@@ -1,0 +1,454 @@
+# AI Mimarisi
+
+## Amaç
+
+Bu doküman sistemin yapay zekâ mimarisini, bileşenlerini ve çalışma prensiplerini açıklamaktadır.
+
+AI katmanı sistemin karar verme merkezidir.
+
+Görevleri;
+
+* Kullanıcı isteğini analiz etmek
+* Uygun iş akışını belirlemek
+* Büyük Dil Modelleri (LLM) ile iletişim kurmak
+* RAG süreçlerini yönetmek
+* MCP araçlarını kullanmak
+* Sonucu oluşturup Backend'e iletmek
+
+AI katmanı FastAPI, HTTP veya kullanıcı arayüzünden bağımsız olarak geliştirilmektedir.
+
+---
+
+# Genel Yaklaşım
+
+AI sistemi aşağıdaki prensiplere göre tasarlanmıştır.
+
+* Agentic AI
+* Workflow Driven Architecture
+* Tool Calling
+* Retrieval-Augmented Generation (RAG)
+* Model Context Protocol (MCP)
+* Stateless Workflow
+* Provider Independent LLM Layer
+
+Her AI işlemi bir iş akışı (workflow) üzerinden yürütülmektedir.
+
+---
+
+# AI Katmanı
+
+AI katmanı aşağıdaki ana bileşenlerden oluşmaktadır.
+
+```text
+ai/
+
+├── workflows/
+├── agents/
+├── prompts/
+├── llm/
+├── embeddings/
+├── retrieval/
+├── memory/
+├── tools/
+├── models/
+├── parsers/
+├── evaluators/
+└── utils/
+```
+
+Her klasör yalnızca belirli bir sorumluluğa sahiptir.
+
+---
+
+# AI İstek Yaşam Döngüsü
+
+Bir AI isteği aşağıdaki adımlardan oluşur.
+
+```text
+Backend
+
+↓
+
+Workflow
+
+↓
+
+Planner
+
+↓
+
+Agent
+
+↓
+
+Tool Selection
+
+↓
+
+LLM / MCP / RAG
+
+↓
+
+Reasoning
+
+↓
+
+Response Builder
+
+↓
+
+Backend
+```
+
+Her istek aynı yaşam döngüsünü takip eder.
+
+---
+
+# Workflow
+
+Workflow sistemin giriş noktasıdır.
+
+Workflow;
+
+* isteği analiz eder
+* gerekli agent'i belirler
+* araç kullanımına karar verir
+* işlem sırasını oluşturur
+* sonucu toplar
+
+Workflow doğrudan LLM çağırmaz.
+
+---
+
+# Agent
+
+Agent belirli bir görevi yerine getiren karar birimidir.
+
+Örnek agent'lar
+
+* Chat Agent
+* RAG Agent
+* Document Agent
+* System Agent
+* Planning Agent
+
+Her agent yalnızca kendi görevinden sorumludur.
+
+---
+
+# Planner
+
+Planner kullanıcının isteğini analiz eder.
+
+Görevleri
+
+* amacı belirlemek
+* gerekli araçları seçmek
+* işlem sırasını oluşturmak
+* gereksiz işlemleri engellemek
+
+Planner sistemin karar mekanizmasıdır.
+
+---
+
+# LLM Katmanı
+
+LLM katmanı farklı model sağlayıcılarını tek bir arayüz altında toplar.
+
+Örnek sağlayıcılar
+
+* OpenAI
+* Ollama
+* Anthropic
+* Google
+* OpenRouter
+
+Diğer katmanlar hangi sağlayıcının kullanıldığını bilmez.
+
+Bu sayede model değişikliği uygulamanın geri kalanını etkilemez.
+
+---
+
+# Prompt Yönetimi
+
+Prompt'lar uygulama kodundan ayrılmıştır.
+
+Her prompt;
+
+* sürümlenebilir
+* yeniden kullanılabilir
+* test edilebilir
+
+Prompt'lar;
+
+* sistem promptu
+* görev promptu
+* araç promptu
+
+olarak ayrılabilir.
+
+---
+
+# Tool Calling
+
+AI doğrudan sistem işlemi gerçekleştirmez.
+
+Tüm yetenekler Tool katmanı üzerinden kullanılır.
+
+Örnekler
+
+* Web Arama
+* Hesaplama
+* Dosya Okuma
+* Dosya Yazma
+* Terminal
+* Git
+* API Çağrısı
+
+Her Tool bağımsızdır.
+
+---
+
+# MCP
+
+Model Context Protocol sistem araçlarını standart bir arayüz üzerinden sunar.
+
+AI yalnızca MCP istemcisini kullanır.
+
+Araçların nasıl çalıştığını bilmez.
+
+Bu yaklaşım;
+
+* güvenliği artırır
+* genişletilebilirliği sağlar
+* araç bağımlılığını azaltır
+
+---
+
+# Retrieval
+
+Retrieval katmanı bilgi erişiminden sorumludur.
+
+Başlıca görevleri
+
+* embedding oluşturmak
+* benzerlik araması yapmak
+* sonuçları sıralamak
+* bağlam oluşturmak
+
+Retrieval doğrudan cevap üretmez.
+
+---
+
+# Embeddings
+
+Embedding katmanı belgeleri vektörlere dönüştürür.
+
+Başlıca görevleri
+
+* chunk oluşturmak
+* embedding üretmek
+* metadata oluşturmak
+* vektör veritabanına kaydetmek
+
+Bu süreç cevap üretiminden bağımsızdır.
+
+---
+
+# Memory
+
+Memory kullanıcıya ait oturum bilgisini yönetir.
+
+Bellek;
+
+* kısa süreli
+* uzun süreli
+
+olarak ayrılabilir.
+
+Memory yalnızca gerekli bilgilerle çalışmalıdır.
+
+Gereksiz veri tutulmamalıdır.
+
+---
+
+# RAG
+
+RAG süreci aşağıdaki adımlardan oluşmaktadır.
+
+```text
+Soru
+
+↓
+
+Query Processing
+
+↓
+
+Embedding
+
+↓
+
+Vector Search
+
+↓
+
+Ranking
+
+↓
+
+Context Builder
+
+↓
+
+LLM
+
+↓
+
+Cevap
+```
+
+LLM yalnızca ilgili bağlam ile çalışır.
+
+---
+
+# Reasoning
+
+Reasoning katmanı modelin ara kararlarını yönetir.
+
+Örnek görevler
+
+* bilgi değerlendirme
+* araç seçimi
+* bağlam analizi
+* cevap doğrulama
+
+Reasoning süreci kullanıcıya doğrudan gösterilmez.
+
+---
+
+# Response Builder
+
+Tüm sonuçlar tek bir cevapta birleştirilir.
+
+Görevleri
+
+* çıktı biçimlendirme
+* kaynak ekleme
+* hata yönetimi
+* son doğrulama
+
+Backend yalnızca Response Builder çıktısını alır.
+
+---
+
+# Observability
+
+AI sistemi tamamen izlenebilir şekilde tasarlanmıştır.
+
+İzlenen bilgiler
+
+* LLM çağrıları
+* Prompt sürümleri
+* Tool kullanımı
+* Workflow adımları
+* Gecikme süreleri
+* Token kullanımı
+* Hatalar
+
+Bu bilgiler sistem davranışını analiz etmek için kullanılır.
+
+---
+
+# Güvenlik
+
+AI aşağıdaki güvenlik prensiplerini uygular.
+
+* Prompt Injection koruması
+* Tool Permission kontrolü
+* Input Validation
+* Output Filtering
+* Gizli bilgi koruması
+* Tool Isolation
+
+AI hiçbir zaman sınırsız sistem yetkisine sahip değildir.
+
+---
+
+# Performans
+
+AI sistemi aşağıdaki optimizasyonları kullanır.
+
+* Embedding Cache
+* Semantic Cache
+* Prompt Cache
+* Streaming Response
+* Asenkron Tool Calling
+* Paralel Retrieval
+* Token Optimizasyonu
+
+Amaç düşük gecikme ve yüksek doğruluktur.
+
+---
+
+# Hata Yönetimi
+
+Her AI işlemi hata durumunda kontrollü şekilde sonlandırılır.
+
+Beklenen hata türleri
+
+* LLM hatası
+* Tool hatası
+* Retrieval hatası
+* MCP bağlantı hatası
+* Timeout
+
+Her hata uygun bir üst katmana raporlanır.
+
+---
+
+# Ölçeklenebilirlik
+
+Yeni AI yetenekleri mevcut mimariyi değiştirmeden eklenebilir.
+
+Yeni;
+
+* Agent
+* Workflow
+* Tool
+* Prompt
+* Provider
+* Retriever
+
+sisteme bağımsız olarak eklenebilir.
+
+Bu yaklaşım AI katmanının sürdürülebilir şekilde büyümesini sağlar.
+
+---
+
+# AI ve Backend İlişkisi
+
+Backend yalnızca AI servisini çağırır.
+
+Backend;
+
+* Prompt bilmez.
+* Tool bilmez.
+* LLM bilmez.
+* Workflow bilmez.
+
+AI katmanı tamamen bağımsızdır.
+
+---
+
+# AI ve Frontend İlişkisi
+
+Frontend AI ile doğrudan iletişim kurmaz.
+
+Tüm iletişim Backend API üzerinden gerçekleştirilir.
+
+Bu yaklaşım güvenlik ve mimari bütünlüğü korur.
+
+
+
+
