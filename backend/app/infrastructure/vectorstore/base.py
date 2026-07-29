@@ -47,3 +47,13 @@ class BaseVectorStore(ABC):
             A list of dictionary objects, each representing a hit (payload, score, id).
         """
         pass
+
+    @abstractmethod
+    async def delete_collection(self, collection_name: str) -> bool:
+        """Delete a collection from the vector database.
+
+        Args:
+            collection_name: The name of the collection to delete.
+        """
+        pass
+

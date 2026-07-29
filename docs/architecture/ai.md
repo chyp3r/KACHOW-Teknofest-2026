@@ -290,18 +290,28 @@ Bu süreç cevap üretiminden bağımsızdır.
 
 # Memory
 
-Memory kullanıcıya ait oturum bilgisini yönetir.
+Memory, sistemin geçmiş konuşmaları ve oturum bazlı bilgileri yönetmesini sağlar. Projede SOTA düzeyinde modüler üç farklı hafıza stratejisi sunulmuştur:
 
-Bellek;
+### 1. Kısa Süreli Hafıza (ConversationWindowMemory)
+`app/ai/memory/conversation.py` altında yer alır:
+- Redis önbellek katmanı üzerinde oturum bazlı çalışır.
+- Belirlenen pencere boyutuna (`window_size`) göre sadece en son `N` adet sohbet turnünü (mesajını) saklar. LLM bağlam penceresini (context window) gereksiz geçmişle şişirmemek için otomatik kırpma yapar.
 
-* kısa süreli
-* uzun süreli
+### 2. Özet Tabanlı Hafıza (SummaryMemory)
+`app/ai/memory/summary.py` altında yer alır:
+- Sohbet geçmişi belirli bir sınıra (`summary_threshold`) ulaştığında, asenkron olarak arka planda LLM çağrısı yaparak tüm eski konuşmayı tek bir paragraflık Türkçe özete sıkıştırır.
+- Bir sonraki adımda ajana bağlam olarak `Geçmiş Sohbet Özeti + Son K adet Ham Mesaj` yapısını sunarak verimli bir uzun dönem hafıza sağlar.
 
-olarak ayrılabilir.
+### 3. Anlamsal Hafıza / Mem0-like Episodic Memory (VectorMemory)
+`app/ai/memory/vector_memory.py` altında yer alır:
+- **Custom Mem0** mantığıyla çalışır. Her konuşma turnünde kullanıcının kendisi hakkında doğrudan veya dolaylı olarak verdiği kişisel olguları, tercihleri, ilgileri ve projeleri (`MetadataAgent` veya LLM yardımıyla) Türkçe maddeler halinde çıkarır.
+- Çıkarılan her bir bağımsız olguyu (`episodic_fact`) `EmbeddingService` üzerinden vektörleyerek Qdrant'ta `user_episodic_memory` koleksiyonunda saklar.
+- Yeni bir istek geldiğinde, kullanıcının güncel sorusuyla en alakalı eski olguları vektör benzerlik araması ile bulur ve prompta enjekte eder (örn: "Kullanıcı Python dilini tercih ediyor", "Kullanıcının projesinin adı KACHOW").
 
-Memory yalnızca gerekli bilgilerle çalışmalıdır.
-
-Gereksiz veri tutulmamalıdır.
+Bu sayede hafıza katmanı:
+- Oturum sınırlarını korur.
+- LLM bağlam limitlerini verimli yönetir.
+- Kullanıcıya ait kişisel tercihleri asla unutmayan akıllı bir kişiselleştirilmiş hafıza sunar.
 
 ---
 

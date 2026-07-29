@@ -122,3 +122,23 @@ class QdrantStore(BaseVectorStore):
                 exc_info=True,
             )
             return []
+
+    async def delete_collection(self, collection_name: str) -> bool:
+        """Delete a collection from Qdrant database."""
+        try:
+            exists = await self.client.collection_exists(collection_name)
+            if not exists:
+                logger.info(
+                    f"Collection '{collection_name}' does not exist, no need to delete."
+                )
+                return True
+            await self.client.delete_collection(collection_name)
+            logger.info(f"Deleted Qdrant collection: '{collection_name}'")
+            return True
+        except Exception as e:
+            logger.error(
+                f"Qdrant delete_collection failed for '{collection_name}': {e}",
+                exc_info=True,
+            )
+            return False
+
