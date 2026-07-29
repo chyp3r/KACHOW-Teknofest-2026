@@ -256,14 +256,23 @@ Retrieval doğrudan cevap üretmez.
 
 # Embeddings
 
-Embedding katmanı belgeleri vektörlere dönüştürür.
+Embedding katmanı belgeleri ve metinleri vektörlere dönüştürerek anlamsal aramaya (semantic search) hazır hale getirir. Projede SOTA düzeyinde modüler bir yapı kurulmuştur.
 
-Başlıca görevleri
+### Embedding Modelleri
+`app/ai/embeddings/models.py` altında sağlayıcı bağımsız bir altyapı uygulanmıştır:
+* **BaseEmbeddingsClient**: Tüm embedding sağlayıcılarının türemesi gereken taban arayüz.
+* **OllamaEmbeddingsClient**: Yerel Ollama üzerindeki embedding modellerini (`nomic-embed-text:latest` veya `qllama/multilingual-e5-base:q4_k_m`) kullanarak asenkron vektörler üretir.
+* **get_embeddings_client**: İlgili sağlayıcıyı başlatan fabrika fonksiyonu.
 
-* chunk oluşturmak
-* embedding üretmek
-* metadata oluşturmak
-* vektör veritabanına kaydetmek
+### Metin Bölme (Chunking) Stratejileri
+`app/ai/embeddings/chunking/` altında 4 farklı bölme yöntemi sunulmaktadır:
+1. **CharacterChunker** (`character.py`): Basit karakter sınırı ve çakışma (overlap) odaklı bölücü.
+2. **RecursiveChunker** (`recursive.py`): Paragraf, cümle ve kelime sınırlarını koruyarak metni rekürsif olarak bölen standart bölücü.
+3. **SemanticChunker** (`semantic.py`): Cümleler arası anlamsal kosinüs benzerliği (cosine similarity) analizini yapıp, anlamsal sapma veya eşik (static/percentile threshold) değerine göre bölen bölücü.
+4. **AgenticChunker** (`agentic.py`): LLM/Ajan yardımıyla metni mantıksal bölümlere ayıran, her parçaya özel başlık ve özet üreterek zengin meta veri (metadata) üreten gelişmiş bölücü.
+
+### Embedding Servisi
+`app/ai/embeddings/service.py` altındaki **EmbeddingService** sınıfı metin bölme (chunking) ve vektör üretme (embedding) adımlarını orkestre ederek, text, vector ve metadata barındıran `EmbeddedChunk` listesini döndürür.
 
 Bu süreç cevap üretiminden bağımsızdır.
 

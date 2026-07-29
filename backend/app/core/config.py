@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "qwen3.5:9b"
     OLLAMA_TEMPERATURE: float = 0.7
 
+    # Embedding Configuration
+    EMBEDDING_PROVIDER: str = "ollama"
+    OLLAMA_EMBEDDING_MODEL: str = "nomic-embed-text:latest"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
