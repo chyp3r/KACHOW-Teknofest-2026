@@ -247,6 +247,9 @@ project-rules.md
 
 Her AI aracı geliştirmeye başlamadan önce bu sırayı takip etmelidir.
 
+> [!IMPORTANT]
+> **CHANGELOG Kuralı**: Yapılan her türlü geliştirme (kod, şablon, veritabanı şeması veya mimari değişiklikler), geliştirme tamamlandığında ana dizindeki `CHANGELOG.md` dosyasına kaydedilmelidir. Diğer ekip üyelerinin ve AI ajanlarının tutarlı takip yapabilmesi için bu kural zorunludur.
+
 ---
 
 # Teknoloji Yığını
