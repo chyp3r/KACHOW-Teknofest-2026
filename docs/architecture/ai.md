@@ -104,19 +104,47 @@ Her istek aynı yaşam döngüsünü takip eder.
 
 ---
 
-# Workflow
+# Workflow (LangGraph Implementations)
 
-Workflow sistemin giriş noktasıdır.
+Sistemin iş süreçleri ile bu süreçleri yürüten teknoloji katmanları (LangGraph) birbirinden tamamen ayrılmıştır:
+- **Workflow**: İş süreci (Classification, RAG, Draft, Routing, System) mantığını tanımlar.
+- **Graph**: Bu süreçlerin LangGraph düğümleri (nodes) ve yönlendirmeleri (edges) ile asenkron ve döngüsel (loop) olarak çalıştırılan somut implementasyonlarıdır (`app/ai/workflows/*_graph.py`).
 
-Workflow;
+Tüm sistem, yöneticilik yapan 2 katman ve 5 asenkron iş akışından (workflow graph) oluşur:
 
-* isteği analiz eder
-* gerekli agent'i belirler
-* araç kullanımına karar verir
-* işlem sırasını oluşturur
-* sonucu toplar
+---
 
-Workflow doğrudan LLM çağırmaz.
+## Yönetici Katmanlar
+
+### 1. Supervisor (Orchestrator)
+Sistemin ana yöneticisidir. Kullanıcıdan gelen isteği alır, planlama adımını başlatır, state (durum) geçişlerini koordine eder ve hata/çakışma yönetimini üstlenir. Supervisor doğrudan yapay zekâ veya LLM işlemi yapmaz, sadece akışı yönetir.
+
+### 2. Planning Agent (`planning_graph.py`)
+Supervisor'ın planlamacı yardımcısıdır. `OrchestratorAgent` kullanarak gelen isteği analiz eder ve çalıştırılması gereken alt iş akışlarını (`classification`, `rag`, `draft`, `routing`) sıralı/paralel bir plan (`PlanOutput`) halinde belirler. Bu sayede gereksiz iş akışları atlanır (örn. sadece basit bir sohbet sorusu geldiyse `classification` ve `routing` adımları atlanır).
+
+---
+
+## 5 Ana Workflow Graph
+
+### 1. Classification Graph (`classification_graph.py`)
+- **Node'lar**: Classify Node -> NER Node -> Metadata Node.
+- **Görev**: Sisteme gelen belgenin türünü (`ClassifierAgent` ile), kişileri, kurumları, tarihleri (`NERAgent` ile) ve dinamik metaverileri (`MetadataAgent` ile) yapılandırılmış Pydantic şemaları ile ayıklar.
+
+### 2. RAG Graph (`rag_graph.py`)
+- **Node'lar**: Query Rewrite -> Retrieve Docs -> Verify Context -> (Yetersizse tekrar sorgu yazımına döngü / Yeterliyse END).
+- **Görev**: Arama kalitesini artırmak için sorguyu genişletir. `HybridRetriever` ile paralel arama (Dense + BM25) yapar. Elde edilen bağlamı `VerifierAgent` ile doğrular. Bilgi yetersizse, veritabanı geribildirimiyle sorguyu tekrar yazdırıp döngüye girer (max 2 deneme).
+
+### 3. Draft Graph (`draft_graph.py`)
+- **Node'lar**: Writer -> Editor -> (Revizyon gerekliyse Writer'a döngü) -> Reflection -> Evaluator.
+- **Görev**: RAG bağlamını ve yönergeleri alarak resmi yazı/mektup taslağı oluşturur (`WriterAgent`). `EditorAgent` taslağı imla/biçim yönünden denetleyip revizyon isteyebilir. `Reflection` adımı yazıyı kendi kendine eleştirerek parlatır. `Evaluator` ise nihai metni oluşturup kalite/güven skoru (0-100) atar.
+
+### 4. Routing Graph (`routing_graph.py`)
+- **Node'lar**: Route Node.
+- **Görev**: Taslak metni ve güven skorunu değerlendirerek yazıyı en uygun departmana (`HR`, `Legal`, `Accounting`, `Citizen`) yönlendirir veya güven skoru düşükse/hata oluştuysa doğrudan insan onayına (`HumanApproval`) iletir.
+
+### 5. System Graph (`system_graph.py`)
+- **Node'lar**: System Op Node.
+- **Görev**: Kullanıcıdan bağımsız çalışan arka plan işlemleridir. Redis önbellek güncellemesi (`CACHE_UPDATE`), geçici dosya temizliği (`CLEANUP`) veya olay loglama (`LOGGING`) işlemlerini asenkron yürütür.
 
 ---
 
