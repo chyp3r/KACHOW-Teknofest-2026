@@ -122,15 +122,25 @@ Workflow doğrudan LLM çağırmaz.
 
 # Agent
 
-Agent belirli bir görevi yerine getiren karar birimidir.
+Agent, belirli bir görevi yerine getiren karar birimidir. Tüm uzman ajanlar, sistemin ortak davranışlarını belirleyen **BaseAgent** sınıfından türetilmiştir.
 
-Örnek agent'lar
+### Ajan Mimari Yapısı (BaseAgent)
+`app/ai/agents/base.py` altında yer alan BaseAgent sınıfı şu SOTA özellikleri barındırır:
+* **Unified Messaging**: Tek bir prompt veya konuşma geçmişi (mesaj listesi) ile çalışabilme.
+* **Dinamik Prompting**: Sistem promptunun çalışma anında bağlama (context) göre dinamik olarak biçimlendirilmesi.
+* **Post-Validation / Guardrails**: Çıktıların doğrulanması ve denetlenmesi için özelleştirilebilir validator desteği.
+* **Self-Correction**: Pydantic model doğrulaması başarısız olduğunda otomatik hata geri-bildirimi ile kendini düzeltme döngüsü.
 
-* Chat Agent
-* RAG Agent
-* Document Agent
-* System Agent
-* Planning Agent
+### Uzman Ajanlar
+Sistemdeki tüm uzman ajanlar `app/ai/agents/` altında konumlandırılmıştır:
+* **OrchestratorAgent** (`orchestrator.py`): İş akışlarını planlar, adımları belirler ve görevleri dağıtır.
+* **NERAgent** (`ner.py`): Metinden varlık isimlerini (kişi, kurum, tarih vb.) çıkarır.
+* **ClassifierAgent** (`classifier.py`): Girdileri kategorize eder, sınıflandırır ve duygu analizi yapar.
+* **MetadataAgent** (`metadata.py`): Belgelerin meta verilerini ve anahtar kelimelerini ayıklar.
+* **WriterAgent** (`writer.py`): Yüksek kaliteli rapor, özet ve makale taslakları yazar.
+* **EditorAgent** (`editor.py`): Yazılan içeriklerin dil bilgisi, akış ve üslup düzeltmelerini yapar.
+* **VerifierAgent** (`verifier.py`): Çıktıların doğruluk, güvenlik ve guardrail kontrollerini üstlenir.
+* **RouterAgent** (`router.py`): İsteği en uygun ajana veya iş akışına yönlendirir.
 
 Her agent yalnızca kendi görevinden sorumludur.
 
