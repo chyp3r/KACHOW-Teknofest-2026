@@ -155,10 +155,14 @@ Planner sistemin karar mekanizmasıdır.
 
 LLM katmanı farklı model sağlayıcılarını tek bir arayüz altında toplar.
 
-Örnek sağlayıcılar
+Uygulanan mimari yapıda aşağıdaki bileşenler yer almaktadır:
+* **BaseLLMClient** (`app/ai/llms/base.py`): Tüm sağlayıcı istemcilerinin uygulaması gereken soyut taban sınıf. `generate`, `stream` ve `generate_structured` metotlarını içerir.
+* **OllamaClient** (`app/ai/llms/ollama.py`): Yerel Ollama servisiyle (`ChatOllama` üzerinden) entegrasyonu sağlar. Qwen gibi yerel modelleri çalıştırır.
+* **get_llm_client** (`app/ai/llms/__init__.py`): İstenen sağlayıcıya ve parametrelere göre doğru istemciyi döndüren fabrika fonksiyonu.
 
+Örnek sağlayıcılar:
 * OpenAI
-* Ollama
+* Ollama (Aktif)
 * Anthropic
 * Google
 * OpenRouter
