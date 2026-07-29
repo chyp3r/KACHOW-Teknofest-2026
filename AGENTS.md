@@ -344,6 +344,9 @@ Kod değişiklikleri aşağıdaki dokümanları etkiliyorsa güncellenmelidir.
 * API
 * AI
 
+> [!IMPORTANT]
+> **CHANGELOG Güncelleme Kuralı**: Projeye katkı sağlayan her geliştirici ve yapay zekâ ajanı (AI Agent), yaptığı anlamlı değişiklikleri ana dizindeki [CHANGELOG.md](file:///Users/gokdenizkuruca/Desktop/Projeler/Teknofest%20NLP/Ads%C4%B1z/KACHOW-Teknofest-2026/CHANGELOG.md) dosyasına uygun sürüm başlığı altında eklemek zorundadır.
+
 Detaylar için:
 
 ```text
