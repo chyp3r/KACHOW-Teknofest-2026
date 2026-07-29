@@ -315,43 +315,50 @@ Bu sayede hafıza katmanı:
 
 ---
 
-# RAG
+# RAG (Retrieval-Augmented Generation)
 
-RAG süreci aşağıdaki adımlardan oluşmaktadır.
+Projede RAG akışı, bilgi doğruluğunu artırmak ve halüsinasyonları engellemek amacıyla SOTA hibrid arama ve reranking (yeniden sıralama) teknolojileriyle kurgulanmıştır.
 
 ```text
-Soru
-
-↓
-
-Query Processing
-
-↓
-
-Embedding
-
-↓
-
-Vector Search
-
-↓
-
-Ranking
-
-↓
-
-Context Builder
-
-↓
-
-LLM
-
-↓
-
-Cevap
+               Kullanıcı Sorgusu
+                      │
+           ┌──────────┴──────────┐
+           ▼                     ▼
+     Dense Search          Sparse Search
+   (Semantic/Qdrant)       (BM25 Keyword)
+           │                     │
+           └──────────┬──────────┘
+                      ▼
+          Reciprocal Rank Fusion (RRF)
+                      │
+                      ▼
+                 LLM Reranker
+           (Structured scoring 0-10)
+                      │
+                      ▼
+             Sıralanmış Bağlam
 ```
 
-LLM yalnızca ilgili bağlam ile çalışır.
+### 1. Dense (Anlamsal) Arama (`DenseRetriever`)
+- Kullanıcı sorgusunu `EmbeddingService` aracılığıyla vektörleştirir.
+- Qdrant vektör veritabanında anlamsal benzerlik araması (`similarity_search`) gerçekleştirir.
+- Anlam ve bağlamı yüksek, ancak kelime birebir eşleşmelerinde zayıf kalabilen aday dokümanları getirir.
+
+### 2. Sparse (Anahtar Kelime) Arama (`BM25Retriever`)
+- `rank-bm25` kütüphanesi üzerine kuruludur.
+- Doküman havuzu (corpus) üzerinde asenkron olarak BM25 indekslemesi yapar.
+- Sorguyu Türkçe büyük-küçük harf duyarlı ve stop-word filtreli SOTA bir tokenize işleminden (`tokenize_turkish`) geçirir.
+- Özel terimler, hata kodları, model isimleri veya tam eşleşmesi gereken anahtar kelimeleri yakalar.
+
+### 3. Rank Fusion (`reciprocal_rank_fusion`)
+- Dense ve Sparse listelerinden dönen adayları **Reciprocal Rank Fusion (RRF)** algoritmasıyla birleştirir.
+- Her iki sıralamadaki pozisyonuna göre dokümanlara $1 / (k + rank)$ formülü ile bir RRF skoru atar. Böylece hem anlamsal hem de kelime eşleşmesi yüksek olan dokümanlar en üstte birleşir.
+
+### 4. Yeniden Sıralama (`LLMReranker`)
+- RRF tarafından birleştirilmiş adayları `BaseAgent` aracılığıyla değerlendirir.
+- Sorgu ile her dokümanı karşılaştırarak **0.0 (alakasız)** ile **10.0 (tam eşleşme)** arasında bir alaka skoru ve Türkçe gerekçe üretir.
+- Çıktı, Pydantic şemasıyla doğrulanır ve hata/çakışma durumunda RRF sıralamasına geri dönen (fallback) bir koruma barındırır.
+- Son sıralanmış ve puanlanmış en kaliteli dokümanları LLM bağlamına (context) besler.
 
 ---
 
