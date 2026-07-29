@@ -2,7 +2,7 @@ from enum import StrEnum
 
 
 class UserRole(StrEnum):
-    """Sistemdeki kullanıcı rol türleri."""
+    """User role types used throughout the system for RBAC."""
 
     ADMIN = "admin"
     EDITOR = "editor"

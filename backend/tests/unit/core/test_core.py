@@ -1,4 +1,4 @@
-"""Core katmanı birim testleri: Enums, Constants, Permissions, Security."""
+"""Unit tests for the core layer: Enums, Constants, Permissions."""
 
 import pytest
 from fastapi import FastAPI
@@ -91,37 +91,10 @@ class TestSystemConstants:
 # ────────────────────────────────────────────────────────────────────────────────
 
 
-def _build_test_app() -> tuple[FastAPI, TestClient]:
-    """RoleChecker testleri için yalıtılmış bir FastAPI uygulaması döndürür."""
-    from fastapi import APIRouter
-
-    app = FastAPI()
-    app.add_middleware(StructuredLoggingMiddleware)
-    app.add_middleware(ResponseTimeMiddleware)
-    app.add_exception_handler(BaseAppException, app_exception_handler)
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
-    app.add_exception_handler(HTTPException, http_exception_handler)
-    app.add_exception_handler(Exception, generic_exception_handler)
-
-    require_admin = RoleChecker(allowed_roles=[UserRole.ADMIN])
-    require_editor_or_admin = RoleChecker(allowed_roles=[UserRole.ADMIN, UserRole.EDITOR])
-
-    router = APIRouter()
-
-    @router.get("/admin-only")
-    def admin_endpoint(request, _: None = None):
-        request.state.user_role = "admin"
-        return require_admin(request)  # type: ignore
-
-    app.include_router(router)
-    return app, TestClient(app, raise_server_exceptions=False)
-
-
 class TestRoleChecker:
     def test_authorized_role_passes(self):
-        """Doğru rolle erişim izin verilmeli."""
+        """Correct role should pass without raising an exception."""
         from fastapi import Request
-        from starlette.datastructures import Headers
 
         checker = RoleChecker(allowed_roles=[UserRole.ADMIN])
 
@@ -135,13 +108,13 @@ class TestRoleChecker:
         request = Request(scope=scope)
         request.state.user_role = UserRole.ADMIN
 
-        # Erişim izinliyse hata fırlatmamalı
         result = checker(request)
         assert result is None
 
     def test_unauthorized_role_raises(self):
-        """Yanlış rolle erişim AuthorizationException fırlatmalı."""
+        """Incorrect role should raise AuthorizationException."""
         from fastapi import Request
+
         from app.api.exceptions import AuthorizationException
 
         checker = RoleChecker(allowed_roles=[UserRole.ADMIN])
@@ -160,8 +133,9 @@ class TestRoleChecker:
             checker(request)
 
     def test_missing_role_raises(self):
-        """Role bilgisi olmayan istekte AuthorizationException fırlatmalı."""
+        """Request with no role state should raise AuthorizationException."""
         from fastapi import Request
+
         from app.api.exceptions import AuthorizationException
 
         checker = RoleChecker(allowed_roles=[UserRole.ADMIN])
@@ -174,7 +148,7 @@ class TestRoleChecker:
             "query_string": b"",
         }
         request = Request(scope=scope)
-        # user_role state'e eklenmedi
+        # user_role intentionally not set on request.state
 
         with pytest.raises(AuthorizationException):
             checker(request)

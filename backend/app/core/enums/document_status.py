@@ -2,7 +2,7 @@ from enum import StrEnum
 
 
 class DocumentStatus(StrEnum):
-    """Belge işlem yaşam döngüsü durumları."""
+    """Lifecycle states of a document through the AI processing pipeline."""
 
     PENDING = "pending"
     PROCESSING = "processing"
