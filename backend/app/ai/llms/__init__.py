@@ -1,7 +1,8 @@
 from typing import Optional
 
 from app.ai.llms.base import BaseLLMClient
-from app.ai.llms.ollama import OllamaClient
+from app.infrastructure.providers.ollama import OllamaClient
+from app.infrastructure.providers.vllm import vLLMClient
 from app.core.config import settings
 
 
@@ -14,7 +15,7 @@ def get_llm_client(
     """Factory function to instantiate and return the configured LLM client.
 
     Args:
-        provider: The name of the LLM provider (default: "ollama").
+        provider: The name of the LLM provider ("ollama" or "vllm").
         base_url: Optional override for the provider's API URL.
         model: Optional override for the model name.
         temperature: Optional override for the temperature.
@@ -29,8 +30,13 @@ def get_llm_client(
         model_name = model or settings.OLLAMA_MODEL
         temp = temperature if temperature is not None else settings.OLLAMA_TEMPERATURE
         return OllamaClient(base_url=url, model=model_name, temperature=temp)
+    elif provider_lower == "vllm":
+        url = base_url or settings.VLLM_BASE_URL
+        model_name = model or settings.VLLM_MODEL
+        temp = temperature if temperature is not None else settings.OLLAMA_TEMPERATURE
+        return vLLMClient(base_url=url, model=model_name, temperature=temp)
     else:
         raise ValueError(f"Unsupported LLM provider: {provider}")
 
 
-__all__ = ["BaseLLMClient", "OllamaClient", "get_llm_client"]
+__all__ = ["BaseLLMClient", "OllamaClient", "vLLMClient", "get_llm_client"]

@@ -27,7 +27,7 @@ services:
       - qdrant
 
   db:
-    image: pgvector/pgvector:pg16
+    image: postgres:15
     container_name: kachow_db_dev
     ports:
       - "5432:5432"

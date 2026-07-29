@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 import pytest
 from pydantic import BaseModel
 
-from app.ai.llms.ollama import OllamaClient
+from app.infrastructure.providers.ollama import OllamaClient
 from langchain_core.messages import AIMessage
 
 
@@ -12,7 +12,7 @@ class UserSchema(BaseModel):
 
 
 @pytest.mark.asyncio
-@patch("app.ai.llms.ollama.ChatOllama")
+@patch("app.infrastructure.providers.ollama.ChatOllama")
 async def test_ollama_generate(mock_chat_ollama):
     # Setup mock response
     mock_instance = MagicMock()
@@ -22,6 +22,7 @@ async def test_ollama_generate(mock_chat_ollama):
     client = OllamaClient(base_url="http://localhost:11434", model="qwen3.5:9b")
     messages = [{"role": "user", "content": "Hi"}]
 
+    # Import inside function to test get_llm_client re-export path
     response = await client.generate(messages, temperature=0.5)
 
     assert response == "Hello! I am Qwen."
@@ -33,7 +34,7 @@ async def test_ollama_generate(mock_chat_ollama):
 
 
 @pytest.mark.asyncio
-@patch("app.ai.llms.ollama.ChatOllama")
+@patch("app.infrastructure.providers.ollama.ChatOllama")
 async def test_ollama_stream(mock_chat_ollama):
     # Setup mock stream
     mock_instance = MagicMock()
@@ -56,7 +57,7 @@ async def test_ollama_stream(mock_chat_ollama):
 
 
 @pytest.mark.asyncio
-@patch("app.ai.llms.ollama.ChatOllama")
+@patch("app.infrastructure.providers.ollama.ChatOllama")
 async def test_ollama_generate_structured(mock_chat_ollama):
     # Setup mock structured output
     mock_instance = MagicMock()
@@ -73,3 +74,4 @@ async def test_ollama_generate_structured(mock_chat_ollama):
     assert response.name == "Gökdeniz"
     assert response.age == 25
     mock_instance.with_structured_output.assert_called_once_with(UserSchema)
+
