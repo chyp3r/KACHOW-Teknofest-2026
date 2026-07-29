@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 
 from app.ai.agents.editor import EditorAgent
 from app.ai.agents.writer import WriterAgent
+from app.ai.agents.reflection import ReflectionAgent
+from app.ai.agents.evaluator import EvaluatorAgent
 from app.ai.llms.base import BaseLLMClient
 
 logger = logging.getLogger(__name__)
@@ -47,13 +49,14 @@ class EvaluatorOutput(BaseModel):
 
 def create_draft_graph(llm_client: BaseLLMClient):
     """Create and compile the LangGraph document drafting/generation workflow
-
     utilizing Writer, Editor, Reflection, and Evaluator agent roles.
 
     Flow: START -> Writer -> Editor -> (Needs Revision? Loop Writer : Reflection) -> Evaluator -> END
     """
     writer_agent = WriterAgent(llm_client)
     editor_agent = EditorAgent(llm_client)
+    reflection_agent = ReflectionAgent(llm_client)
+    evaluator_agent = EvaluatorAgent(llm_client)
 
     # 1. Writer Node
     async def writer_node(state: DraftState) -> Dict[str, Any]:
@@ -114,7 +117,7 @@ def create_draft_graph(llm_client: BaseLLMClient):
             "hale getirecek şekilde düzeltilmiş metni doğrudan çıktı olarak ver."
         )
         try:
-            refined_draft = await editor_agent.run(
+            refined_draft = await reflection_agent.run(
                 messages=prompt, temperature=0.3
             )
             return {"draft": refined_draft}
@@ -131,7 +134,7 @@ def create_draft_graph(llm_client: BaseLLMClient):
             "metnin genel kalitesine, resmiyetine ve doğruluğuna 0.0 ile 100.0 arasında bir güven skoru ata."
         )
         try:
-            res: EvaluatorOutput = await editor_agent.run_structured(
+            res: EvaluatorOutput = await evaluator_agent.run_structured(
                 messages=prompt, response_model=EvaluatorOutput
             )
             return {
@@ -179,3 +182,4 @@ def create_draft_graph(llm_client: BaseLLMClient):
     builder.add_edge("evaluator", END)
 
     return builder.compile()
+

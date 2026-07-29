@@ -81,23 +81,32 @@ async def test_rag_graph(mock_verifier_run):
 # ==========================================
 @pytest.mark.asyncio
 @patch("app.ai.agents.writer.WriterAgent.run")
-@patch("app.ai.agents.editor.EditorAgent.run")
 @patch("app.ai.agents.editor.EditorAgent.run_structured")
-async def test_draft_graph(mock_editor_struct, mock_editor_run, mock_writer_run):
+@patch("app.ai.agents.reflection.ReflectionAgent.run")
+@patch("app.ai.agents.evaluator.EvaluatorAgent.run_structured")
+async def test_draft_graph(
+    mock_evaluator_struct,
+    mock_reflection_run,
+    mock_editor_struct,
+    mock_writer_run,
+):
     mock_llm = MagicMock(spec=BaseLLMClient)
-    
+
     mock_writer_run.return_value = "Draft content text."
-    # Editor structured evaluation output
-    mock_editor_struct.side_effect = [
-        EditorOutput(needs_revision=False, feedback="İyi taslak."), # Editor review
-        EvaluatorOutput(final_draft="Refined final draft.", confidence_score=95.0) # Evaluator review
-    ]
-    mock_editor_run.return_value = "Self-critiqued draft."
-    
+    mock_editor_struct.return_value = EditorOutput(
+        needs_revision=False, feedback="İyi taslak."
+    )
+    mock_reflection_run.return_value = "Self-critiqued draft."
+    mock_evaluator_struct.return_value = EvaluatorOutput(
+        final_draft="Refined final draft.", confidence_score=95.0
+    )
+
     graph = create_draft_graph(mock_llm)
-    
-    res = await graph.ainvoke({"context": "Some context", "instructions": "Write official letter", "attempts": 0})
-    
+
+    res = await graph.ainvoke(
+        {"context": "Some context", "instructions": "Write official letter", "attempts": 0}
+    )
+
     assert res["draft"] == "Refined final draft."
     assert res["confidence_score"] == 95.0
 
