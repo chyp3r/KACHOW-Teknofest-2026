@@ -185,21 +185,31 @@ Bu sayede model değişikliği uygulamanın geri kalanını etkilemez.
 
 # Prompt Yönetimi
 
-Prompt'lar uygulama kodundan ayrılmıştır.
+Prompt'lar uygulama kodundan tamamen ayrılmıştır ve `app/ai/prompts/` klasörü altında merkezi olarak yönetilmektedir.
 
-Her prompt;
+### Prompt Yönetim Sistemi (PromptManager)
+`app/ai/prompts/manager.py` altında yer alan **PromptManager** sınıfı şu özellikleri sunar:
+- **Dosya İzoleli Şablonlar**: Promptlar Python kodunun içine yazılmaz, `prompts/templates/` dizini altında bağımsız `.md` (Markdown) dosyaları olarak saklanır.
+- **Bellek Önbelleklemesi (Caching)**: Disk I/O yükünü en aza indirmek için diskten bir kez okunan prompt şablonları bellekte önbelleğe alınır.
+- **Güvenli Değişken Renderlama**: Değişken yerleştirme için standart `{}` yerine `{{deger}}` söz dizimi kullanılır. Bu sayede prompt içindeki JSON şemalarında veya kod bloklarında yer alan tekli kıvırcık parantezlerin (`{}`) render işlemi sırasında çakışması ve hata üretmesi engellenir.
+- **Singleton Yapısı**: `prompt_manager` adıyla dışa aktarılan tekil örnek, tüm uygulama genelinde tutarlı prompt yönetimi sağlar.
 
-* sürümlenebilir
-* yeniden kullanılabilir
+### Prompt Şablonları (`prompts/templates/`)
+Her uzman ajanın ve akışın sistem yönergesi ilgili markdown dosyasında saklanır:
+- `orchestrator.md`: Orkestrasyon ajanı yönergeleri (Türkçe).
+- `ner.md`: Varlık ismi tanıma ajanı yönergeleri (Türkçe).
+- `classifier.md`: Sınıflandırma ajanı yönergeleri (Türkçe).
+- `metadata.md`: Metadata çıkarma ajanı yönergeleri (Türkçe).
+- `writer.md`: Yazar ajanı yönergeleri (Türkçe).
+- `editor.md`: Editör ajanı yönergeleri (Türkçe).
+- `verifier.md`: Doğrulama ajanı yönergeleri (Türkçe).
+- `router.md`: Yönlendirme ajanı yönergeleri (Türkçe).
+- `chat.md`: Sohbet sistemi yönergeleri (Türkçe).
+
+Bu sayede promptlar:
+* kolayca sürümlenebilir
+* kod değişikliği gerektirmeden güncellenebilir
 * test edilebilir
-
-Prompt'lar;
-
-* sistem promptu
-* görev promptu
-* araç promptu
-
-olarak ayrılabilir.
 
 ---
 
