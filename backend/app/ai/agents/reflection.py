@@ -5,8 +5,8 @@ from app.ai.llms.base import BaseLLMClient
 from app.ai.prompts.manager import PromptManager
 
 
-class OrchestratorAgent(BaseAgent):
-    """Orchestrator Agent responsible for coordinating workflows and delegating tasks to other agents."""
+class ReflectionAgent(BaseAgent):
+    """Reflection Agent responsible for critiquing, self-correcting, and refining document drafts."""
 
     def __init__(
         self,
@@ -14,10 +14,13 @@ class OrchestratorAgent(BaseAgent):
         prompt_manager: Optional[PromptManager] = None,
     ):
         pm = prompt_manager or PromptManager()
-        system_prompt = pm.get_template("orchestrator")
+        system_prompt = pm.get_template("reflection")
         super().__init__(
             llm_client=llm_client,
-            name="OrchestratorAgent",
-            description="Coordinates multi-agent workflows, plans steps, and delegates tasks.",
+            name="ReflectionAgent",
+            description=(
+                "Critiques generated document drafts to identify gaps, repetition, and quality issues, "
+                "producing a refined and polished version."
+            ),
             system_prompt=system_prompt,
         )

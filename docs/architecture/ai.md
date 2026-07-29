@@ -169,8 +169,10 @@ Sistemdeki tüm uzman ajanlar `app/ai/agents/` altında konumlandırılmıştır
 * **EditorAgent** (`editor.py`): Yazılan içeriklerin dil bilgisi, akış ve üslup düzeltmelerini yapar.
 * **VerifierAgent** (`verifier.py`): Çıktıların doğruluk, güvenlik ve guardrail kontrollerini üstlenir.
 * **RouterAgent** (`router.py`): İsteği en uygun ajana veya iş akışına yönlendirir.
+* **ReflectionAgent** (`reflection.py`): Taslak metni kendi kendine eleştirerek gereksiz tekrarları arındırır ve akışı mükemmelleştirir.
+* **EvaluatorAgent** (`evaluator.py`): Nihai resmi yazı taslağını kalite kontrolünden geçirir ve güven/doğruluk skoru atar.
 
-Her agent yalnızca kendi görevinden sorumludur.
+Her agent yalnızca kendi görevinden sorumludur ve prompt şablonunu `PromptManager` üzerinden dinamik olarak diskten yükler.
 
 ---
 
