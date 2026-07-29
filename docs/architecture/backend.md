@@ -297,19 +297,39 @@ Bu yapı AI katmanını güvenli ve genişletilebilir hale getirir.
 
 # Infrastructure
 
-Infrastructure katmanı harici servisleri yönetir.
+Infrastructure katmanı, harici servisler ve veri saklama/erişim katmanlarıyla olan bağlantıları ve istemcileri yönetir. Projede bu katman tamamen asenkron (async) ve modüler olarak tasarlanmıştır.
 
-Örnekler
+### 1. Database (PostgreSQL)
+`app/infrastructure/database/` dizininde konumlanmıştır:
+* **Async Engine & Session**: SQLAlchemy `create_async_engine` ve `async_sessionmaker` kullanılarak asenkron PostgreSQL bağlantı havuzu kurulmuştur.
+* **get_db**: FastAPI endpoint'lerinde veritabanı oturumlarını güvenli şekilde yöneten asenkron dependency fonksiyonu.
+* **verify_db_connection**: Uygulama ayağa kalkarken PostgreSQL veritabanı bağlantısını kontrol eden asenkron doğrulama fonksiyonu.
+* **TimestampMixin**: ORM modellerine `created_at` ve `updated_at` alanlarını otomatik ekleyen zaman damgası mixin sınıfı.
 
-* PostgreSQL
-* Redis
-* Qdrant
-* MinIO
-* SMTP
-* OpenAI
-* Ollama
+### 2. Cache (Redis)
+`app/infrastructure/cache/` dizininde konumlanmıştır:
+* **RedisCache**: `redis.asyncio` kütüphanesini sarmalayarak asenkron get, set, delete, exists ve clear operasyonlarını sunan cache istemcisi.
+* **get_cache**: Global RedisCache tekil (singleton) örneğine erişim sağlayan fonksiyon.
 
-Bu katman yalnızca istemci bağlantılarından sorumludur.
+### 3. Vectorstore (Qdrant)
+`app/infrastructure/vectorstore/` dizininde konumlanmıştır:
+* **BaseVectorStore**: Vektör veritabanları için soyut taban sınıfı.
+* **QdrantStore**: `AsyncQdrantClient` aracılığıyla asenkron koleksiyon oluşturma (`create_collection`), vektör ve metin kaydetme (`upsert_documents`) ve anlamsal benzerlik araması (`similarity_search`) yeteneklerini sağlayan istemci.
+* **get_vector_store**: Global QdrantStore tekil örneğini döndüren fabrika fonksiyonu.
+
+### 4. Storage (Local / S3)
+`app/infrastructure/storage/` dizininde konumlanmıştır:
+* **BaseStorage**: Dosya yükleme, indirme ve silme için soyut arayüz.
+* **LocalStorage**: Yerel disk üzerinde çalışır. Dizin dışı dosya erişimini (Directory Traversal) engelleyen güvenlik kontrolleri barındırır.
+* **S3Storage**: AWS S3 ve MinIO ile uyumlu, asenkron `boto3` thread havuzu kullanan nesne depolama istemcisi.
+* **get_storage_client**: Konfigürasyona göre doğru depolama istemcisini dönen fabrika fonksiyonu.
+
+### 5. LLM Providers
+`app/infrastructure/providers/` dizininde konumlanmıştır:
+* **OllamaClient** (`ollama.py`): Yerel Ollama servisiyle entegrasyonu sağlar.
+* **vLLMClient** (`vllm.py`): vLLM sunucularına OpenAI uyumlu protokol üzerinden asenkron bağlanır.
+
+Bu katman yalnızca istemci bağlantılarından ve temel I/O işlemlerinden sorumludur.
 
 ---
 
