@@ -11,6 +11,7 @@ from app.api.exceptions.conflict import ConflictException
 from app.api.exceptions.not_found import NotFoundException
 from app.api.exceptions.authentication import AuthenticationException
 from app.api.exceptions.authorization import AuthorizationException
+from app.events import event_bus, UserCreatedEvent, UserDeletedEvent, UserPasswordChangedEvent
 
 class UserService:
     """SOTA Service executing user-related business rules and invitations."""
@@ -48,6 +49,17 @@ class UserService:
 
         created_user = await self.repository.create(user)
         await self.repository.mark_invite_used(schema.email)
+        
+        # Publish UserCreatedEvent
+        await event_bus.publish(UserCreatedEvent(
+            payload={
+                "user_id": created_user.id,
+                "username": created_user.username,
+                "email": created_user.email,
+                "role": created_user.role
+            }
+        ))
+        
         return created_user
 
     async def invite_user_email(self, schema: InvitedEmailCreate) -> InvitedEmailModel:
@@ -106,15 +118,24 @@ class UserService:
 
         hashed_new = hash_password(schema.new_password)
         await self.repository.update(user, {"hashed_password": hashed_new})
+        
+        # Publish UserPasswordChangedEvent
+        await event_bus.publish(UserPasswordChangedEvent(payload={"user_id": user_id}))
 
     async def soft_delete_user(self, user_id: str) -> None:
         """Soft delete user by ID."""
         user = await self.repository.soft_delete(user_id)
         if not user:
             raise NotFoundException(message="Kullanıcı bulunamadı.")
+        
+        # Publish UserDeletedEvent (soft)
+        await event_bus.publish(UserDeletedEvent(payload={"user_id": user_id, "delete_type": "soft"}))
 
     async def hard_delete_user(self, user_id: str) -> None:
         """Hard delete user by ID."""
         deleted = await self.repository.hard_delete(user_id)
         if not deleted:
             raise NotFoundException(message="Kullanıcı bulunamadı.")
+            
+        # Publish UserDeletedEvent (hard)
+        await event_bus.publish(UserDeletedEvent(payload={"user_id": user_id, "delete_type": "hard"}))

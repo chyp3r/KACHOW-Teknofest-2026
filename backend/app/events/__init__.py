@@ -6,6 +6,8 @@ from app.events.event import (
     DocumentUploadedEvent,
     DraftCreatedEvent,
     UserCreatedEvent,
+    UserDeletedEvent,
+    UserPasswordChangedEvent,
 )
 from app.events.event_bus import event_bus
 from app.events.publisher import EventPublisher
@@ -19,6 +21,8 @@ __all__ = [
     "DraftCreatedEvent",
     "DocumentRoutedEvent",
     "UserCreatedEvent",
+    "UserDeletedEvent",
+    "UserPasswordChangedEvent",
     "event_bus",
     "EventPublisher",
     "subscribe",
