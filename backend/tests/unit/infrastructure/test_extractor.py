@@ -333,3 +333,16 @@ async def test_fallback_raises_when_no_extractor_supports_input():
     with pytest.raises(DocumentExtractionError) as exc_info:
         await chain.extract(b"data")
     assert "desteği bulunmuyor" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.open_data_loader.OpenDataLoaderPDFLoader")
+async def test_open_data_loader_preserves_line_breaks(mock_loader_class):
+    """Header line structure is load-bearing: collapsing it breaks field extraction."""
+    mock_loader = MagicMock()
+    mock_loader.load.return_value = [Document(page_content="metin", metadata={})]
+    mock_loader_class.return_value = mock_loader
+
+    await OpenDataLoaderExtractor().extract(PDF_BYTES)
+
+    assert mock_loader_class.call_args.kwargs["keep_line_breaks"] is True

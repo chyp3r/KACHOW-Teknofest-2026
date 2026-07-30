@@ -127,6 +127,12 @@ class OpenDataLoaderExtractor(BaseDocumentExtractor):
                 file_path=pdf_path,
                 format=self.output_format,
                 split_pages=True,
+                # Line structure in an official document header is semantically
+                # load-bearing: "Sayı" and "Tarih" share a line, "Konu" sits below,
+                # and the signature block is name-then-title. With the default
+                # collapsing, field extraction misses tarih/konu outright and
+                # misassigns the signer to unrelated fields.
+                keep_line_breaks=True,
                 quiet=True,
             )
             documents = loader.load()

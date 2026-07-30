@@ -184,7 +184,21 @@ def create_document_analysis_graph(
     async def classify_node(state: DocumentAnalysisState) -> dict[str, Any]:
         logger.info("Running Document Classification Node...")
         prompt = (
-            "Aşağıdaki resmî evrakın türünü belirle ve kısa bir özetini çıkar.\n\n"
+            "Aşağıdaki evrakın türünü belirle ve kısa bir özetini çıkar.\n\n"
+            "Tür ayrımında şu ölçütleri kullan:\n"
+            "- official_letter: 'T.C.' başlığı, kurum antedi, Sayı/Tarih/Konu "
+            "alanları ve kurum yetkilisinin unvanlı imzası bulunan, bir kurumdan "
+            "gönderilen yazı. Kurumlar arası yazışmaların varsayılan türüdür.\n"
+            "- petition: bir vatandaşın kendi adına talep veya şikayet ilettiği, "
+            "kurum antedi bulunmayan başvuru.\n"
+            "- information_request: yalnızca 4982 sayılı Kanun kapsamında bilgi "
+            "veya belge talebi açıkça istendiğinde kullanılır.\n"
+            "- complaint: şikayet bildirimi. circular: genelge. "
+            "directive: talimat. report: rapor. minutes: tutanak.\n"
+            "- leave_request: izin talebi.\n"
+            "- other: yalnızca yukarıdakilerin hiçbiri uymuyorsa.\n\n"
+            "Kurum antetli ve unvanlı imza taşıyan bir yazıyı vatandaş başvurusu "
+            "olarak sınıflandırma.\n\n"
             f"EVRAK:\n\"\"\"\n{_trim_for_extraction(state['input_text'])}\n\"\"\""
             f"{_ocr_warning(state.get('is_ocr_text', False))}"
         )
@@ -211,6 +225,10 @@ def create_document_analysis_graph(
     # 2. Field Extraction Node
     async def extract_field_node(state: DocumentAnalysisState) -> dict[str, Any]:
         logger.info("Running Evrak Field Extraction Node...")
+        # Kept deliberately short. A longer version enumerating field positions and
+        # prohibitions was measured against qwen3:8b and made it return an empty
+        # object on every run, while this wording extracts tarih and konu reliably.
+        # Field placement guidance belongs in the schema descriptions, not here.
         prompt = (
             "Aşağıdaki resmî evraktan üstveri alanlarını çıkar. Bir alan belgede "
             "gerçekten yoksa o alanı null bırak; tahmin etme, örnek değer üretme.\n\n"
