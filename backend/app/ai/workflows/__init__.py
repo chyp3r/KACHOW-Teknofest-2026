@@ -1,6 +1,3 @@
-from app.ai.workflows.classification_graph import (
-    create_classification_graph,
-)
 from app.ai.workflows.document_analysis_graph import (
     create_document_analysis_graph,
 )
@@ -11,7 +8,6 @@ from app.ai.workflows.routing_graph import create_routing_graph
 from app.ai.workflows.system_graph import create_system_graph
 
 __all__ = [
-    "create_classification_graph",
     "create_document_analysis_graph",
     "create_rag_graph",
     "create_draft_graph",
