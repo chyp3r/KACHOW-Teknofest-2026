@@ -20,6 +20,7 @@ class PlanningState(TypedDict):
     rag_result: dict[str, Any]
     draft_result: dict[str, Any]
     routing_result: dict[str, Any]
+    chat_result: dict[str, Any]
     final_output: dict[str, Any]
 
 
@@ -27,7 +28,7 @@ class PlanOutput(BaseModel):
     """Pydantic schema for structured planning decisions."""
 
     required_steps: list[str] = Field(
-        description="Çalıştırılması gereken adımların sıralı listesi. Şunları içerebilir: 'classification', 'rag', 'draft', 'routing'."
+        description="Çalıştırılması gereken adımların sıralı listesi. Şunları içerebilir: 'classification', 'rag', 'draft', 'routing', 'chat'."
     )
     reasoning: str = Field(
         description="Neden bu adımların seçildiğinin Türkçe gerekçesi."
@@ -51,9 +52,11 @@ def _requested_correspondence_type(
     )
 
 
+from app.ai.agents.chat import ChatAgent
+
 def create_planning_graph(
     llm_client: BaseLLMClient,
-    classification_graph: Any,
+    document_analysis_graph: Any,
     rag_graph: Any,
     draft_graph: Any,
     routing_graph: Any,
@@ -64,6 +67,7 @@ def create_planning_graph(
     through sub-graphs (Classification, RAG, Draft, Routing) sequentially.
     """
     orchestrator_agent = OrchestratorAgent(llm_client)
+    chat_agent = ChatAgent(llm_client)
 
     # 1. Planning/Supervisor Node
     async def supervisor_planning_node(state: PlanningState) -> dict[str, Any]:
@@ -77,7 +81,7 @@ def create_planning_graph(
             "- Eğer belgeden bilgi çıkarma veya mevzuata dayalı cevaplama gerekiyorsa 'rag' çalışmalıdır.\n"
             "- Eğer resmi bir yazı, mektup veya taslak hazırlanması gerekiyorsa 'draft' çalışmalıdır.\n"
             "- Eğer hazırlanan yazının yönlendirilmesi/aksiyonu gerekiyorsa 'routing' çalışmalıdır.\n"
-            "- Eğer sadece basit bir sohbet veya bilgi dışı soruysa sadece 'rag' ve 'draft' yeterlidir.\n\n"
+            "- Eğer kullanıcı sadece sohbet ediyorsa veya bilgi dışı soru soruyorsa SADECE 'chat' yeterlidir.\n\n"
             "Sıralı adımları ve gerekçesini yapılandırılmış Türkçe formatta döndür."
         )
 
@@ -93,6 +97,7 @@ def create_planning_graph(
                 "rag_result": {},
                 "draft_result": {},
                 "routing_result": {},
+                "chat_result": {},
                 "final_output": {},
             }
         except Exception:
@@ -105,6 +110,7 @@ def create_planning_graph(
                 "rag_result": {},
                 "draft_result": {},
                 "routing_result": {},
+                "chat_result": {},
                 "final_output": {},
             }
 
@@ -123,8 +129,8 @@ def create_planning_graph(
 
         # Dynamically execute corresponding sub-graph
         if current_step == "classification":
-            sub_res = await classification_graph.ainvoke(
-                {"input_text": state["input_text"]}
+            sub_res = await document_analysis_graph.ainvoke(
+                {"input_text": state["input_text"], "is_ocr_text": False}
             )
             new_state_updates["classification_result"] = sub_res
 
@@ -167,6 +173,10 @@ def create_planning_graph(
             )
             new_state_updates["routing_result"] = sub_res
 
+        elif current_step == "chat":
+            reply = await chat_agent.run(messages=state["input_text"])
+            new_state_updates["chat_result"] = {"reply": reply, "status": "COMPLETED"}
+
         else:
             logger.warning(f"Unknown workflow step skipped: {current_step}")
 
@@ -182,6 +192,9 @@ def create_planning_graph(
             routing_res = new_state_updates.get("routing_result") or state.get(
                 "routing_result"
             )
+            chat_res = new_state_updates.get("chat_result") or state.get(
+                "chat_result"
+            )
 
             draft_status = (draft_res or {}).get("status")
             final_status = (
@@ -195,6 +208,7 @@ def create_planning_graph(
                 "rag": rag_res,
                 "draft": draft_res,
                 "routing": routing_res,
+                "chat": chat_res,
             }
 
         return new_state_updates

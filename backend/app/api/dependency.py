@@ -13,6 +13,10 @@ from app.ai.retrieval.corpus_loader import load_mevzuat_corpus
 from app.ai.retrieval.dense import DenseRetriever
 from app.ai.retrieval.hybrid import HybridRetriever
 from app.ai.workflows.document_analysis_graph import create_document_analysis_graph
+from app.ai.workflows.draft_graph import create_draft_graph
+from app.ai.workflows.routing_graph import create_routing_graph
+from app.ai.workflows.rag_graph import create_rag_graph
+from app.ai.workflows.planning_graph import create_planning_graph
 from app.core.config import settings
 from app.core.enums.user_role import UserRole
 from app.core.security import decode_token
@@ -21,6 +25,8 @@ from app.infrastructure.extractors import get_document_extractor
 from app.infrastructure.storage import get_storage_client
 from app.infrastructure.vectorstore import get_vector_store
 from app.domains.documents.service import DocumentService
+from app.domains.documents.draft_service import DraftService
+from app.domains.chat.chat_service import ChatService
 from app.domains.users.model.user_model import UserModel
 from app.domains.users.repository import UserRepository
 from app.domains.users.service import UserService
@@ -166,3 +172,81 @@ def get_document_analysis_service(
         extractor=get_document_extractor(),
         analysis_graph=analysis_graph,
     )
+
+# ---------------------------------------------------------------------------
+# Drafting & Routing (Görev 2)
+# ---------------------------------------------------------------------------
+_draft_graph: Any = None
+_routing_graph: Any = None
+
+
+async def get_draft_graph() -> Any:
+    """Compile the document drafting workflow once per process."""
+    global _draft_graph
+    if _draft_graph is None:
+        _draft_graph = create_draft_graph(llm_client=get_llm_client())
+    return _draft_graph
+
+
+async def get_routing_graph() -> Any:
+    """Compile the document routing workflow once per process."""
+    global _routing_graph
+    if _routing_graph is None:
+        _routing_graph = create_routing_graph(llm_client=get_llm_client())
+    return _routing_graph
+
+
+def get_draft_service(
+    draft_graph: Any = Depends(get_draft_graph),
+    routing_graph: Any = Depends(get_routing_graph),
+) -> DraftService:
+    """Provide the draft service with its collaborators injected."""
+    return DraftService(
+        storage=get_storage_client(),
+        extractor=get_document_extractor(),
+        draft_graph=draft_graph,
+        routing_graph=routing_graph,
+    )
+
+# ---------------------------------------------------------------------------
+# Chat & Orchestration (Görev 3)
+# ---------------------------------------------------------------------------
+_rag_graph: Any = None
+_planning_graph: Any = None
+
+
+async def get_rag_graph() -> Any:
+    """Compile the RAG workflow once per process."""
+    global _rag_graph
+    if _rag_graph is None:
+        _rag_graph = create_rag_graph(
+            llm_client=get_llm_client(),
+            hybrid_retriever=await get_mevzuat_retriever(),
+        )
+    return _rag_graph
+
+
+async def get_planning_graph(
+    document_analysis_graph: Any = Depends(get_document_analysis_graph),
+    rag_graph: Any = Depends(get_rag_graph),
+    draft_graph: Any = Depends(get_draft_graph),
+    routing_graph: Any = Depends(get_routing_graph),
+) -> Any:
+    """Compile the master planning graph once per process."""
+    global _planning_graph
+    if _planning_graph is None:
+        _planning_graph = create_planning_graph(
+            llm_client=get_llm_client(),
+            document_analysis_graph=document_analysis_graph,
+            rag_graph=rag_graph,
+            draft_graph=draft_graph,
+            routing_graph=routing_graph,
+        )
+    return _planning_graph
+
+
+def get_chat_service(
+    planning_graph: Any = Depends(get_planning_graph),
+) -> ChatService:
+    """Provide the ChatService."""
+    return ChatService(planning_graph=planning_graph)

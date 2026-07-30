@@ -7,17 +7,11 @@ from pydantic import ValidationError
 from app.ai.llms.base import BaseLLMClient
 from app.ai.retrieval.hybrid import HybridRetriever
 from app.ai.workflows import (
-    create_classification_graph,
     create_draft_graph,
     create_planning_graph,
     create_rag_graph,
     create_routing_graph,
     create_system_graph,
-)
-from app.ai.workflows.classification_graph import (
-    ClassificationOutput,
-    MetadataOutput,
-    NEROutput,
 )
 from app.ai.workflows.correspondence import resolve_correspondence_type
 from app.ai.workflows.draft_graph import EditorOutput, EvaluatorOutput
@@ -26,37 +20,6 @@ from app.ai.workflows.rag_graph import QueryRewriteOutput, VerifierOutput
 from app.ai.workflows.routing_graph import RouteOutput
 from app.core.enums.correspondence_type import CorrespondenceType
 from app.infrastructure.cache.redis import RedisCache
-
-
-# ==========================================
-# Classification Graph Test
-# ==========================================
-@pytest.mark.asyncio
-@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
-@patch("app.ai.agents.ner.NERAgent.run_structured")
-@patch("app.ai.agents.metadata.MetadataAgent.run_structured")
-async def test_classification_graph(mock_meta_run, mock_ner_run, mock_class_run):
-    # Setup mocks
-    mock_class_run.return_value = ClassificationOutput(
-        doc_type="Dilekçe", summary="İzin talebi özeti."
-    )
-    mock_ner_run.return_value = NEROutput(
-        people=["Ahmet Yılmaz"], organizations=["ASELSAN"], dates=["29 Temmuz"]
-    )
-    mock_meta_run.return_value = MetadataOutput(metadata={"konu": "İzin"})
-
-    mock_llm = MagicMock(spec=BaseLLMClient)
-    graph = create_classification_graph(mock_llm)
-
-    res = await graph.ainvoke(
-        {"input_text": "Ahmet Yılmaz 29 Temmuz tarihinde ASELSAN'da izin istiyor."}
-    )
-
-    assert res["doc_type"] == "Dilekçe"
-    assert res["summary"] == "İzin talebi özeti."
-    assert res["entities"]["people"] == ["Ahmet Yılmaz"]
-    assert res["metadata"]["konu"] == "İzin"
-    assert res["next_workflow_state"] == "RAG"
 
 
 # ==========================================
@@ -583,7 +546,7 @@ async def test_planning_master_graph(mock_orch_run):
 
     master_graph = create_planning_graph(
         llm_client=mock_llm,
-        classification_graph=mock_class_graph,
+        document_analysis_graph=mock_class_graph,
         rag_graph=mock_rag_graph,
         draft_graph=mock_draft_graph,
         routing_graph=mock_routing_graph,

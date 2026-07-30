@@ -20,16 +20,23 @@ class DocumentAnalysisSchema(BaseModel):
     recommended_rules: List[str]
     summary: str
 
-class DocumentDraftSchema(BaseModel):
-    document_id: str
-    draft_type: str
-    draft_content: str
-    is_official_tone: bool
+class DraftRequestSchema(BaseModel):
+    """Payload for initiating a drafting and routing workflow."""
 
-class DocumentRouteSchema(BaseModel):
-    document_id: str
-    target_unit: str
-    reason: str
+    storage_path: str = Field(description="Ham evrakın saklandığı referans yol (Görev 1 çıktısından gelir).")
+    classification: dict = Field(description="Görev 1'den elde edilen belge analiz ve sınıflandırma sonucu (EvrakField dahil).")
+    instructions: str = Field(default="", description="Opsiyonel kullanıcı talimatı veya prompt eklemesi.")
+    correspondence_type: str | None = Field(default=None, description="Zorunlu tutulmak istenen yazışma türü (örn. 'cover_letter').")
+
+
+class DraftResponseSchema(BaseModel):
+    """Result of the drafting and routing workflow."""
+
+    draft: str = Field(description="Üretilen nihai resmî yazı taslağı.")
+    confidence_score: float = Field(description="Taslak kalitesine verilen güven skoru (0-100).")
+    requires_human_approval: bool = Field(description="İnsan onayı gerektirip gerektirmediği (eksik bilgi vb. durumlar).")
+    destination: str = Field(description="Evrakın yönlendirildiği birim (HR, Legal vb.) veya aksiyon.")
+    justification: str = Field(description="Yönlendirme kararının gerekçesi.")
 
 
 class ExtractionInfoSchema(BaseModel):
