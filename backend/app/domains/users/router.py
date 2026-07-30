@@ -35,7 +35,7 @@ async def invite_user(
     service = UserService(repository)
     invite = await service.invite_user_email(schema)
     response_data = InvitedEmailResponse.model_validate(invite)
-    return SuccessResponse(data=response_data, message="Email address successfully invited.")
+    return SuccessResponse(data=response_data)
 
 @router.get("", response_model=APIResponse[List[UserResponse]])
 async def list_users(
