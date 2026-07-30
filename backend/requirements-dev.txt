@@ -1,2 +1,3 @@
 -r requirements.txt
 reportlab>=4.2.0
+Levenshtein>=0.25.0
