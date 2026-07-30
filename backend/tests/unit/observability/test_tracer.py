@@ -28,7 +28,7 @@ def test_get_langfuse_callback_success(mock_handler, monkeypatch):
     
     result1 = get_langfuse_callback()
     assert result1 == mock_instance
-    mock_handler.assert_called_once_with(public_key="pub", secret_key="sec", host="host")
+    mock_handler.assert_called_once_with(public_key="pub")
     
     # Check singleton behavior
     result2 = get_langfuse_callback()
