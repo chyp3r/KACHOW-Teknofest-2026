@@ -1,4 +1,3 @@
-from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +15,8 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen3.5:9b"
     OLLAMA_TEMPERATURE: float = 0.7
+    OLLAMA_REASONING: bool = False
+    OLLAMA_MAX_TOKENS: int = 1024
 
     # vLLM Configuration
     VLLM_BASE_URL: str = "http://localhost:8000/v1"
@@ -40,15 +41,12 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str = "minioadmin"
 
     # Langfuse Configuration
-    LANGFUSE_PUBLIC_KEY: Optional[str] = None
-    LANGFUSE_SECRET_KEY: Optional[str] = None
+    LANGFUSE_PUBLIC_KEY: str | None = None
+    LANGFUSE_SECRET_KEY: str | None = None
     LANGFUSE_HOST: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=True,
-        extra="ignore"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore"
     )
 
 
