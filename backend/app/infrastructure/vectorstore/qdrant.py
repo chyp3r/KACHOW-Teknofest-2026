@@ -101,14 +101,18 @@ class QdrantStore(BaseVectorStore):
     ) -> List[Dict[str, Any]]:
         """Search similar vectors in Qdrant collection and return normalized payload objects."""
         try:
-            results = await self.client.search(
+            # `search()` was removed in qdrant-client 1.x in favour of
+            # `query_points()`. Because this method swallows exceptions and returns
+            # an empty list, calling the removed API made every dense lookup return
+            # no hits silently, degrading hybrid retrieval to sparse-only.
+            response = await self.client.query_points(
                 collection_name=collection_name,
-                query_vector=query_vector,
+                query=query_vector,
                 limit=limit,
             )
 
             hits = []
-            for hit in results:
+            for hit in response.points:
                 payload = hit.payload or {}
                 # Pop out the raw text key
                 text = payload.pop("text", "")
