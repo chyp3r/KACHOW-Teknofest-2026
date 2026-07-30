@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # Ollama Configuration
     # Note: When running inside Docker, set OLLAMA_BASE_URL to http://host.docker.internal:11434
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "qwen3:4b-instruct-2507-q4_K_M"
+    OLLAMA_MODEL: str = "qwen3.5:9b"
     OLLAMA_TEMPERATURE: float = 0.7
     OLLAMA_REASONING: bool = False
     OLLAMA_MAX_TOKENS: int = 1024

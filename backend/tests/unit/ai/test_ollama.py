@@ -5,7 +5,7 @@ from langchain_core.messages import AIMessage
 from pydantic import BaseModel
 
 from app.ai.llms import get_llm_client
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.infrastructure.providers.ollama import OllamaClient
 
 
@@ -139,3 +139,7 @@ def test_ollama_factory_uses_local_defaults():
     assert client.model_name == settings.OLLAMA_MODEL
     assert client.reasoning is False
     assert client.max_tokens == 1024
+
+
+def test_shared_config_keeps_repository_model_default():
+    assert Settings.model_fields["OLLAMA_MODEL"].default == "qwen3.5:9b"

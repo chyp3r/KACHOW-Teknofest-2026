@@ -206,7 +206,7 @@ Uygulanan mimari yapıda aşağıdaki bileşenler yer almaktadır:
 
 ### Yerel Ollama Varsayılanları
 
-Yerel geliştirme profili, 6 GB VRAM ve 16 GB sistem belleğine sahip geliştirici bilgisayarlarında dengeli gecikme ve çıktı kalitesi sağlamak için `qwen3:4b-instruct-2507-q4_K_M` modelini kullanır. Modelin düşünme modu varsayılan olarak kapalıdır (`OLLAMA_REASONING=false`) ve çıktı uzunluğu `OLLAMA_MAX_TOKENS=1024` ile sınırlandırılır. Bu iki değer ortam değişkenleriyle veya gerekli olduğunda tek bir LLM çağrısı için geçersiz kılınabilir.
+Yerel Ollama modeli repository genelinde geliştirici donanımına göre değiştirilmez. Paylaşılan fallback değeri `qwen3.5:9b` olarak korunur; her geliştirici kullanacağı modeli kendi Git'e eklenmeyen `.env` dosyasında `OLLAMA_MODEL` ile seçer. Örneğin 6 GB VRAM'e sahip bir bilgisayarda `OLLAMA_MODEL=qwen3:4b-instruct-2507-q4_K_M` kullanılabilir. Düşünme modu `OLLAMA_REASONING`, çıktı uzunluğu ise `OLLAMA_MAX_TOKENS` ile aynı yerel dosyada yapılandırılabilir.
 
 `OllamaClient`, normal metin üretimi, akış ve yapılandırılmış çıktı yöntemlerinde aynı model, reasoning ve token sınırı ayarlarını uygular. Üretim sunucuları için tanımlanan vLLM modeli bu yerel geliştirme profilinden bağımsızdır.
 
