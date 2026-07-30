@@ -17,6 +17,7 @@ from app.infrastructure.extractors.open_data_loader import OpenDataLoaderExtract
 from app.infrastructure.extractors.pdfium import PdfiumExtractor
 from app.infrastructure.extractors.plain_text import PlainTextExtractor
 from app.infrastructure.extractors.tesseract import TesseractExtractor
+from app.infrastructure.extractors.vision import OllamaVisionExtractor
 
 TURKISH_TEXT = "Sayı: 12345\nKonu: İzin Talebi\nŞçöğüıİĞÜ"
 PDF_BYTES = b"%PDF-1.7\n trailing binary content"
@@ -346,3 +347,89 @@ async def test_open_data_loader_preserves_line_breaks(mock_loader_class):
     await OpenDataLoaderExtractor().extract(PDF_BYTES)
 
     assert mock_loader_class.call_args.kwargs["keep_line_breaks"] is True
+
+
+# ==========================================
+# Readability signal and escalation
+# ==========================================
+GARBAGE_OCR = (
+    "e ee m ; ay MN a\n, e. Personel Genel esi # Lei a , Di m RE e Ni yi vel\n"
+    "Ke Beyi Sefa 14 İL008.07 GATS2 Per ler ae AŞ e\nVU Dİ Talih 1203:2028 | >. İY Ea ayl 0"
+)
+READABLE_OCR = (
+    "T.C.\nÖRNEK BAKANLIĞI\nPersonel Genel Müdürlüğü\n\n"
+    "Sayı : E-11111111-903.07.02-4752\nTarih : 12.03.2026\n"
+    "Konu : Yıllık İzin Talebinin Değerlendirilmesi"
+)
+
+
+def test_quality_ratio_separates_readable_text_from_ocr_garbage():
+    readable = ExtractedDocument(text=READABLE_OCR, extractor="t").quality_ratio
+    garbage = ExtractedDocument(text=GARBAGE_OCR, extractor="t").quality_ratio
+    assert readable > 0.6
+    assert garbage < 0.6
+
+
+def test_quality_ratio_of_empty_text_is_zero():
+    assert ExtractedDocument(text="   ", extractor="t").quality_ratio == 0.0
+
+
+@pytest.mark.asyncio
+async def test_chain_escalates_past_long_but_unreadable_output():
+    """The case that motivated the signal: OCR on a degraded scan returns plenty
+    of characters, so a length-only threshold would accept the garbage."""
+    noisy = _FakeExtractor("noisy", text=GARBAGE_OCR * 6)
+    clean = _FakeExtractor("clean", text=READABLE_OCR * 6)
+    chain = FallbackDocumentExtractor([noisy, clean], min_char_count=200)
+
+    result = await chain.extract(b"data")
+
+    assert noisy.call_count == 1
+    assert result.extractor == "clean"
+
+
+@pytest.mark.asyncio
+async def test_best_effort_prefers_readability_over_length():
+    """A short clean result beats a long unreadable one when nothing qualifies."""
+    long_garbage = _FakeExtractor("long_garbage", text=GARBAGE_OCR * 4)
+    short_clean = _FakeExtractor("short_clean", text="Sayı bilgisi bulunmaktadır")
+    chain = FallbackDocumentExtractor(
+        [long_garbage, short_clean], min_char_count=10_000
+    )
+
+    result = await chain.extract(b"data")
+
+    assert result.extractor == "short_clean"
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.vision.urllib.request.urlopen")
+async def test_vision_extractor_transcribes_an_image(mock_urlopen):
+    import json as _json
+
+    class _Resp:
+        def read(self_inner):
+            return _json.dumps({"response": "T.C.\nÖRNEK BAKANLIĞI"}).encode()
+
+        def __enter__(self_inner):
+            return self_inner
+
+        def __exit__(self_inner, *args):
+            return False
+
+    mock_urlopen.return_value = _Resp()
+
+    result = await OllamaVisionExtractor(model="glm-ocr:latest").extract(
+        b"\x89PNG fake", mime_type="image/png"
+    )
+
+    assert result.text == "T.C.\nÖRNEK BAKANLIĞI"
+    assert result.used_ocr is True
+    assert result.extractor == "ollama_vision"
+
+
+def test_vision_extractor_supports_images_and_pdf_but_not_text():
+    extractor = OllamaVisionExtractor()
+    assert extractor.supports(b"x", mime_type="image/png") is True
+    assert extractor.supports(PDF_BYTES) is True
+    assert extractor.supports(b"x", mime_type="text/plain") is False

@@ -34,6 +34,10 @@ OCR_LANGUAGE: str = "tur"
 # Rasterisation density for OCR; under-scaling is the main cause of poor
 # Turkish character recognition.
 OCR_RENDER_DPI: int = 300
+# Below this share of word-length tokens an extraction is treated as unreadable
+# and the chain escalates. Character count alone cannot detect OCR garbage:
+# a degraded scan yields plenty of characters, just wrong ones.
+MIN_TEXT_QUALITY_RATIO: float = 0.6
 # Tesseract page segmentation mode 6 = assume a single uniform block of text,
 # which matches the block layout of official correspondence.
 OCR_PAGE_SEGMENTATION_MODE: int = 6

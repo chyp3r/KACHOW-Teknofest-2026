@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from app.core.constants import MIN_EXTRACTED_CHAR_COUNT
+from app.core.constants import MIN_EXTRACTED_CHAR_COUNT, MIN_TEXT_QUALITY_RATIO
 from app.infrastructure.extractors.base import (
     BaseDocumentExtractor,
     DocumentExtractionError,
@@ -26,16 +26,39 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         self,
         extractors: list[BaseDocumentExtractor],
         min_char_count: int = MIN_EXTRACTED_CHAR_COUNT,
+        min_quality_ratio: float = MIN_TEXT_QUALITY_RATIO,
     ) -> None:
         """Initialise the chain.
 
         Args:
             extractors: Candidate extractors, tried in order.
-            min_char_count: Character count at or above which a result is accepted
-                without trying the remaining extractors.
+            min_char_count: Character count at or above which a result may be
+                accepted without trying the remaining extractors.
+            min_quality_ratio: Share of word-length tokens a result must reach to
+                be considered readable.
         """
         self.extractors = extractors
         self.min_char_count = min_char_count
+        self.min_quality_ratio = min_quality_ratio
+
+    def _is_acceptable(self, result: ExtractedDocument) -> bool:
+        """Report whether a result is good enough to stop the chain.
+
+        Both checks are needed. Length alone accepts OCR garbage: on a degraded
+        scan Tesseract returned 758 characters of nonsense, comfortably past the
+        length threshold, and the chain would have stopped there and reported no
+        header fields at all.
+
+        Args:
+            result: A candidate extraction.
+
+        Returns:
+            True when the result is long enough and readable enough.
+        """
+        return (
+            result.char_count >= self.min_char_count
+            and result.quality_ratio >= self.min_quality_ratio
+        )
 
     async def extract(
         self,
@@ -81,22 +104,27 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
                 )
                 continue
 
-            if result.char_count >= self.min_char_count:
+            if self._is_acceptable(result):
                 logger.info(
-                    "Extractor [%s] accepted with %d characters.",
+                    "Extractor [%s] accepted with %d characters (quality %.2f).",
                     extractor.name,
                     result.char_count,
+                    result.quality_ratio,
                 )
                 return result
 
             logger.info(
-                "Extractor [%s] returned only %d characters (threshold %d); "
-                "trying the next one.",
+                "Extractor [%s] rejected: %d characters (threshold %d), quality "
+                "%.2f (threshold %.2f); trying the next one.",
                 extractor.name,
                 result.char_count,
                 self.min_char_count,
+                result.quality_ratio,
+                self.min_quality_ratio,
             )
-            if best is None or result.char_count > best.char_count:
+            # Rank best-effort candidates by readability rather than sheer length,
+            # so a short clean result beats a long unreadable one.
+            if best is None or result.quality_ratio > best.quality_ratio:
                 best = result
 
         if best is not None:

@@ -10,6 +10,7 @@ from app.infrastructure.extractors.open_data_loader import OpenDataLoaderExtract
 from app.infrastructure.extractors.pdfium import PdfiumExtractor
 from app.infrastructure.extractors.plain_text import PlainTextExtractor
 from app.infrastructure.extractors.tesseract import TesseractExtractor
+from app.infrastructure.extractors.vision import OllamaVisionExtractor
 
 _document_extractor: Optional[BaseDocumentExtractor] = None
 
@@ -32,6 +33,9 @@ def get_document_extractor() -> BaseDocumentExtractor:
                 OpenDataLoaderExtractor(),
                 PdfiumExtractor(),
                 TesseractExtractor(),
+                # Last resort: far slower than Tesseract but the only thing that
+                # survives a degraded photocopy or phone photo.
+                OllamaVisionExtractor(),
             ]
         )
     return _document_extractor
@@ -42,6 +46,7 @@ __all__ = [
     "DocumentExtractionError",
     "ExtractedDocument",
     "FallbackDocumentExtractor",
+    "OllamaVisionExtractor",
     "OpenDataLoaderExtractor",
     "PdfiumExtractor",
     "PlainTextExtractor",
