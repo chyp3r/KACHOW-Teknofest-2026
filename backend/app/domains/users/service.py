@@ -2,21 +2,24 @@ from typing import Optional, List
 from uuid import uuid4
 
 from app.domains.users.model.user_model import UserModel
+from app.domains.users.model.invited_email import InvitedEmailModel
 from app.domains.users.schema.user_schema import UserCreate, UserUpdate, PasswordChangeRequest
+from app.domains.users.schema.invited_email import InvitedEmailCreate
 from app.domains.users.repository import UserRepository
 from app.core.security import hash_password, verify_password
 from app.api.exceptions.conflict import ConflictException
 from app.api.exceptions.not_found import NotFoundException
 from app.api.exceptions.authentication import AuthenticationException
+from app.api.exceptions.authorization import AuthorizationException
 
 class UserService:
-    """SOTA Service executing user-related business rules."""
+    """SOTA Service executing user-related business rules and invitations."""
 
     def __init__(self, repository: UserRepository):
         self.repository = repository
 
     async def register_user(self, schema: UserCreate) -> UserModel:
-        """Register a new user, hash their password, and persist to database."""
+        """Register a new user, checking invitation whitelist first and assigning invite-specific role."""
         existing_user = await self.repository.get_by_username(schema.username)
         if existing_user:
             raise ConflictException(message="Bu kullanıcı adı zaten alınmış.")
@@ -25,19 +28,48 @@ class UserService:
         if existing_email:
             raise ConflictException(message="Bu e-posta adresi zaten kullanımda.")
 
+        # Whitelist (invite) check
+        invite = await self.repository.get_invite_by_email(schema.email)
+        if not invite:
+            raise AuthorizationException(message="Bu e-posta adresi sistem yöneticisi tarafından davet edilmemiş.")
+
         hashed = hash_password(schema.password)
         
+        # Enforce role defined by the manager in the invite
         user = UserModel(
             id=str(uuid4()),
             username=schema.username,
             email=schema.email,
             hashed_password=hashed,
-            role=schema.role.value,
+            role=invite.role,
             is_active=True,
             is_deleted=False
         )
 
-        return await self.repository.create(user)
+        created_user = await self.repository.create(user)
+        await self.repository.mark_invite_used(schema.email)
+        return created_user
+
+    async def invite_user_email(self, schema: InvitedEmailCreate) -> InvitedEmailModel:
+        """Invite/whitelist an email for registration (Admin/Manager only)."""
+        # Check if email is already registered
+        registered = await self.repository.get_by_email(schema.email)
+        if registered:
+            raise ConflictException(message="Bu e-posta adresiyle zaten bir kullanıcı kayıtlı.")
+
+        # Check if active invite already exists
+        existing_invite = await self.repository.get_invite_by_email(schema.email)
+        if existing_invite:
+            raise ConflictException(message="Bu e-posta adresi zaten davet edilmiş.")
+
+        invite = InvitedEmailModel(
+            id=str(uuid4()),
+            email=schema.email,
+            role=schema.role.value,
+            is_used=False
+        )
+
+        return await self.repository.create_invite(invite)
 
     async def get_user_by_id(self, user_id: str) -> UserModel:
         """Fetch user by ID, raising NotFoundException if not present."""

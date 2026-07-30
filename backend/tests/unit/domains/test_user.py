@@ -10,10 +10,16 @@ from app.core.security import hash_password
 
 @pytest.mark.asyncio
 async def test_register_user_success():
+    mock_invite = MagicMock()
+    mock_invite.email = "john@example.com"
+    mock_invite.role = "employee"
+
     repository = MagicMock()
     repository.get_by_username = AsyncMock(return_value=None)
     repository.get_by_email = AsyncMock(return_value=None)
+    repository.get_invite_by_email = AsyncMock(return_value=mock_invite)
     repository.create = AsyncMock(side_effect=lambda user: user)
+    repository.mark_invite_used = AsyncMock(return_value=True)
 
     service = UserService(repository)
     schema = UserCreate(

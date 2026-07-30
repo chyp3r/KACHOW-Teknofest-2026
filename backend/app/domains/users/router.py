@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.infrastructure.database.session import get_db
 from app.api.responses import APIResponse, SuccessResponse
 from app.domains.users.schema.user_schema import UserCreate, UserUpdate, PasswordChangeRequest, UserResponse
+from app.domains.users.schema.invited_email import InvitedEmailCreate, InvitedEmailResponse
 from app.domains.users.repository import UserRepository
 from app.domains.users.service import UserService
 from app.domains.users.model.user_model import UserModel
@@ -16,12 +17,25 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.post("", response_model=APIResponse[UserResponse])
 async def register(schema: UserCreate, db: AsyncSession = Depends(get_db)):
-    """Register a new user account in the system."""
+    """Register a new user account in the system, validating the email invitation whitelist."""
     repository = UserRepository(db)
     service = UserService(repository)
     user = await service.register_user(schema)
     response_data = UserResponse.model_validate(user)
     return SuccessResponse(data=response_data)
+
+@router.post("/invitations", response_model=APIResponse[InvitedEmailResponse])
+async def invite_user(
+    schema: InvitedEmailCreate,
+    current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+    db: AsyncSession = Depends(get_db)
+):
+    """Invite/whitelist an email address with a predefined role for registration (Admin/Manager only)."""
+    repository = UserRepository(db)
+    service = UserService(repository)
+    invite = await service.invite_user_email(schema)
+    response_data = InvitedEmailResponse.model_validate(invite)
+    return SuccessResponse(data=response_data, message="E-posta adresi başarıyla davet edildi.")
 
 @router.get("", response_model=APIResponse[List[UserResponse]])
 async def list_users(
