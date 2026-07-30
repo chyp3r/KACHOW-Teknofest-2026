@@ -204,6 +204,12 @@ Uygulanan mimari yapıda aşağıdaki bileşenler yer almaktadır:
 * **OllamaClient** (`app/ai/llms/ollama.py`): Yerel Ollama servisiyle (`ChatOllama` üzerinden) entegrasyonu sağlar. Qwen gibi yerel modelleri çalıştırır.
 * **get_llm_client** (`app/ai/llms/__init__.py`): İstenen sağlayıcıya ve parametrelere göre doğru istemciyi döndüren fabrika fonksiyonu.
 
+### Yerel Ollama Varsayılanları
+
+Yerel geliştirme profili, 6 GB VRAM ve 16 GB sistem belleğine sahip geliştirici bilgisayarlarında dengeli gecikme ve çıktı kalitesi sağlamak için `qwen3:4b-instruct-2507-q4_K_M` modelini kullanır. Modelin düşünme modu varsayılan olarak kapalıdır (`OLLAMA_REASONING=false`) ve çıktı uzunluğu `OLLAMA_MAX_TOKENS=1024` ile sınırlandırılır. Bu iki değer ortam değişkenleriyle veya gerekli olduğunda tek bir LLM çağrısı için geçersiz kılınabilir.
+
+`OllamaClient`, normal metin üretimi, akış ve yapılandırılmış çıktı yöntemlerinde aynı model, reasoning ve token sınırı ayarlarını uygular. Üretim sunucuları için tanımlanan vLLM modeli bu yerel geliştirme profilinden bağımsızdır.
+
 Örnek sağlayıcılar:
 * OpenAI
 * Ollama (Aktif)

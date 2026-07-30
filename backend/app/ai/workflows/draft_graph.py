@@ -208,11 +208,15 @@ def create_draft_graph(llm_client: BaseLLMClient):
             "Taslağı seçilen yazışma türünün amacı/yapısı, kaynaklara sadakat, kurumsal dil, "
             "Türkçe yazım kuralları, noktalama ve akıcılık yönünden denetle. Kaynaklarda "
             "bulunmayan bir iddia veya cevap için zorunlu eksik bilgi varsa revizyon iste ve "
-            "bunu geri bildirimde açıkça belirt."
+            "bunu geri bildirimde açıkça belirt. Yapılandırılmış yanıtta needs_revision "
+            "alanını mutlaka true veya false olarak doldur; feedback alanını en fazla üç "
+            "kısa cümleyle sınırla."
         )
         try:
             res: EditorOutput = await editor_agent.run_structured(
-                messages=prompt, response_model=EditorOutput
+                messages=prompt,
+                response_model=EditorOutput,
+                temperature=0.0,
             )
             return {
                 "needs_revision": res.needs_revision,
@@ -272,11 +276,14 @@ def create_draft_graph(llm_client: BaseLLMClient):
             "Metni seçilen yazışma türüne uygunluk, kaynaklara sadakat, eksiksizlik, kurumsal "
             "dil ve doğruluk açısından son kez incele. Nihai metni, 0–100 güven skorunu, insan "
             "onayı gereksinimini ve kısa gerekçeyi döndür. Kaynaklarda bulunmayan bilgi varsa "
-            "güven skorunu düşür ve insan onayı iste."
+            "güven skorunu düşür ve insan onayı iste. Tüm yapılandırılmış alanları eksiksiz "
+            "doldur ve evaluation_notes alanını en fazla iki kısa cümleyle sınırla."
         )
         try:
             res: EvaluatorOutput = await evaluator_agent.run_structured(
-                messages=prompt, response_model=EvaluatorOutput
+                messages=prompt,
+                response_model=EvaluatorOutput,
+                temperature=0.0,
             )
             requires_human_approval = (
                 state.get("requires_human_approval", False)

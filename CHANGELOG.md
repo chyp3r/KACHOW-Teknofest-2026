@@ -20,7 +20,6 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   - **Soft Delete**: Kullanıcıyı kalıcı olarak silmeden `is_deleted=True` ve `is_active=False` yapmak için `/users/{user_id}/soft` (DELETE) ucu eklendi (Yalnızca Admin yetkili).
   - **Hard Delete**: Kullanıcı kaydını veritabanından kalıcı olarak silmek için `/users/{user_id}/hard` (DELETE) ucu eklendi (Yalnızca Admin yetkili).
   - **Birim Testleri**: Silme (soft/hard), listeleme, şifre değiştirme ve güncelleme senaryolarını doğrulayan 5 yeni birim testi `tests/unit/domains/test_user.py` dosyasına eklendi. Tüm testler başarıyla geçti.
-
 ## [1.6.0] - 2026-07-30
 ### Eklendi
 - **Rol Tabanlı Kullanıcı ve Yetkilendirme Sistemi (RBAC)**:
