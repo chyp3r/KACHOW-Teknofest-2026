@@ -12,6 +12,8 @@ from app.ai.compliance import (
     DOCUMENT_TYPE_LABELS,
     EvrakField,
     check_required_fields,
+    detect_structural_signal,
+    format_structural_signal,
 )
 from app.ai.llms.base import BaseLLMClient
 from app.ai.retrieval.hybrid import HybridRetriever
@@ -200,6 +202,11 @@ def create_document_analysis_graph(
             "Kurum antetli ve unvanlı imza taşıyan bir yazıyı vatandaş başvurusu "
             "olarak sınıflandırma.\n\n"
             f"EVRAK:\n\"\"\"\n{_trim_for_extraction(state['input_text'])}\n\"\"\""
+            # Deterministic regex observations, injected as facts rather than as
+            # instructions. Measured on qwen3:8b these cut the harmful
+            # official_letter -> petition confusion, which matters because the
+            # document type selects the required-field rule table.
+            f"{format_structural_signal(detect_structural_signal(state['input_text']))}"
             f"{_ocr_warning(state.get('is_ocr_text', False))}"
         )
         try:

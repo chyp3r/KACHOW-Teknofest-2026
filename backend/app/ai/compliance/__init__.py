@@ -8,6 +8,11 @@ from app.ai.compliance.field_rule import (
     SEVERITY_REQUIRED,
     FieldRule,
 )
+from app.ai.compliance.signal import (
+    StructuralSignal,
+    detect_structural_signal,
+    format_structural_signal,
+)
 
 __all__ = [
     "BLANK_VALUE_MARKER",
@@ -19,7 +24,10 @@ __all__ = [
     "REQUIRED_FIELD_RULES",
     "SEVERITY_ADVISORY",
     "SEVERITY_REQUIRED",
+    "StructuralSignal",
     "check_required_fields",
+    "detect_structural_signal",
+    "format_structural_signal",
     "is_blank",
     "normalize_value",
 ]
