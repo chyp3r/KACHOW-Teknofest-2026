@@ -25,6 +25,7 @@ class ChatService:
                 self.planning_graph.ainvoke(
                     {
                         "input_text": request.message,
+                        "document_id": request.document_id,
                     },
                     config=self._trace_config()
                 ),
@@ -49,10 +50,13 @@ class ChatService:
         chat_res = final_output.get("chat", {})
         draft_res = final_output.get("draft", {})
         rag_res = final_output.get("rag", {})
+        document_qa_res = final_output.get("document_qa", {})
         
         reply = "İşleminiz tamamlandı."
         
-        if chat_res and chat_res.get("reply"):
+        if document_qa_res and document_qa_res.get("reply"):
+            reply = document_qa_res.get("reply")
+        elif chat_res and chat_res.get("reply"):
             # Plain conversation reply
             reply = chat_res.get("reply")
         elif draft_res and draft_res.get("draft"):

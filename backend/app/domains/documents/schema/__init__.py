@@ -3,8 +3,8 @@ from app.domains.documents.schema.document_schema import (
     DocumentClassificationSchema,
     DocumentAnalysisResponseSchema,
     DocumentAnalysisSchema,
-    DocumentDraftSchema,
-    DocumentRouteSchema,
+    DraftRequestSchema,
+    DraftResponseSchema,
     ExtractionInfoSchema,
     MevzuatReferenceSchema,
 )
@@ -14,8 +14,8 @@ __all__ = [
     "DocumentClassificationSchema",
     "DocumentAnalysisSchema",
     "DocumentAnalysisResponseSchema",
-    "DocumentDraftSchema",
-    "DocumentRouteSchema",
+    "DraftRequestSchema",
+    "DraftResponseSchema",
     "ExtractionInfoSchema",
     "MevzuatReferenceSchema",
 ]

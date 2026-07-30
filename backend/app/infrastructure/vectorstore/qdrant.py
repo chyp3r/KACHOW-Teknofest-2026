@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http import models
@@ -97,7 +97,7 @@ class QdrantStore(BaseVectorStore):
             return False
 
     async def similarity_search(
-        self, collection_name: str, query_vector: List[float], limit: int = 5
+        self, collection_name: str, query_vector: List[float], limit: int = 5, filter_dict: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """Search similar vectors in Qdrant collection and return normalized payload objects."""
         try:
@@ -105,10 +105,23 @@ class QdrantStore(BaseVectorStore):
             # `query_points()`. Because this method swallows exceptions and returns
             # an empty list, calling the removed API made every dense lookup return
             # no hits silently, degrading hybrid retrieval to sparse-only.
+            qdrant_filter = None
+            if filter_dict:
+                must_conditions = []
+                for key, val in filter_dict.items():
+                    must_conditions.append(
+                        models.FieldCondition(
+                            key=key,
+                            match=models.MatchValue(value=val),
+                        )
+                    )
+                qdrant_filter = models.Filter(must=must_conditions)
+
             response = await self.client.query_points(
                 collection_name=collection_name,
                 query=query_vector,
                 limit=limit,
+                query_filter=qdrant_filter,
             )
 
             hits = []

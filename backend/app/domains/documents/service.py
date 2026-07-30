@@ -27,6 +27,9 @@ from app.infrastructure.extractors.base import (
     DocumentExtractionError,
 )
 from app.infrastructure.storage.base import BaseStorage
+from app.ai.embeddings.service import EmbeddingService
+from app.ai.embeddings.chunking.recursive import RecursiveChunker
+from app.infrastructure.vectorstore.base import BaseVectorStore
 from app.shared.validator.file_validator import validate_file_extension
 
 logger = logging.getLogger(__name__)
@@ -43,6 +46,8 @@ class DocumentService:
         storage: BaseStorage,
         extractor: BaseDocumentExtractor,
         analysis_graph: Any,
+        embedding_service: Optional[EmbeddingService] = None,
+        vector_store: Optional[BaseVectorStore] = None,
     ) -> None:
         """Initialise the service with injected collaborators.
 
@@ -54,6 +59,8 @@ class DocumentService:
         self.storage = storage
         self.extractor = extractor
         self.analysis_graph = analysis_graph
+        self.embedding_service = embedding_service
+        self.vector_store = vector_store
 
     async def analyze_document(
         self,
@@ -112,6 +119,26 @@ class DocumentService:
 
         state = await self._run_analysis(extracted.text, extracted.used_ocr)
         response = self._assemble(file_name, storage_path, extracted, state)
+        
+        # Async chunk and embed for Document Q&A
+        if self.embedding_service and self.vector_store:
+            try:
+                # Run the chunker asynchronously in the background so it doesn't block the HTTP response
+                # But here we do it synchronously to ensure it's available right away.
+                # In production, this could be a Celery task.
+                chunker = RecursiveChunker(chunk_size=1000, chunk_overlap=200)
+                # Set metadata as storage_path, which acts as the document_id
+                chunks = await self.embedding_service.process_text(
+                    extracted.text, chunker=chunker
+                )
+                if chunks:
+                    for chunk in chunks:
+                        chunk.metadata["storage_path"] = storage_path
+                        
+                    await self.vector_store.create_collection("document_qa", vector_size=3584, distance="Cosine")
+                    await self.vector_store.upsert_documents("document_qa", chunks)
+            except Exception as e:
+                logger.error(f"Failed to embed and index document {storage_path} for QA: {e}")
 
         await self._publish(
             DocumentAnalyzedEvent(
