@@ -8,7 +8,7 @@ class AuthenticationException(BaseAppException):
 
     def __init__(
         self,
-        message: str = "Kimlik doğrulaması başarısız oldu.",
+        message: str = "Authentication failed.",
         error_code: str = "AUTHENTICATION_FAILED",
         details: Optional[Dict[str, Any]] = None,
     ):

@@ -26,12 +26,12 @@ from app.domains.users.repository import UserRepository
 from app.domains.users.service import UserService
 from app.api.exceptions.authentication import AuthenticationException
 from app.api.exceptions.authorization import AuthorizationException
-
 from app.infrastructure.cache import get_cache
 
 logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login", auto_error=False)
+
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -39,36 +39,39 @@ async def get_current_user(
 ) -> UserModel:
     """Dependency to retrieve and authenticate the currently logged-in user from the JWT access token."""
     if not token:
-        raise AuthenticationException(message="Kimlik doğrulama token'ı eksik.")
+        raise AuthenticationException(message="Authentication token is missing.")
 
     # Check blacklist in Redis
     cache = get_cache()
     if await cache.exists(f"token_blacklist:{token}"):
-        raise AuthenticationException(message="Oturum sonlandırılmış, lütfen tekrar giriş yapın.")
+        raise AuthenticationException(message="Session has been terminated. Please log in again.")
 
     payload = decode_token(token)
     user_id = payload.get("sub")
     if not user_id:
-        raise AuthenticationException(message="Geçersiz token kimliği.")
+        raise AuthenticationException(message="Invalid token identity.")
 
     user_repository = UserRepository(db)
     user_service = UserService(user_repository)
-    
+
     try:
         user = await user_service.get_user_by_id(user_id)
         if not user.is_active:
-            raise AuthenticationException(message="Kullanıcı hesabı aktif değil.")
+            raise AuthenticationException(message="User account is not active.")
         return user
     except Exception as exc:
-        raise AuthenticationException(message="Kullanıcı bulunamadı.") from exc
+        raise AuthenticationException(message="User not found.") from exc
+
 
 def require_roles(*allowed_roles: UserRole):
-    """Dependency generator to enforce role-based access control (RBAC) on endpoints."""
-    def role_dependency(current_user: UserModel = Depends(get_current_user)) -> UserModel:
+    """Dependency factory that enforces role-based access control on a route."""
+
+    async def _check_role(current_user: UserModel = Depends(get_current_user)) -> UserModel:
         if current_user.role not in [role.value for role in allowed_roles]:
-            raise AuthorizationException(message="Bu işlem için yetkiniz bulunmamaktadır.")
+            raise AuthorizationException(message="You do not have permission to perform this action.")
         return current_user
-    return role_dependency
+
+    return _check_role
 
 
 # ---------------------------------------------------------------------------

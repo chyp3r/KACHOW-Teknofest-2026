@@ -1,5 +1,5 @@
 class DocumentModel:
-    """Skeletal SQLAlchemy model representing documents (Görev 1 & 2)."""
+    """Skeletal SQLAlchemy model representing documents."""
     __tablename__ = "documents"
     id: str
     filename: str

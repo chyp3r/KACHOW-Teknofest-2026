@@ -74,4 +74,4 @@ def decode_token(token: str) -> dict[str, Any]:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
         return payload
     except jwt.PyJWTError as exc:
-        raise AuthenticationException(message="Geçersiz veya süresi dolmuş token.") from exc
+        raise AuthenticationException(message="Invalid or expired token.") from exc

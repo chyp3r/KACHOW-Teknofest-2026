@@ -6,6 +6,7 @@ from app.domains.auth.schema.auth_schema import LoginRequest, TokenResponse
 
 logger = logging.getLogger(__name__)
 
+
 class AuthService:
     """SOTA Service to authenticate credentials and issue JWT tokens."""
 
@@ -15,15 +16,15 @@ class AuthService:
     async def authenticate_user(self, schema: LoginRequest) -> TokenResponse:
         """Authenticate user credentials and return access & refresh JWTs."""
         user = await self.user_repository.get_by_username(schema.username)
-        
+
         if not user:
             user = await self.user_repository.get_by_email(schema.username)
 
         if not user or not verify_password(schema.password, user.hashed_password):
-            raise AuthenticationException(message="Hatalı kullanıcı adı, e-posta veya şifre.")
+            raise AuthenticationException(message="Invalid username, email or password.")
 
         if not user.is_active:
-            raise AuthenticationException(message="Bu kullanıcı hesabı aktif değil.")
+            raise AuthenticationException(message="This user account is not active.")
 
         logger.info(f"Issuing access tokens for authenticated user ID: {user.id}")
         access_token = create_access_token(
@@ -43,19 +44,19 @@ class AuthService:
         try:
             payload = decode_token(refresh_token)
         except AuthenticationException:
-            raise AuthenticationException(message="Geçersiz veya süresi dolmuş refresh token.")
+            raise AuthenticationException(message="Invalid or expired refresh token.")
 
         # Ensure it is a refresh token, not an access token
         if payload.get("type") != "refresh":
-            raise AuthenticationException(message="Geçersiz token türü. Refresh token bekleniyor.")
+            raise AuthenticationException(message="Invalid token type. Refresh token expected.")
 
         user_id = payload.get("sub")
         if not user_id:
-            raise AuthenticationException(message="Token içinde geçersiz kullanıcı kimliği.")
+            raise AuthenticationException(message="Invalid user identity in token.")
 
         user = await self.user_repository.get_by_id(user_id)
         if not user or not user.is_active:
-            raise AuthenticationException(message="Kullanıcı bulunamadı veya hesap aktif değil.")
+            raise AuthenticationException(message="User not found or account is not active.")
 
         logger.info(f"Refreshing access token for user ID: {user.id}")
         new_access_token = create_access_token(

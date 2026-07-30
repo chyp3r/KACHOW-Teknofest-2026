@@ -8,7 +8,7 @@ class ConflictException(BaseAppException):
 
     def __init__(
         self,
-        message: str = "Çakışma oluştu.",
+        message: str = "A conflict occurred.",
         error_code: str = "RESOURCE_CONFLICT",
         details: Optional[Dict[str, Any]] = None,
     ):

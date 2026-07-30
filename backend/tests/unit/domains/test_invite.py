@@ -33,7 +33,7 @@ async def test_invite_email_already_registered():
 
     with pytest.raises(ConflictException) as exc:
         await service.invite_user_email(schema)
-    assert "zaten bir kullanıcı kayıtlı" in str(exc.value.message)
+    assert "already registered" in str(exc.value.message)
 
 @pytest.mark.asyncio
 async def test_invite_email_already_invited():
@@ -46,7 +46,7 @@ async def test_invite_email_already_invited():
 
     with pytest.raises(ConflictException) as exc:
         await service.invite_user_email(schema)
-    assert "zaten davet edilmiş" in str(exc.value.message)
+    assert "already been invited" in str(exc.value.message)
 
 @pytest.mark.asyncio
 async def test_register_without_invite_raises_forbidden():
@@ -65,7 +65,7 @@ async def test_register_without_invite_raises_forbidden():
 
     with pytest.raises(AuthorizationException) as exc:
         await service.register_user(schema)
-    assert "davet edilmemiş" in str(exc.value.message)
+    assert "has not been invited" in str(exc.value.message)
 
 @pytest.mark.asyncio
 async def test_register_with_invite_success():

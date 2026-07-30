@@ -8,7 +8,7 @@ class ValidationException(BaseAppException):
 
     def __init__(
         self,
-        message: str = "Geçersiz istek verisi.",
+        message: str = "Invalid request data.",
         error_code: str = "VALIDATION_ERROR",
         details: Optional[Dict[str, Any]] = None,
     ):

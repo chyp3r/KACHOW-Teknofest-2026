@@ -13,6 +13,7 @@ from app.api.exceptions.authentication import AuthenticationException
 from app.api.exceptions.authorization import AuthorizationException
 from app.events import event_bus, UserCreatedEvent, UserDeletedEvent, UserPasswordChangedEvent
 
+
 class UserService:
     """SOTA Service executing user-related business rules and invitations."""
 
@@ -23,19 +24,19 @@ class UserService:
         """Register a new user, checking invitation whitelist first and assigning invite-specific role."""
         existing_user = await self.repository.get_by_username(schema.username)
         if existing_user:
-            raise ConflictException(message="Bu kullanıcı adı zaten alınmış.")
+            raise ConflictException(message="Username is already taken.")
 
         existing_email = await self.repository.get_by_email(schema.email)
         if existing_email:
-            raise ConflictException(message="Bu e-posta adresi zaten kullanımda.")
+            raise ConflictException(message="Email address is already in use.")
 
         # Whitelist (invite) check
         invite = await self.repository.get_invite_by_email(schema.email)
         if not invite:
-            raise AuthorizationException(message="Bu e-posta adresi sistem yöneticisi tarafından davet edilmemiş.")
+            raise AuthorizationException(message="This email address has not been invited by a system administrator.")
 
         hashed = hash_password(schema.password)
-        
+
         # Enforce role defined by the manager in the invite
         user = UserModel(
             id=str(uuid4()),
@@ -49,7 +50,7 @@ class UserService:
 
         created_user = await self.repository.create(user)
         await self.repository.mark_invite_used(schema.email)
-        
+
         # Publish UserCreatedEvent
         await event_bus.publish(UserCreatedEvent(
             payload={
@@ -59,20 +60,18 @@ class UserService:
                 "role": created_user.role
             }
         ))
-        
+
         return created_user
 
     async def invite_user_email(self, schema: InvitedEmailCreate) -> InvitedEmailModel:
         """Invite/whitelist an email for registration (Admin/Manager only)."""
-        # Check if email is already registered
         registered = await self.repository.get_by_email(schema.email)
         if registered:
-            raise ConflictException(message="Bu e-posta adresiyle zaten bir kullanıcı kayıtlı.")
+            raise ConflictException(message="A user with this email address is already registered.")
 
-        # Check if active invite already exists
         existing_invite = await self.repository.get_invite_by_email(schema.email)
         if existing_invite:
-            raise ConflictException(message="Bu e-posta adresi zaten davet edilmiş.")
+            raise ConflictException(message="This email address has already been invited.")
 
         invite = InvitedEmailModel(
             id=str(uuid4()),
@@ -87,7 +86,7 @@ class UserService:
         """Fetch user by ID, raising NotFoundException if not present."""
         user = await self.repository.get_by_id(user_id)
         if not user:
-            raise NotFoundException(message="Kullanıcı bulunamadı.")
+            raise NotFoundException(message="User not found.")
         return user
 
     async def get_users(self, skip: int = 0, limit: int = 100, role: Optional[str] = None) -> List[UserModel]:
@@ -97,13 +96,13 @@ class UserService:
     async def update_user(self, user_id: str, schema: UserUpdate) -> UserModel:
         """Update user details, verifying unique constraints if email changes."""
         user = await self.get_user_by_id(user_id)
-        
+
         update_dict = schema.model_dump(exclude_unset=True)
         if "email" in update_dict and update_dict["email"] != user.email:
             existing = await self.repository.get_by_email(update_dict["email"])
             if existing:
-                raise ConflictException(message="Bu e-posta adresi zaten kullanımda.")
-        
+                raise ConflictException(message="Email address is already in use.")
+
         if "role" in update_dict and update_dict["role"] is not None:
             update_dict["role"] = update_dict["role"].value
 
@@ -112,13 +111,13 @@ class UserService:
     async def change_password(self, user_id: str, schema: PasswordChangeRequest) -> None:
         """Change the password of the user after verifying current password."""
         user = await self.get_user_by_id(user_id)
-        
+
         if not verify_password(schema.current_password, user.hashed_password):
-            raise AuthenticationException(message="Mevcut şifreniz hatalı.")
+            raise AuthenticationException(message="Current password is incorrect.")
 
         hashed_new = hash_password(schema.new_password)
         await self.repository.update(user, {"hashed_password": hashed_new})
-        
+
         # Publish UserPasswordChangedEvent
         await event_bus.publish(UserPasswordChangedEvent(payload={"user_id": user_id}))
 
@@ -126,8 +125,8 @@ class UserService:
         """Soft delete user by ID."""
         user = await self.repository.soft_delete(user_id)
         if not user:
-            raise NotFoundException(message="Kullanıcı bulunamadı.")
-        
+            raise NotFoundException(message="User not found.")
+
         # Publish UserDeletedEvent (soft)
         await event_bus.publish(UserDeletedEvent(payload={"user_id": user_id, "delete_type": "soft"}))
 
@@ -135,7 +134,7 @@ class UserService:
         """Hard delete user by ID."""
         deleted = await self.repository.hard_delete(user_id)
         if not deleted:
-            raise NotFoundException(message="Kullanıcı bulunamadı.")
-            
+            raise NotFoundException(message="User not found.")
+
         # Publish UserDeletedEvent (hard)
         await event_bus.publish(UserDeletedEvent(payload={"user_id": user_id, "delete_type": "hard"}))
