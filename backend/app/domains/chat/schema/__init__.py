@@ -1,3 +1,3 @@
-from app.domains.chat.schema.chat_schema import ChatSessionSchema
+from app.domains.chat.schema.chat_schema import ChatMessageRequest, ChatMessageResponse
 
-__all__ = ["ChatSessionSchema"]
+__all__ = ["ChatMessageRequest", "ChatMessageResponse"]

@@ -12,14 +12,15 @@ class DocumentQAAgent(BaseAgent):
     """An agent that answers user questions based on a retrieved document context."""
 
     def __init__(self, llm_client: BaseLLMClient):
-        super().__init__(llm_client, "document_qa")
         self.prompt_manager = PromptManager()
-        self.system_prompt_template = self.prompt_manager.get_prompt("document_qa")
-        if not self.system_prompt_template:
-            logger.warning(
-                "document_qa.md prompt could not be loaded, using fallback prompt."
-            )
-            self.system_prompt_template = "Context: {context}\nQuestion: {query}"
+        self.system_prompt_template = self.prompt_manager.get_template("document_qa")
+        
+        super().__init__(
+            llm_client=llm_client, 
+            name="document_qa",
+            description="Answers questions based on retrieved document context.",
+            system_prompt=self.system_prompt_template
+        )
 
     async def _execute(
         self,

@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http import models

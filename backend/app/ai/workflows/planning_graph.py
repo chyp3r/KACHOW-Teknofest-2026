@@ -2,7 +2,7 @@ import logging
 from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.ai.agents.orchestrator import OrchestratorAgent
 from app.ai.llms.base import BaseLLMClient
@@ -36,6 +36,45 @@ class PlanOutput(BaseModel):
         description="Neden bu adımların seçildiğinin Türkçe gerekçesi."
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def handle_nested_hallucinations(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        if "required_steps" in data and "reasoning" in data:
+            return data
+
+        required_steps = []
+        reasoning = ""
+
+        # Check for "execution_plan" list
+        if "execution_plan" in data and isinstance(data["execution_plan"], list):
+            for step in data["execution_plan"]:
+                if isinstance(step, dict):
+                    proc = step.get("process") or step.get("step") or step.get("step_name")
+                    if proc:
+                        required_steps.append(str(proc))
+
+        # Check for "process_analysis" dict
+        if "process_analysis" in data and isinstance(data["process_analysis"], dict):
+            reasoning = data["process_analysis"].get("justification") or data["process_analysis"].get("reason") or ""
+
+        # Fallback for reasoning from execution plan reasons
+        if not reasoning and "execution_plan" in data and isinstance(data["execution_plan"], list):
+            reasons = [step.get("reason") for step in data["execution_plan"] if isinstance(step, dict) and step.get("reason")]
+            if reasons:
+                reasoning = " | ".join(reasons)
+
+        if required_steps:
+            return {
+                "required_steps": required_steps,
+                "reasoning": reasoning or "Yürütme planı oluşturuldu."
+            }
+
+        return data
+
+
 
 def _requested_correspondence_type(
     classification: dict[str, Any],
@@ -56,7 +95,7 @@ def _requested_correspondence_type(
 
 from app.ai.agents.chat import ChatAgent
 from app.ai.agents.document_qa import DocumentQAAgent
-from app.ai.embeddings.models.openai_embeddings import OpenAIEmbeddingsClient
+from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.infrastructure.vectorstore.base import BaseVectorStore
 
 def create_planning_graph(
@@ -66,7 +105,7 @@ def create_planning_graph(
     draft_graph: Any,
     routing_graph: Any,
     vector_store: BaseVectorStore | None = None,
-    embeddings_client: BaseLLMClient | None = None,
+    embeddings_client: BaseEmbeddingsClient | None = None,
 ):
     """Create and compile the LangGraph master Planning/Supervisor workflow.
 
