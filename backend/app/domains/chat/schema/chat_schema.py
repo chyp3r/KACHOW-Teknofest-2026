@@ -9,6 +9,9 @@ class ChatMessageRequest(BaseModel):
     session_id: Optional[str] = Field(
         default=None, description="Opsiyonel oturum/sohbet kimliği (geçmiş takibi için)."
     )
+    document_id: Optional[str] = Field(
+        default=None, description="Opsiyonel olarak hakkında soru sorulan spesifik belgenin (storage_path) ID'si."
+    )
 
 
 class ChatMessageResponse(BaseModel):

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.embeddings.chunking.recursive import RecursiveChunker
 from app.ai.embeddings.models import get_embeddings_client
+from app.ai.embeddings.service import EmbeddingService
 from app.ai.llms import get_llm_client
 from app.ai.retrieval.bm25 import BM25Retriever
 from app.ai.retrieval.corpus_loader import load_mevzuat_corpus
@@ -171,6 +172,8 @@ def get_document_analysis_service(
         storage=get_storage_client(),
         extractor=get_document_extractor(),
         analysis_graph=analysis_graph,
+        embedding_service=EmbeddingService(embeddings_client=get_embeddings_client()),
+        vector_store=get_vector_store(),
     )
 
 # ---------------------------------------------------------------------------
@@ -241,6 +244,8 @@ async def get_planning_graph(
             rag_graph=rag_graph,
             draft_graph=draft_graph,
             routing_graph=routing_graph,
+            vector_store=get_vector_store(),
+            embeddings_client=get_embeddings_client(),
         )
     return _planning_graph
 

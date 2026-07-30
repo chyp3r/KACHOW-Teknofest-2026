@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.ai.embeddings.service import EmbeddedChunk
 
@@ -34,7 +34,7 @@ class BaseVectorStore(ABC):
 
     @abstractmethod
     async def similarity_search(
-        self, collection_name: str, query_vector: List[float], limit: int = 5
+        self, collection_name: str, query_vector: List[float], limit: int = 5, filter_dict: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """Search for similar vectors in a collection.
 
