@@ -8,7 +8,7 @@ class AIException(BaseAppException):
 
     def __init__(
         self,
-        message: str = "Yapay zekâ iş akışı çalıştırılırken bir hata oluştu.",
+        message: str = "An error occurred while executing the AI workflow.",
         error_code: str = "AI_EXECUTION_ERROR",
         details: Optional[Dict[str, Any]] = None,
     ):

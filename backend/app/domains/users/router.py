@@ -35,7 +35,7 @@ async def invite_user(
     service = UserService(repository)
     invite = await service.invite_user_email(schema)
     response_data = InvitedEmailResponse.model_validate(invite)
-    return SuccessResponse(data=response_data, message="E-posta adresi başarıyla davet edildi.")
+    return SuccessResponse(data=response_data, message="Email address successfully invited.")
 
 @router.get("", response_model=APIResponse[List[UserResponse]])
 async def list_users(
@@ -68,7 +68,7 @@ async def get_user(
     """Retrieve details of a specific user. Authenticated user can only retrieve themselves, unless they are Admin/Manager."""
     is_admin_or_manager = current_user.role in [UserRole.ADMIN.value, UserRole.MANAGER.value]
     if not is_admin_or_manager and current_user.id != user_id:
-        raise AuthorizationException(message="Bu kullanıcının detaylarını görme yetkiniz yok.")
+        raise AuthorizationException(message="You are not authorized to view this user's details.")
 
     repository = UserRepository(db)
     service = UserService(repository)
@@ -89,12 +89,12 @@ async def update_user(
 
     # Enforce privileges
     if not is_admin and not is_self:
-        raise AuthorizationException(message="Bu kullanıcının bilgilerini güncelleme yetkiniz yok.")
+        raise AuthorizationException(message="You are not authorized to update this user's information.")
 
     # Restrict field updates for non-admins
     if not is_admin:
         if schema.role is not None or schema.is_active is not None:
-            raise AuthorizationException(message="Rol veya hesap durumunu sadece yöneticiler güncelleyebilir.")
+            raise AuthorizationException(message="Only administrators can update role or account status.")
 
     repository = UserRepository(db)
     service = UserService(repository)

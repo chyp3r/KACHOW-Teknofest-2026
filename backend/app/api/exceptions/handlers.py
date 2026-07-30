@@ -45,7 +45,7 @@ async def validation_exception_handler(
     
     return ErrorResponse(
         code="VALIDATION_ERROR",
-        message="Girdi verilerinin doğrulanması başarısız oldu.",
+        message="Input validation failed.",
         status_code=422,
         details={"validation_errors": formatted_errors},
         meta=meta,
@@ -77,7 +77,7 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
     
     return ErrorResponse(
         code="INTERNAL_SERVER_ERROR",
-        message="Sunucuda beklenmeyen dahili bir hata oluştu.",
+        message="An unexpected internal server error occurred.",
         status_code=500,
         details=details,
         meta=meta,

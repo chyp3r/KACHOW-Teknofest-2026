@@ -43,7 +43,7 @@ async def test_authenticate_user_invalid_password():
 
     with pytest.raises(AuthenticationException) as exc:
         await service.authenticate_user(schema)
-    assert "Hatalı kullanıcı adı" in str(exc.value.message)
+    assert "Invalid username" in str(exc.value.message)
 
 @pytest.mark.asyncio
 async def test_authenticate_user_inactive():
@@ -61,7 +61,7 @@ async def test_authenticate_user_inactive():
 
     with pytest.raises(AuthenticationException) as exc:
         await service.authenticate_user(schema)
-    assert "aktif değil" in str(exc.value.message)
+    assert "not active" in str(exc.value.message)
 
 from unittest.mock import patch
 from app.domains.auth.router import logout, refresh as refresh_endpoint
@@ -95,8 +95,8 @@ async def test_refresh_token_blacklisted():
     schema = RefreshRequest(refresh_token=refresh_tok)
     with patch("app.domains.auth.router.get_cache", return_value=mock_cache):
         with pytest.raises(AuthenticationException) as exc:
-            await refresh_endpoint(schema=schema, db=MagicMock())
-        assert "sonlandırılmış" in str(exc.value.message)
+            await refresh_endpoint(schema=schema, request=MagicMock(), db=MagicMock())
+        assert "terminated" in str(exc.value.message)
 
 @pytest.mark.asyncio
 async def test_refresh_token_success():
@@ -132,4 +132,4 @@ async def test_get_current_user_blacklisted():
     with patch("app.api.dependency.get_cache", return_value=mock_cache):
         with pytest.raises(AuthenticationException) as exc:
             await get_current_user(token=token, db=MagicMock())
-        assert "Oturum sonlandırılmış" in str(exc.value.message)
+        assert "Session has been terminated" in str(exc.value.message)

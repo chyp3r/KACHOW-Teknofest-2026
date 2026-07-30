@@ -8,7 +8,7 @@ class NotFoundException(BaseAppException):
 
     def __init__(
         self,
-        message: str = "Aranan kaynak bulunamadı.",
+        message: str = "The requested resource was not found.",
         error_code: str = "NOT_FOUND",
         details: Optional[Dict[str, Any]] = None,
     ):

@@ -11,6 +11,7 @@ from app.api.exceptions.handlers import (
 )
 from app.api.exceptions.not_found import NotFoundException
 from app.api.exceptions.validation import ValidationException
+from app.api.exceptions.rate_limit import RateLimitException
 
 __all__ = [
     "BaseAppException",
@@ -20,6 +21,7 @@ __all__ = [
     "AuthorizationException",
     "ConflictException",
     "AIException",
+    "RateLimitException",
     "app_exception_handler",
     "validation_exception_handler",
     "http_exception_handler",

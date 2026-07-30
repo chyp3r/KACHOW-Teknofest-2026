@@ -7,12 +7,12 @@ class APIErrorDetail(BaseModel):
     """Pydantic model representing structured error information in APIResponse."""
 
     code: str = Field(
-        description="Uygulamaya özel benzersiz hata kodu (örn. NOT_FOUND, AI_EXECUTION_ERROR)."
+        description="Application-specific unique error code (e.g. NOT_FOUND, AI_EXECUTION_ERROR)."
     )
     message: str = Field(
-        description="Kullanıcıya veya geliştiriciye gösterilecek açıklayıcı hata mesajı."
+        description="Human-readable error message for the user or developer."
     )
     details: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="Hata hakkında ek teknik detaylar veya validasyon hataları.",
+        description="Additional technical details or validation errors.",
     )

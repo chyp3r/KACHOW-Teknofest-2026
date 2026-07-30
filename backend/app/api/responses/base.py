@@ -11,17 +11,17 @@ T = TypeVar("T")
 class APIResponse(BaseModel, Generic[T]):
     """Standardized unified SOTA API Response wrapper for all endpoints."""
 
-    success: bool = Field(description="İşlemin başarı durumu.")
+    success: bool = Field(description="Indicates whether the operation was successful.")
     data: Optional[T] = Field(
-        default=None, description="Başarılı işlem sonucunda dönen veri."
+        default=None, description="Payload returned on a successful operation."
     )
     error: Optional[APIErrorDetail] = Field(
         default=None,
-        description="Hata durumunda dönen yapılandırılmış hata detayları.",
+        description="Structured error details returned on failure.",
     )
     meta: Dict[str, Any] = Field(
         default_factory=lambda: {
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
-        description="Yanıt ile ilgili meta bilgiler (örn. yanıt süresi, zaman damgası).",
+        description="Response metadata (e.g., response time, timestamp).",
     )

@@ -47,7 +47,7 @@ async def get_success():
 
 @router.get("/test-custom-exception")
 async def get_custom_exception():
-    raise NotFoundException(message="Belge bulunamadı.")
+    raise NotFoundException(message="Document not found.")
 
 
 @router.get("/test-ai-exception")
@@ -97,7 +97,7 @@ def test_custom_exception_handling():
     assert json_data["success"] is False
     assert json_data["data"] is None
     assert json_data["error"]["code"] == "NOT_FOUND"
-    assert json_data["error"]["message"] == "Belge bulunamadı."
+    assert json_data["error"]["message"] == "Document not found."
 
 
 def test_ai_exception_handling():
@@ -133,7 +133,7 @@ def test_validation_exception_handling():
     assert json_data["error"]["code"] == "VALIDATION_ERROR"
     assert (
         json_data["error"]["message"]
-        == "Girdi verilerinin doğrulanması başarısız oldu."
+        == "Input validation failed."
     )
     assert "validation_errors" in json_data["error"]["details"]
 
@@ -151,7 +151,7 @@ def test_generic_exception_handling():
     assert json_data["error"]["code"] == "INTERNAL_SERVER_ERROR"
     assert (
         json_data["error"]["message"]
-        == "Sunucuda beklenmeyen dahili bir hata oluştu."
+        == "An unexpected internal server error occurred."
     )
     assert json_data["error"]["details"]["error_type"] == "ValueError"
 
