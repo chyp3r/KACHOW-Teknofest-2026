@@ -42,17 +42,40 @@ class PlanOutput(BaseModel):
         if not isinstance(data, dict):
             return data
 
-        if "required_steps" in data and "reasoning" in data:
-            return data
-
         required_steps = []
         reasoning = ""
 
-        # Check for "execution_plan" list
-        if "execution_plan" in data and isinstance(data["execution_plan"], list):
+        # Sometimes the model returns required_steps as a list of dicts instead of list of strings
+        if "required_steps" in data and isinstance(data["required_steps"], list):
+            for step in data["required_steps"]:
+                if isinstance(step, str):
+                    required_steps.append(step)
+                elif isinstance(step, dict):
+                    proc = step.get("process_id") or step.get("process") or step.get("step") or step.get("step_name")
+                    if proc:
+                        required_steps.append(str(proc))
+            
+            # If we successfully extracted string steps from the array, update the data dictionary
+            if required_steps:
+                data["required_steps"] = required_steps
+
+        # If data is completely missing required_steps or has a malformed one
+        if "required_steps" in data and "reasoning" in data and all(isinstance(x, str) for x in data.get("required_steps", [])):
+            return data
+
+        # Check for "execution_plan" list (another common hallucination)
+        if not required_steps and "execution_plan" in data and isinstance(data["execution_plan"], list):
             for step in data["execution_plan"]:
                 if isinstance(step, dict):
                     proc = step.get("process") or step.get("step") or step.get("step_name")
+                    if proc:
+                        required_steps.append(str(proc))
+                        
+        # Check for "workflow_plan" list (yet another common hallucination)
+        if not required_steps and "workflow_plan" in data and isinstance(data["workflow_plan"], list):
+            for step in data["workflow_plan"]:
+                if isinstance(step, dict):
+                    proc = step.get("action") or step.get("process") or step.get("step")
                     if proc:
                         required_steps.append(str(proc))
 

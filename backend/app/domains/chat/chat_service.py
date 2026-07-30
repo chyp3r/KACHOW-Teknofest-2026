@@ -77,6 +77,7 @@ class ChatService:
         try:
             from app.observability.tracer import get_langfuse_callback
             handler = get_langfuse_callback()
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error loading Langfuse callback: {e}")
             return {}
         return {"callbacks": [handler]} if handler else {}
