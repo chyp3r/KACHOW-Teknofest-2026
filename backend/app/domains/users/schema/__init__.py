@@ -1,3 +1,3 @@
-from app.domains.users.schema.user_schema import UserSchema
+from app.domains.users.schema.user_schema import UserCreate, UserResponse
 
-__all__ = ["UserSchema"]
+__all__ = ["UserCreate", "UserResponse"]

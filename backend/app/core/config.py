@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "KACHOW-Teknofest-2026"
     API_V1_STR: str = "/api/v1"
     ENVIRONMENT: str = "development"
+    SECRET_KEY: str = "supersecretkeychangeinproduction"
 
     # Database Configuration
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
