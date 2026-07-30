@@ -19,6 +19,9 @@ services:
       - OLLAMA_MODEL=qwen3.5:9b
       - OLLAMA_TEMPERATURE=0.7
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/kachow
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-1234567890}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-1234567890}
+      - LANGFUSE_HOST=http://langfuse:3000
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -27,7 +30,7 @@ services:
       - qdrant
 
   db:
-    image: postgres:15
+    image: pgvector/pgvector:pg16
     container_name: kachow_db_dev
     ports:
       - "5432:5432"
@@ -37,6 +40,7 @@ services:
       - POSTGRES_DB=kachow
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
 
   redis:
     image: redis:7-alpine
@@ -55,7 +59,55 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: kachow_prometheus_dev
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    depends_on:
+      - backend
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: kachow_grafana_dev
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: kachow_langfuse_dev
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/langfuse
+      - NEXTAUTH_SECRET=my_nextauth_secret_for_dev_only_123
+      - SALT=my_salt_for_dev_only_123
+      - ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      - NEXTAUTH_URL=http://localhost:3000
+      - TELEMETRY_ENABLED=false
+    depends_on:
+      - db
+
 volumes:
   postgres_data:
   redis_data:
   qdrant_data:
+  prometheus_data:
+  grafana_data:

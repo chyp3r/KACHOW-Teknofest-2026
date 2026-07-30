@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY: str = "minioadmin"
     S3_SECRET_KEY: str = "minioadmin"
 
+    # Langfuse Configuration
+    LANGFUSE_PUBLIC_KEY: Optional[str] = None
+    LANGFUSE_SECRET_KEY: Optional[str] = None
+    LANGFUSE_HOST: str = "http://localhost:3000"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
