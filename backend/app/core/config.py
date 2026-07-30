@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     LANGFUSE_SECRET_KEY: str | None = None
     LANGFUSE_HOST: str = "http://localhost:3000"
 
+    # Legislation (Mevzuat) Corpus Configuration
+    MEVZUAT_CORPUS_DIR: str = "./datasets/mevzuat"
+    MEVZUAT_COLLECTION_NAME: str = "mevzuat"
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore"
     )

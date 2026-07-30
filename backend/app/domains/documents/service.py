@@ -1,3 +1,300 @@
+import asyncio
+import logging
+import os
+from typing import Any, Optional
+from uuid import uuid4
+
+from app.ai.compliance.evrak_field import EvrakField, MissingField
+from app.api.exceptions.ai_error import AIException
+from app.api.exceptions.validation import ValidationException
+from app.core.constants import (
+    AI_WORKFLOW_TIMEOUT_SECONDS,
+    ALLOWED_DOCUMENT_EXTENSIONS,
+    ALLOWED_FILE_TYPES,
+    MAX_FILE_SIZE_BYTES,
+)
+from app.core.enums.compliance_status import ComplianceStatus
+from app.core.enums.document_type import DocumentType
+from app.domains.documents.schema.document_schema import (
+    DocumentAnalysisResponseSchema,
+    ExtractionInfoSchema,
+    MevzuatReferenceSchema,
+)
+from app.events.event import DocumentAnalyzedEvent, DocumentUploadedEvent
+from app.events.event_bus import event_bus
+from app.infrastructure.extractors.base import (
+    BaseDocumentExtractor,
+    DocumentExtractionError,
+)
+from app.infrastructure.storage.base import BaseStorage
+from app.shared.validator.file_validator import validate_file_extension
+
+logger = logging.getLogger(__name__)
+
+UPLOAD_PATH_PREFIX = "uploads"
+MIN_ANALYSABLE_CHAR_COUNT = 20
+
+
 class DocumentService:
-    """Skeletal service for documents domain."""
-    pass
+    """Business logic for the first-review (ön inceleme) stage of incoming evrak."""
+
+    def __init__(
+        self,
+        storage: BaseStorage,
+        extractor: BaseDocumentExtractor,
+        analysis_graph: Any,
+    ) -> None:
+        """Initialise the service with injected collaborators.
+
+        Args:
+            storage: Storage backend for the raw uploaded document.
+            extractor: Text extraction chain.
+            analysis_graph: Compiled document analysis workflow.
+        """
+        self.storage = storage
+        self.extractor = extractor
+        self.analysis_graph = analysis_graph
+
+    async def analyze_document(
+        self,
+        *,
+        file_name: str,
+        content: bytes,
+        content_type: Optional[str] = None,
+    ) -> DocumentAnalysisResponseSchema:
+        """Store, extract and analyse an incoming official document.
+
+        Args:
+            file_name: Original name of the uploaded file.
+            content: Raw file bytes.
+            content_type: Declared MIME type, when the client supplied one.
+
+        Returns:
+            The full first-review result.
+
+        Raises:
+            ValidationException: If the upload is rejected or yields no text.
+            AIException: If the analysis workflow fails or times out.
+        """
+        self._validate_upload(file_name, content, content_type)
+
+        storage_path = await self._store(file_name, content)
+        await self._publish(
+            DocumentUploadedEvent(
+                payload={
+                    "file_name": file_name,
+                    "storage_path": storage_path,
+                    "size_bytes": len(content),
+                }
+            )
+        )
+
+        try:
+            extracted = await self.extractor.extract(
+                content, file_name=file_name, mime_type=content_type
+            )
+        except DocumentExtractionError as exc:
+            raise ValidationException(
+                message="Belgeden metin çıkarılamadı.", details={"reason": str(exc)}
+            ) from exc
+
+        if extracted.char_count < MIN_ANALYSABLE_CHAR_COUNT:
+            raise ValidationException(
+                message=(
+                    "Belgeden anlamlı metin çıkarılamadı. Taranmış bir belge ise "
+                    "daha yüksek çözünürlüklü bir kopya yükleyin."
+                ),
+                details={
+                    "extractor": extracted.extractor,
+                    "char_count": extracted.char_count,
+                },
+            )
+
+        state = await self._run_analysis(extracted.text, extracted.used_ocr)
+        response = self._assemble(file_name, storage_path, extracted, state)
+
+        await self._publish(
+            DocumentAnalyzedEvent(
+                payload={
+                    "file_name": file_name,
+                    "document_type": response.document_type.value,
+                    "compliance_status": response.compliance_status.value,
+                    "missing_field_count": len(response.missing_fields),
+                }
+            )
+        )
+        return response
+
+    def _validate_upload(
+        self, file_name: str, content: bytes, content_type: Optional[str]
+    ) -> None:
+        """Reject uploads that are empty, oversized or of an unsupported type.
+
+        Args:
+            file_name: Original file name.
+            content: Raw file bytes.
+            content_type: Declared MIME type.
+
+        Raises:
+            ValidationException: If any check fails.
+        """
+        if not content:
+            raise ValidationException(message="Yüklenen dosya boş.")
+
+        if len(content) > MAX_FILE_SIZE_BYTES:
+            raise ValidationException(
+                message="Dosya boyutu izin verilen sınırı aşıyor.",
+                details={
+                    "max_size_bytes": MAX_FILE_SIZE_BYTES,
+                    "size_bytes": len(content),
+                },
+            )
+
+        extension_ok = validate_file_extension(file_name, ALLOWED_DOCUMENT_EXTENSIONS)
+        mime_ok = content_type in ALLOWED_FILE_TYPES if content_type else False
+        if not extension_ok and not mime_ok:
+            raise ValidationException(
+                message="Desteklenmeyen dosya türü.",
+                details={
+                    "file_name": file_name,
+                    "content_type": content_type,
+                    "allowed_types": ALLOWED_FILE_TYPES,
+                    "allowed_extensions": ALLOWED_DOCUMENT_EXTENSIONS,
+                },
+            )
+
+    async def _store(self, file_name: str, content: bytes) -> str:
+        """Persist the raw upload under a collision-free key.
+
+        Args:
+            file_name: Original file name, used only for its extension.
+            content: Raw file bytes.
+
+        Returns:
+            The storage reference returned by the backend.
+        """
+        extension = os.path.splitext(file_name)[1].lower()
+        key = f"{UPLOAD_PATH_PREFIX}/{uuid4().hex}{extension}"
+        return await self.storage.put_file(key, content)
+
+    async def _run_analysis(self, text: str, used_ocr: bool) -> dict[str, Any]:
+        """Invoke the analysis workflow under a timeout.
+
+        Args:
+            text: Extracted document text.
+            used_ocr: Whether the text came from OCR.
+
+        Returns:
+            The final workflow state.
+
+        Raises:
+            AIException: If the workflow fails or exceeds the timeout.
+        """
+        try:
+            return await asyncio.wait_for(
+                self.analysis_graph.ainvoke(
+                    {"input_text": text, "is_ocr_text": used_ocr},
+                    config=self._trace_config(),
+                ),
+                timeout=AI_WORKFLOW_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError as exc:
+            raise AIException(
+                message="Evrak analizi zaman aşımına uğradı.",
+                details={"timeout_seconds": AI_WORKFLOW_TIMEOUT_SECONDS},
+            ) from exc
+        except Exception as exc:
+            logger.exception("Document analysis workflow failed")
+            raise AIException(
+                message="Evrak analizi sırasında bir hata oluştu.",
+                details={"reason": str(exc)},
+            ) from exc
+
+    @staticmethod
+    def _trace_config() -> dict[str, Any]:
+        """Build the LangGraph config, attaching Langfuse tracing when available.
+
+        Imported lazily and defensively: the Langfuse LangChain integration needs
+        the monolithic `langchain` package, so an unavailable tracer must degrade
+        to "no tracing" rather than failing every upload.
+
+        Returns:
+            A LangGraph config dict, empty when tracing is unavailable.
+        """
+        try:
+            from app.observability.tracer import get_langfuse_callback
+
+            handler = get_langfuse_callback()
+        except Exception:
+            logger.debug("Langfuse tracing unavailable; continuing without it.")
+            return {}
+        return {"callbacks": [handler]} if handler else {}
+
+    @staticmethod
+    def _assemble(
+        file_name: str,
+        storage_path: str,
+        extracted: Any,
+        state: dict[str, Any],
+    ) -> DocumentAnalysisResponseSchema:
+        """Build the API response from the final workflow state.
+
+        Args:
+            file_name: Original file name.
+            storage_path: Storage reference of the raw upload.
+            extracted: The `ExtractedDocument` produced by the extractor.
+            state: Final workflow state.
+
+        Returns:
+            The populated response schema.
+        """
+        try:
+            document_type = DocumentType(
+                state.get("document_type", DocumentType.OTHER.value)
+            )
+        except ValueError:
+            document_type = DocumentType.OTHER
+
+        try:
+            compliance_status = ComplianceStatus(
+                state.get("compliance_status", ComplianceStatus.INCOMPLETE.value)
+            )
+        except ValueError:
+            compliance_status = ComplianceStatus.INCOMPLETE
+
+        return DocumentAnalysisResponseSchema(
+            file_name=file_name,
+            storage_path=storage_path,
+            extraction=ExtractionInfoSchema(
+                extractor=extracted.extractor,
+                page_count=extracted.page_count,
+                char_count=extracted.char_count,
+                used_ocr=extracted.used_ocr,
+            ),
+            document_type=document_type,
+            document_type_label=state.get("document_type_label", ""),
+            summary=state.get("summary", ""),
+            fields=EvrakField(**(state.get("fields") or {})),
+            missing_fields=[
+                MissingField(**item) for item in state.get("missing_fields") or []
+            ],
+            compliance_status=compliance_status,
+            mevzuat_references=[
+                MevzuatReferenceSchema(**item)
+                for item in state.get("mevzuat_suggestions") or []
+            ],
+        )
+
+    @staticmethod
+    async def _publish(event: Any) -> None:
+        """Publish a domain event without letting listener failures break intake.
+
+        Args:
+            event: The event to publish.
+        """
+        try:
+            await event_bus.publish(event)
+        except Exception:
+            logger.exception(
+                "Failed to publish event %s", getattr(event, "event_type", "?")
+            )

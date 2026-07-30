@@ -1,5 +1,6 @@
 from app.ai.agents.base import BaseAgent
 from app.ai.agents.classifier import ClassifierAgent
+from app.ai.agents.compliance import ComplianceAgent
 from app.ai.agents.editor import EditorAgent
 from app.ai.agents.metadata import MetadataAgent
 from app.ai.agents.ner import NERAgent
@@ -22,4 +23,5 @@ __all__ = [
     "RouterAgent",
     "ReflectionAgent",
     "EvaluatorAgent",
+    "ComplianceAgent",
 ]

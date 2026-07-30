@@ -1,0 +1,86 @@
+"""Index the legislation corpus into the vector store.
+
+Usage (requires a running Qdrant and Ollama):
+    python scripts/index_mevzuat.py
+    python scripts/index_mevzuat.py --no-recreate
+"""
+
+import argparse
+import asyncio
+import os
+import sys
+
+# Add backend directory to Python path
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "backend"))
+
+from app.ai.embeddings.chunking.recursive import RecursiveChunker
+from app.ai.embeddings.models import get_embeddings_client
+from app.core.config import settings
+from app.infrastructure.vectorstore import get_vector_store
+from app.workers.indexing import index_mevzuat_corpus
+
+# Must match the parameters used by the BM25 dependency in app/api/dependency.py,
+# otherwise rank fusion sees the same passage twice.
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 200
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Mevzuat korpusunu indeksle.")
+    parser.add_argument(
+        "--corpus-dir",
+        default=settings.MEVZUAT_CORPUS_DIR,
+        help="Mevzuat metinlerinin bulunduğu klasör.",
+    )
+    parser.add_argument(
+        "--collection",
+        default=settings.MEVZUAT_COLLECTION_NAME,
+        help="Hedef koleksiyon adı.",
+    )
+    parser.add_argument(
+        "--no-recreate",
+        action="store_true",
+        help="Koleksiyonu silip yeniden oluşturmadan üzerine yaz.",
+    )
+    return parser.parse_args()
+
+
+async def main() -> int:
+    args = _parse_args()
+    print("=" * 60)
+    print("   Mevzuat Korpusu İndeksleme")
+    print("=" * 60)
+    print(f"Korpus klasörü : {args.corpus_dir}")
+    print(f"Koleksiyon     : {args.collection}")
+    print(f"Gömme modeli   : {settings.OLLAMA_EMBEDDING_MODEL}")
+    print(f"Qdrant         : {settings.QDRANT_URL}\n")
+
+    try:
+        report = await index_mevzuat_corpus(
+            corpus_dir=args.corpus_dir,
+            collection_name=args.collection,
+            embeddings_client=get_embeddings_client(),
+            vector_store=get_vector_store(),
+            chunker=RecursiveChunker(
+                chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
+            ),
+            recreate=not args.no_recreate,
+        )
+    except Exception as exc:
+        print(f"\nHATA: {exc}")
+        print("\nKontrol edin:")
+        print(f"  1. Qdrant çalışıyor mu?  ({settings.QDRANT_URL})")
+        print(f"  2. Ollama çalışıyor mu?  ({settings.OLLAMA_BASE_URL})")
+        print(f"  3. '{settings.OLLAMA_EMBEDDING_MODEL}' modeli indirilmiş mi?")
+        print(f"  4. '{args.corpus_dir}' klasöründe .md dosyaları var mı?")
+        return 1
+
+    print("=" * 60)
+    print(f"Tamamlandı: {report.chunk_count} parça indekslendi.")
+    print(f"Vektör boyutu: {report.vector_size}")
+    print("=" * 60)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(asyncio.run(main()))

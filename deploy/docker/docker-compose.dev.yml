@@ -13,6 +13,7 @@ services:
       - ../../backend/app:/workspace/app
       - ../../backend/tests:/workspace/tests
       - ../../scripts:/workspace/scripts
+      - ../../datasets:/workspace/datasets
     environment:
       - ENVIRONMENT=development
       - OLLAMA_BASE_URL=http://host.docker.internal:11434

@@ -9,7 +9,13 @@ from app.core.constants import (
     MAX_PAGE_SIZE,
     MAX_RETRY_ATTEMPTS,
 )
-from app.core.enums import DocumentStatus, UserRole
+from app.core.enums import (
+    ComplianceStatus,
+    CorrespondenceType,
+    DocumentStatus,
+    DocumentType,
+    UserRole,
+)
 from app.core.permissions import RoleChecker
 
 __all__ = [
@@ -18,6 +24,9 @@ __all__ = [
     # Enums
     "UserRole",
     "DocumentStatus",
+    "DocumentType",
+    "ComplianceStatus",
+    "CorrespondenceType",
     # Constants
     "MAX_FILE_SIZE_BYTES",
     "ALLOWED_FILE_TYPES",

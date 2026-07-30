@@ -1,0 +1,16 @@
+{
+  "id": "evrak_08",
+  "note": "İzin talebi; tarih eksik.",
+  "document_type": "leave_request",
+  "scanned": false,
+  "expected_fields": {
+    "konu": "Yıllık İzin Talebi",
+    "muhatap": "ÖRNEK GENEL MÜDÜRLÜĞÜNE",
+    "basvuran_adi": "Elif Aydın",
+    "imza_sahibi": "Elif Aydın",
+    "imza_unvani": "Bilgisayar İşletmeni"
+  },
+  "expected_missing_fields": [
+    "tarih"
+  ]
+}
