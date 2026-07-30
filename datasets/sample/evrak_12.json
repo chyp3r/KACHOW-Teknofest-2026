@@ -1,0 +1,16 @@
+{
+  "id": "evrak_12",
+  "note": "evrak_01 ile aynı içerik; PDF metin katmanı olmadan taranmış görüntü olarak üretilir ve OCR yolunu sınar.",
+  "document_type": "official_letter",
+  "scanned": true,
+  "expected_fields": {
+    "sayi": "E-11111111-903.07.02-4752",
+    "tarih": "12.03.2026",
+    "konu": "Yıllık İzin Talebinin Değerlendirilmesi",
+    "muhatap": "ÖRNEK VALİLİĞİNE",
+    "gonderen_kurum": "Örnek Bakanlığı Personel Genel Müdürlüğü",
+    "imza_sahibi": "Ahmet Yılmaz",
+    "imza_unvani": "Genel Müdür"
+  },
+  "expected_missing_fields": []
+}

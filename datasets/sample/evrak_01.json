@@ -1,0 +1,19 @@
+{
+  "id": "evrak_01",
+  "note": "Tam resmî yazı (kontrol örneği).",
+  "document_type": "official_letter",
+  "scanned": false,
+  "expected_fields": {
+    "sayi": "E-11111111-903.07.02-4752",
+    "tarih": "12.03.2026",
+    "konu": "Yıllık İzin Talebinin Değerlendirilmesi",
+    "muhatap": "ÖRNEK VALİLİĞİNE",
+    "gonderen_kurum": "Örnek Bakanlığı Personel Genel Müdürlüğü",
+    "ilgi": [
+      "01.03.2026 tarihli ve E-22222222-903-118 sayılı yazınız"
+    ],
+    "imza_sahibi": "Ahmet Yılmaz",
+    "imza_unvani": "Genel Müdür"
+  },
+  "expected_missing_fields": []
+}

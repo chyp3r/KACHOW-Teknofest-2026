@@ -1,0 +1,17 @@
+{
+  "id": "evrak_07",
+  "note": "Bilgi edinme başvurusu; yalnızca önerilen alan (iletişim) eksik.",
+  "document_type": "information_request",
+  "scanned": false,
+  "expected_fields": {
+    "tarih": "16.04.2026",
+    "konu": "İhale İlanlarına İlişkin Bilgi Talebi",
+    "muhatap": "ÖRNEK BAKANLIĞI BİLGİ EDİNME BİRİMİNE",
+    "basvuran_adi": "Hasan Çelik",
+    "imza_sahibi": "Hasan Çelik",
+    "adres": "Örnek Mah. Numune Sok. No:7 Örnek/Örnek"
+  },
+  "expected_missing_fields": [
+    "iletisim"
+  ]
+}

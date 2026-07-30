@@ -1,0 +1,16 @@
+{
+  "id": "evrak_06",
+  "note": "Tam bilgi edinme başvurusu (kontrol örneği).",
+  "document_type": "information_request",
+  "scanned": false,
+  "expected_fields": {
+    "tarih": "14.04.2026",
+    "konu": "4982 sayılı Kanun Kapsamında Bilgi Talebi",
+    "muhatap": "ÖRNEK BAKANLIĞI BİLGİ EDİNME BİRİMİNE",
+    "basvuran_adi": "Fatma Öz",
+    "imza_sahibi": "Fatma Öz",
+    "adres": "Deneme Cad. No:5 Kat:3 Örnek/Örnek",
+    "iletisim": "ornek@ornek.example"
+  },
+  "expected_missing_fields": []
+}

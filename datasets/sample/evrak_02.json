@@ -1,0 +1,17 @@
+{
+  "id": "evrak_02",
+  "note": "Resmî yazı; sayı ve muhatap eksik.",
+  "document_type": "official_letter",
+  "scanned": false,
+  "expected_fields": {
+    "tarih": "18.03.2026",
+    "konu": "Hizmet Binası Bakım Çalışması",
+    "gonderen_kurum": "Örnek Bakanlığı Destek Hizmetleri Dairesi Başkanlığı",
+    "imza_sahibi": "Zeynep Kaya",
+    "imza_unvani": "Daire Başkanı"
+  },
+  "expected_missing_fields": [
+    "muhatap",
+    "sayi"
+  ]
+}

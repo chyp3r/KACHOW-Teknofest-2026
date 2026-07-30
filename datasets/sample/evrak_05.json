@@ -1,0 +1,16 @@
+{
+  "id": "evrak_05",
+  "note": "Dilekçe; adres ve imza eksik (3071 s.K. m.4 zorunlu unsurları).",
+  "document_type": "petition",
+  "scanned": false,
+  "expected_fields": {
+    "tarih": "09.04.2026",
+    "konu": "Park Alanı Temizliği Talebi",
+    "muhatap": "ÖRNEK KAYMAKAMLIĞINA",
+    "basvuran_adi": "Ali Vural"
+  },
+  "expected_missing_fields": [
+    "adres",
+    "imza_sahibi"
+  ]
+}

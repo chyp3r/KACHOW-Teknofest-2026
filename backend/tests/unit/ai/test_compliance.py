@@ -4,6 +4,9 @@ Deliberately mock-free: the whole point of doing this check in Python rather tha
 in the language model is that it is exactly reproducible and directly auditable.
 """
 
+import json
+import pathlib
+
 import pytest
 
 from app.ai.compliance import (
@@ -199,3 +202,106 @@ def test_empty_document_reports_every_mandatory_field():
     ]
     detected = {item.key for item in report.missing_fields}
     assert set(mandatory).issubset(detected)
+
+
+# ==========================================
+# Dataset-driven regression over datasets/sample/
+# ==========================================
+# Makes the synthetic corpus a real test asset rather than demo decoration: the
+# committed ground truth is checked against the rule table on every run, with no
+# language model involved.
+def _find_sample_dir() -> pathlib.Path:
+    """Locate datasets/sample by walking up from this test file.
+
+    Walked rather than hard-coded because the suite runs both from `backend/` on a
+    workstation and from `/workspace` inside the container, where the repository
+    root sits at a different depth.
+
+    Returns:
+        Path to the sample dataset directory (which may not exist).
+    """
+    here = pathlib.Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent / "datasets" / "sample"
+        if candidate.is_dir():
+            return candidate
+    return here.parents[4] / "datasets" / "sample"
+
+
+SAMPLE_DIR = _find_sample_dir()
+SAMPLE_FILES = sorted(SAMPLE_DIR.glob("evrak_*.json"))
+
+
+def _load(path):
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def test_sample_dataset_is_present():
+    assert SAMPLE_FILES, f"No ground-truth files found in {SAMPLE_DIR}"
+
+
+@pytest.mark.parametrize("path", SAMPLE_FILES, ids=lambda p: p.stem)
+def test_sample_ground_truth_matches_the_rule_table(path):
+    truth = _load(path)
+    report = check_required_fields(
+        truth["document_type"], EvrakField(**truth["expected_fields"])
+    )
+    detected = sorted(item.key for item in report.missing_fields)
+    assert detected == truth["expected_missing_fields"], (
+        f"{truth['id']}: expected {truth['expected_missing_fields']}, got {detected}"
+    )
+
+
+@pytest.mark.parametrize("path", SAMPLE_FILES, ids=lambda p: p.stem)
+def test_sample_status_follows_from_missing_severities(path):
+    truth = _load(path)
+    report = check_required_fields(
+        truth["document_type"], EvrakField(**truth["expected_fields"])
+    )
+    if not truth["expected_missing_fields"]:
+        assert report.status is ComplianceStatus.COMPLIANT
+    else:
+        assert report.status in (
+            ComplianceStatus.INCOMPLETE,
+            ComplianceStatus.PARTIALLY_COMPLIANT,
+        )
+
+
+@pytest.mark.parametrize("path", SAMPLE_FILES, ids=lambda p: p.stem)
+def test_sample_has_a_matching_text_file(path):
+    assert path.with_suffix(".txt").is_file()
+
+
+@pytest.mark.parametrize("path", SAMPLE_FILES, ids=lambda p: p.stem)
+def test_sample_document_type_is_a_known_enum_member(path):
+    truth = _load(path)
+    assert DocumentType(truth["document_type"])
+
+
+@pytest.mark.parametrize("path", SAMPLE_FILES, ids=lambda p: p.stem)
+def test_sample_expected_fields_match_the_schema(path):
+    """Guards typos in hand-authored ground truth."""
+    truth = _load(path)
+    unknown = set(truth["expected_fields"]) - set(EvrakField.model_fields)
+    assert not unknown, f"{truth['id']}: unknown field(s) {unknown}"
+
+
+def test_sample_dataset_covers_the_advisory_only_path():
+    """At least one sample must yield PARTIALLY_COMPLIANT, or that branch is untested."""
+    statuses = []
+    for path in SAMPLE_FILES:
+        truth = _load(path)
+        statuses.append(
+            check_required_fields(
+                truth["document_type"], EvrakField(**truth["expected_fields"])
+            ).status
+        )
+    assert ComplianceStatus.PARTIALLY_COMPLIANT in statuses
+    assert ComplianceStatus.COMPLIANT in statuses
+    assert ComplianceStatus.INCOMPLETE in statuses
+
+
+def test_sample_dataset_contains_a_scanned_case():
+    """The OCR path needs at least one image-only document."""
+    assert any(_load(path).get("scanned") for path in SAMPLE_FILES)

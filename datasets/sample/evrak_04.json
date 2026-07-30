@@ -1,0 +1,16 @@
+{
+  "id": "evrak_04",
+  "note": "Tam dilekçe (kontrol örneği).",
+  "document_type": "petition",
+  "scanned": false,
+  "expected_fields": {
+    "tarih": "05.04.2026",
+    "konu": "Sokak Aydınlatması Talebi",
+    "muhatap": "ÖRNEK BELEDİYE BAŞKANLIĞINA",
+    "basvuran_adi": "Ayşe Demir",
+    "imza_sahibi": "Ayşe Demir",
+    "adres": "Örnek Mah. Deneme Sok. No:1 Daire:2 Örnek/Örnek",
+    "iletisim": "0500 000 00 00"
+  },
+  "expected_missing_fields": []
+}

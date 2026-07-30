@@ -1,0 +1,20 @@
+{
+  "id": "evrak_11",
+  "note": "Resmî yazı; alanlar biçimsel olarak var ama içerik yok ('Belirtilmemiş', '-'). BLANK_VALUE_MARKER yolunu sınar.",
+  "document_type": "official_letter",
+  "scanned": false,
+  "expected_fields": {
+    "sayi": "Belirtilmemiş",
+    "tarih": "-",
+    "konu": "   ",
+    "muhatap": "ÖRNEK MÜDÜRLÜĞÜNE",
+    "gonderen_kurum": "Örnek Bakanlığı Bilgi İşlem Dairesi Başkanlığı",
+    "imza_sahibi": "Selin Yıldız",
+    "imza_unvani": "Şube Müdürü"
+  },
+  "expected_missing_fields": [
+    "konu",
+    "sayi",
+    "tarih"
+  ]
+}
