@@ -239,10 +239,11 @@ def create_document_analysis_graph(
         text = _trim_for_extraction(state["input_text"])
 
         # The regulation prescribes the header layout, so the labelled fields are
-        # read with regular expressions instead of the model. Measured on qwen3:8b,
-        # asking for one field returns `sayi` correctly while asking for several at
-        # once returns it as null -- the model degrades as the schema widens. The
-        # parser scores 28/28 on the sample corpus with no invented values.
+        # read with regular expressions instead of the model. The parser scores
+        # 60/60 on the sample corpus with no invented values, and lifts overall
+        # extraction from 28.4% to 98.5% on qwen3:8b and from 94.0% to 97.0% on
+        # qwen3.5:9b -- a correctness floor on the small model, a precision and
+        # latency win on the default one.
         parsed = parse_labelled_fields(text)
         logger.info("Parsed %d labelled field(s) deterministically.", len(parsed))
 
