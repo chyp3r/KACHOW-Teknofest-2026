@@ -36,12 +36,13 @@ from app.core.permissions import RoleChecker
 class TestUserRole:
     def test_values_are_strings(self):
         assert UserRole.ADMIN == "admin"
-        assert UserRole.EDITOR == "editor"
-        assert UserRole.VIEWER == "viewer"
+        assert UserRole.MANAGER == "manager"
+        assert UserRole.EMPLOYEE == "employee"
+        assert UserRole.AUDITOR == "auditor"
 
     def test_all_roles_present(self):
         roles = {r.value for r in UserRole}
-        assert roles == {"admin", "editor", "viewer"}
+        assert roles == {"admin", "manager", "employee", "auditor"}
 
 
 class TestDocumentStatus:
@@ -127,7 +128,7 @@ class TestRoleChecker:
             "query_string": b"",
         }
         request = Request(scope=scope)
-        request.state.user_role = UserRole.VIEWER
+        request.state.user_role = UserRole.EMPLOYEE
 
         with pytest.raises(AuthorizationException):
             checker(request)
