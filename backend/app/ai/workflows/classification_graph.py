@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
@@ -18,8 +18,8 @@ class ClassificationState(TypedDict):
     input_text: str
     doc_type: str
     summary: str
-    entities: Dict[str, List[str]]  # people, organizations, dates
-    metadata: Dict[str, Any]
+    entities: dict[str, list[str]]  # people, organizations, dates
+    metadata: dict[str, Any]
     next_workflow_state: str
 
 
@@ -35,15 +35,15 @@ class ClassificationOutput(BaseModel):
 class NEROutput(BaseModel):
     """Pydantic schema for structured named entity extraction."""
 
-    people: List[str] = Field(
+    people: list[str] = Field(
         default_factory=list,
         description="Metinde geçen kişi adları (örn. 'Ahmet Yılmaz').",
     )
-    organizations: List[str] = Field(
+    organizations: list[str] = Field(
         default_factory=list,
         description="Metinde geçen kurum, şirket veya organizasyon adları (örn. 'ASELSAN').",
     )
-    dates: List[str] = Field(
+    dates: list[str] = Field(
         default_factory=list,
         description="Metinde geçen tarih veya zaman ifadeleri (örn. '29 Temmuz 2026').",
     )
@@ -52,7 +52,7 @@ class NEROutput(BaseModel):
 class MetadataOutput(BaseModel):
     """Pydantic schema for dynamic metadata extraction."""
 
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Konu, referans no, dil, ton vb. içeren dinamik metadata tablosu.",
     )
@@ -69,7 +69,7 @@ def create_classification_graph(llm_client: BaseLLMClient):
     metadata_agent = MetadataAgent(llm_client)
 
     # 1. Classification Node
-    async def classify_node(state: ClassificationState) -> Dict[str, Any]:
+    async def classify_node(state: ClassificationState) -> dict[str, Any]:
         logger.info("Running Classification Node...")
         prompt = (
             "Aşağıdaki belgenin/isteğin türünü ve özetini çıkart.\n\n"
@@ -80,12 +80,12 @@ def create_classification_graph(llm_client: BaseLLMClient):
                 messages=prompt, response_model=ClassificationOutput
             )
             return {"doc_type": res.doc_type, "summary": res.summary}
-        except Exception as e:
-            logger.error(f"Classification Node failed: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Classification Node failed")
             return {"doc_type": "Bilinmeyen", "summary": "Özet çıkarılamadı."}
 
     # 2. NER Node
-    async def ner_node(state: ClassificationState) -> Dict[str, Any]:
+    async def ner_node(state: ClassificationState) -> dict[str, Any]:
         logger.info("Running NER Node...")
         prompt = (
             "Aşağıdaki metinden kişi adlarını, kurumları ve tarihleri ayıkla.\n\n"
@@ -102,16 +102,19 @@ def create_classification_graph(llm_client: BaseLLMClient):
                     "dates": res.dates,
                 }
             }
-        except Exception as e:
-            logger.error(f"NER Node failed: {e}", exc_info=True)
+        except Exception:
+            logger.exception("NER Node failed")
             return {"entities": {"people": [], "organizations": [], "dates": []}}
 
     # 3. Metadata Node
-    async def metadata_node(state: ClassificationState) -> Dict[str, Any]:
+    async def metadata_node(state: ClassificationState) -> dict[str, Any]:
         logger.info("Running Metadata Node...")
         prompt = (
             "Aşağıdaki metinden konu, önem derecesi, referans no ve dil gibi öznitelikleri çıkartarak "
             "anahtar-değer şeklinde bir metadata nesnesi oluştur.\n\n"
+            "Kullanıcı belirli bir çıktı yazışma türü istiyorsa `correspondence_type` alanını "
+            "yalnızca şu değerlerden biriyle ekle: `cover_letter`, `response_letter`, "
+            "`information_notice`, `other_official`. Açık bir talep yoksa bu alanı ekleme.\n\n"
             f"İÇERİK:\n\"\"\"\n{state['input_text']}\n\"\"\""
         )
         try:
@@ -121,8 +124,8 @@ def create_classification_graph(llm_client: BaseLLMClient):
             # Decide the initial workflow state (e.g. if it is a general question, route to RAG)
             next_state = "RAG" if state.get("doc_type") != "Gereksiz" else "Routing"
             return {"metadata": res.metadata, "next_workflow_state": next_state}
-        except Exception as e:
-            logger.error(f"Metadata Node failed: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Metadata Node failed")
             return {"metadata": {}, "next_workflow_state": "RAG"}
 
     # Define Graph

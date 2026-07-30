@@ -34,6 +34,23 @@ class PlanOutput(BaseModel):
     )
 
 
+def _requested_correspondence_type(
+    classification: dict[str, Any],
+) -> str | None:
+    """Read an explicitly classified output correspondence type.
+
+    Args:
+        classification: Combined Classification Graph result.
+
+    Returns:
+        Requested correspondence type when classification metadata contains one.
+    """
+    metadata = classification.get("metadata", {})
+    return classification.get("correspondence_type") or metadata.get(
+        "correspondence_type"
+    )
+
+
 def create_planning_graph(
     llm_client: BaseLLMClient,
     classification_graph: Any,
@@ -122,10 +139,14 @@ def create_planning_graph(
 
         elif current_step == "draft":
             context = state.get("rag_result", {}).get("context", "")
+            classification = state.get("classification_result", {})
             sub_res = await draft_graph.ainvoke(
                 {
                     "source_document": state["input_text"],
-                    "classification": state.get("classification_result", {}),
+                    "classification": classification,
+                    "correspondence_type": _requested_correspondence_type(
+                        classification
+                    ),
                     "context": context,
                     "instructions": (
                         "Gelen evraka, evrakın amacı ve doğrulanmış bağlam doğrultusunda "

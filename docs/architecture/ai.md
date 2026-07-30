@@ -136,8 +136,9 @@ Supervisor'ın planlamacı yardımcısıdır. `OrchestratorAgent` kullanarak gel
 
 ### 3. Draft Graph (`draft_graph.py`)
 - **Node'lar**: Writer -> Editor -> (Revizyon gerekliyse Writer'a döngü) -> Reflection -> Evaluator.
-- **Girdi**: Gelen evrakın asıl metni, Classification Graph çıktısı, doğrulanmış RAG bağlamı ve yazım yönergeleri birlikte taşınır.
-- **Görev**: Bu kaynaklara bağlı resmi cevap taslağı oluşturur (`WriterAgent`). `EditorAgent` taslağı hem kaynak sadakati hem dil/biçim yönünden denetler ve en fazla iki yazım denemesi içinde revizyon isteyebilir. `ReflectionAgent`, kaynakları tekrar görerek taslağı parlatır. `EvaluatorAgent` nihai metni doğrular, 0-100 aralığında güven skoru atar ve insan onayı gereksinimini belirler.
+- **Girdi**: Gelen evrakın asıl metni, Classification Graph çıktısı, doğrulanmış RAG bağlamı, yazım yönergeleri ve isteğe bağlı `correspondence_type` birlikte taşınır.
+- **Yazışma Türleri**: Çıktı sözleşmesi `cover_letter` (üst yazı), `response_letter` (cevap yazısı), `information_notice` (bilgilendirme metni) ve `other_official` (diğer/alternatif resmî yazışma) değerlerini destekler. Açık çağıran girdisi, Classification metadata'sı, yazım yönergesi ve gelen belge türü sırasıyla değerlendirilir. Türkçe/İngilizce karşılıklar normalize edilir. Güvenilir eşleşme bulunamazsa `other_official` seçilir ve insan incelemesi zorunlu olur.
+- **Görev**: Bu kaynaklara ve seçilen yazışma türünün yapı kurallarına bağlı resmî taslak oluşturur (`WriterAgent`). `EditorAgent` taslağı hem tür uygunluğu, kaynak sadakati hem dil/biçim yönünden denetler ve en fazla iki yazım denemesi içinde revizyon isteyebilir. `ReflectionAgent`, kaynakları ve türü tekrar görerek taslağı parlatır. `EvaluatorAgent` nihai metni doğrular, 0-100 aralığında güven skoru atar ve insan onayı gereksinimini belirler.
 - **Güvenlik**: Gelen evrak eksikse veya ajanlardan biri güvenilir çıktı üretemezse akış sahte bir varsayılan taslak ya da başarı skoru döndürmez. Durum `FAILED` veya `NEEDS_HUMAN_APPROVAL` olur. Doğrulanmış RAG bağlamı bulunmayan taslaklar da zorunlu insan incelemesine işaretlenir.
 - **Tool Sınırı**: Writer, Editor, Reflection ve Evaluator ajanlarına doğrudan sistem aracı verilmez. Retrieval araçları RAG Graph seviyesinde çalışır; Draft Graph yalnızca doğrulanmış bağlamı tüketir.
 

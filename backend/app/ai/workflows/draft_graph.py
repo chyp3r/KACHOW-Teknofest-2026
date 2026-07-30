@@ -10,6 +10,10 @@ from app.ai.agents.evaluator import EvaluatorAgent
 from app.ai.agents.reflection import ReflectionAgent
 from app.ai.agents.writer import WriterAgent
 from app.ai.llms.base import BaseLLMClient
+from app.ai.workflows.correspondence import (
+    format_correspondence_profile,
+    resolve_correspondence_type,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +26,8 @@ class DraftState(TypedDict, total=False):
 
     source_document: str
     classification: dict[str, Any]
+    correspondence_type: str
+    correspondence_type_source: str
     context: str
     instructions: str
     draft: str
@@ -88,11 +94,23 @@ def create_draft_graph(llm_client: BaseLLMClient):
 
     # 1. Input Validation Node
     async def validate_input_node(state: DraftState) -> dict[str, Any]:
+        classification = state.get("classification", {})
+        instructions = (
+            state.get("instructions", "").strip()
+            or "Gelen evraka uygun resmî ve kurumsal bir yazışma taslağı oluştur."
+        )
+        correspondence_type, type_source = resolve_correspondence_type(
+            state.get("correspondence_type"),
+            instructions,
+            classification,
+        )
         source_document = state.get("source_document", "").strip()
         if not source_document:
             error = "Gelen evrak içeriği sağlanmadığı için taslak oluşturulamadı."
             logger.error(error)
             return {
+                "correspondence_type": correspondence_type.value,
+                "correspondence_type_source": type_source,
                 "draft": "",
                 "confidence_score": 0.0,
                 "requires_human_approval": True,
@@ -104,11 +122,12 @@ def create_draft_graph(llm_client: BaseLLMClient):
         context = state.get("context", "").strip()
         return {
             "source_document": source_document,
-            "classification": state.get("classification", {}),
+            "classification": classification,
+            "correspondence_type": correspondence_type.value,
+            "correspondence_type_source": type_source,
             "context": context,
-            "instructions": state.get("instructions", "").strip()
-            or "Gelen evraka uygun resmi ve kurumsal bir yanıt taslağı oluştur.",
-            "requires_human_approval": not bool(context),
+            "instructions": instructions,
+            "requires_human_approval": not bool(context) or type_source == "fallback",
             "status": "IN_PROGRESS",
             "error": "",
             "attempts": state.get("attempts", 0),
@@ -125,12 +144,16 @@ def create_draft_graph(llm_client: BaseLLMClient):
         source_document = state["source_document"]
         classification = _format_classification(state.get("classification", {}))
         context = state.get("context") or "Doğrulanmış ek RAG bağlamı bulunamadı."
+        correspondence_profile = format_correspondence_profile(
+            state["correspondence_type"]
+        )
 
         # Incorporate editor feedback if we are in a revision loop
         if attempts > 0 and feedback:
             prompt = (
                 f'Gelen Evrak:\n"""\n{source_document}\n"""\n\n'
                 f"Belge Analizi:\n{classification}\n\n"
+                f"İstenen Yazışma Türü:\n{correspondence_profile}\n\n"
                 f'Doğrulanmış RAG Bağlamı:\n"""\n{context}\n"""\n\n'
                 f"İlk Yönergeler: \"{state['instructions']}\"\n"
                 f"Şu ana kadar yazdığın taslak:\n\"\"\"\n{state['draft']}\n\"\"\"\n\n"
@@ -142,10 +165,11 @@ def create_draft_graph(llm_client: BaseLLMClient):
             prompt = (
                 f'Gelen Evrak:\n"""\n{source_document}\n"""\n\n'
                 f"Belge Analizi:\n{classification}\n\n"
+                f"İstenen Yazışma Türü:\n{correspondence_profile}\n\n"
                 f'Doğrulanmış RAG Bağlamı:\n"""\n{context}\n"""\n\n'
                 f"Yönergeler: \"{state['instructions']}\"\n\n"
-                "Yalnızca gelen evrak ve doğrulanmış bağlamdaki bilgilere dayanarak resmi, "
-                "kurumsal ve akıcı bir Türkçe cevap taslağı oluştur. Kaynaklarda bulunmayan "
+                "Yalnızca gelen evrak ve doğrulanmış bağlamdaki bilgilere dayanarak seçilen "
+                "türde resmî, kurumsal ve akıcı bir Türkçe taslak oluştur. Kaynaklarda bulunmayan "
                 "bilgileri uydurma; cevap için zorunlu bir bilgi eksikse bunu açıkça belirt."
             )
 
@@ -178,11 +202,13 @@ def create_draft_graph(llm_client: BaseLLMClient):
         prompt = (
             f"Gelen Evrak:\n\"\"\"\n{state['source_document']}\n\"\"\"\n\n"
             f"Belge Analizi:\n{_format_classification(state.get('classification', {}))}\n\n"
+            f"İstenen Yazışma Türü:\n{format_correspondence_profile(state['correspondence_type'])}\n\n"
             f"Doğrulanmış RAG Bağlamı:\n\"\"\"\n{state.get('context') or 'Ek bağlam yok.'}\n\"\"\"\n\n"
             f"Taslak Metin:\n\"\"\"\n{state['draft']}\n\"\"\"\n\n"
-            "Taslağı kaynaklara sadakat, kurumsal dil, Türkçe yazım kuralları, noktalama ve "
-            "akıcılık yönünden denetle. Kaynaklarda bulunmayan bir iddia veya cevap için zorunlu "
-            "eksik bilgi varsa revizyon iste ve bunu geri bildirimde açıkça belirt."
+            "Taslağı seçilen yazışma türünün amacı/yapısı, kaynaklara sadakat, kurumsal dil, "
+            "Türkçe yazım kuralları, noktalama ve akıcılık yönünden denetle. Kaynaklarda "
+            "bulunmayan bir iddia veya cevap için zorunlu eksik bilgi varsa revizyon iste ve "
+            "bunu geri bildirimde açıkça belirt."
         )
         try:
             res: EditorOutput = await editor_agent.run_structured(
@@ -215,11 +241,12 @@ def create_draft_graph(llm_client: BaseLLMClient):
         logger.info("Running Reflection Node...")
         prompt = (
             f"Gelen Evrak:\n\"\"\"\n{state['source_document']}\n\"\"\"\n\n"
+            f"İstenen Yazışma Türü:\n{format_correspondence_profile(state['correspondence_type'])}\n\n"
             f"Doğrulanmış RAG Bağlamı:\n\"\"\"\n{state.get('context') or 'Ek bağlam yok.'}\n\"\"\"\n\n"
             f"Mevcut Taslak:\n\"\"\"\n{state['draft']}\n\"\"\"\n\n"
-            "Taslağı kaynaklara sadakat, resmi dil, tekrar ve anlam bütünlüğü yönünden eleştir. "
-            "Yalnızca gelen evrak ve doğrulanmış bağlamla desteklenen bilgileri koruyarak "
-            "düzeltilmiş metni doğrudan çıktı olarak ver."
+            "Taslağı seçilen yazışma türüne uygunluk, kaynaklara sadakat, resmî dil, tekrar ve "
+            "anlam bütünlüğü yönünden eleştir. Yalnızca gelen evrak ve doğrulanmış bağlamla "
+            "desteklenen bilgileri koruyarak düzeltilmiş metni doğrudan çıktı olarak ver."
         )
         try:
             refined_draft = await reflection_agent.run(messages=prompt, temperature=0.3)
@@ -239,11 +266,13 @@ def create_draft_graph(llm_client: BaseLLMClient):
         prompt = (
             f"Gelen Evrak:\n\"\"\"\n{state['source_document']}\n\"\"\"\n\n"
             f"Belge Analizi:\n{_format_classification(state.get('classification', {}))}\n\n"
+            f"İstenen Yazışma Türü:\n{format_correspondence_profile(state['correspondence_type'])}\n\n"
             f"Doğrulanmış RAG Bağlamı:\n\"\"\"\n{state.get('context') or 'Ek bağlam yok.'}\n\"\"\"\n\n"
             f"Nihai Metin:\n\"\"\"\n{state['draft']}\n\"\"\"\n\n"
-            "Metni kaynaklara sadakat, eksiksizlik, kurumsal dil ve doğruluk açısından son kez "
-            "incele. Nihai metni, 0–100 güven skorunu, insan onayı gereksinimini ve kısa gerekçeyi döndür. "
-            "Kaynaklarda bulunmayan bilgi varsa güven skorunu düşür ve insan onayı iste."
+            "Metni seçilen yazışma türüne uygunluk, kaynaklara sadakat, eksiksizlik, kurumsal "
+            "dil ve doğruluk açısından son kez incele. Nihai metni, 0–100 güven skorunu, insan "
+            "onayı gereksinimini ve kısa gerekçeyi döndür. Kaynaklarda bulunmayan bilgi varsa "
+            "güven skorunu düşür ve insan onayı iste."
         )
         try:
             res: EvaluatorOutput = await evaluator_agent.run_structured(

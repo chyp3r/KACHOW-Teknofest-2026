@@ -19,10 +19,12 @@ from app.ai.workflows.classification_graph import (
     MetadataOutput,
     NEROutput,
 )
+from app.ai.workflows.correspondence import resolve_correspondence_type
 from app.ai.workflows.draft_graph import EditorOutput, EvaluatorOutput
 from app.ai.workflows.planning_graph import PlanOutput
 from app.ai.workflows.rag_graph import QueryRewriteOutput, VerifierOutput
 from app.ai.workflows.routing_graph import RouteOutput
+from app.core.enums.correspondence_type import CorrespondenceType
 from app.infrastructure.cache.redis import RedisCache
 
 
@@ -92,6 +94,55 @@ async def test_rag_graph(mock_verifier_run):
 # ==========================================
 # Draft Graph Test
 # ==========================================
+@pytest.mark.parametrize(
+    (
+        "requested_type",
+        "instructions",
+        "classification",
+        "expected_type",
+        "expected_source",
+    ),
+    [
+        (
+            None,
+            "Resmî metin hazırla.",
+            {"metadata": {"correspondence_type": "üst yazı"}},
+            CorrespondenceType.COVER_LETTER,
+            "classification",
+        ),
+        (
+            None,
+            "Bilgilendirme metni hazırla.",
+            {"doc_type": "Dilekçe"},
+            CorrespondenceType.INFORMATION_NOTICE,
+            "instructions",
+        ),
+        (
+            None,
+            "Uygun resmî metni hazırla.",
+            {"doc_type": "Duyuru"},
+            CorrespondenceType.INFORMATION_NOTICE,
+            "document_type",
+        ),
+    ],
+)
+def test_correspondence_type_resolution_precedence(
+    requested_type,
+    instructions,
+    classification,
+    expected_type,
+    expected_source,
+):
+    resolved_type, source = resolve_correspondence_type(
+        requested_type,
+        instructions,
+        classification,
+    )
+
+    assert resolved_type == expected_type
+    assert source == expected_source
+
+
 @pytest.mark.asyncio
 @patch("app.ai.agents.writer.WriterAgent.run")
 @patch("app.ai.agents.editor.EditorAgent.run_structured")
@@ -132,7 +183,116 @@ async def test_draft_graph(
     assert res["draft"] == "Refined final draft."
     assert res["confidence_score"] == 95.0
     assert res["requires_human_approval"] is False
+    assert res["correspondence_type"] == CorrespondenceType.RESPONSE_LETTER
+    assert res["correspondence_type_source"] == "document_type"
     assert res["status"] == "COMPLETED"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("requested_type", "expected_type", "prompt_fragment"),
+    [
+        ("üst yazı", CorrespondenceType.COVER_LETTER, "İletilen ek veya dayanak"),
+        (
+            "cevap yazısı",
+            CorrespondenceType.RESPONSE_LETTER,
+            "Gelen evraktaki talep veya soruyu",
+        ),
+        (
+            "bilgilendirme metni",
+            CorrespondenceType.INFORMATION_NOTICE,
+            "Bilgiyi tarafsız",
+        ),
+        (
+            "alternatif resmî yazışma",
+            CorrespondenceType.OTHER_OFFICIAL,
+            "esnek fakat resmî",
+        ),
+    ],
+)
+@patch("app.ai.agents.writer.WriterAgent.run")
+@patch("app.ai.agents.editor.EditorAgent.run_structured")
+@patch("app.ai.agents.reflection.ReflectionAgent.run")
+@patch("app.ai.agents.evaluator.EvaluatorAgent.run_structured")
+async def test_draft_graph_supports_official_correspondence_types(
+    mock_evaluator_struct,
+    mock_reflection_run,
+    mock_editor_struct,
+    mock_writer_run,
+    requested_type,
+    expected_type,
+    prompt_fragment,
+):
+    mock_writer_run.return_value = "Türe uygun ilk taslak."
+    mock_editor_struct.return_value = EditorOutput(
+        needs_revision=False, feedback="Uygun."
+    )
+    mock_reflection_run.return_value = "Türe uygun nihai taslak."
+    mock_evaluator_struct.return_value = EvaluatorOutput(
+        final_draft="Türe uygun nihai taslak.",
+        confidence_score=94.0,
+    )
+
+    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+    res = await graph.ainvoke(
+        {
+            "source_document": "Kuruma iletilen doğrulanmış evrak.",
+            "classification": {"doc_type": "Resmî Yazı"},
+            "correspondence_type": requested_type,
+            "context": "Doğrulanmış kurumsal bağlam.",
+            "instructions": "Uygun resmî yazışmayı hazırla.",
+        }
+    )
+
+    writer_prompt = mock_writer_run.call_args.kwargs["messages"]
+    assert expected_type.value in writer_prompt
+    assert prompt_fragment in writer_prompt
+    assert expected_type.value in mock_editor_struct.call_args.kwargs["messages"]
+    assert expected_type.value in mock_reflection_run.call_args.kwargs["messages"]
+    assert expected_type.value in mock_evaluator_struct.call_args.kwargs["messages"]
+    assert res["correspondence_type"] == expected_type
+    assert res["correspondence_type_source"] == "explicit"
+    assert res["requires_human_approval"] is False
+    assert res["status"] == "COMPLETED"
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.writer.WriterAgent.run")
+@patch("app.ai.agents.editor.EditorAgent.run_structured")
+@patch("app.ai.agents.reflection.ReflectionAgent.run")
+@patch("app.ai.agents.evaluator.EvaluatorAgent.run_structured")
+async def test_draft_graph_requires_approval_for_unknown_correspondence_type(
+    mock_evaluator_struct,
+    mock_reflection_run,
+    mock_editor_struct,
+    mock_writer_run,
+):
+    mock_writer_run.return_value = "İnsan incelemesi gerektiren taslak."
+    mock_editor_struct.return_value = EditorOutput(
+        needs_revision=False, feedback="Biçim uygun."
+    )
+    mock_reflection_run.return_value = "İnsan incelemesi gerektiren nihai taslak."
+    mock_evaluator_struct.return_value = EvaluatorOutput(
+        final_draft="İnsan incelemesi gerektiren nihai taslak.",
+        confidence_score=95.0,
+        requires_human_approval=False,
+    )
+
+    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+    res = await graph.ainvoke(
+        {
+            "source_document": "Kuruma iletilen evrak.",
+            "classification": {"doc_type": "Bilinmeyen"},
+            "correspondence_type": "tanımsız yazışma",
+            "context": "Doğrulanmış bağlam.",
+            "instructions": "Resmî metin hazırla.",
+        }
+    )
+
+    assert res["correspondence_type"] == CorrespondenceType.OTHER_OFFICIAL
+    assert res["correspondence_type_source"] == "fallback"
+    assert res["requires_human_approval"] is True
+    assert res["status"] == "NEEDS_HUMAN_APPROVAL"
 
 
 @pytest.mark.asyncio
@@ -198,6 +358,7 @@ async def test_draft_graph_rejects_missing_source_document(mock_writer_run):
     assert res["draft"] == ""
     assert res["confidence_score"] == 0.0
     assert res["requires_human_approval"] is True
+    assert res["correspondence_type"] == CorrespondenceType.RESPONSE_LETTER
     assert res["status"] == "FAILED"
     assert "evrak içeriği" in res["error"]
 
@@ -405,6 +566,7 @@ async def test_planning_master_graph(mock_orch_run):
     mock_class_graph.ainvoke.return_value = {
         "doc_type": "Dilekçe",
         "summary": "İzin talebi.",
+        "metadata": {"correspondence_type": "information_notice"},
     }
 
     mock_rag_graph = AsyncMock()
@@ -435,6 +597,7 @@ async def test_planning_master_graph(mock_orch_run):
     draft_input = mock_draft_graph.ainvoke.call_args.args[0]
     assert draft_input["source_document"] == "Yeni gelen evrak içeriği"
     assert draft_input["classification"]["doc_type"] == "Dilekçe"
+    assert draft_input["correspondence_type"] == "information_notice"
     assert draft_input["context"] == "Şeker pancarı bilgisi."
 
     final_output = res["final_output"]
