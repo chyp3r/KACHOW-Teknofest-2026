@@ -136,7 +136,11 @@ Supervisor'ın planlamacı yardımcısıdır. `OrchestratorAgent` kullanarak gel
 
 ### 3. Draft Graph (`draft_graph.py`)
 - **Node'lar**: Writer -> Editor -> (Revizyon gerekliyse Writer'a döngü) -> Reflection -> Evaluator.
-- **Görev**: RAG bağlamını ve yönergeleri alarak resmi yazı/mektup taslağı oluşturur (`WriterAgent`). `EditorAgent` taslağı imla/biçim yönünden denetleyip revizyon isteyebilir. `Reflection` adımı yazıyı kendi kendine eleştirerek parlatır. `Evaluator` ise nihai metni oluşturup kalite/güven skoru (0-100) atar.
+- **Girdi**: Gelen evrakın asıl metni, Classification Graph çıktısı, doğrulanmış RAG bağlamı, yazım yönergeleri ve isteğe bağlı `correspondence_type` birlikte taşınır.
+- **Yazışma Türleri**: Çıktı sözleşmesi `cover_letter` (üst yazı), `response_letter` (cevap yazısı), `information_notice` (bilgilendirme metni) ve `other_official` (diğer/alternatif resmî yazışma) değerlerini destekler. Açık çağıran girdisi, Classification metadata'sı, yazım yönergesi ve gelen belge türü sırasıyla değerlendirilir. Türkçe/İngilizce karşılıklar normalize edilir. Güvenilir eşleşme bulunamazsa `other_official` seçilir ve insan incelemesi zorunlu olur.
+- **Görev**: Bu kaynaklara ve seçilen yazışma türünün yapı kurallarına bağlı resmî taslak oluşturur (`WriterAgent`). `EditorAgent` taslağı hem tür uygunluğu, kaynak sadakati hem dil/biçim yönünden denetler ve en fazla iki yazım denemesi içinde revizyon isteyebilir. `ReflectionAgent`, kaynakları ve türü tekrar görerek taslağı parlatır. `EvaluatorAgent` nihai metni doğrular, 0-100 aralığında güven skoru atar ve insan onayı gereksinimini belirler.
+- **Güvenlik**: Gelen evrak eksikse veya ajanlardan biri güvenilir çıktı üretemezse akış sahte bir varsayılan taslak ya da başarı skoru döndürmez. Durum `FAILED` veya `NEEDS_HUMAN_APPROVAL` olur. Doğrulanmış RAG bağlamı bulunmayan taslaklar da zorunlu insan incelemesine işaretlenir.
+- **Tool Sınırı**: Writer, Editor, Reflection ve Evaluator ajanlarına doğrudan sistem aracı verilmez. Retrieval araçları RAG Graph seviyesinde çalışır; Draft Graph yalnızca doğrulanmış bağlamı tüketir.
 
 ### 4. Routing Graph (`routing_graph.py`)
 - **Node'lar**: Route Node.
@@ -199,6 +203,12 @@ Uygulanan mimari yapıda aşağıdaki bileşenler yer almaktadır:
 * **BaseLLMClient** (`app/ai/llms/base.py`): Tüm sağlayıcı istemcilerinin uygulaması gereken soyut taban sınıf. `generate`, `stream` ve `generate_structured` metotlarını içerir.
 * **OllamaClient** (`app/ai/llms/ollama.py`): Yerel Ollama servisiyle (`ChatOllama` üzerinden) entegrasyonu sağlar. Qwen gibi yerel modelleri çalıştırır.
 * **get_llm_client** (`app/ai/llms/__init__.py`): İstenen sağlayıcıya ve parametrelere göre doğru istemciyi döndüren fabrika fonksiyonu.
+
+### Yerel Ollama Varsayılanları
+
+Yerel Ollama modeli repository genelinde geliştirici donanımına göre değiştirilmez. Paylaşılan fallback değeri `qwen3.5:9b` olarak korunur; her geliştirici kullanacağı modeli Git'e eklenmeyen yerel `.env` dosyasında `OLLAMA_MODEL` ile seçer. Docker Compose kökteki `.env` dosyasını, backend'i doğrudan çalıştırma ise `backend/.env` dosyasını kullanır. Örneğin 6 GB VRAM'e sahip bir bilgisayarda `OLLAMA_MODEL=qwen3:4b-instruct-2507-q4_K_M` kullanılabilir. Düşünme modu `OLLAMA_REASONING`, çıktı uzunluğu ise `OLLAMA_MAX_TOKENS` ile aynı yerel dosyada yapılandırılabilir.
+
+`OllamaClient`, normal metin üretimi, akış ve yapılandırılmış çıktı yöntemlerinde aynı model, reasoning ve token sınırı ayarlarını uygular. Üretim sunucuları için tanımlanan vLLM modeli bu yerel geliştirme profilinden bağımsızdır.
 
 Örnek sağlayıcılar:
 * OpenAI

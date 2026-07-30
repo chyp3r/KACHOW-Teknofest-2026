@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
@@ -14,23 +14,40 @@ class PlanningState(TypedDict):
     """LangGraph State representing the main Orchestrator/Planning workflow context."""
 
     input_text: str
-    plan_steps: List[str]  # e.g., ["classification", "rag", "draft", "routing"]
+    plan_steps: list[str]  # e.g., ["classification", "rag", "draft", "routing"]
     current_step_idx: int
-    classification_result: Dict[str, Any]
-    rag_result: Dict[str, Any]
-    draft_result: Dict[str, Any]
-    routing_result: Dict[str, Any]
-    final_output: Dict[str, Any]
+    classification_result: dict[str, Any]
+    rag_result: dict[str, Any]
+    draft_result: dict[str, Any]
+    routing_result: dict[str, Any]
+    final_output: dict[str, Any]
 
 
 class PlanOutput(BaseModel):
     """Pydantic schema for structured planning decisions."""
 
-    required_steps: List[str] = Field(
+    required_steps: list[str] = Field(
         description="Çalıştırılması gereken adımların sıralı listesi. Şunları içerebilir: 'classification', 'rag', 'draft', 'routing'."
     )
     reasoning: str = Field(
         description="Neden bu adımların seçildiğinin Türkçe gerekçesi."
+    )
+
+
+def _requested_correspondence_type(
+    classification: dict[str, Any],
+) -> str | None:
+    """Read an explicitly classified output correspondence type.
+
+    Args:
+        classification: Combined Classification Graph result.
+
+    Returns:
+        Requested correspondence type when classification metadata contains one.
+    """
+    metadata = classification.get("metadata", {})
+    return classification.get("correspondence_type") or metadata.get(
+        "correspondence_type"
     )
 
 
@@ -49,7 +66,7 @@ def create_planning_graph(
     orchestrator_agent = OrchestratorAgent(llm_client)
 
     # 1. Planning/Supervisor Node
-    async def supervisor_planning_node(state: PlanningState) -> Dict[str, Any]:
+    async def supervisor_planning_node(state: PlanningState) -> dict[str, Any]:
         logger.info("Supervisor planning task execution...")
 
         prompt = (
@@ -78,8 +95,8 @@ def create_planning_graph(
                 "routing_result": {},
                 "final_output": {},
             }
-        except Exception as e:
-            logger.error(f"Supervisor Planning Node failed: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Supervisor Planning Node failed")
             # Default safe plan fallback
             return {
                 "plan_steps": ["classification", "rag", "draft", "routing"],
@@ -92,7 +109,7 @@ def create_planning_graph(
             }
 
     # 2. Sub-graph Execution Orchestration Node
-    async def execute_step_node(state: PlanningState) -> Dict[str, Any]:
+    async def execute_step_node(state: PlanningState) -> dict[str, Any]:
         idx = state["current_step_idx"]
         steps = state["plan_steps"]
 
@@ -100,9 +117,7 @@ def create_planning_graph(
             return {}
 
         current_step = steps[idx].lower()
-        logger.info(
-            f"Executing plan step {idx + 1}/{len(steps)}: '{current_step}'"
-        )
+        logger.info(f"Executing plan step {idx + 1}/{len(steps)}: '{current_step}'")
 
         new_state_updates = {"current_step_idx": idx + 1}
 
@@ -115,20 +130,28 @@ def create_planning_graph(
 
         elif current_step == "rag":
             # Extract query: use classification summary if available, otherwise original text
-            query = state.get("classification_result", {}).get(
-                "summary"
-            ) or state["input_text"]
-            sub_res = await rag_graph.ainvoke(
-                {"original_query": query, "attempts": 0}
+            query = (
+                state.get("classification_result", {}).get("summary")
+                or state["input_text"]
             )
+            sub_res = await rag_graph.ainvoke({"original_query": query, "attempts": 0})
             new_state_updates["rag_result"] = sub_res
 
         elif current_step == "draft":
             context = state.get("rag_result", {}).get("context", "")
+            classification = state.get("classification_result", {})
             sub_res = await draft_graph.ainvoke(
                 {
+                    "source_document": state["input_text"],
+                    "classification": classification,
+                    "correspondence_type": _requested_correspondence_type(
+                        classification
+                    ),
                     "context": context,
-                    "instructions": state["input_text"],
+                    "instructions": (
+                        "Gelen evraka, evrakın amacı ve doğrulanmış bağlam doğrultusunda "
+                        "resmi ve kurumsal bir Türkçe yanıt taslağı oluştur."
+                    ),
                     "attempts": 0,
                 }
             )
@@ -137,6 +160,8 @@ def create_planning_graph(
         elif current_step == "routing":
             draft = state.get("draft_result", {}).get("draft", "")
             score = state.get("draft_result", {}).get("confidence_score", 100.0)
+            if state.get("draft_result", {}).get("requires_human_approval", False):
+                score = 0.0
             sub_res = await routing_graph.ainvoke(
                 {"draft": draft, "confidence_score": score}
             )
@@ -147,21 +172,32 @@ def create_planning_graph(
 
         # If this is the last step, compile final output
         if idx + 1 >= len(steps):
-            class_res = new_state_updates.get("classification_result") or state.get("classification_result")
+            class_res = new_state_updates.get("classification_result") or state.get(
+                "classification_result"
+            )
             rag_res = new_state_updates.get("rag_result") or state.get("rag_result")
-            draft_res = new_state_updates.get("draft_result") or state.get("draft_result")
-            routing_res = new_state_updates.get("routing_result") or state.get("routing_result")
-            
+            draft_res = new_state_updates.get("draft_result") or state.get(
+                "draft_result"
+            )
+            routing_res = new_state_updates.get("routing_result") or state.get(
+                "routing_result"
+            )
+
+            draft_status = (draft_res or {}).get("status")
+            final_status = (
+                draft_status
+                if draft_status in {"FAILED", "NEEDS_HUMAN_APPROVAL"}
+                else "COMPLETED"
+            )
             new_state_updates["final_output"] = {
-                "status": "COMPLETED",
+                "status": final_status,
                 "classification": class_res,
                 "rag": rag_res,
                 "draft": draft_res,
-                "routing": routing_res
+                "routing": routing_res,
             }
 
         return new_state_updates
-
 
     # Routing Conditional Logic: Loops back to execute_step if steps remain, else goes to END
     def route_after_step(state: PlanningState) -> str:

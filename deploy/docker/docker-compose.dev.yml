@@ -16,8 +16,10 @@ services:
     environment:
       - ENVIRONMENT=development
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - OLLAMA_MODEL=qwen3.5:9b
-      - OLLAMA_TEMPERATURE=0.7
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3.5:9b}
+      - OLLAMA_TEMPERATURE=${OLLAMA_TEMPERATURE:-0.7}
+      - OLLAMA_REASONING=${OLLAMA_REASONING:-false}
+      - OLLAMA_MAX_TOKENS=${OLLAMA_MAX_TOKENS:-1024}
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/kachow
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-1234567890}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-1234567890}
