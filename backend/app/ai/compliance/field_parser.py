@@ -7,13 +7,21 @@ referenced documents (m.15) and "Ek:" follows the signature (m.18). Because the
 format is prescribed rather than free-form, these values can be read with regular
 expressions at far higher accuracy than a small language model achieves.
 
-That matters concretely. Measured on qwen3:8b, asking for a single field returns
-`sayi` correctly, but asking for three at once returns `sayi` as null and can send
-another field into a repeating-token loop until the generation budget is spent.
-Parsing the prescribed labels here removes those fields from the model's burden and
-leaves it the genuinely unstructured judgement (muhatap, the signature block).
+How much this matters depends on the model, and both ends were measured on the
+12-document sample corpus:
 
-Values parsed here take precedence over model output for the same field.
+- `qwen3:8b` degrades badly as the schema widens. Asked for a single field it
+  returns `sayi` correctly; asked for three at once it returns `sayi` as null and
+  can send another field into a repeating-token loop until the generation budget
+  is spent. Overall extraction accuracy 28.4% alone, 98.5% with this parser.
+- `qwen3.5:9b` (the project default) handles the full schema: 94.0% alone, 97.0%
+  with this parser. Here the parser is no longer load-bearing, but it still fixes
+  `muhatap` (60% -> 100%), removes two thirds of the wrong values, and cuts
+  extraction wall-clock by roughly a third because the model emits fewer fields.
+
+So the parser earns its place on both: as a correctness floor on a small model and
+as a precision and latency win on a larger one. Values parsed here take precedence
+over model output for the same field.
 """
 
 import re

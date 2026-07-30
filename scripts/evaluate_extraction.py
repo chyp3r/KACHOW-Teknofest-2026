@@ -63,6 +63,14 @@ def _parse_args() -> argparse.Namespace:
         "--field", action="append", help="Yalnızca belirtilen alanları raporla."
     )
     parser.add_argument("--repeat", type=int, default=1, help="Örnek başına tekrar.")
+    parser.add_argument(
+        "--no-parser",
+        action="store_true",
+        help=(
+            "Deterministik ayrıştırıcıyı devre dışı bırak ve yalnızca modeli ölç. "
+            "Ayrıştırıcının hâlâ gerekli olup olmadığını sınamak için kullanılır."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -156,7 +164,8 @@ async def main() -> int:
     print("   Evrak Alan Çıkarımı Değerlendirmesi")
     print("=" * 82)
     print(f"Model  : {settings.OLLAMA_MODEL}")
-    print(f"Örnek  : {len(samples)}   Tekrar: {args.repeat}\n")
+    print(f"Örnek  : {len(samples)}   Tekrar: {args.repeat}")
+    print(f"Ayrıştırıcı: {'KAPALI (yalnızca model)' if args.no_parser else 'AÇIK'}\n")
 
     per_field: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     per_sample = []
@@ -164,7 +173,7 @@ async def main() -> int:
 
     for sample in samples:
         totals: dict[str, int] = defaultdict(int)
-        parsed = parse_labelled_fields(sample["text"])
+        parsed = {} if args.no_parser else parse_labelled_fields(sample["text"])
         for _ in range(args.repeat):
             try:
                 result = await agent.run_structured(
