@@ -16,6 +16,10 @@ from app.api.middleware import (
 from app.api.router import api_router
 from app.core.config import settings
 from app.observability.metrics import init_metrics
+from app.observability.logger import setup_logging
+
+# Initialize system logging formatters
+setup_logging(settings.ENVIRONMENT)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

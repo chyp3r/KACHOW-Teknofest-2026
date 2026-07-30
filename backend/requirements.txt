@@ -20,3 +20,4 @@ boto3>=1.34.0
 rank-bm25>=0.2.2
 prometheus-fastapi-instrumentator>=6.1.0
 langfuse>=2.0.0
+mcp>=1.1.2
