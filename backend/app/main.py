@@ -15,6 +15,7 @@ from app.api.middleware import (
 )
 from app.api.router import api_router
 from app.core.config import settings
+from app.observability.metrics import init_metrics
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -25,7 +26,10 @@ app = FastAPI(
 app.add_middleware(StructuredLoggingMiddleware)
 app.add_middleware(ResponseTimeMiddleware)
 
-# 2. Register Global Exception Handlers
+# 2. Register Metrics (Prometheus /metrics endpoint)
+init_metrics(app)
+
+# 3. Register Global Exception Handlers
 app.add_exception_handler(BaseAppException, app_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
