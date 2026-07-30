@@ -22,6 +22,7 @@ services:
       - OLLAMA_REASONING=${OLLAMA_REASONING:-false}
       - OLLAMA_MAX_TOKENS=${OLLAMA_MAX_TOKENS:-1024}
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/kachow
+      - QDRANT_URL=http://qdrant:6333
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-1234567890}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-1234567890}
       - LANGFUSE_HOST=http://langfuse:3000

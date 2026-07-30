@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 EXTRACTION_NUM_CTX = 8192
 HEAD_CHAR_BUDGET = 6000
 TAIL_CHAR_BUDGET = 1500
-MEVZUAT_RESULT_LIMIT = 5
+MEVZUAT_RESULT_LIMIT = 3
 
 
 class DocumentAnalysisState(TypedDict, total=False):
