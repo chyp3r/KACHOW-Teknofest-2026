@@ -2,13 +2,15 @@ from typing import Optional, List
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.domains.users.model.user_model import UserModel
+from app.domains.users.model.invited_email import InvitedEmailModel
 
 class UserRepository:
-    """SOTA Repository for SQLAlchemy database transactions regarding Users."""
+    """SOTA Repository for SQLAlchemy database transactions regarding Users and Invites."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    # ---------- User Methods ----------
     async def get_by_id(self, user_id: str) -> Optional[UserModel]:
         """Fetch active user by primary key ID."""
         result = await self.db.execute(
@@ -67,3 +69,29 @@ class UserRepository:
         result = await self.db.execute(delete(UserModel).where(UserModel.id == user_id))
         await self.db.flush()
         return result.rowcount > 0
+
+    # ---------- Invite Methods ----------
+    async def get_invite_by_email(self, email: str) -> Optional[InvitedEmailModel]:
+        """Fetch active, unused invite by email."""
+        result = await self.db.execute(
+            select(InvitedEmailModel).where(
+                InvitedEmailModel.email == email,
+                InvitedEmailModel.is_used == False
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def create_invite(self, invite: InvitedEmailModel) -> InvitedEmailModel:
+        """Persist a new email invitation whitelist record."""
+        self.db.add(invite)
+        await self.db.flush()
+        return invite
+
+    async def mark_invite_used(self, email: str) -> bool:
+        """Mark email invitation as used."""
+        invite = await self.get_invite_by_email(email)
+        if invite:
+            invite.is_used = True
+            await self.db.flush()
+            return True
+        return False
