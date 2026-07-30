@@ -62,3 +62,35 @@ async def test_authenticate_user_inactive():
     with pytest.raises(AuthenticationException) as exc:
         await service.authenticate_user(schema)
     assert "aktif değil" in str(exc.value.message)
+
+from unittest.mock import patch
+from app.domains.auth.router import logout
+from app.core.security import create_access_token
+
+@pytest.mark.asyncio
+async def test_logout_endpoint():
+    token = create_access_token("user-id", extra_claims={"role": "employee"})
+    
+    mock_cache = MagicMock()
+    mock_cache.set = AsyncMock(return_value=True)
+    
+    with patch("app.domains.auth.router.get_cache", return_value=mock_cache):
+        response = await logout(token=token)
+        # response is JSONResponse from SuccessResponse
+        assert response.status_code == 200
+        mock_cache.set.assert_called_once()
+        assert "token_blacklist" in mock_cache.set.call_args[0][0]
+
+from app.api.dependency import get_current_user
+
+@pytest.mark.asyncio
+async def test_get_current_user_blacklisted():
+    token = create_access_token("user-id", extra_claims={"role": "employee"})
+    
+    mock_cache = MagicMock()
+    mock_cache.exists = AsyncMock(return_value=True)
+    
+    with patch("app.api.dependency.get_cache", return_value=mock_cache):
+        with pytest.raises(AuthenticationException) as exc:
+            await get_current_user(token=token, db=MagicMock())
+        assert "Oturum sonlandırılmış" in str(exc.value.message)

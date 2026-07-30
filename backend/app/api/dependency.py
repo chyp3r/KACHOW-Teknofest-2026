@@ -11,6 +11,8 @@ from app.domains.users.service import UserService
 from app.api.exceptions.authentication import AuthenticationException
 from app.api.exceptions.authorization import AuthorizationException
 
+from app.infrastructure.cache import get_cache
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login", auto_error=False)
 
 async def get_current_user(
@@ -20,6 +22,11 @@ async def get_current_user(
     """Dependency to retrieve and authenticate the currently logged-in user from the JWT access token."""
     if not token:
         raise AuthenticationException(message="Kimlik doğrulama token'ı eksik.")
+
+    # Check blacklist in Redis
+    cache = get_cache()
+    if await cache.exists(f"token_blacklist:{token}"):
+        raise AuthenticationException(message="Oturum sonlandırılmış, lütfen tekrar giriş yapın.")
 
     payload = decode_token(token)
     user_id = payload.get("sub")

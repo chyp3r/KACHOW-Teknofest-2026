@@ -27,3 +27,9 @@ class DocumentRoutedEvent(BaseEvent):
 
 class UserCreatedEvent(BaseEvent):
     event_type: str = "user.created"
+
+class UserDeletedEvent(BaseEvent):
+    event_type: str = "user.deleted"
+
+class UserPasswordChangedEvent(BaseEvent):
+    event_type: str = "user.password_changed"
