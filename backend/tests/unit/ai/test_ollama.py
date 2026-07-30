@@ -25,7 +25,7 @@ async def test_ollama_generate(mock_chat_ollama):
 
     client = OllamaClient(
         base_url="http://localhost:11434",
-        model="qwen3:4b-instruct-2507-q4_K_M",
+        model="test-model",
     )
     messages = [{"role": "user", "content": "Hi"}]
 
@@ -34,7 +34,7 @@ async def test_ollama_generate(mock_chat_ollama):
     assert response == "Hello! I am Qwen."
     mock_chat_ollama.assert_called_once_with(
         base_url="http://localhost:11434",
-        model="qwen3:4b-instruct-2507-q4_K_M",
+        model="test-model",
         temperature=0.5,
         reasoning=False,
         num_predict=1024,
@@ -55,7 +55,7 @@ async def test_ollama_stream(mock_chat_ollama):
 
     client = OllamaClient(
         base_url="http://localhost:11434",
-        model="qwen3:4b-instruct-2507-q4_K_M",
+        model="test-model",
     )
     messages = [{"role": "user", "content": "Hi"}]
 
@@ -66,7 +66,7 @@ async def test_ollama_stream(mock_chat_ollama):
     assert "".join(chunks) == "Hello!"
     mock_chat_ollama.assert_called_once_with(
         base_url="http://localhost:11434",
-        model="qwen3:4b-instruct-2507-q4_K_M",
+        model="test-model",
         temperature=0.7,
         reasoning=False,
         num_predict=1024,
@@ -86,7 +86,7 @@ async def test_ollama_generate_structured(mock_chat_ollama):
 
     client = OllamaClient(
         base_url="http://localhost:11434",
-        model="qwen3:4b-instruct-2507-q4_K_M",
+        model="test-model",
     )
     messages = [{"role": "user", "content": "Extract name and age"}]
 
@@ -97,7 +97,7 @@ async def test_ollama_generate_structured(mock_chat_ollama):
     mock_instance.with_structured_output.assert_called_once_with(UserSchema)
     mock_chat_ollama.assert_called_once_with(
         base_url="http://localhost:11434",
-        model="qwen3:4b-instruct-2507-q4_K_M",
+        model="test-model",
         temperature=0.7,
         reasoning=False,
         num_predict=1024,
@@ -113,7 +113,7 @@ async def test_ollama_generate_allows_runtime_overrides(mock_chat_ollama):
 
     client = OllamaClient(
         base_url="http://localhost:11434",
-        model="qwen3:4b-instruct-2507-q4_K_M",
+        model="test-model",
     )
 
     response = await client.generate(
@@ -125,7 +125,7 @@ async def test_ollama_generate_allows_runtime_overrides(mock_chat_ollama):
     assert response == "Override works"
     mock_chat_ollama.assert_called_once_with(
         base_url="http://localhost:11434",
-        model="qwen3:4b-instruct-2507-q4_K_M",
+        model="test-model",
         temperature=0.7,
         reasoning=True,
         num_predict=128,
