@@ -2,6 +2,14 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [1.12.0] - 2026-07-30
+### Eklendi
+- **Genişletilmiş Birim Test Kapsamı ve Hata Düzeltmeleri** (#51):
+  - MCP Modülü, Kullanıcı Alanı (Repository, Service, Router), Altyapı Modülleri (Redis, S3, Qdrant), Gözlemlenebilirlik (Tracer, Logger, Metrics) ve Paylaşılan Olay/Doğrulama (Event Bus, Publisher, Subscriber, Pagination DTO, Validators) katmanları için kapsamlı unit testleri yazıldı.
+  - Langfuse `CallbackHandler` başlatma sırasında ortaya çıkan ve `secret_key` parametresini geçersiz kabul eden bir hata giderildi. Artık anahtarlar `os.environ` üzerinden yönetiliyor.
+  - Davetiyeler oluşturulduktan sonra `SuccessResponse` dönerken kaynak kodunda yer alan `message` parametresi hatası giderildi.
+  - `requirements.txt` dosyasına `fastmcp` ve `langchain` bağımlılıkları eklendi.
+
 ## [1.11.0] - 2026-07-30
 ### Eklendi
 - **Görev 2: Resmî Yazı Taslaklama ve Birim Yönlendirme**:
