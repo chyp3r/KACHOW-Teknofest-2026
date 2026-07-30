@@ -17,6 +17,8 @@ from app.ai.compliance import (
     SEVERITY_REQUIRED,
     EvrakField,
     check_required_fields,
+    detect_structural_signal,
+    format_structural_signal,
     is_blank,
     normalize_value,
 )
@@ -305,3 +307,92 @@ def test_sample_dataset_covers_the_advisory_only_path():
 def test_sample_dataset_contains_a_scanned_case():
     """The OCR path needs at least one image-only document."""
     assert any(_load(path).get("scanned") for path in SAMPLE_FILES)
+
+
+# ==========================================
+# Structural signals (deterministic classification prior)
+# ==========================================
+OFFICIAL_LETTER_TEXT = """T.C.
+ÖRNEK BAKANLIĞI
+
+Sayı : E-111-1
+Tarih : 30.07.2026
+Konu : Deneme
+
+ÖRNEK VALİLİĞİNE
+
+İlgi : 01.07.2026 tarihli yazınız.
+
+Metin.
+
+Ahmet Yılmaz
+Genel Müdür"""
+
+PETITION_TEXT = """ÖRNEK BELEDİYE BAŞKANLIĞINA
+
+Tarih : 30.07.2026
+Konu : Talep
+
+Metin.
+
+Ayşe Demir
+Adres : Örnek Mah. No:1
+İmza"""
+
+
+def test_signal_detects_institutional_markers():
+    signal = detect_structural_signal(OFFICIAL_LETTER_TEXT)
+    assert signal.has_institution_header is True
+    assert signal.has_sayi_field is True
+    assert signal.has_ilgi_field is True
+    assert signal.has_titled_signature is True
+    assert signal.looks_institutional is True
+
+
+def test_signal_does_not_treat_an_addressee_as_a_signature():
+    """'BELEDİYE BAŞKANLIĞINA' is the addressee; reporting it as a titled
+    signature would feed the classifier a false observation."""
+    signal = detect_structural_signal(PETITION_TEXT)
+    assert signal.has_titled_signature is False
+    assert signal.has_institution_header is False
+    assert signal.looks_institutional is False
+
+
+def test_signal_detects_applicant_contact_block():
+    assert detect_structural_signal(PETITION_TEXT).has_applicant_contact is True
+    assert detect_structural_signal(OFFICIAL_LETTER_TEXT).has_applicant_contact is False
+
+
+def test_signal_requires_more_than_a_header_to_look_institutional():
+    signal = detect_structural_signal("T.C.\n\nrastgele metin")
+    assert signal.has_institution_header is True
+    assert signal.looks_institutional is False
+
+
+def test_signal_ignores_sayi_appearing_mid_sentence():
+    signal = detect_structural_signal("Bu yazıda sayı bilgisi bulunmamaktadır.")
+    assert signal.has_sayi_field is False
+
+
+def test_format_signal_states_the_institutional_conclusion():
+    text = format_structural_signal(detect_structural_signal(OFFICIAL_LETTER_TEXT))
+    assert "kurum anteti" in text
+    assert "vatandaş başvurusu" in text
+
+
+def test_format_signal_is_empty_when_nothing_is_detected():
+    assert format_structural_signal(detect_structural_signal("düz metin")) == ""
+
+
+@pytest.mark.parametrize("path", SAMPLE_FILES, ids=lambda p: p.stem)
+def test_institutional_signal_matches_the_sample_document_type(path):
+    """The load-bearing signal must agree with ground truth on every sample."""
+    truth = _load(path)
+    text = path.with_suffix(".txt").read_text(encoding="utf-8")
+    institutional_types = {
+        DocumentType.OFFICIAL_LETTER,
+        DocumentType.CIRCULAR,
+        DocumentType.DIRECTIVE,
+    }
+    expected = DocumentType(truth["document_type"]) in institutional_types
+    assert detect_structural_signal(text).looks_institutional is expected
