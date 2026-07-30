@@ -27,14 +27,15 @@ class DummyPayload(BaseModel):
 
 
 # Create a test FastAPI app specifically to isolate and test API Core components
-test_app = FastAPI()
-test_app.add_middleware(StructuredLoggingMiddleware)
-test_app.add_middleware(ResponseTimeMiddleware)
+# Create a test FastAPI app specifically to isolate and test API Core components
+app = FastAPI()
+app.add_middleware(StructuredLoggingMiddleware)
+app.add_middleware(ResponseTimeMiddleware)
 
-test_app.add_exception_handler(BaseAppException, app_exception_handler)
-test_app.add_exception_handler(RequestValidationError, validation_exception_handler)
-test_app.add_exception_handler(HTTPException, http_exception_handler)
-test_app.add_exception_handler(Exception, generic_exception_handler)
+app.add_exception_handler(BaseAppException, app_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(Exception, generic_exception_handler)
 
 router = APIRouter()
 
@@ -69,8 +70,8 @@ async def get_generic_exception():
     raise ValueError("Unexpected python error.")
 
 
-test_app.include_router(router)
-client = TestClient(test_app, raise_server_exceptions=False)
+app.include_router(router)
+client = TestClient(app, raise_server_exceptions=False)
 
 
 def test_success_response():
