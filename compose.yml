@@ -95,7 +95,7 @@ services:
       - prometheus
 
   langfuse:
-    image: langfuse/langfuse:2
+    image: langfuse/langfuse:3
     container_name: kachow_langfuse_dev
     ports:
       - "3000:3000"

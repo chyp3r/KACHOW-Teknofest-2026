@@ -24,6 +24,13 @@ OFFICIAL_LETTER_TEXT = (
     "Konu: Yıllık İzin Talebi\nİLGİLİ MAKAMA\nMehmet Öztürk\nGenel Müdür"
 )
 
+# Deliberately missing the "Sayı:" heading and any addressee line, so the
+# deterministic parser cannot rescue those two fields.
+INCOMPLETE_LETTER_TEXT = (
+    "T.C.\nÖRNEK BAKANLIĞI\nTarih: 30.07.2026\n"
+    "Konu: Yıllık İzin Talebi\n\nMetin arz ederim.\n\nMehmet Öztürk\nGenel Müdür"
+)
+
 COMPLETE_FIELDS = EvrakField(
     sayi="E-123-456",
     tarih="30.07.2026",
@@ -85,19 +92,20 @@ async def test_graph_detects_missing_fields_without_retriever(
     mock_classify.return_value = DocumentClassificationOutput(
         document_type=DocumentType.OFFICIAL_LETTER, summary="İzin talebi yazısı."
     )
-    mock_extract.return_value = COMPLETE_FIELDS.model_copy(
-        update={"sayi": None, "muhatap": "Belirtilmemiş"}
-    )
+    mock_extract.return_value = EvrakField(muhatap="Belirtilmemiş")
 
     graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
-    result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+    result = await graph.ainvoke({"input_text": INCOMPLETE_LETTER_TEXT})
 
     assert result["document_type"] == DocumentType.OFFICIAL_LETTER.value
     assert result["document_type_label"] == "Resmî Yazı"
     assert result["summary"] == "İzin talebi yazısı."
     assert result["compliance_status"] == ComplianceStatus.INCOMPLETE.value
-    # "Belirtilmemiş" must count as absent, not as a value.
-    assert {item["key"] for item in result["missing_fields"]} == {"sayi", "muhatap"}
+    # "Belirtilmemiş" counts as absent, not as a value. `tarih` is NOT reported
+    # missing: the deterministic parser reads it straight off the document even
+    # though the model returned nothing at all.
+    assert {item["key"] for item in result["missing_fields"]} == {"muhatap", "sayi"}
+    assert result["fields"]["tarih"] == "30.07.2026"
     assert result["missing_fields"][0]["mevzuat"]
     assert result["mevzuat_documents"] == []
     assert result["mevzuat_suggestions"] == []
@@ -165,6 +173,8 @@ async def test_graph_suggests_mevzuat_from_retrieved_excerpts(
     mock_classify.return_value = DocumentClassificationOutput(
         document_type=DocumentType.OFFICIAL_LETTER, summary="İzin talebi."
     )
+    # The incomplete fixture has no "Sayı:" heading, so neither the parser nor the
+    # model supplies it and it genuinely reaches the missing-field list.
     mock_extract.return_value = COMPLETE_FIELDS.model_copy(update={"sayi": None})
     mock_suggest.return_value = MevzuatSuggestionOutput(
         suggestions=[
@@ -186,7 +196,7 @@ async def test_graph_suggests_mevzuat_from_retrieved_excerpts(
     graph = create_document_analysis_graph(
         MagicMock(spec=BaseLLMClient), mevzuat_retriever=retriever
     )
-    result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+    result = await graph.ainvoke({"input_text": INCOMPLETE_LETTER_TEXT})
 
     assert len(result["mevzuat_suggestions"]) == 1
     assert "m.11" in result["mevzuat_suggestions"][0]["mevzuat"]
@@ -279,7 +289,69 @@ async def test_graph_survives_extraction_failure(mock_classify, mock_extract):
     mock_extract.side_effect = Exception("schema violation")
 
     graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
+    result = await graph.ainvoke({"input_text": INCOMPLETE_LETTER_TEXT})
+
+    # The model contributed nothing, yet the deterministically parsed fields stand
+    # and only the genuinely absent ones are reported.
+    assert result["compliance_status"] == ComplianceStatus.INCOMPLETE.value
+    assert {item["key"] for item in result["missing_fields"]} == {"muhatap", "sayi"}
+    assert result["fields"]["tarih"] == "30.07.2026"
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.metadata.MetadataAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_parser_rescues_labelled_fields_the_model_drops(
+    mock_classify, mock_extract
+):
+    """The prescribed header labels are read deterministically, so a model that
+    returns nothing must not cause a false 'missing field' report."""
+    mock_classify.return_value = DocumentClassificationOutput(
+        document_type=DocumentType.OFFICIAL_LETTER, summary="x"
+    )
+    mock_extract.return_value = EvrakField()  # model contributes nothing at all
+
+    graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
     result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
 
-    assert result["compliance_status"] == ComplianceStatus.INCOMPLETE.value
-    assert len(result["missing_fields"]) > 0
+    fields = result["fields"]
+    assert fields["sayi"] == "E-123-456"
+    assert fields["tarih"] == "30.07.2026"
+    assert fields["konu"] == "Yıllık İzin Talebi"
+    detected = {item["key"] for item in result["missing_fields"]}
+    assert "sayi" not in detected
+    assert "tarih" not in detected
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.metadata.MetadataAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_parsed_fields_survive_an_extraction_failure(mock_classify, mock_extract):
+    """A model exception must not discard values read straight off the document."""
+    mock_classify.return_value = DocumentClassificationOutput(
+        document_type=DocumentType.OFFICIAL_LETTER, summary="x"
+    )
+    mock_extract.side_effect = Exception("structured output invalid")
+
+    graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
+    result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    assert result["fields"]["sayi"] == "E-123-456"
+    assert result["fields"]["konu"] == "Yıllık İzin Talebi"
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.metadata.MetadataAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_parsed_values_override_model_guesses(mock_classify, mock_extract):
+    """A label read off the document is stronger evidence than a model guess."""
+    mock_classify.return_value = DocumentClassificationOutput(
+        document_type=DocumentType.OFFICIAL_LETTER, summary="x"
+    )
+    mock_extract.return_value = EvrakField(sayi="UYDURMA-999", konu="yanlış konu")
+
+    graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
+    result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    assert result["fields"]["sayi"] == "E-123-456"
+    assert result["fields"]["konu"] == "Yıllık İzin Talebi"
