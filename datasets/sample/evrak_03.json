@@ -1,0 +1,17 @@
+{
+  "id": "evrak_03",
+  "note": "Resmî yazı; tarih eksik, imza unvanı eksik (biri zorunlu biri önerilen).",
+  "document_type": "official_letter",
+  "scanned": false,
+  "expected_fields": {
+    "sayi": "E-11111111-602.04-9013",
+    "konu": "Faaliyet Raporu Hazırlıkları",
+    "muhatap": "ÖRNEK GENEL MÜDÜRLÜĞÜNE",
+    "gonderen_kurum": "Örnek Bakanlığı Strateji Geliştirme Başkanlığı",
+    "imza_sahibi": "Mustafa Şahin"
+  },
+  "expected_missing_fields": [
+    "imza_unvani",
+    "tarih"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "evrak_09",
+  "note": "Tam genelge (resmî yazı zorunlu unsurları uygulanır).",
+  "document_type": "circular",
+  "scanned": false,
+  "expected_fields": {
+    "sayi": "E-11111111-010.06-1204",
+    "tarih": "20.04.2026",
+    "konu": "Mesai Saatleri Uygulaması",
+    "muhatap": "DAĞITIM YERLERİNE",
+    "gonderen_kurum": "Örnek Bakanlığı",
+    "imza_sahibi": "Kemal Arslan",
+    "imza_unvani": "Bakan Yardımcısı"
+  },
+  "expected_missing_fields": []
+}

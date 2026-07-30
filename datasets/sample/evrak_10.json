@@ -1,0 +1,13 @@
+{
+  "id": "evrak_10",
+  "note": "Tutanak; imza sahibi eksik.",
+  "document_type": "minutes",
+  "scanned": false,
+  "expected_fields": {
+    "tarih": "22.04.2026",
+    "konu": "Depo Sayım Tespiti"
+  },
+  "expected_missing_fields": [
+    "imza_sahibi"
+  ]
+}

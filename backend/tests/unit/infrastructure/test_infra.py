@@ -147,13 +147,44 @@ async def test_qdrant_store(mock_qdrant_client_class):
     mock_hit = MagicMock()
     mock_hit.score = 0.95
     mock_hit.payload = {"text": "Found text", "src": "doc"}
-    mock_client.search.return_value = [mock_hit]
+    mock_response = MagicMock()
+    mock_response.points = [mock_hit]
+    mock_client.query_points.return_value = mock_response
 
     hits = await store.similarity_search("test_collection", [0.1, 0.2], limit=1)
     assert len(hits) == 1
     assert hits[0]["text"] == "Found text"
     assert hits[0]["score"] == 0.95
     assert hits[0]["metadata"]["src"] == "doc"
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.vectorstore.qdrant.AsyncQdrantClient")
+async def test_qdrant_store_uses_a_real_client_method(mock_qdrant_client_class):
+    """Guards against calling a qdrant-client API that no longer exists.
+
+    `similarity_search` swallows exceptions and returns an empty list, so a renamed
+    or removed client method degrades dense retrieval to zero hits silently rather
+    than failing. Speccing the mock makes any such drift fail loudly here: an
+    unspecced AsyncMock answers to `.search()` long after the real client stopped.
+    """
+    from qdrant_client import AsyncQdrantClient
+
+    mock_client = AsyncMock(spec=AsyncQdrantClient)
+    mock_qdrant_client_class.return_value = mock_client
+
+    mock_hit = MagicMock()
+    mock_hit.score = 0.5
+    mock_hit.payload = {"text": "metin"}
+    mock_response = MagicMock()
+    mock_response.points = [mock_hit]
+    mock_client.query_points.return_value = mock_response
+
+    store = QdrantStore(qdrant_url="http://qdrant:6333")
+    hits = await store.similarity_search("mevzuat", [0.1, 0.2], limit=1)
+
+    assert hits == [{"text": "metin", "score": 0.5, "metadata": {}}]
+    mock_client.query_points.assert_awaited_once()
 
 
 # ==========================================

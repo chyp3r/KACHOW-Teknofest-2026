@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Uploaded documents (LOCAL_STORAGE_DIR). Incoming evrak may contain personal
+# data such as names, addresses and national ID numbers -- never commit them.
+backend/storage_data/
+storage_data/

@@ -1,0 +1,2 @@
+-r requirements.txt
+reportlab>=4.2.0
