@@ -9,8 +9,9 @@ import pathlib
 
 import pytest
 
-from app.ai.compliance import is_blank
+from app.ai.compliance import EvrakField, is_blank
 from app.ai.compliance.field_parser import (
+    AUTHORITATIVE_FIELD,
     format_parsed_fields,
     merge_parsed_over_model,
     parse_labelled_fields,
@@ -110,12 +111,12 @@ def test_parser_is_deterministic():
 
 def test_merge_lets_parsed_values_win():
     merged = merge_parsed_over_model(
-        {"sayi": "model uydurmasi", "muhatap": "ÖRNEK VALİLİĞİNE"},
+        {"sayi": "model uydurmasi", "iletisim": "0500 000 00 00"},
         {"sayi": "E-1-2-3"},
     )
     assert merged["sayi"] == "E-1-2-3"
-    # Fields the parser does not cover survive untouched.
-    assert merged["muhatap"] == "ÖRNEK VALİLİĞİNE"
+    # Non-authoritative fields survive untouched: the parser cannot rule them out.
+    assert merged["iletisim"] == "0500 000 00 00"
 
 
 def test_format_parsed_fields_lists_resolved_names():
@@ -236,3 +237,49 @@ def test_parser_recovers_positional_fields_across_the_corpus(path):
     }
     recovered = {name for name in expected if not is_blank(parsed.get(name))}
     assert recovered == expected, f"{truth['id']}: kayıp {expected - recovered}"
+
+
+# ==========================================
+# Parser authority in both directions
+# ==========================================
+def test_model_value_is_discarded_for_an_unparsed_authoritative_field():
+    """The regulation prescribes how `muhatap` appears; if the parser finds no
+    such line the field is genuinely absent, and a model value for it would hide
+    a real omission."""
+    merged = merge_parsed_over_model({"muhatap": "İLGİLİ MAKAMA"}, {})
+    assert merged["muhatap"] is None
+
+
+def test_model_value_is_kept_for_a_non_authoritative_field():
+    """An unlabelled address is common in petitions, so an absent parse means
+    'unknown' rather than 'absent'."""
+    merged = merge_parsed_over_model({"adres": "Örnek Mah. No:1"}, {})
+    assert merged["adres"] == "Örnek Mah. No:1"
+
+
+def test_unparsed_authoritative_list_field_becomes_empty_not_none():
+    merged = merge_parsed_over_model({"ilgi": ["uydurma atıf"]}, {})
+    assert merged["ilgi"] == []
+
+
+def test_parsed_value_still_wins_over_the_model():
+    merged = merge_parsed_over_model({"sayi": "UYDURMA"}, {"sayi": "E-1-2-3"})
+    assert merged["sayi"] == "E-1-2-3"
+
+
+def test_authoritative_set_only_contains_real_evrak_fields():
+    assert AUTHORITATIVE_FIELD <= set(EvrakField.model_fields)
+
+
+def test_fields_without_parser_support_are_not_authoritative():
+    """Suppressing these would turn invented values into missing ones."""
+    for name in ("adres", "iletisim", "gizlilik_derecesi", "ivedilik", "basvuran_adi"):
+        assert name not in AUTHORITATIVE_FIELD
+
+
+def test_unsigned_petition_signature_is_not_resurrected_by_the_model():
+    """End-to-end guard for the 3071 m.4 case: parser refuses the bare trailing
+    name, and the model must not put it back."""
+    parsed = parse_labelled_fields(UNSIGNED_PETITION)
+    merged = merge_parsed_over_model({"imza_sahibi": "Ali Vural"}, parsed)
+    assert merged["imza_sahibi"] is None

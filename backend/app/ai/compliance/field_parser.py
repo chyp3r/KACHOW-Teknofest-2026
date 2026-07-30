@@ -300,14 +300,56 @@ def parse_labelled_fields(text: str) -> dict[str, Any]:
     return parsed
 
 
+#: Fields for which the parser is authoritative in BOTH directions: if the
+#: regulation prescribes how the field appears and the parser cannot find it, the
+#: field is genuinely absent and a model value for it is discarded.
+#:
+#: Deliberately excludes fields whose presentation is not prescribed and which the
+#: parser therefore cannot rule out:
+#:   - `adres` / `iletisim`: a petition often writes these without a label.
+#:   - `gizlilik_derecesi` / `ivedilik`: appear as standalone stamps
+#:     ("HİZMETE ÖZEL", "ACELE") rather than as side-headings.
+#:   - `basvuran_adi`: has no parser support at all.
+#: For those, an absent parse means "unknown", not "absent", so the model is
+#: still trusted.
+AUTHORITATIVE_FIELD: frozenset[str] = frozenset(
+    {
+        "sayi",
+        "tarih",
+        "konu",
+        "ilgi",
+        "ekler",
+        "muhatap",
+        "gonderen_kurum",
+        "imza_sahibi",
+        "imza_unvani",
+    }
+)
+
+#: Fields whose empty value is a list rather than None.
+_LIST_FIELD: frozenset[str] = frozenset({"ilgi", "ekler"})
+
+
 def merge_parsed_over_model(
     model_fields: dict[str, Any], parsed: dict[str, Any]
 ) -> dict[str, Any]:
-    """Overlay deterministically parsed values on top of model output.
+    """Combine deterministically parsed values with model output.
 
-    Parsed values win for the fields they cover: the label they were read from is
-    prescribed by the regulation, which is stronger evidence than a model guess.
-    Fields the parser does not cover are left exactly as the model produced them.
+    The parser wins in both directions for `AUTHORITATIVE_FIELD`:
+
+    * where it found a value, that value replaces the model's;
+    * where it found nothing, the model's value is **discarded**.
+
+    The second rule matters more than it looks. The regulation prescribes how these
+    fields appear, so a missing label means the field is genuinely absent -- and a
+    model that fills it anyway converts an incomplete document into an apparently
+    compliant one, hiding the very omission this pipeline exists to report. Observed
+    cases include inventing the stock addressee "İLGİLİ MAKAMA" for a letter that
+    has none, and lifting a leave start date out of the body into `tarih` for a
+    document carrying no date at all.
+
+    Fields outside `AUTHORITATIVE_FIELD` are left exactly as the model produced
+    them, because for those an absent parse means "unknown", not "absent".
 
     Args:
         model_fields: The model's `EvrakField` dump.
@@ -317,6 +359,9 @@ def merge_parsed_over_model(
         The merged field mapping.
     """
     merged = dict(model_fields)
+    for name in AUTHORITATIVE_FIELD:
+        if name not in parsed:
+            merged[name] = [] if name in _LIST_FIELD else None
     merged.update(parsed)
     return merged
 
