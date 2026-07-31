@@ -5,7 +5,7 @@ from langchain_core.documents import Document
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
-from app.ai.agents.verifier import VerifierAgent
+from app.ai.agents.base import BaseAgent
 from app.ai.llms.base import BaseLLMClient
 from app.ai.retrieval.hybrid import HybridRetriever
 
@@ -13,14 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 class RAGState(TypedDict):
-    """LangGraph State representing the RAG (retrieval & validation) workflow context."""
+    """LangGraph State representing the RAG (retrieval) workflow context."""
 
     original_query: str
     rewritten_query: str
     documents: List[Document]
     context: str
-    verification_status: str  # "SUFFICIENT" or "INSUFFICIENT"
-    verifier_feedback: str
     attempts: int
 
 
@@ -32,14 +30,11 @@ class QueryRewriteOutput(BaseModel):
     )
 
 
-class VerifierOutput(BaseModel):
-    """Pydantic schema for context verification."""
+class QueryRewriteOutput(BaseModel):
+    """Pydantic schema for structured query rewriting."""
 
-    status: str = Field(
-        description="Sorguyu cevaplamak için bağlam yeterliliği. 'SUFFICIENT' (Yeterli) veya 'INSUFFICIENT' (Yetersiz) olmalıdır."
-    )
-    feedback: str = Field(
-        description="Eğer bağlam yetersizse eksik kalan noktalar, yeterliyse kısa gerekçe."
+    rewritten_query: str = Field(
+        description="Arama doğruluğunu artırmak için zenginleştirilmiş/düzeltilmiş Türkçe sorgu."
     )
 
 
@@ -48,36 +43,30 @@ def create_rag_graph(
 ):
     """Create and compile the LangGraph RAG workflow with query rewriting,
 
-    parallel hybrid retrieval, and verifier loop.
+    and parallel hybrid retrieval.
 
-    Flow: START -> Rewrite Query -> Retrieve Docs -> Verify Context -> (Sufficient? END : Loop Rewrite)
+    Flow: START -> Rewrite Query -> Retrieve Docs -> END
     """
-    # Instantiate verifier agent
-    verifier_agent = VerifierAgent(llm_client)
+    rewriter_agent = BaseAgent(
+        llm_client=llm_client,
+        name="QueryRewriter",
+        description="Rewrites queries to improve search recall.",
+        system_prompt="Sen bir arama sorgusu zenginleştirme asistanısın. Görevin, verilen sorguyu arama motorlarında en iyi sonuçları getirecek şekilde Türkçe olarak zenginleştirmektir. Çıktıyı belirtilen şemada ver."
+    )
 
     # 1. Query Rewrite Node
     async def rewrite_node(state: RAGState) -> Dict[str, Any]:
         logger.info("Running Query Rewrite Node...")
         attempts = state.get("attempts", 0)
-        feedback = state.get("verifier_feedback", "")
 
-        # If it's a retry, inject feedback to LLM to guide rewriting
-        if attempts > 0 and feedback:
-            prompt = (
-                f"Sorgu: \"{state['original_query']}\"\n"
-                f"Önceki arama başarısız oldu çünkü veritabanı doğrulaması şu geribildirimi verdi: \"{feedback}\"\n"
-                "Lütfen bu geribildirimi göz önüne alarak, veritabanından eksik olan bu bilgileri "
-                "yakalayabilecek daha detaylı ve alternatif terimler içeren yeni bir Türkçe arama sorgusu yaz."
-            )
-        else:
-            prompt = (
-                f"Sorgu: \"{state['original_query']}\"\n"
-                "Bu sorguyu arama motorunda (vektör/keyword) en iyi sonuçları getirecek şekilde, "
-                "anlamsal olarak zenginleştirerek genişletilmiş bir Türkçe arama sorgusu haline getir."
-            )
+        prompt = (
+            f"Sorgu: \"{state['original_query']}\"\n"
+            "Bu sorguyu arama motorunda (vektör/keyword) en iyi sonuçları getirecek şekilde, "
+            "anlamsal olarak zenginleştirerek genişletilmiş bir Türkçe arama sorgusu haline getir."
+        )
 
         try:
-            res: QueryRewriteOutput = await verifier_agent.run_structured(
+            res: QueryRewriteOutput = await rewriter_agent.run_structured(
                 messages=prompt, response_model=QueryRewriteOutput
             )
             return {"rewritten_query": res.rewritten_query, "attempts": attempts + 1}
@@ -100,69 +89,13 @@ def create_rag_graph(
             logger.error(f"Retrieve Node failed: {e}", exc_info=True)
             return {"documents": [], "context": ""}
 
-    # 3. Verify Node
-    async def verify_node(state: RAGState) -> Dict[str, Any]:
-        logger.info("Running Verify Node...")
-        if not state["documents"]:
-            return {
-                "verification_status": "INSUFFICIENT",
-                "verifier_feedback": "Hiçbir doküman bulunamadı.",
-            }
-
-        prompt = (
-            f"Kullanıcı Sorgusu: \"{state['original_query']}\"\n\n"
-            f"Elde Edilen Bağlam:\n\"\"\"\n{state['context']}\n\"\"\"\n\n"
-            "Bu bağlam, kullanıcının sorusunu eksiksiz ve doğru bir şekilde cevaplamak için yeterli mi? "
-            "Lütfen bunu değerlendir ve yapılandırılmış formatta durum ile gerekçe/geribildirim döndür."
-        )
-
-        try:
-            res: VerifierOutput = await verifier_agent.run_structured(
-                messages=prompt, response_model=VerifierOutput
-            )
-            return {
-                "verification_status": res.status.upper(),
-                "verifier_feedback": res.feedback,
-            }
-        except Exception as e:
-            logger.error(f"Verify Node failed: {e}", exc_info=True)
-            return {
-                "verification_status": "SUFFICIENT",
-                "verifier_feedback": "Doğrulama hatası oluştu, devam ediliyor.",
-            }
-
-    # Conditional Routing Logic
-    def route_after_verify(state: RAGState) -> str:
-        status = state.get("verification_status", "SUFFICIENT")
-        attempts = state.get("attempts", 0)
-
-        # If sufficient or we hit maximum limit (e.g. 2 attempts), end RAG
-        if status == "SUFFICIENT" or attempts >= 2:
-            logger.info("RAG verification SUFFICIENT or maximum attempts hit. Routing to END.")
-            return "end"
-        
-        logger.warning(
-            f"RAG verification INSUFFICIENT (Attempt {attempts}). Feedback: {state.get('verifier_feedback')}. Retrying rewrite..."
-        )
-        return "rewrite"
-
     # Define Graph
     builder = StateGraph(RAGState)
     builder.add_node("rewrite", rewrite_node)
     builder.add_node("retrieve", retrieve_node)
-    builder.add_node("verify", verify_node)
 
     builder.add_edge(START, "rewrite")
     builder.add_edge("rewrite", "retrieve")
-    builder.add_edge("retrieve", "verify")
-
-    builder.add_conditional_edges(
-        "verify",
-        route_after_verify,
-        {
-            "end": END,
-            "rewrite": "rewrite",
-        },
-    )
+    builder.add_edge("retrieve", END)
 
     return builder.compile()
