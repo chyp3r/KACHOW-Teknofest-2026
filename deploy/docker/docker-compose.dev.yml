@@ -20,8 +20,21 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3.5:9b}
       - OLLAMA_TEMPERATURE=${OLLAMA_TEMPERATURE:-0.7}
       - OLLAMA_REASONING=${OLLAMA_REASONING:-false}
-      - OLLAMA_MAX_TOKENS=${OLLAMA_MAX_TOKENS:-1024}
+      # 1024 truncated official drafts mid-sentence and cut off structured
+      # output before it could validate. Keep this in sync with core/config.py.
+      - OLLAMA_MAX_TOKENS=${OLLAMA_MAX_TOKENS:-4096}
+      # Ollama's own default is 2048 and it truncates from the start, silently
+      # dropping the system prompt or the document header.
+      - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-8192}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
+      # Optional small model for intent and routing. Unset = use OLLAMA_MODEL.
+      - OLLAMA_FAST_MODEL=${OLLAMA_FAST_MODEL:-}
+      - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text:latest}
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/kachow
+      # These have no compose entry before, so the container fell back to the
+      # localhost defaults and could not reach the sibling services at all.
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379/0
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-1234567890}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-1234567890}
       - LANGFUSE_HOST=http://langfuse:3000

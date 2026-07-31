@@ -29,6 +29,7 @@ from app.infrastructure.extractors.base import (
 from app.infrastructure.storage.base import BaseStorage
 from app.ai.embeddings.service import EmbeddingService
 from app.ai.embeddings.chunking.recursive import RecursiveChunker
+from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.infrastructure.vectorstore.base import BaseVectorStore
 from app.shared.validator.file_validator import validate_file_extension
 
@@ -36,6 +37,15 @@ logger = logging.getLogger(__name__)
 
 UPLOAD_PATH_PREFIX = "uploads"
 MIN_ANALYSABLE_CHAR_COUNT = 20
+
+#: Q&A index settings. Must stay in sync with the retrieval side in
+#: planning_graph's document_qa step.
+QA_COLLECTION_NAME = "document_qa"
+QA_CHUNK_SIZE = 1000
+QA_CHUNK_OVERLAP = 200
+
+#: Cached embedding dimension, probed once per process.
+_qa_vector_size: Optional[int] = None
 
 
 class DocumentService:
@@ -122,25 +132,7 @@ class DocumentService:
         await self._save_document_metadata(file_name, storage_path, response)
         await self._save_document_analysis_cache(storage_path, extracted.text, response)
         
-        # Async chunk and embed for Document Q&A
-        if self.embedding_service and self.vector_store:
-            try:
-                # Run the chunker asynchronously in the background so it doesn't block the HTTP response
-                # But here we do it synchronously to ensure it's available right away.
-                # In production, this could be a Celery task.
-                chunker = RecursiveChunker(chunk_size=1000, chunk_overlap=200)
-                # Set metadata as storage_path, which acts as the document_id
-                chunks = await self.embedding_service.process_text(
-                    extracted.text, chunker=chunker
-                )
-                if chunks:
-                    for chunk in chunks:
-                        chunk.metadata["storage_path"] = storage_path
-                        
-                    await self.vector_store.create_collection("document_qa", vector_size=3584, distance="Cosine")
-                    await self.vector_store.upsert_documents("document_qa", chunks)
-            except Exception as e:
-                logger.error(f"Failed to embed and index document {storage_path} for QA: {e}")
+        await self._index_for_qa(storage_path, extracted.text)
 
         await self._publish(
             DocumentAnalyzedEvent(
@@ -153,6 +145,125 @@ class DocumentService:
             )
         )
         return response
+
+    async def _index_for_qa(self, storage_path: str, text: str) -> None:
+        """Chunk, embed and index the document so Document Q&A can find it.
+
+        The collection dimension is probed from a real embedding rather than
+        hard-coded. It used to be pinned at 3584 (a 7B model's hidden size) while
+        the configured embedding model emits 768, so every upsert was rejected,
+        the failure was swallowed by this method's except clause, and the
+        collection stayed permanently empty -- Document Q&A answered "belgede
+        bulunamadı" for every question ever asked.
+
+        Each chunk also gets a sparse (BM25-style) vector alongside the dense
+        one and is tagged with ``storage_path`` in its payload -- the same
+        identifier the document-scoped query side filters on -- so retrieval
+        can run Qdrant's native hybrid (dense + sparse) search restricted to
+        this one document instead of a plain dense-only lookup.
+
+        Args:
+            storage_path: Storage reference, used as the document identifier.
+            text: Full extracted document text.
+        """
+        if not self.embedding_service or not self.vector_store:
+            return
+
+        try:
+            chunker = RecursiveChunker(
+                chunk_size=QA_CHUNK_SIZE, chunk_overlap=QA_CHUNK_OVERLAP
+            )
+            chunks = await self.embedding_service.process_text(text, chunker=chunker)
+            if not chunks:
+                logger.warning("Document %s produced no chunks to index.", storage_path)
+                return
+
+            # Unfit on purpose: its sparse indices are CRC32 hashes of tokens,
+            # not corpus-fitted ids, so no shared vocabulary is needed across
+            # documents. Document-side encoding only uses avg_doc_len (falls
+            # back sanely to each chunk's own length when unset); query-side
+            # IDF weights default to a uniform 1.0. Fitting per single-document
+            # upload would be pointless anyway -- BM25 IDF over a corpus of one
+            # document is a constant.
+            encoder = SparseBM25Encoder()
+            for chunk in chunks:
+                chunk.metadata["storage_path"] = storage_path
+                indices, values = encoder.encode_document(chunk.text)
+                chunk.sparse_vector = {"indices": indices, "values": values}
+
+            vector_size = await self._probe_embedding_dimension()
+            if vector_size is None:
+                return
+
+            created = await self.vector_store.create_collection(
+                QA_COLLECTION_NAME, vector_size=vector_size, distance="Cosine"
+            )
+            if not created:
+                # create_collection's return value used to go unchecked: when an
+                # existing collection had a stale dimension (left over from a
+                # previous embedding model), _validate_existing correctly
+                # rejected it and logged an error, but upsert_documents ran
+                # anyway and failed on every point with a Qdrant 400. Rebuilding
+                # is safe here -- a collection that fails validation has never
+                # accepted a write under the current embedding model, so there
+                # is no current data to lose.
+                logger.warning(
+                    "'%s' is incompatible with the current embedding dimension "
+                    "(%d); recreating it.",
+                    QA_COLLECTION_NAME,
+                    vector_size,
+                )
+                await self.vector_store.delete_collection(QA_COLLECTION_NAME)
+                created = await self.vector_store.create_collection(
+                    QA_COLLECTION_NAME, vector_size=vector_size, distance="Cosine"
+                )
+                if not created:
+                    logger.error(
+                        "Could not (re)create '%s'; skipping Q&A index for %s.",
+                        QA_COLLECTION_NAME,
+                        storage_path,
+                    )
+                    return
+
+            stored = await self.vector_store.upsert_documents(QA_COLLECTION_NAME, chunks)
+            if not stored:
+                logger.error(
+                    "Upsert failed for document %s into '%s'.",
+                    storage_path,
+                    QA_COLLECTION_NAME,
+                )
+                return
+
+            logger.info(
+                "Indexed %d chunk(s) for Q&A on document %s (vector_size=%d).",
+                len(chunks),
+                storage_path,
+                vector_size,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to embed and index document %s for Q&A", storage_path
+            )
+
+    async def _probe_embedding_dimension(self) -> Optional[int]:
+        """Detect the embedding dimension by embedding a throwaway string.
+
+        Returns:
+            The dimension, or None when the embedding service is unreachable.
+        """
+        global _qa_vector_size
+        if _qa_vector_size is not None:
+            return _qa_vector_size
+
+        try:
+            probe = await self.embedding_service.embeddings_client.embed_query("boyut")
+        except Exception:
+            logger.exception("Could not probe embedding dimension; skipping Q&A index.")
+            return None
+
+        _qa_vector_size = len(probe)
+        logger.info("Detected Q&A embedding dimension: %d", _qa_vector_size)
+        return _qa_vector_size
 
     def _validate_upload(
         self, file_name: str, content: bytes, content_type: Optional[str]

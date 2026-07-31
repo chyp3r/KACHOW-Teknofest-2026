@@ -415,13 +415,29 @@ body {
   border-bottom-left-radius: 4px;
 }
 
-/* Live Logs Console - Floating above Input Area */
+/* Blinking caret shown while text is still streaming in. */
+.streaming-caret {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  margin-top: 2px;
+  background: var(--accent-indigo);
+  border-radius: 1px;
+  animation: caret-blink 1s step-end infinite;
+}
+
+@keyframes caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Live Logs Console - sits in normal flex flow between the messages area and
+   the input area, so it can never overlap either: a fixed pixel offset here
+   used to assume the input area's height, and grew wrong the moment the
+   "Aktif Belgeyi Kullan (<file_name>)" label wrapped to two lines. */
 .live-logs-container-fixed {
-  position: absolute;
-  bottom: 150px; /* Above the input area */
-  left: 24px;
-  right: 24px;
-  z-index: 50;
+  flex-shrink: 0;
+  margin: 0 24px;
   background: rgba(9, 13, 22, 0.95);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);

@@ -1,23 +1,61 @@
+import json
 import logging
-from typing import Any, TypedDict
+import os
+from typing import Any, Optional, TypedDict
 
-from langgraph.graph import END, START, StateGraph
-from pydantic import BaseModel, Field, model_validator
 from langchain_core.runnables import RunnableConfig
+from langgraph.graph import END, START, StateGraph
 
-from app.ai.agents.orchestrator import OrchestratorAgent
+from app.ai.agents.chat import ChatAgent
+from app.ai.agents.document_qa import DocumentQAAgent
+from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.llms.base import BaseLLMClient
+from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
+from app.ai.workflows.events import (
+    child_config,
+    emit,
+    emit_node_end,
+    emit_node_start,
+    emit_partial,
+    emit_token,
+)
+from app.ai.workflows.planner import resolve_plan
+from app.core.config import settings
+from app.infrastructure.vectorstore.base import BaseVectorStore
 
 logger = logging.getLogger(__name__)
 
+QA_COLLECTION_NAME = "document_qa"
+QA_RESULT_LIMIT = 4
 
-class PlanningState(TypedDict):
-    """LangGraph State representing the main Orchestrator/Planning workflow context."""
+STEP_LABELS = {
+    "classification": "Evrak Analizi",
+    "rag": "Mevzuat Tarama",
+    "draft": "Taslak Oluşturma",
+    "routing": "Birim Yönlendirme",
+    "chat": "Sohbet",
+    "document_qa": "Belge Soru-Cevap",
+}
+
+STEP_MESSAGES = {
+    "classification": "Belge sınıflandırılıyor ve üst veriler çıkarılıyor...",
+    "rag": "Mevzuat veri tabanında ilgili maddeler taranıyor...",
+    "draft": "Resmî cevap taslağı hazırlanıyor...",
+    "routing": "Cevap taslağının iletileceği birim analiz ediliyor...",
+    "chat": "Sohbet yanıtı hazırlanıyor...",
+    "document_qa": "Belge içeriği doğrultusunda cevap aranıyor...",
+}
+
+
+class PlanningState(TypedDict, total=False):
+    """LangGraph state for the master orchestration workflow."""
 
     input_text: str
     document_id: str | None
-    plan_steps: list[str]  # e.g., ["classification", "rag", "draft", "routing"]
+    plan_steps: list[str]
+    plan_intent: str
     current_step_idx: int
+    cached_document: dict[str, Any]
     classification_result: dict[str, Any]
     rag_result: dict[str, Any]
     draft_result: dict[str, Any]
@@ -27,100 +65,75 @@ class PlanningState(TypedDict):
     final_output: dict[str, Any]
 
 
-class PlanOutput(BaseModel):
-    """Pydantic schema for structured planning decisions."""
-
-    required_steps: list[str] = Field(
-        description="Çalıştırılması gereken adımların sıralı listesi. Şunları içerebilir: 'classification', 'rag', 'draft', 'routing', 'chat', 'document_qa'."
-    )
-    reasoning: str = Field(
-        description="Neden bu adımların seçildiğinin Türkçe gerekçesi."
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def handle_nested_hallucinations(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-
-        required_steps = []
-        reasoning = ""
-
-        # Sometimes the model returns required_steps as a list of dicts instead of list of strings
-        if "required_steps" in data and isinstance(data["required_steps"], list):
-            for step in data["required_steps"]:
-                if isinstance(step, str):
-                    required_steps.append(step)
-                elif isinstance(step, dict):
-                    proc = step.get("process_id") or step.get("process") or step.get("step") or step.get("step_name")
-                    if proc:
-                        required_steps.append(str(proc))
-            
-            # If we successfully extracted string steps from the array, update the data dictionary
-            if required_steps:
-                data["required_steps"] = required_steps
-
-        # If data is completely missing required_steps or has a malformed one
-        if "required_steps" in data and "reasoning" in data and all(isinstance(x, str) for x in data.get("required_steps", [])):
-            return data
-
-        # Check for "execution_plan" list (another common hallucination)
-        if not required_steps and "execution_plan" in data and isinstance(data["execution_plan"], list):
-            for step in data["execution_plan"]:
-                if isinstance(step, dict):
-                    proc = step.get("process") or step.get("step") or step.get("step_name")
-                    if proc:
-                        required_steps.append(str(proc))
-                        
-        # Check for "workflow_plan" list (yet another common hallucination)
-        if not required_steps and "workflow_plan" in data and isinstance(data["workflow_plan"], list):
-            for step in data["workflow_plan"]:
-                if isinstance(step, dict):
-                    proc = step.get("action") or step.get("process") or step.get("step")
-                    if proc:
-                        required_steps.append(str(proc))
-
-        # Check for "process_analysis" dict
-        if "process_analysis" in data and isinstance(data["process_analysis"], dict):
-            reasoning = data["process_analysis"].get("justification") or data["process_analysis"].get("reason") or ""
-
-        # Fallback for reasoning from execution plan reasons
-        if not reasoning and "execution_plan" in data and isinstance(data["execution_plan"], list):
-            reasons = [step.get("reason") for step in data["execution_plan"] if isinstance(step, dict) and step.get("reason")]
-            if reasons:
-                reasoning = " | ".join(reasons)
-
-        if required_steps:
-            return {
-                "required_steps": required_steps,
-                "reasoning": reasoning or "Yürütme planı oluşturuldu."
-            }
-
-        return data
-
-
-
-def _requested_correspondence_type(
-    classification: dict[str, Any],
-) -> str | None:
+def _requested_correspondence_type(classification: dict[str, Any]) -> str | None:
     """Read an explicitly classified output correspondence type.
 
     Args:
-        classification: Combined Classification Graph result.
+        classification: Combined analysis result.
 
     Returns:
-        Requested correspondence type when classification metadata contains one.
+        The requested correspondence type, when the metadata carries one.
     """
-    metadata = classification.get("metadata", {})
+    metadata = classification.get("metadata", {}) or {}
     return classification.get("correspondence_type") or metadata.get(
         "correspondence_type"
     )
 
 
-from app.ai.agents.chat import ChatAgent
-from app.ai.agents.document_qa import DocumentQAAgent
-from app.ai.embeddings.models import BaseEmbeddingsClient
-from app.infrastructure.vectorstore.base import BaseVectorStore
+def _load_cached_document(document_id: str | None) -> dict[str, Any]:
+    """Read the cached analysis and extracted text for an uploaded document.
+
+    Args:
+        document_id: The document's storage path, or None.
+
+    Returns:
+        The cache payload, or an empty dict when there is nothing to load.
+    """
+    if not document_id:
+        return {}
+
+    cache_file = os.path.join(
+        settings.LOCAL_STORAGE_DIR, f"{document_id}_analysis.json"
+    )
+    if not os.path.exists(cache_file):
+        return {}
+
+    try:
+        with open(cache_file, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except Exception:
+        logger.exception("Failed to read cached analysis for %s", document_id)
+        return {}
+
+
+def _mevzuat_context(classification: dict[str, Any]) -> str:
+    """Render the legislation the analysis step already retrieved.
+
+    The draft flow no longer runs a separate RAG step. The analysis sub-graph
+    retrieves legislation for the document as part of its own work, so a second
+    retrieval pass repeated the same query behind an extra LLM call and
+    discarded the first result.
+
+    Args:
+        classification: The analysis result.
+
+    Returns:
+        The excerpts as prompt context, or an empty string.
+    """
+    parts: list[str] = []
+
+    for index, document in enumerate(classification.get("mevzuat_documents") or [], 1):
+        content = getattr(document, "page_content", None)
+        if content:
+            source = getattr(document, "metadata", {}).get("mevzuat", "bilinmiyor")
+            parts.append(f"[DOKÜMAN {index}] (Kaynak: {source})\n{content}")
+
+    for item in classification.get("mevzuat_suggestions") or []:
+        if isinstance(item, dict) and item.get("mevzuat"):
+            parts.append(f"[MEVZUAT] {item['mevzuat']}: {item.get('aciklama', '')}")
+
+    return "\n\n".join(parts)
+
 
 def create_planning_graph(
     llm_client: BaseLLMClient,
@@ -130,337 +143,350 @@ def create_planning_graph(
     routing_graph: Any,
     vector_store: BaseVectorStore | None = None,
     embeddings_client: BaseEmbeddingsClient | None = None,
+    fast_llm_client: Optional[BaseLLMClient] = None,
 ):
-    """Create and compile the LangGraph master Planning/Supervisor workflow.
+    """Create and compile the master orchestration workflow.
 
-    Evaluates the input query, generates an execution plan, and dynamically routes
-    through sub-graphs (Classification, RAG, Draft, Routing) sequentially.
+    Planning is deterministic (see :mod:`app.ai.workflows.planner`). The previous
+    implementation asked a model to choose from a fixed four-way decision table,
+    which cost a structured generation plus a retry loop on every single request
+    and needed sixty lines of output-shape repair to be usable at all.
+
+    Args:
+        llm_client: Quality-tier model, used for chat and document Q&A.
+        document_analysis_graph: Compiled analysis sub-graph.
+        rag_graph: Compiled retrieval sub-graph.
+        draft_graph: Compiled drafting sub-graph.
+        routing_graph: Compiled routing sub-graph.
+        vector_store: Vector store backing document Q&A.
+        embeddings_client: Embeddings client backing document Q&A.
+        fast_llm_client: Small model for intent classification on ambiguous
+            messages. Falls back to ``llm_client``.
+
+    Returns:
+        The compiled LangGraph workflow.
     """
-    orchestrator_agent = OrchestratorAgent(llm_client)
     chat_agent = ChatAgent(llm_client)
     document_qa_agent = DocumentQAAgent(llm_client)
+    intent_client = fast_llm_client or llm_client
+    # Unfit on purpose, same as the indexing side (documents/service.py):
+    # its sparse indices are corpus-independent CRC32 hashes, and query-side
+    # IDF weights default to a uniform 1.0 without a fitted vocabulary, which
+    # is still a meaningful lexical signal for RRF fusion against the dense
+    # vector.
+    qa_sparse_encoder = SparseBM25Encoder()
 
-    # 1. Planning/Supervisor Node
-    async def supervisor_planning_node(state: PlanningState, config: RunnableConfig) -> dict[str, Any]:
-        logger.info("Supervisor planning task execution...")
-
-        status_queue = config.get("configurable", {}).get("status_queue")
-        if status_queue:
-            await status_queue.put({
-                "event": "node_start",
-                "node": "planning",
-                "label": "Planlama",
-                "message": "İş planı hazırlanıyor..."
-            })
-
-        prompt = (
-            f"Kullanıcı İsteği:\n\"\"\"\n{state['input_text']}\n\"\"\"\n"
-            f"İlgili Belge ID (Eğer varsa): {state.get('document_id', 'Yok')}\n\n"
-            "Bu istek için hangi iş süreçlerinin çalıştırılması gerektiğini sistem yönergendeki karar kurallarına göre belirle.\n"
-            "Sıralı adımları ve gerekçesini yapılandırılmış Türkçe formatta döndür."
+    async def planning_node(
+        state: PlanningState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Resolve the execution plan. Sub-millisecond in the common case."""
+        await emit_node_start(
+            config, "planning", "Planlama", "İş planı hazırlanıyor..."
         )
 
-        try:
-            res: PlanOutput = await orchestrator_agent.run_structured(
-                messages=prompt, response_model=PlanOutput
+        decision = await resolve_plan(
+            state["input_text"], state.get("document_id"), intent_client
+        )
+        logger.info(
+            "Plan: %s (intent=%s, source=%s)",
+            decision.steps,
+            decision.intent,
+            decision.source,
+        )
+
+        await emit(
+            config,
+            {
+                "event": "planning_completed",
+                "plan_steps": decision.steps,
+                "intent": decision.intent,
+                "reasoning": decision.reasoning,
+            },
+        )
+
+        return {
+            "plan_steps": decision.steps,
+            "plan_intent": decision.intent,
+            "current_step_idx": 0,
+            "cached_document": _load_cached_document(state.get("document_id")),
+            "classification_result": {},
+            "rag_result": {},
+            "draft_result": {},
+            "routing_result": {},
+            "chat_result": {},
+            "document_qa_result": {},
+            "final_output": {},
+        }
+
+    async def _run_classification(
+        state: PlanningState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        cached = state.get("cached_document") or {}
+        if cached.get("analysis"):
+            logger.info("Using cached analysis for document %s", state.get("document_id"))
+            analysis = cached["analysis"]
+            await emit_partial(config, "classification", analysis)
+            # The live path's compliance/rag graph nodes only ever turn from
+            # 'running' to 'completed' via the two signals the analysis
+            # sub-graph emits on its own: a "compliance" partial_result from
+            # check_compliance_node, and a node_end for "classification" from
+            # suggest_mevzuat_node once the whole sub-graph finishes (the
+            # DERIVED_NODES mapping in the frontend promotes 'compliance' and
+            # 'rag' to 'completed' on that node_end). The cached path never
+            # invokes that sub-graph, so without replaying both signals here,
+            # a document analyzed earlier and then drafted from cache left its
+            # 'Mevzuat' (rag) and 'compliance' graph nodes stuck amber forever.
+            await emit_partial(
+                config,
+                "compliance",
+                {
+                    "compliance_status": analysis.get("compliance_status"),
+                    "missing_fields": analysis.get("missing_fields") or [],
+                },
             )
-            logger.info(f"Supervisor generated plan: {res.required_steps}")
-            
-            if status_queue:
-                await status_queue.put({
-                    "event": "planning_completed",
-                    "plan_steps": res.required_steps,
-                    "reasoning": res.reasoning
-                })
+            await emit_node_end(
+                config,
+                "classification",
+                "Evrak Analizi",
+                "Evrak analizi tamamlandı (önbellek).",
+                {"mevzuat_suggestions": analysis.get("mevzuat_references") or []},
+            )
+            return analysis
 
+        return await document_analysis_graph.ainvoke(
+            {"input_text": state["input_text"], "is_ocr_text": False},
+            config=child_config(config),
+        )
+
+    async def _run_draft(
+        state: PlanningState, classification: dict[str, Any], config: RunnableConfig
+    ) -> dict[str, Any]:
+        cached = state.get("cached_document") or {}
+        source_document = cached.get("extracted_text") or state["input_text"]
+
+        context = state.get("rag_result", {}).get("context") or _mevzuat_context(
+            classification
+        )
+
+        return await draft_graph.ainvoke(
+            {
+                "source_document": source_document,
+                "classification": classification,
+                "correspondence_type": _requested_correspondence_type(classification),
+                "context": context,
+                "instructions": (
+                    f"Kullanıcı İsteği: {state['input_text']}\n\n"
+                    "Gelen evraka, evrakın amacı ve doğrulanmış bağlam doğrultusunda "
+                    "resmî ve kurumsal bir Türkçe yanıt taslağı oluştur."
+                ),
+                "attempts": 0,
+            },
+            config=child_config(config),
+        )
+
+    async def _run_document_qa(
+        state: PlanningState, classification: dict[str, Any], config: RunnableConfig
+    ) -> dict[str, Any]:
+        document_id = state.get("document_id")
+        if not document_id:
             return {
-                "plan_steps": res.required_steps,
-                "current_step_idx": 0,
-                "classification_result": {},
-                "rag_result": {},
-                "draft_result": {},
-                "routing_result": {},
-                "chat_result": {},
-                "document_qa_result": {},
-                "final_output": {},
-            }
-        except Exception:
-            logger.exception("Supervisor Planning Node failed")
-            # Default safe plan fallback
-            fallback_steps = ["classification", "rag", "draft", "routing"]
-            if status_queue:
-                await status_queue.put({
-                    "event": "planning_completed",
-                    "plan_steps": fallback_steps,
-                    "reasoning": "Planlama düğümünde hata oluştu, varsayılan akışa geçildi."
-                })
-            return {
-                "plan_steps": fallback_steps,
-                "current_step_idx": 0,
-                "classification_result": {},
-                "rag_result": {},
-                "draft_result": {},
-                "routing_result": {},
-                "chat_result": {},
-                "document_qa_result": {},
-                "final_output": {},
+                "reply": "Soru sorulacak bir belge belirtilmedi.",
+                "status": "FAILED",
             }
 
-    # 2. Sub-graph Execution Orchestration Node
-    async def execute_step_node(state: PlanningState, config: RunnableConfig) -> dict[str, Any]:
-        idx = state["current_step_idx"]
-        steps = state["plan_steps"]
+        cached = state.get("cached_document") or {}
+        analysis = classification or cached.get("analysis") or {}
 
+        summary = analysis.get("summary") or "Özet verisi mevcut değil."
+        raw_metadata = analysis.get("fields") or analysis.get("metadata") or {}
+        metadata = (
+            json.dumps(raw_metadata, ensure_ascii=False, indent=2, default=str)
+            if isinstance(raw_metadata, dict)
+            else str(raw_metadata)
+        )
+
+        passages: list[str] = []
+        if vector_store and embeddings_client:
+            try:
+                query_vector = await embeddings_client.embed_query(state["input_text"])
+                sparse_indices, sparse_values = qa_sparse_encoder.encode_query(
+                    state["input_text"]
+                )
+                # filter_dict scopes both the dense and sparse prefetch branches
+                # to this document's chunks before Qdrant fuses them (RRF), so
+                # the vector similarity ranking only ever runs over this
+                # document rather than the whole document_qa collection.
+                hits = await vector_store.hybrid_search(
+                    collection_name=QA_COLLECTION_NAME,
+                    query_vector=query_vector,
+                    sparse_indices=sparse_indices,
+                    sparse_values=sparse_values,
+                    limit=QA_RESULT_LIMIT,
+                    filter_dict={"storage_path": document_id},
+                )
+                passages = [hit["text"] for hit in hits if hit.get("text")]
+            except Exception:
+                logger.exception("Document Q&A vector search failed")
+
+        # The extracted text is the reliable fallback. Vector search can miss
+        # when the document was indexed under different settings, and answering
+        # from the cached text beats refusing to answer at all.
+        if not passages and cached.get("extracted_text"):
+            passages = [cached["extracted_text"][:8000]]
+
+        context = (
+            f"--- BELGE ÖZETİ ---\n{summary}\n\n"
+            f"--- BELGE ÜSTVERİSİ ---\n{metadata}\n\n"
+            f"--- BELGE İÇERİĞİ ---\n"
+            + ("\n\n---\n\n".join(passages) if passages else "İçerik bulunamadı.")
+        )
+
+        chunks: list[str] = []
+        try:
+            async for chunk in document_qa_agent.answer_stream(
+                context=context, query=state["input_text"]
+            ):
+                chunks.append(chunk)
+                await emit_token(config, "document_qa", chunk)
+            return {"reply": "".join(chunks).strip(), "status": "COMPLETED"}
+        except Exception as exc:
+            logger.exception("Document QA step failed")
+            return {"reply": f"Belge sorusu yanıtlanamadı: {exc}", "status": "FAILED"}
+
+    async def _run_chat(
+        state: PlanningState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        chunks: list[str] = []
+        try:
+            async for chunk in chat_agent.stream(messages=state["input_text"]):
+                chunks.append(chunk)
+                await emit_token(config, "chat", chunk)
+            return {"reply": "".join(chunks).strip(), "status": "COMPLETED"}
+        except Exception as exc:
+            logger.exception("Chat step failed")
+            return {"reply": f"Sohbet yanıtı üretilemedi: {exc}", "status": "FAILED"}
+
+    async def execute_step_node(
+        state: PlanningState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Run the current plan step and advance the cursor."""
+        idx = state.get("current_step_idx", 0)
+        steps = state.get("plan_steps") or []
         if idx >= len(steps):
             return {}
 
-        current_step = steps[idx].lower()
-        logger.info(f"Executing plan step {idx + 1}/{len(steps)}: '{current_step}'")
+        step = steps[idx].lower()
+        label = STEP_LABELS.get(step, step.capitalize())
+        logger.info("Executing plan step %d/%d: '%s'", idx + 1, len(steps), step)
 
-        status_queue = config.get("configurable", {}).get("status_queue")
-        if status_queue:
-            labels = {
-                "classification": "Sınıflandırma",
-                "rag": "Mevzuat Tarama",
-                "draft": "Taslak Oluşturma",
-                "routing": "Birim Yönlendirme",
-                "chat": "Sohbet",
-                "document_qa": "Belge Soru-Cevap"
-            }
-            messages = {
-                "classification": "Belge sınıflandırılıyor ve üst veriler çıkarılıyor...",
-                "rag": "Mevzuat veri tabanında ilgili maddeler taranıyor...",
-                "draft": "Resmi cevap taslağı hazırlanıyor...",
-                "routing": "Cevap taslağının iletileceği birim analiz ediliyor...",
-                "chat": "Sohbet yanıtı hazırlanıyor...",
-                "document_qa": "Belge içeriği doğrultusunda cevap aranıyor..."
-            }
-            await status_queue.put({
-                "event": "node_start",
-                "node": current_step,
-                "label": labels.get(current_step, current_step.capitalize()),
-                "message": messages.get(current_step, f"{current_step} süreci yürütülüyor...")
-            })
+        await emit_node_start(
+            config, step, label, STEP_MESSAGES.get(step, f"{label} yürütülüyor...")
+        )
 
-        import json
-        import os
-        from app.core.config import settings
+        updates: dict[str, Any] = {"current_step_idx": idx + 1}
+        cached = state.get("cached_document") or {}
 
-        doc_id = state.get("document_id")
-        cached_data = None
-        if doc_id:
-            cache_file = os.path.join(settings.LOCAL_STORAGE_DIR, f"{doc_id}_analysis.json")
-            if os.path.exists(cache_file):
-                try:
-                    with open(cache_file, "r", encoding="utf-8") as f:
-                        cached_data = json.load(f)
-                except Exception:
-                    logger.error(f"Failed to read cached analysis for {doc_id}")
+        # Seed the classification from cache when the plan skips the analysis
+        # step but a later step needs its output. Written into the returned
+        # update rather than assigned onto `state`, which LangGraph does not
+        # support and which silently lost the value on the next superstep.
+        classification = state.get("classification_result") or {}
+        if not classification and cached.get("analysis"):
+            classification = cached["analysis"]
+            updates["classification_result"] = classification
 
-        new_state_updates = {"current_step_idx": idx + 1}
+        try:
+            if step == "classification":
+                classification = await _run_classification(state, config)
+                updates["classification_result"] = classification
 
-        # Auto-populate classification result from cache if available to prevent empty fields when classification step is skipped
-        if doc_id and cached_data and "analysis" in cached_data:
-            if not state.get("classification_result"):
-                state["classification_result"] = cached_data["analysis"]
-                new_state_updates["classification_result"] = cached_data["analysis"]
-
-        # Dynamically execute corresponding sub-graph
-        if current_step == "classification":
-            if cached_data and "analysis" in cached_data:
-                logger.info(f"Using cached classification for document {doc_id}")
-                new_state_updates["classification_result"] = cached_data["analysis"]
-            else:
-                sub_res = await document_analysis_graph.ainvoke(
-                    {"input_text": state["input_text"], "is_ocr_text": False}
+            elif step == "rag":
+                query = classification.get("summary") or state["input_text"]
+                updates["rag_result"] = await rag_graph.ainvoke(
+                    {"original_query": query, "attempts": 0},
+                    config=child_config(config),
                 )
-                new_state_updates["classification_result"] = sub_res
 
-        elif current_step == "rag":
-            # Extract query: use classification summary if available, otherwise original text
-            query = (
-                state.get("classification_result", {}).get("summary")
-                or state["input_text"]
-            )
-            sub_res = await rag_graph.ainvoke({"original_query": query, "attempts": 0})
-            new_state_updates["rag_result"] = sub_res
+            elif step == "draft":
+                updates["draft_result"] = await _run_draft(state, classification, config)
 
-        elif current_step == "draft":
-            context = state.get("rag_result", {}).get("context", "")
-            classification = state.get("classification_result", {})
-            
-            source_doc = state["input_text"]
-            if cached_data and "extracted_text" in cached_data:
-                source_doc = cached_data["extracted_text"]
+            elif step == "routing":
+                draft_result = updates.get("draft_result") or state.get("draft_result") or {}
+                score = draft_result.get("confidence_score", 100.0)
+                if draft_result.get("requires_human_approval"):
+                    score = 0.0
+                updates["routing_result"] = await routing_graph.ainvoke(
+                    {"draft": draft_result.get("draft", ""), "confidence_score": score},
+                    config=child_config(config),
+                )
 
-            sub_res = await draft_graph.ainvoke(
-                {
-                    "source_document": source_doc,
-                    "classification": classification,
-                    "correspondence_type": _requested_correspondence_type(
-                        classification
-                    ),
-                    "context": context,
-                    "instructions": (
-                        f"Kullanıcı İsteği: {state['input_text']}\n\n"
-                        "Gelen evraka, evrakın amacı ve doğrulanmış bağlam doğrultusunda "
-                        "resmi ve kurumsal bir Türkçe yanıt taslağı oluştur."
-                    ),
-                    "attempts": 0,
-                }
-            )
-            new_state_updates["draft_result"] = sub_res
+            elif step == "chat":
+                updates["chat_result"] = await _run_chat(state, config)
 
-        elif current_step == "routing":
-            draft = state.get("draft_result", {}).get("draft", "")
-            score = state.get("draft_result", {}).get("confidence_score", 100.0)
-            if state.get("draft_result", {}).get("requires_human_approval", False):
-                score = 0.0
-            sub_res = await routing_graph.ainvoke(
-                {"draft": draft, "confidence_score": score}
-            )
-            new_state_updates["routing_result"] = sub_res
+            elif step == "document_qa":
+                updates["document_qa_result"] = await _run_document_qa(
+                    state, classification, config
+                )
 
-        elif current_step == "chat":
-            reply = await chat_agent.run(messages=state["input_text"])
-            new_state_updates["chat_result"] = {"reply": reply, "status": "COMPLETED"}
-
-        elif current_step == "document_qa":
-            doc_id = state.get("document_id")
-            if not doc_id or not vector_store or not embeddings_client:
-                logger.error("Document QA failed: Missing document_id, vector_store, or embeddings_client.")
-                new_state_updates["document_qa_result"] = {"reply": "Belge bulunamadı veya sistem yapılandırması eksik.", "status": "FAILED"}
             else:
-                try:
-                    import json
-                    
-                    # 1. State üzerinden sınıflandırma (metadata ve özet) verilerini al
-                    classification = state.get("classification_result", {})
-                    doc_summary = classification.get("summary", "Özet verisi mevcut değil.")
-                    
-                    raw_metadata = classification.get("metadata", "Metadata mevcut değil.")
-                    if isinstance(raw_metadata, dict):
-                        doc_metadata = json.dumps(raw_metadata, ensure_ascii=False, indent=2)
-                    else:
-                        doc_metadata = str(raw_metadata)
+                logger.warning("Unknown workflow step skipped: %s", step)
 
-                    # 2. Embed query
-                    query_vector = await embeddings_client.embed_query(state["input_text"])
-                    
-                    # 3. Search Qdrant with filter
-                    filter_dict = {"storage_path": doc_id}
-                    hits = await vector_store.similarity_search(
-                        collection_name="document_qa",
-                        query_vector=query_vector,
-                        limit=3,
-                        filter_dict=filter_dict,
-                    )
-                    
-                    # 4. Bağlamı (Context) oluştur: Özet + Metadata + Vektör Arama Sonuçları
-                    meta_context = (
-                        f"--- BELGE ÖZETİ ---\n{doc_summary}\n\n"
-                        f"--- BELGE METADATASI ---\n{doc_metadata}\n\n"
-                        f"--- ALINTILANAN BELGE İÇERİĞİ ---\n"
-                    )
+        except Exception as exc:
+            logger.exception("Plan step '%s' failed", step)
+            updates[f"{step}_result"] = {"status": "FAILED", "error": str(exc)}
 
-                    if not hits:
-                        context = meta_context + "Bu belgeye ait spesifik bir metin içeriği bulunamadı."
-                    else:
-                        context = meta_context + "\n\n---\n\n".join([hit["text"] for hit in hits])
-                        
-                    # 5. Ask QA Agent
-                    reply = await document_qa_agent._execute(
-                        messages=[],
-                        context=context,
-                        query=state["input_text"]
-                    )
-                    new_state_updates["document_qa_result"] = {"reply": reply, "status": "COMPLETED"}
-                except Exception as e:
-                    logger.exception("Document QA step failed")
-                    new_state_updates["document_qa_result"] = {"reply": f"Hata oluştu: {str(e)}", "status": "FAILED"}
-        else:
-            logger.warning(f"Unknown workflow step skipped: {current_step}")
-
-        # If this is the last step, compile final output
         if idx + 1 >= len(steps):
-            class_res = new_state_updates.get("classification_result") or state.get(
-                "classification_result"
-            )
-            rag_res = new_state_updates.get("rag_result") or state.get("rag_result")
-            draft_res = new_state_updates.get("draft_result") or state.get(
-                "draft_result"
-            )
-            routing_res = new_state_updates.get("routing_result") or state.get(
-                "routing_result"
-            )
-            chat_res = new_state_updates.get("chat_result") or state.get(
-                "chat_result"
-            )
-            document_qa_res = new_state_updates.get("document_qa_result") or state.get(
-                "document_qa_result"
+            updates["final_output"] = _compile_final_output(state, updates)
+
+        # The sub-graphs emit their own node_end events with richer payloads;
+        # only announce completion here for steps that have none.
+        if step in {"classification", "draft", "routing"}:
+            pass
+        else:
+            await emit_node_end(
+                config, step, label, f"{label} tamamlandı.", updates.get(f"{step}_result", {})
             )
 
-            draft_status = (draft_res or {}).get("status")
-            final_status = (
-                draft_status
-                if draft_status in {"FAILED", "NEEDS_HUMAN_APPROVAL"}
-                else "COMPLETED"
-            )
-            new_state_updates["final_output"] = {
-                "status": final_status,
-                "classification": class_res,
-                "rag": rag_res,
-                "draft": draft_res,
-                "routing": routing_res,
-                "chat": chat_res,
-                "document_qa": document_qa_res,
-            }
+        return updates
 
-        if status_queue:
-            labels = {
-                "classification": "Sınıflandırma",
-                "rag": "Mevzuat Tarama",
-                "draft": "Taslak Oluşturma",
-                "routing": "Birim Yönlendirme",
-                "chat": "Sohbet",
-                "document_qa": "Belge Soru-Cevap"
-            }
-            result_key = f"{current_step}_result"
-            node_result = new_state_updates.get(result_key, {})
-            await status_queue.put({
-                "event": "node_end",
-                "node": current_step,
-                "label": labels.get(current_step, current_step.capitalize()),
-                "message": f"{labels.get(current_step, current_step.capitalize())} tamamlandı.",
-                "result": node_result
-            })
+    def _compile_final_output(
+        state: PlanningState, updates: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Assemble the response payload from state plus this step's updates."""
 
-        return new_state_updates
+        def _pick(key: str) -> dict[str, Any]:
+            return updates.get(key) or state.get(key) or {}
 
-    # Routing Conditional Logic: Loops back to execute_step if steps remain, else goes to END
+        draft_result = _pick("draft_result")
+        draft_status = draft_result.get("status")
+        final_status = (
+            draft_status
+            if draft_status in {"FAILED", "NEEDS_HUMAN_APPROVAL"}
+            else "COMPLETED"
+        )
+
+        return {
+            "status": final_status,
+            "classification": _pick("classification_result"),
+            "rag": _pick("rag_result"),
+            "draft": draft_result,
+            "routing": _pick("routing_result"),
+            "chat": _pick("chat_result"),
+            "document_qa": _pick("document_qa_result"),
+        }
+
     def route_after_step(state: PlanningState) -> str:
-        idx = state["current_step_idx"]
-        steps = state["plan_steps"]
+        idx = state.get("current_step_idx", 0)
+        return "continue" if idx < len(state.get("plan_steps") or []) else "end"
 
-        if idx < len(steps):
-            return "continue"
-        return "end"
-
-    # Define StateGraph
     builder = StateGraph(PlanningState)
-    builder.add_node("planning", supervisor_planning_node)
+    builder.add_node("planning", planning_node)
     builder.add_node("executor", execute_step_node)
 
     builder.add_edge(START, "planning")
     builder.add_edge("planning", "executor")
-
     builder.add_conditional_edges(
-        "executor",
-        route_after_step,
-        {
-            "continue": "executor",
-            "end": END,
-        },
+        "executor", route_after_step, {"continue": "executor", "end": END}
     )
 
     return builder.compile()

@@ -19,10 +19,8 @@ Kullanıcının sorusuna YALNIZCA sağlanan belge parçalarından (context) elde
 5. Soru belge içeriğiyle tamamen alakasız ise bunu belirt ve belge kapsamını kısaca özetle.
 6. Kısmen cevaplanabilir bir soruysa, cevaplayabildiğin kısmı cevapla ve eksik kısmı belirt.
 
-## Girdiler
+## Sağlanan Bağlam (Context)
 
-### Kullanıcı Sorusu
-{query}
+Kullanıcının sorusu ayrı bir mesaj olarak gelecektir. Cevabını yalnızca aşağıdaki bağlama dayandır.
 
-### Sağlanan Bağlam (Context)
-{context}
+{{context}}

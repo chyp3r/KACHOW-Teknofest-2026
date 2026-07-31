@@ -10,6 +10,11 @@ from app.infrastructure.vectorstore.base import BaseVectorStore
 
 logger = logging.getLogger(__name__)
 
+#: Name of the sparse vector used by the hybrid retriever. Collections created
+#: before this was introduced do not have it, and Qdrant rejects any query that
+#: names a vector the collection lacks.
+SPARSE_VECTOR_NAME = "text-sparse"
+
 
 class QdrantStore(BaseVectorStore):
     """Qdrant client implementation of BaseVectorStore for vector storage and search."""
@@ -22,13 +27,68 @@ class QdrantStore(BaseVectorStore):
         """
         self.qdrant_url = qdrant_url
         self.client = AsyncQdrantClient(url=qdrant_url)
+        # Cache of collection_name -> "does it have a sparse vector". Probed once
+        # per process so a stale collection costs one extra call, not one failed
+        # query (and one stack trace) per retrieval.
+        self._sparse_support: Dict[str, bool] = {}
         logger.info(f"Initialized AsyncQdrantClient targeting: {qdrant_url}")
+
+    async def _has_sparse_vector(self, collection_name: str) -> bool:
+        """Report whether a collection is configured for sparse vectors.
+
+        Args:
+            collection_name: The collection to inspect.
+
+        Returns:
+            True when the collection declares the sparse vector the hybrid
+            retriever needs. Unknown or unreachable collections report False, so
+            retrieval degrades to dense-only rather than erroring.
+        """
+        cached = self._sparse_support.get(collection_name)
+        if cached is not None:
+            return cached
+
+        try:
+            info = await self.client.get_collection(collection_name)
+            sparse_config = getattr(info.config.params, "sparse_vectors", None) or {}
+            has_sparse = SPARSE_VECTOR_NAME in sparse_config
+        except Exception:
+            logger.warning(
+                "Could not inspect collection '%s'; assuming no sparse vectors.",
+                collection_name,
+            )
+            has_sparse = False
+
+        if not has_sparse:
+            logger.warning(
+                "Collection '%s' has no '%s' vector, so hybrid search will run "
+                "dense-only. The collection predates hybrid indexing; re-run "
+                "scripts/index_mevzuat.py to rebuild it with sparse vectors.",
+                collection_name,
+                SPARSE_VECTOR_NAME,
+            )
+
+        self._sparse_support[collection_name] = has_sparse
+        return has_sparse
 
     async def create_collection(
         self, collection_name: str, vector_size: int, distance: str = "Cosine"
     ) -> bool:
-        """Create Qdrant collection if it does not already exist."""
-        # Map string distance metric to Qdrant models.Distance enum
+        """Create the collection, or validate the schema of an existing one.
+
+        An existing collection is *checked*, not blindly accepted. The previous
+        version returned success on any existing collection, so one created
+        before sparse vectors existed stayed permanently incompatible with
+        hybrid search while every retrieval logged a 400 from Qdrant.
+
+        Args:
+            collection_name: Target collection.
+            vector_size: Dense vector dimensionality.
+            distance: Distance metric name.
+
+        Returns:
+            True when the collection exists and is usable for dense search.
+        """
         dist_enum = models.Distance.COSINE
         dist_lower = distance.lower()
         if dist_lower == "euclidean":
@@ -37,35 +97,85 @@ class QdrantStore(BaseVectorStore):
             dist_enum = models.Distance.DOT
 
         try:
-            # Check if collection exists
-            exists = await self.client.collection_exists(collection_name)
-            if exists:
-                logger.info(
-                    f"Collection '{collection_name}' already exists in Qdrant."
-                )
-                return True
+            if await self.client.collection_exists(collection_name):
+                return await self._validate_existing(collection_name, vector_size)
 
-            # Create new collection
             await self.client.create_collection(
                 collection_name=collection_name,
                 vectors_config=models.VectorParams(
                     size=vector_size, distance=dist_enum
                 ),
                 sparse_vectors_config={
-                    "text-sparse": models.SparseVectorParams(
-                        index=models.SparseIndexParams(
-                            on_disk=True,
-                        )
+                    SPARSE_VECTOR_NAME: models.SparseVectorParams(
+                        index=models.SparseIndexParams(on_disk=True)
                     )
-                }
+                },
             )
+            self._sparse_support[collection_name] = True
             logger.info(
-                f"Successfully created Qdrant collection: '{collection_name}'"
+                "Created Qdrant collection '%s' (dense=%d, sparse=%s).",
+                collection_name,
+                vector_size,
+                SPARSE_VECTOR_NAME,
             )
             return True
         except Exception as e:
             logger.error(
                 f"Qdrant create_collection failed for '{collection_name}': {e}",
+                exc_info=True,
+            )
+            return False
+
+    async def _validate_existing(
+        self, collection_name: str, vector_size: int
+    ) -> bool:
+        """Check that an existing collection matches what the code expects.
+
+        Args:
+            collection_name: The collection to check.
+            vector_size: The dense dimensionality the caller intends to write.
+
+        Returns:
+            True when the collection can accept dense writes of this size.
+        """
+        try:
+            info = await self.client.get_collection(collection_name)
+            params = info.config.params
+
+            existing_vectors = params.vectors
+            existing_size = getattr(existing_vectors, "size", None)
+            if existing_size is None and isinstance(existing_vectors, dict):
+                default = existing_vectors.get("")
+                existing_size = getattr(default, "size", None)
+
+            if existing_size is not None and existing_size != vector_size:
+                # Writing 768-dim vectors into a 3584-dim collection fails on
+                # every point and is otherwise only visible as a silent no-op.
+                logger.error(
+                    "Collection '%s' has dimension %d but the embedding model "
+                    "produces %d. Delete the collection and re-index.",
+                    collection_name,
+                    existing_size,
+                    vector_size,
+                )
+                return False
+
+            sparse_config = getattr(params, "sparse_vectors", None) or {}
+            has_sparse = SPARSE_VECTOR_NAME in sparse_config
+            self._sparse_support[collection_name] = has_sparse
+            if not has_sparse:
+                logger.warning(
+                    "Collection '%s' exists without a '%s' vector; hybrid search "
+                    "will fall back to dense-only. Re-index to enable it.",
+                    collection_name,
+                    SPARSE_VECTOR_NAME,
+                )
+            else:
+                logger.info("Collection '%s' already exists and is valid.", collection_name)
+            return True
+        except Exception as e:
+            logger.error(
+                f"Could not validate existing collection '{collection_name}': {e}",
                 exc_info=True,
             )
             return False
@@ -192,18 +302,35 @@ class QdrantStore(BaseVectorStore):
             )
 
             prefetch_list = [dense_prefetch]
-            # Only prefetch sparse if we have valid query tokens
-            if sparse_indices and sparse_values:
-                sparse_prefetch = models.Prefetch(
-                    query=models.SparseVector(
-                        indices=sparse_indices,
-                        values=sparse_values,
-                    ),
-                    using="text-sparse",
-                    limit=limit * 3,
-                    filter=qdrant_filter,
+            # Only prefetch sparse when the query has tokens *and* the collection
+            # actually declares the vector. Naming a vector the collection lacks
+            # makes Qdrant reject the whole request with a 400.
+            if (
+                sparse_indices
+                and sparse_values
+                and await self._has_sparse_vector(collection_name)
+            ):
+                prefetch_list.append(
+                    models.Prefetch(
+                        query=models.SparseVector(
+                            indices=sparse_indices,
+                            values=sparse_values,
+                        ),
+                        using=SPARSE_VECTOR_NAME,
+                        limit=limit * 3,
+                        filter=qdrant_filter,
+                    )
                 )
-                prefetch_list.append(sparse_prefetch)
+
+            # A single prefetch branch has nothing to fuse; go straight to dense
+            # search rather than paying for a degenerate RRF round trip.
+            if len(prefetch_list) == 1:
+                return await self.similarity_search(
+                    collection_name=collection_name,
+                    query_vector=query_vector,
+                    limit=limit,
+                    filter_dict=filter_dict,
+                )
 
             # Query Qdrant with Fusion (Reciprocal Rank Fusion)
             response = await self.client.query_points(
@@ -224,10 +351,15 @@ class QdrantStore(BaseVectorStore):
                 )
             return hits
         except Exception as e:
-            logger.error(
-                f"Qdrant hybrid_search failed in '{collection_name}': {e}",
-                exc_info=True,
+            # Logged without a traceback: the dense fallback below still answers
+            # the query, so this is a degradation notice, not a crash. Emitting a
+            # full stack trace per retrieval buried the real errors in the log.
+            logger.warning(
+                "Qdrant hybrid_search failed in '%s' (%s); falling back to dense search.",
+                collection_name,
+                e,
             )
+            self._sparse_support[collection_name] = False
             # Fallback to similarity search
             return await self.similarity_search(
                 collection_name=collection_name,

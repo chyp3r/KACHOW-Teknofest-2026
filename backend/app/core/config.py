@@ -18,7 +18,34 @@ class Settings(BaseSettings):
     # Vision-language model used to OCR degraded scans (see extractors/vision.py).
     OLLAMA_VISION_MODEL: str = "glm-ocr:latest"
     OLLAMA_REASONING: bool = False
-    OLLAMA_MAX_TOKENS: int = 1024
+
+    #: Generation budget. The previous value of 1024 truncated official drafts
+    #: mid-sentence and cut off the editor's structured JSON, which then failed
+    #: Pydantic validation and burned three retries before failing outright.
+    OLLAMA_MAX_TOKENS: int = 4096
+
+    #: Context window. Ollama defaults to 2048 and truncates *from the start* --
+    #: silently dropping the system prompt or the document header, which is
+    #: exactly where sayı/tarih/konu/muhatap live. Must be set globally, not
+    #: per-node.
+    OLLAMA_NUM_CTX: int = 8192
+
+    #: How long Ollama keeps a model resident after a request. Without this the
+    #: model is evicted between pipeline steps and every step pays the reload.
+    OLLAMA_KEEP_ALIVE: str = "30m"
+
+    #: Optional small model for cheap, low-token decisions (intent, routing,
+    #: query classification). Falls back to OLLAMA_MODEL when unset, so an
+    #: environment that has not pulled a second model keeps working.
+    OLLAMA_FAST_MODEL: str | None = None
+
+    #: Generation budget for the fast model. Intent and routing outputs are a
+    #: label plus one sentence; anything larger is the model rambling.
+    OLLAMA_FAST_MAX_TOKENS: int = 512
+
+    #: Warm both models on startup so the first user request does not pay the
+    #: cold-load cost (several seconds on Apple Silicon).
+    OLLAMA_WARMUP_ON_STARTUP: bool = True
 
     # vLLM Configuration
     VLLM_BASE_URL: str = "http://localhost:8000/v1"

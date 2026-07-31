@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.embeddings.chunking.recursive import RecursiveChunker
 from app.ai.embeddings.models import get_embeddings_client
 from app.ai.embeddings.service import EmbeddingService
-from app.ai.llms import get_llm_client
+from app.ai.llms import get_fast_llm_client, get_llm_client
 from app.ai.retrieval.bm25 import BM25Retriever
 from app.ai.retrieval.corpus_loader import load_mevzuat_corpus
 from app.ai.retrieval.dense import DenseRetriever
@@ -170,10 +170,14 @@ async def get_draft_graph() -> Any:
 
 
 async def get_routing_graph() -> Any:
-    """Compile the document routing workflow once per process."""
+    """Compile the document routing workflow once per process.
+
+    Uses the fast tier: the output is one unit label plus one sentence, so the
+    quality model buys nothing here but latency.
+    """
     global _routing_graph
     if _routing_graph is None:
-        _routing_graph = create_routing_graph(llm_client=get_llm_client())
+        _routing_graph = create_routing_graph(llm_client=get_fast_llm_client())
     return _routing_graph
 
 
@@ -224,6 +228,7 @@ async def get_planning_graph(
             routing_graph=routing_graph,
             vector_store=get_vector_store(),
             embeddings_client=get_embeddings_client(),
+            fast_llm_client=get_fast_llm_client(),
         )
     return _planning_graph
 
