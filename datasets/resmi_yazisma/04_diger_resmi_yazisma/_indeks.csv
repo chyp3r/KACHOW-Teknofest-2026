@@ -1,0 +1,62 @@
+id,niyet,baslik,belge_turu,dosya
+DY-001,09_tutanak,Tutanak Örneği,resmi_sablon,DY-001_tutanak-ornegi.md
+DY-002,01_gorus,Dilekçe Örneği,resmi_sablon,DY-002_dilekce-ornegi.md
+DY-003,02_onay_olur,Disiplin Soruşturması Emri Örneği,resmi_sablon,DY-003_disiplin-sorusturmasi-emri-ornegi.md
+DY-004,03_davet,Savunma Davetiyesi Örneği,resmi_sablon,DY-004_savunma-davetiyesi-ornegi.md
+DY-005,09_tutanak,Savunma Tutanağı Örneği,resmi_sablon,DY-005_savunma-tutanagi-ornegi.md
+DY-006,04_teblig_bildirim,Tanık Tebellüğ Belgesi Örneği,resmi_sablon,DY-006_tanik-tebellug-belgesi-ornegi.md
+DY-007,03_davet,Tanık İfade Davetiyesi Örneği,resmi_sablon,DY-007_tanik-ifade-davetiyesi-ornegi.md
+DY-008,09_tutanak,Tanık İfade Tutanağı Örneği,resmi_sablon,DY-008_tanik-ifade-tutanagi-ornegi.md
+DY-009,06_koordinasyon,Bilgi Talebi Örneği,resmi_sablon,DY-009_bilgi-talebi-ornegi.md
+DY-010,09_tutanak,Soruşturma Raporu Örneği,resmi_sablon,DY-010_sorusturma-raporu-ornegi.md
+DY-011,09_tutanak,Soruşturma Dosyası Dizi Pusulası Örneği,resmi_sablon,DY-011_sorusturma-dosyasi-dizi-pusulasi-ornegi.md
+DY-012,06_koordinasyon,Soruşturma Raporu Dosya Teslimi Yazı Örneği,resmi_sablon,DY-012_sorusturma-raporu-dosya-teslimi-yazi-ornegi.md
+DY-013,08_gorevlendirme,Raportör Görevlendirme Örneği,resmi_sablon,DY-013_raportor-gorevlendirme-ornegi.md
+DY-014,09_tutanak,Raportör Raporu Örneği,resmi_sablon,DY-014_raportor-raporu-ornegi.md
+DY-015,04_teblig_bildirim,Ceza Tebliği Örneği (Disiplin Kurulu),resmi_sablon,DY-015_ceza-tebligi-ornegi-disiplin-kurulu.md
+DY-016,04_teblig_bildirim,Ceza Tebliği Örneği (İndirim Uygulanması),resmi_sablon,DY-016_ceza-tebligi-ornegi-indirim-uygulanmasi.md
+DY-017,04_teblig_bildirim,Ceza Tebliği Örneği (İndirim Uygulanmaması),resmi_sablon,DY-017_ceza-tebligi-ornegi-indirim-uygulanmamasi.md
+DY-018,03_davet,Son Savunma İstemi Örneği,resmi_sablon,DY-018_son-savunma-istemi-ornegi.md
+DY-019,01_gorus,Ek Süre Talebi Örneği,resmi_sablon,DY-019_ek-sure-talebi-ornegi.md
+DY-020,08_gorevlendirme,Yolluklu/Yolluksuz Görevlendirme Talep Yazısı,resmi_sablon,DY-020_yolluklu-yolluksuz-gorevlendirme-talep-yazisi.md
+DY-021,08_gorevlendirme,Görevlendirme Bölüm Başkanlığı Üst Yazısı,resmi_sablon,DY-021_gorevlendirme-bolum-baskanligi-ust-yazisi.md
+DY-022,01_gorus,Dr. Öğretim Üyesi Yeniden Atama Teklif Yazısı,resmi_sablon,DY-022_dr-ogretim-uyesi-yeniden-atama-teklif-yazisi.md
+DY-023,01_gorus,Öğretim Elemanı Görev Süresi Uzatma Teklif Yazısı,resmi_sablon,DY-023_ogretim-elemani-gorev-suresi-uzatma-teklif-yazisi.md
+DY-024,02_onay_olur,Harcama Yetkisi Devir Formu,resmi_sablon,DY-024_harcama-yetkisi-devir-formu.md
+DY-025,02_onay_olur,Gerçekleştirme Görevlisi Vekâlet İmza Sirküsü,resmi_sablon,DY-025_gerceklestirme-gorevlisi-vekalet-imza-sirkusu.md
+DY-026,09_tutanak,Toplantı Tutanak Formu,resmi_sablon,DY-026_toplanti-tutanak-formu.md
+DY-027,08_gorevlendirme,Yurt Dışı Görev Dönüş Formu,resmi_sablon,DY-027_yurt-disi-gorev-donus-formu.md
+DY-028,06_koordinasyon,Bakım Onarım İstek Formu,resmi_sablon,DY-028_bakim-onarim-istek-formu.md
+DY-029,01_gorus,Öğrenim Değerlendirme Talep Yazısı,resmi_sablon,DY-029_ogrenim-degerlendirme-talep-yazisi.md
+DY-030,01_gorus,Hazırlık Sınıfı Değerlendirme Talep Yazısı,resmi_sablon,DY-030_hazirlik-sinifi-degerlendirme-talep-yazisi.md
+DY-031,01_gorus,Ders Talep Dilekçesi,resmi_sablon,DY-031_ders-talep-dilekcesi.md
+DY-032,02_onay_olur,İnceleme Başlatma Yazı Örneği,resmi_sablon,DY-032_inceleme-baslatma-yazi-ornegi.md
+DY-033,09_tutanak,İnceleme İşlemleri Hazırlık Tutanağı,resmi_sablon,DY-033_inceleme-islemleri-hazirlik-tutanagi.md
+DY-034,08_gorevlendirme,Yeminli Kâtip Görevlendirme Tutanağı,resmi_sablon,DY-034_yeminli-katip-gorevlendirme-tutanagi.md
+DY-035,07_toplanti,Kurul Toplantı Tutanağı,resmi_sablon,DY-035_kurul-toplanti-tutanagi.md
+DY-036,03_davet,İnceleme Yapılanı Savunmaya Davet Yazısı,resmi_sablon,DY-036_inceleme-yapilani-savunmaya-davet-yazisi.md
+DY-037,09_tutanak,İnceleme Yapılanın Savunma Tutanağı,resmi_sablon,DY-037_inceleme-yapilanin-savunma-tutanagi.md
+DY-038,03_davet,Şikâyetçiyi İfadeye Davet Yazısı,resmi_sablon,DY-038_sikayetciyi-ifadeye-davet-yazisi.md
+DY-039,09_tutanak,Şikâyetçi İfade Tutanağı,resmi_sablon,DY-039_sikayetci-ifade-tutanagi.md
+DY-040,03_davet,Tanık Davet Yazısı,resmi_sablon,DY-040_tanik-davet-yazisi.md
+DY-041,09_tutanak,Tanık İfade Tutanağı,resmi_sablon,DY-041_tanik-ifade-tutanagi.md
+DY-042,08_gorevlendirme,Bilirkişi Görevlendirme Talep Belgesi,resmi_sablon,DY-042_bilirkisi-gorevlendirme-talep-belgesi.md
+DY-043,01_gorus,Bilirkişi Raporu Örneği,resmi_sablon,DY-043_bilirkisi-raporu-ornegi.md
+DY-044,01_gorus,İnceleme Raporu Örneği,resmi_sablon,DY-044_inceleme-raporu-ornegi.md
+DY-045,06_koordinasyon,Bilgi ve Belge İsteme Yazısı,resmi_sablon,DY-045_bilgi-ve-belge-isteme-yazisi.md
+DY-046,09_tutanak,Disiplin Dosyası Dizi Pusulası Örneği,resmi_sablon,DY-046_disiplin-dosyasi-dizi-pusulasi-ornegi.md
+DY-047,06_koordinasyon,Rapor Teslimi Yazı Örneği,resmi_sablon,DY-047_rapor-teslimi-yazi-ornegi.md
+DY-048,03_davet,Savunma Davet Yazısı Örneği,resmi_sablon,DY-048_savunma-davet-yazisi-ornegi.md
+DY-049,09_tutanak,Savunma Tutanağı Örneği - AHBV,resmi_sablon,DY-049_savunma-tutanagi-ornegi-ahbv.md
+DY-050,06_koordinasyon,Öğrenci Sicil Özeti İstem Yazısı Örneği,resmi_sablon,DY-050_ogrenci-sicil-ozeti-istem-yazisi-ornegi.md
+DY-201,05_tekit_hatirlatma,Belirtilmemiş Başlık,sentetik_belge,DY-201.md
+DY-202,05_tekit_hatirlatma,Belirtilmemiş Başlık,sentetik_belge,DY-202.md
+DY-203,05_tekit_hatirlatma,Belirtilmemiş Başlık,sentetik_belge,DY-203.md
+DY-204,05_tekit_hatirlatma,Belirtilmemiş Başlık,sentetik_belge,DY-204.md
+DY-205,05_tekit_hatirlatma,Belirtilmemiş Başlık,sentetik_belge,DY-205.md
+DY-206,05_tekit_hatirlatma,Belirtilmemiş Başlık,sentetik_belge,DY-206.md
+DY-207,10_iade_yetkisizlik,Belirtilmemiş Başlık,sentetik_belge,DY-207.md
+DY-208,10_iade_yetkisizlik,Belirtilmemiş Başlık,sentetik_belge,DY-208.md
+DY-209,10_iade_yetkisizlik,Belirtilmemiş Başlık,sentetik_belge,DY-209.md
+DY-210,10_iade_yetkisizlik,Belirtilmemiş Başlık,sentetik_belge,DY-210.md
+DY-211,10_iade_yetkisizlik,Belirtilmemiş Başlık,sentetik_belge,DY-211.md

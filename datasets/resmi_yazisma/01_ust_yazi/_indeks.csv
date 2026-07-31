@@ -1,0 +1,57 @@
+id,niyet,baslik,belge_turu,dosya
+UY-001,04_gorevlendirme_personel,Araştırma Eczacısı Görevlendirme Üst Yazı Örneği,resmi_sablon,UY-001_arastirma-eczacisi-gorevlendirme-ust-yazi-ornegi.md
+UY-002,04_gorevlendirme_personel,Araştırma Hemşiresi Görevlendirme Üst Yazı Örneği,resmi_sablon,UY-002_arastirma-hemsiresi-gorevlendirme-ust-yazi-ornegi.md
+UY-003,02_basvuru_talep,Araştırma Ürünü İthalatı Üst Yazı Örneği,resmi_sablon,UY-003_arastirma-urunu-ithalati-ust-yazi-ornegi.md
+UY-004,01_ek_belge_iletimi,Biyolojik Materyal Transfer Formu Üst Yazı Örneği,resmi_sablon,UY-004_biyolojik-materyal-transfer-formu-ust-yazi-ornegi.md
+UY-005,01_ek_belge_iletimi,Ciddi Advers Olay Bildirimi Üst Yazı Örneği,resmi_sablon,UY-005_ciddi-advers-olay-bildirimi-ust-yazi-ornegi.md
+UY-006,06_rapor_sunum,SUSAR Altı Aylık Sıralı Liste Bildirimi Üst Yazı Örneği,resmi_sablon,UY-006_susar-alti-aylik-sirali-liste-bildirimi-ust-yazi-ornegi.md
+UY-007,02_basvuru_talep,Klinik Araştırma İlk Başvuru Üst Yazı Örneği,resmi_sablon,UY-007_klinik-arastirma-ilk-basvuru-ust-yazi-ornegi.md
+UY-008,04_gorevlendirme_personel,İzleyici (Monitör) Görevlendirme Üst Yazı Örneği,resmi_sablon,UY-008_izleyici-monitor-gorevlendirme-ust-yazi-ornegi.md
+UY-009,01_ek_belge_iletimi,Klinik Araştırma Sonlandırma Bildirimi Üst Yazı Örneği,resmi_sablon,UY-009_klinik-arastirma-sonlandirma-bildirimi-ust-yazi-ornegi.md
+UY-010,02_basvuru_talep,Önemli Değişiklik Başvurusu Üst Yazı Örneği,resmi_sablon,UY-010_onemli-degisiklik-basvurusu-ust-yazi-ornegi.md
+UY-011,04_gorevlendirme_personel,Saha Görevlisi Yetkilendirme Üst Yazı Örneği,resmi_sablon,UY-011_saha-gorevlisi-yetkilendirme-ust-yazi-ornegi.md
+UY-012,03_onay_izin,Sigorta Süre Uzatma Üst Yazı Örneği,resmi_sablon,UY-012_sigorta-sure-uzatma-ust-yazi-ornegi.md
+UY-013,04_gorevlendirme_personel,Yardımcı Araştırmacı Görevlendirme Üst Yazı Örneği,resmi_sablon,UY-013_yardimci-arastirmaci-gorevlendirme-ust-yazi-ornegi.md
+UY-014,06_rapor_sunum,Yıllık Bildirim Üst Yazı Örneği,resmi_sablon,UY-014_yillik-bildirim-ust-yazi-ornegi.md
+UY-015,06_rapor_sunum,Yıllık Güvenlik Raporu Bildirimi Üst Yazı Örneği,resmi_sablon,UY-015_yillik-guvenlik-raporu-bildirimi-ust-yazi-ornegi.md
+UY-016,01_ek_belge_iletimi,Başlama Tarihi Bildirimi Üst Yazısı,resmi_sablon,UY-016_baslama-tarihi-bildirimi-ust-yazisi.md
+UY-017,01_ek_belge_iletimi,İlk Gönüllü İlk Vizit Tarihi Bildirimi Üst Yazısı,resmi_sablon,UY-017_ilk-gonullu-ilk-vizit-tarihi-bildirimi-ust-yazisi.md
+UY-018,01_ek_belge_iletimi,Gönüllü Alımı Sonlanım Tarihi Bildirimi Üst Yazısı,resmi_sablon,UY-018_gonullu-alimi-sonlanim-tarihi-bildirimi-ust-yazisi.md
+UY-019,06_rapor_sunum,Yıllık Bildirim Üst Yazısı - KSÜ,resmi_sablon,UY-019_yillik-bildirim-ust-yazisi-ksu.md
+UY-020,01_ek_belge_iletimi,Araştırmanın Tamamlanması Bildirimi Üst Yazısı - KSÜ,resmi_sablon,UY-020_arastirmanin-tamamlanmasi-bildirimi-ust-yazisi-ksu.md
+UY-021,06_rapor_sunum,Araştırma Sonuç Raporu Bildirimi Üst Yazısı,resmi_sablon,UY-021_arastirma-sonuc-raporu-bildirimi-ust-yazisi.md
+UY-022,01_ek_belge_iletimi,Araştırmanın Tüm Ülkelerde Tamamlanması Bildirimi Üst Yazısı - KSÜ,resmi_sablon,UY-022_arastirmanin-tum-ulkelerde-tamamlanmasi-bildirimi-ust-yazisi-ksu.md
+UY-023,01_ek_belge_iletimi,SUSAR Bildirimi Üst Yazı Örneği - KSÜ,resmi_sablon,UY-023_susar-bildirimi-ust-yazi-ornegi-ksu.md
+UY-024,06_rapor_sunum,Yurt Dışı SUSAR Sıralı Liste Bildirimi Üst Yazısı - KSÜ,resmi_sablon,UY-024_yurt-disi-susar-sirali-liste-bildirimi-ust-yazisi-ksu.md
+UY-025,06_rapor_sunum,DSUR Bildirimi Üst Yazı Örneği - KSÜ,resmi_sablon,UY-025_dsur-bildirimi-ust-yazi-ornegi-ksu.md
+UY-026,01_ek_belge_iletimi,Ölümle Sonuçlanan Ciddi Advers Olay Bildirimi Üst Yazısı - KSÜ,resmi_sablon,UY-026_olumle-sonuclanan-ciddi-advers-olay-bildirimi-ust-yazisi-ksu.md
+UY-027,04_gorevlendirme_personel,Personel Görevlendirme Bildirimi Üst Yazısı - KSÜ,resmi_sablon,UY-027_personel-gorevlendirme-bildirimi-ust-yazisi-ksu.md
+UY-028,02_basvuru_talep,Araştırma Ürünü İthalatı Üst Yazısı - KSÜ,resmi_sablon,UY-028_arastirma-urunu-ithalati-ust-yazisi-ksu.md
+UY-029,02_basvuru_talep,Araştırmacı Toplantısı Üst Yazısı - KSÜ,resmi_sablon,UY-029_arastirmaci-toplantisi-ust-yazisi-ksu.md
+UY-030,04_gorevlendirme_personel,Atama Üst Yazı Örneği,resmi_sablon,UY-030_atama-ust-yazi-ornegi.md
+UY-031,04_gorevlendirme_personel,Ayrılış Üst Yazı Örneği,resmi_sablon,UY-031_ayrilis-ust-yazi-ornegi.md
+UY-032,03_onay_izin,Kurum Müdürü Vekâlet Onayı Üst Yazı Örneği,resmi_sablon,UY-032_kurum-muduru-vekalet-onayi-ust-yazi-ornegi.md
+UY-033,02_basvuru_talep,Sertifika İptal Üst Yazı Örneği,resmi_sablon,UY-033_sertifika-iptal-ust-yazi-ornegi.md
+UY-034,03_onay_izin,Sözleşme Yenileme Üst Yazı Örneği,resmi_sablon,UY-034_sozlesme-yenileme-ust-yazi-ornegi.md
+UY-035,02_basvuru_talep,Tez Konusu İçin SUAM'a Yazılacak Üst Yazı Örneği,resmi_sablon,UY-035_tez-konusu-icin-suam-a-yazilacak-ust-yazi-ornegi.md
+UY-036,04_gorevlendirme_personel,Uzmanlık Eğitimi Tez Sınav Jürisi Üst Yazı Örneği,resmi_sablon,UY-036_uzmanlik-egitimi-tez-sinav-jurisi-ust-yazi-ornegi.md
+UY-037,04_gorevlendirme_personel,Uzmanlık Eğitimi Bitirme Sınav Jürisi Üst Yazı Örneği,resmi_sablon,UY-037_uzmanlik-egitimi-bitirme-sinav-jurisi-ust-yazi-ornegi.md
+UY-038,02_basvuru_talep,Uzmanlık Eğitimi Tescil Talebi Üst Yazı Örneği,resmi_sablon,UY-038_uzmanlik-egitimi-tescil-talebi-ust-yazi-ornegi.md
+UY-039,01_ek_belge_iletimi,Birimler Tarafından Gönderilecek Üst Yazı Örneği,resmi_sablon,UY-039_birimler-tarafindan-gonderilecek-ust-yazi-ornegi.md
+UY-040,01_ek_belge_iletimi,Girişimcilik Dersini Başarıyla Bitiren Öğrenci Listesi Üst Yazı Örneği,resmi_sablon,UY-040_girisimcilik-dersini-basariyla-bitiren-ogrenci-listesi-ust-yazi-ornegi.md
+UY-041,01_ek_belge_iletimi,Dekanlığa Sevk Üst Yazı Örneği (Bölüm Başkanlıkları),resmi_sablon,UY-041_dekanliga-sevk-ust-yazi-ornegi-bolum-baskanliklari.md
+UY-042,01_ek_belge_iletimi,Komisyona Sevk Üst Yazı Örneği (Dekanlık),resmi_sablon,UY-042_komisyona-sevk-ust-yazi-ornegi-dekanlik.md
+UY-043,06_rapor_sunum,"Başlama, İlk Gönüllü, Gönüllü Sonlanımı, Yıllık ve Sonuç Raporu Üst Yazıları Paketi",resmi_sablon,UY-043_baslama-ilk-gonullu-gonullu-sonlanimi-yillik-ve-sonuc-raporu-ust-yazilar.md
+UY-044,01_ek_belge_iletimi,Araştırmanın Tamamlanması Bildirimi Üst Yazısı - Afyon,resmi_sablon,UY-044_arastirmanin-tamamlanmasi-bildirimi-ust-yazisi-afyon.md
+UY-045,01_ek_belge_iletimi,Araştırmanın Tüm Ülkelerde Tamamlanması Üst Yazısı - Afyon,resmi_sablon,UY-045_arastirmanin-tum-ulkelerde-tamamlanmasi-ust-yazisi-afyon.md
+UY-046,01_ek_belge_iletimi,SUSAR Bildirimi Üst Yazı Örneği - Afyon,resmi_sablon,UY-046_susar-bildirimi-ust-yazi-ornegi-afyon.md
+UY-047,06_rapor_sunum,Yurt Dışı SUSAR Sıralı Liste Bildirimi Üst Yazısı - Afyon,resmi_sablon,UY-047_yurt-disi-susar-sirali-liste-bildirimi-ust-yazisi-afyon.md
+UY-048,06_rapor_sunum,DSUR Bildirimi Üst Yazı Örneği - Afyon,resmi_sablon,UY-048_dsur-bildirimi-ust-yazi-ornegi-afyon.md
+UY-049,01_ek_belge_iletimi,Ölümle Sonuçlanan Ciddi Olumsuz Olay Bildirimi Üst Yazısı - Afyon,resmi_sablon,UY-049_olumle-sonuclanan-ciddi-olumsuz-olay-bildirimi-ust-yazisi-afyon.md
+UY-050,04_gorevlendirme_personel,Personel Görevlendirme Üst Yazı Örneği - Afyon,resmi_sablon,UY-050_personel-gorevlendirme-ust-yazi-ornegi-afyon.md
+UY-201,05_teklif_proje,Belirtilmemiş Başlık,sentetik_belge,UY-201.md
+UY-202,05_teklif_proje,Belirtilmemiş Başlık,sentetik_belge,UY-202.md
+UY-203,05_teklif_proje,Belirtilmemiş Başlık,sentetik_belge,UY-203.md
+UY-204,05_teklif_proje,Belirtilmemiş Başlık,sentetik_belge,UY-204.md
+UY-205,05_teklif_proje,Belirtilmemiş Başlık,sentetik_belge,UY-205.md
+UY-206,05_teklif_proje,Belirtilmemiş Başlık,sentetik_belge,UY-206.md

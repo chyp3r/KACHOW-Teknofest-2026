@@ -1,0 +1,75 @@
+{
+  "version": "1.0",
+  "language": "tr",
+  "primary_categories": {
+    "cover_letter": {
+      "folder": "01_ust_yazi",
+      "label": "Üst yazı",
+      "intents": [
+        "ek_belge_iletimi",
+        "basvuru_talep",
+        "onay_izin",
+        "gorevlendirme_personel",
+        "teklif_proje",
+        "rapor_sunum"
+      ]
+    },
+    "response_letter": {
+      "folder": "02_cevap_yazisi",
+      "label": "Cevap yazısı",
+      "intents": [
+        "istek_talep",
+        "sikayet",
+        "bilgi_edinme",
+        "itiraz",
+        "gorus_talebi",
+        "olumlu_cevap",
+        "ret_kismen_kabul",
+        "eksik_belge_yetkisizlik"
+      ]
+    },
+    "information_notice": {
+      "folder": "03_bilgilendirme_metni",
+      "label": "Bilgilendirme metni",
+      "intents": [
+        "islem_sureci",
+        "duyuru",
+        "uyari_guvenlik",
+        "mevzuat_hak_yukumluluk",
+        "kamuoyu_aciklamasi",
+        "etkinlik_program",
+        "hizmet_kullanim"
+      ]
+    },
+    "other_official": {
+      "folder": "04_diger_resmi_yazisma",
+      "label": "Diğer resmî yazışma",
+      "intents": [
+        "gorus",
+        "onay_olur",
+        "davet",
+        "teblig_bildirim",
+        "tekit_hatirlatma",
+        "koordinasyon",
+        "toplanti",
+        "gorevlendirme",
+        "tutanak",
+        "iade_yetkisizlik"
+      ]
+    }
+  },
+  "record_statuses": [
+    "candidate",
+    "full_text_verified",
+    "normalized",
+    "human_approved",
+    "rejected"
+  ],
+  "source_types": [
+    "official_regulation",
+    "official_template",
+    "completed_official_letter",
+    "official_information_text",
+    "index_page"
+  ]
+}
