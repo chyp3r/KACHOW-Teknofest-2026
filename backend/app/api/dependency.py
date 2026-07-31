@@ -100,40 +100,18 @@ MEVZUAT_CHUNK_OVERLAP = 200
 async def get_mevzuat_retriever() -> HybridRetriever:
     """Build the legislation retriever once per process.
 
-    The BM25 half has no persistence layer, so its corpus is re-read from disk
-    rather than scrolled back out of the vector store: BM25 needs only text, which
-    makes this cheap and independent of Qdrant and Ollama.
-
-    Returns:
-        A hybrid dense + BM25 retriever over the legislation collection.
+    Uses native Qdrant hybrid search with a pre-saved sparse vocabulary.
     """
     global _mevzuat_retriever
     if _mevzuat_retriever is None:
-        embeddings_client = get_embeddings_client()
-        dense = DenseRetriever(
-            vector_store=get_vector_store(),
-            embeddings_client=embeddings_client,
-            collection_name=settings.MEVZUAT_COLLECTION_NAME,
-        )
-        bm25 = BM25Retriever()
-        documents = await load_mevzuat_corpus(
-            settings.MEVZUAT_CORPUS_DIR,
-            RecursiveChunker(
-                chunk_size=MEVZUAT_CHUNK_SIZE, chunk_overlap=MEVZUAT_CHUNK_OVERLAP
-            ),
-        )
-        if documents:
-            bm25.index_documents(documents)
-        else:
-            # Without this warning a missing corpus silently degrades the hybrid
-            # retriever to dense-only over an English-centric embedding model.
-            logger.warning(
-                "Mevzuat corpus is empty at %s; BM25 retrieval is disabled and "
-                "legislation suggestions will be weak.",
-                settings.MEVZUAT_CORPUS_DIR,
-            )
+        import os
         _mevzuat_retriever = HybridRetriever(
-            dense_retriever=dense, bm25_retriever=bm25
+            vector_store=get_vector_store(),
+            embeddings_client=get_embeddings_client(),
+            collection_name=settings.MEVZUAT_COLLECTION_NAME,
+            sparse_vocab_path=os.path.join(
+                settings.MEVZUAT_CORPUS_DIR, "sparse_vocab.json"
+            ),
         )
     return _mevzuat_retriever
 

@@ -49,6 +49,30 @@ class BaseVectorStore(ABC):
         pass
 
     @abstractmethod
+    async def hybrid_search(
+        self,
+        collection_name: str,
+        query_vector: List[float],
+        sparse_indices: List[int],
+        sparse_values: List[float],
+        limit: int = 5,
+        filter_dict: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Perform hybrid dense/sparse vector search with fusion.
+
+        Args:
+            collection_name: The name of the collection.
+            query_vector: The query embedding vector.
+            sparse_indices: Sparse vector token indices.
+            sparse_values: Sparse vector token values (weights).
+            limit: Maximum number of results to return.
+
+        Returns:
+            A list of dictionary objects, each representing a hit.
+        """
+        pass
+
+    @abstractmethod
     async def delete_collection(self, collection_name: str) -> bool:
         """Delete a collection from the vector database.
 

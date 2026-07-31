@@ -51,6 +51,13 @@ class QdrantStore(BaseVectorStore):
                 vectors_config=models.VectorParams(
                     size=vector_size, distance=dist_enum
                 ),
+                sparse_vectors_config={
+                    "text-sparse": models.SparseVectorParams(
+                        index=models.SparseIndexParams(
+                            on_disk=True,
+                        )
+                    )
+                }
             )
             logger.info(
                 f"Successfully created Qdrant collection: '{collection_name}'"
@@ -75,9 +82,22 @@ class QdrantStore(BaseVectorStore):
             point_id = str(uuid.uuid4())
             # Save raw text inside payload along with any metadata keys
             payload = {"text": chunk.text, **chunk.metadata}
+            
+            # Format vector based on presence of sparse vector
+            if chunk.sparse_vector:
+                vector_data = {
+                    "": chunk.vector,
+                    "text-sparse": models.SparseVector(
+                        indices=chunk.sparse_vector["indices"],
+                        values=chunk.sparse_vector["values"],
+                    ),
+                }
+            else:
+                vector_data = chunk.vector
+
             points.append(
                 models.PointStruct(
-                    id=point_id, vector=chunk.vector, payload=payload
+                    id=point_id, vector=vector_data, payload=payload
                 )
             )
 
@@ -139,6 +159,82 @@ class QdrantStore(BaseVectorStore):
                 exc_info=True,
             )
             return []
+
+    async def hybrid_search(
+        self,
+        collection_name: str,
+        query_vector: List[float],
+        sparse_indices: List[int],
+        sparse_values: List[float],
+        limit: int = 5,
+        filter_dict: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Perform native hybrid search using Qdrant Prefetch API and RRF fusion."""
+        try:
+            qdrant_filter = None
+            if filter_dict:
+                must_conditions = []
+                for key, val in filter_dict.items():
+                    must_conditions.append(
+                        models.FieldCondition(
+                            key=key,
+                            match=models.MatchValue(value=val),
+                        )
+                    )
+                qdrant_filter = models.Filter(must=must_conditions)
+
+            # Define prefetch queries for dense and sparse
+            dense_prefetch = models.Prefetch(
+                query=query_vector,
+                using="",  # Default dense vector
+                limit=limit * 3,  # Fetch more candidates to fuse
+                filter=qdrant_filter,
+            )
+
+            prefetch_list = [dense_prefetch]
+            # Only prefetch sparse if we have valid query tokens
+            if sparse_indices and sparse_values:
+                sparse_prefetch = models.Prefetch(
+                    query=models.SparseVector(
+                        indices=sparse_indices,
+                        values=sparse_values,
+                    ),
+                    using="text-sparse",
+                    limit=limit * 3,
+                    filter=qdrant_filter,
+                )
+                prefetch_list.append(sparse_prefetch)
+
+            # Query Qdrant with Fusion (Reciprocal Rank Fusion)
+            response = await self.client.query_points(
+                collection_name=collection_name,
+                prefetch=prefetch_list,
+                query=models.FusionQuery(
+                    fusion=models.Fusion.RRF
+                ),
+                limit=limit,
+            )
+
+            hits = []
+            for hit in response.points:
+                payload = hit.payload or {}
+                text = payload.pop("text", "")
+                hits.append(
+                    {"text": text, "score": hit.score, "metadata": payload}
+                )
+            return hits
+        except Exception as e:
+            logger.error(
+                f"Qdrant hybrid_search failed in '{collection_name}': {e}",
+                exc_info=True,
+            )
+            # Fallback to similarity search
+            return await self.similarity_search(
+                collection_name=collection_name,
+                query_vector=query_vector,
+                limit=limit,
+                filter_dict=filter_dict,
+            )
 
     async def delete_collection(self, collection_name: str) -> bool:
         """Delete a collection from Qdrant database."""

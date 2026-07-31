@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, TypedDict
+from typing import Any, Dict, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
@@ -22,8 +22,16 @@ class RoutingState(TypedDict):
 class RouteOutput(BaseModel):
     """Pydantic schema for structured routing decisions."""
 
-    destination: str = Field(
-        description="Yazının yönlendirileceği birim veya aksiyon. Türkçe birim adı (örn. 'İnsan Kaynakları', 'Hukuk Müşavirliği', 'Mali İşler') veya 'İnsan Onayı Gerekli'."
+    destination: Literal[
+        "İnsan Kaynakları",
+        "Hukuk Müşavirliği",
+        "Mali İşler",
+        "Vatandaş İlişkileri",
+        "Bilgi İşlem Dairesi",
+        "Destek Hizmetleri",
+        "İnsan Onayı Gerekli"
+    ] = Field(
+        description="Yazının yönlendirileceği birim. Yalnızca tanımlı listeden bir birim seçilmelidir."
     )
     justification: str = Field(
         description="Yazının içeriğine göre neden bu birime yönlendirildiğinin Türkçe gerekçesi."
@@ -59,6 +67,9 @@ def create_routing_graph(llm_client: BaseLLMClient):
                 return {
                     "final_destination": "İnsan Onayı Gerekli",
                     "justification": "Yazı güven skoru kritik düzeyde düşük olduğu için insan onayına yönlendirildi.",
+                    "routed_unit": "İnsan Onayı Gerekli",
+                    "reasoning": "Yazı güven skoru kritik düzeyde düşük olduğu için insan onayına yönlendirildi.",
+                    "priority": "Yüksek",
                 }
 
             res: RouteOutput = await router_agent.run_structured(
@@ -67,12 +78,18 @@ def create_routing_graph(llm_client: BaseLLMClient):
             return {
                 "final_destination": res.destination,
                 "justification": res.justification,
+                "routed_unit": res.destination,
+                "reasoning": res.justification,
+                "priority": "Yüksek" if res.destination == "İnsan Onayı Gerekli" else "Normal",
             }
         except Exception as e:
             logger.error(f"Routing Node failed: {e}", exc_info=True)
             return {
                 "final_destination": "İnsan Onayı Gerekli",
                 "justification": "Yönlendirme hatası nedeniyle insan onayına yönlendirildi.",
+                "routed_unit": "İnsan Onayı Gerekli",
+                "reasoning": "Yönlendirme hatası nedeniyle insan onayına yönlendirildi.",
+                "priority": "Yüksek",
             }
 
     # Define Graph

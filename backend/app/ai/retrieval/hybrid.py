@@ -1,73 +1,100 @@
-import asyncio
+import os
 import logging
 from typing import List
 
 from langchain_core.documents import Document
 
-from app.ai.retrieval.bm25 import BM25Retriever
-from app.ai.retrieval.dense import DenseRetriever
-from app.ai.retrieval.fusion import reciprocal_rank_fusion
+from app.ai.embeddings.models import BaseEmbeddingsClient
+from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
+from app.infrastructure.vectorstore.base import BaseVectorStore
 
 logger = logging.getLogger(__name__)
 
 
 class HybridRetriever:
-    """SOTA Hybrid Retriever that combines Dense (semantic) and Sparse (BM25 keyword)
+    """SOTA Hybrid Retriever executing unified dense + sparse vector queries on Qdrant.
 
-    retrievals in parallel, merging them via Reciprocal Rank Fusion (RRF).
+    Merges search scores natively inside the Qdrant database using Reciprocal Rank Fusion (RRF).
     """
 
     def __init__(
         self,
-        dense_retriever: DenseRetriever,
-        bm25_retriever: BM25Retriever,
-        k: int = 60,
+        vector_store: BaseVectorStore,
+        embeddings_client: BaseEmbeddingsClient,
+        collection_name: str = "documents",
+        sparse_vocab_path: str = "",
     ):
-        """Initialize Hybrid Retriever.
+        """Initialize Native Hybrid Retriever.
 
         Args:
-            dense_retriever: DenseRetriever instance.
-            bm25_retriever: BM25Retriever instance.
-            k: Reciprocal Rank Fusion parameter (default: 60).
+            vector_store: BaseVectorStore client (e.g. QdrantStore).
+            embeddings_client: BaseEmbeddingsClient to generate query vector.
+            collection_name: Qdrant collection name to search.
+            sparse_vocab_path: Path to the fitted sparse vocab JSON file.
         """
-        self.dense = dense_retriever
-        self.bm25 = bm25_retriever
-        self.k = k
-        logger.info("Initialized HybridRetriever.")
+        self.vector_store = vector_store
+        self.embeddings_client = embeddings_client
+        self.collection_name = collection_name
+        self.sparse_vocab_path = sparse_vocab_path
+
+        self.sparse_encoder = SparseBM25Encoder()
+        if sparse_vocab_path and os.path.exists(sparse_vocab_path):
+            self.sparse_encoder.load(sparse_vocab_path)
+        else:
+            logger.warning(
+                f"Sparse vocabulary file not found at {sparse_vocab_path}. "
+                "Sparse query weights will default to 1.0."
+            )
+
+        logger.info(
+            f"Initialized HybridRetriever targeting collection '{collection_name}'"
+        )
 
     async def retrieve(self, query: str, limit: int = 5) -> List[Document]:
-        """Retrieve documents using both semantic and keyword search in parallel,
-
-        merging them and returning the top candidates.
+        """Perform semantic and keyword search simultaneously on Qdrant, returning RRF-fused results.
 
         Args:
-            query: User search query.
-            limit: Maximum documents to return.
+            query: User's question or search query.
+            limit: Maximum documents to retrieve.
         """
         if not query.strip():
             return []
 
-        # Request more candidates (e.g. limit * 2) from base retrievers
-        # to ensure high-quality coverage during fusion.
-        fetch_limit = max(limit * 2, 10)
+        try:
+            # 1. Embed dense query
+            query_vector = await self.embeddings_client.embed_query(query)
 
-        # Run retrievals in parallel for optimum speed
-        dense_task = self.dense.retrieve(query, limit=fetch_limit)
-        bm25_task = self.bm25.retrieve(query, limit=fetch_limit)
+            # 2. Encode sparse query (BM25)
+            sparse_indices, sparse_values = self.sparse_encoder.encode_query(query)
 
-        dense_results, bm25_results = await asyncio.gather(
-            dense_task, bm25_task
-        )
+            # 3. Query Qdrant with native hybrid search
+            hits = await self.vector_store.hybrid_search(
+                collection_name=self.collection_name,
+                query_vector=query_vector,
+                sparse_indices=sparse_indices,
+                sparse_values=sparse_values,
+                limit=limit,
+            )
 
-        # Merge results using Reciprocal Rank Fusion
-        fused_results = reciprocal_rank_fusion(
-            [dense_results, bm25_results], k=self.k
-        )
+            # 4. Format hits into LangChain Document objects
+            documents = []
+            for hit in hits:
+                metadata = hit.get("metadata", {}).copy()
+                metadata["score"] = hit.get("score", 0.0)
+                documents.append(
+                    Document(
+                        page_content=hit.get("text", ""), metadata=metadata
+                    )
+                )
 
-        logger.info(
-            f"HybridRetriever unified {len(dense_results)} dense and {len(bm25_results)} sparse "
-            f"results into {len(fused_results)} total, returning top {limit}."
-        )
+            logger.info(
+                f"HybridRetriever found {len(documents)} results natively from Qdrant."
+            )
+            return documents
 
-        # Return top limit
-        return fused_results[:limit]
+        except Exception as e:
+            logger.error(
+                f"HybridRetriever search failed for query '{query}': {e}",
+                exc_info=True,
+            )
+            return []

@@ -78,19 +78,29 @@ async def index_mevzuat_corpus(
             f"'{collection_name}' koleksiyonu oluşturulamadı; indeksleme durduruldu."
         )
 
-    # Embed the loader's chunks directly instead of routing through
-    # EmbeddingService.process_text: that helper re-chunks raw text, which would
-    # produce different content than the BM25 path reads from the same corpus and
-    # break the exact-content de-duplication rank fusion relies on.
+    import os
+    from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
+
+    # Fit and save sparse encoder for hybrid search
+    encoder = SparseBM25Encoder()
+    encoder.fit(documents)
+    vocab_path = os.path.join(corpus_dir, "sparse_vocab.json")
+    encoder.save(vocab_path)
+
     texts = [document.page_content for document in documents]
     vectors = await embeddings_client.embed_documents(texts)
 
-    chunks = [
-        EmbeddedChunk(
-            text=document.page_content, vector=vector, metadata=document.metadata
+    chunks = []
+    for document, vector in zip(documents, vectors):
+        indices, values = encoder.encode_document(document.page_content)
+        chunks.append(
+            EmbeddedChunk(
+                text=document.page_content,
+                vector=vector,
+                metadata=document.metadata,
+                sparse_vector={"indices": indices, "values": values},
+            )
         )
-        for document, vector in zip(documents, vectors)
-    ]
 
     # QdrantStore swallows exceptions and returns False. Without this check the
     # script would report success over an empty collection -- for example after an

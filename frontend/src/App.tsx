@@ -8,8 +8,6 @@ import {
     FileText,
     Clock,
     CheckCircle,
-    AlertTriangle,
-    FolderOpen,
     Copy,
     Terminal,
     Activity
@@ -718,12 +716,12 @@ export default function App() {
                                                     </div>
                                                 )}
 
-                                                {/* Evaluator Agent Output */}
+                                                {/* Editor/Evaluator Agent Output */}
                                                 {nodeResults.draft.evaluation_notes && (
                                                     <div style={{ marginTop: 4 }}>
                                                         <div className="details-label" style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: 4 }}>
                                                             <CheckCircle size={12} />
-                                                            Değerlendirici Ajan Notları:
+                                                            Editör Ajanı Değerlendirme Notları:
                                                         </div>
                                                         <div className="draft-box" style={{ background: 'rgba(16, 185, 129, 0.03)', borderColor: 'rgba(16, 185, 129, 0.15)', fontSize: '12px' }}>
                                                             {nodeResults.draft.evaluation_notes}

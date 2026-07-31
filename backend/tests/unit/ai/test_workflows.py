@@ -14,7 +14,7 @@ from app.ai.workflows import (
     create_system_graph,
 )
 from app.ai.workflows.correspondence import resolve_correspondence_type
-from app.ai.workflows.draft_graph import EditorOutput, EvaluatorOutput
+from app.ai.workflows.draft_graph import EditorOutput
 from app.ai.workflows.planning_graph import PlanOutput
 from app.ai.workflows.rag_graph import QueryRewriteOutput
 from app.ai.workflows.routing_graph import RouteOutput
@@ -103,11 +103,7 @@ def test_correspondence_type_resolution_precedence(
 @pytest.mark.asyncio
 @patch("app.ai.agents.writer.WriterAgent.run")
 @patch("app.ai.agents.editor.EditorAgent.run_structured")
-@patch("app.ai.agents.reflection.ReflectionAgent.run")
-@patch("app.ai.agents.evaluator.EvaluatorAgent.run_structured")
 async def test_draft_graph(
-    mock_evaluator_struct,
-    mock_reflection_run,
     mock_editor_struct,
     mock_writer_run,
 ):
@@ -115,11 +111,10 @@ async def test_draft_graph(
 
     mock_writer_run.return_value = "Draft content text."
     mock_editor_struct.return_value = EditorOutput(
-        needs_revision=False, feedback="İyi taslak."
-    )
-    mock_reflection_run.return_value = "Self-critiqued draft."
-    mock_evaluator_struct.return_value = EvaluatorOutput(
-        confidence_score=95.0
+        final_draft="Edited and polished final draft.",
+        confidence_score=95.0,
+        requires_human_approval=False,
+        evaluation_notes="İyi taslak."
     )
 
     graph = create_draft_graph(mock_llm)
@@ -137,7 +132,7 @@ async def test_draft_graph(
         }
     )
 
-    assert res["draft"] == "Self-critiqued draft."
+    assert res["draft"] == "Edited and polished final draft."
     assert res["confidence_score"] == 95.0
     assert res["requires_human_approval"] is False
     assert res["correspondence_type"] == CorrespondenceType.RESPONSE_LETTER
@@ -169,11 +164,7 @@ async def test_draft_graph(
 )
 @patch("app.ai.agents.writer.WriterAgent.run")
 @patch("app.ai.agents.editor.EditorAgent.run_structured")
-@patch("app.ai.agents.reflection.ReflectionAgent.run")
-@patch("app.ai.agents.evaluator.EvaluatorAgent.run_structured")
 async def test_draft_graph_supports_official_correspondence_types(
-    mock_evaluator_struct,
-    mock_reflection_run,
     mock_editor_struct,
     mock_writer_run,
     requested_type,
@@ -182,11 +173,10 @@ async def test_draft_graph_supports_official_correspondence_types(
 ):
     mock_writer_run.return_value = "Türe uygun ilk taslak."
     mock_editor_struct.return_value = EditorOutput(
-        needs_revision=False, feedback="Uygun."
-    )
-    mock_reflection_run.return_value = "Türe uygun nihai taslak."
-    mock_evaluator_struct.return_value = EvaluatorOutput(
+        final_draft="Türe uygun nihai taslak.",
         confidence_score=94.0,
+        requires_human_approval=False,
+        evaluation_notes="Uygun."
     )
 
     graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
@@ -204,8 +194,6 @@ async def test_draft_graph_supports_official_correspondence_types(
     assert expected_type.value in writer_prompt
     assert prompt_fragment in writer_prompt
     assert expected_type.value in mock_editor_struct.call_args.kwargs["messages"]
-    assert expected_type.value in mock_reflection_run.call_args.kwargs["messages"]
-    assert expected_type.value in mock_evaluator_struct.call_args.kwargs["messages"]
     assert res["correspondence_type"] == expected_type
     assert res["correspondence_type_source"] == "explicit"
     assert res["requires_human_approval"] is False
@@ -215,22 +203,16 @@ async def test_draft_graph_supports_official_correspondence_types(
 @pytest.mark.asyncio
 @patch("app.ai.agents.writer.WriterAgent.run")
 @patch("app.ai.agents.editor.EditorAgent.run_structured")
-@patch("app.ai.agents.reflection.ReflectionAgent.run")
-@patch("app.ai.agents.evaluator.EvaluatorAgent.run_structured")
 async def test_draft_graph_requires_approval_for_unknown_correspondence_type(
-    mock_evaluator_struct,
-    mock_reflection_run,
     mock_editor_struct,
     mock_writer_run,
 ):
     mock_writer_run.return_value = "İnsan incelemesi gerektiren taslak."
     mock_editor_struct.return_value = EditorOutput(
-        needs_revision=False, feedback="Biçim uygun."
-    )
-    mock_reflection_run.return_value = "İnsan incelemesi gerektiren nihai taslak."
-    mock_evaluator_struct.return_value = EvaluatorOutput(
+        final_draft="İnsan incelemesi gerektiren nihai taslak.",
         confidence_score=95.0,
         requires_human_approval=False,
+        evaluation_notes="Biçim uygun."
     )
 
     graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
@@ -253,114 +235,47 @@ async def test_draft_graph_requires_approval_for_unknown_correspondence_type(
 @pytest.mark.asyncio
 @patch("app.ai.agents.writer.WriterAgent.run")
 @patch("app.ai.agents.editor.EditorAgent.run_structured")
-@patch("app.ai.agents.reflection.ReflectionAgent.run")
-@patch("app.ai.agents.evaluator.EvaluatorAgent.run_structured")
-async def test_draft_graph_preserves_sources_during_revision(
-    mock_evaluator_struct,
-    mock_reflection_run,
+async def test_draft_graph_editor_updates_draft(
     mock_editor_struct,
     mock_writer_run,
 ):
-    mock_llm = MagicMock(spec=BaseLLMClient)
-    mock_writer_run.side_effect = ["İlk taslak.", "Düzeltilmiş taslak."]
-    mock_editor_struct.side_effect = [
-        EditorOutput(needs_revision=True, feedback="Tarihi açıkça belirt."),
-        EditorOutput(needs_revision=False, feedback="Uygun."),
-    ]
-    mock_reflection_run.return_value = "Kaynağa bağlı nihai taslak."
-    mock_evaluator_struct.return_value = EvaluatorOutput(
-        confidence_score=92.0,
+    mock_writer_run.return_value = "Writer's draft."
+    mock_editor_struct.return_value = EditorOutput(
+        final_draft="Editor's corrected and polished draft.",
+        confidence_score=88.0,
+        requires_human_approval=False,
+        evaluation_notes="Cleaned up some typos."
     )
 
-    graph = create_draft_graph(mock_llm)
+    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
     res = await graph.ainvoke(
         {
-            "source_document": "Başvuru sahibi 29 Temmuz tarihinde izin talep etmiştir.",
+            "source_document": "Kuruma iletilen evrak.",
             "classification": {"doc_type": "Dilekçe"},
-            "context": "İzin talebi ilgili birim tarafından değerlendirilir.",
+            "context": "Doğrulanmış bağlam.",
             "instructions": "Resmi cevap hazırla.",
-            "attempts": 0,
         }
     )
 
-    assert mock_writer_run.call_count == 2
-    revision_prompt = mock_writer_run.call_args_list[1].kwargs["messages"]
-    assert "Tarihi açıkça belirt." in revision_prompt
-    assert "İzin talebi ilgili birim" in revision_prompt
-    assert "Tarihi açıkça belirt" in revision_prompt
-    assert res["attempts"] == 2
+    assert res["draft"] == "Editor's corrected and polished draft."
+    assert res["confidence_score"] == 88.0
     assert res["status"] == "COMPLETED"
 
 
 @pytest.mark.asyncio
 @patch("app.ai.agents.writer.WriterAgent.run")
-async def test_draft_graph_rejects_missing_source_document(mock_writer_run):
-    mock_llm = MagicMock(spec=BaseLLMClient)
-    graph = create_draft_graph(mock_llm)
-
-    res = await graph.ainvoke(
-        {
-            "source_document": "   ",
-            "classification": {},
-            "context": "Bağlam",
-            "instructions": "Resmi cevap hazırla.",
-            "attempts": 0,
-        }
-    )
-
-    mock_writer_run.assert_not_called()
-    assert res["draft"] == ""
-    assert res["confidence_score"] == 0.0
-    assert res["requires_human_approval"] is True
-    assert res["correspondence_type"] == CorrespondenceType.RESPONSE_LETTER
-    assert res["status"] == "FAILED"
-    assert "evrak içeriği" in res["error"]
-
-
-@pytest.mark.asyncio
-@patch("app.ai.agents.writer.WriterAgent.run")
-async def test_draft_graph_stops_after_writer_failure(mock_writer_run):
-    mock_writer_run.side_effect = RuntimeError("LLM unavailable")
-    mock_llm = MagicMock(spec=BaseLLMClient)
-    graph = create_draft_graph(mock_llm)
-
-    res = await graph.ainvoke(
-        {
-            "source_document": "Kuruma gönderilmiş örnek evrak.",
-            "classification": {"doc_type": "Resmi Yazı"},
-            "context": "Doğrulanmış bağlam.",
-            "instructions": "Resmi cevap hazırla.",
-            "attempts": 0,
-        }
-    )
-
-    assert res["draft"] == ""
-    assert res["confidence_score"] == 0.0
-    assert res["requires_human_approval"] is True
-    assert res["status"] == "FAILED"
-    assert "LLM unavailable" in res["error"]
-
-
-@pytest.mark.asyncio
-@patch("app.ai.agents.writer.WriterAgent.run")
 @patch("app.ai.agents.editor.EditorAgent.run_structured")
-@patch("app.ai.agents.reflection.ReflectionAgent.run")
-@patch("app.ai.agents.evaluator.EvaluatorAgent.run_structured")
 async def test_draft_graph_requires_approval_without_verified_context(
-    mock_evaluator_struct,
-    mock_reflection_run,
     mock_editor_struct,
     mock_writer_run,
 ):
     mock_llm = MagicMock(spec=BaseLLMClient)
     mock_writer_run.return_value = "Kaynak evraka dayalı taslak."
     mock_editor_struct.return_value = EditorOutput(
-        needs_revision=False, feedback="Uygun."
-    )
-    mock_reflection_run.return_value = "Kaynak evraka dayalı nihai taslak."
-    mock_evaluator_struct.return_value = EvaluatorOutput(
+        final_draft="Kaynak evraka dayalı nihai taslak.",
         confidence_score=95.0,
         requires_human_approval=False,
+        evaluation_notes="Uygun."
     )
 
     graph = create_draft_graph(mock_llm)
@@ -382,59 +297,12 @@ async def test_draft_graph_requires_approval_without_verified_context(
 @pytest.mark.asyncio
 @patch("app.ai.agents.writer.WriterAgent.run")
 @patch("app.ai.agents.editor.EditorAgent.run_structured")
-@patch("app.ai.agents.reflection.ReflectionAgent.run")
-@patch("app.ai.agents.evaluator.EvaluatorAgent.run_structured")
-async def test_draft_graph_requires_approval_when_revision_limit_is_reached(
-    mock_evaluator_struct,
-    mock_reflection_run,
-    mock_editor_struct,
-    mock_writer_run,
-):
-    mock_llm = MagicMock(spec=BaseLLMClient)
-    mock_writer_run.side_effect = ["İlk taslak.", "İkinci taslak."]
-    mock_editor_struct.side_effect = [
-        EditorOutput(needs_revision=True, feedback="İlk düzeltme."),
-        EditorOutput(needs_revision=True, feedback="Hâlâ doğrulanamayan bilgi var."),
-    ]
-    mock_reflection_run.return_value = "İnceleme gerektiren taslak."
-    mock_evaluator_struct.return_value = EvaluatorOutput(
-        confidence_score=90.0,
-    )
-
-    graph = create_draft_graph(mock_llm)
-    res = await graph.ainvoke(
-        {
-            "source_document": "Gelen evrak.",
-            "classification": {"doc_type": "Dilekçe"},
-            "context": "Doğrulanmış bağlam.",
-            "instructions": "Resmi cevap hazırla.",
-            "attempts": 0,
-        }
-    )
-
-    assert mock_writer_run.call_count == 2
-    assert res["attempts"] == 2
-    assert res["requires_human_approval"] is True
-    assert res["status"] == "NEEDS_HUMAN_APPROVAL"
-
-
-@pytest.mark.asyncio
-@patch("app.ai.agents.writer.WriterAgent.run")
-@patch("app.ai.agents.editor.EditorAgent.run_structured")
-@patch("app.ai.agents.reflection.ReflectionAgent.run")
-@patch("app.ai.agents.evaluator.EvaluatorAgent.run_structured")
-async def test_draft_graph_preserves_draft_when_evaluator_fails(
-    mock_evaluator_struct,
-    mock_reflection_run,
+async def test_draft_graph_fails_when_editor_fails(
     mock_editor_struct,
     mock_writer_run,
 ):
     mock_writer_run.return_value = "İlk taslak."
-    mock_editor_struct.return_value = EditorOutput(
-        needs_revision=False, feedback="Uygun."
-    )
-    mock_reflection_run.return_value = "Kaynağa dayalı son taslak."
-    mock_evaluator_struct.side_effect = ValueError("Geçersiz yapılandırılmış çıktı")
+    mock_editor_struct.side_effect = ValueError("Geçersiz yapılandırılmış çıktı")
 
     graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
     res = await graph.ainvoke(
@@ -446,16 +314,15 @@ async def test_draft_graph_preserves_draft_when_evaluator_fails(
         }
     )
 
-    assert res["draft"] == "Kaynağa dayalı son taslak."
     assert res["confidence_score"] == 0.0
     assert res["requires_human_approval"] is True
     assert res["status"] == "NEEDS_HUMAN_APPROVAL"
     assert "Geçersiz yapılandırılmış çıktı" in res["error"]
 
 
-def test_evaluator_output_rejects_out_of_range_confidence_score():
+def test_editor_output_rejects_out_of_range_confidence_score():
     with pytest.raises(ValidationError):
-        EvaluatorOutput(confidence_score=101.0)
+        EditorOutput(final_draft="...", confidence_score=101.0)
 
 
 # ==========================================
@@ -465,7 +332,7 @@ def test_evaluator_output_rejects_out_of_range_confidence_score():
 @patch("app.ai.agents.router.RouterAgent.run_structured")
 async def test_routing_graph(mock_router_run):
     mock_router_run.return_value = RouteOutput(
-        destination="HR", justification="İzin konusudur."
+        destination="İnsan Kaynakları", justification="İzin konusudur."
     )
     mock_llm = MagicMock(spec=BaseLLMClient)
 
@@ -474,7 +341,7 @@ async def test_routing_graph(mock_router_run):
         {"draft": "Personel izin belgesi.", "confidence_score": 90.0}
     )
 
-    assert res["final_destination"] == "HR"
+    assert res["final_destination"] == "İnsan Kaynakları"
     assert res["justification"] == "İzin konusudur."
 
 

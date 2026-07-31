@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -15,6 +15,8 @@ class EmbeddedChunk(BaseModel):
     text: str
     vector: List[float]
     metadata: Dict[str, Any]
+    sparse_vector: Optional[Dict[str, Any]] = None
+
 
 
 class EmbeddingService:

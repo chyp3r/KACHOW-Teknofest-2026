@@ -100,22 +100,26 @@ def test_reciprocal_rank_fusion():
 # ==========================================
 @pytest.mark.asyncio
 async def test_hybrid_retriever():
-    mock_dense = AsyncMock(spec=DenseRetriever)
-    mock_bm25 = AsyncMock(spec=BM25Retriever)
-    
-    doc_dense = Document(page_content="Dense hit", metadata={})
-    doc_bm25 = Document(page_content="BM25 hit", metadata={})
-    
-    mock_dense.retrieve.return_value = [doc_dense]
-    mock_bm25.retrieve.return_value = [doc_bm25]
+    mock_vector_store = AsyncMock(spec=BaseVectorStore)
+    mock_hit = {"text": "Hybrid search result", "score": 0.90, "metadata": {"source": "manual"}}
+    mock_vector_store.hybrid_search.return_value = [mock_hit]
 
-    hybrid = HybridRetriever(dense_retriever=mock_dense, bm25_retriever=mock_bm25, k=60)
-    
+    mock_embeddings = MagicMock(spec=BaseEmbeddingsClient)
+    mock_embeddings.embed_query = AsyncMock(return_value=[0.1, 0.2, 0.3])
+
+    hybrid = HybridRetriever(
+        vector_store=mock_vector_store,
+        embeddings_client=mock_embeddings,
+        collection_name="docs",
+        sparse_vocab_path="nonexistent_vocab.json"
+    )
+
     results = await hybrid.retrieve("Query test", limit=1)
-    
+
     assert len(results) == 1
-    mock_dense.retrieve.assert_called_once()
-    mock_bm25.retrieve.assert_called_once()
+    assert results[0].page_content == "Hybrid search result"
+    assert results[0].metadata["score"] == 0.90
+    mock_vector_store.hybrid_search.assert_called_once()
 
 
 # ==========================================
