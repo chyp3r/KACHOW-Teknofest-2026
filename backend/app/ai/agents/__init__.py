@@ -6,7 +6,6 @@ from app.ai.agents.metadata import MetadataAgent
 from app.ai.agents.ner import NERAgent
 from app.ai.agents.orchestrator import OrchestratorAgent
 from app.ai.agents.router import RouterAgent
-from app.ai.agents.verifier import VerifierAgent
 from app.ai.agents.writer import WriterAgent
 from app.ai.agents.reflection import ReflectionAgent
 from app.ai.agents.evaluator import EvaluatorAgent
@@ -19,7 +18,6 @@ __all__ = [
     "MetadataAgent",
     "WriterAgent",
     "EditorAgent",
-    "VerifierAgent",
     "RouterAgent",
     "ReflectionAgent",
     "EvaluatorAgent",

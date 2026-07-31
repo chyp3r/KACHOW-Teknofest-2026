@@ -95,7 +95,7 @@ services:
       - prometheus
 
   langfuse:
-    image: langfuse/langfuse:2
+    image: langfuse/langfuse:3
     container_name: kachow_langfuse_dev
     ports:
       - "3000:3000"
@@ -108,6 +108,22 @@ services:
       - TELEMETRY_ENABLED=false
     depends_on:
       - db
+
+  frontend:
+    build:
+      context: ./
+      dockerfile: deploy/docker/frontend.Dockerfile
+    image: kachow-frontend:dev
+    container_name: kachow_frontend_dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/workspace
+      - /workspace/node_modules
+    environment:
+      - VITE_API_URL=http://backend:8000
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:
