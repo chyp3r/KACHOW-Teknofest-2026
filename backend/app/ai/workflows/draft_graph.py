@@ -4,6 +4,7 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
+from langchain_core.runnables import RunnableConfig
 
 from app.ai.agents.editor import EditorAgent
 from app.ai.agents.evaluator import EvaluatorAgent
@@ -17,7 +18,7 @@ from app.ai.workflows.correspondence import (
 
 logger = logging.getLogger(__name__)
 
-MAX_REVISION_ATTEMPTS = 2
+MAX_REVISION_ATTEMPTS = 1
 MIN_AUTOMATED_CONFIDENCE_SCORE = 70.0
 
 
@@ -39,6 +40,8 @@ class DraftState(TypedDict, total=False):
     status: str
     error: str
     attempts: int
+    brief: str
+
 
 
 class EditorOutput(BaseModel):
@@ -78,7 +81,41 @@ def _format_classification(classification: dict[str, Any]) -> str:
     """Serialize document analysis data for grounded agent prompts."""
     if not classification:
         return "Sınıflandırma bilgisi sağlanmadı."
-    return json.dumps(classification, ensure_ascii=False, indent=2, sort_keys=True)
+    
+    # Pre-process classification dict to handle non-serializable Document objects and other types
+    cleaned = {}
+    for k, v in classification.items():
+        if isinstance(v, list):
+            cleaned_list = []
+            for item in v:
+                if hasattr(item, "page_content") and hasattr(item, "metadata"):  # LangChain Document
+                    cleaned_list.append({
+                        "page_content": item.page_content,
+                        "metadata": item.metadata
+                    })
+                elif hasattr(item, "model_dump"):  # Pydantic v2
+                    cleaned_list.append(item.model_dump())
+                elif hasattr(item, "dict"):  # Pydantic v1
+                    cleaned_list.append(item.dict())
+                else:
+                    cleaned_list.append(item)
+            cleaned[k] = cleaned_list
+        elif hasattr(v, "page_content") and hasattr(v, "metadata"):  # LangChain Document
+            cleaned[k] = {
+                "page_content": v.page_content,
+                "metadata": v.metadata
+            }
+        elif hasattr(v, "model_dump"):  # Pydantic v2
+            cleaned[k] = v.model_dump()
+        elif hasattr(v, "dict"):  # Pydantic v1
+            cleaned[k] = v.dict()
+        else:
+            cleaned[k] = v
+
+    try:
+        return json.dumps(cleaned, ensure_ascii=False, indent=2, sort_keys=True)
+    except Exception:
+        return str(cleaned)
 
 
 def create_draft_graph(llm_client: BaseLLMClient):
@@ -117,9 +154,32 @@ def create_draft_graph(llm_client: BaseLLMClient):
                 "status": "FAILED",
                 "error": error,
                 "attempts": state.get("attempts", 0),
+                "brief": "",
             }
 
         context = state.get("context", "").strip()
+        
+        # Compile Brief (Briefing Agent / Context Builder Pattern)
+        fields = classification.get("fields", {})
+        if hasattr(fields, "model_dump"):
+            fields = fields.model_dump()
+        elif hasattr(fields, "dict"):
+            fields = fields.dict()
+        elif not isinstance(fields, dict):
+            fields = {}
+
+        brief = (
+            f"1. Belge Türü: {classification.get('document_type_label') or classification.get('document_type') or 'Belirtilmedi'}\n"
+            f"2. Belge Özeti: {classification.get('summary') or 'Özet çıkarılamadı.'}\n"
+            f"3. Çıkarılan Kritik Bilgiler:\n"
+            f"   - Tarih: {fields.get('tarih') or 'Bulunamadı'}\n"
+            f"   - Sayı: {fields.get('sayi') or 'Bulunamadı'}\n"
+            f"   - Konu: {fields.get('konu') or 'Bulunamadı'}\n"
+            f"   - Muhatap: {fields.get('muhatap') or 'Bulunamadı'}\n"
+            f"4. Doğrulanmış Mevzuat Bağlamı:\n\"\"\"\n{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
+            f"5. Kullanıcı Talebi ve Talimatlar: {instructions}\n"
+        )
+
         return {
             "source_document": source_document,
             "classification": classification,
@@ -127,6 +187,7 @@ def create_draft_graph(llm_client: BaseLLMClient):
             "correspondence_type_source": type_source,
             "context": context,
             "instructions": instructions,
+            "brief": brief,
             "requires_human_approval": not bool(context) or type_source == "fallback",
             "status": "IN_PROGRESS",
             "error": "",
@@ -137,13 +198,20 @@ def create_draft_graph(llm_client: BaseLLMClient):
         return "end" if state.get("status") == "FAILED" else "writer"
 
     # 2. Writer Node
-    async def writer_node(state: DraftState) -> dict[str, Any]:
+    async def writer_node(state: DraftState, config: RunnableConfig) -> dict[str, Any]:
         logger.info("Running Writer Node...")
+        status_queue = config.get("configurable", {}).get("status_queue")
+        attempts = state.get("attempts", 0)
+        if status_queue:
+            await status_queue.put({
+                "event": "node_start",
+                "node": "draft",
+                "label": "Taslak Oluşturma",
+                "message": f"[Yazar Ajanı] Taslak yazılıyor... (Deneme {attempts + 1})"
+            })
         attempts = state.get("attempts", 0)
         feedback = state.get("edit_feedback", "")
-        source_document = state["source_document"]
-        classification = _format_classification(state.get("classification", {}))
-        context = state.get("context") or "Doğrulanmış ek RAG bağlamı bulunamadı."
+        brief = state["brief"]
         correspondence_profile = format_correspondence_profile(
             state["correspondence_type"]
         )
@@ -151,26 +219,32 @@ def create_draft_graph(llm_client: BaseLLMClient):
         # Incorporate editor feedback if we are in a revision loop
         if attempts > 0 and feedback:
             prompt = (
-                f'Gelen Evrak:\n"""\n{source_document}\n"""\n\n'
-                f"Belge Analizi:\n{classification}\n\n"
-                f"İstenen Yazışma Türü:\n{correspondence_profile}\n\n"
-                f'Doğrulanmış RAG Bağlamı:\n"""\n{context}\n"""\n\n'
-                f"İlk Yönergeler: \"{state['instructions']}\"\n"
-                f"Şu ana kadar yazdığın taslak:\n\"\"\"\n{state['draft']}\n\"\"\"\n\n"
-                f'Editör taslağı inceledi ve şu düzeltmeleri yapmanı istedi: "{feedback}"\n'
-                "Geri bildirimi uygula; ancak gelen evrakta veya doğrulanmış bağlamda bulunmayan "
-                "hiçbir kişi, tarih, kurum, mevzuat, sayı ya da olay ekleme. Eksik bilgiyi açıkça belirt."
+                f"### GÖREV:\n"
+                f"Aşağıdaki 'Brief' belgesi ve editörün geri bildirimine göre taslak cevabı revize et.\n\n"
+                f"### BRIEF BELGESİ:\n"
+                f"{brief}\n\n"
+                f"### YAZIŞMA TÜRÜ PROFILI:\n"
+                f"{correspondence_profile}\n\n"
+                f"### ÖNCEKİ TASLAK:\n"
+                f"\"\"\"\n{state['draft']}\n\"\"\"\n\n"
+                f"### EDİTÖRÜN GERİ BİLDİRİMİ:\n"
+                f"\"{feedback}\"\n\n"
+                "### KURALLAR:\n"
+                "- Yalnızca brief içindeki bilgilere sadık kal, yeni bilgi/olay/tarih/mevzuat uydurma.\n"
+                "- Editörün geri bildirimini eksiksiz uygula."
             )
         else:
             prompt = (
-                f'Gelen Evrak:\n"""\n{source_document}\n"""\n\n'
-                f"Belge Analizi:\n{classification}\n\n"
-                f"İstenen Yazışma Türü:\n{correspondence_profile}\n\n"
-                f'Doğrulanmış RAG Bağlamı:\n"""\n{context}\n"""\n\n'
-                f"Yönergeler: \"{state['instructions']}\"\n\n"
-                "Yalnızca gelen evrak ve doğrulanmış bağlamdaki bilgilere dayanarak seçilen "
-                "türde resmî, kurumsal ve akıcı bir Türkçe taslak oluştur. Kaynaklarda bulunmayan "
-                "bilgileri uydurma; cevap için zorunlu bir bilgi eksikse bunu açıkça belirt."
+                f"### GÖREV:\n"
+                f"Aşağıdaki 'Brief' (özet, kritik bilgiler ve mevzuat) doğrultusunda resmi ve kurumsal bir Türkçe cevap taslağı yaz.\n\n"
+                f"### BRIEF BELGESİ:\n"
+                f"{brief}\n\n"
+                f"### YAZIŞMA TÜRÜ PROFILI:\n"
+                f"{correspondence_profile}\n\n"
+                "### KURALLAR:\n"
+                "- Yalnızca brief içindeki bilgilere ve mevzuat bağlamına sadık kal.\n"
+                "- Gelen evrak veya mevzuatta yer almayan hiçbir kişi, kurum, sayı, tarih veya olay uydurma.\n"
+                "- Cevap yazısı için zorunlu olan ancak brief içinde bulunmayan eksik bilgiler varsa bunu taslak metin içinde açıkça belirt (örn. '[Tarih Eksik - Lütfen Doldurun]')."
             )
 
         try:
@@ -197,20 +271,31 @@ def create_draft_graph(llm_client: BaseLLMClient):
         return "end" if state.get("status") == "FAILED" else "editor"
 
     # 3. Editor Node
-    async def editor_node(state: DraftState) -> dict[str, Any]:
+    async def editor_node(state: DraftState, config: RunnableConfig) -> dict[str, Any]:
         logger.info("Running Editor Node...")
+        status_queue = config.get("configurable", {}).get("status_queue")
+        if status_queue:
+            await status_queue.put({
+                "event": "node_start",
+                "node": "draft",
+                "label": "Taslak Denetleme",
+                "message": "[Editör Ajanı] Taslak resmi yazışma kuralları ve kaynak doğruluğu açısından denetleniyor..."
+            })
+        brief = state["brief"]
+        correspondence_profile = format_correspondence_profile(
+            state["correspondence_type"]
+        )
         prompt = (
-            f"Gelen Evrak:\n\"\"\"\n{state['source_document']}\n\"\"\"\n\n"
-            f"Belge Analizi:\n{_format_classification(state.get('classification', {}))}\n\n"
-            f"İstenen Yazışma Türü:\n{format_correspondence_profile(state['correspondence_type'])}\n\n"
-            f"Doğrulanmış RAG Bağlamı:\n\"\"\"\n{state.get('context') or 'Ek bağlam yok.'}\n\"\"\"\n\n"
-            f"Taslak Metin:\n\"\"\"\n{state['draft']}\n\"\"\"\n\n"
-            "Taslağı seçilen yazışma türünün amacı/yapısı, kaynaklara sadakat, kurumsal dil, "
-            "Türkçe yazım kuralları, noktalama ve akıcılık yönünden denetle. Kaynaklarda "
-            "bulunmayan bir iddia veya cevap için zorunlu eksik bilgi varsa revizyon iste ve "
-            "bunu geri bildirimde açıkça belirt. Yapılandırılmış yanıtta needs_revision "
-            "alanını mutlaka true veya false olarak doldur; feedback alanını en fazla üç "
-            "kısa cümleyle sınırla."
+            f"### BRIEF BELGESİ:\n"
+            f"{brief}\n\n"
+            f"### YAZIŞMA TÜRÜ PROFILI:\n"
+            f"{correspondence_profile}\n\n"
+            f"### DENETLENECEK TASLAK METİN:\n"
+            f"\"\"\"\n{state['draft']}\n\"\"\"\n\n"
+            "### DENETLEME VE ÇIKTI TALİMATI:\n"
+            "Taslağı brief belgesine uygunluk, kaynaklara sadakat, kurumsal dil, Türkçe yazım kuralları, noktalama ve akıcılık yönünden incele.\n"
+            "Eğer brief dışından uydurulmuş bilgiler varsa veya taslak eksikse revizyon iste ('needs_revision': true) ve gerekçesini 'feedback' alanına yaz.\n"
+            "Taslak başarılı ise 'needs_revision': false yap."
         )
         try:
             res: EditorOutput = await editor_agent.run_structured(
@@ -218,6 +303,14 @@ def create_draft_graph(llm_client: BaseLLMClient):
                 response_model=EditorOutput,
                 temperature=0.0,
             )
+            if res.needs_revision:
+                if status_queue:
+                    await status_queue.put({
+                        "event": "node_start",
+                        "node": "draft",
+                        "label": "Taslak Denetleme",
+                        "message": f"[Editör Ajanı] Düzeltme talep edildi: {res.feedback}"
+                    })
             return {
                 "needs_revision": res.needs_revision,
                 "edit_feedback": res.feedback,
@@ -225,7 +318,7 @@ def create_draft_graph(llm_client: BaseLLMClient):
                     state.get("requires_human_approval", False)
                     or (
                         res.needs_revision
-                        and state.get("attempts", 0) >= MAX_REVISION_ATTEMPTS
+                        and state.get("attempts", 0) > MAX_REVISION_ATTEMPTS
                     )
                 ),
             }
@@ -241,16 +334,36 @@ def create_draft_graph(llm_client: BaseLLMClient):
             }
 
     # 4. Reflection Node (Self-Correction / Critique)
-    async def reflection_node(state: DraftState) -> dict[str, Any]:
+    async def reflection_node(state: DraftState, config: RunnableConfig) -> dict[str, Any]:
         logger.info("Running Reflection Node...")
+        status_queue = config.get("configurable", {}).get("status_queue")
+        if status_queue:
+            await status_queue.put({
+                "event": "node_start",
+                "node": "draft",
+                "label": "Taslak İyileştirme",
+                "message": "[Kritik Ajanı] Taslak metni editör geri bildirimiyle parlatılıyor ve düzeltiliyor..."
+            })
+        feedback = state.get("edit_feedback", "")
+        brief = state["brief"]
+        correspondence_profile = format_correspondence_profile(
+            state["correspondence_type"]
+        )
         prompt = (
-            f"Gelen Evrak:\n\"\"\"\n{state['source_document']}\n\"\"\"\n\n"
-            f"İstenen Yazışma Türü:\n{format_correspondence_profile(state['correspondence_type'])}\n\n"
-            f"Doğrulanmış RAG Bağlamı:\n\"\"\"\n{state.get('context') or 'Ek bağlam yok.'}\n\"\"\"\n\n"
-            f"Mevcut Taslak:\n\"\"\"\n{state['draft']}\n\"\"\"\n\n"
-            "Taslağı seçilen yazışma türüne uygunluk, kaynaklara sadakat, resmî dil, tekrar ve "
-            "anlam bütünlüğü yönünden eleştir. Yalnızca gelen evrak ve doğrulanmış bağlamla "
-            "desteklenen bilgileri koruyarak düzeltilmiş metni doğrudan çıktı olarak ver."
+            f"### BRIEF BELGESİ:\n"
+            f"{brief}\n\n"
+            f"### YAZIŞMA TÜRÜ PROFILI:\n"
+            f"{correspondence_profile}\n\n"
+            f"### MEVCUT TASLAK:\n"
+            f"\"\"\"\n{state['draft']}\n\"\"\"\n\n"
+        )
+        if feedback:
+            prompt += f"### EDİTÖRÜN GERİ BİLDİRİMİ:\n\"{feedback}\"\n\nLütfen bu geri bildirimi dikkate alarak taslağı düzeltin.\n\n"
+            
+        prompt += (
+            "### TALİMAT:\n"
+            "Taslağı brief belgesine uygunluk, kaynaklara sadakat, resmî dil, tekrar ve anlam bütünlüğü yönünden düzeltip geliştir.\n"
+            "Yeni bilgi uydurmadan parlatılmış nihai metni doğrudan çıktı olarak ver."
         )
         try:
             refined_draft = await reflection_agent.run(messages=prompt, temperature=0.3)
@@ -265,19 +378,30 @@ def create_draft_graph(llm_client: BaseLLMClient):
             }
 
     # 5. Evaluator Node
-    async def evaluator_node(state: DraftState) -> dict[str, Any]:
+    async def evaluator_node(state: DraftState, config: RunnableConfig) -> dict[str, Any]:
         logger.info("Running Evaluator Node...")
+        status_queue = config.get("configurable", {}).get("status_queue")
+        if status_queue:
+            await status_queue.put({
+                "event": "node_start",
+                "node": "draft",
+                "label": "Kalite Kontrol",
+                "message": "[Değerlendirici Ajanı] Nihai taslak kalite kontrol ve puanlama aşamasına alındı..."
+            })
+        brief = state["brief"]
+        correspondence_profile = format_correspondence_profile(
+            state["correspondence_type"]
+        )
         prompt = (
-            f"Gelen Evrak:\n\"\"\"\n{state['source_document']}\n\"\"\"\n\n"
-            f"Belge Analizi:\n{_format_classification(state.get('classification', {}))}\n\n"
-            f"İstenen Yazışma Türü:\n{format_correspondence_profile(state['correspondence_type'])}\n\n"
-            f"Doğrulanmış RAG Bağlamı:\n\"\"\"\n{state.get('context') or 'Ek bağlam yok.'}\n\"\"\"\n\n"
-            f"Nihai Metin:\n\"\"\"\n{state['draft']}\n\"\"\"\n\n"
-            "Metni seçilen yazışma türüne uygunluk, kaynaklara sadakat, eksiksizlik, kurumsal "
-            "dil ve doğruluk açısından son kez incele. Nihai metni, 0–100 güven skorunu, insan "
-            "onayı gereksinimini ve kısa gerekçeyi döndür. Kaynaklarda bulunmayan bilgi varsa "
-            "güven skorunu düşür ve insan onayı iste. Tüm yapılandırılmış alanları eksiksiz "
-            "doldur ve evaluation_notes alanını en fazla iki kısa cümleyle sınırla."
+            f"### BRIEF BELGESİ:\n"
+            f"{brief}\n\n"
+            f"### YAZIŞMA TÜRÜ PROFILI:\n"
+            f"{correspondence_profile}\n\n"
+            f"### NİHAİ TASLAK METİN:\n"
+            f"\"\"\"\n{state['draft']}\n\"\"\"\n\n"
+            "### DEĞERLENDİRME TALİMATI:\n"
+            "Metni brief belgesine uygunluk, kaynaklara sadakat, eksiksizlik, kurumsal dil ve doğruluk açısından son kez incele.\n"
+            "Nihai metni, 0–100 güven skorunu, insan onayı gereksinimini ve kısa gerekçeyi yapılandırılmış formatta döndür."
         )
         try:
             res: EvaluatorOutput = await evaluator_agent.run_structured(
@@ -316,14 +440,14 @@ def create_draft_graph(llm_client: BaseLLMClient):
         needs_rev = state.get("needs_revision", False)
         attempts = state.get("attempts", 0)
 
-        if needs_rev and attempts < MAX_REVISION_ATTEMPTS:
+        if needs_rev and attempts <= MAX_REVISION_ATTEMPTS:
             logger.warning(
-                f"Editor requested revision (Attempt {attempts}). Feedback: {state.get('edit_feedback')}. Routing to Writer..."
+                f"Editor requested revision (Attempt {attempts}). Feedback: {state.get('edit_feedback')}. Routing to Writer for refinement..."
             )
-            return "rewrite"
+            return "writer"
 
         logger.info(
-            "Draft accepted or max revision attempts hit. Routing to Reflection."
+            "Draft accepted or max revision attempts hit. Routing to Reflection for final polish."
         )
         return "reflection"
 
@@ -357,8 +481,9 @@ def create_draft_graph(llm_client: BaseLLMClient):
         "editor",
         route_after_edit,
         {
-            "rewrite": "writer",
+            "writer": "writer",
             "reflection": "reflection",
+            "evaluator": "evaluator",
             "end": END,
         },
     )
