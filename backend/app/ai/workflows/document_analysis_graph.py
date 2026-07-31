@@ -48,6 +48,7 @@ class DocumentAnalysisState(TypedDict, total=False):
     checked_field_count: int
     mevzuat_documents: list[Document]
     mevzuat_suggestions: list[dict[str, Any]]
+    entities: list[str]
 
 
 class DocumentClassificationOutput(BaseModel):
@@ -272,7 +273,11 @@ def create_document_analysis_graph(
             # not discard values that were read straight off the document.
             model_fields = EvrakField().model_dump()
 
-        return {"fields": merge_parsed_over_model(model_fields, parsed)}
+        merged_fields = merge_parsed_over_model(model_fields, parsed)
+        return {
+            "fields": merged_fields,
+            "entities": merged_fields.get("entities", [])
+        }
 
     # 3. Compliance Node (no LLM: pure, reproducible set subtraction)
     async def check_compliance_node(state: DocumentAnalysisState) -> dict[str, Any]:

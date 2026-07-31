@@ -155,13 +155,8 @@ def create_planning_graph(
 
         prompt = (
             f"Kullanıcı İsteği:\n\"\"\"\n{state['input_text']}\n\"\"\"\n"
-            f"İlgili Belge ID (Eğer varsa):\n{state.get('document_id', 'Yok')}\n\n"
-            "Bu istek için hangi iş süreçlerinin çalıştırılması gerektiğini belirle.\n"
-            "İş Süreçleri Kuralları:\n"
-            "- 'chat' Kuralı: YALNIZCA Belge ID 'Yok' ise ve kullanıcı genel bir selamlaşma, sohbet veya sistemin yetenekleri hakkında genel sorular soruyorsa SADECE 'chat' seçilmelidir. Eğer bir Belge ID mevcutsa, 'chat' adımını KESİNLİKLE SEÇME.\n"
-            "- 'document_qa' Kuralı: Eğer bir Belge ID mevcutsa ve kullanıcı bu belgenin içeriğiyle ilgili doğrudan soru soruyorsa (örn. 'bu belgedeki izin süresi ne?', 'başvuran kim?', 'konusu nedir?') SADECE 'document_qa' seçilmelidir.\n"
-            "- 'rag', 'draft', 'routing' Kuralı: Kullanıcı bir resmi yazı, cevap yazısı, üst yazı yazılmasını, taslak hazırlanmasını veya yazışma üretilmesini istiyorsa (örn. 'üst yazı yaz', 'cevap yazısı hazırla', 'buna bir taslak yanıt oluştur') 'rag', 'draft' ve 'routing' adımları sırasıyla seçilmelidir.\n"
-            "- 'classification' Kuralı: Sadece ham/yeni bir dosya yüklendiğinde ve Belge ID 'Yok' ise en başta 'classification' seçilmelidir. Belge ID mevcutsa 'classification' adımını KESİNLİKLE SEÇME.\n\n"
+            f"İlgili Belge ID (Eğer varsa): {state.get('document_id', 'Yok')}\n\n"
+            "Bu istek için hangi iş süreçlerinin çalıştırılması gerektiğini sistem yönergendeki karar kurallarına göre belirle.\n"
             "Sıralı adımları ve gerekçesini yapılandırılmış Türkçe formatta döndür."
         )
 

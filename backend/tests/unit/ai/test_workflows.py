@@ -119,7 +119,7 @@ async def test_draft_graph(
     )
     mock_reflection_run.return_value = "Self-critiqued draft."
     mock_evaluator_struct.return_value = EvaluatorOutput(
-        final_draft="Refined final draft.", confidence_score=95.0
+        confidence_score=95.0
     )
 
     graph = create_draft_graph(mock_llm)
@@ -137,7 +137,7 @@ async def test_draft_graph(
         }
     )
 
-    assert res["draft"] == "Refined final draft."
+    assert res["draft"] == "Self-critiqued draft."
     assert res["confidence_score"] == 95.0
     assert res["requires_human_approval"] is False
     assert res["correspondence_type"] == CorrespondenceType.RESPONSE_LETTER
@@ -186,7 +186,6 @@ async def test_draft_graph_supports_official_correspondence_types(
     )
     mock_reflection_run.return_value = "Türe uygun nihai taslak."
     mock_evaluator_struct.return_value = EvaluatorOutput(
-        final_draft="Türe uygun nihai taslak.",
         confidence_score=94.0,
     )
 
@@ -230,7 +229,6 @@ async def test_draft_graph_requires_approval_for_unknown_correspondence_type(
     )
     mock_reflection_run.return_value = "İnsan incelemesi gerektiren nihai taslak."
     mock_evaluator_struct.return_value = EvaluatorOutput(
-        final_draft="İnsan incelemesi gerektiren nihai taslak.",
         confidence_score=95.0,
         requires_human_approval=False,
     )
@@ -271,7 +269,6 @@ async def test_draft_graph_preserves_sources_during_revision(
     ]
     mock_reflection_run.return_value = "Kaynağa bağlı nihai taslak."
     mock_evaluator_struct.return_value = EvaluatorOutput(
-        final_draft="Kaynağa bağlı nihai taslak.",
         confidence_score=92.0,
     )
 
@@ -362,7 +359,6 @@ async def test_draft_graph_requires_approval_without_verified_context(
     )
     mock_reflection_run.return_value = "Kaynak evraka dayalı nihai taslak."
     mock_evaluator_struct.return_value = EvaluatorOutput(
-        final_draft="Kaynak evraka dayalı nihai taslak.",
         confidence_score=95.0,
         requires_human_approval=False,
     )
@@ -402,7 +398,6 @@ async def test_draft_graph_requires_approval_when_revision_limit_is_reached(
     ]
     mock_reflection_run.return_value = "İnceleme gerektiren taslak."
     mock_evaluator_struct.return_value = EvaluatorOutput(
-        final_draft="İnceleme gerektiren taslak.",
         confidence_score=90.0,
     )
 
@@ -460,7 +455,7 @@ async def test_draft_graph_preserves_draft_when_evaluator_fails(
 
 def test_evaluator_output_rejects_out_of_range_confidence_score():
     with pytest.raises(ValidationError):
-        EvaluatorOutput(final_draft="Taslak", confidence_score=101.0)
+        EvaluatorOutput(confidence_score=101.0)
 
 
 # ==========================================

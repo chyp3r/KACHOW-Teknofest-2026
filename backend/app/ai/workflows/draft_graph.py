@@ -56,12 +56,12 @@ class EditorOutput(BaseModel):
 
 
 class EvaluatorOutput(BaseModel):
-    """Pydantic schema for final document evaluation."""
+    """Pydantic schema for final document evaluation.
 
-    final_draft: str = Field(
-        min_length=1,
-        description="Tüm düzeltmeleri ve parlatmaları içeren nihai Türkçe resmi yazı/taslak.",
-    )
+    The evaluator only scores and decides on human approval.
+    It does NOT produce a final_draft — the draft from Reflection is preserved.
+    """
+
     confidence_score: float = Field(
         ge=0.0,
         le=100.0,
@@ -168,6 +168,17 @@ def create_draft_graph(llm_client: BaseLLMClient):
         elif not isinstance(fields, dict):
             fields = {}
 
+        # Trim source_document for brief (head + tail) to avoid exceeding context
+        _src = source_document
+        _HEAD = 4000
+        _TAIL = 1000
+        if len(_src) > _HEAD + _TAIL:
+            _src = (
+                _src[:_HEAD]
+                + "\n\n[... belgenin orta kısmı kısaltıldı ...]\n\n"
+                + _src[-_TAIL:]
+            )
+
         brief = (
             f"1. Belge Türü: {classification.get('document_type_label') or classification.get('document_type') or 'Belirtilmedi'}\n"
             f"2. Belge Özeti: {classification.get('summary') or 'Özet çıkarılamadı.'}\n"
@@ -176,8 +187,9 @@ def create_draft_graph(llm_client: BaseLLMClient):
             f"   - Sayı: {fields.get('sayi') or 'Bulunamadı'}\n"
             f"   - Konu: {fields.get('konu') or 'Bulunamadı'}\n"
             f"   - Muhatap: {fields.get('muhatap') or 'Bulunamadı'}\n"
-            f"4. Doğrulanmış Mevzuat Bağlamı:\n\"\"\"\n{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
-            f"5. Kullanıcı Talebi ve Talimatlar: {instructions}\n"
+            f"4. Gelen Evrak Metni:\n\"\"\"\n{_src}\n\"\"\"\n"
+            f"5. Doğrulanmış Mevzuat Bağlamı:\n\"\"\"\n{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
+            f"6. Kullanıcı Talebi ve Talimatlar: {instructions}\n"
         )
 
         return {
@@ -415,7 +427,6 @@ def create_draft_graph(llm_client: BaseLLMClient):
                 or res.confidence_score < MIN_AUTOMATED_CONFIDENCE_SCORE
             )
             return {
-                "draft": res.final_draft,
                 "confidence_score": res.confidence_score,
                 "requires_human_approval": requires_human_approval,
                 "evaluation_notes": res.evaluation_notes,

@@ -5,13 +5,13 @@ from pydantic import BaseModel
 from app.ai.agents import (
     BaseAgent,
     OrchestratorAgent,
-    NERAgent,
     ClassifierAgent,
     MetadataAgent,
     WriterAgent,
     EditorAgent,
-    VerifierAgent,
     RouterAgent,
+    ReflectionAgent,
+    EvaluatorAgent,
 )
 
 
@@ -131,13 +131,13 @@ async def test_base_agent_run_structured_retry_loop(mock_llm_client):
 def test_specialist_agents_inheritance(mock_llm_client):
     agents = [
         OrchestratorAgent(mock_llm_client),
-        NERAgent(mock_llm_client),
         ClassifierAgent(mock_llm_client),
         MetadataAgent(mock_llm_client),
         WriterAgent(mock_llm_client),
         EditorAgent(mock_llm_client),
-        VerifierAgent(mock_llm_client),
         RouterAgent(mock_llm_client),
+        ReflectionAgent(mock_llm_client),
+        EvaluatorAgent(mock_llm_client),
     ]
 
     for agent in agents:

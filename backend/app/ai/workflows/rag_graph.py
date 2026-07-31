@@ -30,14 +30,6 @@ class QueryRewriteOutput(BaseModel):
     )
 
 
-class QueryRewriteOutput(BaseModel):
-    """Pydantic schema for structured query rewriting."""
-
-    rewritten_query: str = Field(
-        description="Arama doğruluğunu artırmak için zenginleştirilmiş/düzeltilmiş Türkçe sorgu."
-    )
-
-
 def create_rag_graph(
     llm_client: BaseLLMClient, hybrid_retriever: HybridRetriever
 ):

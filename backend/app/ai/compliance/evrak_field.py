@@ -74,6 +74,10 @@ class EvrakField(BaseModel):
         default=None,
         description="Telefon veya e-posta gibi iletişim bilgisi. Yoksa null.",
     )
+    entities: list[str] = Field(
+        default_factory=list,
+        description="Belgede geçen önemli varlık isimleri (Kişi, Kurum, Tarih, Para Birimi, Ürün, Referans vb.). Yoksa boş liste.",
+    )
 
 
 class MissingField(BaseModel):

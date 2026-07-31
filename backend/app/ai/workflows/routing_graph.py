@@ -23,10 +23,10 @@ class RouteOutput(BaseModel):
     """Pydantic schema for structured routing decisions."""
 
     destination: str = Field(
-        description="Nihai aksiyon/departman. Şunlardan biri olmalıdır: 'HR', 'Legal', 'Accounting', 'Citizen', 'HumanApproval'."
+        description="Yazının yönlendirileceği birim veya aksiyon. Türkçe birim adı (örn. 'İnsan Kaynakları', 'Hukuk Müşavirliği', 'Mali İşler') veya 'İnsan Onayı Gerekli'."
     )
     justification: str = Field(
-        description="Yazının içeriğine göre neden bu departmana yönlendirildiğinin gerekçesi."
+        description="Yazının içeriğine göre neden bu birime yönlendirildiğinin Türkçe gerekçesi."
     )
 
 
@@ -44,14 +44,10 @@ def create_routing_graph(llm_client: BaseLLMClient):
         prompt = (
             f"Taslak İçeriği:\n\"\"\"\n{state['draft']}\n\"\"\"\n"
             f"Güven Skoru: {state.get('confidence_score', 100.0)}\n\n"
-            "Bu yazının konusuna göre, yazıyı en uygun departmana veya aksiyona yönlendir.\n"
-            "Desteklenen Hedefler:\n"
-            "- 'HR': Personel, izin, işe alım, İnsan Kaynakları konuları.\n"
-            "- 'Legal': Sözleşmeler, yasal süreçler, Hukuk konuları.\n"
-            "- 'Accounting': Fatura, ödeme, maaş, Muhasebe konuları.\n"
-            "- 'Citizen': Vatandaşa verilecek doğrudan cevaplar.\n"
-            "- 'HumanApproval': Güven skoru düşükse veya çok hassas bir durum varsa insan onayına sunma.\n\n"
-            "Lütfen yönlendirme kararını ve gerekçesini yapılandırılmış Türkçe formatta döndür."
+            "Bu yazının konusunu analiz ederek en uygun birime yönlendir.\n"
+            "Birim adını Türkçe olarak yaz (örn. 'İnsan Kaynakları', 'Hukuk Müşavirliği', 'Mali İşler', 'Vatandaş İlişkileri').\n"
+            "Güven skoru düşükse veya hassas bir durum varsa 'İnsan Onayı Gerekli' yönlendir.\n\n"
+            "Yönlendirme kararını ve gerekçesini yapılandırılmış Türkçe formatta döndür."
         )
 
         try:
@@ -61,7 +57,7 @@ def create_routing_graph(llm_client: BaseLLMClient):
                     f"Confidence score too low ({state['confidence_score']}). Forcing HumanApproval route."
                 )
                 return {
-                    "final_destination": "HumanApproval",
+                    "final_destination": "İnsan Onayı Gerekli",
                     "justification": "Yazı güven skoru kritik düzeyde düşük olduğu için insan onayına yönlendirildi.",
                 }
 
@@ -75,7 +71,7 @@ def create_routing_graph(llm_client: BaseLLMClient):
         except Exception as e:
             logger.error(f"Routing Node failed: {e}", exc_info=True)
             return {
-                "final_destination": "HumanApproval",
+                "final_destination": "İnsan Onayı Gerekli",
                 "justification": "Yönlendirme hatası nedeniyle insan onayına yönlendirildi.",
             }
 
