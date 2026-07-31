@@ -43,7 +43,13 @@ def create_rag_graph(
         llm_client=llm_client,
         name="QueryRewriter",
         description="Rewrites queries to improve search recall.",
-        system_prompt="Sen bir arama sorgusu zenginleştirme asistanısın. Görevin, verilen sorguyu arama motorlarında en iyi sonuçları getirecek şekilde Türkçe olarak zenginleştirmektir. Çıktıyı belirtilen şemada ver."
+        system_prompt=(
+            "Sen bir arama sorgusu zenginleştirme asistanısın. Görevin, verilen sorguyu arama motorlarında "
+            "en iyi sonuçları getirecek şekilde Türkçe olarak zenginleştirmektir. "
+            "ÖNEMLİ KURALLAR: "
+            "1. Çıktıyı belirtilen JSON şemasında ver. "
+            "2. JSON anahtar (key) isimlerini KESİNLİKLE Türkçe'ye çevirme. Yalnızca 'rewritten_query' anahtarını kullan."
+        )
     )
 
     # 1. Query Rewrite Node

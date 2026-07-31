@@ -332,9 +332,22 @@ def create_planning_graph(
                 new_state_updates["document_qa_result"] = {"reply": "Belge bulunamadı veya sistem yapılandırması eksik.", "status": "FAILED"}
             else:
                 try:
-                    # 1. Embed query
+                    import json
+                    
+                    # 1. State üzerinden sınıflandırma (metadata ve özet) verilerini al
+                    classification = state.get("classification_result", {})
+                    doc_summary = classification.get("summary", "Özet verisi mevcut değil.")
+                    
+                    raw_metadata = classification.get("metadata", "Metadata mevcut değil.")
+                    if isinstance(raw_metadata, dict):
+                        doc_metadata = json.dumps(raw_metadata, ensure_ascii=False, indent=2)
+                    else:
+                        doc_metadata = str(raw_metadata)
+
+                    # 2. Embed query
                     query_vector = await embeddings_client.embed_query(state["input_text"])
-                    # 2. Search Qdrant with filter
+                    
+                    # 3. Search Qdrant with filter
                     filter_dict = {"storage_path": doc_id}
                     hits = await vector_store.similarity_search(
                         collection_name="document_qa",
@@ -343,12 +356,19 @@ def create_planning_graph(
                         filter_dict=filter_dict,
                     )
                     
+                    # 4. Bağlamı (Context) oluştur: Özet + Metadata + Vektör Arama Sonuçları
+                    meta_context = (
+                        f"--- BELGE ÖZETİ ---\n{doc_summary}\n\n"
+                        f"--- BELGE METADATASI ---\n{doc_metadata}\n\n"
+                        f"--- ALINTILANAN BELGE İÇERİĞİ ---\n"
+                    )
+
                     if not hits:
-                        context = "Bu belgeye ait hiçbir içerik bulunamadı."
+                        context = meta_context + "Bu belgeye ait spesifik bir metin içeriği bulunamadı."
                     else:
-                        context = "\n\n---\n\n".join([hit["text"] for hit in hits])
+                        context = meta_context + "\n\n---\n\n".join([hit["text"] for hit in hits])
                         
-                    # 3. Ask QA Agent
+                    # 5. Ask QA Agent
                     reply = await document_qa_agent._execute(
                         messages=[],
                         context=context,
@@ -358,7 +378,6 @@ def create_planning_graph(
                 except Exception as e:
                     logger.exception("Document QA step failed")
                     new_state_updates["document_qa_result"] = {"reply": f"Hata oluştu: {str(e)}", "status": "FAILED"}
-
         else:
             logger.warning(f"Unknown workflow step skipped: {current_step}")
 

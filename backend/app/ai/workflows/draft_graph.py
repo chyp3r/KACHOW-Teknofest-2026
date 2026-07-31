@@ -156,17 +156,6 @@ def create_draft_graph(llm_client: BaseLLMClient):
         elif not isinstance(fields, dict):
             fields = {}
 
-        # Trim source_document for brief (head + tail) to avoid exceeding context
-        _src = source_document
-        _HEAD = 4000
-        _TAIL = 1000
-        if len(_src) > _HEAD + _TAIL:
-            _src = (
-                _src[:_HEAD]
-                + "\n\n[... belgenin orta kısmı kısaltıldı ...]\n\n"
-                + _src[-_TAIL:]
-            )
-
         brief = (
             f"1. Belge Türü: {classification.get('document_type_label') or classification.get('document_type') or 'Belirtilmedi'}\n"
             f"2. Belge Özeti: {classification.get('summary') or 'Özet çıkarılamadı.'}\n"
@@ -175,9 +164,8 @@ def create_draft_graph(llm_client: BaseLLMClient):
             f"   - Sayı: {fields.get('sayi') or 'Bulunamadı'}\n"
             f"   - Konu: {fields.get('konu') or 'Bulunamadı'}\n"
             f"   - Muhatap: {fields.get('muhatap') or 'Bulunamadı'}\n"
-            f"4. Gelen Evrak Metni:\n\"\"\"\n{_src}\n\"\"\"\n"
-            f"5. Doğrulanmış Mevzuat Bağlamı:\n\"\"\"\n{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
-            f"6. Kullanıcı Talebi ve Talimatlar: {instructions}\n"
+            f"4. Doğrulanmış Mevzuat Bağlamı:\n\"\"\"\n{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
+            f"5. Kullanıcı Talebi ve Talimatlar: {instructions}\n"
         )
 
         return {
@@ -230,7 +218,7 @@ def create_draft_graph(llm_client: BaseLLMClient):
 
         prompt = (
             f"### GÖREV:\n"
-            f"Aşağıdaki 'Brief' (özet, kritik bilgiler ve mevzuat) doğrultusunda resmi ve kurumsal bir Türkçe cevap taslağı yaz.\n\n"
+            f"Aşağıdaki 'Brief' (özet, kritik bilgiler ve mevzuat) doğrultusunda resmi ve kurumsal bir Türkçe taslak yaz.\n\n"
             f"### BRIEF BELGESİ:\n"
             f"{brief}\n\n"
             f"### YAZIŞMA TÜRÜ PROFILI:\n"
