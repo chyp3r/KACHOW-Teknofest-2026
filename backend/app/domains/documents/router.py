@@ -50,3 +50,24 @@ async def generate_draft(
     """
     result = await service.generate_draft_and_route(request)
     return SuccessResponse(data=result.model_dump(mode="json"))
+
+
+@router.get("", response_model=None)
+async def list_documents():
+    """List all uploaded documents with their metadata."""
+    import json
+    import os
+    from app.core.config import settings
+
+    metadata_file = os.path.join(settings.LOCAL_STORAGE_DIR, "uploads_metadata.json")
+    if not os.path.exists(metadata_file):
+        return SuccessResponse(data=[])
+
+    try:
+        with open(metadata_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        # Sort by upload time descending (newest first)
+        data.sort(key=lambda x: x.get("upload_time", ""), reverse=True)
+        return SuccessResponse(data=data)
+    except Exception:
+        return SuccessResponse(data=[])

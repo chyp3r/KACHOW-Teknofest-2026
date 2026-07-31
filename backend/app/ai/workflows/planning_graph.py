@@ -3,6 +3,7 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field, model_validator
+from langchain_core.runnables import RunnableConfig
 
 from app.ai.agents.orchestrator import OrchestratorAgent
 from app.ai.llms.base import BaseLLMClient
@@ -140,20 +141,27 @@ def create_planning_graph(
     document_qa_agent = DocumentQAAgent(llm_client)
 
     # 1. Planning/Supervisor Node
-    async def supervisor_planning_node(state: PlanningState) -> dict[str, Any]:
+    async def supervisor_planning_node(state: PlanningState, config: RunnableConfig) -> dict[str, Any]:
         logger.info("Supervisor planning task execution...")
+
+        status_queue = config.get("configurable", {}).get("status_queue")
+        if status_queue:
+            await status_queue.put({
+                "event": "node_start",
+                "node": "planning",
+                "label": "Planlama",
+                "message": "İş planı hazırlanıyor..."
+            })
 
         prompt = (
             f"Kullanıcı İsteği:\n\"\"\"\n{state['input_text']}\n\"\"\"\n"
             f"İlgili Belge ID (Eğer varsa):\n{state.get('document_id', 'Yok')}\n\n"
             "Bu istek için hangi iş süreçlerinin çalıştırılması gerektiğini belirle.\n"
             "İş Süreçleri Kuralları:\n"
-            "- Eğer ham bir dosya/belge (PDF, görsel vb.) geldiyse önce 'classification' mutlaka çalışmalıdır.\n"
-            "- Eğer belgeden bilgi çıkarma veya mevzuata dayalı cevaplama gerekiyorsa 'rag' çalışmalıdır.\n"
-            "- Eğer resmi bir yazı, mektup veya taslak hazırlanması gerekiyorsa 'draft' çalışmalıdır.\n"
-            "- Eğer hazırlanan yazının yönlendirilmesi/aksiyonu gerekiyorsa 'routing' çalışmalıdır.\n"
-            "- Eğer kullanıcı spesifik bir 'Belge ID' vermişse ve YALNIZCA o belge içeriğiyle ilgili bir soru soruyorsa SADECE 'document_qa' çalıştırılmalıdır.\n"
-            "- Eğer kullanıcı sadece sohbet ediyorsa veya bilgi dışı soru soruyorsa SADECE 'chat' yeterlidir.\n\n"
+            "- 'chat' Kuralı: YALNIZCA Belge ID 'Yok' ise ve kullanıcı genel bir selamlaşma, sohbet veya sistemin yetenekleri hakkında genel sorular soruyorsa SADECE 'chat' seçilmelidir. Eğer bir Belge ID mevcutsa, 'chat' adımını KESİNLİKLE SEÇME.\n"
+            "- 'document_qa' Kuralı: Eğer bir Belge ID mevcutsa ve kullanıcı bu belgenin içeriğiyle ilgili doğrudan soru soruyorsa (örn. 'bu belgedeki izin süresi ne?', 'başvuran kim?', 'konusu nedir?') SADECE 'document_qa' seçilmelidir.\n"
+            "- 'rag', 'draft', 'routing' Kuralı: Kullanıcı bir resmi yazı, cevap yazısı, üst yazı yazılmasını, taslak hazırlanmasını veya yazışma üretilmesini istiyorsa (örn. 'üst yazı yaz', 'cevap yazısı hazırla', 'buna bir taslak yanıt oluştur') 'rag', 'draft' ve 'routing' adımları sırasıyla seçilmelidir.\n"
+            "- 'classification' Kuralı: Sadece ham/yeni bir dosya yüklendiğinde ve Belge ID 'Yok' ise en başta 'classification' seçilmelidir. Belge ID mevcutsa 'classification' adımını KESİNLİKLE SEÇME.\n\n"
             "Sıralı adımları ve gerekçesini yapılandırılmış Türkçe formatta döndür."
         )
 
@@ -162,6 +170,14 @@ def create_planning_graph(
                 messages=prompt, response_model=PlanOutput
             )
             logger.info(f"Supervisor generated plan: {res.required_steps}")
+            
+            if status_queue:
+                await status_queue.put({
+                    "event": "planning_completed",
+                    "plan_steps": res.required_steps,
+                    "reasoning": res.reasoning
+                })
+
             return {
                 "plan_steps": res.required_steps,
                 "current_step_idx": 0,
@@ -176,8 +192,15 @@ def create_planning_graph(
         except Exception:
             logger.exception("Supervisor Planning Node failed")
             # Default safe plan fallback
+            fallback_steps = ["classification", "rag", "draft", "routing"]
+            if status_queue:
+                await status_queue.put({
+                    "event": "planning_completed",
+                    "plan_steps": fallback_steps,
+                    "reasoning": "Planlama düğümünde hata oluştu, varsayılan akışa geçildi."
+                })
             return {
-                "plan_steps": ["classification", "rag", "draft", "routing"],
+                "plan_steps": fallback_steps,
                 "current_step_idx": 0,
                 "classification_result": {},
                 "rag_result": {},
@@ -189,7 +212,7 @@ def create_planning_graph(
             }
 
     # 2. Sub-graph Execution Orchestration Node
-    async def execute_step_node(state: PlanningState) -> dict[str, Any]:
+    async def execute_step_node(state: PlanningState, config: RunnableConfig) -> dict[str, Any]:
         idx = state["current_step_idx"]
         steps = state["plan_steps"]
 
@@ -199,14 +222,64 @@ def create_planning_graph(
         current_step = steps[idx].lower()
         logger.info(f"Executing plan step {idx + 1}/{len(steps)}: '{current_step}'")
 
+        status_queue = config.get("configurable", {}).get("status_queue")
+        if status_queue:
+            labels = {
+                "classification": "Sınıflandırma",
+                "rag": "Mevzuat Tarama",
+                "draft": "Taslak Oluşturma",
+                "routing": "Birim Yönlendirme",
+                "chat": "Sohbet",
+                "document_qa": "Belge Soru-Cevap"
+            }
+            messages = {
+                "classification": "Belge sınıflandırılıyor ve üst veriler çıkarılıyor...",
+                "rag": "Mevzuat veri tabanında ilgili maddeler taranıyor...",
+                "draft": "Resmi cevap taslağı hazırlanıyor...",
+                "routing": "Cevap taslağının iletileceği birim analiz ediliyor...",
+                "chat": "Sohbet yanıtı hazırlanıyor...",
+                "document_qa": "Belge içeriği doğrultusunda cevap aranıyor..."
+            }
+            await status_queue.put({
+                "event": "node_start",
+                "node": current_step,
+                "label": labels.get(current_step, current_step.capitalize()),
+                "message": messages.get(current_step, f"{current_step} süreci yürütülüyor...")
+            })
+
+        import json
+        import os
+        from app.core.config import settings
+
+        doc_id = state.get("document_id")
+        cached_data = None
+        if doc_id:
+            cache_file = os.path.join(settings.LOCAL_STORAGE_DIR, f"{doc_id}_analysis.json")
+            if os.path.exists(cache_file):
+                try:
+                    with open(cache_file, "r", encoding="utf-8") as f:
+                        cached_data = json.load(f)
+                except Exception:
+                    logger.error(f"Failed to read cached analysis for {doc_id}")
+
         new_state_updates = {"current_step_idx": idx + 1}
+
+        # Auto-populate classification result from cache if available to prevent empty fields when classification step is skipped
+        if doc_id and cached_data and "analysis" in cached_data:
+            if not state.get("classification_result"):
+                state["classification_result"] = cached_data["analysis"]
+                new_state_updates["classification_result"] = cached_data["analysis"]
 
         # Dynamically execute corresponding sub-graph
         if current_step == "classification":
-            sub_res = await document_analysis_graph.ainvoke(
-                {"input_text": state["input_text"], "is_ocr_text": False}
-            )
-            new_state_updates["classification_result"] = sub_res
+            if cached_data and "analysis" in cached_data:
+                logger.info(f"Using cached classification for document {doc_id}")
+                new_state_updates["classification_result"] = cached_data["analysis"]
+            else:
+                sub_res = await document_analysis_graph.ainvoke(
+                    {"input_text": state["input_text"], "is_ocr_text": False}
+                )
+                new_state_updates["classification_result"] = sub_res
 
         elif current_step == "rag":
             # Extract query: use classification summary if available, otherwise original text
@@ -220,15 +293,21 @@ def create_planning_graph(
         elif current_step == "draft":
             context = state.get("rag_result", {}).get("context", "")
             classification = state.get("classification_result", {})
+            
+            source_doc = state["input_text"]
+            if cached_data and "extracted_text" in cached_data:
+                source_doc = cached_data["extracted_text"]
+
             sub_res = await draft_graph.ainvoke(
                 {
-                    "source_document": state["input_text"],
+                    "source_document": source_doc,
                     "classification": classification,
                     "correspondence_type": _requested_correspondence_type(
                         classification
                     ),
                     "context": context,
                     "instructions": (
+                        f"Kullanıcı İsteği: {state['input_text']}\n\n"
                         "Gelen evraka, evrakın amacı ve doğrulanmış bağlam doğrultusunda "
                         "resmi ve kurumsal bir Türkçe yanıt taslağı oluştur."
                     ),
@@ -322,6 +401,25 @@ def create_planning_graph(
                 "chat": chat_res,
                 "document_qa": document_qa_res,
             }
+
+        if status_queue:
+            labels = {
+                "classification": "Sınıflandırma",
+                "rag": "Mevzuat Tarama",
+                "draft": "Taslak Oluşturma",
+                "routing": "Birim Yönlendirme",
+                "chat": "Sohbet",
+                "document_qa": "Belge Soru-Cevap"
+            }
+            result_key = f"{current_step}_result"
+            node_result = new_state_updates.get(result_key, {})
+            await status_queue.put({
+                "event": "node_end",
+                "node": current_step,
+                "label": labels.get(current_step, current_step.capitalize()),
+                "message": f"{labels.get(current_step, current_step.capitalize())} tamamlandı.",
+                "result": node_result
+            })
 
         return new_state_updates
 

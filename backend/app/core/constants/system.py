@@ -48,7 +48,7 @@ MAX_PAGE_SIZE: int = 100
 
 # ---------- AI Workflow ----------
 MAX_RETRY_ATTEMPTS: int = 3
-AI_WORKFLOW_TIMEOUT_SECONDS: int = 120
+AI_WORKFLOW_TIMEOUT_SECONDS: int = 300
 
 # ---------- CORS ----------
 CORS_ORIGINS: list[str] = [

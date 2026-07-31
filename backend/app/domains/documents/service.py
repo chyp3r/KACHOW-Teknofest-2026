@@ -119,6 +119,8 @@ class DocumentService:
 
         state = await self._run_analysis(extracted.text, extracted.used_ocr)
         response = self._assemble(file_name, storage_path, extracted, state)
+        await self._save_document_metadata(file_name, storage_path, response)
+        await self._save_document_analysis_cache(storage_path, extracted.text, response)
         
         # Async chunk and embed for Document Q&A
         if self.embedding_service and self.vector_store:
@@ -325,3 +327,73 @@ class DocumentService:
             logger.exception(
                 "Failed to publish event %s", getattr(event, "event_type", "?")
             )
+
+    async def _save_document_metadata(
+        self,
+        file_name: str,
+        storage_path: str,
+        response: DocumentAnalysisResponseSchema,
+    ) -> None:
+        """Save analyzed document metadata to local json file."""
+        import json
+        from datetime import datetime
+        from app.core.config import settings
+
+        metadata_file = os.path.join(settings.LOCAL_STORAGE_DIR, "uploads_metadata.json")
+
+        def _write():
+            metadata = []
+            if os.path.exists(metadata_file):
+                try:
+                    with open(metadata_file, "r", encoding="utf-8") as f:
+                        metadata = json.load(f)
+                except Exception:
+                    logger.error("Failed to read uploads metadata file, resetting it")
+            
+            # Check if storage_path already exists to avoid duplicates
+            metadata = [m for m in metadata if m.get("storage_path") != storage_path]
+
+            metadata.append({
+                "file_name": file_name,
+                "storage_path": storage_path,
+                "upload_time": datetime.utcnow().isoformat(),
+                "document_type": response.document_type.value,
+                "document_type_label": response.document_type_label,
+                "compliance_status": response.compliance_status.value,
+                "summary": response.summary,
+            })
+
+            os.makedirs(os.path.dirname(metadata_file), exist_ok=True)
+            with open(metadata_file, "w", encoding="utf-8") as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
+
+        try:
+            await asyncio.to_thread(_write)
+        except Exception as e:
+            logger.error(f"Failed to save document metadata: {e}")
+
+    async def _save_document_analysis_cache(
+        self,
+        storage_path: str,
+        extracted_text: str,
+        response: DocumentAnalysisResponseSchema,
+    ) -> None:
+        """Save full document analysis and extracted text to a local cache JSON file."""
+        import json
+        from app.core.config import settings
+
+        cache_file = os.path.join(settings.LOCAL_STORAGE_DIR, f"{storage_path}_analysis.json")
+
+        def _write():
+            cache_data = {
+                "extracted_text": extracted_text,
+                "analysis": response.model_dump(mode="json")
+            }
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump(cache_data, f, ensure_ascii=False, indent=2)
+
+        try:
+            await asyncio.to_thread(_write)
+        except Exception as e:
+            logger.error(f"Failed to save document analysis cache: {e}")
