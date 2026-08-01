@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.ai.llms.base import BaseLLMClient
 from app.ai.prompts.manager import render_placeholders
+from app.observability.ai_metrics import LLM_DURATION, STRUCT_RETRIES
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,6 @@ class BaseAgent(ABC):
         name: str,
         description: str,
         system_prompt: str,
-        tools: Optional[List[Any]] = None,
         validators: Optional[List[Callable[[str], None]]] = None,
     ):
         """Initialize the Base Agent.
@@ -49,14 +49,12 @@ class BaseAgent(ABC):
             name: Human-readable name of the agent (e.g., "ClassifierAgent").
             description: Quick summary of what this agent does.
             system_prompt: Base instructions, optionally with ``{{placeholders}}``.
-            tools: Optional tools list that the agent has access to.
             validators: Optional post-generation validator functions.
         """
         self.llm_client = llm_client
         self.name = name
         self.description = description
         self.system_prompt = system_prompt
-        self.tools = tools or []
         self.validators = validators or []
         logger.info("Initialized Agent [%s]: %s", self.name, self.description)
 
@@ -148,6 +146,10 @@ class BaseAgent(ABC):
         except Exception:
             logger.exception("Agent [%s] execution failed", self.name)
             raise
+        finally:
+            LLM_DURATION.labels(agent=self.name, method="run").observe(
+                time.perf_counter() - start_time
+            )
 
     async def run_structured(
         self,
@@ -208,6 +210,10 @@ class BaseAgent(ABC):
                     temperature=temperature,
                     **kwargs,
                 )
+
+                for validator in self.validators:
+                    validator(result.model_dump_json())
+
                 logger.info(
                     "Agent [%s] structured %s ok on attempt %d/%d in %.2fs",
                     self.name,
@@ -215,6 +221,11 @@ class BaseAgent(ABC):
                     attempt,
                     max_retries,
                     time.perf_counter() - start_time,
+                )
+                if attempt > 1:
+                    STRUCT_RETRIES.labels(agent=self.name).inc(attempt - 1)
+                LLM_DURATION.labels(agent=self.name, method="run_structured").observe(
+                    time.perf_counter() - start_time
                 )
                 return result
             except Exception as exc:
@@ -232,6 +243,10 @@ class BaseAgent(ABC):
             self.name,
             response_model.__name__,
             max_retries,
+        )
+        STRUCT_RETRIES.labels(agent=self.name).inc(max_retries)
+        LLM_DURATION.labels(agent=self.name, method="run_structured").observe(
+            time.perf_counter() - start_time
         )
         raise last_error  # type: ignore[misc]
 

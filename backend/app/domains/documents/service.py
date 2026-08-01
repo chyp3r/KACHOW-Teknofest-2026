@@ -5,6 +5,7 @@ from typing import Any, Optional
 from uuid import uuid4
 
 from app.ai.compliance.evrak_field import EvrakField, MissingField
+from app.ai.guardrails.injection import scrub_extracted_text
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
 from app.core.constants import (
@@ -37,6 +38,13 @@ logger = logging.getLogger(__name__)
 
 UPLOAD_PATH_PREFIX = "uploads"
 MIN_ANALYSABLE_CHAR_COUNT = 20
+
+#: DocumentService is constructed fresh per request (see
+#: api/dependency.py::get_document_analysis_service), so an instance-level
+#: lock would not serialise anything -- two concurrent uploads would each get
+#: their own lock and still race on uploads_metadata.json's read-modify-write.
+#: Module-level makes it actually shared across the process.
+_METADATA_WRITE_LOCK = asyncio.Lock()
 
 #: Q&A index settings. Must stay in sync with the retrieval side in
 #: planning_graph's document_qa step.
@@ -115,6 +123,15 @@ class DocumentService:
                 message="Belgeden metin çıkarılamadı.", details={"reason": str(exc)}
             ) from exc
 
+        # A submitted document is attacker-controlled input from the prompt's
+        # perspective. Scrub before the char_count gate runs, so the gate
+        # measures what analysis actually sees, not the pre-scrub text.
+        extracted.text, scrubbed_markers = scrub_extracted_text(extracted.text)
+        if scrubbed_markers:
+            logger.warning(
+                "Scrubbed possible prompt injection from %s: %s", storage_path, scrubbed_markers
+            )
+
         if extracted.char_count < MIN_ANALYSABLE_CHAR_COUNT:
             raise ValidationException(
                 message=(
@@ -128,7 +145,7 @@ class DocumentService:
             )
 
         state = await self._run_analysis(extracted.text, extracted.used_ocr)
-        response = self._assemble(file_name, storage_path, extracted, state)
+        response = self._assemble(file_name, storage_path, extracted, state, scrubbed_markers)
         await self._save_document_metadata(file_name, storage_path, response)
         await self._save_document_analysis_cache(storage_path, extracted.text, response)
         
@@ -362,13 +379,12 @@ class DocumentService:
             A LangGraph config dict, empty when tracing is unavailable.
         """
         try:
-            from app.observability.tracer import get_langfuse_callback
+            from app.observability.tracer import build_trace_config
 
-            handler = get_langfuse_callback()
+            return build_trace_config()
         except Exception:
             logger.debug("Langfuse tracing unavailable; continuing without it.")
             return {}
-        return {"callbacks": [handler]} if handler else {}
 
     @staticmethod
     def _assemble(
@@ -376,6 +392,7 @@ class DocumentService:
         storage_path: str,
         extracted: Any,
         state: dict[str, Any],
+        scrubbed_markers: Optional[list[str]] = None,
     ) -> DocumentAnalysisResponseSchema:
         """Build the API response from the final workflow state.
 
@@ -384,6 +401,8 @@ class DocumentService:
             storage_path: Storage reference of the raw upload.
             extracted: The `ExtractedDocument` produced by the extractor.
             state: Final workflow state.
+            scrubbed_markers: Markers describing content removed by the
+                prompt-injection guardrail, if any.
 
         Returns:
             The populated response schema.
@@ -405,11 +424,13 @@ class DocumentService:
         return DocumentAnalysisResponseSchema(
             file_name=file_name,
             storage_path=storage_path,
+            analysis_id=storage_path,
             extraction=ExtractionInfoSchema(
                 extractor=extracted.extractor,
                 page_count=extracted.page_count,
                 char_count=extracted.char_count,
                 used_ocr=extracted.used_ocr,
+                scrubbed_markers=scrubbed_markers or [],
             ),
             document_type=document_type,
             document_type_label=state.get("document_type_label", ""),
@@ -479,7 +500,8 @@ class DocumentService:
                 json.dump(metadata, f, ensure_ascii=False, indent=2)
 
         try:
-            await asyncio.to_thread(_write)
+            async with _METADATA_WRITE_LOCK:
+                await asyncio.to_thread(_write)
         except Exception as e:
             logger.error(f"Failed to save document metadata: {e}")
 
@@ -508,3 +530,46 @@ class DocumentService:
             await asyncio.to_thread(_write)
         except Exception as e:
             logger.error(f"Failed to save document analysis cache: {e}")
+
+    async def get_cached_analysis(
+        self, storage_path: str
+    ) -> Optional[DocumentAnalysisResponseSchema]:
+        """Read a previously computed analysis back from the local cache file.
+
+        Backs ``GET /documents/{storage_path}``. Before this, the frontend
+        only had the 7-field projection in ``uploads_metadata.json`` (used by
+        ``GET /documents``), so re-selecting a document from the library lost
+        ``missing_fields`` and ``mevzuat_references`` entirely.
+
+        Args:
+            storage_path: The document's storage key.
+
+        Returns:
+            The cached analysis response, or None if no cache exists for it
+            or the cache fails to parse.
+        """
+        import json
+        from app.core.config import settings
+
+        cache_file = os.path.join(settings.LOCAL_STORAGE_DIR, f"{storage_path}_analysis.json")
+
+        def _read():
+            if not os.path.exists(cache_file):
+                return None
+            with open(cache_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+
+        try:
+            cache_data = await asyncio.to_thread(_read)
+        except Exception:
+            logger.exception("Failed to read cached analysis for %s", storage_path)
+            return None
+
+        if not cache_data or not cache_data.get("analysis"):
+            return None
+
+        try:
+            return DocumentAnalysisResponseSchema(**cache_data["analysis"])
+        except Exception:
+            logger.exception("Cached analysis for %s failed to validate", storage_path)
+            return None

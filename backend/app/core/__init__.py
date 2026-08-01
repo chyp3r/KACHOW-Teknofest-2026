@@ -16,7 +16,6 @@ from app.core.enums import (
     DocumentType,
     UserRole,
 )
-from app.core.permissions import RoleChecker
 
 __all__ = [
     # Config
@@ -36,6 +35,4 @@ __all__ = [
     "MAX_RETRY_ATTEMPTS",
     "CORS_ORIGINS",
     "CACHE_TTL_SECONDS",
-    # Permissions
-    "RoleChecker",
 ]
