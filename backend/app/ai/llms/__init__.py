@@ -16,7 +16,6 @@ connection pool is not, and the graphs are compiled once and reused.
 from app.ai.llms.base import BaseLLMClient
 from app.core.config import settings
 from app.infrastructure.providers.ollama import OllamaClient
-from app.infrastructure.providers.vllm import vLLMClient
 
 _client_cache: dict[tuple, BaseLLMClient] = {}
 
@@ -31,7 +30,7 @@ def get_llm_client(
     """Instantiate (or reuse) the configured LLM client.
 
     Args:
-        provider: The name of the LLM provider ("ollama" or "vllm").
+        provider: The name of the LLM provider (currently only "ollama").
         base_url: Optional override for the provider's API URL.
         model: Optional override for the model name.
         temperature: Optional override for the temperature.
@@ -59,14 +58,6 @@ def get_llm_client(
             reasoning=settings.OLLAMA_REASONING,
             max_tokens=(
                 max_tokens if max_tokens is not None else settings.OLLAMA_MAX_TOKENS
-            ),
-        )
-    elif provider_lower == "vllm":
-        client = vLLMClient(
-            base_url=base_url or settings.VLLM_BASE_URL,
-            model=model or settings.VLLM_MODEL,
-            temperature=(
-                temperature if temperature is not None else settings.OLLAMA_TEMPERATURE
             ),
         )
     else:
@@ -110,5 +101,4 @@ __all__ = [
     "get_fast_llm_client",
     "get_llm_client",
     "iter_cached_clients",
-    "vLLMClient",
 ]
