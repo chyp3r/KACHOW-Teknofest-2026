@@ -96,9 +96,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         Control to the running application.
     """
     logger.info("Starting %s (%s)...", settings.PROJECT_NAME, settings.ENVIRONMENT)
+
+    # Registers the event bus's listeners as a side effect of import (the
+    # @subscribe decorator runs at module load time). Without this import
+    # DocumentService/DraftService's publish() calls have no subscriber at
+    # all -- the bus was write-only.
+    import app.events.subscribers  # noqa: F401
+
+    # Deliberately outside _startup()'s WARMUP_TIMEOUT_SECONDS budget: the
+    # planning graph's compilation (inside _warm_up_graphs) needs the
+    # checkpointer already open, and a slow Postgres must not silently steal
+    # time from the model warm-up budget or get skipped by it.
+    from app.infrastructure.checkpointing import init_checkpointer
+
+    await init_checkpointer()
+
     await _startup()
     logger.info("Startup complete; accepting requests.")
     try:
         yield
     finally:
         logger.info("Shutting down %s.", settings.PROJECT_NAME)
+        from app.infrastructure.checkpointing import close_checkpointer
+
+        await close_checkpointer()

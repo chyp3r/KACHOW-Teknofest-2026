@@ -1,20 +1,28 @@
+import asyncio
+import hashlib
 import json
 import logging
 import os
-from typing import Any, Optional, TypedDict
+from typing import Annotated, Any, Optional, TypedDict
 
 from langchain_core.runnables import RunnableConfig
+from langgraph.errors import GraphInterrupt
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import interrupt
 
 from app.ai.agents.chat import ChatAgent
 from app.ai.agents.document_qa import DocumentQAAgent
 from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.llms.base import BaseLLMClient
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
+from app.ai.verification import apply_answers, verify_draft
 from app.ai.workflows.events import (
     child_config,
     emit,
+    emit_interrupt,
     emit_node_end,
+    emit_node_error,
+    emit_node_skipped,
     emit_node_start,
     emit_partial,
     emit_token,
@@ -22,6 +30,7 @@ from app.ai.workflows.events import (
 from app.ai.workflows.planner import resolve_plan
 from app.core.config import settings
 from app.infrastructure.vectorstore.base import BaseVectorStore
+from app.observability.ai_metrics import HITL_INTERRUPTS
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +55,59 @@ STEP_MESSAGES = {
     "document_qa": "Belge içeriği doğrultusunda cevap aranıyor...",
 }
 
+#: A step whose dependency's own result carries status FAILED must not run on
+#: empty/garbage input. Without this a failed draft still let routing run on
+#: draft="" and route to human approval -- an outcome visually identical to a
+#: real routing decision (see planning_graph D6 in the implementation notes).
+_STEP_DEPENDENCIES: dict[str, tuple[str, ...]] = {
+    "draft": ("classification",),
+    "routing": ("draft",),
+}
+
+
+def _dependency_failed(
+    step: str, state: "PlanningState", updates: dict[str, Any]
+) -> Optional[str]:
+    """Return the name of a failed dependency for ``step``, if any.
+
+    Args:
+        step: The plan step about to run.
+        state: The graph state as of the start of this superstep.
+        updates: Updates already computed earlier in this same superstep
+            (a dependency that just ran this turn is not yet in ``state``).
+
+    Returns:
+        The failed dependency's step name, or None when every dependency (if
+        any) succeeded or has not run yet.
+    """
+    for dependency in _STEP_DEPENDENCIES.get(step, ()):
+        result = updates.get(f"{dependency}_result") or state.get(f"{dependency}_result") or {}
+        if result.get("status") == "FAILED":
+            return dependency
+    return None
+
+
+#: Turns kept across messages on the same thread. ~6 exchanges is enough for
+#: pronoun/ellipsis resolution ("evet, hazırla" after "taslak ister misiniz?")
+#: without growing the prompt sent to chat/document_qa without bound.
+HISTORY_WINDOW = 12
+
+
+def _append_history(
+    left: list[dict[str, str]] | None, right: list[dict[str, str]] | None
+) -> list[dict[str, str]]:
+    """LangGraph reducer: concatenate turns and keep only the trailing window.
+
+    Args:
+        left: The channel's existing value.
+        right: The update returned by a node this superstep.
+
+    Returns:
+        The combined, trimmed history.
+    """
+    combined = [*(left or []), *(right or [])]
+    return combined[-HISTORY_WINDOW:]
+
 
 class PlanningState(TypedDict, total=False):
     """LangGraph state for the master orchestration workflow."""
@@ -63,6 +125,10 @@ class PlanningState(TypedDict, total=False):
     chat_result: dict[str, Any]
     document_qa_result: dict[str, Any]
     final_output: dict[str, Any]
+    #: Persists across separate ainvoke() calls on the same checkpointer
+    #: thread_id (see ChatService._thread_id) -- this is the whole memory
+    #: story; there is no separate store to keep consistent with it.
+    history: Annotated[list[dict[str, str]], _append_history]
 
 
 def _requested_correspondence_type(classification: dict[str, Any]) -> str | None:
@@ -135,6 +201,26 @@ def _mevzuat_context(classification: dict[str, Any]) -> str:
     return "\n\n".join(parts)
 
 
+def _prior_turns(state: PlanningState, limit: int) -> list[dict[str, str]]:
+    """History entries from before the current turn, most-recent last.
+
+    ``planning_node`` always appends the current user turn to ``history``
+    before ``chat``/``document_qa`` run, so the last entry is always the
+    message being answered right now -- excluded here, or it would appear
+    twice once the agent appends it again as the live query turn.
+
+    Args:
+        state: Current graph state.
+        limit: Maximum number of prior turns to return.
+
+    Returns:
+        Up to ``limit`` prior turns, oldest first.
+    """
+    history = state.get("history") or []
+    prior = history[:-1] if history else []
+    return prior[-limit:] if limit > 0 else []
+
+
 def create_planning_graph(
     llm_client: BaseLLMClient,
     document_analysis_graph: Any,
@@ -144,6 +230,7 @@ def create_planning_graph(
     vector_store: BaseVectorStore | None = None,
     embeddings_client: BaseEmbeddingsClient | None = None,
     fast_llm_client: Optional[BaseLLMClient] = None,
+    checkpointer: Any = None,
 ):
     """Create and compile the master orchestration workflow.
 
@@ -162,10 +249,21 @@ def create_planning_graph(
         embeddings_client: Embeddings client backing document Q&A.
         fast_llm_client: Small model for intent classification on ambiguous
             messages. Falls back to ``llm_client``.
+        checkpointer: Optional LangGraph checkpointer (see
+            ``app.infrastructure.checkpointing``). Required for the
+            ``human_gate`` node's ``interrupt()`` calls to actually pause and
+            resume the run; without one, HITL steps are skipped and the graph
+            falls through as if they never triggered -- degraded, not broken.
+            Only this graph gets a checkpointer: the four sub-graphs are
+            invoked via ``.ainvoke()`` from inside ``execute_step_node``
+            rather than registered as nodes, so they are independent Pregel
+            instances that would each need their own unrelated checkpoint
+            lineage.
 
     Returns:
         The compiled LangGraph workflow.
     """
+    has_checkpointer = checkpointer is not None
     chat_agent = ChatAgent(llm_client)
     document_qa_agent = DocumentQAAgent(llm_client)
     intent_client = fast_llm_client or llm_client
@@ -185,7 +283,10 @@ def create_planning_graph(
         )
 
         decision = await resolve_plan(
-            state["input_text"], state.get("document_id"), intent_client
+            state["input_text"],
+            state.get("document_id"),
+            intent_client,
+            previous_intent=state.get("plan_intent"),
         )
         logger.info(
             "Plan: %s (intent=%s, source=%s)",
@@ -216,6 +317,7 @@ def create_planning_graph(
             "chat_result": {},
             "document_qa_result": {},
             "final_output": {},
+            "history": [{"role": "user", "content": state["input_text"]}],
         }
 
     async def _run_classification(
@@ -226,16 +328,12 @@ def create_planning_graph(
             logger.info("Using cached analysis for document %s", state.get("document_id"))
             analysis = cached["analysis"]
             await emit_partial(config, "classification", analysis)
-            # The live path's compliance/rag graph nodes only ever turn from
-            # 'running' to 'completed' via the two signals the analysis
-            # sub-graph emits on its own: a "compliance" partial_result from
-            # check_compliance_node, and a node_end for "classification" from
-            # suggest_mevzuat_node once the whole sub-graph finishes (the
-            # DERIVED_NODES mapping in the frontend promotes 'compliance' and
-            # 'rag' to 'completed' on that node_end). The cached path never
-            # invokes that sub-graph, so without replaying both signals here,
-            # a document analyzed earlier and then drafted from cache left its
-            # 'Mevzuat' (rag) and 'compliance' graph nodes stuck amber forever.
+            # The live path's compliance node only ever turns 'running'
+            # (derived from classification's own node_start) to 'completed'
+            # via this partial_result. The cached path never invokes the
+            # analysis sub-graph at all, so without replaying it here, a
+            # document analyzed earlier and then drafted from cache left the
+            # frontend's 'Uygunluk' node stuck amber forever.
             await emit_partial(
                 config,
                 "compliance",
@@ -244,12 +342,37 @@ def create_planning_graph(
                     "missing_fields": analysis.get("missing_fields") or [],
                 },
             )
+
+            # Likewise replay the "rag" node's own start/end (D1): the live
+            # path's retrieve_mevzuat_node now emits these for itself, and the
+            # cached path must mirror that so 'Mevzuat' doesn't sit at 'todo'
+            # forever -- there is no sub-graph invocation here to emit them.
+            mevzuat_references = analysis.get("mevzuat_references") or []
+            await emit_node_start(
+                config, "rag", "Mevzuat Tarama", "Önbellekteki mevzuat sonuçları yükleniyor..."
+            )
+            await emit_node_end(
+                config,
+                "rag",
+                "Mevzuat Tarama",
+                f"{len(mevzuat_references)} mevzuat alıntısı yüklendi (önbellek).",
+                {
+                    "search_query": "",
+                    "documents": [],
+                    "context": "\n\n".join(
+                        f"[MEVZUAT] {item.get('mevzuat', '')}: {item.get('aciklama', '')}"
+                        for item in mevzuat_references
+                        if isinstance(item, dict) and item.get("mevzuat")
+                    ),
+                },
+            )
+
             await emit_node_end(
                 config,
                 "classification",
                 "Evrak Analizi",
                 "Evrak analizi tamamlandı (önbellek).",
-                {"mevzuat_suggestions": analysis.get("mevzuat_references") or []},
+                {"mevzuat_suggestions": mevzuat_references},
             )
             return analysis
 
@@ -344,11 +467,18 @@ def create_planning_graph(
         chunks: list[str] = []
         try:
             async for chunk in document_qa_agent.answer_stream(
-                context=context, query=state["input_text"]
+                context=context,
+                query=state["input_text"],
+                history=_prior_turns(state, 6),
             ):
                 chunks.append(chunk)
                 await emit_token(config, "document_qa", chunk)
-            return {"reply": "".join(chunks).strip(), "status": "COMPLETED"}
+            reply = "".join(chunks).strip()
+            return {
+                "reply": reply,
+                "status": "COMPLETED",
+                "history": [{"role": "assistant", "content": reply}],
+            }
         except Exception as exc:
             logger.exception("Document QA step failed")
             return {"reply": f"Belge sorusu yanıtlanamadı: {exc}", "status": "FAILED"}
@@ -356,12 +486,21 @@ def create_planning_graph(
     async def _run_chat(
         state: PlanningState, config: RunnableConfig
     ) -> dict[str, Any]:
+        messages = [
+            *_prior_turns(state, HISTORY_WINDOW),
+            {"role": "user", "content": state["input_text"]},
+        ]
         chunks: list[str] = []
         try:
-            async for chunk in chat_agent.stream(messages=state["input_text"]):
+            async for chunk in chat_agent.stream(messages=messages):
                 chunks.append(chunk)
                 await emit_token(config, "chat", chunk)
-            return {"reply": "".join(chunks).strip(), "status": "COMPLETED"}
+            reply = "".join(chunks).strip()
+            return {
+                "reply": reply,
+                "status": "COMPLETED",
+                "history": [{"role": "assistant", "content": reply}],
+            }
         except Exception as exc:
             logger.exception("Chat step failed")
             return {"reply": f"Sohbet yanıtı üretilemedi: {exc}", "status": "FAILED"}
@@ -379,10 +518,6 @@ def create_planning_graph(
         label = STEP_LABELS.get(step, step.capitalize())
         logger.info("Executing plan step %d/%d: '%s'", idx + 1, len(steps), step)
 
-        await emit_node_start(
-            config, step, label, STEP_MESSAGES.get(step, f"{label} yürütülüyor...")
-        )
-
         updates: dict[str, Any] = {"current_step_idx": idx + 1}
         cached = state.get("cached_document") or {}
 
@@ -394,6 +529,23 @@ def create_planning_graph(
         if not classification and cached.get("analysis"):
             classification = cached["analysis"]
             updates["classification_result"] = classification
+
+        failed_dependency = _dependency_failed(step, state, updates)
+        if failed_dependency is not None:
+            reason = (
+                f"'{STEP_LABELS.get(failed_dependency, failed_dependency)}' adımı "
+                "başarısız olduğu için bu adım atlandı."
+            )
+            logger.warning("Skipping plan step '%s': %s", step, reason)
+            await emit_node_skipped(config, step, label, reason)
+            updates[f"{step}_result"] = {"status": "SKIPPED", "reason": reason}
+            if idx + 1 >= len(steps):
+                updates["final_output"] = _compile_final_output(state, updates)
+            return updates
+
+        await emit_node_start(
+            config, step, label, STEP_MESSAGES.get(step, f"{label} yürütülüyor...")
+        )
 
         try:
             if step == "classification":
@@ -431,16 +583,31 @@ def create_planning_graph(
             else:
                 logger.warning("Unknown workflow step skipped: %s", step)
 
+        except (asyncio.CancelledError, GraphInterrupt):
+            # A client disconnect or an interrupt() call anywhere in this
+            # node's call tree must propagate, not be swallowed into a FAILED
+            # result -- either would otherwise look exactly like an ordinary
+            # step failure to the rest of the graph. No sub-graph calls
+            # interrupt() today, but this node has a checkpointer attached
+            # once one is configured, so a future one must not be silently
+            # eaten here.
+            raise
         except Exception as exc:
             logger.exception("Plan step '%s' failed", step)
             updates[f"{step}_result"] = {"status": "FAILED", "error": str(exc)}
+            await emit_node_error(
+                config, step, label, f"{label} sırasında bir hata oluştu.", detail=str(exc)
+            )
 
         if idx + 1 >= len(steps):
             updates["final_output"] = _compile_final_output(state, updates)
 
         # The sub-graphs emit their own node_end events with richer payloads;
-        # only announce completion here for steps that have none.
+        # only announce completion here for steps that have none, and only
+        # when the step didn't already report itself via emit_node_error above.
         if step in {"classification", "draft", "routing"}:
+            pass
+        elif updates.get(f"{step}_result", {}).get("status") == "FAILED":
             pass
         else:
             await emit_node_end(
@@ -461,7 +628,14 @@ def create_planning_graph(
         draft_status = draft_result.get("status")
         final_status = (
             draft_status
-            if draft_status in {"FAILED", "NEEDS_HUMAN_APPROVAL"}
+            if draft_status
+            in {
+                "FAILED",
+                "NEEDS_HUMAN_APPROVAL",
+                "NEEDS_INPUT",
+                "REVISE_REQUESTED",
+                "REJECTED",
+            }
             else "COMPLETED"
         )
 
@@ -475,18 +649,168 @@ def create_planning_graph(
             "document_qa": _pick("document_qa_result"),
         }
 
+    async def human_gate_node(
+        state: PlanningState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Pause the run for a human answer, then apply it without regenerating.
+
+        A separate node from ``executor`` on purpose: ``interrupt()`` replays
+        its own node from the top on resume. Living here, resuming replays a
+        few dict lookups; living inside ``execute_step_node`` (which is where
+        the draft step itself runs), resuming would replay the entire ~30s
+        draft generation the executor already committed to state.
+        """
+        draft_result = state.get("draft_result") or {}
+        missing_information = draft_result.get("missing_information") or []
+        kind = "missing_information" if missing_information else "draft_approval"
+
+        payload = {
+            "kind": kind,
+            "questions": missing_information,
+            "draft": draft_result.get("draft", ""),
+            "verification": draft_result.get("verification", {}),
+            "judge": draft_result.get("judge", {}),
+            "combined_score": draft_result.get("combined_score"),
+            "requires_human_approval": draft_result.get("requires_human_approval"),
+        }
+        # Deterministic, not a fresh uuid4: interrupt() re-executes everything
+        # before it on resume, including this id's computation, and it must
+        # come out identical both times for the frontend's dedup to work.
+        interrupt_id = hashlib.sha256(
+            f"{kind}:{draft_result.get('draft', '')}:{state.get('current_step_idx', 0)}".encode(
+                "utf-8"
+            )
+        ).hexdigest()[:16]
+
+        HITL_INTERRUPTS.labels(kind=kind).inc()
+        await emit_node_start(
+            config,
+            "human_gate",
+            "İnsan Onayı",
+            "Devam etmek için insan onayı/eksik bilgi bekleniyor...",
+        )
+        await emit_interrupt(config, kind=kind, interrupt_id=interrupt_id, payload=payload)
+        answer = interrupt(payload)
+        answer = answer if isinstance(answer, dict) else {}
+        # Execution only reaches here after Command(resume=...) -- the gate is
+        # now resolved, whatever the human decided.
+        await emit_node_end(
+            config, "human_gate", "İnsan Onayı", "İnsan yanıtı alındı, işleme devam ediliyor.", answer
+        )
+
+        if kind == "missing_information":
+            filled_draft, residual = apply_answers(
+                draft_result.get("draft", ""), answer.get("answers", {})
+            )
+
+            if residual:
+                residual_questions = [
+                    question
+                    for question in missing_information
+                    if question.get("key") in residual
+                ]
+                updated = {
+                    **draft_result,
+                    "draft": filled_draft,
+                    "missing_information": residual_questions,
+                    "status": "NEEDS_INPUT",
+                }
+                return {"draft_result": updated}
+
+            report = verify_draft(
+                filled_draft,
+                source_document=draft_result.get("source_document", ""),
+                context=draft_result.get("context", ""),
+                classification=draft_result.get("classification") or {},
+                instructions=draft_result.get("instructions", ""),
+                strict=draft_result.get("correspondence_type") != "other_official",
+            )
+            status = "NEEDS_HUMAN_APPROVAL" if report.requires_human_approval else "COMPLETED"
+            updated = {
+                **draft_result,
+                "draft": filled_draft,
+                "confidence_score": report.confidence_score,
+                "combined_score": report.confidence_score,
+                "requires_human_approval": report.requires_human_approval,
+                "verification": report.model_dump(),
+                "evaluation_notes": report.evaluation_notes,
+                "missing_information": [],
+                "status": status,
+            }
+            return {"draft_result": updated}
+
+        # draft_approval
+        action = answer.get("action")
+        if action == "revise":
+            note = (answer.get("instructions") or "").strip()
+            existing = draft_result.get("instructions", "")
+            updated = {
+                **draft_result,
+                "instructions": f"{existing}\n\nEk talimat (insan geri bildirimi): {note}".strip(),
+                "status": "REVISE_REQUESTED",
+            }
+            updates = {"draft_result": updated}
+            updates["final_output"] = _compile_final_output(state, updates)
+            return updates
+
+        if action == "reject":
+            updated = {**draft_result, "status": "REJECTED"}
+            updates = {"draft_result": updated}
+            updates["final_output"] = _compile_final_output(state, updates)
+            return updates
+
+        # Default: approve. Falls through to routing via route_after_gate.
+        updated = {
+            **draft_result,
+            "status": "APPROVED",
+            "approved_by": answer.get("user_id"),
+        }
+        return {"draft_result": updated}
+
     def route_after_step(state: PlanningState) -> str:
         idx = state.get("current_step_idx", 0)
-        return "continue" if idx < len(state.get("plan_steps") or []) else "end"
+        steps = state.get("plan_steps") or []
+
+        if has_checkpointer and idx > 0:
+            just_ran = steps[idx - 1].lower()
+            if just_ran == "draft":
+                draft_result = state.get("draft_result") or {}
+                draft_status = draft_result.get("status")
+                if draft_status == "NEEDS_INPUT":
+                    return "human_gate"
+                if (
+                    draft_status == "NEEDS_HUMAN_APPROVAL"
+                    and settings.HITL_APPROVAL_GATE_ENABLED
+                ):
+                    return "human_gate"
+
+        return "continue" if idx < len(steps) else "end"
+
+    def route_after_gate(state: PlanningState) -> str:
+        draft_result = state.get("draft_result") or {}
+        status = draft_result.get("status")
+        if status == "NEEDS_INPUT":
+            return "human_gate"
+        if status in {"REVISE_REQUESTED", "REJECTED"}:
+            return "end"
+        return "continue"
 
     builder = StateGraph(PlanningState)
     builder.add_node("planning", planning_node)
     builder.add_node("executor", execute_step_node)
+    builder.add_node("human_gate", human_gate_node)
 
     builder.add_edge(START, "planning")
     builder.add_edge("planning", "executor")
     builder.add_conditional_edges(
-        "executor", route_after_step, {"continue": "executor", "end": END}
+        "executor",
+        route_after_step,
+        {"continue": "executor", "human_gate": "human_gate", "end": END},
+    )
+    builder.add_conditional_edges(
+        "human_gate",
+        route_after_gate,
+        {"human_gate": "human_gate", "continue": "executor", "end": END},
     )
 
-    return builder.compile()
+    return builder.compile(checkpointer=checkpointer)
