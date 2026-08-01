@@ -5,14 +5,31 @@ from typing import Any, TypedDict
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 
+from app.ai.agents.judge import JudgeAgent
+from app.ai.agents.reviser import ReviserAgent
 from app.ai.agents.writer import WriterAgent
+from app.ai.guardrails.injection import assert_no_prompt_leak
 from app.ai.llms.base import BaseLLMClient
-from app.ai.verification import verify_draft
+from app.ai.verification import (
+    DraftJudgeVerdict,
+    InfoQuestion,
+    build_missing_info_request,
+    judge_draft,
+    merge_verdicts,
+    verify_draft,
+)
 from app.ai.workflows.correspondence import (
     format_correspondence_profile,
     resolve_correspondence_type,
 )
-from app.ai.workflows.events import emit_node_end, emit_node_start, emit_token
+from app.ai.workflows.events import (
+    emit_node_end,
+    emit_node_error,
+    emit_node_start,
+    emit_token,
+)
+from app.core.config import settings
+from app.observability.ai_metrics import DRAFT_REVISIONS, DRAFT_SCORE
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +37,11 @@ logger = logging.getLogger(__name__)
 #: signature block runs 600-1200 tokens; the old global cap of 1024 truncated
 #: the longer ones mid-sentence.
 DRAFT_MAX_TOKENS = 2048
+
+#: One initial generation plus at most one revision. Each attempt is a full
+#: local generation (~25-30s); a third attempt would blow the ~90s draft
+#: latency budget and rarely succeeds where the second one didn't.
+MAX_DRAFT_ATTEMPTS = 2
 
 
 class DraftState(TypedDict, total=False):
@@ -32,10 +54,18 @@ class DraftState(TypedDict, total=False):
     context: str
     instructions: str
     draft: str
+    previous_draft: str
     confidence_score: float
+    combined_score: float
     requires_human_approval: bool
+    requires_revision: bool
     evaluation_notes: str
     verification: dict[str, Any]
+    judge: dict[str, Any]
+    judge_available: bool
+    repair_items: list[dict[str, Any]]
+    missing_information: list[dict[str, Any]]
+    attempt_history: list[dict[str, Any]]
     status: str
     error: str
     attempts: int
@@ -119,23 +149,75 @@ def _build_brief(
     )
 
 
-def create_draft_graph(llm_client: BaseLLMClient):
-    """Create and compile the drafting workflow.
+def _build_repair_prompt(state: DraftState) -> str:
+    """Compose the targeted repair prompt handed to the reviser.
 
-    Flow: START -> validate_input -> writer -> verify -> END
-
-    The former LLM editor node is now :func:`app.ai.verification.verify_draft`, a
-    pure function. That removes a second full generation of the same text from
-    the critical path -- the largest single latency cost in the pipeline -- and
-    replaces self-graded fluency with an actual groundedness check.
+    Sends the full brief rather than a defect-conditional slice of it. The
+    brief is already a condensed representation (a few thousand characters at
+    most -- the writer never sees the raw ``source_document`` either, only
+    this brief), so brief + previous draft + defect list stays comfortably
+    inside the model's context window with room to spare for the output.
 
     Args:
-        llm_client: The LLM used by the writer agent.
+        state: Current draft state, expected to carry ``previous_draft`` and
+            ``repair_items`` from the preceding verify/revise pass.
+
+    Returns:
+        The repair prompt.
+    """
+    defects = state.get("repair_items") or []
+    numbered = "\n".join(
+        f"{index}. [{item.get('kind')}] {item.get('detail')}"
+        + (f" -> Öneri: {item.get('suggested_fix')}" if item.get("suggested_fix") else "")
+        for index, item in enumerate(defects, start=1)
+    )
+
+    return (
+        "### GÖREV:\n"
+        "Aşağıdaki önceki taslağı, YALNIZCA numaralı kusur listesindeki maddeleri "
+        "gidererek düzelt. Listede olmayan hiçbir cümleyi değiştirme.\n\n"
+        f"### BRIEF BELGESİ:\n{state.get('brief', '')}\n\n"
+        f"### YAZIŞMA TÜRÜ PROFİLİ:\n"
+        f"{format_correspondence_profile(state.get('correspondence_type', 'other_official'))}\n\n"
+        f"### ÖNCEKİ TASLAK:\n{state.get('previous_draft', '')}\n\n"
+        f"### DÜZELTİLMESİ GEREKEN KUSURLAR:\n{numbered or '(kusur listesi boş)'}\n\n"
+        "### KURAL:\n"
+        "Yalnızca listelenen kusurları düzelt. Başka hiçbir cümleyi değiştirme. "
+        "`[...]` yer tutucularını olduğu gibi bırak."
+    )
+
+
+def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient | None = None):
+    """Create and compile the drafting workflow.
+
+    Flow::
+
+        START -> validate_input -+-> writer -+-> verify -+-> revise -> writer
+                                  \\-> END      \\-> END     |-> END (needs_input)
+                                                             \\-> END
+
+    The former single-pass "writer -> LLM editor" pipeline had no path back to
+    the writer, so a low-scoring draft was only ever flagged, never repaired.
+    ``verify`` now runs a hybrid gate -- the deterministic ``verify_draft``
+    plus a fast-tier judge for what regex cannot see (request fit, arz/rica
+    direction, register, muhatap consistency) -- and routes to a bounded
+    ``revise -> writer`` loop when the defects found are the kind a targeted
+    text edit can actually fix. Defects that aren't (an explicit placeholder
+    the writer left because it doesn't know the value; a guessed
+    correspondence type) go straight to human review or an information
+    request instead of being retried into the same gap.
+
+    Args:
+        llm_client: The quality-tier LLM used by the writer and reviser.
+        fast_llm_client: Optional fast-tier client for the judge. Falls back
+            to ``llm_client`` when omitted.
 
     Returns:
         The compiled LangGraph workflow.
     """
     writer_agent = WriterAgent(llm_client)
+    reviser_agent = ReviserAgent(llm_client)
+    judge_agent = JudgeAgent(fast_llm_client or llm_client)
 
     async def validate_input_node(state: DraftState) -> dict[str, Any]:
         classification = state.get("classification") or {}
@@ -181,63 +263,93 @@ def create_draft_graph(llm_client: BaseLLMClient):
         return "end" if state.get("status") == "FAILED" else "writer"
 
     async def writer_node(state: DraftState, config: RunnableConfig) -> dict[str, Any]:
-        logger.info("Running Writer Node...")
-        await emit_node_start(
-            config, "draft", "Taslak Oluşturma", "[Yazar Ajanı] Taslak yazılıyor..."
-        )
+        attempt_number = state.get("attempts", 0) + 1
+        is_revision = bool(state.get("previous_draft"))
 
-        attempts = state.get("attempts", 0)
-        is_other = state.get("correspondence_type") == "other_official"
-
-        if is_other:
-            rules = (
-                "- Yazışma türü 'Diğer resmî yazışma' olduğu için, brief'te bulunmayan "
-                "tamamlayıcı bilgileri genel kurumsal bilgi birikiminle tamamlayabilirsin.\n"
-                "- Resmî yazı standartlarına uygunluğu sağlamak için makul tamamlamalar yapabilirsin."
+        if is_revision:
+            logger.info("Running Reviser Node (attempt %d)...", attempt_number)
+            await emit_node_start(
+                config,
+                "draft",
+                "Taslak Revizyonu",
+                f"[Revizyon Ajanı] Taslak {attempt_number}. denemede düzeltiliyor...",
+                meta={"attempt": attempt_number},
             )
+            agent = reviser_agent
+            prompt = _build_repair_prompt(state)
+            temperature = 0.2
         else:
-            rules = (
-                "- Yalnızca brief içindeki bilgilere ve mevzuat bağlamına sadık kal.\n"
-                "- Gelen evrakta veya mevzuatta yer almayan hiçbir kişi, kurum, sayı, "
-                "tarih veya olay uydurma.\n"
-                "- Zorunlu olup brief'te bulunmayan bilgileri köşeli parantezli yer "
-                "tutucu olarak bırak (örn. '[Tarih Eksik - Lütfen Doldurun]')."
+            logger.info("Running Writer Node...")
+            await emit_node_start(
+                config,
+                "draft",
+                "Taslak Oluşturma",
+                "[Yazar Ajanı] Taslak yazılıyor...",
+                meta={"attempt": attempt_number},
             )
 
-        prompt = (
-            "### GÖREV:\n"
-            "Aşağıdaki brief doğrultusunda resmî ve kurumsal bir Türkçe yazı taslağı yaz.\n\n"
-            f"### BRIEF BELGESİ:\n{state['brief']}\n\n"
-            f"### YAZIŞMA TÜRÜ PROFİLİ:\n"
-            f"{format_correspondence_profile(state['correspondence_type'])}\n\n"
-            f"### KURALLAR:\n{rules}"
-        )
+            is_other = state.get("correspondence_type") == "other_official"
+            if is_other:
+                rules = (
+                    "- Yazışma türü 'Diğer resmî yazışma' olduğu için, brief'te bulunmayan "
+                    "tamamlayıcı bilgileri genel kurumsal bilgi birikiminle tamamlayabilirsin.\n"
+                    "- Resmî yazı standartlarına uygunluğu sağlamak için makul tamamlamalar yapabilirsin."
+                )
+            else:
+                rules = (
+                    "- Yalnızca brief içindeki bilgilere ve mevzuat bağlamına sadık kal.\n"
+                    "- Gelen evrakta veya mevzuatta yer almayan hiçbir kişi, kurum, sayı, "
+                    "tarih veya olay uydurma.\n"
+                    "- Zorunlu olup brief'te bulunmayan bilgileri köşeli parantezli yer "
+                    "tutucu olarak bırak (örn. '[Tarih Eksik - Lütfen Doldurun]')."
+                )
+
+            prompt = (
+                "### GÖREV:\n"
+                "Aşağıdaki brief doğrultusunda resmî ve kurumsal bir Türkçe yazı taslağı yaz.\n\n"
+                f"### BRIEF BELGESİ:\n{state['brief']}\n\n"
+                f"### YAZIŞMA TÜRÜ PROFİLİ:\n"
+                f"{format_correspondence_profile(state['correspondence_type'])}\n\n"
+                f"### KURALLAR:\n{rules}"
+            )
+            agent = writer_agent
+            temperature = 0.4
 
         # Streamed rather than awaited whole: the draft is the longest single
         # generation in the system, and forwarding chunks is what makes the UI
-        # feel live instead of frozen behind a spinner.
+        # feel live instead of frozen behind a spinner. A revision streams
+        # under the same "draft" node id, so the frontend clears any
+        # in-progress streamingText on every node_start rather than only the
+        # first -- otherwise the two attempts would visually concatenate.
         chunks: list[str] = []
         try:
-            async for chunk in writer_agent.stream(
-                messages=prompt, temperature=0.4, max_tokens=DRAFT_MAX_TOKENS
+            async for chunk in agent.stream(
+                messages=prompt, temperature=temperature, max_tokens=DRAFT_MAX_TOKENS
             ):
                 chunks.append(chunk)
                 await emit_token(config, "draft", chunk)
 
             draft = "".join(chunks).strip()
             if not draft:
-                raise ValueError("WriterAgent boş taslak döndürdü.")
+                raise ValueError("Ajan boş taslak döndürdü.")
 
-            return {"draft": draft, "attempts": attempts + 1, "status": "IN_PROGRESS"}
+            # .stream() cannot run BaseAgent.validators (there is no single
+            # response to check before tokens are already emitted), so the
+            # same guardrail runs here instead, against the accumulated text.
+            # Fails closed: an apparent injection stops the run for human
+            # review rather than being fed into an automatic revision pass.
+            assert_no_prompt_leak(draft)
+
+            return {"draft": draft, "attempts": attempt_number, "status": "IN_PROGRESS"}
         except Exception as exc:
-            logger.exception("Writer Node failed")
+            logger.exception("Writer/Reviser node failed (attempt %d)", attempt_number)
             return {
                 "draft": "".join(chunks).strip(),
-                "attempts": attempts + 1,
+                "attempts": attempt_number,
                 "confidence_score": 0.0,
                 "requires_human_approval": True,
                 "status": "FAILED",
-                "error": f"WriterAgent taslak üretemedi: {exc}",
+                "error": f"Taslak üretilemedi: {exc}",
             }
 
     def route_after_writer(state: DraftState) -> str:
@@ -247,42 +359,157 @@ def create_draft_graph(llm_client: BaseLLMClient):
         logger.info("Running Draft Verification Node...")
         await emit_node_start(
             config,
-            "draft",
+            "verify",
             "Taslak Doğrulama",
             "[Doğrulayıcı] Taslak kaynak evrak ve mevzuata karşı denetleniyor...",
         )
 
+        draft_text = state.get("draft", "")
+        classification = state.get("classification") or {}
+        strict = state.get("correspondence_type") != "other_official"
+
         report = verify_draft(
-            state.get("draft", ""),
+            draft_text,
             source_document=state.get("source_document", ""),
             context=state.get("context", ""),
-            classification=state.get("classification") or {},
+            classification=classification,
             instructions=state.get("instructions", ""),
-            strict=state.get("correspondence_type") != "other_official",
+            strict=strict,
         )
 
-        # An unresolved correspondence type means the system guessed which kind
-        # of letter to write, which is itself grounds for review.
+        verdict: DraftJudgeVerdict | None = None
+        if settings.DRAFT_JUDGE_ENABLED:
+            # A separate node id from "verify" (even though it runs inside the
+            # same LangGraph node) so the frontend can show the hybrid gate as
+            # two distinct mechanisms -- deterministic groundedness vs. the
+            # fast-tier judge's reasoning-based checks -- rather than one
+            # opaque "doğrulama" step.
+            await emit_node_start(
+                config,
+                "judge",
+                "Kalite Yargıcı",
+                "[Yargıç] Talebe uygunluk, üslup ve kapanış yönü değerlendiriliyor...",
+            )
+            verdict = await judge_draft(
+                judge_agent,
+                draft=draft_text,
+                brief=state.get("brief", ""),
+                correspondence_type=state.get("correspondence_type") or "other_official",
+                instructions=state.get("instructions", ""),
+            )
+            if verdict is None:
+                await emit_node_error(
+                    config,
+                    "judge",
+                    "Kalite Yargıcı",
+                    "Kalite yargıcı kullanılamadı; deterministik doğrulama sonucuna göre devam ediliyor.",
+                    fatal=False,
+                )
+            else:
+                await emit_node_end(
+                    config,
+                    "judge",
+                    "Kalite Yargıcı",
+                    "Yargıç değerlendirmesi tamamlandı.",
+                    verdict.model_dump(),
+                )
+
+        missing_information: list[InfoQuestion] = []
+        if report.placeholder_count > 0:
+            missing_information = build_missing_info_request(draft_text, report, classification)
+
+        combined = merge_verdicts(report, verdict, missing_information=missing_information)
+
+        DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)
+        if verdict is not None:
+            DRAFT_SCORE.labels(source="judge").observe(verdict.score)
+        DRAFT_SCORE.labels(source="combined").observe(combined.combined_score)
+
+        # An unresolved correspondence type or a draft with no verified
+        # legislative context means the system guessed, which is itself
+        # grounds for review -- and a second generation cannot fix either, so
+        # this is folded into the approval decision, not into requires_revision.
         requires_approval = (
-            report.requires_human_approval
+            combined.requires_human_approval
             or state.get("correspondence_type_source") == "fallback"
             or not state.get("context")
         )
 
+        history_entry = {
+            "attempt": state.get("attempts", 0),
+            "deterministic_score": report.confidence_score,
+            "judge_score": verdict.score if verdict is not None else None,
+            "combined_score": combined.combined_score,
+            "defect_count": len(combined.repair_items),
+        }
+        attempt_history = [*(state.get("attempt_history") or []), history_entry]
+
+        if missing_information:
+            status = "NEEDS_INPUT"
+        elif requires_approval:
+            status = "NEEDS_HUMAN_APPROVAL"
+        else:
+            status = "COMPLETED"
+
         update = {
-            "confidence_score": report.confidence_score,
+            "confidence_score": combined.combined_score,
+            "combined_score": combined.combined_score,
             "requires_human_approval": requires_approval,
-            "evaluation_notes": report.evaluation_notes,
+            "requires_revision": combined.requires_revision,
+            "evaluation_notes": combined.notes,
             "verification": report.model_dump(),
-            "status": "NEEDS_HUMAN_APPROVAL" if requires_approval else "COMPLETED",
+            "judge": verdict.model_dump() if verdict is not None else {},
+            "judge_available": combined.judge_available,
+            "repair_items": [item.model_dump() for item in combined.repair_items],
+            "missing_information": [question.model_dump() for question in missing_information],
+            "attempt_history": attempt_history,
+            "status": status,
         }
 
         await emit_node_end(
             config,
-            "draft",
-            "Taslak Oluşturma",
-            "Taslak hazırlandı ve doğrulandı.",
-            {"draft": state.get("draft", ""), **update},
+            "verify",
+            "Taslak Doğrulama",
+            "Taslak doğrulaması tamamlandı.",
+            {"draft": draft_text, **update},
+        )
+        return update
+
+    def route_after_verify(state: DraftState) -> str:
+        if state.get("status") == "FAILED":
+            return "end"
+        if state.get("missing_information"):
+            return "needs_input"
+        if not state.get("requires_revision"):
+            return "end"
+        if state.get("attempts", 0) >= MAX_DRAFT_ATTEMPTS:
+            return "end"
+        return "revise"
+
+    async def revise_node(state: DraftState, config: RunnableConfig) -> dict[str, Any]:
+        """Prep the next writer pass. Pure and LLM-free -- the loop's only
+        generation cost is the writer/reviser call, never a second one here."""
+        repair_items = state.get("repair_items") or []
+        logger.info("Preparing revision (%d defect(s))...", len(repair_items))
+        trigger = (
+            "deterministic"
+            if any(item.get("source") == "deterministic" for item in repair_items)
+            else "judge"
+        )
+        DRAFT_REVISIONS.labels(trigger=trigger).inc()
+        await emit_node_start(
+            config,
+            "revise",
+            "Revizyon Hazırlığı",
+            f"{len(repair_items)} kusur tespit edildi; hedefli düzeltme hazırlanıyor...",
+        )
+        update = {"previous_draft": state.get("draft", "")}
+        await emit_node_end(
+            config,
+            "revise",
+            "Revizyon Hazırlığı",
+            "Düzeltme talimatları hazırlandı.",
+            {"repair_items": repair_items},
         )
         return update
 
@@ -290,6 +517,7 @@ def create_draft_graph(llm_client: BaseLLMClient):
     builder.add_node("validate_input", validate_input_node)
     builder.add_node("writer", writer_node)
     builder.add_node("verify", verify_node)
+    builder.add_node("revise", revise_node)
 
     builder.add_edge(START, "validate_input")
     builder.add_conditional_edges(
@@ -298,6 +526,11 @@ def create_draft_graph(llm_client: BaseLLMClient):
     builder.add_conditional_edges(
         "writer", route_after_writer, {"verify": "verify", "end": END}
     )
-    builder.add_edge("verify", END)
+    builder.add_conditional_edges(
+        "verify",
+        route_after_verify,
+        {"revise": "revise", "needs_input": END, "end": END},
+    )
+    builder.add_edge("revise", "writer")
 
     return builder.compile()
