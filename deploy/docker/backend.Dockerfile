@@ -13,14 +13,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr-tur \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python requirements
-COPY backend/requirements.txt .
+# Copy Python requirements. -dev pulls in requirements.txt too, plus
+# pytest-cov/pytest-timeout and the langgraph-checkpoint memory saver the test
+# suite's HITL integration test uses -- installing only requirements.txt (the
+# previous behaviour) left those absent from the image entirely.
+COPY backend/requirements.txt backend/requirements-dev.txt ./
 
 # Install Python requirements
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements-dev.txt
 
 # Copy backend application code
 COPY backend/app /workspace/app
+COPY backend/tests /workspace/tests
+COPY backend/alembic /workspace/alembic
+COPY backend/alembic.ini backend/pyproject.toml /workspace/
 
 # Copy the legislation corpus; without it the BM25 half of the hybrid retriever
 # is empty and mevzuat suggestions silently degrade.
