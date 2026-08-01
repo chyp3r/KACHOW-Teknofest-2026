@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import Any
 
+from app.ai.guardrails.injection import scrub_extracted_text
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
 from app.core.constants import AI_WORKFLOW_TIMEOUT_SECONDS
@@ -41,33 +42,46 @@ class DraftService:
 
         try:
             extracted = await self.extractor.extract(content_bytes, file_name=request.storage_path)
-            source_document = extracted.text
+            source_document, scrubbed_markers = scrub_extracted_text(extracted.text)
+            if scrubbed_markers:
+                logger.warning(
+                    "Scrubbed possible prompt injection from %s: %s",
+                    request.storage_path,
+                    scrubbed_markers,
+                )
         except DocumentExtractionError as e:
             raise ValidationException(
-                message="Evrak metni çıkarılamadı.", 
+                message="Evrak metni çıkarılamadı.",
                 details={"reason": str(e)}
             ) from e
 
         # 2. Run drafting workflow
         # Build context from mevzuat_references to inform the WriterAgent
-        mevzuat_refs = request.classification.get("mevzuat_references", [])
-        context_lines = []
-        for ref in mevzuat_refs:
-            mevz = ref.get("mevzuat", "")
-            desc = ref.get("aciklama", "")
-            if mevz:
-                context_lines.append(f"- {mevz}: {desc}")
+        context_lines = [
+            f"- {ref.mevzuat}: {ref.aciklama}"
+            for ref in request.classification.mevzuat_references
+            if ref.mevzuat
+        ]
         context_str = "\n".join(context_lines) if context_lines else ""
+
+        # draft_graph's internal helpers (_build_brief, verify_draft, ...) treat
+        # classification as a plain dict; the typed DraftClassificationSchema is
+        # the boundary validation, not the graph's internal representation.
+        classification_dict = request.classification.model_dump(mode="json")
 
         try:
             draft_state = await asyncio.wait_for(
                 self.draft_graph.ainvoke(
                     {
                         "source_document": source_document,
-                        "classification": request.classification,
+                        "classification": classification_dict,
                         "context": context_str,
                         "instructions": request.instructions,
-                        "correspondence_type": request.correspondence_type,
+                        "correspondence_type": (
+                            request.correspondence_type.value
+                            if request.correspondence_type
+                            else None
+                        ),
                     },
                     config=self._trace_config()
                 ),
@@ -93,6 +107,28 @@ class DraftService:
 
         draft_content = draft_state.get("draft", "")
         confidence = draft_state.get("confidence_score", 0.0)
+        missing_information = draft_state.get("missing_information") or []
+        common_fields = dict(
+            draft=draft_content,
+            confidence_score=confidence,
+            requires_human_approval=draft_state.get("requires_human_approval", True),
+            attempts=draft_state.get("attempts", 1),
+            verification=draft_state.get("verification", {}),
+            judge=draft_state.get("judge", {}),
+            missing_information=missing_information,
+        )
+
+        # This endpoint has no session/interrupt mechanism of its own (that's
+        # the chat path's job via /chat/resume) -- a draft still carrying
+        # unfilled placeholders is reported as-is rather than routed, since
+        # routing a demonstrably incomplete draft to a department is worse
+        # than not routing it at all.
+        if missing_information:
+            return DraftResponseSchema(
+                **common_fields,
+                destination="",
+                justification="Taslak eksik bilgi içeriyor; birim yönlendirmesi yapılmadı.",
+            )
 
         # 3. Run routing workflow
         try:
@@ -119,18 +155,16 @@ class DraftService:
             ) from e
 
         return DraftResponseSchema(
-            draft=draft_content,
-            confidence_score=confidence,
-            requires_human_approval=draft_state.get("requires_human_approval", True),
+            **common_fields,
             destination=routing_state.get("final_destination", "HumanApproval"),
-            justification=routing_state.get("justification", "Yönlendirme kararı alınamadı.")
+            justification=routing_state.get("justification", "Yönlendirme kararı alınamadı."),
         )
 
     @staticmethod
     def _trace_config() -> dict[str, Any]:
         try:
-            from app.observability.tracer import get_langfuse_callback
-            handler = get_langfuse_callback()
+            from app.observability.tracer import build_trace_config
+
+            return build_trace_config()
         except Exception:
             return {}
-        return {"callbacks": [handler]} if handler else {}

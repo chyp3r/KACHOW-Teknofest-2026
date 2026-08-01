@@ -7,6 +7,19 @@ from app.api.exceptions.validation import ValidationException
 from app.api.exceptions.ai_error import AIException
 from app.infrastructure.extractors.base import DocumentExtractionError, ExtractedDocument
 
+#: Matches the shape DocumentService._store() produces --
+#: uploads/<32 hex><ext> -- which is what validate_storage_path requires.
+VALID_STORAGE_PATH = "uploads/" + "a" * 32 + ".pdf"
+
+
+def _request(**overrides) -> DraftRequestSchema:
+    fields = dict(
+        storage_path=VALID_STORAGE_PATH,
+        classification={"document_type": "petition"},
+    )
+    fields.update(overrides)
+    return DraftRequestSchema(**fields)
+
 
 @pytest.fixture
 def mock_storage():
@@ -31,7 +44,11 @@ def mock_draft_graph():
         "status": "COMPLETED",
         "draft": "Sayın İlgili, taslak metindir.",
         "confidence_score": 85.0,
-        "requires_human_approval": False
+        "requires_human_approval": False,
+        "attempts": 1,
+        "verification": {},
+        "judge": {},
+        "missing_information": [],
     }
     return graph
 
@@ -41,7 +58,7 @@ def mock_routing_graph():
     graph = AsyncMock()
     graph.ainvoke.return_value = {
         "final_destination": "HR",
-        "justification": "Personel işlemleri ile ilgilidir."
+        "justification": "Personel işlemleri ile ilgilidir.",
     }
     return graph
 
@@ -58,32 +75,52 @@ def draft_service(mock_storage, mock_extractor, mock_draft_graph, mock_routing_g
 
 @pytest.mark.asyncio
 async def test_generate_draft_and_route_success(draft_service, mock_draft_graph, mock_routing_graph):
-    request = DraftRequestSchema(
-        storage_path="uploads/test.pdf",
-        classification={"document_type": "Dilekçe"},
-        instructions="Test",
-        correspondence_type="cover_letter"
-    )
-    
+    request = _request(instructions="Test", correspondence_type="cover_letter")
+
     response = await draft_service.generate_draft_and_route(request)
-    
+
     assert response.draft == "Sayın İlgili, taslak metindir."
     assert response.confidence_score == 85.0
     assert response.requires_human_approval is False
     assert response.destination == "HR"
     assert response.justification == "Personel işlemleri ile ilgilidir."
-    
+
     mock_draft_graph.ainvoke.assert_called_once()
     mock_routing_graph.ainvoke.assert_called_once()
 
 
 @pytest.mark.asyncio
+async def test_generate_draft_skips_routing_when_information_is_missing(
+    draft_service, mock_draft_graph, mock_routing_graph
+):
+    """A draft with unfilled placeholders must not be routed to a department --
+    it needs the missing-information round trip first (see /chat/resume)."""
+    mock_draft_graph.ainvoke.return_value = {
+        "status": "NEEDS_INPUT",
+        "draft": "Sayın [...], ...",
+        "confidence_score": 40.0,
+        "requires_human_approval": True,
+        "attempts": 1,
+        "verification": {},
+        "judge": {},
+        "missing_information": [
+            {"key": "muhatap", "label": "Muhatap", "why": "Eksik", "example": None, "required": True}
+        ],
+    }
+    request = _request()
+
+    response = await draft_service.generate_draft_and_route(request)
+
+    assert response.missing_information
+    assert response.destination == ""
+    mock_routing_graph.ainvoke.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_generate_draft_storage_error(draft_service, mock_storage):
     mock_storage.get_file.side_effect = Exception("Storage error")
-    request = DraftRequestSchema(
-        storage_path="uploads/invalid.pdf",
-        classification={},
-    )
+    request = _request()
+
     with pytest.raises(ValidationException) as exc:
         await draft_service.generate_draft_and_route(request)
     assert "bulunamadı" in str(exc.value)
@@ -92,10 +129,8 @@ async def test_generate_draft_storage_error(draft_service, mock_storage):
 @pytest.mark.asyncio
 async def test_generate_draft_extractor_error(draft_service, mock_extractor):
     mock_extractor.extract.side_effect = DocumentExtractionError("Extraction failed")
-    request = DraftRequestSchema(
-        storage_path="uploads/test.pdf",
-        classification={},
-    )
+    request = _request()
+
     with pytest.raises(ValidationException) as exc:
         await draft_service.generate_draft_and_route(request)
     assert "çıkarılamadı" in str(exc.value)
@@ -105,12 +140,15 @@ async def test_generate_draft_extractor_error(draft_service, mock_extractor):
 async def test_generate_draft_graph_failure(draft_service, mock_draft_graph):
     mock_draft_graph.ainvoke.return_value = {
         "status": "FAILED",
-        "error": "Writer failed"
+        "error": "Writer failed",
     }
-    request = DraftRequestSchema(
-        storage_path="uploads/test.pdf",
-        classification={},
-    )
+    request = _request()
+
     with pytest.raises(AIException) as exc:
         await draft_service.generate_draft_and_route(request)
     assert "üretilemedi" in str(exc.value)
+
+
+def test_storage_path_rejects_malformed_value():
+    with pytest.raises(ValueError):
+        _request(storage_path="uploads/../../etc/passwd")
