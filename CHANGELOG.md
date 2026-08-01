@@ -2,6 +2,83 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [1.21.0] - 2026-08-01
+### Değiştirildi
+- **Docker Geliştirme Ortamı**: `backend.Dockerfile` artık `requirements.txt` yerine `requirements-dev.txt` kuruyor (yeni HITL entegrasyon testinin ihtiyaç duyduğu `pytest-cov`/`pytest-timeout`/`langgraph-checkpoint` imajda hiç yoktu) ve `alembic/`, `alembic.ini`, `pyproject.toml` dosyalarını imaja kopyalıyor. `compose.yml` aynı yolları `app/`/`tests/` ile aynı desende canlı volume olarak da bağlıyor; migration veya pytest yapılandırması değişiklikleri artık yeniden build gerektirmiyor.
+
+### Düzeltildi
+- **Docker İçinde Tam Test Koşusu**: Backend imajı build edilip `db`/`redis`/`qdrant`/`backend` servisleri ayağa kaldırılarak paket ilk kez uçtan uca `python -m pytest tests/` ile Docker içinde çalıştırıldı. Süreçte ortaya çıkan gerçek hatalar giderildi:
+  - `RedisCache.close()` içinde artık deprecated olan `redis.asyncio.Redis.close()` çağrısı `.aclose()` ile değiştirildi. `warnings=error` politikası altında bu tek uyarı, `/documents/analyze` gibi `rate_limit()` arkasındaki herhangi bir uç nokta tetiklendiği an sonraki **tüm** testlerin teardown'ında art arda patlıyordu (227 hata).
+  - `tests/conftest.py`'ye her testten sonra process-genelindeki Redis istemci referansını **kapatmadan** bırakan bir `autouse` fixture eklendi: bağlantının bağlı olduğu event loop (TestClient'in kısa ömürlü anyio-portal loop'u) teardown anında zaten kapanmış oluyor; kapatmayı denemek "Event loop is closed" hatasını "farklı loop'a bağlı" hatasıyla değiştirmekten öteye geçmiyordu.
+  - `test_ollama.py`, `test_base_agent.py`, `test_qdrant.py`, `test_retrieval.py`, `test_user_router.py` içindeki, kodun güncel davranışından (num_ctx/keep_alive parametreleri, `{{çift parantez}}` prompt biçimi, koleksiyon boyutu doğrulaması, `datetime.utcnow()` deprecation, silinmiş `LLMReranker` testinden kalan ölü kod parçası) sapmış eski varsayımlar güncellendi.
+  - `document_analysis_graph.py`'nin artık tek bir birleşik sınıflandırma+alan-çıkarım çağrısı yapması nedeniyle `test_document_analysis.py` tamamen bu tek çağrı etrafında yeniden yazıldı; iki ayrı ajanı (`ClassifierAgent`+`MetadataAgent`) mock'layan eski testler koleksiyonda hiç eşleşmiyordu.
+  - `alembic upgrade head` ve `GET /api/v1/health?deep=true` (postgres/redis/qdrant/ollama/checkpointer hepsi `ok`) Docker içinde doğrulandı.
+  - Sonuç: **621/621 test geçti.**
+
+## [1.20.0] - 2026-08-01
+### Eklendi
+- **Görev 2 Uç Noktaları ve Ölü Kod Temizliği**:
+  - `POST /api/v1/routing/suggest`: `POST /documents/draft`'tan bağımsız, sadece taslak metni + güven skoru okuyan tek başına birim-yönlendirme uç noktası. İnsan bir taslağı elle düzenledikten sonra yeni bir üretim ödemeden yönlendirme kararını tazeleyebilir.
+  - `frontend/src/App.tsx` içine `judge`, `revise` ve `human_gate` düğümleri SVG aşama grafiğine eklendi; her biri artık kendi gerçek `node_start`/`node_end`/`interrupt` olaylarıyla besleniyor. Taslak oluşturma formu (`POST /documents/draft`'ı önceden hiç çağırmıyordu) ve eksik-bilgi/onay kesintileri için devam formu eklendi.
+  - Sidebar artık `EvrakField`'in **15 alanının tamamını**, `missing_fields` listesini (önem derecesi + mevzuat atfıyla) ve `mevzuat_references`'ı gösteriyor — önceden yalnızca `tarih`/`sayı` görünüyordu.
+
+### Kaldırıldı
+- Hiçbir yerde kurulmayan `editor`/`evaluator`/`metadata`/`orchestrator`/`reflection` ajanları, `workflows/system_graph.py`, `infrastructure/providers/vllm.py` (LLM fabrikasındaki kayıtsız `"vllm"` dalıyla birlikte), `core/permissions/role_checker.py` (hiçbir middleware'in hiç doldurmadığı `request.state.user_role`'e bağımlıydı), sıfır route'lu `evaluation`/`feedback`/`settings` domain iskeletleri (9 dosya) ve iki 0 byte'lık worker betiği (`workers/cleanup.py`, `workers/embedding.py`) silindi.
+- `ai/retrieval/reranker.py` (`LLMReranker`) kaldırıldı: ~90 sn'lik taslak gecikme bütçesinin kritik yolunda, bu küçüklükteki bir korpusta 3 sonucu yeniden sıralamak hiçbir zaman kalitenin belirleyicisi olmadı.
+- İlk EventBus abonesi (`document.analyzed` → yapılandırılmış log satırı) kaydedildi; `DocumentService`/`DraftService`'in `publish()` çağrılarının artık gerçek bir dinleyicisi var.
+
+## [1.19.0] - 2026-08-01
+### Eklendi
+- **Tipli SSE Olay Sözleşmesi ve Gözlemlenebilirlik**:
+  - `emit_node_error`/`emit_node_skipped`/`emit_interrupt` ve kuyruk başına monotonik bir `seq` sayacı eklendi; istemci olayları sıralayabiliyor ve `interrupt()` içeren bir düğümü resume ederken oluşan tekrar (replay) olayını tekilleştirebiliyor.
+  - `event_schema.py`: on SSE olay tipinin şeklini bir kez, Pydantic modelleriyle yazan sözleşme dosyası; `test_event_contract.py` sıfır kod üretimi (codegen) kurmadan bu sözleşmeyi doğruluyor.
+  - `CorrelationIdMiddleware` (en dıştaki middleware, `X-Request-ID`) eklendi ve bir `ContextVar` aracılığıyla `JSONFormatter`'a bağlandı; yapılandırılmış loglar artık gerçekten yapılandırılmış (tek bir önceden biçimlendirilmiş mesaj string'i değil).
+  - `observability/ai_metrics.py`: düğüm/LLM süresi, token sayımı, taslak skorları, revizyon sayısı, yargıç hataları, HITL kesinti/devam sayaçları, yapılandırılmış-çıktı yeniden deneme sayaçları — `BaseAgent` ve olay yayıcılarına bağlandı.
+  - `GET /api/v1/health?deep=true`: Postgres/Redis/Qdrant/Ollama/checkpointer'ı zaman aşımı altında sınayan, hiçbir şeyi kontrol etmeyen eski kimliksiz `/health`'in yerini alan birleşik derin sağlık kontrolü.
+  - `build_trace_config()`: üç yerde birebir kopyalanmış `_trace_config` mantığını tek noktaya topladı.
+- **Prompt Enjeksiyonu Guardrail'leri ve Sınır Doğrulaması**:
+  - `scrub_extracted_text()`: çıkarılan evrak metninden sıfır-genişlikli/bidi kontrol karakterlerini ve Türkçe/İngilizce talimat-geçersizleştirme satırlarını temizler; çıkarımdan hemen sonra, `char_count` eşiği çalışmadan önce uygulanır — yüklenen bir PDF sistemin bakış açısından saldırgan kontrolündeki bir girdidir.
+  - `assert_no_prompt_leak()` artık `BaseAgent.run_structured()`'da da çalışıyor (önceden bu yolda ölüydü); yazar/revizör/sınıflandırıcı ajanları görünür bir sızıntıda denemeyi kapalı şekilde başarısız sayıp otomatik bir revizyon yerine insan incelemesine yönlendiriyor.
+  - `validate_storage_path()`: kimlik doğrulaması gerektirmeyen bir uç noktada, istemcinin verdiği `storage_path` ile `storage.get_file(...)` arasında başka hiçbir engel yoktu — biçimsel olmayan bir path-traversal okuma ilkelliğiydi.
+  - `DraftClassificationSchema`: `DraftRequestSchema.classification` artık prompt'a doğrudan giden serbest bir `dict` değil, taslak akışının gerçekten tükettiği dar ve tipli bir alan kümesi.
+  - `_read_bounded()`: yükleme 1 MiB'lik parçalar hâlinde okunuyor ve çalışan toplam limiti aştığı an reddediliyor; önceden tüm gövde boyut kontrolü hiç çalışmadan belleğe alınıyordu.
+  - `BaseAgent.__init__`'ten ölü `tools` parametresi kaldırıldı — saklanıyordu, hiç okunmuyordu, bu kod tabanındaki hiçbir ajan tool-calling kullanmıyor.
+
+## [1.18.0] - 2026-08-01
+### Eklendi
+- **Postgres Checkpointer Üzerinde HITL (Human-in-the-Loop) Kesinti/Devam**:
+  - Eksik Alembic iskeleti tamamlandı: `alembic.ini` hiç yoktu, `env.py`/`script.py.mako` 0 byte'tı, `users`/`invited_emails` tabloları için bile bir baseline migration yoktu. `env.py`, `checkpoint%` tablolarını `include_object` ile dışlıyor; bu tabloları `AsyncPostgresSaver.setup()` kendi `CREATE TABLE IF NOT EXISTS` mantığıyla yönetiyor.
+  - `infrastructure/checkpointing/` eklendi: en-iyi-çaba (best-effort) init/close bir `AsyncExitStack` etrafında — `AsyncPostgresSaver.from_conn_string()` kendisi bir async context manager olduğu için doğrudan `await` edilip bir kenara bırakılamaz.
+  - `planning_graph`'a, taslak adımını çalıştıran `executor` düğümünden **ayrı** yeni bir `human_gate` düğümü eklendi: `interrupt()` kendi düğümünü resume'da baştan tekrar çalıştırır; `execute_step_node` içinde olsaydı resume, executor'ın state'e zaten yazdığı ~30 sn'lik taslak üretimini tekrarlardı.
+  - `thread_id = session_id` `chat_service`/`chat` router'ı boyunca bağlandı; `POST /chat/resume`, `POST /chat/resume/sync`, `GET /chat/sessions/{id}/state` ve `ChatResumeRequest` (`answer`/`approve`/`revise`/`reject`) eklendi.
+  - Yalnızca `planning_graph` bir checkpointer alıyor — dört alt graf `execute_step_node` içinden `.ainvoke()` ile çağrılıyor, düğüm olarak kayıtlı değiller; üzerlerine checkpointer koymak ilgisiz, öksüz checkpoint soyağaçları başlatırdı.
+- **Checkpoint'lenmiş Graf State'i Üzerinden Konuşma Hafızası**:
+  - `CheckpointMemory`: `planning_graph.aget_state()` üzerine ince, salt-okunur bir görünüm. `thread_id` zaten `session_id`'ye eşit ve checkpointer geçmişi, kesinti payload'ını ve her şeyi zaten tutarlı biçimde saklıyor.
+  - Planlayıcıya kısa-onay devam kuralı eklendi: bir taslak/analiz teklifinden sonra "evet, hazırla" artık düz sohbete düşmek yerine o niyeti sürdürüyor; 6 kelimelik bir mesaj sınırı ve yalnızca belirsiz olmayan bir devam eylemi olan iki niyetle (`draft`/`analyze`) sınırlı.
+
+### Kaldırıldı
+- `ConversationWindowMemory`/`SummaryMemory`/`VectorMemory` kaldırıldı: checkpointer'ın yanında ikinci bir Redis tabanlı depo, çökme anında ikisi arasında bölünen bir yazma riski taşıyordu ve periyodik özet üretimi ~90 sn'lik bütçeyi zorlardı.
+
+## [1.17.0] - 2026-08-01
+### Eklendi
+- **Hibrit Kalite Kapısı ve Sınırlı Taslak Reflexion Döngüsü**:
+  - `judge_draft()`/`merge_verdicts()`: regex'in göremediği şeyler (talebe uygunluk, arz/rica yönü, resmî üslup, muhatap tutarlılığı) için deterministik doğrulayıcının üzerine hızlı-katman bir LLM yargıcı eklendi. Birleşik skor `0.6*deterministik + 0.4*yargıç`; herhangi bir kritik bulgu veya "talebi karşılamıyor" kararı skoru otomasyon eşiğinin altına sabitliyor.
+  - `build_missing_info_request()`/`apply_answers()`: bir taslağın `[...]` yer tutucularının deterministik, LLM'siz biçimde insan tarafından cevaplanabilir sorulara dönüştürülmesi ve taslağı yeniden üretmeden cevaplandıktan sonra devam edilmesi.
+  - `draft_graph` yeniden kuruldu: `validate_input → writer → verify → revise → writer`, `MAX_DRAFT_ATTEMPTS=2` ile sınırlı. Düzeltilebilir kusurlar (eksik yapı, doğrulanamayan iddialar, düzeltilebilir yargıç bulguları) yeni bir `ReviserAgent` üzerinden döngüye giriyor; kalan bir yer tutucu veya çözülememiş bir yazışma türü aynı boşluğa tekrar denemek yerine doğrudan insan incelemesine gidiyor.
+  - `_build_repair_prompt` her zaman brief'in tamamını + önceki taslağı + numaralı kusur listesini gönderiyor — `num_ctx` içinde rahatça kalıyor, yazar zaten ham `source_document`'i hiç görmüyordu.
+- **Yeniden Deneme/Zaman Aşımı Politikası ve Üçüncü Katman Analiz Yedeği**:
+  - `resilience.py`: `RetryPolicy`'yi import eden tek yer (sürümler arası `langgraph.pregel`↔`langgraph.types` taşınmasına karşı), `LLM_RETRY`/`IO_RETRY` ve `node_timeout()`. Bilerek `writer`/`revise` düğümlerine uygulanmıyor — zaten token yayınlamış bir düğümü yeniden denemek bunları UI'a tekrar oynatırdı.
+  - `document_analysis_graph` artık isteğe bağlı bir `fast_llm_client` alıyor: kalite katmanı hem birleşik hem yalnız-sınıflandırma çağrısında başarısız olursa, `DocumentType.OTHER`'a düşmeden önce hızlı katmanda bir kez daha deneniyor.
+  - `retrieve_mevzuat_node` artık `"rag"` id'si altında gerçek `node_start`/`node_end` yayıyor (getirilen belgeler ve render edilmiş bağlamla birlikte) — önceden hiçbir şey yaymıyordu ve bu, frontend'in Mevzuat panelinin hep boş kalmasının kök nedeniydi.
+
+## [1.16.0] - 2026-08-01
+### Değiştirildi
+- **Bağımlılık ve Araç Zinciri Yükseltmesi**: `langgraph`, `interrupt`/`Command`/`RetryPolicy` garanti eden bir sürüm aralığına sabitlendi; `langgraph-checkpoint-postgres`, `psycopg[binary,pool]`, `prometheus-client` eklendi. `pytest-cov`/`pytest-timeout` ve tutarlı async test davranışı için `[tool.pytest.ini_options]` (asyncio_mode=auto, testpaths, timeout) eklendi. Frontend'e eslint + typescript-eslint, vitest + testing-library eklendi (`npm run lint` daha önce çalışacağı bir yapılandırmaya bile sahip değildi).
+- **Prompt Yöneticisi ve Şablon Seti Konsolidasyonu**:
+  - Modül seviyesi `prompt_manager` tekil örneği kaldırıldı; `get_prompt_manager()` artık tek giriş noktası. `TEMPLATE_CONTRACTS` + `declared_placeholders()` eklendi; her şablonun `{{placeholder}}` kümesi, ilgili ajanın gerçekten sağladığıyla karşılaştırılıyor.
+  - `orchestrator.md`/`metadata.md`/`editor.md`/`evaluator.md`/`reflection.md` şablonları silindi (hiçbir ajan tarafından referans verilmiyorlardı ya da artık çalışmayan bir akışı tanımlıyorlardı); `judge.md` ve `reviser.md` eklendi. `chat.md`'nin kaldırılmış bir "editör ve kendini denetleme" aşamasını kullanıcıya duyuran metni düzeltildi.
+  - Yeni `test_prompt_templates.py`: her şablonun deklare edilip edilmediğini, diskte var olup olmadığını ve tam olarak bir ajan modülü tarafından referans verilip verilmediğini doğrulayan iki yönlü sözleşme testi — beş öksüz şablonu tam olarak yakalayacak türden bir kontrol.
+
 ## [1.15.0] - 2026-07-31
 ### Eklendi
 - **SparseBM25Encoder**: Türkçe karakter duyarlı ve CRC32 hash tabanlı, yerel olarak çalışan matematiksel bir BM25 Sparse Vector Encoder eklendi (`app/ai/retrieval/sparse_encoder.py`).

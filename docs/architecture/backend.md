@@ -143,14 +143,14 @@ chat/
 
 documents/
 
-users/
+routing/
 
-settings/
+users/
 
 system/
 ```
 
-Her domain kendi içerisinde izole çalışır.
+Her domain kendi içerisinde izole çalışır. Boş, sıfır-route'lu iskelet domain'ler (eskiden `evaluation/`, `feedback/`, `settings/`) kaldırılmıştır — bir domain yalnızca gerçek bir uç nokta bağlandığında eklenir.
 
 ---
 
@@ -326,8 +326,12 @@ Infrastructure katmanı, harici servisler ve veri saklama/erişim katmanlarıyla
 
 ### 5. LLM Providers
 `app/infrastructure/providers/` dizininde konumlanmıştır:
-* **OllamaClient** (`ollama.py`): Yerel Ollama servisiyle entegrasyonu sağlar.
-* **vLLMClient** (`vllm.py`): vLLM sunucularına OpenAI uyumlu protokol üzerinden asenkron bağlanır.
+* **OllamaClient** (`ollama.py`): Yerel Ollama servisiyle entegrasyonu sağlar; `num_ctx`/`keep_alive` her çağrıda ayarlanır ve `ChatOllama` örnekleri parametre setine göre önbelleğe alınır. (Kullanılmayan `vllm.py` sağlayıcısı kaldırılmıştır — hiçbir yerde kurulmuyordu ve `OllamaClient`'ın aldığı sertleştirmelerin (client cache, `num_ctx`) hiçbirine sahip değildi.)
+
+### 6. Checkpointing (Postgres)
+`app/infrastructure/checkpointing/` dizininde konumlanmıştır:
+* **`init_checkpointer` / `close_checkpointer` / `get_checkpointer`**: `AsyncPostgresSaver.from_conn_string()`'in kendisi bir async context manager olduğu için (doğrudan `await` edilip bir kenara bırakılamaz), bir `AsyncExitStack` etrafında en-iyi-çaba (best-effort) açılıp kapatılır. Postgres erişilemezse yalnızca HITL kesintileri devre dışı kalır; uygulama boot'u engellenmez.
+* Yalnızca `planning_graph` bir checkpointer alır (bkz. `docs/architecture/ai.md` — HITL bölümü).
 
 Bu katman yalnızca istemci bağlantılarından ve temel I/O işlemlerinden sorumludur.
 

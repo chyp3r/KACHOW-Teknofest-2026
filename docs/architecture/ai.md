@@ -114,41 +114,61 @@ Tüm sistem, yöneticilik yapan 2 katman ve 5 asenkron iş akışından (workflo
 
 ---
 
-## Yönetici Katmanlar
+## Yönetici Katman
 
-### 1. Supervisor (Orchestrator)
-Sistemin ana yöneticisidir. Kullanıcıdan gelen isteği alır, planlama adımını başlatır, state (durum) geçişlerini koordine eder ve hata/çakışma yönetimini üstlenir. Supervisor doğrudan yapay zekâ veya LLM işlemi yapmaz, sadece akışı yönetir.
-
-### 2. Planning Agent (`planning_graph.py`)
-Supervisor'ın planlamacı yardımcısıdır. `OrchestratorAgent` kullanarak gelen isteği analiz eder ve çalıştırılması gereken alt iş akışlarını (`classification`, `rag`, `draft`, `routing`) sıralı/paralel bir plan (`PlanOutput`) halinde belirler. Bu sayede gereksiz iş akışları atlanır (örn. sadece basit bir sohbet sorusu geldiyse `classification` ve `routing` adımları atlanır).
+### Planning Graph (`planning_graph.py`)
+Sistemin tek orkestrasyon grafiğidir ve **tek checkpointer alan graf**budur (bkz. HITL bölümü). `planner.py`'deki **deterministik planlayıcı** ile gelen mesajı/eki analiz eder ve çalıştırılacak alt adımları (`classification`, `rag`, `draft`, `routing`, `chat`, `document_qa`) bir plan olarak belirler — bu artık bir LLM çağrısı değil, anahtar kelime/soru-işareti/önceki-niyet tabanlı bir arama tablosudur (`resolve_plan_deterministic`); yalnızca gerçekten belirsiz mesajlar hızlı-katman modele düşer. `executor` düğümü planı adım adım yürütür ve her adımın bağımlılığı başarısız olduysa (`_STEP_DEPENDENCIES`) o adımı hiç çalıştırmadan `SKIPPED` işaretler — başarısız bir taslağın üzerine boş girdiyle yönlendirme çalıştırılması buradan engellenir.
 
 ---
 
-## 5 Ana Workflow Graph
+## Ana Workflow Graph'ları
 
-### 1. Classification Graph (`classification_graph.py`)
-- **Node'lar**: Classify Node -> NER Node -> Metadata Node.
-- **Görev**: Sisteme gelen belgenin türünü (`ClassifierAgent` ile), kişileri, kurumları, tarihleri (`NERAgent` ile) ve dinamik metaverileri (`MetadataAgent` ile) yapılandırılmış Pydantic şemaları ile ayıklar.
+### 1. Document Analysis Graph (`document_analysis_graph.py`) — Görev 1
+- **Node'lar**: `analyze` (sınıflandırma + alan çıkarımı tek birleşik yapılandırılmış çağrıda) → `check_compliance` ve `retrieve_mevzuat` (paralel dallar) → `suggest_mevzuat`.
+- **Görev**: Gelen evrağın türünü ve `EvrakField`'in 15 alanını **tek bir** `ClassifierAgent.run_structured()` çağrısıyla çıkarır (önceden ayrı bir sınıflandırma + ayrı bir metadata ajanı vardı; birleştirme analiz bacağının süresini yarıya indirdi). Kalite katmanı hem birleşik hem de yalnız-sınıflandırma şemasında başarısız olursa, `DocumentType.OTHER`'a düşmeden önce isteğe bağlı bir hızlı-katman istemcisiyle bir kez daha denenir.
+- **Eksik bilgi tespiti tamamen deterministiktir** (`check_compliance`, LLM'siz). Mevzuat taraması (`retrieve_mevzuat`) kendi `"rag"` id'si altında gerçek `node_start`/`node_end` yayar; taşınan veri (`search_query`, `documents`, `context`) hem taslak brief'inde hem de UI'daki Mevzuat panelinde doğrudan kullanılır.
 
-### 2. RAG Graph (`rag_graph.py`)
-- **Node'lar**: Query Rewrite -> Retrieve Docs -> Verify Context -> (Yetersizse tekrar sorgu yazımına döngü / Yeterliyse END).
-- **Görev**: Arama kalitesini artırmak için sorguyu genişletir. `HybridRetriever` ile paralel arama (Dense + BM25) yapar. Elde edilen bağlamı `VerifierAgent` ile doğrular. Bilgi yetersizse, veritabanı geribildirimiyle sorguyu tekrar yazdırıp döngüye girer (max 2 deneme).
+### 2. RAG Graph (`rag_graph.py`) — genel soru-cevap
+- **Node'lar**: `prepare_query` (deterministik `build_search_query`, model çağrısı yok) → `retrieve`.
+- **Görev**: `HybridRetriever` ile Qdrant native RRF (dense+sparse) araması yapar. Sorgu yeniden yazımı için ayrı bir LLM adımı yoktur — `document_analysis_graph`'ın `_build_mevzuat_query`'siyle aynı gerekçeyle: sparse yarı literal terimleri eşleştirir, bir model parafrazı daha kötü bir sorgu üretir.
 
-### 3. Draft Graph (`draft_graph.py`)
-- **Node'lar**: Writer -> Editor -> (Revizyon gerekliyse Writer'a döngü) -> Reflection -> Evaluator.
-- **Girdi**: Gelen evrakın asıl metni, Classification Graph çıktısı, doğrulanmış RAG bağlamı, yazım yönergeleri ve isteğe bağlı `correspondence_type` birlikte taşınır.
-- **Yazışma Türleri**: Çıktı sözleşmesi `cover_letter` (üst yazı), `response_letter` (cevap yazısı), `information_notice` (bilgilendirme metni) ve `other_official` (diğer/alternatif resmî yazışma) değerlerini destekler. Açık çağıran girdisi, Classification metadata'sı, yazım yönergesi ve gelen belge türü sırasıyla değerlendirilir. Türkçe/İngilizce karşılıklar normalize edilir. Güvenilir eşleşme bulunamazsa `other_official` seçilir ve insan incelemesi zorunlu olur.
-- **Görev**: Bu kaynaklara ve seçilen yazışma türünün yapı kurallarına bağlı resmî taslak oluşturur (`WriterAgent`). `EditorAgent` taslağı hem tür uygunluğu, kaynak sadakati hem dil/biçim yönünden denetler ve en fazla iki yazım denemesi içinde revizyon isteyebilir. `ReflectionAgent`, kaynakları ve türü tekrar görerek taslağı parlatır. `EvaluatorAgent` nihai metni doğrular, 0-100 aralığında güven skoru atar ve insan onayı gereksinimini belirler.
-- **Güvenlik**: Gelen evrak eksikse veya ajanlardan biri güvenilir çıktı üretemezse akış sahte bir varsayılan taslak ya da başarı skoru döndürmez. Durum `FAILED` veya `NEEDS_HUMAN_APPROVAL` olur. Doğrulanmış RAG bağlamı bulunmayan taslaklar da zorunlu insan incelemesine işaretlenir.
-- **Tool Sınırı**: Writer, Editor, Reflection ve Evaluator ajanlarına doğrudan sistem aracı verilmez. Retrieval araçları RAG Graph seviyesinde çalışır; Draft Graph yalnızca doğrulanmış bağlamı tüketir.
+### 3. Draft Graph (`draft_graph.py`) — Görev 2, hibrit kalite kapılı reflexion döngüsü
+- **Node'lar**: `validate_input → writer → verify → (revise → writer | needs_input=END | end)`.
+- **Girdi**: Gelen evrakın brief'i (ham `source_document` writer'a hiç gitmez, yalnızca `_build_brief()`'in ürettiği özetlenmiş yapı gider), doğrulanmış RAG bağlamı, yazım yönergeleri ve isteğe bağlı `correspondence_type`.
+- **Yazışma Türleri**: `cover_letter`, `response_letter`, `information_notice`, `other_official`. Çözümleme sırası: açık istek → sınıflandırma metadata'sı → kullanıcı yönergesi → gelen belge türünden çıkarım → `other_official` (fallback, insan incelemesi zorunlu).
+- **Reflexion döngüsü**: `verify` düğümü hibrit kalite kapısını çalıştırır (aşağıya bakınız). Düzeltilebilir kusurlar (eksik yapı, doğrulanamayan iddialar, düzeltilebilir yargıç bulguları) `revise` üzerinden `writer`'a döner — bu kez `ReviserAgent`, yalnızca numaralı kusur listesini hedef alan bir onarım promptuyla çalışır. En fazla `MAX_DRAFT_ATTEMPTS=2` deneme (bir ilk üretim + bir revizyon). `revise` düğümünün kendisi LLM çağrısı yapmaz; döngünün maliyeti her turda tam olarak bir üretimdir.
+- **Kaçış yolları**: Kalan bir `[...]` yer tutucusu (yazar zaten bilmediğini işaretlemiştir) veya çözülememiş bir yazışma türü/eksik RAG bağlamı aynı boşluğa tekrar denemek yerine sırasıyla `NEEDS_INPUT` (insan-cevabı bekleyen HITL kesintisi) veya `NEEDS_HUMAN_APPROVAL`'a gider.
+- **Güvenlik**: Gelen evrak eksikse veya writer/reviser güvenilir çıktı üretemezse akış sahte bir varsayılan taslak ya da başarı skoru döndürmez; durum `FAILED` olur.
 
 ### 4. Routing Graph (`routing_graph.py`)
-- **Node'lar**: Route Node.
-- **Görev**: Taslak metni ve güven skorunu değerlendirerek yazıyı en uygun departmana (`HR`, `Legal`, `Accounting`, `Citizen`) yönlendirir veya güven skoru düşükse/hata oluştuysa doğrudan insan onayına (`HumanApproval`) iletir.
+- **Node'lar**: `route`.
+- **Görev**: Taslak metni ve (hibrit) güven skorunu değerlendirerek yazıyı `ROUTING_UNITS` listesindeki birime yönlendirir veya güven skoru `HUMAN_APPROVAL_SCORE_THRESHOLD`'un altındaysa/hata oluştuysa doğrudan `İnsan Onayı Gerekli`'ye iletir. `POST /api/v1/routing/suggest` üzerinden, bir taslak üretmeden bağımsız olarak da çağrılabilir — insan bir taslağı elle düzenledikten sonra yeniden üretim ödemeden taze bir yönlendirme kararı almak için.
 
-### 5. System Graph (`system_graph.py`)
-- **Node'lar**: System Op Node.
-- **Görev**: Kullanıcıdan bağımsız çalışan arka plan işlemleridir. Redis önbellek güncellemesi (`CACHE_UPDATE`), geçici dosya temizliği (`CLEANUP`) veya olay loglama (`LOGGING`) işlemlerini asenkron yürütür.
+---
+
+## Hibrit Kalite Kapısı (Görev 2)
+
+Taslak kalite denetimi iki bağımsız mekanizmanın birleşimidir (`ai/verification/`):
+
+1. **Deterministik doğrulayıcı** (`draft_verifier.verify_draft`): regex ve küme-üyeliği ile çalışır, LLM çağırmaz. Taslaktaki her sayı/tarih/kurum/mevzuat atfının kaynak evrakta veya alınan mevzuat bağlamında karşılığı olup olmadığını denetler (kurum adları için ≥%75 önemli-token örtüşmesi paraphrase'e izin verir), beş zorunlu yapısal unsuru (Konu/Sayı/Tarih/Kapanış/İmza) kontrol eder ve doldurulmamış `[...]` yer tutucularını sayar.
+2. **Hızlı-katman LLM yargıcı** (`llm_judge.judge_draft`): regex'in göremediği şeyleri değerlendirir — talebe gerçekten cevap veriyor mu, arz/rica yönü muhatap hiyerarşisiyle uyumlu mu, resmî üslup korunuyor mu, muhatap/hitap/kapanış tutarlı mı. Yargıç asla taslak metnini tekrar üretmez (her alan uzunluk sınırlı) ve bir yankı-koruması (`_reject_draft_echo`) taslağı büyük ölçüde tekrar eden bir "değerlendirmeyi" geçersiz sayar. Yargıç zaman aşımına uğrarsa, şema hatası verirse veya sağlayıcı istisnası fırlatırsa akış **bloke olmaz** — deterministik skora düşer (`judge_available=False`).
+
+`merge_verdicts()` ikisini `0.6*deterministik + 0.4*yargıç` ile birleştirir; herhangi bir **kritik** yargıç bulgusu veya `addresses_request=false` kararı, ortalamayı ezip skoru otomasyon eşiğinin altına sabitler ve insan onayını zorunlu kılar.
+
+---
+
+## HITL (Human-in-the-Loop)
+
+`draft_graph` yalnızca **raporlar** (durum + `missing_information`), akış kontrolü yapmaz — `interrupt()` bir alt grafın içinde çağrılamaz, çünkü `execute_step_node`'un geniş `except Exception`'ına düşer ve checkpointer'ı yoktur. Kesinti, `planning_graph`'a eklenen ayrı bir `human_gate` düğümünde gerçekleşir:
+
+```
+executor --(draft NEEDS_INPUT / NEEDS_HUMAN_APPROVAL)--> human_gate --(interrupt)
+human_gate --(Command(resume=...))--> executor (devam) | END (revize talebi / red)
+```
+
+`human_gate` ayrı bir düğüm olmasının nedeni: `interrupt()` bulunduğu düğümü resume'da baştan çalıştırır. `execute_step_node`'un içinde olsaydı, resume executor'ın state'e zaten yazdığı ~30 sn'lik taslak üretimini tekrarlardı. `missing_information` kesintisinde cevaplar `apply_answers()` ile **taslak yeniden üretilmeden** yerine konur ve yalnızca deterministik doğrulayıcı tekrar çalışır. Yalnızca `planning_graph` bir `AsyncPostgresSaver` checkpointer alır; dört alt graf `.ainvoke()` ile çağrılan, düğüm olarak kayıtlı olmayan bağımsız Pregel örnekleridir — üzerlerine checkpointer koymak ilgisiz, öksüz bir checkpoint soyağacı başlatırdı.
+
+`thread_id = session_id`; devam uç noktaları `POST /api/v1/chat/resume`, `POST /api/v1/chat/resume/sync` ve `GET /api/v1/chat/sessions/{id}/state`'tir (bkz. `docs/api/chat.md`).
 
 ---
 
@@ -159,39 +179,34 @@ Agent, belirli bir görevi yerine getiren karar birimidir. Tüm uzman ajanlar, s
 ### Ajan Mimari Yapısı (BaseAgent)
 `app/ai/agents/base.py` altında yer alan BaseAgent sınıfı şu SOTA özellikleri barındırır:
 * **Unified Messaging**: Tek bir prompt veya konuşma geçmişi (mesaj listesi) ile çalışabilme.
-* **Dinamik Prompting**: Sistem promptunun çalışma anında bağlama (context) göre dinamik olarak biçimlendirilmesi.
-* **Post-Validation / Guardrails**: Çıktıların doğrulanması ve denetlenmesi için özelleştirilebilir validator desteği.
-* **Self-Correction**: Pydantic model doğrulaması başarısız olduğunda otomatik hata geri-bildirimi ile kendini düzeltme döngüsü.
+* **Dinamik Prompting**: Sistem promptunun çalışma anında `{{placeholder}}` sözdizimiyle bağlama (context) göre dinamik olarak biçimlendirilmesi.
+* **Post-Validation / Guardrails**: `validators` listesi hem `run_structured()` hem de akış sonrası biriken metin üzerinde çalışır (bkz. `ai/guardrails/injection.py`); bir ihlal denemeyi kapalı şekilde başarısız sayar.
+* **Self-Correction**: Pydantic model doğrulaması başarısız olduğunda, önceki hata notunun üstüne eklenmek yerine onun yerini alan tek bir düzeltme notuyla kendini düzeltme döngüsü.
+* **Metrik enstrümantasyonu**: `run`/`run_structured`/`stream` çağrıları `observability/ai_metrics.py`'deki LLM süresi ve yapılandırılmış-çıktı yeniden deneme sayaçlarını besler.
 
 ### Uzman Ajanlar
 Sistemdeki tüm uzman ajanlar `app/ai/agents/` altında konumlandırılmıştır:
-* **OrchestratorAgent** (`orchestrator.py`): İş akışlarını planlar, adımları belirler ve görevleri dağıtır.
-* **NERAgent** (`ner.py`): Metinden varlık isimlerini (kişi, kurum, tarih vb.) çıkarır.
-* **ClassifierAgent** (`classifier.py`): Girdileri kategorize eder, sınıflandırır ve duygu analizi yapar.
-* **MetadataAgent** (`metadata.py`): Belgelerin meta verilerini ve anahtar kelimelerini ayıklar.
-* **WriterAgent** (`writer.py`): Yüksek kaliteli rapor, özet ve makale taslakları yazar.
-* **EditorAgent** (`editor.py`): Yazılan içeriklerin dil bilgisi, akış ve üslup düzeltmelerini yapar.
-* **VerifierAgent** (`verifier.py`): Çıktıların doğruluk, güvenlik ve guardrail kontrollerini üstlenir.
-* **RouterAgent** (`router.py`): İsteği en uygun ajana veya iş akışına yönlendirir.
-* **ReflectionAgent** (`reflection.py`): Taslak metni kendi kendine eleştirerek gereksiz tekrarları arındırır ve akışı mükemmelleştirir.
-* **EvaluatorAgent** (`evaluator.py`): Nihai resmi yazı taslağını kalite kontrolünden geçirir ve güven/doğruluk skoru atar.
+* **ClassifierAgent** (`classifier.py`): Görev 1'de sınıflandırma ve alan çıkarımını **tek bir birleşik çağrıda** yapar (`document_analysis_graph.py`'nin `MergedDocumentAnalysisOutput` şeması); genel metin sınıflandırması için de kullanılır.
+* **ComplianceAgent** (`compliance.py`): Gelen evrakı alınan mevzuat alıntılarıyla eşleştirir ve yalnızca sunulan alıntılara dayanan gerekçe üretir.
+* **WriterAgent** (`writer.py`): Brief'ten ilk taslağı yazar; kaynakta olmayan hiçbir kişi/kurum/tarih/sayı/olay üretmemesi ve bilmediği zorunlu bilgi için `[...]` yer tutucusu bırakması istenir.
+* **ReviserAgent** (`reviser.py`): Taslağı sıfırdan yeniden yazmaz; yalnızca numaralı kusur listesindeki maddeleri hedefleyen bir onarım promptuyla önceki taslağı düzeltir.
+* **JudgeAgent** (`judge.py`): Hibrit kalite kapısının hızlı-katman LLM yarısı — talebe uygunluk, üslup, kapanış yönü ve muhatap tutarlılığını değerlendirir (bkz. "Hibrit Kalite Kapısı").
+* **RouterAgent** (`router.py`): Taslağı `ROUTING_UNITS` listesindeki en uygun birime yönlendirir.
+* **ChatAgent** (`chat.py`): Evrak işlemi gerektirmeyen genel sohbeti yürütür.
+* **DocumentQAAgent** (`document_qa.py`): Yüklü bir belge hakkındaki soruları, belgenin özeti/üstverisi/içeriğinden oluşan bağlamla yanıtlar.
 
-Her agent yalnızca kendi görevinden sorumludur ve prompt şablonunu `PromptManager` üzerinden dinamik olarak diskten yükler.
+Her agent yalnızca kendi görevinden sorumludur ve prompt şablonunu `get_prompt_manager()` üzerinden dinamik olarak diskten yükler (bkz. "Prompt Yönetimi"). Niyet çözümlemesi artık bir ajan değil, deterministik bir arama tablosudur (bkz. "Planner").
 
 ---
 
 # Planner
 
-Planner kullanıcının isteğini analiz eder.
+`app/ai/workflows/planner.py` — sistemin dört sabit akışı vardır ve aralarındaki seçim çoğu mesaj için bir akıl yürütme değil, bir arama işidir.
 
-Görevleri
+* **`resolve_plan_deterministic()`**: mesajı Türkçe karakterleri katlayarak normalize eder, sırasıyla taslak anahtar kelimeleri, analiz anahtar kelimeleri, **kısa-onay devam kuralı** ("evet, hazırla" bir taslak/analiz teklifinden sonra o niyeti sürdürür — yalnızca 6 kelimeye kadar ve yalnızca belirsiz olmayan bir devamı olan iki niyet için), sohbet anahtar kelimeleri ve soru-işareti/soru-sözcüğü sezgiselini dener.
+* Yalnızca bunların hiçbiri eşleşmezse **belirsiz** kabul edilir ve tek bir etiketlik hızlı-katman model çağrısına düşer (`classify_intent_with_model`); model de başarısız olursa güvenli varsayılan (belge varsa `document_qa`, yoksa `chat`) seçilir — hiçbir zaman en yavaş dört-adımlı boru hattına değil.
 
-* amacı belirlemek
-* gerekli araçları seçmek
-* işlem sırasını oluşturmak
-* gereksiz işlemleri engellemek
-
-Planner sistemin karar mekanizmasıdır.
+Önceki tasarımda bu seçim, tam bir yapılandırılmış çıktı şeması bekleyen bir `OrchestratorAgent` çağrısıydı ve kritik yolda bir round-trip + Pydantic yeniden deneme döngüsü maliyeti taşıyordu. Planner artık sistemin karar mekanizmasıdır ama LLM'siz çalışır.
 
 ---
 
@@ -201,21 +216,14 @@ LLM katmanı farklı model sağlayıcılarını tek bir arayüz altında toplar.
 
 Uygulanan mimari yapıda aşağıdaki bileşenler yer almaktadır:
 * **BaseLLMClient** (`app/ai/llms/base.py`): Tüm sağlayıcı istemcilerinin uygulaması gereken soyut taban sınıf. `generate`, `stream` ve `generate_structured` metotlarını içerir.
-* **OllamaClient** (`app/ai/llms/ollama.py`): Yerel Ollama servisiyle (`ChatOllama` üzerinden) entegrasyonu sağlar. Qwen gibi yerel modelleri çalıştırır.
-* **get_llm_client** (`app/ai/llms/__init__.py`): İstenen sağlayıcıya ve parametrelere göre doğru istemciyi döndüren fabrika fonksiyonu.
+* **OllamaClient** (`app/infrastructure/providers/ollama.py`): Yerel Ollama servisiyle (`ChatOllama` üzerinden) entegrasyonu sağlar. Şu an tek sağlayıcı budur (`vllm.py` kullanılmadığı için kaldırılmıştır).
+* **get_llm_client** / **get_fast_llm_client** (`app/ai/llms/__init__.py`): İki katmanlı fabrika. `get_llm_client()` kalite katmanını (taslak yazımı, sınıflandırma), `get_fast_llm_client()` ise `OLLAMA_FAST_MODEL` tanımlıysa küçük modeli, tanımlı değilse aynı modeli döndürür — niyet çözümlemesi, yönlendirme ve kalite yargıcı gibi kısa/etiket-boyutlu kararlar için.
 
 ### Yerel Ollama Varsayılanları
 
 Yerel Ollama modeli repository genelinde geliştirici donanımına göre değiştirilmez. Paylaşılan fallback değeri `qwen3.5:9b` olarak korunur; her geliştirici kullanacağı modeli Git'e eklenmeyen yerel `.env` dosyasında `OLLAMA_MODEL` ile seçer. Docker Compose kökteki `.env` dosyasını, backend'i doğrudan çalıştırma ise `backend/.env` dosyasını kullanır. Örneğin 6 GB VRAM'e sahip bir bilgisayarda `OLLAMA_MODEL=qwen3:4b-instruct-2507-q4_K_M` kullanılabilir. Düşünme modu `OLLAMA_REASONING`, çıktı uzunluğu ise `OLLAMA_MAX_TOKENS` ile aynı yerel dosyada yapılandırılabilir.
 
-`OllamaClient`, normal metin üretimi, akış ve yapılandırılmış çıktı yöntemlerinde aynı model, reasoning ve token sınırı ayarlarını uygular. Üretim sunucuları için tanımlanan vLLM modeli bu yerel geliştirme profilinden bağımsızdır.
-
-Örnek sağlayıcılar:
-* OpenAI
-* Ollama (Aktif)
-* Anthropic
-* Google
-* OpenRouter
+`OllamaClient`, normal metin üretimi, akış ve yapılandırılmış çıktı yöntemlerinde aynı model, `num_ctx`, `keep_alive`, reasoning ve token sınırı ayarlarını uygular; `ChatOllama` örnekleri parametre setine göre önbelleğe alınır.
 
 Diğer katmanlar hangi sağlayıcının kullanıldığını bilmez.
 
@@ -232,19 +240,19 @@ Prompt'lar uygulama kodundan tamamen ayrılmıştır ve `app/ai/prompts/` klasö
 - **Dosya İzoleli Şablonlar**: Promptlar Python kodunun içine yazılmaz, `prompts/templates/` dizini altında bağımsız `.md` (Markdown) dosyaları olarak saklanır.
 - **Bellek Önbelleklemesi (Caching)**: Disk I/O yükünü en aza indirmek için diskten bir kez okunan prompt şablonları bellekte önbelleğe alınır.
 - **Güvenli Değişken Renderlama**: Değişken yerleştirme için standart `{}` yerine `{{deger}}` söz dizimi kullanılır. Bu sayede prompt içindeki JSON şemalarında veya kod bloklarında yer alan tekli kıvırcık parantezlerin (`{}`) render işlemi sırasında çakışması ve hata üretmesi engellenir.
-- **Singleton Yapısı**: `prompt_manager` adıyla dışa aktarılan tekil örnek, tüm uygulama genelinde tutarlı prompt yönetimi sağlar.
+- **Süreç-genelinde tekil erişim**: `get_prompt_manager()` fonksiyonu tüm uygulama genelinde aynı örneği döndürür. (Modül seviyesinde ayrıca dışa aktarılan bir `prompt_manager` nesnesi **yoktur** — her ajanın kendi `PromptManager()` kurması yerine bu tek fonksiyon kullanılır.)
+- **Şablon Sözleşmesi**: `TEMPLATE_CONTRACTS` her şablonun deklare ettiği `{{placeholder}}` kümesini kod içinde sabitler; `declared_placeholders()` bir şablon metnindeki gerçek placeholder'ları çıkarır. `tests/unit/ai/test_prompt_templates.py`, her şablonun diskte var olduğunu, sözleşmesiyle eşleştiğini ve **tam olarak bir** ajan modülü tarafından referans verildiğini doğrular — sahipsiz bir şablon burada yakalanır.
 
 ### Prompt Şablonları (`prompts/templates/`)
 Her uzman ajanın ve akışın sistem yönergesi ilgili markdown dosyasında saklanır:
-- `orchestrator.md`: Orkestrasyon ajanı yönergeleri (Türkçe).
-- `ner.md`: Varlık ismi tanıma ajanı yönergeleri (Türkçe).
-- `classifier.md`: Sınıflandırma ajanı yönergeleri (Türkçe).
-- `metadata.md`: Metadata çıkarma ajanı yönergeleri (Türkçe).
+- `classifier.md`: Sınıflandırma + alan çıkarımı ajanı yönergeleri (Türkçe).
+- `compliance.md`: Uygunluk/mevzuat eşleştirme ajanı yönergeleri (Türkçe).
 - `writer.md`: Yazar ajanı yönergeleri (Türkçe).
-- `editor.md`: Editör ajanı yönergeleri (Türkçe).
-- `verifier.md`: Doğrulama ajanı yönergeleri (Türkçe).
+- `reviser.md`: Revizör ajanı yönergeleri — yalnızca listelenen kusurları düzeltme, `[...]` yer tutucularına dokunmama kuralını içerir (Türkçe).
+- `judge.md`: Kalite yargıcı ajanı yönergeleri — arz/rica yön kuralı ve hiyerarşi muhakemesi (Türkçe).
 - `router.md`: Yönlendirme ajanı yönergeleri (Türkçe).
 - `chat.md`: Sohbet sistemi yönergeleri (Türkçe).
+- `document_qa.md`: Belge soru-cevap ajanı yönergeleri (Türkçe).
 
 Bu sayede promptlar:
 * kolayca sürümlenebilir
@@ -330,28 +338,12 @@ Bu süreç cevap üretiminden bağımsızdır.
 
 # Memory
 
-Memory, sistemin geçmiş konuşmaları ve oturum bazlı bilgileri yönetmesini sağlar. Projede SOTA düzeyinde modüler üç farklı hafıza stratejisi sunulmuştur:
+Konuşma geçmişi, **checkpoint'lenmiş graf state'i** üzerinde taşınır — `planning_graph`'ın `thread_id`'si zaten `session_id`'ye eşittir ve `AsyncPostgresSaver` bu state'i (geçmiş, bekleyen bir HITL kesintisi, her şey) zaten tutarlı biçimde kalıcılaştırır. Ayrı bir Redis tabanlı depo, checkpoint yazımıyla arasında bir çökmede bölünebilecek ikinci bir kaynak eklerdi.
 
-### 1. Kısa Süreli Hafıza (ConversationWindowMemory)
-`app/ai/memory/conversation.py` altında yer alır:
-- Redis önbellek katmanı üzerinde oturum bazlı çalışır.
-- Belirlenen pencere boyutuna (`window_size`) göre sadece en son `N` adet sohbet turnünü (mesajını) saklar. LLM bağlam penceresini (context window) gereksiz geçmişle şişirmemek için otomatik kırpma yapar.
+### CheckpointMemory (`ai/memory/checkpoint_memory.py`)
+`BaseMemory` sözleşmesini `planning_graph.aget_state(...)` üzerine ince, salt-okunur bir görünüm olarak uygular. `HISTORY_WINDOW=12` turluk bir pencere `_append_history` reducer'ıyla state'te tutulur; `_run_chat`/`_run_document_qa` sohbet/soru-cevap ajanlarına geçmişi buradan sağlar.
 
-### 2. Özet Tabanlı Hafıza (SummaryMemory)
-`app/ai/memory/summary.py` altında yer alır:
-- Sohbet geçmişi belirli bir sınıra (`summary_threshold`) ulaştığında, asenkron olarak arka planda LLM çağrısı yaparak tüm eski konuşmayı tek bir paragraflık Türkçe özete sıkıştırır.
-- Bir sonraki adımda ajana bağlam olarak `Geçmiş Sohbet Özeti + Son K adet Ham Mesaj` yapısını sunarak verimli bir uzun dönem hafıza sağlar.
-
-### 3. Anlamsal Hafıza / Mem0-like Episodic Memory (VectorMemory)
-`app/ai/memory/vector_memory.py` altında yer alır:
-- **Custom Mem0** mantığıyla çalışır. Her konuşma turnünde kullanıcının kendisi hakkında doğrudan veya dolaylı olarak verdiği kişisel olguları, tercihleri, ilgileri ve projeleri (`MetadataAgent` veya LLM yardımıyla) Türkçe maddeler halinde çıkarır.
-- Çıkarılan her bir bağımsız olguyu (`episodic_fact`) `EmbeddingService` üzerinden vektörleyerek Qdrant'ta `user_episodic_memory` koleksiyonunda saklar.
-- Yeni bir istek geldiğinde, kullanıcının güncel sorusuyla en alakalı eski olguları vektör benzerlik araması ile bulur ve prompta enjekte eder (örn: "Kullanıcı Python dilini tercih ediyor", "Kullanıcının projesinin adı KACHOW").
-
-Bu sayede hafıza katmanı:
-- Oturum sınırlarını korur.
-- LLM bağlam limitlerini verimli yönetir.
-- Kullanıcıya ait kişisel tercihleri asla unutmayan akıllı bir kişiselleştirilmiş hafıza sunar.
+> **Not**: Önceki sürümlerdeki Redis pencere hafızası (`ConversationWindowMemory`), LLM özetleme tabanlı uzun dönem hafıza (`SummaryMemory`) ve Qdrant tabanlı episodik/Mem0-benzeri hafıza (`VectorMemory`) kaldırılmıştır; tek doğruluk kaynağı artık checkpointer'dır.
 
 ---
 
@@ -394,11 +386,8 @@ Projede RAG akışı, bilgi doğruluğunu artırmak ve halüsinasyonları engell
 - Dense ve Sparse listelerinden dönen adayları **Reciprocal Rank Fusion (RRF)** algoritmasıyla birleştirir.
 - Her iki sıralamadaki pozisyonuna göre dokümanlara $1 / (k + rank)$ formülü ile bir RRF skoru atar. Böylece hem anlamsal hem de kelime eşleşmesi yüksek olan dokümanlar en üstte birleşir.
 
-### 4. Yeniden Sıralama (`LLMReranker`)
-- RRF tarafından birleştirilmiş adayları `BaseAgent` aracılığıyla değerlendirir.
-- Sorgu ile her dokümanı karşılaştırarak **0.0 (alakasız)** ile **10.0 (tam eşleşme)** arasında bir alaka skoru ve Türkçe gerekçe üretir.
-- Çıktı, Pydantic şemasıyla doğrulanır ve hata/çakışma durumunda RRF sıralamasına geri dönen (fallback) bir koruma barındırır.
-- Son sıralanmış ve puanlanmış en kaliteli dokümanları LLM bağlamına (context) besler.
+### 4. Yeniden Sıralama
+> **Kaldırıldı.** `LLMReranker`, bu boyuttaki bir korpusta 3 sonucu yeniden sıralamak için ~90 sn'lik taslak gecikme bütçesinin kritik yoluna bir LLM çağrısı daha ekliyordu ve kalitenin belirleyicisi hiç olmadı. RRF'nin ürettiği sıralama doğrudan kullanılır.
 
 ---
 
@@ -454,7 +443,7 @@ Bu bilgiler sistem davranışını analiz etmek için kullanılır.
 
 AI aşağıdaki güvenlik prensiplerini uygular.
 
-* Prompt Injection koruması
+* **Prompt Injection koruması** — `ai/guardrails/injection.py`. `scrub_extracted_text()` çıkarılan evrak metnindeki sıfır-genişlikli/bidi kontrol karakterlerini ve Türkçe/İngilizce talimat-geçersizleştirme satırlarını (yüklenen bir dosya saldırgan kontrolündeki girdidir) temizler; `assert_no_prompt_leak()` bir `BaseAgent` validator'ı olarak hem yapılandırılmış çıktılarda hem de akış sonrası biriken metinde çalışır.
 * Tool Permission kontrolü
 * Input Validation
 * Output Filtering

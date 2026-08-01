@@ -53,11 +53,13 @@ Tüm uç noktalarda olduğu gibi birleşik `APIResponse` zarfı kullanılır.
   "data": {
     "file_name": "evrak_02.pdf",
     "storage_path": "uploads/9f1c....pdf",
+    "analysis_id": "uploads/9f1c....pdf",
     "extraction": {
       "extractor": "opendataloader",
       "page_count": 1,
       "char_count": 281,
-      "used_ocr": false
+      "used_ocr": false,
+      "scrubbed_markers": []
     },
     "document_type": "official_letter",
     "document_type_label": "Resmî Yazı",
@@ -104,8 +106,10 @@ Tüm uç noktalarda olduğu gibi birleşik `APIResponse` zarfı kullanılır.
 
 | Alan | Açıklama |
 |---|---|
+| `analysis_id` | Bu analiz sonucunun kimliği; `storage_path` ile aynıdır ve `GET /documents/{storage_path}` ile tam analizi tekrar çekmek için kullanılır |
 | `extraction.extractor` | Metni çıkaran bileşen: `plain_text`, `opendataloader`, `pdfium` veya `tesseract` |
 | `extraction.used_ocr` | `true` ise metin OCR ile okunmuştur ve alan değerleri kullanıcıya doğrulatılmalıdır |
+| `extraction.scrubbed_markers` | Metinden temizlenen olası talimat-enjeksiyonu işaretçileri (bkz. Güvenlik notu) — boşsa hiçbir şey temizlenmemiştir |
 | `document_type` | `DocumentType` enum değeri (gelen evrak türü) |
 | `compliance_status` | `compliant`, `partially_compliant` veya `incomplete` |
 | `missing_fields[].severity` | `zorunlu` veya `onerilen` |
@@ -163,9 +167,50 @@ gerektirir). Java yoksa `pypdfium2` yedeği devreye girer. Taranmış PDF veya
 fotoğraflanmış evrak, 300 DPI'a rasterize edilip Tesseract Türkçe dil paketi
 (`tur`) ile okunur.
 
-**Kimlik doğrulama.** Bu uç nokta şu aşamada kimlik doğrulaması istemez.
-Korumaya alınması için `Depends(get_current_user)` bağımlılığının eklenmesi
-yeterlidir.
+**Kimlik doğrulama.** `settings.REQUIRE_AUTH` varsayılan olarak `False`
+olduğu için bu uç nokta şu aşamada kimlik doğrulaması istemez;
+`require_auth_if_enabled` bağımlılığı `REQUIRE_AUTH=True` yapıldığı an, kod
+değişikliği gerekmeden devreye girer. `/documents/analyze` ayrıca IP başına
+dakikada 10 istekle sınırlıdır (`rate_limit`) — yerel modeli onlarca saniye
+meşgul eden bu uç nokta kimliksiz tek bir çağıranla kolayca tıkanabilir.
 
-**Kalıcılık.** Bu aşamada veritabanı kaydı tutulmaz; yalnızca ham evrak
-`BaseStorage` üzerinde saklanır ve `storage_path` ile döndürülür.
+**Kalıcılık.** Bu aşamada veritabanı kaydı tutulmaz; ham evrak `BaseStorage`
+üzerinde, analiz sonucu ise yerel `uploads_metadata.json` içinde saklanır ve
+`storage_path` ile döndürülür.
+
+**Güvenlik.** Çıkarılan metin, ajan promptlarına girmeden hemen önce
+`scrub_extracted_text()` ile temizlenir: sıfır-genişlikli/bidi kontrol
+karakterleri ve Türkçe/İngilizce talimat-geçersizleştirme satırları
+kaldırılır. Bu, `char_count` eşiği çalışmadan **önce** uygulanır, böylece
+temizlenmiş metin ölçülen metindir. Ne temizlendiği `extraction.scrubbed_markers`
+alanında dürüstçe raporlanır.
+
+---
+
+## GET /api/v1/documents
+
+Yüklenen evrakları en yeniden eskiye özet metadata ile (7 alanlık kütüphane
+projeksiyonu) sayfalayarak listeler. `page`/`size` sorgu parametrelerini
+kabul eder ve `PaginatedResponse` zarfı (`items`, `total`, `page`, `size`,
+`pages`) döndürür.
+
+## GET /api/v1/documents/{storage_path}
+
+Önbelleğe alınmış **tam** analiz sonucunu döndürür — `POST /documents/analyze`
+ile birebir aynı şema (`missing_fields`, `mevzuat_references` dahil). Kütüphane
+listesinden bir evrağı yeniden seçerken bu uç nokta olmadan bu iki alan
+tamamen kayboluyordu. `storage_path` biçimsizse 400, önbellekte analiz yoksa
+404 döner.
+
+## GET /api/v1/documents/correspondence-types
+
+Desteklenen çıktı yazışma türlerini (`cover_letter`, `response_letter`,
+`information_notice`, `other_official`) ve Türkçe etiketlerini listeler.
+Frontend'in tür seçici bileşeni bu listeyi kullanır; etiketler
+`CorrespondenceType`/`CORRESPONDENCE_TYPE_LABELS` tek doğruluk kaynağından
+gelir, TypeScript tarafında tekrar yazılmaz.
+
+## POST /api/v1/documents/draft
+
+Görev 2 — resmî yazı taslaklama ve birim yönlendirme uç noktası. Ayrıntılı
+istek/yanıt şeması ve HITL akışı için bkz. **`docs/api/drafts.md`**.
