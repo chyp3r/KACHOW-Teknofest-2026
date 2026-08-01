@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Any, Optional
 from langfuse.langchain import CallbackHandler
 from app.core.config import settings
 
@@ -35,5 +35,31 @@ def get_langfuse_callback() -> Optional[CallbackHandler]:
         except Exception as e:
             logger.error(f"Failed to initialize Langfuse callback handler: {e}", exc_info=True)
             return None
-            
+
     return _callback_handler
+
+
+def build_trace_config(**configurable: Any) -> dict[str, Any]:
+    """Build a LangGraph config: given configurable keys plus Langfuse tracing.
+
+    Replaces three identical private ``_trace_config`` copies that used to
+    live in ``ChatService``, ``DocumentService`` and ``DraftService``.
+
+    Args:
+        **configurable: Values merged into ``config["configurable"]`` (e.g.
+            ``thread_id``, ``status_queue``). Omit for a plain, tracing-only
+            config.
+
+    Returns:
+        A LangGraph-shaped config dict. Tracing degrades to absent rather than
+        raising -- a document upload or a chat turn must not fail because
+        Langfuse is unreachable.
+    """
+    config: dict[str, Any] = {}
+    if configurable:
+        config["configurable"] = dict(configurable)
+
+    handler = get_langfuse_callback()
+    if handler:
+        config["callbacks"] = [handler]
+    return config
