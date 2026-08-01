@@ -100,6 +100,26 @@ CHAT_KEYWORDS = (
     "hosca kal",
 )
 
+#: A short affirmative reply to "taslak hazırlayayım mı?" or "analiz edeyim
+#: mi?" continues whatever the previous turn's intent was, rather than
+#: falling through to the "short message -> chat" default. Without this, "evet,
+#: hazırla" after a draft offer resolved to plain conversation.
+CONTINUATION_KEYWORDS = (
+    "evet",
+    "olur",
+    "tamam",
+    "onayliyorum",
+    "devam et",
+    "devam",
+    "hazirla",
+    "yap",
+    "lutfen",
+)
+
+#: Only these intents make sense to silently continue; a bare "evet" after a
+#: chat/document_qa turn has no unambiguous follow-up action.
+_CONTINUABLE_INTENTS = frozenset({"draft", "analyze"})
+
 QUESTION_MARKERS = (
     "mi",
     "mu",
@@ -184,7 +204,7 @@ def _looks_like_question(raw: str, normalized: str) -> bool:
 
 
 def resolve_plan_deterministic(
-    message: str, document_id: Optional[str]
+    message: str, document_id: Optional[str], previous_intent: Optional[str] = None
 ) -> Optional[PlanDecision]:
     """Resolve the plan without a model, when the message allows it.
 
@@ -195,6 +215,9 @@ def resolve_plan_deterministic(
     Args:
         message: The user's message.
         document_id: Storage path of an attached document, when present.
+        previous_intent: The intent resolved for this thread's previous turn,
+            when known. Lets a short affirmative ("evet, hazırla") continue a
+            draft/analyze offer instead of falling through to plain chat.
 
     Returns:
         A decision, or None when the message is ambiguous.
@@ -217,6 +240,18 @@ def resolve_plan_deterministic(
             "analyze",
             REASONING_BY_INTENT["analyze"],
             "keyword",
+        )
+
+    if (
+        previous_intent in _CONTINUABLE_INTENTS
+        and len(normalized.split()) <= 6
+        and _contains_any(normalized, CONTINUATION_KEYWORDS)
+    ):
+        return PlanDecision(
+            list(PLAN_BY_INTENT[previous_intent]),
+            previous_intent,  # type: ignore[arg-type]
+            REASONING_BY_INTENT[previous_intent] + " (önceki isteğin devamı)",
+            "continuation",
         )
 
     # A greeting with no document attached needs no further thought.
@@ -299,6 +334,7 @@ async def resolve_plan(
     message: str,
     document_id: Optional[str],
     llm_client: Optional[BaseLLMClient] = None,
+    previous_intent: Optional[str] = None,
 ) -> PlanDecision:
     """Resolve the execution plan for a user message.
 
@@ -307,11 +343,13 @@ async def resolve_plan(
         document_id: Storage path of an attached document, when present.
         llm_client: Fast-tier client for the ambiguous case. When omitted, an
             ambiguous message resolves by context instead of by model.
+        previous_intent: The intent resolved for this thread's previous turn,
+            when known -- enables the short-affirmative continuation rule.
 
     Returns:
         The execution plan and the rationale shown to the user.
     """
-    decided = resolve_plan_deterministic(message, document_id)
+    decided = resolve_plan_deterministic(message, document_id, previous_intent)
     if decided is not None:
         logger.info(
             "Plan resolved deterministically (%s): %s", decided.source, decided.steps
