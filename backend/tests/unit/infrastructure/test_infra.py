@@ -12,21 +12,11 @@ from app.ai.embeddings.service import EmbeddedChunk
 
 
 # ==========================================
-# vLLM Client Tests
+# LLM Client Factory Tests
 # ==========================================
-@pytest.mark.asyncio
-@patch("app.infrastructure.providers.vllm.ChatOpenAI")
-async def test_vllm_client_generate(mock_chat_openai):
-    mock_instance = MagicMock()
-    mock_instance.ainvoke = AsyncMock()
-    mock_instance.ainvoke.return_value.content = "vLLM test response"
-    mock_chat_openai.return_value = mock_instance
-
-    client = get_llm_client(provider="vllm", base_url="http://localhost:8000/v1", model="qwen")
-    response = await client.generate([{"role": "user", "content": "hello"}])
-
-    assert response == "vLLM test response"
-    mock_instance.ainvoke.assert_called_once()
+def test_get_llm_client_rejects_unsupported_provider():
+    with pytest.raises(ValueError):
+        get_llm_client(provider="bedrock")
 
 
 # ==========================================

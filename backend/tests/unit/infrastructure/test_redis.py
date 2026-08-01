@@ -18,7 +18,7 @@ async def test_redis_connect_and_close(mock_aioredis, redis_cache):
     mock_aioredis.from_url.assert_called_once_with("redis://localhost:6379/0", decode_responses=True)
     
     await redis_cache.close()
-    mock_client.close.assert_called_once()
+    mock_client.aclose.assert_called_once()
     assert redis_cache.client is None
 
 @pytest.mark.asyncio

@@ -7,12 +7,9 @@ from app.ai.retrieval import (
     BM25Retriever,
     reciprocal_rank_fusion,
     HybridRetriever,
-    LLMReranker,
 )
 from app.infrastructure.vectorstore import BaseVectorStore
 from app.ai.embeddings import BaseEmbeddingsClient
-from app.ai.agents.base import BaseAgent
-from app.ai.retrieval.reranker import RerankResponse, DocumentRelevance
 
 
 # ==========================================
@@ -122,36 +119,6 @@ async def test_hybrid_retriever():
     mock_vector_store.hybrid_search.assert_called_once()
 
 
-# ==========================================
-# LLM Reranker Tests
-# ==========================================
-@pytest.mark.asyncio
-async def test_llm_reranker():
-    mock_agent = MagicMock(spec=BaseAgent)
-    
-    # Mock LLM structured response
-    mock_response = RerankResponse(
-        scores=[
-            DocumentRelevance(index=1, relevance_score=9.5, reason="Birebir eşleşme"),
-            DocumentRelevance(index=0, relevance_score=2.0, reason="Kısmen alakasız")
-        ]
-    )
-    mock_agent.run_structured = AsyncMock(return_value=mock_response)
-
-    reranker = LLMReranker(agent=mock_agent)
-    
-    docs = [
-        Document(page_content="Weak candidate", metadata={"orig_idx": 0}),
-        Document(page_content="Strong candidate", metadata={"orig_idx": 1})
-    ]
-    
-    sorted_docs = await reranker.rerank("Query", docs)
-    
-    # Verify sorted: Strong candidate (index 1) should be at rank 0 now
-    assert len(sorted_docs) == 2
-    assert sorted_docs[0].page_content == "Strong candidate"
-    assert sorted_docs[0].metadata["relevance_score"] == 9.5
-    assert sorted_docs[0].metadata["rerank_reason"] == "Birebir eşleşme"
-    
-    assert sorted_docs[1].page_content == "Weak candidate"
-    assert sorted_docs[1].metadata["relevance_score"] == 2.0
+# LLMReranker was removed: reranking 3 results out of a corpus this small, on
+# the critical path of the ~90s draft latency budget, was never where the
+# quality was -- see the implementation plan's Phase 8 notes.

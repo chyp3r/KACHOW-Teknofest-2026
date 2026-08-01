@@ -4,14 +4,11 @@ from pydantic import BaseModel
 
 from app.ai.agents import (
     BaseAgent,
-    OrchestratorAgent,
     ClassifierAgent,
-    MetadataAgent,
     WriterAgent,
-    EditorAgent,
+    ReviserAgent,
     RouterAgent,
-    ReflectionAgent,
-    EvaluatorAgent,
+    JudgeAgent,
 )
 
 
@@ -26,32 +23,34 @@ def mock_llm_client():
 
 
 def test_base_agent_initialization(mock_llm_client):
-    agent = OrchestratorAgent(llm_client=mock_llm_client)
-    assert agent.name == "OrchestratorAgent"
+    agent = ClassifierAgent(llm_client=mock_llm_client)
+    assert agent.name == "ClassifierAgent"
     assert agent.llm_client == mock_llm_client
-    assert "Coordinates" in agent.description
 
 
 def test_base_agent_prompt_rendering(mock_llm_client):
+    # Placeholders are {{name}}, never {name} -- templates embed literal JSON
+    # examples with single braces, so str.format() cannot be used on them.
     agent = BaseAgent(
         llm_client=mock_llm_client,
         name="TestAgent",
         description="A test agent",
-        system_prompt="Hello {name}, welcome to {project}!",
+        system_prompt="Hello {{name}}, welcome to {{project}}!",
     )
 
     # Render without context
-    assert agent._render_system_prompt() == "Hello {name}, welcome to {project}!"
+    assert agent._render_system_prompt() == "Hello {{name}}, welcome to {{project}}!"
 
     # Render with context
     ctx = {"name": "Gökdeniz", "project": "KACHOW"}
     assert agent._render_system_prompt(ctx) == "Hello Gökdeniz, welcome to KACHOW!"
 
-    # Render with missing keys (should fail gracefully and log warning)
+    # Render with missing keys (left as-is rather than failing, so a
+    # partially supplied context still produces a usable prompt)
     bad_ctx = {"name": "Gökdeniz"}
     assert (
         agent._render_system_prompt(bad_ctx)
-        == "Hello {name}, welcome to {project}!"
+        == "Hello Gökdeniz, welcome to {{project}}!"
     )
 
 
@@ -130,14 +129,11 @@ async def test_base_agent_run_structured_retry_loop(mock_llm_client):
 
 def test_specialist_agents_inheritance(mock_llm_client):
     agents = [
-        OrchestratorAgent(mock_llm_client),
         ClassifierAgent(mock_llm_client),
-        MetadataAgent(mock_llm_client),
         WriterAgent(mock_llm_client),
-        EditorAgent(mock_llm_client),
+        ReviserAgent(mock_llm_client),
         RouterAgent(mock_llm_client),
-        ReflectionAgent(mock_llm_client),
-        EvaluatorAgent(mock_llm_client),
+        JudgeAgent(mock_llm_client),
     ]
 
     for agent in agents:

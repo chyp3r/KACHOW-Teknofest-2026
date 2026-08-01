@@ -29,7 +29,9 @@ class RedisCache:
     async def close(self) -> None:
         """Close the Redis connection pool."""
         if self.client is not None:
-            await self.client.close()
+            # .close() is a deprecated alias for .aclose() on this redis-py
+            # version and emits a DeprecationWarning on every call.
+            await self.client.aclose()
             self.client = None
             logger.info("Closed Redis cache connection.")
 

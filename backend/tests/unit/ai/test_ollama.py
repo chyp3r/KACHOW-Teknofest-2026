@@ -37,7 +37,9 @@ async def test_ollama_generate(mock_chat_ollama):
         model="test-model",
         temperature=0.5,
         reasoning=False,
-        num_predict=1024,
+        num_predict=4096,
+        num_ctx=settings.OLLAMA_NUM_CTX,
+        keep_alive=settings.OLLAMA_KEEP_ALIVE,
     )
 
 
@@ -69,7 +71,9 @@ async def test_ollama_stream(mock_chat_ollama):
         model="test-model",
         temperature=0.7,
         reasoning=False,
-        num_predict=1024,
+        num_predict=4096,
+        num_ctx=settings.OLLAMA_NUM_CTX,
+        keep_alive=settings.OLLAMA_KEEP_ALIVE,
     )
 
 
@@ -94,13 +98,21 @@ async def test_ollama_generate_structured(mock_chat_ollama):
 
     assert response.name == "Gökdeniz"
     assert response.age == 25
-    mock_instance.with_structured_output.assert_called_once_with(UserSchema)
+    # method="function_calling" is pinned: the library's "json_schema" default
+    # is a silent no-op against a custom Ollama renderer/parser engine (e.g.
+    # qwen3.5), while tool-calling is honoured exactly -- see generate_structured's
+    # docstring.
+    mock_instance.with_structured_output.assert_called_once_with(
+        UserSchema, method="function_calling"
+    )
     mock_chat_ollama.assert_called_once_with(
         base_url="http://localhost:11434",
         model="test-model",
         temperature=0.7,
         reasoning=False,
-        num_predict=1024,
+        num_predict=4096,
+        num_ctx=settings.OLLAMA_NUM_CTX,
+        keep_alive=settings.OLLAMA_KEEP_ALIVE,
     )
 
 
@@ -129,6 +141,8 @@ async def test_ollama_generate_allows_runtime_overrides(mock_chat_ollama):
         temperature=0.7,
         reasoning=True,
         num_predict=128,
+        num_ctx=settings.OLLAMA_NUM_CTX,
+        keep_alive=settings.OLLAMA_KEEP_ALIVE,
     )
 
 
@@ -138,7 +152,7 @@ def test_ollama_factory_uses_local_defaults():
     assert isinstance(client, OllamaClient)
     assert client.model_name == settings.OLLAMA_MODEL
     assert client.reasoning is False
-    assert client.max_tokens == 1024
+    assert client.max_tokens == settings.OLLAMA_MAX_TOKENS
 
 
 def test_shared_config_keeps_repository_model_default():
