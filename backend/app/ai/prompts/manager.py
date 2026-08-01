@@ -13,22 +13,61 @@ logger = logging.getLogger(__name__)
 _PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*(\w+)\s*\}\}")
 
 
-def render_placeholders(template: str, context: Mapping[str, Any]) -> str:
+#: The declared ``{{placeholder}}`` set for every template this codebase ships.
+#: A template gaining a new placeholder with no corresponding update here (or an
+#: agent stopping supplying a declared one) is exactly the drift this contract
+#: catches -- see ``tests/unit/ai/test_prompt_templates.py``.
+TEMPLATE_CONTRACTS: Dict[str, frozenset] = {
+    "chat": frozenset(),
+    "classifier": frozenset(),
+    "compliance": frozenset(),
+    "document_qa": frozenset({"context"}),
+    "router": frozenset(),
+    "writer": frozenset(),
+    "judge": frozenset(),
+    "reviser": frozenset(),
+}
+
+
+def declared_placeholders(template: str) -> set:
+    """Return the ``{{name}}`` placeholders a template's text declares.
+
+    Args:
+        template: Raw template text (not a template name -- callers that have
+            only a name should read it first via :meth:`PromptManager.get_template`).
+
+    Returns:
+        The set of distinct placeholder names found in the text.
+    """
+    return set(_PLACEHOLDER_PATTERN.findall(template))
+
+
+def render_placeholders(
+    template: str, context: Mapping[str, Any], *, strict: bool = False
+) -> str:
     """Substitute ``{{name}}`` placeholders in a template.
 
     Args:
         template: Raw template text.
         context: Values to substitute, keyed by placeholder name.
+        strict: When True, raise instead of logging when a placeholder has no
+            supplied value. Production rendering always leaves an unmatched
+            placeholder verbatim so a partially supplied context stays
+            readable instead of going blank; ``strict`` exists for tests that
+            want to assert every declared placeholder is actually supplied.
 
     Returns:
-        The rendered text. Placeholders with no matching key are left verbatim,
-        which keeps a partially supplied context readable instead of blanking
-        the instruction.
+        The rendered text.
+
+    Raises:
+        KeyError: If ``strict`` is True and a placeholder has no matching key.
     """
 
     def _replace(match: re.Match[str]) -> str:
         key = match.group(1)
         if key not in context:
+            if strict:
+                raise KeyError(f"Prompt placeholder '{{{{{key}}}}}' has no value.")
             logger.warning("Prompt placeholder '{{%s}}' has no value; left as-is.", key)
             return match.group(0)
         return str(context[key])
@@ -91,17 +130,18 @@ class PromptManager:
         logger.debug("Loaded and cached prompt template: %s", base_name)
         return content
 
-    def render(self, name: str, **kwargs: Any) -> str:
+    def render(self, name: str, *, strict: bool = False, **kwargs: Any) -> str:
         """Load a template and substitute its ``{{variable}}`` placeholders.
 
         Args:
             name: Template name.
+            strict: See :func:`render_placeholders`.
             **kwargs: Placeholder values.
 
         Returns:
             The rendered prompt.
         """
-        return render_placeholders(self.get_template(name), kwargs)
+        return render_placeholders(self.get_template(name), kwargs, strict=strict)
 
     def clear_cache(self) -> None:
         """Clear the template cache."""

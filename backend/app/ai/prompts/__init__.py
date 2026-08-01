@@ -1,6 +1,3 @@
-from app.ai.prompts.manager import PromptManager
+from app.ai.prompts.manager import PromptManager, get_prompt_manager, render_placeholders
 
-# Global singleton instance of PromptManager
-prompt_manager = PromptManager()
-
-__all__ = ["PromptManager", "prompt_manager"]
+__all__ = ["PromptManager", "get_prompt_manager", "render_placeholders"]
