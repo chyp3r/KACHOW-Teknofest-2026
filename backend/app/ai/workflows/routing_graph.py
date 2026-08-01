@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from app.ai.agents.router import RouterAgent
 from app.ai.llms.base import BaseLLMClient
 from app.ai.workflows.events import emit_node_end, emit_node_start
+from app.ai.workflows.resilience import LLM_RETRY, NODE_TIMEOUT_SECONDS, TRANSIENT_ERRORS, node_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,7 @@ def create_routing_graph(llm_client: BaseLLMClient):
     """
     router_agent = RouterAgent(llm_client)
 
+    @node_timeout(NODE_TIMEOUT_SECONDS["route"])
     async def routing_node(state: RoutingState, config: RunnableConfig) -> Dict[str, Any]:
         logger.info("Running Routing Node...")
         await emit_node_start(
@@ -133,6 +135,9 @@ def create_routing_graph(llm_client: BaseLLMClient):
                     messages=prompt, response_model=RouteOutput, temperature=0.0
                 )
                 update = _decision(res.destination, res.justification)
+            except TRANSIENT_ERRORS:
+                logger.warning("Routing Node hit a transient error; retrying.")
+                raise
             except Exception:
                 logger.exception("Routing Node failed")
                 update = _decision(
@@ -146,7 +151,7 @@ def create_routing_graph(llm_client: BaseLLMClient):
         return update
 
     builder = StateGraph(RoutingState)
-    builder.add_node("route", routing_node)
+    builder.add_node("route", routing_node, retry_policy=LLM_RETRY)
     builder.add_edge(START, "route")
     builder.add_edge("route", END)
 

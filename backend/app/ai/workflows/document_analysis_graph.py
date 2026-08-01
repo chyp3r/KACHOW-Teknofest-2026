@@ -21,7 +21,14 @@ from app.ai.compliance import (
 )
 from app.ai.llms.base import BaseLLMClient
 from app.ai.retrieval.hybrid import HybridRetriever
-from app.ai.workflows.events import emit_node_end, emit_node_start, emit_partial
+from app.ai.workflows.events import emit_node_end, emit_node_error, emit_node_start, emit_partial
+from app.ai.workflows.resilience import (
+    IO_RETRY,
+    LLM_RETRY,
+    NODE_TIMEOUT_SECONDS,
+    TRANSIENT_ERRORS,
+    node_timeout,
+)
 from app.core.enums.compliance_status import ComplianceStatus
 from app.core.enums.document_type import DocumentType
 
@@ -204,10 +211,27 @@ def _build_mevzuat_query(state: DocumentAnalysisState) -> str:
     return " ".join(parts).strip()
 
 
+def _render_mevzuat_excerpts(documents: list[Document]) -> str:
+    """Render retrieved legislation excerpts as prompt/display context.
+
+    Args:
+        documents: Documents returned by the hybrid retriever.
+
+    Returns:
+        The excerpts joined into one string, or an empty string when none.
+    """
+    parts: list[str] = []
+    for index, document in enumerate(documents, start=1):
+        source = document.metadata.get("mevzuat", "bilinmiyor")
+        parts.append(f"[ALINTI {index}] (Kaynak: {source})\n{document.page_content}")
+    return "\n\n".join(parts)
+
+
 def create_document_analysis_graph(
     llm_client: BaseLLMClient,
     mevzuat_retriever: Optional[HybridRetriever] = None,
     reasoning_llm_client: Optional[BaseLLMClient] = None,
+    fast_llm_client: Optional[BaseLLMClient] = None,
 ):
     """Create and compile the incoming-document analysis workflow.
 
@@ -226,13 +250,20 @@ def create_document_analysis_graph(
             legislation nodes degrade to no-ops and the rest still runs.
         reasoning_llm_client: Optional separate client for the legislation
             suggestion step. Defaults to ``llm_client``.
+        fast_llm_client: Optional fast-tier client. When the quality tier fails
+            both the merged and classification-only structured calls, one more
+            attempt runs on the fast tier before dropping to
+            ``DocumentType.OTHER`` -- a third, cheap rung under the existing
+            two-tier degradation ladder, only paid on the failure path.
 
     Returns:
         The compiled LangGraph workflow.
     """
     classifier_agent = ClassifierAgent(llm_client)
     compliance_agent = ComplianceAgent(reasoning_llm_client or llm_client)
+    fallback_classifier_agent = ClassifierAgent(fast_llm_client) if fast_llm_client else None
 
+    @node_timeout(NODE_TIMEOUT_SECONDS["analyze"])
     async def analyze_node(
         state: DocumentAnalysisState, config: RunnableConfig
     ) -> dict[str, Any]:
@@ -293,6 +324,13 @@ def create_document_analysis_graph(
             document_type = DocumentType(payload["document_type"])
             summary = payload["summary"]
             model_fields = {key: payload.get(key) for key in EVRAK_FIELD_KEYS}
+        except TRANSIENT_ERRORS:
+            # A dropped connection affects every tier of this ladder equally
+            # (they all talk to the same Ollama instance), so retrying the
+            # whole node once the connection is back beats cycling through
+            # degradation tiers that would hit the same error.
+            logger.warning("Document Analysis Node hit a transient error; retrying.")
+            raise
         except Exception:
             # Fall back to type and summary alone. The merged schema is the
             # fast path, not a requirement: a smaller model that cannot hold the
@@ -313,10 +351,38 @@ def create_document_analysis_graph(
                 )
                 document_type = DocumentType(fallback.document_type)
                 summary = fallback.summary
+            except TRANSIENT_ERRORS:
+                logger.warning("Document Analysis Node hit a transient error; retrying.")
+                raise
             except Exception:
-                logger.exception("Document Analysis Node failed")
-                document_type = DocumentType.OTHER
-                summary = "Evrak özeti çıkarılamadı."
+                if fallback_classifier_agent is not None:
+                    logger.warning(
+                        "Classification-only analysis also failed; trying the "
+                        "fast tier once before giving up.",
+                        exc_info=True,
+                    )
+                    try:
+                        fast_fallback: DocumentClassificationOutput = (
+                            await fallback_classifier_agent.run_structured(
+                                messages=prompt,
+                                response_model=DocumentClassificationOutput,
+                                temperature=0.0,
+                                max_retries=1,
+                            )
+                        )
+                        document_type = DocumentType(fast_fallback.document_type)
+                        summary = fast_fallback.summary
+                    except TRANSIENT_ERRORS:
+                        logger.warning("Document Analysis Node hit a transient error; retrying.")
+                        raise
+                    except Exception:
+                        logger.exception("Document Analysis Node failed on every tier")
+                        document_type = DocumentType.OTHER
+                        summary = "Evrak özeti çıkarılamadı."
+                else:
+                    logger.exception("Document Analysis Node failed")
+                    document_type = DocumentType.OTHER
+                    summary = "Evrak özeti çıkarılamadı."
             # The deterministically parsed fields still stand: a model failure
             # must not discard values read straight off the document.
             model_fields = EvrakField().model_dump()
@@ -362,25 +428,73 @@ def create_document_analysis_graph(
         await emit_partial(config, "compliance", update)
         return update
 
+    @node_timeout(NODE_TIMEOUT_SECONDS["retrieve_mevzuat"])
     async def retrieve_mevzuat_node(
         state: DocumentAnalysisState, config: RunnableConfig
     ) -> dict[str, Any]:
-        """Retrieve legislation excerpts for the document."""
+        """Retrieve legislation excerpts for the document.
+
+        Emits its own node_start/node_end under the "rag" node id -- the root
+        cause of the frontend's "Mevzuat" panel never showing data (D1) was
+        that this node previously emitted nothing at all, even though the
+        excerpts it retrieves are real and used by both the draft brief and
+        the analysis response's mevzuat_references.
+        """
+        query = _build_mevzuat_query(state)
+        await emit_node_start(
+            config, "rag", "Mevzuat Tarama", "Mevzuat veri tabanında ilgili maddeler taranıyor..."
+        )
+
         if mevzuat_retriever is None:
             logger.info("No mevzuat retriever configured; skipping retrieval.")
+            await emit_node_end(
+                config,
+                "rag",
+                "Mevzuat Tarama",
+                "Mevzuat erişimi yapılandırılmadığı için atlandı.",
+                {"search_query": query, "documents": [], "context": ""},
+            )
             return {"mevzuat_documents": []}
 
         logger.info("Running Mevzuat Retrieval Node...")
         try:
-            documents = await mevzuat_retriever.retrieve(
-                _build_mevzuat_query(state), limit=MEVZUAT_RESULT_LIMIT
-            )
+            documents = await mevzuat_retriever.retrieve(query, limit=MEVZUAT_RESULT_LIMIT)
             logger.info("Retrieved %d mevzuat excerpt(s).", len(documents))
+            await emit_node_end(
+                config,
+                "rag",
+                "Mevzuat Tarama",
+                f"{len(documents)} mevzuat alıntısı bulundu.",
+                {
+                    "search_query": query,
+                    "documents": [
+                        {
+                            "page_content": document.page_content,
+                            "metadata": document.metadata,
+                        }
+                        for document in documents
+                    ],
+                    "context": _render_mevzuat_excerpts(documents),
+                },
+            )
             return {"mevzuat_documents": documents}
+        except TRANSIENT_ERRORS:
+            # Let the graph's IO_RETRY policy retry a dropped connection;
+            # swallowing it here would mean the retry policy never fires.
+            logger.warning("Mevzuat Retrieval Node hit a transient error; retrying.")
+            raise
         except Exception:
             logger.exception("Mevzuat Retrieval Node failed")
+            await emit_node_error(
+                config,
+                "rag",
+                "Mevzuat Tarama",
+                "Mevzuat taraması sırasında bir hata oluştu.",
+                fatal=False,
+            )
             return {"mevzuat_documents": []}
 
+    @node_timeout(NODE_TIMEOUT_SECONDS["suggest_mevzuat"])
     async def suggest_mevzuat_node(
         state: DocumentAnalysisState, config: RunnableConfig
     ) -> dict[str, Any]:
@@ -418,6 +532,9 @@ def create_document_analysis_graph(
                 temperature=0.0,
             )
             suggestions = [item.model_dump() for item in res.suggestions]
+        except TRANSIENT_ERRORS:
+            logger.warning("Mevzuat Suggestion Node hit a transient error; retrying.")
+            raise
         except Exception:
             logger.exception("Mevzuat Suggestion Node failed")
             # Degrade to the raw citations rather than losing the requirement.
@@ -439,10 +556,12 @@ def create_document_analysis_graph(
         return {"mevzuat_suggestions": suggestions}
 
     builder = StateGraph(DocumentAnalysisState)
-    builder.add_node("analyze", analyze_node)
+    # check_compliance is pure computation over already-fetched state and
+    # never raises past its own try/except, so it carries no retry policy.
+    builder.add_node("analyze", analyze_node, retry_policy=LLM_RETRY)
     builder.add_node("check_compliance", check_compliance_node)
-    builder.add_node("retrieve_mevzuat", retrieve_mevzuat_node)
-    builder.add_node("suggest_mevzuat", suggest_mevzuat_node)
+    builder.add_node("retrieve_mevzuat", retrieve_mevzuat_node, retry_policy=IO_RETRY)
+    builder.add_node("suggest_mevzuat", suggest_mevzuat_node, retry_policy=LLM_RETRY)
 
     builder.add_edge(START, "analyze")
     # Fan out: compliance is CPU-bound, retrieval is network-bound.
