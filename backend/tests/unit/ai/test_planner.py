@@ -105,6 +105,47 @@ def test_a_question_word_without_a_question_mark_still_triggers_document_qa():
     assert decision.intent == "document_qa"
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Az önce sana ne sormuştum?",
+        "Biraz önce ne demiştim?",
+        "Bu konuşmada daha önce ne konuştuk?",
+        "Hatırlıyor musun, ilk mesajımda ne sordum?",
+        "Sana daha önce ne demiştim?",
+    ],
+)
+def test_memory_recall_question_resolves_to_chat_even_with_a_document(message):
+    decision = resolve_plan_deterministic(message, "uploads/doc.pdf")
+    assert decision.intent == "chat"
+    assert decision.source == "memory_recall"
+
+
+def test_memory_recall_question_resolves_to_chat_without_a_document():
+    decision = resolve_plan_deterministic(
+        "Bu konuşmada daha önce hangi konuyu konuştuk, hatırlıyor musun?", None
+    )
+    assert decision.intent == "chat"
+    assert decision.source == "memory_recall"
+
+
+def test_memory_recall_wins_even_when_the_message_also_looks_like_a_document_question():
+    """A message that is both document-shaped ('bu belgede...') and
+    memory-shaped ('hatırlıyor musun') must resolve to chat, not
+    document_qa."""
+    decision = resolve_plan_deterministic(
+        "Bu belgede kaç madde vardı, hatırlıyor musun?", "uploads/doc.pdf"
+    )
+    assert decision.intent == "chat"
+
+
+def test_memory_recall_does_not_override_draft_keyword_precedence():
+    decision = resolve_plan_deterministic(
+        "Az önce taslak hazırlamanı istemiştim, şimdi hazırla", "uploads/doc.pdf"
+    )
+    assert decision.intent == "draft"
+
+
 def test_short_message_without_a_document_resolves_to_chat():
     decision = resolve_plan_deterministic("tamam güzel", None)
     assert decision.intent == "chat"

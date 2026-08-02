@@ -138,6 +138,44 @@ QUESTION_MARKERS = (
     "kime",
 )
 
+#: Phrases that make a message about *this conversation's own history* rather
+#: than a document's content or a fresh topic. Firing this must send the
+#: message to `chat` (unrestricted history access) regardless of whether a
+#: document happens to be attached -- a document being attached must never
+#: turn a question about the conversation itself into a document question.
+MEMORY_RECALL_MARKERS = (
+    "az once",
+    "biraz once",
+    "az evvel",
+    "demistim",
+    "dedim mi",
+    "demis miydim",
+    "soylemis miydim",
+    "sormus muydum",
+    "sordum mu",
+    "hatirliyor musun",
+    "hatirliyor musunuz",
+    "hatirla",
+    "onceki mesaj",
+    "onceki mesajimda",
+    "onceki sorumda",
+    "yukarida ne dedim",
+    "yukarida ne yazdim",
+    "bu konusmada",
+    "bu sohbette",
+    "sana ne sordum",
+    "sana ne demistim",
+    "en son ne sordum",
+    "en son sana ne",
+    "konusma gecmisi",
+    "gecmis mesajlarda",
+    "ilk mesajimda",
+    "daha once ne sordum",
+    "daha once sordugum",
+    "daha once konustuk",
+    "daha once bahsettim",
+)
+
 _TURKISH_MAP = str.maketrans(
     {
         "ç": "c", "Ç": "c", "ğ": "g", "Ğ": "g", "ı": "i", "İ": "i",
@@ -203,6 +241,21 @@ def _looks_like_question(raw: str, normalized: str) -> bool:
     return _contains_any(f" {normalized} ", tuple(f" {m.strip()} " for m in QUESTION_MARKERS))
 
 
+def _is_memory_recall_question(normalized: str) -> bool:
+    """Heuristically decide whether the message asks about earlier turns in
+    *this* conversation, rather than a document or a fresh topic.
+
+    Args:
+        normalized: The folded message, for token checks.
+
+    Returns:
+        True when the message reads as a memory-recall question.
+    """
+    return _contains_any(
+        f" {normalized} ", tuple(f" {m.strip()} " for m in MEMORY_RECALL_MARKERS)
+    )
+
+
 def resolve_plan_deterministic(
     message: str, document_id: Optional[str], previous_intent: Optional[str] = None
 ) -> Optional[PlanDecision]:
@@ -252,6 +305,17 @@ def resolve_plan_deterministic(
             previous_intent,  # type: ignore[arg-type]
             REASONING_BY_INTENT[previous_intent] + " (önceki isteğin devamı)",
             "continuation",
+        )
+
+    # A question about the conversation itself must never be treated as a
+    # document question just because a document happens to be attached --
+    # unconditional on document_id, unlike the document-question branch below.
+    if _is_memory_recall_question(normalized):
+        return PlanDecision(
+            list(PLAN_BY_INTENT["chat"]),
+            "chat",
+            REASONING_BY_INTENT["chat"] + " (konuşmanın kendisine dair bir soru tespit edildi)",
+            "memory_recall",
         )
 
     # A greeting with no document attached needs no further thought.
