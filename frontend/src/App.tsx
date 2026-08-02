@@ -145,6 +145,26 @@ const REASONING_LEVELS: Array<{ value: ReasoningLevel; label: string }> = [
     { value: 'deep', label: 'Derin' },
 ];
 
+// Anonim, tarayıcıya özgü konuşma kimliği. localStorage'da kalıcılaştırılır,
+// böylece sayfa yenileme/yeni sekme AYNI checkpoint thread'ini (ve rolling
+// özetini) yeniden kullanır. Gerçek kullanıcı kimliği DEĞİLDİR: farklı
+// tarayıcı/cihaz veya temizlenmiş localStorage yeni bir thread başlatır.
+const CLIENT_SESSION_STORAGE_KEY = 'kachow_client_session_id';
+
+function getOrCreateClientSessionId(): string {
+    try {
+        const existing = window.localStorage.getItem(CLIENT_SESSION_STORAGE_KEY);
+        if (existing) return existing;
+        const fresh = `web:${crypto.randomUUID()}`;
+        window.localStorage.setItem(CLIENT_SESSION_STORAGE_KEY, fresh);
+        return fresh;
+    } catch {
+        // Private browsing / storage disabled: degrade to a fresh id for
+        // this tab only, same as today's behavior.
+        return `web:${crypto.randomUUID()}`;
+    }
+}
+
 export default function App() {
     const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
     const [selectedDoc, setSelectedDoc] = useState<DocumentMetadata | null>(null);
@@ -155,7 +175,7 @@ export default function App() {
 
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [inputText, setInputText] = useState('');
-    const [attachActiveDoc, setAttachActiveDoc] = useState(true);
+    const [attachActiveDoc, setAttachActiveDoc] = useState(false);
     const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>('balanced');
     const [loading, setLoading] = useState(false);
     const [copiedText, setCopiedText] = useState(false);
@@ -167,7 +187,7 @@ export default function App() {
     // Checkpointer thread id for this conversation. Resolved server-side and
     // handed back as the first SSE event when the client doesn't supply one;
     // required to call /chat/resume against a paused run.
-    const [sessionId, setSessionId] = useState<string | null>(null);
+    const [sessionId, setSessionId] = useState<string | null>(() => getOrCreateClientSessionId());
     const [pendingInterrupt, setPendingInterrupt] = useState<InterruptState | null>(null);
     const [resumeAnswers, setResumeAnswers] = useState<Record<string, string>>({});
     const [resumeInstructions, setResumeInstructions] = useState('');
