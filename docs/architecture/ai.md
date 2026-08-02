@@ -264,6 +264,8 @@ Bu sayede promptlar:
 
 # Tool Calling
 
+> **Not**: Bu bölüm mimari hedefi tanımlar; şu anki sürümde hiçbir ajan tool-calling kullanmıyor (`BaseAgent`'ın `tools` parametresi kaldırıldı, bkz. CHANGELOG [1.19.0]) ve aşağıdaki "Dosya Okuma/Yazma/Terminal/Git" örneklerinin karşılığı yok. Ayrı bir temizlik konusu olarak bırakılmıştır.
+
 AI doğrudan sistem işlemi gerçekleştirmez.
 
 Tüm yetenekler Tool katmanı üzerinden kullanılır.
@@ -339,12 +341,21 @@ Bu süreç cevap üretiminden bağımsızdır.
 
 # Memory
 
-Konuşma geçmişi, **checkpoint'lenmiş graf state'i** üzerinde taşınır — `planning_graph`'ın `thread_id`'si zaten `session_id`'ye eşittir ve `AsyncPostgresSaver` bu state'i (geçmiş, bekleyen bir HITL kesintisi, her şey) zaten tutarlı biçimde kalıcılaştırır. Ayrı bir Redis tabanlı depo, checkpoint yazımıyla arasında bir çökmede bölünebilecek ikinci bir kaynak eklerdi.
+Konuşma geçmişi, **checkpoint'lenmiş graf state'i** üzerinde taşınır — `planning_graph`'ın `thread_id`'si zaten `session_id`'ye eşittir ve `AsyncPostgresSaver` bu state'i (geçmiş, özet, bekleyen bir HITL kesintisi, her şey) zaten tutarlı biçimde kalıcılaştırır. Ayrı bir Redis tabanlı depo, checkpoint yazımıyla arasında bir çökmede bölünebilecek ikinci bir kaynak eklerdi.
 
 ### CheckpointMemory (`ai/memory/checkpoint_memory.py`)
-`BaseMemory` sözleşmesini `planning_graph.aget_state(...)` üzerine ince, salt-okunur bir görünüm olarak uygular. `HISTORY_WINDOW=12` turluk bir pencere `_append_history` reducer'ıyla state'te tutulur; `_run_chat`/`_run_document_qa` sohbet/soru-cevap ajanlarına geçmişi buradan sağlar.
+`BaseMemory` sözleşmesini `planning_graph.aget_state(...)` üzerine ince, salt-okunur bir görünüm olarak uygular.
 
-> **Not**: Önceki sürümlerdeki Redis pencere hafızası (`ConversationWindowMemory`), LLM özetleme tabanlı uzun dönem hafıza (`SummaryMemory`) ve Qdrant tabanlı episodik/Mem0-benzeri hafıza (`VectorMemory`) kaldırılmıştır; tek doğruluk kaynağı artık checkpointer'dır.
+### Kayan Pencere + Özet (rolling window + summary)
+`HISTORY_WINDOW=12` turluk bir pencere `_append_history` reducer'ıyla state'te tutulur ve `_run_chat`/`_run_document_qa`'ya geçmişi verbatim olarak sağlar. Bunun ötesindeki turlar sonsuza dek atılmaz: state ayrıca `HISTORY_RAW_CAP=40` turluk daha geniş bir ham günlük ve `history_summary`/`history_summarized_through` alanlarını tutar. `consolidate_memory_node`, her tur bittikten sonra (pencerenin dışına yeterince yeni tur çıktığında, `CONSOLIDATION_BATCH_SIZE=4`) hızlı katman modeliyle (`get_fast_llm_client`, intent sınıflandırmasıyla aynı model, `MemorySummarizerAgent`) bu turları var olan özetle birleştirip kısa bir özet üretir. `chat`/`document_qa` prompt şablonları bu özeti ayrı, açıkça etiketlenmiş bir blok olarak alır (`{{history_summary}}`) — belge bağlamıyla karıştırılmaz.
+
+> **Not**: Önceki sürümlerdeki Redis pencere hafızası (`ConversationWindowMemory`), LLM özetleme tabanlı uzun dönem hafıza (`SummaryMemory`) ve Qdrant tabanlı episodik/Mem0-benzeri hafıza (`VectorMemory`) kaldırılmıştır; tek doğruluk kaynağı hâlâ checkpointer'dır — rolling summary da ayrı bir depo değil, aynı checkpoint'lenmiş state'in bir alanıdır.
+
+### Oturum Ölçeği (session scope)
+Sunucu, istemci bir `session_id` göndermezse `anon:<uuid4>` üretir (`ChatService._thread_id`). Frontend, `crypto.randomUUID()` ile üretilen bir kimliği `localStorage`'da (`kachow_client_session_id`) kalıcılaştırıp her istekte gönderir, böylece sayfa yenilemede/aynı tarayıcıda yeni sekmede AYNI checkpoint thread'i (ve özeti) yeniden kullanılır. Bu, gerçek kullanıcı kimlik doğrulaması değildir: anonim, tarayıcıya özgüdür ve cihazlar arası değildir (`REQUIRE_AUTH` hâlâ kapalı; gerçek kullanıcı kimliğine bağlı kalıcı memory ayrı bir konu olarak bırakılmıştır).
+
+### Planlama ve Memory
+`planner.py`'nin `resolve_plan_deterministic`'i, bir belge ekliyken bile konuşmanın kendisine dair sorular (`MEMORY_RECALL_MARKERS`, ör. "az önce ne sordum") tespit ettiğinde `document_id`'den bağımsız olarak `chat`'e yönlendirir — bir belgenin ekli olması, konuşma hafızasına dair bir soruyu asla belge sorusuna çevirmez.
 
 ---
 

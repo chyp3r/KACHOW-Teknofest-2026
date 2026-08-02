@@ -337,14 +337,12 @@ retrieval_prompt
 
 ## Memory
 
-Amacı belirtmelidir.
+Amacı belirtmelidir. Bu projede gerçek karşılıkları:
 
 ```text
-short_term_memory
+history            -> kayan pencere (HISTORY_WINDOW, verbatim son turlar)
 
-conversation_memory
-
-semantic_memory
+history_summary     -> kayan özet (pencerenin dışına çıkan turların LLM özeti)
 ```
 
 ---
