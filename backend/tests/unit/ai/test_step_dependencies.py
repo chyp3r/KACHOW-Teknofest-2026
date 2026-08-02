@@ -7,7 +7,12 @@ routing decision. ``_dependency_failed`` is what ``execute_step_node``
 consults before dispatching a step at all.
 """
 
-from app.ai.workflows.planning_graph import _STEP_DEPENDENCIES, _append_history, _dependency_failed
+from app.ai.workflows.planning_graph import (
+    _STEP_DEPENDENCIES,
+    _append_history,
+    _dependency_failed,
+    _pending_consolidation,
+)
 
 
 def test_draft_depends_on_a_successful_classification():
@@ -61,15 +66,15 @@ def test_step_dependency_table_only_covers_the_two_declared_edges():
 # ==========================================
 # History reducer
 # ==========================================
-def test_append_history_concatenates_and_trims_to_the_window():
-    from app.ai.workflows.planning_graph import HISTORY_WINDOW
+def test_append_history_concatenates_and_trims_to_the_raw_cap():
+    from app.ai.workflows.planning_graph import HISTORY_RAW_CAP
 
-    left = [{"role": "user", "content": f"msg{i}"} for i in range(HISTORY_WINDOW)]
+    left = [{"role": "user", "content": f"msg{i}"} for i in range(HISTORY_RAW_CAP)]
     right = [{"role": "assistant", "content": "reply"}]
 
     result = _append_history(left, right)
 
-    assert len(result) == HISTORY_WINDOW
+    assert len(result) == HISTORY_RAW_CAP
     assert result[-1] == {"role": "assistant", "content": "reply"}
     assert result[0] == {"role": "user", "content": "msg1"}
 
@@ -82,3 +87,45 @@ def test_append_history_tolerates_none_on_either_side():
         {"role": "user", "content": "hi"}
     ]
     assert _append_history(None, None) == []
+
+
+# ==========================================
+# Memory consolidation trigger (_pending_consolidation)
+# ==========================================
+def _turns(n: int) -> list[dict[str, str]]:
+    return [{"role": "user", "content": f"msg{i}"} for i in range(n)]
+
+
+def test_pending_consolidation_is_empty_when_history_fits_the_window():
+    pending, boundary = _pending_consolidation(_turns(10), 0, window=12, batch_size=4)
+    assert pending == []
+    assert boundary == 0
+
+
+def test_pending_consolidation_is_empty_below_the_batch_size():
+    # 14 turns, window=12 -> 2 overflowed, batch_size=4 -> not worth a call yet.
+    pending, boundary = _pending_consolidation(_turns(14), 0, window=12, batch_size=4)
+    assert pending == []
+    assert boundary == 0
+
+
+def test_pending_consolidation_fires_at_the_batch_size():
+    # 16 turns, window=12 -> 4 overflowed, meets batch_size=4.
+    history = _turns(16)
+    pending, boundary = _pending_consolidation(history, 0, window=12, batch_size=4)
+    assert pending == history[0:4]
+    assert boundary == 4
+
+
+def test_pending_consolidation_only_returns_the_newly_overflowed_delta():
+    # Already summarized through 4; 20 turns -> boundary at 8 -> 4 new pending.
+    history = _turns(20)
+    pending, boundary = _pending_consolidation(history, 4, window=12, batch_size=4)
+    assert pending == history[4:8]
+    assert boundary == 8
+
+
+def test_pending_consolidation_tolerates_empty_history():
+    pending, boundary = _pending_consolidation([], 0, window=12, batch_size=4)
+    assert pending == []
+    assert boundary == 0

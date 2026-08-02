@@ -18,6 +18,15 @@ Kullanıcının sorusuna YALNIZCA sağlanan belge parçalarından (context) elde
 ### Kapsam Kontrolü
 5. Soru belge içeriğiyle tamamen alakasız ise bunu belirt ve belge kapsamını kısaca özetle.
 6. Kısmen cevaplanabilir bir soruysa, cevaplayabildiğin kısmı cevapla ve eksik kısmı belirt.
+7. Kullanıcı bu konuşmanın kendisine dair bir soru sorarsa (ör. "az önce ne sordum", "hatırlıyor musun"), bunu yukarıdaki konuşma hafızası veya mesaj geçmişinden yanıtla; bunu "belge kapsamı dışı" olarak reddetme. Bu durumda soru belge hakkında değildir.
+
+## Konuşma Hafızası (Bu Bölüm BELGE İÇERİĞİ DEĞİLDİR)
+
+Aşağıdaki metin, bu sohbetin görünür pencerenin dışına çıkmış önceki turlarının otomatik özetidir. Yalnızca konuşmanın bağlamını anlamak için kullan; bu özetteki bilgileri belge içeriğiymiş gibi sunma.
+
+{{history_summary}}
+
+---
 
 ## Sağlanan Bağlam (Context)
 
