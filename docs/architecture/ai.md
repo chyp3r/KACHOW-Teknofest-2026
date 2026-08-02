@@ -218,6 +218,7 @@ Uygulanan mimari yapıda aşağıdaki bileşenler yer almaktadır:
 * **BaseLLMClient** (`app/ai/llms/base.py`): Tüm sağlayıcı istemcilerinin uygulaması gereken soyut taban sınıf. `generate`, `stream` ve `generate_structured` metotlarını içerir.
 * **OllamaClient** (`app/infrastructure/providers/ollama.py`): Yerel Ollama servisiyle (`ChatOllama` üzerinden) entegrasyonu sağlar. Şu an tek sağlayıcı budur (`vllm.py` kullanılmadığı için kaldırılmıştır).
 * **get_llm_client** / **get_fast_llm_client** (`app/ai/llms/__init__.py`): İki katmanlı fabrika. `get_llm_client()` kalite katmanını (taslak yazımı, sınıflandırma), `get_fast_llm_client()` ise `OLLAMA_FAST_MODEL` tanımlıysa küçük modeli, tanımlı değilse aynı modeli döndürür — niyet çözümlemesi, yönlendirme ve kalite yargıcı gibi kısa/etiket-boyutlu kararlar için.
+* **Reasoning Level** (`app/ai/reasoning_levels.py`, `ReasoningLevel` enum'u `app/core/enums/`): Kullanıcının her istekte seçebildiği `fast`/`balanced`/`deep` seviyeleri, yukarıdaki iki katmanı ve Ollama'nın `reasoning` (thinking mode) bayrağını, taslak reflexion döngüsünün (`draft_graph.py`) deneme sayısını ve kalite yargıcının çalışıp çalışmayacağını tek bir preset üzerinden birleştirir. Üçüncü bir model eklenmez: `deep` aynı kalite modelini daha fazla çıkarım-zamanı hesaplamayla (thinking mode + ekstra revizyon + zorunlu yargıç) çalıştırır, `fast` ise zaten sıcak duran hızlı-katman modelini writer/reviser için de kullanır. `balanced`, bu özellik eklenmeden önceki sabit davranışla birebir aynıdır.
 
 ### Yerel Ollama Varsayılanları
 

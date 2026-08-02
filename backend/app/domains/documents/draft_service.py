@@ -3,6 +3,7 @@ import logging
 from typing import Any
 
 from app.ai.guardrails.injection import scrub_extracted_text
+from app.ai.reasoning_levels import get_reasoning_level_preset
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
 from app.core.constants import AI_WORKFLOW_TIMEOUT_SECONDS
@@ -69,6 +70,11 @@ class DraftService:
         # the boundary validation, not the graph's internal representation.
         classification_dict = request.classification.model_dump(mode="json")
 
+        draft_timeout = (
+            AI_WORKFLOW_TIMEOUT_SECONDS
+            * 1.5
+            * get_reasoning_level_preset(request.reasoning_level).timeout_multiplier
+        )
         try:
             draft_state = await asyncio.wait_for(
                 self.draft_graph.ainvoke(
@@ -82,15 +88,16 @@ class DraftService:
                             if request.correspondence_type
                             else None
                         ),
+                        "reasoning_level": request.reasoning_level.value,
                     },
                     config=self._trace_config()
                 ),
-                timeout=AI_WORKFLOW_TIMEOUT_SECONDS * 1.5,
+                timeout=draft_timeout,
             )
         except asyncio.TimeoutError as e:
             raise AIException(
                 message="Taslak üretimi zaman aşımına uğradı.",
-                details={"timeout_seconds": AI_WORKFLOW_TIMEOUT_SECONDS * 1.5},
+                details={"timeout_seconds": draft_timeout},
             ) from e
         except Exception as e:
             logger.exception("Drafting workflow failed")

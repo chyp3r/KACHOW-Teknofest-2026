@@ -285,6 +285,8 @@ gibi farklı sağlayıcılarla çalışabilecek şekilde tasarlanmalıdır.
 
 Model değişimi Workflow değişikliği gerektirmemelidir.
 
+Kullanıcının hız/kalite tercihi (`ReasoningLevel`: `fast`/`balanced`/`deep`, bkz. `app/ai/reasoning_levels.py`) da aynı prensiple ele alınır: bir seviye yeni bir model eklemek yerine mevcut iki katmanı (kalite/hızlı) ve `BaseLLMClient` üzerindeki mevcut parametreleri (`reasoning`, `max_tokens`, `temperature`) farklı şekilde birleştirir. Yeni bir seviye eklemek workflow düğümlerinde dallanma gerektirmemeli, yalnızca preset tablosuna bir satır eklemekle sınırlı kalmalıdır.
+
 ---
 
 # Tool Çağrıları

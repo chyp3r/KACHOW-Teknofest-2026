@@ -3,6 +3,7 @@ import logging
 from typing import Any, AsyncIterator, Optional
 from uuid import uuid4
 
+from app.ai.reasoning_levels import get_reasoning_level_preset
 from app.api.exceptions.ai_error import AIException
 from app.core.constants import AI_WORKFLOW_TIMEOUT_SECONDS
 from app.domains.chat.schema.chat_schema import (
@@ -130,17 +131,22 @@ class ChatService:
 
         HITL_RESUMES.labels(action=request.action).inc()
         config = self._trace_config(session_id)
+        # No explicit escalation on this resume -> preset resolves to
+        # BALANCED (multiplier 1.0), leaving today's fixed timeout unchanged.
+        timeout = ORCHESTRATION_TIMEOUT_SECONDS * get_reasoning_level_preset(
+            request.reasoning_level
+        ).timeout_multiplier
         try:
             state = await asyncio.wait_for(
                 self.planning_graph.ainvoke(
                     Command(resume=self._resume_payload(request)), config=config
                 ),
-                timeout=ORCHESTRATION_TIMEOUT_SECONDS,
+                timeout=timeout,
             )
         except asyncio.TimeoutError as exc:
             raise AIException(
                 message="Devam işlemi zaman aşımına uğradı.",
-                details={"timeout_seconds": ORCHESTRATION_TIMEOUT_SECONDS},
+                details={"timeout_seconds": timeout},
             ) from exc
         except Exception as exc:
             logger.exception("Resume failed")
@@ -170,6 +176,9 @@ class ChatService:
         from langgraph.types import Command
 
         HITL_RESUMES.labels(action=request.action).inc()
+        timeout = ORCHESTRATION_TIMEOUT_SECONDS * get_reasoning_level_preset(
+            request.reasoning_level
+        ).timeout_multiplier
         queue: asyncio.Queue = asyncio.Queue()
 
         async def run_graph() -> None:
@@ -181,7 +190,7 @@ class ChatService:
                     self.planning_graph.ainvoke(
                         Command(resume=self._resume_payload(request)), config=config
                     ),
-                    timeout=ORCHESTRATION_TIMEOUT_SECONDS,
+                    timeout=timeout,
                 )
                 await self._enqueue_terminal_event(queue, state, config, session_id)
             except asyncio.CancelledError:
@@ -265,21 +274,25 @@ class ChatService:
                 details={"session_id": thread_id},
             )
 
+        timeout = ORCHESTRATION_TIMEOUT_SECONDS * get_reasoning_level_preset(
+            request.reasoning_level
+        ).timeout_multiplier
         try:
             return await asyncio.wait_for(
                 self.planning_graph.ainvoke(
                     {
                         "input_text": request.message,
                         "document_id": request.document_id,
+                        "reasoning_level": request.reasoning_level.value,
                     },
                     config=config,
                 ),
-                timeout=ORCHESTRATION_TIMEOUT_SECONDS,
+                timeout=timeout,
             )
         except asyncio.TimeoutError as exc:
             raise AIException(
                 message="Sohbet işlemi zaman aşımına uğradı.",
-                details={"timeout_seconds": ORCHESTRATION_TIMEOUT_SECONDS},
+                details={"timeout_seconds": timeout},
             ) from exc
         except asyncio.CancelledError:
             raise
@@ -380,6 +393,9 @@ class ChatService:
             "action": request.action,
             "answers": request.answers,
             "instructions": request.instructions,
+            "reasoning_level": (
+                request.reasoning_level.value if request.reasoning_level else None
+            ),
         }
 
     @staticmethod

@@ -29,6 +29,7 @@ from app.ai.workflows.events import (
 )
 from app.ai.workflows.planner import resolve_plan
 from app.core.config import settings
+from app.core.enums.reasoning_level import ReasoningLevel
 from app.infrastructure.vectorstore.base import BaseVectorStore
 from app.observability.ai_metrics import HITL_INTERRUPTS
 
@@ -114,6 +115,9 @@ class PlanningState(TypedDict, total=False):
 
     input_text: str
     document_id: str | None
+    #: Speed-vs-quality tier for this run ("fast"/"balanced"/"deep"); read by
+    #: draft_graph via _run_draft. Absent resolves to "balanced" downstream.
+    reasoning_level: str
     plan_steps: list[str]
     plan_intent: str
     current_step_idx: int
@@ -302,6 +306,7 @@ def create_planning_graph(
                 "plan_steps": decision.steps,
                 "intent": decision.intent,
                 "reasoning": decision.reasoning,
+                "reasoning_level": state.get("reasoning_level", ReasoningLevel.BALANCED.value),
             },
         )
 
@@ -403,6 +408,7 @@ def create_planning_graph(
                     "resmî ve kurumsal bir Türkçe yanıt taslağı oluştur."
                 ),
                 "attempts": 0,
+                "reasoning_level": state.get("reasoning_level", ReasoningLevel.BALANCED.value),
             },
             config=child_config(config),
         )
@@ -750,6 +756,11 @@ def create_planning_graph(
                 "status": "REVISE_REQUESTED",
             }
             updates = {"draft_result": updated}
+            # A resume may ask for a different reasoning level on the retry
+            # (e.g. escalate to "deep" after a "fast" draft was rejected).
+            # Omitted -> state's existing reasoning_level is left untouched.
+            if answer.get("reasoning_level"):
+                updates["reasoning_level"] = answer["reasoning_level"]
             updates["final_output"] = _compile_final_output(state, updates)
             return updates
 

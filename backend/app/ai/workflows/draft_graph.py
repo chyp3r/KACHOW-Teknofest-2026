@@ -25,23 +25,35 @@ from app.ai.workflows.correspondence import (
 from app.ai.workflows.events import (
     emit_node_end,
     emit_node_error,
+    emit_node_skipped,
     emit_node_start,
     emit_token,
 )
+from app.ai.reasoning_levels import ReasoningLevelPreset, get_reasoning_level_preset
 from app.core.config import settings
+from app.core.enums.reasoning_level import ReasoningLevel
 from app.observability.ai_metrics import DRAFT_REVISIONS, DRAFT_SCORE
 
 logger = logging.getLogger(__name__)
 
+#: The "balanced" reasoning-level preset carries today's pre-existing
+#: defaults verbatim (see app.ai.reasoning_levels), so deriving these two
+#: constants from it -- rather than duplicating the literals -- makes
+#: "balanced reproduces today's behaviour exactly" a structural guarantee
+#: instead of something that can drift out of sync.
+_BALANCED_PRESET = get_reasoning_level_preset(ReasoningLevel.BALANCED)
+
 #: Generation budget for a draft. An official letter with header, body and
 #: signature block runs 600-1200 tokens; the old global cap of 1024 truncated
 #: the longer ones mid-sentence.
-DRAFT_MAX_TOKENS = 2048
+DRAFT_MAX_TOKENS = _BALANCED_PRESET.draft_max_tokens
 
 #: One initial generation plus at most one revision. Each attempt is a full
 #: local generation (~25-30s); a third attempt would blow the ~90s draft
-#: latency budget and rarely succeeds where the second one didn't.
-MAX_DRAFT_ATTEMPTS = 2
+#: latency budget and rarely succeeds where the second one didn't. The
+#: "deep" reasoning level raises this bound for callers willing to trade
+#: latency for another repair pass -- see app.ai.reasoning_levels.
+MAX_DRAFT_ATTEMPTS = _BALANCED_PRESET.max_draft_attempts
 
 
 class DraftState(TypedDict, total=False):
@@ -70,6 +82,11 @@ class DraftState(TypedDict, total=False):
     error: str
     attempts: int
     brief: str
+    #: Speed-vs-quality tier for this run ("fast"/"balanced"/"deep"); see
+    #: app.ai.reasoning_levels.get_reasoning_level_preset. Absent or unknown
+    #: resolves to "balanced", so older callers that never set it are
+    #: unaffected.
+    reasoning_level: str
 
 
 def _format_classification(classification: dict[str, Any]) -> str:
@@ -187,6 +204,23 @@ def _build_repair_prompt(state: DraftState) -> str:
     )
 
 
+def _resolve_free_text_client(
+    preset: ReasoningLevelPreset,
+    llm_client: BaseLLMClient,
+    fast_llm_client: BaseLLMClient | None,
+) -> BaseLLMClient:
+    """Pick the client that backs writer/reviser generation for a run.
+
+    Module-level (rather than a closure inside ``create_draft_graph``) so it
+    can be unit-tested and reasoned about independently of the compiled graph.
+    Never introduces a third client: only ``fast_llm_client`` or
+    ``llm_client``, the same two already handed to ``create_draft_graph``.
+    """
+    if preset.model_tier == "fast" and fast_llm_client is not None:
+        return fast_llm_client
+    return llm_client
+
+
 def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient | None = None):
     """Create and compile the drafting workflow.
 
@@ -215,8 +249,11 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
     Returns:
         The compiled LangGraph workflow.
     """
-    writer_agent = WriterAgent(llm_client)
-    reviser_agent = ReviserAgent(llm_client)
+    # Writer/reviser are *not* built once here: which client backs them
+    # depends on the reasoning level of the run in progress (see writer_node),
+    # so a fresh, cheap agent wrapper is constructed per call instead. The
+    # judge always uses the fast tier regardless of level -- only whether it
+    # runs at all varies (see verify_node) -- so it stays a single instance.
     judge_agent = JudgeAgent(fast_llm_client or llm_client)
 
     async def validate_input_node(state: DraftState) -> dict[str, Any]:
@@ -265,6 +302,13 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
     async def writer_node(state: DraftState, config: RunnableConfig) -> dict[str, Any]:
         attempt_number = state.get("attempts", 0) + 1
         is_revision = bool(state.get("previous_draft"))
+        preset = get_reasoning_level_preset(state.get("reasoning_level"))
+        client = _resolve_free_text_client(preset, llm_client, fast_llm_client)
+        meta = {
+            "attempt": attempt_number,
+            "reasoning_level": preset.level.value,
+            "reasoning": preset.reasoning,
+        }
 
         if is_revision:
             logger.info("Running Reviser Node (attempt %d)...", attempt_number)
@@ -273,9 +317,9 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
                 "draft",
                 "Taslak Revizyonu",
                 f"[Revizyon Ajanı] Taslak {attempt_number}. denemede düzeltiliyor...",
-                meta={"attempt": attempt_number},
+                meta=meta,
             )
-            agent = reviser_agent
+            agent = ReviserAgent(client)
             prompt = _build_repair_prompt(state)
             temperature = 0.2
         else:
@@ -285,7 +329,7 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
                 "draft",
                 "Taslak Oluşturma",
                 "[Yazar Ajanı] Taslak yazılıyor...",
-                meta={"attempt": attempt_number},
+                meta=meta,
             )
 
             is_other = state.get("correspondence_type") == "other_official"
@@ -312,7 +356,7 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
                 f"{format_correspondence_profile(state['correspondence_type'])}\n\n"
                 f"### KURALLAR:\n{rules}"
             )
-            agent = writer_agent
+            agent = WriterAgent(client)
             temperature = 0.4
 
         # Streamed rather than awaited whole: the draft is the longest single
@@ -324,7 +368,10 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
         chunks: list[str] = []
         try:
             async for chunk in agent.stream(
-                messages=prompt, temperature=temperature, max_tokens=DRAFT_MAX_TOKENS
+                messages=prompt,
+                temperature=temperature,
+                max_tokens=preset.draft_max_tokens,
+                reasoning=preset.reasoning,
             ):
                 chunks.append(chunk)
                 await emit_token(config, "draft", chunk)
@@ -367,6 +414,7 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
         draft_text = state.get("draft", "")
         classification = state.get("classification") or {}
         strict = state.get("correspondence_type") != "other_official"
+        preset = get_reasoning_level_preset(state.get("reasoning_level"))
 
         report = verify_draft(
             draft_text,
@@ -377,8 +425,16 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
             strict=strict,
         )
 
+        # None means the level has no opinion; defer to the global setting.
+        # True/False (fast forces off, deep forces on) overrides it outright.
+        judge_on = (
+            settings.DRAFT_JUDGE_ENABLED
+            if preset.judge_enabled is None
+            else preset.judge_enabled
+        )
+
         verdict: DraftJudgeVerdict | None = None
-        if settings.DRAFT_JUDGE_ENABLED:
+        if judge_on:
             # A separate node id from "verify" (even though it runs inside the
             # same LangGraph node) so the frontend can show the hybrid gate as
             # two distinct mechanisms -- deterministic groundedness vs. the
@@ -413,6 +469,16 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
                     "Yargıç değerlendirmesi tamamlandı.",
                     verdict.model_dump(),
                 )
+        elif preset.judge_enabled is False:
+            # Only announce a skip when the *level* is what turned it off --
+            # the pre-existing settings.DRAFT_JUDGE_ENABLED=False case stays
+            # silent, exactly as it behaved before this feature existed.
+            await emit_node_skipped(
+                config,
+                "judge",
+                "Kalite Yargıcı",
+                "Hızlı modda kalite yargıcı atlandı.",
+            )
 
         missing_information: list[InfoQuestion] = []
         if report.placeholder_count > 0:
@@ -464,6 +530,7 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
             "missing_information": [question.model_dump() for question in missing_information],
             "attempt_history": attempt_history,
             "status": status,
+            "reasoning_level": preset.level.value,
         }
 
         await emit_node_end(
@@ -482,7 +549,8 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
             return "needs_input"
         if not state.get("requires_revision"):
             return "end"
-        if state.get("attempts", 0) >= MAX_DRAFT_ATTEMPTS:
+        preset = get_reasoning_level_preset(state.get("reasoning_level"))
+        if state.get("attempts", 0) >= preset.max_draft_attempts:
             return "end"
         return "revise"
 

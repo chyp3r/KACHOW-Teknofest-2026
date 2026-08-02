@@ -7,6 +7,7 @@ from app.ai.verification import InfoQuestion
 from app.core.enums.compliance_status import ComplianceStatus
 from app.core.enums.correspondence_type import CorrespondenceType
 from app.core.enums.document_type import DocumentType
+from app.core.enums.reasoning_level import ReasoningLevel
 from app.shared.validator.storage_path_validator import validate_storage_path
 
 
@@ -92,6 +93,10 @@ class DraftRequestSchema(BaseModel):
     )
     correspondence_type: CorrespondenceType | None = Field(
         default=None, description="Zorunlu tutulmak istenen yazışma türü."
+    )
+    reasoning_level: ReasoningLevel = Field(
+        default=ReasoningLevel.BALANCED,
+        description="Hız/kalite tercihi: fast (hızlı), balanced (dengeli, varsayılan), deep (derin muhakeme).",
     )
 
     @field_validator("storage_path")

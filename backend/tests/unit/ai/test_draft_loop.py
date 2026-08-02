@@ -9,15 +9,21 @@ stops at MAX_DRAFT_ATTEMPTS, and short-circuits to a human question when the
 writer leaves an explicit placeholder instead.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.ai.agents.reviser import ReviserAgent
 from app.ai.agents.writer import WriterAgent
 from app.ai.llms.base import BaseLLMClient
-from app.ai.workflows.draft_graph import MAX_DRAFT_ATTEMPTS, create_draft_graph
+from app.ai.reasoning_levels import get_reasoning_level_preset
+from app.ai.workflows.draft_graph import (
+    MAX_DRAFT_ATTEMPTS,
+    _resolve_free_text_client,
+    create_draft_graph,
+)
 from app.core.config import settings
+from app.core.enums.reasoning_level import ReasoningLevel
 
 SOURCE_DOCUMENT = "Sayı: E-1-1, Tarih: 30.07.2026 tarihli evrak."
 
@@ -176,3 +182,83 @@ async def test_missing_source_document_fails_before_any_generation_call():
 
     mock_writer.assert_not_called()
     assert result["status"] == "FAILED"
+
+
+# --- Reasoning-level awareness -----------------------------------------
+
+
+def test_resolve_free_text_client_uses_fast_tier_only_for_the_fast_level():
+    quality = MagicMock(spec=BaseLLMClient, name="quality")
+    fast = MagicMock(spec=BaseLLMClient, name="fast")
+
+    fast_preset = get_reasoning_level_preset(ReasoningLevel.FAST)
+    balanced_preset = get_reasoning_level_preset(ReasoningLevel.BALANCED)
+    deep_preset = get_reasoning_level_preset(ReasoningLevel.DEEP)
+
+    assert _resolve_free_text_client(fast_preset, quality, fast) is fast
+    assert _resolve_free_text_client(balanced_preset, quality, fast) is quality
+    assert _resolve_free_text_client(deep_preset, quality, fast) is quality
+    # No fast_llm_client configured (OLLAMA_FAST_MODEL unset) -> falls back to
+    # the quality client rather than raising or using None.
+    assert _resolve_free_text_client(fast_preset, quality, None) is quality
+
+
+@pytest.mark.asyncio
+async def test_fast_level_stops_after_one_attempt_and_skips_the_judge():
+    graph = create_draft_graph(
+        MagicMock(spec=BaseLLMClient), MagicMock(spec=BaseLLMClient)
+    )
+    state = {**BASE_STATE, "reasoning_level": "fast"}
+
+    with (
+        patch.object(WriterAgent, "stream") as mock_writer,
+        patch.object(ReviserAgent, "stream") as mock_reviser,
+        patch(
+            "app.ai.workflows.draft_graph.judge_draft", new_callable=AsyncMock
+        ) as mock_judge_draft,
+    ):
+        mock_writer.side_effect = lambda **kwargs: _one_chunk(BAD_DRAFT)
+
+        result = await graph.ainvoke(state)
+
+    assert mock_writer.call_count == 1
+    assert mock_writer.call_args.kwargs["reasoning"] is False
+    mock_reviser.assert_not_called()
+    # fast forces the judge off regardless of settings.DRAFT_JUDGE_ENABLED.
+    mock_judge_draft.assert_not_called()
+    assert result["attempts"] == 1
+    assert result["status"] == "NEEDS_HUMAN_APPROVAL"
+    assert result["reasoning_level"] == "fast"
+
+
+@pytest.mark.asyncio
+async def test_deep_level_allows_a_third_attempt_and_forces_the_judge_on(monkeypatch):
+    # Deliberately the opposite of the global default, to prove "deep" forces
+    # the judge on rather than merely respecting settings.DRAFT_JUDGE_ENABLED.
+    monkeypatch.setattr(settings, "DRAFT_JUDGE_ENABLED", False)
+
+    graph = create_draft_graph(
+        MagicMock(spec=BaseLLMClient), MagicMock(spec=BaseLLMClient)
+    )
+    state = {**BASE_STATE, "reasoning_level": "deep"}
+
+    with (
+        patch.object(WriterAgent, "stream") as mock_writer,
+        patch.object(ReviserAgent, "stream") as mock_reviser,
+        patch(
+            "app.ai.workflows.draft_graph.judge_draft", new_callable=AsyncMock
+        ) as mock_judge_draft,
+    ):
+        mock_writer.side_effect = lambda **kwargs: _one_chunk(BAD_DRAFT)
+        mock_reviser.side_effect = lambda **kwargs: _one_chunk(BAD_DRAFT)
+        mock_judge_draft.return_value = None
+
+        result = await graph.ainvoke(state)
+
+    # writer (attempt 1) + reviser twice (attempts 2 and 3) = 3 total passes.
+    assert mock_writer.call_count == 1
+    assert mock_writer.call_args.kwargs["reasoning"] is True
+    assert mock_reviser.call_count == 2
+    assert mock_judge_draft.call_count == 3
+    assert result["attempts"] == 3
+    assert result["reasoning_level"] == "deep"
