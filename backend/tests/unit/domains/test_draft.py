@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+from app.core.enums.reasoning_level import ReasoningLevel
 from app.domains.documents.draft_service import DraftService
 from app.domains.documents.schema.document_schema import DraftRequestSchema
 from app.api.exceptions.validation import ValidationException
@@ -152,3 +153,21 @@ async def test_generate_draft_graph_failure(draft_service, mock_draft_graph):
 def test_storage_path_rejects_malformed_value():
     with pytest.raises(ValueError):
         _request(storage_path="uploads/../../etc/passwd")
+
+
+def test_draft_request_defaults_reasoning_level_to_balanced():
+    request = _request()
+
+    assert request.reasoning_level == ReasoningLevel.BALANCED
+
+
+@pytest.mark.asyncio
+async def test_generate_draft_threads_the_requested_reasoning_level_into_the_graph(
+    draft_service, mock_draft_graph
+):
+    request = _request(reasoning_level="deep")
+
+    await draft_service.generate_draft_and_route(request)
+
+    graph_input = mock_draft_graph.ainvoke.call_args.args[0]
+    assert graph_input["reasoning_level"] == "deep"

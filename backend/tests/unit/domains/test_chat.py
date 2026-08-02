@@ -1,7 +1,9 @@
 import pytest
+from pydantic import ValidationError
 from unittest.mock import AsyncMock, MagicMock
 
 from app.api.exceptions.ai_error import AIException
+from app.core.enums.reasoning_level import ReasoningLevel
 from app.domains.chat.chat_service import ChatService
 from app.domains.chat.schema.chat_schema import ChatMessageRequest
 
@@ -129,3 +131,32 @@ async def test_chat_service_rejects_new_message_on_already_paused_session(
     with pytest.raises(AIException):
         await chat_service.handle_message(request)
     mock_planning_graph.ainvoke.assert_not_called()
+
+
+def test_chat_message_request_defaults_reasoning_level_to_balanced():
+    """The zero-regression contract: an older caller that never sends this
+    field must resolve to today's pre-existing behaviour."""
+    request = ChatMessageRequest(message="Merhaba")
+
+    assert request.reasoning_level == ReasoningLevel.BALANCED
+
+
+def test_chat_message_request_rejects_an_invalid_reasoning_level():
+    with pytest.raises(ValidationError):
+        ChatMessageRequest(message="Merhaba", reasoning_level="ultra")
+
+
+@pytest.mark.asyncio
+async def test_chat_service_threads_the_requested_reasoning_level_into_the_graph(
+    chat_service, mock_planning_graph
+):
+    request = ChatMessageRequest(message="Bana hızlı bir taslak yaz", reasoning_level="fast")
+
+    mock_planning_graph.ainvoke.return_value = {
+        "final_output": {"status": "COMPLETED", "chat": {"reply": "Tamam."}}
+    }
+
+    await chat_service.handle_message(request)
+
+    graph_input = mock_planning_graph.ainvoke.call_args.args[0]
+    assert graph_input["reasoning_level"] == "fast"

@@ -26,7 +26,9 @@ services:
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
       - OLLAMA_FAST_MODEL=${OLLAMA_FAST_MODEL:-}
       - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text:latest}
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/kachow
+      # Derived from the same POSTGRES_* values as the db service below, so
+      # the two can never drift out of sync with each other.
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-kachow}
       - QDRANT_URL=http://qdrant:6333
       - REDIS_URL=redis://redis:6379/0
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-1234567890}
@@ -45,9 +47,9 @@ services:
     ports:
       - "5432:5432"
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=kachow
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-kachow}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
@@ -91,7 +93,7 @@ services:
     ports:
       - "3001:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
@@ -101,15 +103,19 @@ services:
       - prometheus
 
   langfuse:
-    image: langfuse/langfuse:2
+    # v2 server is not compatible with the v4 langfuse Python SDK the backend
+    # depends on (backend/requirements.txt); v3 is the matching server line.
+    image: langfuse/langfuse:3
     container_name: kachow_langfuse_dev
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/langfuse
-      - NEXTAUTH_SECRET=my_nextauth_secret_for_dev_only_123
-      - SALT=my_salt_for_dev_only_123
-      - ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      # A separate "langfuse" database on the same Postgres instance/creds as
+      # the app's own db -- not POSTGRES_DB, which is the app's "kachow" db.
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/langfuse
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET:-my_nextauth_secret_for_dev_only_123}
+      - SALT=${LANGFUSE_SALT:-my_salt_for_dev_only_123}
+      - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
       - NEXTAUTH_URL=http://localhost:3000
       - TELEMETRY_ENABLED=false
     depends_on:

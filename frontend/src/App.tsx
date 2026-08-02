@@ -136,6 +136,15 @@ const CORRESPONDENCE_TYPE_FALLBACK = [
     { value: 'other_official', label: 'Diğer resmî yazışma' },
 ];
 
+// Speed-vs-quality tradeoff sent to the backend as `reasoning_level`; see
+// backend/app/ai/reasoning_levels.py for what each tier actually changes.
+type ReasoningLevel = 'fast' | 'balanced' | 'deep';
+const REASONING_LEVELS: Array<{ value: ReasoningLevel; label: string }> = [
+    { value: 'fast', label: 'Hızlı' },
+    { value: 'balanced', label: 'Dengeli' },
+    { value: 'deep', label: 'Derin' },
+];
+
 export default function App() {
     const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
     const [selectedDoc, setSelectedDoc] = useState<DocumentMetadata | null>(null);
@@ -147,6 +156,7 @@ export default function App() {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [inputText, setInputText] = useState('');
     const [attachActiveDoc, setAttachActiveDoc] = useState(true);
+    const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>('balanced');
     const [loading, setLoading] = useState(false);
     const [copiedText, setCopiedText] = useState(false);
     // Text arriving token-by-token from the backend, rendered live before the
@@ -168,6 +178,7 @@ export default function App() {
     const [draftFormOpen, setDraftFormOpen] = useState(false);
     const [correspondenceTypes, setCorrespondenceTypes] = useState(CORRESPONDENCE_TYPE_FALLBACK);
     const [draftCorrespondenceType, setDraftCorrespondenceType] = useState('');
+    const [draftReasoningLevel, setDraftReasoningLevel] = useState<ReasoningLevel>('balanced');
     const [draftInstructions, setDraftInstructions] = useState('');
     const [draftSubmitting, setDraftSubmitting] = useState(false);
     const [draftResult, setDraftResult] = useState<any | null>(null);
@@ -466,7 +477,8 @@ export default function App() {
                 body: JSON.stringify({
                     message: userMessage,
                     session_id: sessionId,
-                    document_id: (attachActiveDoc && selectedDoc) ? selectedDoc.storage_path : null
+                    document_id: (attachActiveDoc && selectedDoc) ? selectedDoc.storage_path : null,
+                    reasoning_level: reasoningLevel,
                 })
             });
             await consumeSSEStream(res);
@@ -694,6 +706,7 @@ export default function App() {
                     },
                     instructions: draftInstructions,
                     correspondence_type: draftCorrespondenceType || null,
+                    reasoning_level: draftReasoningLevel,
                 }),
             });
             const json = await res.json();
@@ -924,6 +937,16 @@ export default function App() {
                                         <option key={t.value} value={t.value}>{t.label}</option>
                                     ))}
                                 </select>
+                                <label style={{ fontSize: '11px', color: '#9ca3af' }}>Düşünme Seviyesi</label>
+                                <select
+                                    value={draftReasoningLevel}
+                                    onChange={e => setDraftReasoningLevel(e.target.value as ReasoningLevel)}
+                                    style={{ background: 'var(--bg-secondary)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: '6px 8px' }}
+                                >
+                                    {REASONING_LEVELS.map(level => (
+                                        <option key={level.value} value={level.value}>{level.label}</option>
+                                    ))}
+                                </select>
                                 <label style={{ fontSize: '11px', color: '#9ca3af' }}>Talimatlar (opsiyonel)</label>
                                 <textarea
                                     value={draftInstructions}
@@ -1111,6 +1134,16 @@ export default function App() {
                                 />
                                 <span>Aktif Belgeyi Kullan ({selectedDoc ? selectedDoc.file_name : 'Belge Seçilmedi'})</span>
                             </label>
+                            <select
+                                value={reasoningLevel}
+                                onChange={e => setReasoningLevel(e.target.value as ReasoningLevel)}
+                                title="Düşünme seviyesi: hız/kalite tercihi"
+                                style={{ background: 'var(--bg-secondary)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: '4px 8px', fontSize: '12px' }}
+                            >
+                                {REASONING_LEVELS.map(level => (
+                                    <option key={level.value} value={level.value}>{level.label}</option>
+                                ))}
+                            </select>
                         </div>
 
                         <div className="input-container">
@@ -1219,7 +1252,7 @@ export default function App() {
                                                     fontWeight: 500,
                                                 }}
                                             >
-                                                {node.label}{meta?.attempt > 1 ? ` (#${meta.attempt})` : ''}
+                                                {node.label}{meta?.attempt > 1 ? ` (#${meta.attempt})` : ''}{meta?.reasoning_level && meta.reasoning_level !== 'balanced' ? ` [${meta.reasoning_level}]` : ''}
                                             </text>
                                         </g>
                                     );

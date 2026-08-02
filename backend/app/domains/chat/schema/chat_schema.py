@@ -2,6 +2,8 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.enums.reasoning_level import ReasoningLevel
+
 
 class ChatMessageRequest(BaseModel):
     """Client request for a new chat interaction."""
@@ -24,6 +26,10 @@ class ChatMessageRequest(BaseModel):
         default=None,
         max_length=512,
         description="Opsiyonel olarak hakkında soru sorulan spesifik belgenin (storage_path) ID'si.",
+    )
+    reasoning_level: ReasoningLevel = Field(
+        default=ReasoningLevel.BALANCED,
+        description="Hız/kalite tercihi: fast (hızlı), balanced (dengeli, varsayılan), deep (derin muhakeme).",
     )
 
 
@@ -66,4 +72,11 @@ class ChatResumeRequest(BaseModel):
     )
     instructions: str = Field(
         default="", max_length=4000, description="action='revise' için ek talimat."
+    )
+    reasoning_level: Optional[ReasoningLevel] = Field(
+        default=None,
+        description=(
+            "action='revise' için bu tekrar denemede kullanılacak seviye. "
+            "Belirtilmezse oturumun mevcut seviyesi korunur."
+        ),
     )
