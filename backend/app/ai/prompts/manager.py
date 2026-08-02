@@ -18,14 +18,15 @@ _PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*(\w+)\s*\}\}")
 #: agent stopping supplying a declared one) is exactly the drift this contract
 #: catches -- see ``tests/unit/ai/test_prompt_templates.py``.
 TEMPLATE_CONTRACTS: Dict[str, frozenset] = {
-    "chat": frozenset(),
+    "chat": frozenset({"history_summary"}),
     "classifier": frozenset(),
     "compliance": frozenset(),
-    "document_qa": frozenset({"context"}),
+    "document_qa": frozenset({"context", "history_summary"}),
     "router": frozenset(),
     "writer": frozenset(),
     "judge": frozenset(),
     "reviser": frozenset(),
+    "memory_summary": frozenset({"existing_summary", "new_turns"}),
 }
 
 

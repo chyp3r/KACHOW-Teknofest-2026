@@ -32,7 +32,10 @@ class DocumentQAAgent(BaseAgent):
 
     @staticmethod
     def _build(
-        context: Optional[str], query: Optional[str], history: List[Dict[str, str]]
+        context: Optional[str],
+        query: Optional[str],
+        history: List[Dict[str, str]],
+        history_summary: Optional[str] = None,
     ) -> tuple[List[Dict[str, str]], Dict[str, str]]:
         """Assemble the message list and prompt context for a QA turn.
 
@@ -44,13 +47,21 @@ class DocumentQAAgent(BaseAgent):
             context: Retrieved document chunks joined into one string.
             query: The user's question.
             history: Prior conversation turns.
+            history_summary: Rolling summary of turns older than the verbatim
+                window, rendered as a block separate from the document context
+                so the model never mistakes conversation memory for document
+                content.
 
         Returns:
             The message list and the system-prompt render context.
         """
         messages = list(history)
         messages.append({"role": "user", "content": query or ""})
-        return messages, {"context": context or "Bağlam bulunamadı."}
+        return messages, {
+            "context": context or "Bağlam bulunamadı.",
+            "history_summary": history_summary
+            or "(Bu konuşmada henüz özetlenecek eski mesaj yok.)",
+        }
 
     async def answer(
         self,
@@ -58,6 +69,7 @@ class DocumentQAAgent(BaseAgent):
         context: Optional[str] = None,
         query: Optional[str] = None,
         history: Optional[List[Dict[str, str]]] = None,
+        history_summary: Optional[str] = None,
         **kwargs: Any,
     ) -> str:
         """Answer a question from the supplied document context.
@@ -66,12 +78,14 @@ class DocumentQAAgent(BaseAgent):
             context: Retrieved document chunks as a single string.
             query: The user's question.
             history: Optional prior conversation turns.
+            history_summary: Rolling summary of turns older than the verbatim
+                window.
             **kwargs: Extra provider configuration.
 
         Returns:
             The agent's answer.
         """
-        messages, prompt_context = self._build(context, query, history or [])
+        messages, prompt_context = self._build(context, query, history or [], history_summary)
         return await self.run(
             messages=messages, context=prompt_context, temperature=0.2, **kwargs
         )
@@ -82,6 +96,7 @@ class DocumentQAAgent(BaseAgent):
         context: Optional[str] = None,
         query: Optional[str] = None,
         history: Optional[List[Dict[str, str]]] = None,
+        history_summary: Optional[str] = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """Stream the answer token-by-token.
@@ -90,12 +105,14 @@ class DocumentQAAgent(BaseAgent):
             context: Retrieved document chunks as a single string.
             query: The user's question.
             history: Optional prior conversation turns.
+            history_summary: Rolling summary of turns older than the verbatim
+                window.
             **kwargs: Extra provider configuration.
 
         Returns:
             An async iterator of text chunks.
         """
-        messages, prompt_context = self._build(context, query, history or [])
+        messages, prompt_context = self._build(context, query, history or [], history_summary)
         return self.stream(
             messages=messages, context=prompt_context, temperature=0.2, **kwargs
         )

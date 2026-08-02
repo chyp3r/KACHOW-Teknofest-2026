@@ -12,6 +12,7 @@ from langgraph.types import interrupt
 
 from app.ai.agents.chat import ChatAgent
 from app.ai.agents.document_qa import DocumentQAAgent
+from app.ai.agents.memory_summarizer import MemorySummarizerAgent
 from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.llms.base import BaseLLMClient
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
@@ -88,10 +89,20 @@ def _dependency_failed(
     return None
 
 
-#: Turns kept across messages on the same thread. ~6 exchanges is enough for
-#: pronoun/ellipsis resolution ("evet, hazırla" after "taslak ister misiniz?")
-#: without growing the prompt sent to chat/document_qa without bound.
+#: Turns kept verbatim in the prompt sent to chat/document_qa on every turn.
+#: ~6 exchanges is enough for pronoun/ellipsis resolution ("evet, hazırla"
+#: after "taslak ister misiniz?") without growing that prompt without bound.
 HISTORY_WINDOW = 12
+
+#: Raw turns retained in state before consolidation must have folded them
+#: into history_summary. Comfortably larger than HISTORY_WINDOW so
+#: consolidate_memory_node always has the overflow available when it runs
+#: (it runs once per turn, after HISTORY_WINDOW turns are already appended).
+HISTORY_RAW_CAP = 40
+
+#: Only bother calling the model once there's a worth-while batch to fold in,
+#: not for every single turn's 1-2-entry dribble past the window.
+CONSOLIDATION_BATCH_SIZE = 4
 
 
 def _append_history(
@@ -107,7 +118,35 @@ def _append_history(
         The combined, trimmed history.
     """
     combined = [*(left or []), *(right or [])]
-    return combined[-HISTORY_WINDOW:]
+    return combined[-HISTORY_RAW_CAP:]
+
+
+def _pending_consolidation(
+    history: list[dict[str, str]],
+    summarized_through: int,
+    window: int,
+    batch_size: int,
+) -> tuple[list[dict[str, str]], int]:
+    """Turns that have aged out of the verbatim window and aren't summarized yet.
+
+    Args:
+        history: The raw retained turns (up to HISTORY_RAW_CAP).
+        summarized_through: Count of ``history`` entries already folded into
+            ``history_summary``.
+        window: The verbatim window size (HISTORY_WINDOW).
+        batch_size: Minimum number of newly-overflowed turns worth a model call.
+
+    Returns:
+        A tuple of (pending turns, new boundary to advance
+        ``summarized_through`` to). ``pending`` is empty when there's nothing
+        new past ``window``, or fewer than ``batch_size`` new overflowed turns
+        to bother the model for.
+    """
+    boundary = max(0, len(history) - window)
+    pending = history[summarized_through:boundary]
+    if len(pending) < batch_size:
+        return [], summarized_through
+    return pending, boundary
 
 
 class PlanningState(TypedDict, total=False):
@@ -131,8 +170,19 @@ class PlanningState(TypedDict, total=False):
     final_output: dict[str, Any]
     #: Persists across separate ainvoke() calls on the same checkpointer
     #: thread_id (see ChatService._thread_id) -- this is the whole memory
-    #: story; there is no separate store to keep consistent with it.
+    #: story; there is no separate store to keep consistent with it. Holds up
+    #: to HISTORY_RAW_CAP raw turns; only the trailing HISTORY_WINDOW are sent
+    #: verbatim to chat/document_qa (see _prior_turns).
     history: Annotated[list[dict[str, str]], _append_history]
+    #: Rolling summary of turns that have aged out of the verbatim window
+    #: (see consolidate_memory_node). Plain string field -- LangGraph's
+    #: default "last write wins" channel semantics are exactly what's wanted
+    #: here since only consolidate_memory_node ever writes it.
+    history_summary: str
+    #: Count of `history` entries already folded into history_summary, so
+    #: consolidation only summarizes the newly-overflowed delta each turn
+    #: instead of re-summarizing the whole backlog.
+    history_summarized_through: int
 
 
 def _requested_correspondence_type(classification: dict[str, Any]) -> str | None:
@@ -271,6 +321,9 @@ def create_planning_graph(
     chat_agent = ChatAgent(llm_client)
     document_qa_agent = DocumentQAAgent(llm_client)
     intent_client = fast_llm_client or llm_client
+    # Reuses the fast tier already resolved for intent classification -- a
+    # short consolidation pass doesn't warrant a third model in the mix.
+    memory_summarizer_agent = MemorySummarizerAgent(intent_client)
     # Unfit on purpose, same as the indexing side (documents/service.py):
     # its sparse indices are corpus-independent CRC32 hashes, and query-side
     # IDF weights default to a uniform 1.0 without a fitted vocabulary, which
@@ -476,6 +529,7 @@ def create_planning_graph(
                 context=context,
                 query=state["input_text"],
                 history=_prior_turns(state, 6),
+                history_summary=state.get("history_summary"),
             ):
                 chunks.append(chunk)
                 await emit_token(config, "document_qa", chunk)
@@ -496,9 +550,15 @@ def create_planning_graph(
             *_prior_turns(state, HISTORY_WINDOW),
             {"role": "user", "content": state["input_text"]},
         ]
+        history_summary_context = {
+            "history_summary": state.get("history_summary")
+            or "(Bu konuşmada henüz özetlenecek eski mesaj yok.)"
+        }
         chunks: list[str] = []
         try:
-            async for chunk in chat_agent.stream(messages=messages):
+            async for chunk in chat_agent.stream(
+                messages=messages, context=history_summary_context
+            ):
                 chunks.append(chunk)
                 await emit_token(config, "chat", chunk)
             reply = "".join(chunks).strip()
@@ -510,6 +570,34 @@ def create_planning_graph(
         except Exception as exc:
             logger.exception("Chat step failed")
             return {"reply": f"Sohbet yanıtı üretilemedi: {exc}", "status": "FAILED"}
+
+    async def consolidate_memory_node(
+        state: PlanningState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Fold turns that fell outside the verbatim window into history_summary.
+
+        Runs once per turn, after the executor loop (and human_gate, if it ran)
+        finish -- never mid-turn, so it never sees a partially-built response.
+        A separate terminal node rather than folded into planning_node, whose
+        docstring commits it to staying sub-millisecond (deterministic, no LLM
+        call); this node's LLM call is conditional and only ever runs here.
+        """
+        pending, boundary = _pending_consolidation(
+            state.get("history") or [],
+            state.get("history_summarized_through", 0),
+            HISTORY_WINDOW,
+            CONSOLIDATION_BATCH_SIZE,
+        )
+        if not pending:
+            return {}
+        try:
+            summary = await memory_summarizer_agent.summarize(
+                existing_summary=state.get("history_summary") or "", new_turns=pending
+            )
+            return {"history_summary": summary, "history_summarized_through": boundary}
+        except Exception:
+            logger.exception("Memory consolidation failed; keeping prior summary")
+            return {}
 
     async def execute_step_node(
         state: PlanningState, config: RunnableConfig
@@ -579,12 +667,20 @@ def create_planning_graph(
                 )
 
             elif step == "chat":
-                updates["chat_result"] = await _run_chat(state, config)
+                chat_result = await _run_chat(state, config)
+                updates["chat_result"] = chat_result
+                # chat_result carries its own "history" entry (the assistant's
+                # reply) nested inside it -- it must be hoisted to a top-level
+                # update or the history reducer never sees it, and assistant
+                # turns silently never make it into checkpointed memory.
+                if chat_result.get("history"):
+                    updates["history"] = chat_result["history"]
 
             elif step == "document_qa":
-                updates["document_qa_result"] = await _run_document_qa(
-                    state, classification, config
-                )
+                document_qa_result = await _run_document_qa(state, classification, config)
+                updates["document_qa_result"] = document_qa_result
+                if document_qa_result.get("history"):
+                    updates["history"] = document_qa_result["history"]
 
             else:
                 logger.warning("Unknown workflow step skipped: %s", step)
@@ -810,18 +906,20 @@ def create_planning_graph(
     builder.add_node("planning", planning_node)
     builder.add_node("executor", execute_step_node)
     builder.add_node("human_gate", human_gate_node)
+    builder.add_node("consolidate_memory", consolidate_memory_node)
 
     builder.add_edge(START, "planning")
     builder.add_edge("planning", "executor")
     builder.add_conditional_edges(
         "executor",
         route_after_step,
-        {"continue": "executor", "human_gate": "human_gate", "end": END},
+        {"continue": "executor", "human_gate": "human_gate", "end": "consolidate_memory"},
     )
     builder.add_conditional_edges(
         "human_gate",
         route_after_gate,
-        {"human_gate": "human_gate", "continue": "executor", "end": END},
+        {"human_gate": "human_gate", "continue": "executor", "end": "consolidate_memory"},
     )
+    builder.add_edge("consolidate_memory", END)
 
     return builder.compile(checkpointer=checkpointer)
