@@ -59,7 +59,7 @@ bir katman üretir. Yalnızca ikincisini iyileştirmek, her şeyde çekimser kal
 yükü modele yıkan bir katman üretir. Bu yüzden `accuracy` varsayılan olarak
 yalnızca karar verilen alt kümeyi puanlar, `confusion_matrix` çekimserliği kendi
 sütununda tutar ve `macro_f1` mikro değil makro'dur (altın küme bilinçli olarak
-dengesizdir; mikro ortalama, `chat`'i doğru bilip `document_qa`'yı tamamen
+dengesizdir; mikro ortalama, `assist`'i doğru bilip `draft_revision`'ı tamamen
 kaçıran bir katmanı iyi gösterirdi).
 
 ## Altın küme kategorileri
@@ -71,6 +71,12 @@ deterministik katmanın bilinen bir kusur sınıfını hedefler — böylece rap
 `keyword_*`, `continuation` ve `document_question` kontrol grubudur: katmanın
 tasarlandığı alan. Bunlar geçmeye devam etmeli; başarısız kategorileri
 iyileştirirken bunları bozan bir değişiklik anında görünür.
+
+`draft_revision` ve `assist_vs_analyze`, `chat`/`document_qa`'nın tek `assist`
+niyetinde birleşmesinden (bkz. CHANGELOG `[1.34.0]`) sonra eklendi:
+`draft_revision` yalnızca `has_last_draft: true` taşıyan vakalarda anlamlıdır
+(bkz. `intent_suite.py::decide`), `assist_vs_analyze` ise sadeleşen niyet
+uzayının yeni sınırını -- kurallar bu vakalara göre ayarlanmadan -- sınar.
 
 ## Veri kaynağı beyanı
 

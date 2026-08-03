@@ -1,5 +1,9 @@
 // Niyet çözümleme altın kümesi. Şartname 6.5: tüm mesajlar kurgudur.
-// Alanlar: message, document_attached, previous_intent -> girdi; expected -> altın cevap.
+// Alanlar: message, document_attached, previous_intent, has_last_draft -> girdi; expected -> altın cevap.
+// `chat` ve `document_qa`, tek `assist` niyetinde birleşti (bkz. planner.py'nin
+// modül docstring'i) -- eski etiketler burada güncellendi, kategori isimleri
+// (document_question, memory_recall, ...) hangi ifade biçiminin sınandığını
+// göstermeye devam ediyor, sadece hedef niyet artık hepsi için `assist`.
 {"id": "draft_01", "category": "keyword_draft", "message": "Bu evraka bir cevap yazısı hazırla.", "document_attached": true, "previous_intent": null, "expected": {"intent": "draft", "steps": ["classification", "draft", "routing"]}}
 {"id": "draft_02", "category": "keyword_draft", "message": "Gelen dilekçeye cevap hazırla lütfen.", "document_attached": true, "previous_intent": null, "expected": {"intent": "draft", "steps": ["classification", "draft", "routing"]}}
 {"id": "draft_03", "category": "keyword_draft", "message": "Bir üst yazı oluşturur musun?", "document_attached": true, "previous_intent": null, "expected": {"intent": "draft", "steps": ["classification", "draft", "routing"]}}
@@ -18,55 +22,55 @@
 {"id": "analyze_06", "category": "keyword_analyze", "message": "Evrakı sınıflandır.", "document_attached": true, "previous_intent": null, "expected": {"intent": "analyze", "steps": ["classification"]}}
 {"id": "analyze_07", "category": "keyword_analyze", "message": "Belgeyi özetle.", "document_attached": true, "previous_intent": null, "expected": {"intent": "analyze", "steps": ["classification"]}}
 {"id": "analyze_08", "category": "keyword_analyze", "message": "Eksik bilgi olup olmadığını kontrol et.", "document_attached": true, "previous_intent": null, "expected": {"intent": "analyze", "steps": ["classification"]}}
-{"id": "chat_01", "category": "keyword_chat", "message": "Merhaba", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "chat_02", "category": "keyword_chat", "message": "İyi günler, nasılsın?", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "chat_03", "category": "keyword_chat", "message": "Sen kimsin?", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "chat_04", "category": "keyword_chat", "message": "Neler yapabilirsin?", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "chat_05", "category": "keyword_chat", "message": "Teşekkürler, çok yardımcı oldun.", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "chat_06", "category": "keyword_chat", "message": "Bu sistem nasıl çalışır?", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "chat_07", "category": "keyword_chat", "message": "Görüşürüz", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "chat_08", "category": "keyword_chat", "message": "Selam, günaydın!", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
+{"id": "chat_01", "category": "keyword_assist", "message": "Merhaba", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "chat_02", "category": "keyword_assist", "message": "İyi günler, nasılsın?", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "chat_03", "category": "keyword_assist", "message": "Sen kimsin?", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "chat_04", "category": "keyword_assist", "message": "Neler yapabilirsin?", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "chat_05", "category": "keyword_assist", "message": "Teşekkürler, çok yardımcı oldun.", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "chat_06", "category": "keyword_assist", "message": "Bu sistem nasıl çalışır?", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "chat_07", "category": "keyword_assist", "message": "Görüşürüz", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "chat_08", "category": "keyword_assist", "message": "Selam, günaydın!", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
 {"id": "cont_01", "category": "continuation", "message": "Evet, hazırla.", "document_attached": true, "previous_intent": "draft", "expected": {"intent": "draft", "steps": ["classification", "draft", "routing"]}}
 {"id": "cont_02", "category": "continuation", "message": "Olur, devam et.", "document_attached": true, "previous_intent": "analyze", "expected": {"intent": "analyze", "steps": ["classification"]}}
 {"id": "cont_03", "category": "continuation", "message": "Tamam", "document_attached": true, "previous_intent": "draft", "expected": {"intent": "draft", "steps": ["classification", "draft", "routing"]}}
 {"id": "cont_04", "category": "continuation", "message": "Onaylıyorum, yap.", "document_attached": true, "previous_intent": "draft", "expected": {"intent": "draft", "steps": ["classification", "draft", "routing"]}}
 {"id": "cont_05", "category": "continuation", "message": "Evet lütfen", "document_attached": true, "previous_intent": "analyze", "expected": {"intent": "analyze", "steps": ["classification"]}}
-{"id": "cont_06", "category": "continuation", "message": "Evet", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
+{"id": "cont_06", "category": "continuation", "message": "Evet", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
 {"id": "cont_07", "category": "continuation", "message": "Devam", "document_attached": true, "previous_intent": "draft", "expected": {"intent": "draft", "steps": ["classification", "draft", "routing"]}}
 {"id": "cont_08", "category": "continuation", "message": "Tamamdır, devam edebilirsin.", "document_attached": true, "previous_intent": "analyze", "expected": {"intent": "analyze", "steps": ["classification"]}}
-{"id": "recall_01", "category": "memory_recall", "message": "Az önce ne sordum?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "recall_02", "category": "memory_recall", "message": "Sana ne demiştim hatırlıyor musun?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "recall_03", "category": "memory_recall", "message": "Bu konuşmada hangi konulardan bahsettik?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "recall_04", "category": "memory_recall", "message": "İlk mesajımda ne yazmıştım?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "recall_05", "category": "memory_recall", "message": "Önceki mesajımda hangi kurumdan söz etmiştim?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "recall_06", "category": "memory_recall", "message": "Daha önce ne sordum sana?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "recall_07", "category": "memory_recall", "message": "Konuşma geçmişimizi özetler misin?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "recall_08", "category": "memory_recall", "message": "Az önce sana ilettiğim konuyu hatırlıyor musunuz?", "document_attached": true, "previous_intent": "document_qa", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "recall_09", "category": "memory_recall", "message": "Bu sohbette benden hangi bilgileri istedin?", "document_attached": true, "previous_intent": "document_qa", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "recall_10", "category": "memory_recall", "message": "Geçmiş mesajlarda hangi mevzuattan bahsetmiştin?", "document_attached": true, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "docqa_01", "category": "document_question", "message": "Bu belgede kimden bahsediliyor?", "document_attached": true, "previous_intent": null, "expected": {"intent": "document_qa", "steps": ["document_qa"]}}
-{"id": "docqa_02", "category": "document_question", "message": "Evrakın konusu nedir?", "document_attached": true, "previous_intent": null, "expected": {"intent": "document_qa", "steps": ["document_qa"]}}
-{"id": "docqa_03", "category": "document_question", "message": "Belgede hangi tarih geçiyor?", "document_attached": true, "previous_intent": null, "expected": {"intent": "document_qa", "steps": ["document_qa"]}}
-{"id": "docqa_04", "category": "document_question", "message": "Bu yazı kime gönderilmiş?", "document_attached": true, "previous_intent": null, "expected": {"intent": "document_qa", "steps": ["document_qa"]}}
-{"id": "docqa_05", "category": "document_question", "message": "Evrakta kaç ek var?", "document_attached": true, "previous_intent": null, "expected": {"intent": "document_qa", "steps": ["document_qa"]}}
-{"id": "docqa_06", "category": "document_question", "message": "Belgeyi kim imzalamış?", "document_attached": true, "previous_intent": null, "expected": {"intent": "document_qa", "steps": ["document_qa"]}}
-{"id": "docqa_07", "category": "document_question", "message": "Yazının sayı bilgisi ne?", "document_attached": true, "previous_intent": null, "expected": {"intent": "document_qa", "steps": ["document_qa"]}}
-{"id": "docqa_08", "category": "document_question", "message": "Bu evrak nereden gelmiş?", "document_attached": true, "previous_intent": null, "expected": {"intent": "document_qa", "steps": ["document_qa"]}}
-{"id": "docqa_09", "category": "document_question", "message": "Talep edilen süre ne kadar?", "document_attached": true, "previous_intent": null, "expected": {"intent": "document_qa", "steps": ["document_qa"]}}
-{"id": "docqa_10", "category": "document_question", "message": "Belgede gizlilik derecesi var mı?", "document_attached": true, "previous_intent": null, "expected": {"intent": "document_qa", "steps": ["document_qa"]}}
-{"id": "short_01", "category": "short_message", "message": "Peki", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "short_02", "category": "short_message", "message": "Anladım", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "short_03", "category": "short_message", "message": "Harika", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "short_04", "category": "short_message", "message": "", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "short_05", "category": "short_message", "message": "   ", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "short_06", "category": "short_message", "message": "Süper, sağol", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
+{"id": "recall_01", "category": "memory_recall", "message": "Az önce ne sordum?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "recall_02", "category": "memory_recall", "message": "Sana ne demiştim hatırlıyor musun?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "recall_03", "category": "memory_recall", "message": "Bu konuşmada hangi konulardan bahsettik?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "recall_04", "category": "memory_recall", "message": "İlk mesajımda ne yazmıştım?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "recall_05", "category": "memory_recall", "message": "Önceki mesajımda hangi kurumdan söz etmiştim?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "recall_06", "category": "memory_recall", "message": "Daha önce ne sordum sana?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "recall_07", "category": "memory_recall", "message": "Konuşma geçmişimizi özetler misin?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "recall_08", "category": "memory_recall", "message": "Az önce sana ilettiğim konuyu hatırlıyor musunuz?", "document_attached": true, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "recall_09", "category": "memory_recall", "message": "Bu sohbette benden hangi bilgileri istedin?", "document_attached": true, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "recall_10", "category": "memory_recall", "message": "Geçmiş mesajlarda hangi mevzuattan bahsetmiştin?", "document_attached": true, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "docqa_01", "category": "document_question", "message": "Bu belgede kimden bahsediliyor?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "docqa_02", "category": "document_question", "message": "Evrakın konusu nedir?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "docqa_03", "category": "document_question", "message": "Belgede hangi tarih geçiyor?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "docqa_04", "category": "document_question", "message": "Bu yazı kime gönderilmiş?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "docqa_05", "category": "document_question", "message": "Evrakta kaç ek var?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "docqa_06", "category": "document_question", "message": "Belgeyi kim imzalamış?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "docqa_07", "category": "document_question", "message": "Yazının sayı bilgisi ne?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "docqa_08", "category": "document_question", "message": "Bu evrak nereden gelmiş?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "docqa_09", "category": "document_question", "message": "Talep edilen süre ne kadar?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "docqa_10", "category": "document_question", "message": "Belgede gizlilik derecesi var mı?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "short_01", "category": "short_message", "message": "Peki", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "short_02", "category": "short_message", "message": "Anladım", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "short_03", "category": "short_message", "message": "Harika", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "short_04", "category": "short_message", "message": "", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "short_05", "category": "short_message", "message": "   ", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "short_06", "category": "short_message", "message": "Süper, sağol", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
 {"id": "inv_01", "category": "inversion", "message": "Hazırladığın taslak metnini incele.", "document_attached": true, "previous_intent": "draft", "expected": {"intent": "analyze", "steps": ["classification"]}}
 {"id": "inv_02", "category": "inversion", "message": "Bu taslak mevzuata uygun mu, kontrol et.", "document_attached": true, "previous_intent": "draft", "expected": {"intent": "analyze", "steps": ["classification"]}}
-{"id": "inv_03", "category": "inversion", "message": "Resmi yazı ne demek, kısaca anlatır mısın?", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "inv_04", "category": "inversion", "message": "Üst yazı ile cevap yazısı arasındaki fark nedir?", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "inv_05", "category": "inversion", "message": "Taslak oluşturma süreci sistemde nasıl işliyor?", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "inv_06", "category": "inversion", "message": "Taslak hakkında ne düşünüyorsun?", "document_attached": false, "previous_intent": "draft", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "inv_07", "category": "inversion", "message": "Bir bilgilendirme metni hangi durumlarda kullanılır?", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
+{"id": "inv_03", "category": "inversion", "message": "Resmi yazı ne demek, kısaca anlatır mısın?", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "inv_04", "category": "inversion", "message": "Üst yazı ile cevap yazısı arasındaki fark nedir?", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "inv_05", "category": "inversion", "message": "Taslak oluşturma süreci sistemde nasıl işliyor?", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "inv_06", "category": "inversion", "message": "Taslak hakkında ne düşünüyorsun?", "document_attached": false, "previous_intent": "draft", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "inv_07", "category": "inversion", "message": "Bir bilgilendirme metni hangi durumlarda kullanılır?", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
 {"id": "inv_08", "category": "inversion", "message": "Taslak içindeki eksik alanları listeler misin?", "document_attached": true, "previous_intent": "draft", "expected": {"intent": "analyze", "steps": ["classification"]}}
 {"id": "comp_01", "category": "compound", "message": "Belgeyi incele ve cevap yazısı oluştur.", "document_attached": true, "previous_intent": null, "expected": {"intent": "draft", "steps": ["classification", "draft", "routing"]}}
 {"id": "comp_02", "category": "compound", "message": "Önce evrakı değerlendir, sonra yanıt metnini üret.", "document_attached": true, "previous_intent": null, "expected": {"intent": "draft", "steps": ["classification", "draft", "routing"]}}
@@ -76,12 +80,12 @@
 {"id": "comp_06", "category": "compound", "message": "Eksik bilgileri tespit ettikten sonra resmi cevabı düzenle.", "document_attached": true, "previous_intent": null, "expected": {"intent": "draft", "steps": ["classification", "draft", "routing"]}}
 {"id": "comp_07", "category": "compound", "message": "Belgeyi kontrol et ve gerekiyorsa bir üst yazı çıkar.", "document_attached": true, "previous_intent": null, "expected": {"intent": "draft", "steps": ["classification", "draft", "routing"]}}
 {"id": "comp_08", "category": "compound", "message": "Uygunluk denetimi yap, sonra cevabı kaleme al.", "document_attached": true, "previous_intent": null, "expected": {"intent": "draft", "steps": ["classification", "draft", "routing"]}}
-{"id": "prec_01", "category": "precedence", "message": "Merhaba", "document_attached": true, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "prec_02", "category": "precedence", "message": "Teşekkürler", "document_attached": true, "previous_intent": "document_qa", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "prec_03", "category": "precedence", "message": "İyi akşamlar, yarın devam ederiz.", "document_attached": true, "previous_intent": "draft", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "prec_04", "category": "precedence", "message": "Sağol, çok iyi oldu.", "document_attached": true, "previous_intent": "draft", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "prec_05", "category": "precedence", "message": "Sen neler yapabilirsin?", "document_attached": true, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "prec_06", "category": "precedence", "message": "Bu sistem nasıl çalışır, kısaca anlatır mısın?", "document_attached": true, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
+{"id": "prec_01", "category": "precedence", "message": "Merhaba", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "prec_02", "category": "precedence", "message": "Teşekkürler", "document_attached": true, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "prec_03", "category": "precedence", "message": "İyi akşamlar, yarın devam ederiz.", "document_attached": true, "previous_intent": "draft", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "prec_04", "category": "precedence", "message": "Sağol, çok iyi oldu.", "document_attached": true, "previous_intent": "draft", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "prec_05", "category": "precedence", "message": "Sen neler yapabilirsin?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "prec_06", "category": "precedence", "message": "Bu sistem nasıl çalışır, kısaca anlatır mısın?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
 {"id": "pdraft_01", "category": "paraphrase_draft", "message": "Bu evraka bir mukabele metni oluştur.", "document_attached": true, "previous_intent": null, "expected": {"intent": "draft", "steps": ["classification", "draft", "routing"]}}
 {"id": "pdraft_02", "category": "paraphrase_draft", "message": "Gelen yazıya karşılık bir metin tanzim et.", "document_attached": true, "previous_intent": null, "expected": {"intent": "draft", "steps": ["classification", "draft", "routing"]}}
 {"id": "pdraft_03", "category": "paraphrase_draft", "message": "Buna uygun bir tebligat metni düzenle.", "document_attached": true, "previous_intent": null, "expected": {"intent": "draft", "steps": ["classification", "draft", "routing"]}}
@@ -96,16 +100,16 @@
 {"id": "panalyze_04", "category": "paraphrase_analyze", "message": "Bu belgenin usule uygunluğunu irdele.", "document_attached": true, "previous_intent": null, "expected": {"intent": "analyze", "steps": ["classification"]}}
 {"id": "panalyze_05", "category": "paraphrase_analyze", "message": "Evrakı bir süz ve bulgularını raporla.", "document_attached": true, "previous_intent": null, "expected": {"intent": "analyze", "steps": ["classification"]}}
 {"id": "panalyze_06", "category": "paraphrase_analyze", "message": "Belgenin hangi kategoriye girdiğini tespit etmeni istiyorum.", "document_attached": true, "previous_intent": null, "expected": {"intent": "analyze", "steps": ["classification"]}}
-{"id": "precall_01", "category": "paraphrase_memory", "message": "Biraz evvel sana ilettiğim konu neydi?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "precall_02", "category": "paraphrase_memory", "message": "Önceki turda konuştuğumuz konuyu tekrar eder misin?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "precall_03", "category": "paraphrase_memory", "message": "Bu diyalogda hangi konulara değindik?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "precall_04", "category": "paraphrase_memory", "message": "Geçen sefer hangi kurumun adını vermiştim?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "precall_05", "category": "paraphrase_memory", "message": "Yukarıda bahsettiğim evrak hangisiydi?", "document_attached": true, "previous_intent": "document_qa", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "precall_06", "category": "paraphrase_memory", "message": "Sohbetimizin başında ne konuşmuştuk?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "precall_07", "category": "paraphrase_memory", "message": "Demin verdiğin cevabı bir daha söyler misin?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "precall_08", "category": "paraphrase_memory", "message": "Buraya kadar neler konuştuğumuzu toparlar mısın?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "precall_09", "category": "paraphrase_memory", "message": "Sana ilettiğim ilk talebi anımsıyor musun?", "document_attached": true, "previous_intent": "document_qa", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "precall_10", "category": "paraphrase_memory", "message": "Evvelce sorduğum soruyu tekrarlayabilir misin?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
+{"id": "precall_01", "category": "paraphrase_memory", "message": "Biraz evvel sana ilettiğim konu neydi?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "precall_02", "category": "paraphrase_memory", "message": "Önceki turda konuştuğumuz konuyu tekrar eder misin?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "precall_03", "category": "paraphrase_memory", "message": "Bu diyalogda hangi konulara değindik?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "precall_04", "category": "paraphrase_memory", "message": "Geçen sefer hangi kurumun adını vermiştim?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "precall_05", "category": "paraphrase_memory", "message": "Yukarıda bahsettiğim evrak hangisiydi?", "document_attached": true, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "precall_06", "category": "paraphrase_memory", "message": "Sohbetimizin başında ne konuşmuştuk?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "precall_07", "category": "paraphrase_memory", "message": "Demin verdiğin cevabı bir daha söyler misin?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "precall_08", "category": "paraphrase_memory", "message": "Buraya kadar neler konuştuğumuzu toparlar mısın?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "precall_09", "category": "paraphrase_memory", "message": "Sana ilettiğim ilk talebi anımsıyor musun?", "document_attached": true, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "precall_10", "category": "paraphrase_memory", "message": "Evvelce sorduğum soruyu tekrarlayabilir misin?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
 {"id": "esc_01", "category": "escalation", "message": "Bunu hallet.", "document_attached": true, "previous_intent": null, "expected": {"expected_abstain": true}}
 {"id": "esc_02", "category": "escalation", "message": "Buna göre ilerle.", "document_attached": true, "previous_intent": null, "expected": {"expected_abstain": true}}
 {"id": "esc_03", "category": "escalation", "message": "Gereğini yap.", "document_attached": true, "previous_intent": null, "expected": {"expected_abstain": true}}
@@ -122,11 +126,31 @@
 {"id": "held_06", "category": "heldout_paraphrase", "message": "Bu evrakta bir sorun var mı acaba?", "document_attached": true, "previous_intent": null, "expected": {"intent": "analyze", "steps": ["classification"]}}
 {"id": "held_07", "category": "heldout_paraphrase", "message": "Bu yazının kurallara uyup uymadığını söyler misin?", "document_attached": true, "previous_intent": null, "expected": {"intent": "analyze", "steps": ["classification"]}}
 {"id": "held_08", "category": "heldout_paraphrase", "message": "Belgenin durumunu bir çıkar bakalım.", "document_attached": true, "previous_intent": null, "expected": {"intent": "analyze", "steps": ["classification"]}}
-{"id": "held_09", "category": "heldout_paraphrase", "message": "Şurada geçen kurum neresiydi?", "document_attached": true, "previous_intent": null, "expected": {"intent": "document_qa", "steps": ["document_qa"]}}
-{"id": "held_10", "category": "heldout_paraphrase", "message": "İçinde ne yazıyor bunun?", "document_attached": true, "previous_intent": null, "expected": {"intent": "document_qa", "steps": ["document_qa"]}}
-{"id": "held_11", "category": "heldout_paraphrase", "message": "Kaç sayfadan oluşuyor bu?", "document_attached": true, "previous_intent": null, "expected": {"intent": "document_qa", "steps": ["document_qa"]}}
-{"id": "held_12", "category": "heldout_paraphrase", "message": "Sen ne tür işler görebiliyorsun?", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "held_13", "category": "heldout_paraphrase", "message": "Buradaki akış nasıl ilerliyor tam olarak?", "document_attached": false, "previous_intent": null, "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "held_14", "category": "heldout_paraphrase", "message": "Demin ne konuşuyorduk biz?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "held_15", "category": "heldout_paraphrase", "message": "Şu ana kadar neler geçti aramızda?", "document_attached": false, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
-{"id": "held_16", "category": "heldout_paraphrase", "message": "Bir evvelki turda bana ne iletmiştin?", "document_attached": true, "previous_intent": "chat", "expected": {"intent": "chat", "steps": ["chat"]}}
+{"id": "held_09", "category": "heldout_paraphrase", "message": "Şurada geçen kurum neresiydi?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "held_10", "category": "heldout_paraphrase", "message": "İçinde ne yazıyor bunun?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "held_11", "category": "heldout_paraphrase", "message": "Kaç sayfadan oluşuyor bu?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "held_12", "category": "heldout_paraphrase", "message": "Sen ne tür işler görebiliyorsun?", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "held_13", "category": "heldout_paraphrase", "message": "Buradaki akış nasıl ilerliyor tam olarak?", "document_attached": false, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "held_14", "category": "heldout_paraphrase", "message": "Demin ne konuşuyorduk biz?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "held_15", "category": "heldout_paraphrase", "message": "Şu ana kadar neler geçti aramızda?", "document_attached": false, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "held_16", "category": "heldout_paraphrase", "message": "Bir evvelki turda bana ne iletmiştin?", "document_attached": true, "previous_intent": "assist", "expected": {"intent": "assist", "steps": ["assist"]}}
+// draft_revision: yeni niyet (bkz. PR "Taslak Kalıcılığı"). has_last_draft
+// olmadan bu kurallar hiç ateşlenmez -- her vaka bilerek true taşıyor.
+{"id": "dr_01", "category": "draft_revision", "message": "Metindeki 'ben' yerine 'biz' kullan.", "document_attached": false, "previous_intent": null, "has_last_draft": true, "expected": {"intent": "draft_revision", "steps": ["draft"]}}
+{"id": "dr_02", "category": "draft_revision", "message": "Taslağın tonunu daha resmi bir dille anlat.", "document_attached": false, "previous_intent": null, "has_last_draft": true, "expected": {"intent": "draft_revision", "steps": ["draft"]}}
+{"id": "dr_03", "category": "draft_revision", "message": "Üçüncü paragrafı kısalt.", "document_attached": false, "previous_intent": null, "has_last_draft": true, "expected": {"intent": "draft_revision", "steps": ["draft"]}}
+{"id": "dr_04", "category": "draft_revision", "message": "Bu taslağı biraz kısalt.", "document_attached": false, "previous_intent": null, "has_last_draft": true, "expected": {"intent": "draft_revision", "steps": ["draft"]}}
+{"id": "dr_05", "category": "draft_revision", "message": "Taslağa ekle: son paragrafı.", "document_attached": false, "previous_intent": null, "has_last_draft": true, "expected": {"intent": "draft_revision", "steps": ["draft"]}}
+{"id": "dr_06", "category": "draft_revision", "message": "Taslaktan çıkar: gereksiz cümleyi.", "document_attached": false, "previous_intent": null, "has_last_draft": true, "expected": {"intent": "draft_revision", "steps": ["draft"]}}
+{"id": "dr_07", "category": "draft_revision", "message": "Taslağı revize et, konu satırını düzelt.", "document_attached": true, "previous_intent": null, "has_last_draft": true, "expected": {"intent": "draft_revision", "steps": ["draft"]}}
+{"id": "dr_08", "category": "draft_revision", "message": "Taslağı tekrar yaz, daha kısa olsun.", "document_attached": false, "previous_intent": null, "has_last_draft": true, "expected": {"intent": "draft_revision", "steps": ["draft"]}}
+{"id": "dr_09", "category": "draft_revision", "message": "Cümleyi değiştir: ikinci paragraftaki ifadeyi sadeleştir.", "document_attached": true, "previous_intent": null, "has_last_draft": true, "expected": {"intent": "draft_revision", "steps": ["draft"]}}
+{"id": "dr_10", "category": "draft_revision", "message": "Kelimeleri değiştir, resmi bir üslupla tekrar yaz.", "document_attached": false, "previous_intent": "draft_revision", "has_last_draft": true, "expected": {"intent": "draft_revision", "steps": ["draft"]}}
+// assist_vs_analyze: analyze/assist merkezli niyet uzayı için yeni bir sınır
+// kümesi -- kurallar bu vakalara göre AYARLANMADI.
+{"id": "av_01", "category": "assist_vs_analyze", "message": "Belgenin konusu nedir, söyler misin?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "av_02", "category": "assist_vs_analyze", "message": "Bu yazıda hangi tarih belirtilmiş?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "av_03", "category": "assist_vs_analyze", "message": "Evrakta imzası olan kişi kim?", "document_attached": true, "previous_intent": null, "expected": {"intent": "assist", "steps": ["assist"]}}
+{"id": "av_04", "category": "assist_vs_analyze", "message": "Evrakın mevzuata uygunluğunu bir denetle.", "document_attached": true, "previous_intent": null, "expected": {"intent": "analyze", "steps": ["classification"]}}
+{"id": "av_05", "category": "assist_vs_analyze", "message": "Bu dilekçedeki eksik alanları tespit et.", "document_attached": true, "previous_intent": null, "expected": {"intent": "analyze", "steps": ["classification"]}}
+{"id": "av_06", "category": "assist_vs_analyze", "message": "Bu evrakın mevzuata dayanağını kontrol et.", "document_attached": true, "previous_intent": null, "expected": {"intent": "analyze", "steps": ["classification"]}}

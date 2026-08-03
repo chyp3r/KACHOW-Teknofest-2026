@@ -3,6 +3,16 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 
+## [1.36.0] - 2026-08-04
+### Değiştirildi
+- **Niyet Altın Kümesi `assist`/`draft_revision`'a Göre Yeniden Etiketlendi ve Yeniden Ölçüldü**: `chat`/`document_qa` birleşimi (`[1.34.0]`) ve taslak revizyonu (`[1.35.0]`) sonrası `evaluation/datasets/intents.jsonl` hâlâ eski dört niyetli etiketleri taşıyordu. Router'ı tamamen bir LLM ile değiştirme fikri **değerlendirilip reddedildi**: mevcut üç basamaklı merdiven (sözlüksel kurallar → semantik prototipler → hızlı katman modeli) zaten doğru tasarım -- ölçülemez/pahalı bir model çağrısını yalnızca gerçekten belirsiz mesajlar için ödüyor. Asıl sorun merdivenin kendisi değil, ayırt etmeye zorlandığı sınıflardı; `[1.34.0]`/`[1.35.0]` o sınıfları düzelttiği için bu değişiklik büyük ölçüde veri seti + ölçüm işiydi.
+  - `intents.jsonl`'deki tüm `chat`/`document_qa` etiketleri (51 + 13 vaka) → `assist`; ilgili `previous_intent` alanları da güncellendi. Kategori isimleri (`document_question`, `memory_recall`, `keyword_assist`, ...) hangi ifade biçiminin sınandığını göstermeye devam ediyor, yalnızca hedef niyet değişti.
+  - Yeni `draft_revision` kategorisi (10 vaka, hepsi `has_last_draft: true`) ve yeni `assist_vs_analyze` heldout kategorisi (6 vaka, kurallar bu vakalara göre ayarlanmadı) eklendi.
+  - `evaluation/harness/intent_suite.py::decide`, `resolve_plan_deterministic`'e artık `has_last_draft`'ı da geçiyor -- önceden bu alan hiç okunmuyordu, yani `draft_revision`'ı ölçmenin bir yolu yoktu.
+  - **Ölçüm sonucu** (`docker compose run --rm --no-deps backend python -m evaluation.generate_report --suite all --label router-simplified`, `evaluation/reports/all-router-simplified.{json,md}`'ye yazıldı): Macro F1 `0.9559` → **`0.9625`** (+0.0066), doğruluk (tüm vakalar) `0.9154` → **`0.9247`**, eskalasyon oranı `0.0769` → **`0.0548`**. `draft_revision` etiketi P/R/F1 **1.00/1.00/1.00** (destek 10), `assist_vs_analyze` kategorisi **1.00** doğruluk. `draft`/`analyze` etiketlerinin F1'i (0.94 / 0.92) düşmedi -- kalan 11 başarısız vaka tamamı `heldout_paraphrase`'de ve `[1.28.0]`'den beri kurallara göre ayarlanmayan, önceden de bilinen zor vakalar (`held_03/05/06` artık `document_qa` yerine `assist`'e düşüyor ama aynı yanlışlık sınıfı, yeni bir regresyon değil).
+  - **Yapılmadı (ops adımı):** `app/ai/policy/prototypes.py`'deki semantik prototip örnekleri `[1.34.0]`'de zaten `assist`'e birleştirildi ve `POLICY_VERSION` `1.3.0`'a yükseltilmişti; bu ortamda canlı bir Ollama embedding servisi bulunmadığı için `scripts/build_prototypes.py` çalıştırılamadı. Eski vektör dosyaları sürüm damgası uyuşmazlığından kendini devre dışı bırakıyor (davranış bozulmuyor, semantik basamak o aileler için no-op'a düşüyor) -- prod'a alınmadan önce betiğin çalıştırılması gerekiyor.
+  - **Doğrulama:** `docker compose run --rm backend pytest -q` → **846 passed** (değişmedi; bu PR yalnızca `evaluation/` altını ve `intent_suite.py`'yi değiştiriyor, üretim kodu dokunulmadı).
+
 ## [1.35.0] - 2026-08-03
 ### Eklendi
 - **Taslak Kalıcılığı (`drafts` Tablosu) ve "Son Taslağı Düzenle" Niyeti**: Taslak turlar arasında yaşamıyordu -- `planning_node` her turda `draft_result`'ı sıfırlıyor, `_run_draft` önceki taslağı hiç prompt'a koymuyordu, dolayısıyla "son taslaktaki 'ben' ifadelerini 'biz' yap" dendiğinde sistem sıfırdan yeni bir taslak üretiyordu.

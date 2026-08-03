@@ -45,6 +45,7 @@ def decide(case: EvalCase) -> dict[str, Any]:
         case.payload.get("message", ""),
         document_id,
         case.payload.get("previous_intent"),
+        bool(case.payload.get("has_last_draft")),
     )
 
     if decision is None:
