@@ -215,6 +215,29 @@ def score_intents(
         result.scores["chat"] = result.scores.get("chat", 0.0) + WEIGHT_HINT * 2
         result.evidence.append("chat.short_message")
 
+    # A yes/no request softener ("yazar mısın", "söyler misin") marks a message
+    # as an action asked politely, not a content lookup -- unlike "var mı",
+    # which genuinely asks whether something exists in the document. "Bunun
+    # cevabını sen yazar mısın?" carries no document phrase at all, yet used to
+    # win document_qa outright because the structural question hint clears the
+    # presence floor on its own.
+    #
+    # Gated on the absence of `document_qa.about_the_document`, unlike the
+    # memory-recall counter below: recall is a topic signal and always wins,
+    # but a softener is only a grammatical mood and must not override real
+    # content evidence -- "Bu belgede ne yazdığını söyler misin?" is still a
+    # genuine document question and should stay one.
+    softener_surfaces = (" misin ", " musun ", " misiniz ", " musunuz ")
+    padded_message = f" {normalized} "
+    has_softener = any(surface in padded_message for surface in softener_surfaces)
+    if (
+        has_softener
+        and "document_qa" in result.scores
+        and "document_qa.about_the_document" not in result.evidence
+    ):
+        result.scores["document_qa"] += WEIGHT_COUNTER
+        result.evidence.append("document_qa.request_softener_counter")
+
     # Applied last, after every document_qa signal has been accumulated: a
     # question about *this conversation* is not a question about the document,
     # so document phrases in it are not evidence -- they are the subject the

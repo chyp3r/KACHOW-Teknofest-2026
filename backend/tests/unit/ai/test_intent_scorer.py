@@ -148,3 +148,60 @@ def test_every_decision_reports_the_rules_that_produced_it():
 
     assert scores.evidence
     assert all(isinstance(rule_id, str) and "." in rule_id for rule_id in scores.evidence)
+
+
+def test_a_request_softener_does_not_win_document_qa_on_its_own():
+    """"Bunun cevabını sen yazar mısın?" carries no document phrase; the
+    question mark alone used to be enough for `document_qa` to clear both the
+    presence floor and the decisive margin unopposed. A politely-phrased
+    request is not a content lookup, so this must abstain, not answer wrong."""
+    scores = score_intents("Bunun cevabını sen yazar mısın?", DOCUMENT)
+
+    assert "document_qa.request_softener_counter" in scores.evidence
+    assert scores.scores.get("document_qa", 0.0) < PRESENCE_FLOOR
+
+
+def test_a_request_softener_does_not_override_a_real_content_question():
+    """The softener counter is gated on the absence of `about_the_document`:
+    unlike memory recall, a softener is only a grammatical mood, and "Bu
+    belgede ne yazdığını söyler misin?" is still a genuine document question."""
+    scores = score_intents("Bu belgede ne yazdığını söyler misin?", DOCUMENT)
+
+    assert "document_qa.request_softener_counter" not in scores.evidence
+    assert scores.ranked[0][0] == "document_qa"
+
+
+def test_a_definitional_softener_does_not_capture_a_document_specific_question():
+    """"anlatır mısın" no longer sits in the definitional-question surfaces on
+    its own: asking to explain a specific document's status is not a question
+    about a general concept, even though it uses the same softener."""
+    scores = score_intents("Şu belgeye bir göz atıp durumu anlatır mısın?", DOCUMENT)
+
+    assert "chat.definitional_question" not in scores.evidence
+
+
+def test_a_genuine_definitional_question_still_resolves_to_chat():
+    """The removed bare softener phrases were redundant for every existing
+    case: "ne demek" alone still carries the inversion category."""
+    scores = score_intents("Resmi yazı ne demek, kısaca anlatır mısın?", None)
+
+    assert scores.ranked[0][0] == "chat"
+    assert "draft.definitional_counter" in scores.evidence
+
+
+def test_a_compliance_question_is_evidence_for_analyze():
+    """"kurallara uyup uymadığını" is the same compliance concept as the
+    existing "mevzuata uygun" surface, just a different conjugation."""
+    scores = score_intents("Bu yazının kurallara uyup uymadığını söyler misin?", DOCUMENT)
+
+    assert scores.scores.get("analyze", 0.0) >= PRESENCE_FLOOR
+
+
+def test_evvelki_is_recognised_as_a_memory_recall_synonym():
+    """"evvelki" is a synonym of the already-covered "önceki"; a document
+    attached must not turn a question about the conversation into one about
+    the document's contents."""
+    scores = score_intents("Bir evvelki turda bana ne iletmiştin?", DOCUMENT)
+
+    assert "chat.memory_recall" in scores.evidence
+    assert scores.ranked[0][0] == "chat"

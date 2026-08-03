@@ -113,7 +113,7 @@ ANALYZE_RULES: tuple[EvidenceRule, ...] = (
             "analiz et", "incele", "inceleyip", "siniflandir", "turunu belirle",
             "ozetle", "ozet cikar", "degerlendir", "kontrol et", "denetle",
             "gozden gecir", "irdele", "tespit et", "tespit etmeni",
-            "uygunlugunu", "uygunluk denetimi", "mevzuata uygun",
+            "uygunlugunu", "uygunluk denetimi", "mevzuata uygun", "kurallara uy",
             "eksik alan", "eksik bilgi", "eksiklikleri", "bir bak",
             "olup olmadigina", "hangi kategoriye", "bulgularini raporla",
         ),
@@ -160,6 +160,14 @@ CHAT_RULES: tuple[EvidenceRule, ...] = (
     #: "ne demek", "fark nedir", "hangi durumlarda kullanilir". They subtract
     #: from whichever domain noun fired, so "Üst yazı ne demek?" lands on chat
     #: without the draft phrases needing to be weakened for every other case.
+    #:
+    #: Bare "açıklar mısın" / "anlatır mısın" used to be listed here too, on the
+    #: assumption that asking for an explanation is always about a concept. It
+    #: is not: "Şu belgeye bakıp durumu anlatır mısın?" asks the same thing
+    #: about a specific attached document, which is an analysis request, not a
+    #: definitional one. Removed -- every existing `chat` case that used either
+    #: phrase also carries its own definitional marker ("ne demek", "nasıl
+    #: çalışır") and still resolves correctly without it.
     EvidenceRule(
         id="chat.definitional_question",
         intent="chat",
@@ -170,7 +178,7 @@ CHAT_RULES: tuple[EvidenceRule, ...] = (
             "ne demek", "ne anlama", "fark nedir", "farki nedir",
             "arasindaki fark", "hangi durumlarda", "ne zaman kullanilir",
             "nasil isliyor", "nasil yapilir", "ne dusunuyorsun",
-            "ornegi nedir", "aciklar misin", "anlatir misin",
+            "ornegi nedir",
         ),
     ),
 )
@@ -187,7 +195,7 @@ MEMORY_RECALL_RULES: tuple[EvidenceRule, ...] = (
         weight=WEIGHT_EXPLICIT,
         surfaces=(
             "az once", "biraz once", "az evvel", "biraz evvel", "demin",
-            "evvelce", "gecen sefer", "daha once", "onceki", "onceki mesaj",
+            "evvelce", "evvelki", "gecen sefer", "daha once", "onceki", "onceki mesaj",
             "onceki turda", "onceki sorumda", "ilk mesajimda", "ilk talebi",
             "demistim", "dedim mi", "demis miydim", "soylemis miydim",
             "sormus muydum", "sordum mu", "sordugum", "sorduğum soruyu",
