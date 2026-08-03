@@ -3,7 +3,7 @@ import hashlib
 import json
 import logging
 import os
-from typing import Annotated, Any, Optional, TypedDict
+from typing import Annotated, Any, Awaitable, Callable, Optional, TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.errors import GraphInterrupt
@@ -33,6 +33,7 @@ from app.ai.workflows.events import (
 from app.ai.workflows.planner import resolve_plan
 from app.core.config import settings
 from app.core.enums.reasoning_level import ReasoningLevel
+from app.core.enums.step_status import StepStatus
 from app.infrastructure.vectorstore.base import BaseVectorStore
 from app.observability.ai_metrics import HITL_INTERRUPTS
 
@@ -86,7 +87,7 @@ def _dependency_failed(
     """
     for dependency in _STEP_DEPENDENCIES.get(step, ()):
         result = updates.get(f"{dependency}_result") or state.get(f"{dependency}_result") or {}
-        if result.get("status") == "FAILED":
+        if result.get("status") == StepStatus.FAILED:
             return dependency
     return None
 
@@ -489,7 +490,7 @@ def create_planning_graph(
         if not document_id:
             return {
                 "reply": "Soru sorulacak bir belge belirtilmedi.",
-                "status": "FAILED",
+                "status": StepStatus.FAILED,
             }
 
         cached = state.get("cached_document") or {}
@@ -552,12 +553,12 @@ def create_planning_graph(
             reply = "".join(chunks).strip()
             return {
                 "reply": reply,
-                "status": "COMPLETED",
+                "status": StepStatus.COMPLETED,
                 "history": [{"role": "assistant", "content": reply}],
             }
         except Exception as exc:
             logger.exception("Document QA step failed")
-            return {"reply": f"Belge sorusu yanıtlanamadı: {exc}", "status": "FAILED"}
+            return {"reply": f"Belge sorusu yanıtlanamadı: {exc}", "status": StepStatus.FAILED}
 
     async def _run_chat(
         state: PlanningState, config: RunnableConfig
@@ -580,12 +581,12 @@ def create_planning_graph(
             reply = "".join(chunks).strip()
             return {
                 "reply": reply,
-                "status": "COMPLETED",
+                "status": StepStatus.COMPLETED,
                 "history": [{"role": "assistant", "content": reply}],
             }
         except Exception as exc:
             logger.exception("Chat step failed")
-            return {"reply": f"Sohbet yanıtı üretilemedi: {exc}", "status": "FAILED"}
+            return {"reply": f"Sohbet yanıtı üretilemedi: {exc}", "status": StepStatus.FAILED}
 
     async def consolidate_memory_node(
         state: PlanningState, config: RunnableConfig
@@ -614,6 +615,74 @@ def create_planning_graph(
         except Exception:
             logger.exception("Memory consolidation failed; keeping prior summary")
             return {}
+
+    async def _step_classification(
+        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
+    ) -> None:
+        updates["classification_result"] = await _run_classification(state, config)
+
+    async def _step_rag(
+        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
+    ) -> None:
+        query = classification.get("summary") or state["input_text"]
+        updates["rag_result"] = await rag_graph.ainvoke(
+            {"original_query": query, "attempts": 0},
+            config=child_config(config),
+        )
+
+    async def _step_draft(
+        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
+    ) -> None:
+        updates["draft_result"] = await _run_draft(state, classification, config)
+
+    async def _step_routing(
+        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
+    ) -> None:
+        draft_result = updates.get("draft_result") or state.get("draft_result") or {}
+        score = draft_result.get("confidence_score", 100.0)
+        if draft_result.get("requires_human_approval"):
+            score = 0.0
+        updates["routing_result"] = await routing_graph.ainvoke(
+            {"draft": draft_result.get("draft", ""), "confidence_score": score},
+            config=child_config(config),
+        )
+
+    async def _step_chat(
+        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
+    ) -> None:
+        chat_result = await _run_chat(state, config)
+        updates["chat_result"] = chat_result
+        # chat_result carries its own "history" entry (the assistant's reply)
+        # nested inside it -- it must be hoisted to a top-level update or the
+        # history reducer never sees it, and assistant turns silently never
+        # make it into checkpointed memory.
+        if chat_result.get("history"):
+            updates["history"] = chat_result["history"]
+
+    async def _step_document_qa(
+        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
+    ) -> None:
+        document_qa_result = await _run_document_qa(state, classification, config)
+        updates["document_qa_result"] = document_qa_result
+        if document_qa_result.get("history"):
+            updates["history"] = document_qa_result["history"]
+
+    #: One entry per dispatchable step name. Each runner reads whatever it
+    #: needs from `state`/`classification` and writes its result(s) directly
+    #: into `updates` -- the same contract the old `if/elif` chain's branches
+    #: had, just each in its own callable instead of sharing one function body.
+    #: A step absent here (there is none today) falls through to the
+    #: "unknown step" branch in `execute_step_node`, exactly as before.
+    STEP_RUNNERS: dict[
+        str, Callable[[PlanningState, RunnableConfig, dict[str, Any], dict[str, Any]], Awaitable[None]]
+    ] = {
+        "classification": _step_classification,
+        "rag": _step_rag,
+        "draft": _step_draft,
+        "routing": _step_routing,
+        "chat": _step_chat,
+        "document_qa": _step_document_qa,
+    }
 
     async def execute_step_node(
         state: PlanningState, config: RunnableConfig
@@ -648,7 +717,7 @@ def create_planning_graph(
             )
             logger.warning("Skipping plan step '%s': %s", step, reason)
             await emit_node_skipped(config, step, label, reason)
-            updates[f"{step}_result"] = {"status": "SKIPPED", "reason": reason}
+            updates[f"{step}_result"] = {"status": StepStatus.SKIPPED, "reason": reason}
             if idx + 1 >= len(steps):
                 updates["final_output"] = _compile_final_output(state, updates)
             return updates
@@ -658,46 +727,9 @@ def create_planning_graph(
         )
 
         try:
-            if step == "classification":
-                classification = await _run_classification(state, config)
-                updates["classification_result"] = classification
-
-            elif step == "rag":
-                query = classification.get("summary") or state["input_text"]
-                updates["rag_result"] = await rag_graph.ainvoke(
-                    {"original_query": query, "attempts": 0},
-                    config=child_config(config),
-                )
-
-            elif step == "draft":
-                updates["draft_result"] = await _run_draft(state, classification, config)
-
-            elif step == "routing":
-                draft_result = updates.get("draft_result") or state.get("draft_result") or {}
-                score = draft_result.get("confidence_score", 100.0)
-                if draft_result.get("requires_human_approval"):
-                    score = 0.0
-                updates["routing_result"] = await routing_graph.ainvoke(
-                    {"draft": draft_result.get("draft", ""), "confidence_score": score},
-                    config=child_config(config),
-                )
-
-            elif step == "chat":
-                chat_result = await _run_chat(state, config)
-                updates["chat_result"] = chat_result
-                # chat_result carries its own "history" entry (the assistant's
-                # reply) nested inside it -- it must be hoisted to a top-level
-                # update or the history reducer never sees it, and assistant
-                # turns silently never make it into checkpointed memory.
-                if chat_result.get("history"):
-                    updates["history"] = chat_result["history"]
-
-            elif step == "document_qa":
-                document_qa_result = await _run_document_qa(state, classification, config)
-                updates["document_qa_result"] = document_qa_result
-                if document_qa_result.get("history"):
-                    updates["history"] = document_qa_result["history"]
-
+            runner = STEP_RUNNERS.get(step)
+            if runner is not None:
+                await runner(state, config, classification, updates)
             else:
                 logger.warning("Unknown workflow step skipped: %s", step)
 
@@ -712,7 +744,7 @@ def create_planning_graph(
             raise
         except Exception as exc:
             logger.exception("Plan step '%s' failed", step)
-            updates[f"{step}_result"] = {"status": "FAILED", "error": str(exc)}
+            updates[f"{step}_result"] = {"status": StepStatus.FAILED, "error": str(exc)}
             await emit_node_error(
                 config, step, label, f"{label} sırasında bir hata oluştu.", detail=str(exc)
             )
@@ -725,7 +757,7 @@ def create_planning_graph(
         # when the step didn't already report itself via emit_node_error above.
         if step in {"classification", "draft", "routing"}:
             pass
-        elif updates.get(f"{step}_result", {}).get("status") == "FAILED":
+        elif updates.get(f"{step}_result", {}).get("status") == StepStatus.FAILED:
             pass
         else:
             await emit_node_end(
@@ -748,13 +780,13 @@ def create_planning_graph(
             draft_status
             if draft_status
             in {
-                "FAILED",
-                "NEEDS_HUMAN_APPROVAL",
-                "NEEDS_INPUT",
-                "REVISE_REQUESTED",
-                "REJECTED",
+                StepStatus.FAILED,
+                StepStatus.NEEDS_HUMAN_APPROVAL,
+                StepStatus.NEEDS_INPUT,
+                StepStatus.REVISE_REQUESTED,
+                StepStatus.REJECTED,
             }
-            else "COMPLETED"
+            else StepStatus.COMPLETED
         )
 
         return {
@@ -831,7 +863,7 @@ def create_planning_graph(
                     **draft_result,
                     "draft": filled_draft,
                     "missing_information": residual_questions,
-                    "status": "NEEDS_INPUT",
+                    "status": StepStatus.NEEDS_INPUT,
                 }
                 return {"draft_result": updated}
 
@@ -843,7 +875,7 @@ def create_planning_graph(
                 instructions=draft_result.get("instructions", ""),
                 strict=draft_result.get("correspondence_type") != "other_official",
             )
-            status = "NEEDS_HUMAN_APPROVAL" if report.requires_human_approval else "COMPLETED"
+            status = StepStatus.NEEDS_HUMAN_APPROVAL if report.requires_human_approval else StepStatus.COMPLETED
             updated = {
                 **draft_result,
                 "draft": filled_draft,
@@ -865,7 +897,7 @@ def create_planning_graph(
             updated = {
                 **draft_result,
                 "instructions": f"{existing}\n\nEk talimat (insan geri bildirimi): {note}".strip(),
-                "status": "REVISE_REQUESTED",
+                "status": StepStatus.REVISE_REQUESTED,
             }
             updates = {"draft_result": updated}
             # A resume may ask for a different reasoning level on the retry
@@ -877,7 +909,7 @@ def create_planning_graph(
             return updates
 
         if action == "reject":
-            updated = {**draft_result, "status": "REJECTED"}
+            updated = {**draft_result, "status": StepStatus.REJECTED}
             updates = {"draft_result": updated}
             updates["final_output"] = _compile_final_output(state, updates)
             return updates
@@ -885,7 +917,7 @@ def create_planning_graph(
         # Default: approve. Falls through to routing via route_after_gate.
         updated = {
             **draft_result,
-            "status": "APPROVED",
+            "status": StepStatus.APPROVED,
             "approved_by": answer.get("user_id"),
         }
         return {"draft_result": updated}
@@ -899,10 +931,10 @@ def create_planning_graph(
             if just_ran == "draft":
                 draft_result = state.get("draft_result") or {}
                 draft_status = draft_result.get("status")
-                if draft_status == "NEEDS_INPUT":
+                if draft_status == StepStatus.NEEDS_INPUT:
                     return "human_gate"
                 if (
-                    draft_status == "NEEDS_HUMAN_APPROVAL"
+                    draft_status == StepStatus.NEEDS_HUMAN_APPROVAL
                     and settings.HITL_APPROVAL_GATE_ENABLED
                 ):
                     return "human_gate"
@@ -912,9 +944,9 @@ def create_planning_graph(
     def route_after_gate(state: PlanningState) -> str:
         draft_result = state.get("draft_result") or {}
         status = draft_result.get("status")
-        if status == "NEEDS_INPUT":
+        if status == StepStatus.NEEDS_INPUT:
             return "human_gate"
-        if status in {"REVISE_REQUESTED", "REJECTED"}:
+        if status in {StepStatus.REVISE_REQUESTED, StepStatus.REJECTED}:
             return "end"
         return "continue"
 

@@ -3,6 +3,7 @@ from app.core.enums.correspondence_type import CorrespondenceType
 from app.core.enums.document_status import DocumentStatus
 from app.core.enums.document_type import DocumentType
 from app.core.enums.reasoning_level import ReasoningLevel
+from app.core.enums.step_status import StepStatus
 from app.core.enums.user_role import UserRole
 
 __all__ = [
@@ -11,5 +12,6 @@ __all__ = [
     "DocumentStatus",
     "DocumentType",
     "ReasoningLevel",
+    "StepStatus",
     "UserRole",
 ]
