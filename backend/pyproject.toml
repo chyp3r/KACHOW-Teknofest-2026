@@ -1,0 +1,20 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+timeout = 60
+filterwarnings = [
+    "error::DeprecationWarning",
+    "ignore::DeprecationWarning:langchain.*",
+    "ignore::DeprecationWarning:pydantic.*",
+]
+markers = [
+    "integration: exercises real infra (Postgres/Redis/Qdrant/Ollama); skipped by default in CI",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/main.py"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]

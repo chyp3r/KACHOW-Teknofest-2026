@@ -11,11 +11,15 @@ from app.api.exceptions import (
     validation_exception_handler,
 )
 from app.api.middleware import (
+    CorrelationIdMiddleware,
     ResponseTimeMiddleware,
     StructuredLoggingMiddleware,
 )
 from app.api.router import api_router
 from app.core.config import settings
+from app.core.constants.system import CORS_ORIGINS
+from app.lifespan import lifespan
+from app.observability.ai_metrics import init_ai_metrics
 from app.observability.metrics import init_metrics
 from app.observability.logger import setup_logging
 
@@ -25,39 +29,40 @@ setup_logging(settings.ENVIRONMENT)
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    lifespan=lifespan,
 )
 
-# CORS Middleware (Allow all origins for local/development dev server)
+# CORS: an explicit origin allowlist, not "*". Browsers reject "*" combined
+# with allow_credentials=True outright, so the previous configuration was not
+# just permissive -- it silently failed for every credentialed request.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 1. Register Middlewares (Calculates response time first, then logs)
+# Registered last = runs outermost (Starlette applies middleware in reverse
+# registration order), so request_id is already set before every other
+# middleware and every route handler runs.
 app.add_middleware(StructuredLoggingMiddleware)
 app.add_middleware(ResponseTimeMiddleware)
+app.add_middleware(CorrelationIdMiddleware)
 
-# 2. Register Metrics (Prometheus /metrics endpoint)
+# Prometheus /metrics: default HTTP instrumentation plus the AI-specific
+# collectors (node/LLM latency, draft scores, HITL counters, ...).
 init_metrics(app)
+init_ai_metrics()
 
-# 3. Register Global Exception Handlers
+# Register Global Exception Handlers
 app.add_exception_handler(BaseAppException, app_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
 
-# 3. Include Routers
+# Include Routers. /health lives under /api/v1/health (app.domains.system) --
+# no separate bare /health here, which used to return a differently-shaped
+# response from the same information.
 app.include_router(api_router, prefix=settings.API_V1_STR)
-
-
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "project": settings.PROJECT_NAME,
-        "environment": settings.ENVIRONMENT,
-    }
 

@@ -235,13 +235,10 @@ Chunking ve embedding stratejileri standartlaştırılmalıdır.
 
 Memory sistemin geçmiş bilgisini yönetir.
 
-Memory;
+Bu projede memory tek bir kaynakta yaşar: LangGraph checkpointer'ının kalıcılaştırdığı graf state'i (bkz. `docs/architecture/ai.md` → Memory). İki katman vardır, ikisi de aynı state'in alanlarıdır — ayrı bir depo veya sınıf hiyerarşisi değil:
 
-* kısa süreli,
-* uzun süreli,
-* oturum bazlı
-
-olarak ayrılmalıdır.
+* kayan pencere (`history`, son `HISTORY_WINDOW` turu verbatim tutar),
+* kayan özet (`history_summary`, pencerenin dışına çıkan turların hafif LLM özetidir).
 
 Memory katmanı kullanıcı arayüzünü bilmez.
 
@@ -284,6 +281,8 @@ AI sistemi;
 gibi farklı sağlayıcılarla çalışabilecek şekilde tasarlanmalıdır.
 
 Model değişimi Workflow değişikliği gerektirmemelidir.
+
+Kullanıcının hız/kalite tercihi (`ReasoningLevel`: `fast`/`balanced`/`deep`, bkz. `app/ai/reasoning_levels.py`) da aynı prensiple ele alınır: bir seviye yeni bir model eklemek yerine mevcut iki katmanı (kalite/hızlı) ve `BaseLLMClient` üzerindeki mevcut parametreleri (`reasoning`, `max_tokens`, `temperature`) farklı şekilde birleştirir. Yeni bir seviye eklemek workflow düğümlerinde dallanma gerektirmemeli, yalnızca preset tablosuna bir satır eklemekle sınırlı kalmalıdır.
 
 ---
 

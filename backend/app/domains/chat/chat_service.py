@@ -1,155 +1,481 @@
 import asyncio
 import logging
-from typing import Any
+from typing import Any, AsyncIterator, Optional
+from uuid import uuid4
 
+from app.ai.reasoning_levels import get_reasoning_level_preset
 from app.api.exceptions.ai_error import AIException
 from app.core.constants import AI_WORKFLOW_TIMEOUT_SECONDS
-from app.domains.chat.schema.chat_schema import ChatMessageRequest, ChatMessageResponse
+from app.domains.chat.schema.chat_schema import (
+    ChatMessageRequest,
+    ChatMessageResponse,
+    ChatResumeRequest,
+)
+from app.observability.ai_metrics import HITL_RESUMES
 
 logger = logging.getLogger(__name__)
 
-class ChatService:
-    """Service for orchestrating chat and AI workflows (Task 3)."""
+#: The orchestrated flow runs several sub-graphs, so it gets a longer budget
+#: than a single analysis pass.
+ORCHESTRATION_TIMEOUT_SECONDS = AI_WORKFLOW_TIMEOUT_SECONDS * 2
 
-    def __init__(
-        self,
-        planning_graph: Any,
-    ) -> None:
+DEFAULT_REPLY = "İşleminiz tamamlandı."
+INTERRUPTED_REPLY = "Devam etmek için ek bilgiye veya onayınıza ihtiyaç var."
+
+
+class ChatService:
+    """Orchestrates chat and AI workflows through the master planning graph."""
+
+    def __init__(self, planning_graph: Any) -> None:
+        """Initialise the service.
+
+        Args:
+            planning_graph: The compiled master planning workflow.
+        """
         self.planning_graph = planning_graph
 
     async def handle_message(self, request: ChatMessageRequest) -> ChatMessageResponse:
-        """Process a user message through the Master Planning Graph."""
-        
+        """Process a user message and return the completed (or paused) result.
+
+        Args:
+            request: The chat request.
+
+        Returns:
+            The orchestrated response.
+
+        Raises:
+            AIException: If the workflow fails or exceeds its timeout.
+        """
+        thread_id = self._thread_id(request.session_id)
+        config = self._trace_config(thread_id)
+        state = await self._invoke(request, config=config)
+        return await self._response_from_state(state, config, thread_id)
+
+    async def handle_message_stream(
+        self, request: ChatMessageRequest
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Process a user message, yielding progress events as they happen.
+
+        The worker task is cancelled if the consumer stops iterating. Previously
+        the task was only awaited after the loop, so a client that disconnected
+        mid-stream left the graph running -- holding the local model busy for a
+        response nobody would receive.
+
+        Args:
+            request: The chat request.
+
+        Yields:
+            Progress and result events. The first event is always ``session``,
+            carrying the resolved ``thread_id`` -- generated server-side when
+            the caller didn't supply one -- so the client can resume later.
+        """
+        thread_id = self._thread_id(request.session_id)
+        yield {"event": "session", "thread_id": thread_id}
+
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def run_graph() -> None:
+            try:
+                config = self._trace_config(thread_id)
+                config.setdefault("configurable", {})["status_queue"] = queue
+
+                state = await self._invoke(request, config=config)
+                await self._enqueue_terminal_event(queue, state, config, thread_id)
+            except asyncio.CancelledError:
+                raise
+            except AIException as exc:
+                await queue.put(
+                    {"event": "error", "message": exc.message, "details": exc.details}
+                )
+            except Exception as exc:
+                logger.exception("Streaming workflow failed")
+                await queue.put(
+                    {
+                        "event": "error",
+                        "message": "İş akışı sırasında bir hata oluştu.",
+                        "details": str(exc),
+                    }
+                )
+            finally:
+                await queue.put(None)
+
+        task = asyncio.create_task(run_graph())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield item
+        finally:
+            if not task.done():
+                task.cancel()
+            # Surface a crash in the worker rather than swallowing it, but never
+            # let teardown of a cancelled task raise out of the generator.
+            await asyncio.gather(task, return_exceptions=True)
+
+    async def resume(self, session_id: str, request: ChatResumeRequest) -> ChatMessageResponse:
+        """Resume a run paused at the human-in-the-loop gate and await its result.
+
+        Args:
+            session_id: The thread_id the paused run is waiting on.
+            request: The human's answer/decision.
+
+        Returns:
+            The orchestrated response, completed or paused again (e.g. when
+            some missing-information answers were left blank).
+
+        Raises:
+            AIException: If resuming fails or exceeds its timeout.
+        """
+        from langgraph.types import Command
+
+        HITL_RESUMES.labels(action=request.action).inc()
+        config = self._trace_config(session_id)
+        # No explicit escalation on this resume -> preset resolves to
+        # BALANCED (multiplier 1.0), leaving today's fixed timeout unchanged.
+        timeout = ORCHESTRATION_TIMEOUT_SECONDS * get_reasoning_level_preset(
+            request.reasoning_level
+        ).timeout_multiplier
         try:
             state = await asyncio.wait_for(
+                self.planning_graph.ainvoke(
+                    Command(resume=self._resume_payload(request)), config=config
+                ),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError as exc:
+            raise AIException(
+                message="Devam işlemi zaman aşımına uğradı.",
+                details={"timeout_seconds": timeout},
+            ) from exc
+        except Exception as exc:
+            logger.exception("Resume failed")
+            raise AIException(
+                message="Devam işlemi sırasında bir hata oluştu.",
+                details={"reason": str(exc)},
+            ) from exc
+
+        return await self._response_from_state(state, config, session_id)
+
+    async def resume_stream(
+        self, session_id: str, request: ChatResumeRequest
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Resume a paused run, yielding progress events as they happen.
+
+        Same worker/queue shape as :meth:`handle_message_stream`; the only
+        difference is that the graph resumes from its checkpoint via
+        ``Command(resume=...)`` instead of starting a fresh run.
+
+        Args:
+            session_id: The thread_id the paused run is waiting on.
+            request: The human's answer/decision.
+
+        Yields:
+            Progress and result events.
+        """
+        from langgraph.types import Command
+
+        HITL_RESUMES.labels(action=request.action).inc()
+        timeout = ORCHESTRATION_TIMEOUT_SECONDS * get_reasoning_level_preset(
+            request.reasoning_level
+        ).timeout_multiplier
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def run_graph() -> None:
+            try:
+                config = self._trace_config(session_id)
+                config.setdefault("configurable", {})["status_queue"] = queue
+
+                state = await asyncio.wait_for(
+                    self.planning_graph.ainvoke(
+                        Command(resume=self._resume_payload(request)), config=config
+                    ),
+                    timeout=timeout,
+                )
+                await self._enqueue_terminal_event(queue, state, config, session_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.exception("Streaming resume failed")
+                await queue.put(
+                    {
+                        "event": "error",
+                        "message": "Devam işlemi sırasında bir hata oluştu.",
+                        "details": str(exc),
+                    }
+                )
+            finally:
+                await queue.put(None)
+
+        task = asyncio.create_task(run_graph())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield item
+        finally:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    async def get_session_state(self, session_id: str) -> dict[str, Any]:
+        """Report whether a session is idle, running, or paused on an interrupt.
+
+        Args:
+            session_id: The thread_id to inspect.
+
+        Returns:
+            ``{"status": "interrupted", "interrupt": {...}}`` when paused,
+            ``{"status": "idle", "interrupt": None}`` otherwise (including
+            when no checkpointer is configured, in which case a session can
+            never be found paused).
+        """
+        config = self._trace_config(session_id)
+        try:
+            snapshot = await self.planning_graph.aget_state(config)
+        except Exception:
+            return {"status": "idle", "interrupt": None}
+
+        if not snapshot.next:
+            return {"status": "idle", "interrupt": None}
+
+        interrupt_payload = self._extract_interrupt(snapshot)
+        if interrupt_payload is None:
+            return {"status": "running", "interrupt": None}
+        return {"status": "interrupted", "interrupt": interrupt_payload}
+
+    async def _invoke(
+        self, request: ChatMessageRequest, config: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Run the planning graph under a timeout.
+
+        Args:
+            request: The chat request.
+            config: The LangGraph runnable config.
+
+        Returns:
+            The final (or paused) workflow state.
+
+        Raises:
+            AIException: On timeout, workflow failure, or when this session
+                already has a pending human-in-the-loop interrupt -- starting
+                a fresh run on a thread with an outstanding paused task is not
+                a supported resume path; the caller must use ``/chat/resume``
+                (or a new session_id) instead.
+        """
+        if await self._is_paused(config):
+            thread_id = (config.get("configurable") or {}).get("thread_id")
+            raise AIException(
+                message=(
+                    "Bu oturum bir insan onayı veya eksik bilgi talebi bekliyor. "
+                    "Devam etmek için /chat/resume uç noktasını kullanın."
+                ),
+                details={"session_id": thread_id},
+            )
+
+        timeout = ORCHESTRATION_TIMEOUT_SECONDS * get_reasoning_level_preset(
+            request.reasoning_level
+        ).timeout_multiplier
+        try:
+            return await asyncio.wait_for(
                 self.planning_graph.ainvoke(
                     {
                         "input_text": request.message,
                         "document_id": request.document_id,
+                        "reasoning_level": request.reasoning_level.value,
                     },
-                    config=self._trace_config()
+                    config=config,
                 ),
-                timeout=AI_WORKFLOW_TIMEOUT_SECONDS * 4.0,  # Longer timeout for orchestration
+                timeout=timeout,
             )
-        except asyncio.TimeoutError as e:
+        except asyncio.TimeoutError as exc:
             raise AIException(
                 message="Sohbet işlemi zaman aşımına uğradı.",
-                details={"timeout_seconds": AI_WORKFLOW_TIMEOUT_SECONDS * 4.0},
-            ) from e
-        except Exception as e:
+                details={"timeout_seconds": timeout},
+            ) from exc
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
             logger.exception("Orchestration workflow failed")
             raise AIException(
                 message="İş akışı sırasında bir hata oluştu.",
-                details={"reason": str(e)},
-            ) from e
+                details={"reason": str(exc)},
+            ) from exc
 
-        final_output = state.get("final_output", {})
-        status = final_output.get("status", "FAILED")
-        
-        # Determine the reply text to show to the user
-        chat_res = final_output.get("chat", {})
-        draft_res = final_output.get("draft", {})
-        rag_res = final_output.get("rag", {})
-        document_qa_res = final_output.get("document_qa", {})
-        
-        reply = "İşleminiz tamamlandı."
-        
-        if document_qa_res and document_qa_res.get("reply"):
-            reply = document_qa_res.get("reply")
-        elif chat_res and chat_res.get("reply"):
-            # Plain conversation reply
-            reply = chat_res.get("reply")
-        elif draft_res and draft_res.get("draft"):
-            # Generated a draft
-            reply = f"Resmi yazı taslağınız hazırlandı.\n\n{draft_res.get('draft')}"
-        elif rag_res and rag_res.get("context"):
-            # Retrieved context but no draft
-            reply = "Mevzuattan ilgili bilgiler bulundu, ancak taslak oluşturulamadı."
-            
-        return ChatMessageResponse(
-            reply=reply,
-            workflow_status=status,
-            details=final_output
+    async def _enqueue_terminal_event(
+        self,
+        queue: "asyncio.Queue",
+        state: dict[str, Any],
+        config: dict[str, Any],
+        thread_id: str,
+    ) -> None:
+        """Push the run's closing event: ``final_result``, or nothing if paused.
+
+        A paused run already pushed its own ``interrupt`` event from inside
+        ``human_gate_node`` (via ``emit_interrupt``) at the moment it actually
+        suspended -- pushing a second, synthetic one here would duplicate it,
+        and pushing ``final_result`` would be actively wrong, since a paused
+        run's ``final_output`` is still empty. This only determines whether to
+        stay silent (paused) or announce completion.
+
+        Args:
+            queue: The SSE progress queue.
+            state: The state ``ainvoke``/resume returned.
+            config: The config used for that call, reused to check pause state.
+            thread_id: The session's thread_id, for logging only.
+        """
+        if await self._is_paused(config):
+            logger.info("Session %s paused at a human-in-the-loop gate.", thread_id)
+            return
+
+        final_output = state.get("final_output", {}) or {}
+        await queue.put(
+            {
+                "event": "final_result",
+                "reply": self._select_reply(final_output),
+                "workflow_status": final_output.get("status", "FAILED"),
+                "details": final_output,
+            }
         )
 
-    async def handle_message_stream(self, request: ChatMessageRequest):
-        """Process a user message and yield real-time execution events."""
-        queue = asyncio.Queue()
+    async def _response_from_state(
+        self, state: dict[str, Any], config: dict[str, Any], thread_id: str
+    ) -> ChatMessageResponse:
+        """Build the non-streaming response, accounting for a paused run."""
+        if await self._is_paused(config):
+            snapshot = await self.planning_graph.aget_state(config)
+            interrupt_payload = self._extract_interrupt(snapshot) or {}
+            return ChatMessageResponse(
+                reply=INTERRUPTED_REPLY,
+                workflow_status="INTERRUPTED",
+                session_id=thread_id,
+                details={"interrupt": interrupt_payload},
+            )
 
-        async def run_graph():
-            try:
-                config = self._trace_config()
-                if "configurable" not in config:
-                    config["configurable"] = {}
-                config["configurable"]["status_queue"] = queue
+        final_output = state.get("final_output", {}) or {}
+        return ChatMessageResponse(
+            reply=self._select_reply(final_output),
+            workflow_status=final_output.get("status", "FAILED"),
+            session_id=thread_id,
+            details=final_output,
+        )
 
-                state = await asyncio.wait_for(
-                    self.planning_graph.ainvoke(
-                        {
-                            "input_text": request.message,
-                            "document_id": request.document_id,
-                        },
-                        config=config
-                    ),
-                    timeout=AI_WORKFLOW_TIMEOUT_SECONDS * 4.0,  # Longer timeout for orchestration
-                )
+    async def _is_paused(self, config: dict[str, Any]) -> bool:
+        """Whether the last graph call left the run suspended on an interrupt.
 
-                final_output = state.get("final_output", {})
-                status = final_output.get("status", "FAILED")
-
-                # Determine response
-                chat_res = final_output.get("chat", {})
-                draft_res = final_output.get("draft", {})
-                rag_res = final_output.get("rag", {})
-                document_qa_res = final_output.get("document_qa", {})
-
-                reply = "İşleminiz tamamlandı."
-                if document_qa_res and document_qa_res.get("reply"):
-                    reply = document_qa_res.get("reply")
-                elif chat_res and chat_res.get("reply"):
-                    reply = chat_res.get("reply")
-                elif draft_res and draft_res.get("draft"):
-                    reply = f"Resmi yazı taslağınız hazırlandı.\n\n{draft_res.get('draft')}"
-                elif rag_res and rag_res.get("context"):
-                    reply = "Mevzuattan ilgili bilgiler bulundu, ancak taslak oluşturulamadı."
-
-                await queue.put({
-                    "event": "final_result",
-                    "reply": reply,
-                    "workflow_status": status,
-                    "details": final_output
-                })
-            except Exception as e:
-                logger.exception("Streaming workflow failed")
-                await queue.put({
-                    "event": "error",
-                    "message": "İş akışı sırasında bir hata oluştu.",
-                    "details": str(e)
-                })
-            finally:
-                # Sentinel to indicate end of queue
-                await queue.put(None)
-
-        # Start graph in background
-        task = asyncio.create_task(run_graph())
-
-        # Yield events from queue
-        while True:
-            item = await queue.get()
-            if item is None:
-                break
-            yield item
-
-        await task
-
-
+        Safe to call even without a checkpointer configured: ``aget_state``
+        raises in that case, which this treats as "never paused" -- correct,
+        since ``route_after_step`` only ever detours to ``human_gate`` when a
+        checkpointer is present in the first place.
+        """
+        try:
+            snapshot = await self.planning_graph.aget_state(config)
+        except Exception:
+            return False
+        return bool(snapshot.next)
 
     @staticmethod
-    def _trace_config() -> dict[str, Any]:
+    def _extract_interrupt(snapshot: Any) -> Optional[dict[str, Any]]:
+        """Pull the pending interrupt's payload out of a state snapshot."""
+        for task in getattr(snapshot, "tasks", ()) or ():
+            task_interrupts = getattr(task, "interrupts", None) or ()
+            for item in task_interrupts:
+                value = getattr(item, "value", item)
+                if isinstance(value, dict):
+                    return value
+        return None
+
+    @staticmethod
+    def _resume_payload(request: ChatResumeRequest) -> dict[str, Any]:
+        """Shape a ChatResumeRequest into the dict human_gate_node's interrupt() expects."""
+        return {
+            "action": request.action,
+            "answers": request.answers,
+            "instructions": request.instructions,
+            "reasoning_level": (
+                request.reasoning_level.value if request.reasoning_level else None
+            ),
+        }
+
+    @staticmethod
+    def _thread_id(session_id: Optional[str]) -> str:
+        """Resolve the checkpointer thread_id for a request.
+
+        Args:
+            session_id: The client-supplied session id, if any.
+
+        Returns:
+            ``session_id`` unchanged, or a fresh server-generated id.
+        """
+        return session_id or f"anon:{uuid4()}"
+
+    @staticmethod
+    def _select_reply(final_output: dict[str, Any]) -> str:
+        """Pick the text shown to the user from the completed workflow output.
+
+        Args:
+            final_output: The compiled workflow result.
+
+        Returns:
+            The reply text.
+        """
+        document_qa = final_output.get("document_qa") or {}
+        if document_qa.get("reply"):
+            return document_qa["reply"]
+
+        chat = final_output.get("chat") or {}
+        if chat.get("reply"):
+            return chat["reply"]
+
+        draft = final_output.get("draft") or {}
+        if draft.get("draft"):
+            routing = final_output.get("routing") or {}
+            parts = [f"Resmî yazı taslağınız hazırlandı.\n\n{draft['draft']}"]
+            if routing.get("routed_unit"):
+                parts.append(f"\n\n**Önerilen Birim:** {routing['routed_unit']}")
+            if draft.get("status") == "REJECTED":
+                parts.append("\n\n_Bu taslak reddedildi._")
+            elif draft.get("status") == "REVISE_REQUESTED":
+                parts.append("\n\n_Bu taslak için revizyon talep edildi._")
+            elif draft.get("requires_human_approval"):
+                parts.append(
+                    "\n\n_Bu taslak insan onayı gerektiriyor: "
+                    f"{draft.get('evaluation_notes', '')}_"
+                )
+            return "".join(parts)
+
+        if draft.get("error"):
+            return f"Taslak oluşturulamadı: {draft['error']}"
+
+        classification = final_output.get("classification") or {}
+        if classification.get("summary"):
+            return (
+                f"Evrak analizi tamamlandı.\n\n"
+                f"**Tür:** {classification.get('document_type_label', 'Belirlenemedi')}\n\n"
+                f"**Özet:** {classification['summary']}"
+            )
+
+        if (final_output.get("rag") or {}).get("context"):
+            return "Mevzuattan ilgili bilgiler bulundu, ancak taslak oluşturulamadı."
+
+        return DEFAULT_REPLY
+
+    @staticmethod
+    def _trace_config(thread_id: str) -> dict[str, Any]:
+        """Build the LangGraph config: thread_id plus Langfuse tracing when available.
+
+        Args:
+            thread_id: The checkpointer thread id for this session.
+
+        Returns:
+            A config dict with ``configurable.thread_id`` always set, and
+            ``callbacks`` present only when tracing is available.
+        """
         try:
-            from app.observability.tracer import get_langfuse_callback
-            handler = get_langfuse_callback()
-        except Exception as e:
-            logger.error(f"Error loading Langfuse callback: {e}")
-            return {}
-        return {"callbacks": [handler]} if handler else {}
+            from app.observability.tracer import build_trace_config
+
+            return build_trace_config(thread_id=thread_id)
+        except Exception:
+            logger.debug("Langfuse tracing unavailable; continuing without it.")
+            return {"configurable": {"thread_id": thread_id}}

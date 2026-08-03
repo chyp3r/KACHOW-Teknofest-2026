@@ -6,24 +6,32 @@ from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Union
 from pydantic import BaseModel
 
 from app.ai.llms.base import BaseLLMClient
+from app.ai.prompts.manager import render_placeholders
+from app.observability.ai_metrics import LLM_DURATION, STRUCT_RETRIES
 
 logger = logging.getLogger(__name__)
 
+#: Two attempts, not three. Every retry re-runs a full local generation; on
+#: consumer hardware a third attempt costs more wall-clock time than the caller's
+#: whole latency budget and almost never succeeds where the second failed.
+DEFAULT_MAX_RETRIES = 2
+
 
 class BaseAgent(ABC):
-    """SOTA (State-of-the-Art) Base Agent class providing a unified, robust framework
+    """Base class for the specialized agents in the multi-agent system.
 
-    for building Specialized Agents in a Multi-Agent system.
+    Responsibilities:
 
-    Key Features:
-    1. **Unified Messaging**: Supports single prompts or multi-message histories.
-    2. **Dynamic Prompting**: System prompt dynamically renders variables using Jinja2-style
-       formatting context (e.g., date, profile, dynamic variables).
-    3. **Pre/Post-Execution Guardrails**: Custom validator hooks to check inputs or outputs
-       and raise structured exceptions or trigger self-correction.
-    4. **Observability**: Built-in latency tracing, attempt tracking, and logging.
-    5. **Self-Correction Loop**: Automatic retry with error feedback when structured (JSON/Pydantic)
-       generation schema validation fails.
+    1. **Unified messaging** -- accepts a single prompt or a message history.
+    2. **Prompt rendering** -- substitutes ``{{variable}}`` placeholders. This is
+       deliberately *not* :meth:`str.format`: the prompt templates contain
+       literal JSON examples with single braces, so ``format`` raises ``KeyError``
+       on them and the previous implementation swallowed that error and silently
+       shipped an unrendered prompt.
+    3. **Guardrails** -- optional post-generation validators.
+    4. **Observability** -- per-call latency logging.
+    5. **Self-correction** -- bounded retry with error feedback when structured
+       output fails schema validation.
     """
 
     def __init__(
@@ -32,60 +40,62 @@ class BaseAgent(ABC):
         name: str,
         description: str,
         system_prompt: str,
-        tools: Optional[List[Any]] = None,
         validators: Optional[List[Callable[[str], None]]] = None,
     ):
         """Initialize the Base Agent.
 
         Args:
             llm_client: The LLM provider client conforming to BaseLLMClient.
-            name: Human-readable name of the agent (e.g., "NERAgent").
-            description: Quick summary of what this agent does (for routing/orchestration).
-            system_prompt: Base system instructions containing optional format placeholders.
-            tools: Optional tools list that the agent has access to.
+            name: Human-readable name of the agent (e.g., "ClassifierAgent").
+            description: Quick summary of what this agent does.
+            system_prompt: Base instructions, optionally with ``{{placeholders}}``.
             validators: Optional post-generation validator functions.
         """
         self.llm_client = llm_client
         self.name = name
         self.description = description
         self.system_prompt = system_prompt
-        self.tools = tools or []
         self.validators = validators or []
-        logger.info(f"Initialized Agent [{self.name}]: {self.description}")
+        logger.info("Initialized Agent [%s]: %s", self.name, self.description)
 
     def _render_system_prompt(self, context: Optional[Dict[str, Any]] = None) -> str:
-        """Render system prompt using context variables."""
+        """Substitute ``{{variable}}`` placeholders in the system prompt.
+
+        Args:
+            context: Values to inject. ``None`` returns the template untouched.
+
+        Returns:
+            The rendered prompt. Unknown placeholders are left in place rather
+            than raising, so a partially supplied context still produces a usable
+            prompt instead of a silently blank one.
+        """
         if not context:
             return self.system_prompt
-        try:
-            return self.system_prompt.format(**context)
-        except KeyError as e:
-            logger.warning(
-                f"Missing key in rendering prompt context for [{self.name}]: {e}"
-            )
-            return self.system_prompt
-        except Exception as e:
-            logger.error(
-                f"Error rendering system prompt for [{self.name}]: {e}", exc_info=True
-            )
-            return self.system_prompt
+        return render_placeholders(self.system_prompt, context)
 
     def _prepare_messages(
         self,
         messages: Union[str, List[Dict[str, str]]],
         context: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, str]]:
-        """Prepares message list by injecting the rendered system prompt at the beginning."""
-        rendered_sys = self._render_system_prompt(context)
-        prepared = [{"role": "system", "content": rendered_sys}]
+        """Build the message list, prefixing the rendered system prompt.
+
+        Args:
+            messages: Prompt string or message history list.
+            context: Variables to inject into the system prompt template.
+
+        Returns:
+            A message list beginning with exactly one system message.
+        """
+        prepared = [{"role": "system", "content": self._render_system_prompt(context)}]
 
         if isinstance(messages, str):
             prepared.append({"role": "user", "content": messages})
         else:
-            # If system prompt is already present in the list, filter it out to avoid duplication
-            for msg in messages:
-                if msg.get("role") != "system":
-                    prepared.append(msg)
+            # Drop any caller-supplied system turns; the agent owns that slot.
+            prepared.extend(
+                msg for msg in messages if msg.get("role") != "system"
+            )
 
         return prepared
 
@@ -105,10 +115,14 @@ class BaseAgent(ABC):
             temperature: Generation temperature.
             max_tokens: Limit on maximum tokens.
             **kwargs: Extra model/provider configurations.
-        """
-        start_time = time.time()
-        logger.info(f"Agent [{self.name}] starting generation...")
 
+        Returns:
+            The generated text.
+
+        Raises:
+            Exception: Whatever the provider or a validator raised.
+        """
+        start_time = time.perf_counter()
         prepared = self._prepare_messages(messages, context)
 
         try:
@@ -119,20 +133,23 @@ class BaseAgent(ABC):
                 **kwargs,
             )
 
-            # Apply output validation/guardrails
             for validator in self.validators:
                 validator(response)
 
-            latency = time.time() - start_time
             logger.info(
-                f"Agent [{self.name}] generation successful in {latency:.4f}s"
+                "Agent [%s] generated %d chars in %.2fs",
+                self.name,
+                len(response),
+                time.perf_counter() - start_time,
             )
             return response
-        except Exception as e:
-            logger.error(
-                f"Agent [{self.name}] execution failed: {e}", exc_info=True
-            )
+        except Exception:
+            logger.exception("Agent [%s] execution failed", self.name)
             raise
+        finally:
+            LLM_DURATION.labels(agent=self.name, method="run").observe(
+                time.perf_counter() - start_time
+            )
 
     async def run_structured(
         self,
@@ -140,63 +157,98 @@ class BaseAgent(ABC):
         response_model: type[BaseModel],
         context: Optional[Dict[str, Any]] = None,
         temperature: Optional[float] = None,
-        max_retries: int = 3,
+        max_retries: int = DEFAULT_MAX_RETRIES,
         **kwargs: Any,
     ) -> Any:
-        """Execute the agent to get a structured response conforming to a Pydantic model.
+        """Execute the agent and validate the output against a Pydantic model.
 
-        Includes a self-correction mechanism to retry with error feedback if schema
-        validation fails.
+        On failure the agent retries with a correction note appended. The note
+        replaces the previous one instead of stacking: the original
+        implementation appended to the same list every round, so by the third
+        attempt the (potentially multi-thousand-token) source document was being
+        re-sent three times over.
 
         Args:
             messages: Prompt string or message history list.
             response_model: Pydantic model class to validate the output against.
             context: Variables to inject into the system prompt template.
             temperature: Generation temperature.
-            max_retries: Number of attempts to correct formatting errors.
+            max_retries: Total number of attempts, including the first.
             **kwargs: Extra model/provider configurations.
-        """
-        start_time = time.time()
-        logger.info(
-            f"Agent [{self.name}] starting structured generation for model [{response_model.__name__}]..."
-        )
 
-        prepared = self._prepare_messages(messages, context)
+        Returns:
+            A validated ``response_model`` instance.
+
+        Raises:
+            Exception: The last provider or validation error, if every attempt
+                failed.
+        """
+        start_time = time.perf_counter()
+        base_messages = self._prepare_messages(messages, context)
+        last_error: Exception | None = None
 
         for attempt in range(1, max_retries + 1):
+            attempt_messages = list(base_messages)
+            if last_error is not None:
+                attempt_messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Önceki yanıtın geçersizdi ve "
+                            f"{response_model.__name__} şemasına uymadı. "
+                            f"Hata: {last_error}. "
+                            "Yalnızca şemaya birebir uyan geçerli bir JSON nesnesi "
+                            "üret; açıklama, markdown veya ek metin ekleme."
+                        ),
+                    }
+                )
+
             try:
                 result = await self.llm_client.generate_structured(
-                    messages=prepared,
+                    messages=attempt_messages,
                     response_model=response_model,
                     temperature=temperature,
                     **kwargs,
                 )
-                latency = time.time() - start_time
+
+                for validator in self.validators:
+                    validator(result.model_dump_json())
+
                 logger.info(
-                    f"Agent [{self.name}] structured generation successful on attempt {attempt}/{max_retries} (Took {latency:.4f}s)"
+                    "Agent [%s] structured %s ok on attempt %d/%d in %.2fs",
+                    self.name,
+                    response_model.__name__,
+                    attempt,
+                    max_retries,
+                    time.perf_counter() - start_time,
+                )
+                if attempt > 1:
+                    STRUCT_RETRIES.labels(agent=self.name).inc(attempt - 1)
+                LLM_DURATION.labels(agent=self.name, method="run_structured").observe(
+                    time.perf_counter() - start_time
                 )
                 return result
-            except Exception as e:
+            except Exception as exc:
+                last_error = exc
                 logger.warning(
-                    f"Agent [{self.name}] structured output validation failed on attempt {attempt}/{max_retries}: {e}"
+                    "Agent [%s] structured output invalid on attempt %d/%d: %s",
+                    self.name,
+                    attempt,
+                    max_retries,
+                    exc,
                 )
-                if attempt == max_retries:
-                    logger.error(
-                        f"Agent [{self.name}] failed structured generation after {max_retries} attempts."
-                    )
-                    raise
 
-                # Self-correction feedback loop: append warning and retry
-                prepared.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Your last output was invalid. It failed to conform to the requested "
-                            f"Pydantic schema {response_model.__name__}. Error trace: {e}. "
-                            f"Please regenerate and ensure the output exactly matches the schema."
-                        ),
-                    }
-                )
+        logger.error(
+            "Agent [%s] failed structured generation of %s after %d attempts.",
+            self.name,
+            response_model.__name__,
+            max_retries,
+        )
+        STRUCT_RETRIES.labels(agent=self.name).inc(max_retries)
+        LLM_DURATION.labels(agent=self.name, method="run_structured").observe(
+            time.perf_counter() - start_time
+        )
+        raise last_error  # type: ignore[misc]
 
     def stream(
         self,
@@ -214,6 +266,9 @@ class BaseAgent(ABC):
             temperature: Generation temperature.
             max_tokens: Limit on maximum tokens.
             **kwargs: Extra model/provider configurations.
+
+        Returns:
+            An async iterator of text chunks.
         """
         prepared = self._prepare_messages(messages, context)
         return self.llm_client.stream(

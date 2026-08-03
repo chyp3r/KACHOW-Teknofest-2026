@@ -5,13 +5,9 @@ from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.embeddings.chunking.recursive import RecursiveChunker
 from app.ai.embeddings.models import get_embeddings_client
 from app.ai.embeddings.service import EmbeddingService
-from app.ai.llms import get_llm_client
-from app.ai.retrieval.bm25 import BM25Retriever
-from app.ai.retrieval.corpus_loader import load_mevzuat_corpus
-from app.ai.retrieval.dense import DenseRetriever
+from app.ai.llms import get_fast_llm_client, get_llm_client
 from app.ai.retrieval.hybrid import HybridRetriever
 from app.ai.workflows.document_analysis_graph import create_document_analysis_graph
 from app.ai.workflows.draft_graph import create_draft_graph
@@ -81,6 +77,25 @@ def require_roles(*allowed_roles: UserRole):
     return _check_role
 
 
+async def require_auth_if_enabled(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[UserModel]:
+    """Enforce authentication only when ``settings.REQUIRE_AUTH`` is True.
+
+    A single conditional dependency rather than two different router wirings,
+    so flipping ``REQUIRE_AUTH`` doesn't need a redeploy with different route
+    registrations -- see the setting's docstring for why /documents/* and
+    /chat/* default to open.
+
+    Returns:
+        The authenticated user when ``REQUIRE_AUTH`` is True, otherwise None.
+    """
+    if not settings.REQUIRE_AUTH:
+        return None
+    return await get_current_user(token=token, db=db)
+
+
 # ---------------------------------------------------------------------------
 # Document analysis (Görev 1)
 # ---------------------------------------------------------------------------
@@ -89,12 +104,6 @@ def require_roles(*allowed_roles: UserRole):
 # pays for them.
 _mevzuat_retriever: Optional[HybridRetriever] = None
 _document_analysis_graph: Any = None
-
-# Must match scripts/index_mevzuat.py, otherwise the BM25 and dense halves of the
-# hybrid retriever chunk the same corpus differently and reciprocal rank fusion --
-# which de-duplicates on exact page_content -- counts every shared passage twice.
-MEVZUAT_CHUNK_SIZE = 1000
-MEVZUAT_CHUNK_OVERLAP = 200
 
 
 async def get_mevzuat_retriever() -> HybridRetriever:
@@ -130,7 +139,9 @@ async def get_document_analysis_graph(
     global _document_analysis_graph
     if _document_analysis_graph is None:
         _document_analysis_graph = create_document_analysis_graph(
-            llm_client=get_llm_client(), mevzuat_retriever=retriever
+            llm_client=get_llm_client(),
+            mevzuat_retriever=retriever,
+            fast_llm_client=get_fast_llm_client(),
         )
     return _document_analysis_graph
 
@@ -162,18 +173,28 @@ _routing_graph: Any = None
 
 
 async def get_draft_graph() -> Any:
-    """Compile the document drafting workflow once per process."""
+    """Compile the document drafting workflow once per process.
+
+    The writer/reviser use the quality tier; the hybrid gate's judge leg runs
+    on the fast tier, since it emits a small verdict rather than draft text.
+    """
     global _draft_graph
     if _draft_graph is None:
-        _draft_graph = create_draft_graph(llm_client=get_llm_client())
+        _draft_graph = create_draft_graph(
+            llm_client=get_llm_client(), fast_llm_client=get_fast_llm_client()
+        )
     return _draft_graph
 
 
 async def get_routing_graph() -> Any:
-    """Compile the document routing workflow once per process."""
+    """Compile the document routing workflow once per process.
+
+    Uses the fast tier: the output is one unit label plus one sentence, so the
+    quality model buys nothing here but latency.
+    """
     global _routing_graph
     if _routing_graph is None:
-        _routing_graph = create_routing_graph(llm_client=get_llm_client())
+        _routing_graph = create_routing_graph(llm_client=get_fast_llm_client())
     return _routing_graph
 
 
@@ -213,9 +234,15 @@ async def get_planning_graph(
     draft_graph: Any = Depends(get_draft_graph),
     routing_graph: Any = Depends(get_routing_graph),
 ) -> Any:
-    """Compile the master planning graph once per process."""
+    """Compile the master planning graph once per process.
+
+    The only graph that gets a checkpointer -- see create_planning_graph's
+    docstring for why the sub-graphs deliberately do not.
+    """
     global _planning_graph
     if _planning_graph is None:
+        from app.infrastructure.checkpointing import get_checkpointer
+
         _planning_graph = create_planning_graph(
             llm_client=get_llm_client(),
             document_analysis_graph=document_analysis_graph,
@@ -224,6 +251,8 @@ async def get_planning_graph(
             routing_graph=routing_graph,
             vector_store=get_vector_store(),
             embeddings_client=get_embeddings_client(),
+            fast_llm_client=get_fast_llm_client(),
+            checkpointer=get_checkpointer(),
         )
     return _planning_graph
 

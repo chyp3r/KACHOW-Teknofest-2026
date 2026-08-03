@@ -1,7 +1,7 @@
 import os
 import pytest
 
-from app.ai.prompts import prompt_manager, PromptManager
+from app.ai.prompts import PromptManager, get_prompt_manager
 
 
 @pytest.fixture
@@ -60,7 +60,10 @@ def test_prompt_manager_rendering(temp_templates_dir):
 
 
 def test_global_prompt_manager_exists():
-    assert prompt_manager is not None
-    assert isinstance(prompt_manager, PromptManager)
+    manager = get_prompt_manager()
+    assert manager is not None
+    assert isinstance(manager, PromptManager)
     # Check that it points to the correct directory inside the app package
-    assert prompt_manager.templates_dir.endswith(os.path.join("app", "ai", "prompts", "templates"))
+    assert manager.templates_dir.endswith(os.path.join("app", "ai", "prompts", "templates"))
+    # get_prompt_manager() is a process-wide singleton, not a fresh instance.
+    assert get_prompt_manager() is manager

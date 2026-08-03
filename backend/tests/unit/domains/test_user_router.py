@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.domains.users.router import router
 from app.api.dependency import get_current_user, require_roles, get_db
@@ -20,11 +20,11 @@ async def mock_get_db():
     yield AsyncMock()
 
 def mock_get_current_user_admin():
-    user = UserModel(id="admin-1", username="admin", email="a@a.com", role=UserRole.ADMIN.value, is_active=True, is_deleted=False, hashed_password="pw", created_at=datetime.utcnow(), updated_at=datetime.utcnow())
+    user = UserModel(id="admin-1", username="admin", email="a@a.com", role=UserRole.ADMIN.value, is_active=True, is_deleted=False, hashed_password="pw", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
     return user
 
 def mock_get_current_user_employee():
-    user = UserModel(id="emp-1", username="emp1", email="e@e.com", role=UserRole.EMPLOYEE.value, is_active=True, is_deleted=False, hashed_password="pw", created_at=datetime.utcnow(), updated_at=datetime.utcnow())
+    user = UserModel(id="emp-1", username="emp1", email="e@e.com", role=UserRole.EMPLOYEE.value, is_active=True, is_deleted=False, hashed_password="pw", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
     return user
 
 def mock_require_roles_admin():
@@ -51,7 +51,7 @@ def override_as_employee():
 @patch("app.domains.users.router.UserRepository")
 def test_register_user(mock_repo_cls, mock_service_cls):
     mock_service = mock_service_cls.return_value
-    mock_user = UserModel(id="1", username="testuser", email="test@example.com", role="employee", is_active=True, is_deleted=False, hashed_password="x", created_at=datetime.utcnow(), updated_at=datetime.utcnow())
+    mock_user = UserModel(id="1", username="testuser", email="test@example.com", role="employee", is_active=True, is_deleted=False, hashed_password="x", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
     mock_service.register_user = AsyncMock(return_value=mock_user)
     
     payload = {
@@ -76,8 +76,8 @@ def test_invite_user(mock_repo_cls, mock_service_cls):
     mock_invite.email = "new@example.com"
     mock_invite.role = "employee"
     mock_invite.is_used = False
-    mock_invite.created_at = datetime.utcnow()
-    mock_invite.updated_at = datetime.utcnow()
+    mock_invite.created_at = datetime.now(timezone.utc)
+    mock_invite.updated_at = datetime.now(timezone.utc)
     mock_service.invite_user_email = AsyncMock(return_value=mock_invite)
     
     payload = {"email": "new@example.com", "role": "employee"}
@@ -90,7 +90,7 @@ def test_invite_user(mock_repo_cls, mock_service_cls):
 @patch("app.domains.users.router.UserRepository")
 def test_list_users(mock_repo_cls, mock_service_cls):
     mock_service = mock_service_cls.return_value
-    mock_user = UserModel(id="1", username="u1", email="u1@e.com", role="employee", is_active=True, is_deleted=False, hashed_password="x", created_at=datetime.utcnow(), updated_at=datetime.utcnow())
+    mock_user = UserModel(id="1", username="u1", email="u1@e.com", role="employee", is_active=True, is_deleted=False, hashed_password="x", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
     mock_service.get_users = AsyncMock(return_value=[mock_user])
     
     response = client.get("/users?skip=0&limit=10")
@@ -110,7 +110,7 @@ def test_get_me(mock_repo_cls, mock_service_cls):
 @patch("app.domains.users.router.UserRepository")
 def test_get_user_as_admin(mock_repo_cls, mock_service_cls):
     mock_service = mock_service_cls.return_value
-    mock_user = UserModel(id="emp-1", username="emp1", email="e@e.com", role="employee", is_active=True, is_deleted=False, hashed_password="x", created_at=datetime.utcnow(), updated_at=datetime.utcnow())
+    mock_user = UserModel(id="emp-1", username="emp1", email="e@e.com", role="employee", is_active=True, is_deleted=False, hashed_password="x", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
     mock_service.get_user_by_id = AsyncMock(return_value=mock_user)
     
     response = client.get("/users/emp-1")
@@ -127,7 +127,7 @@ def test_get_user_as_employee_unauthorized(mock_repo_cls, mock_service_cls, over
 @patch("app.domains.users.router.UserRepository")
 def test_update_user_as_admin(mock_repo_cls, mock_service_cls):
     mock_service = mock_service_cls.return_value
-    mock_user = UserModel(id="emp-1", username="emp1", email="e@e.com", role="employee", is_active=True, is_deleted=False, hashed_password="x", created_at=datetime.utcnow(), updated_at=datetime.utcnow())
+    mock_user = UserModel(id="emp-1", username="emp1", email="e@e.com", role="employee", is_active=True, is_deleted=False, hashed_password="x", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
     mock_service.update_user = AsyncMock(return_value=mock_user)
     
     payload = {"role": "manager"}

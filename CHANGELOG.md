@@ -2,16 +2,238 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
-## [1.17.0] - 2026-08-03
+
+## [1.31.0] - 2026-08-03
 ### Eklendi
 - **Gelişmiş Sentetik PDF Veri Kümesi**: KVKK/PII ve RAG süreçlerinin testi için, 6 farklı kurum (MEB, İSKİ, SGK, YÖK, BOTAŞ, Ankara BŞB) formatına (antet, mizanpaj, Türkçe TrueType fontlar) birebir uygun ve sahte PII verileri içeren 300 adet zengin içerikli simülasyon PDF belgesi üretilerek veri setine döküldü (`scripts/generate_diverse_pdfs.py`).
 - **Dilekçe Veri Kümesi Operasyonu**: Açık kaynak sitelerden (dilekceornegi.net vb.) gerçek dilekçe örnekleri kazındı. Buna ek olarak 12 farklı kategoride kurgusal sahte PII barındıran zengin dilekçe şablonları üretildi (`scripts/scrape_dilekce.py`). Veri setine 74 yeni dilekçe örneği dâhil edildi.
 - **Ek Sentetik Veriler**: İhtiyaca yönelik olarak çok sayıda sentetik üst yazı dosyası oluşturuldu.
 
-## [1.16.0] - 2026-08-01
+## [1.30.0] - 2026-08-03
 ### Eklendi
 - **Sentetik RAG Veri Kümesi Genişletmesi**: Veri kümesinde eksik (0-1 adet) olan 9 farklı resmî yazışma kategorisi (İtiraz, Görüş Talebi, Ret/Kısmi Kabul, Eksik Belge, Proje Teklifi, Tekit, İade/Yetkisizlik vb.) için Şartnamenin 6.5 maddesine uygun olarak tamamen kurgusal, ancak kurumsal yapıya ve Yönetmeliğe uygun 53 adet yeni sentetik belge eklendi. Katalogdaki doğrulanmış örnek sayısı 253'e ulaştı.
 - **Dataset İndeks Otomasyonu**: `scripts/update_dataset_indexes.py` adında yeni bir Python scripti eklendi. Bu script veri kümesi dizinindeki Markdown (`.md`) dosyalarını tarayıp YAML frontmatter bilgilerini otomatik okuyarak `kaynak-katalogu.jsonl`, `kaynak-ozeti.csv` ve ilgili dizinlerin alt `_indeks.csv` dosyalarını tek tuşla güncelleyerek manuel veri girişi hatalarının önüne geçmektedir.
+=======
+## [1.29.0] - 2026-08-03
+### Düzeltildi
+- **Semantik Katman Canlı Ollama'ya Karşı Ölçüldü ve Eşikleri Yeniden Kalibre Edildi**: 1.28.0'da bu katman **atıl** ve **ölçülmemiş** olarak gönderilmişti. Ollama açıldıktan sonra prototip vektörleri üretildi ve katman gerçek `nomic-embed-text` gömmeleriyle uçtan uca ölçüldü. Gönderilen `0.72` eşiğinin **gürültü bandının içinde** olduğu ortaya çıktı:
+
+| sim | vaka | beklenen → eşleşen | |
+|---|---|---|---|
+| 0.880 | `held_01` | draft → draft | doğru |
+| 0.859 | `held_02` | draft → draft | doğru |
+| 0.758 | `held_12` | chat → **analyze** | **yanlış** |
+| 0.750 | `held_13` | chat → chat | doğru |
+| 0.749 | `held_08` | analyze → **draft** | **yanlış** |
+| 0.747 | `held_15` | chat → **document_qa** | **yanlış** |
+| 0.740 | `esc_08` | (belirsiz) | doğru şekilde kararsız |
+
+  `0.72`'de bu **3 doğru karara karşı 3 yanlış** demek. Şansa karar veren bir katman nötr değil, bir **regresyondur**: o üç mesaj daha önce doğru bilme şansı olan bir modele eskale ediliyordu, semantik basamak bu şansı elinden aldı.
+  - Eşik `0.80`'e çekildi — güvenli bandın (`0.758 → 0.859`) **ortası**, kenarı değil. Tarama `0.76`'nın da sıfır hata verdiğini gösteriyor ama bu 15 vakalık bir örneklemde son hataya `0.002` pay bırakır; bu bir eşik değil gürültüdür. Marj eşiği, benzerlik doğru ayarlandığında **hiç bağlayıcı olmuyor** (hayatta kalan iki karar 0.154 ve 0.098 ile geçiyor); yalnızca gerçekten eşit iki eşleşme yuvarlamayla ayrılmasın diye korundu.
+  - **Asıl sonuç kalibrasyon değil, kalibrasyonun ortaya çıkardığı şey**: güvenli eşikte bu katman **130 mesajın 2'sini** çözüyor. Nedeni sayılarda görünüyor — resmî registerdeki Türkçe cümleler karşılıklı olarak benzer, dolayısıyla tamamen belirsiz bir mesaj bile alakasız prototiplere karşı 0.60–0.74 alıyor; bu gürültü tabanının üstünde yalnızca dar bir bant kalıyor. Plan bu katmanın eskalasyonların çoğunu soğuracağını varsayıyordu; **yedide birini** soğuruyor.
+  - **Gecikme** (önceden bilinmiyordu): p50 **19.7 ms**, p95 **22.0 ms** — docstring'lerdeki 50-150 ms tahmininden belirgin şekilde iyi. Tahminler ölçümle değiştirildi.
+- **Prototip Dizini Mount Edilmemiş Bir Yola Yazılıyordu**: `PROTOTYPE_DIR`, `__file__` üzerinden `parents[3].parent` ile türetiliyordu. Container'da paket kökü **çalışma dizininin kendisi** (`/workspace`) olduğu için bunun bir üstü `/` oluyordu; `build_prototypes.py` 768 boyutlu vektörleri `/datasets/prototypes/` altına "başarıyla yazdım" diyerek yazıyor, container çıkınca hepsi kayboluyordu. Betiğin başarı çıktısı gerçek bir üretimden ayırt edilemiyordu. Artık `MEVZUAT_CORPUS_DIR` ile aynı deseni izliyor: `settings` içinde göreli yol.
+- **`make test` Redis'siz Koşuyordu**: Hedef `--no-deps` kullanıyordu; birim testlerinin altyapıya dokunmadığı varsayımıyla. Bu, `rate_limit()` arkasındaki yedi API testi dışında doğru — onlar Redis'e ulaşıyor ve bağlantı hatası testin beklediği 422 yerine 500 olarak yüzeye çıkıyor.
+  - **Hata kipinden kötüsü, hatanın yanlış atfedilmesiydi**: bu yedi test dört ayrı PR'da "`origin/main`'de de mevcut, httpx/starlette sürüm kayması" diye raporlandı. Hikâye makuldü — çıktıda bir `StarletteDeprecationWarning` vardı ve `origin/main`'e geçip aynı yedi hata görülmüştü. Ama o kontrol de **aynı bozuk çağrıyı** kullanıyordu, dolayısıyla hipotezi değil harness hatasını doğruladı.
+  - Redis ayaktayken paket **798 passed, 0 failed**. Ortada bir sürüm kayması yok ve hiç olmadı; deprecation uyarısı ilgisiz ve zararsız.
+  - `make eval` `--no-deps` ile kalıyor; orada gerçekten doğru — o suite'ler saf karar fonksiyonlarını çağırıyor.
+
+## [1.28.0] - 2026-08-03
+### Eklendi
+- **Semantik Prototip Katmanı** (`app/ai/semantic/`, `app/ai/policy/prototypes.py`): Karar merdiveninin 2. basamağı. Sözlüksel kurallar yüzeyleri **birebir** eşleştirir, dolayısıyla parafraza yapısal olarak kördür — "cevap hazırla"nın her yeni söyleniş biçimi elle eklenmek zorundadır. Bu katman, mesajı sınıf başına birkaç **örnek ifadeyle** anlam üzerinden karşılaştırır.
+  - **Ekonomi tüm gerekçe**: kısa bir mesaj için tek `embed_query`, zaten bellekte ve sıcak duran bir modelde ~50-150 ms (`HybridRetriever` her mevzuat aramasında aynı servisi çağırıyor). Hızlı katman modelinin tek etiketlik yapılandırılmış çağrısı, JSON şeması + Pydantic doğrulama + olası retry ile ~1-3 sn. Yani burada çözülen bir parafraz, bir üst basamağın maliyetinin **yüzde birkaçına** mal olur.
+  - **Değer, karar vermeyi reddetmesinde.** Aynı resmî registerdeki kısa Türkçe cümleler arasındaki kosinüs benzerliği sıkışıktır — alakasız cümleler rutin olarak 0.6 civarında oturur — dolayısıyla "en yakın prototip" neredeyse her zaman *bir* prototiptir. Bu yüzden bir eşleşme hem yüksek mutlak benzerlik hem de ikinciye net bir fark gerektirir; tek başına mutlak eşik sürekli tetiklenir, tek başına marj ise eşit derecede kötü iki eşleşme arasında farkın rastlantısal olduğu yerde tetiklenir. Herhangi biri sağlanmazsa modele düşülür.
+  - Prototip vektörleri `scripts/build_prototypes.py` ile **önceden hesaplanır**; istek anında ~30 ifade gömmek, bu katmanın kaçınmak için var olduğu model çağrısından pahalı olurdu. Çalışma yolunda tek bir string gömülür: kullanıcının kendi mesajı (test bunu `embed_documents` hiç çağrılmadığını doğrulayarak kilitliyor).
+  - Her vektör dosyası gömme modeli, boyutu ve policy sürümüyle **damgalıdır**; damga tutmazsa matcher kendini devre dışı bırakır. Farklı bir modelle üretilmiş vektörlerden karar vermek, bir model çağrısı ödemekten kötüdür: yavaş değil, **eminden yanlış** olur. Eksik dizin, okunamayan dosya ve gömme servisi kesintisi de aynı no-op'a düşer — betiği hiç çalıştırmamış bir kurulum, katman hiç yokmuş gibi davranır.
+  - `resolve_plan` artık üç basamaklı: sözlüksel kurallar → prototipler → hızlı katman modeli. Her basamak yalnızca bir altının reddettiğini görür; kuralların çözdüğü bir mesaj **hiç gömme maliyeti ödemez** (testle kilitli).
+  - `FakeEmbeddingsClient` conftest'e eklendi (`FakeLLMClient` deseniyle: gerçek alt sınıf, MagicMock değil).
+
+### Değiştirildi
+- **Held-out parafraz kümesi** (`intents.jsonl`, `heldout_paraphrase`, 16 vaka): Kurallar ayarlandıktan **sonra** yazıldı ve hiçbir kural bunlara göre değiştirilmedi. Önceki sürümdeki `1.0000` skorunun ne değerde olduğunu öğrenmenin tek dürüst yolu buydu.
+
+| | 1.27.0 | 1.28.0 |
+|---|---|---|
+| Macro F1 (genel) | 1.0000 | **0.9326** |
+| Eskalasyon (genel) | 0.0000 | **0.0538** |
+| Held-out doğruluk | — | **0.25** (16'da 4) |
+
+  **`1.0000` uyduruldu.** Kurallar ve eşikler o kümenin başarısızlıklarına göre ayarlanmıştı; ölçtüğü şey katmanın genelleme gücü değil, o kümeye ne kadar iyi uydurulduğuydu. Bunu bir sayıyla söylemek, 1.26.0'daki uyarı notundan daha değerlidir.
+
+  On iki başarısızlık, farklı önem taşıyan iki sınıfa ayrılıyor:
+  - **Yedisi çekimser kalıyor** — semantik katmanın tam olarak kurulduğu trafik: sözlüksel yüzeyi olmayan parafrazlar, bugün doğru davranışın eskalasyon olduğu ve bir prototip eşleşmesinin bunları model çağrısının küçük bir kesrine çözebileceği yerler.
+  - **Beşi eminden yanlış** ve semantik katman bunlara **hiç yardım edemez**, çünkü yalnızca çekimserlik üzerinde çalışır. Beşin dördü `document_qa`'ya düşüyor ve bu, belirli bir karara kadar izlenebilir: `question_with_document` ipucu, "Evrakın konusu nedir?" varlık tabanını geçsin diye HINT (1.0) yerine DOMAIN (1.6) yapılmıştı. Bu düzeltme, `document_qa`'yı **belge ekliyken sorulan her soru için varsayılan** hâline getirdi — bir belge sorusu için doğru, parafraz edilmiş bir taslak/analiz/hatırlama talebi için yanlış.
+
+  Bu bulgu **düzeltilmedi, kaydedildi**. Şimdi yapılacak herhangi bir değişiklik bu on altı vakadan haberdar olurdu ve onları bir ölçüm olarak yakardı — ki bu kümenin var olma sebebi tam olarak bu hatayı açığa çıkarmak. Düzeltme, kümeleri genişletme işiyle birlikte kalibrasyon adımına ait.
+
+> **Semantik katman bu kurulumda atıl.** `datasets/prototypes/` altında vektör dosyası yok ve üretim betiği çalışan bir Ollama gerektiriyor. Katman testli olarak geliyor (`FakeEmbeddingsClient` ile 12 test + 5 merdiven testi) ama **gerçek gömmelerle uçtan uca ölçülmedi**: doğruluk katkısı ve `embed_query` p50/p95 gecikmesi bilinmiyor. `scripts/build_prototypes.py` canlı bir Ollama'ya karşı çalıştırılana kadar merdiven iki basamaklı kalır.
+
+## [1.27.0] - 2026-08-03
+### Düzeltildi
+- **Taslak Yazarının Zaman Bütçesi Hiç Uygulanmıyordu**: `resilience.py:53` yazıldığından beri `writer: 120.0` ve `judge: 20.0` girdilerini taşıyordu ve **hiçbiri okunmuyordu** — `draft_graph.py` `node_timeout`'u import bile etmiyordu. Yani ~90 sn'lik taslak bütçesinin **en pahalı adımının** hiçbir düğüm seviyesi koruması yoktu, ama tabloda varmış gibi görünüyordu. Uygulanmayan bir bütçe, bütçesizlikten kötüdür: koruma olduğu izlenimi verir.
+  - Yazarın bütçesi dekoratörle değil **düğümün içinde** uygulanıyor. Dekoratör düğümün `except` bloklarını aşarak yükselir ve taslak grafiğini düşürür; oysa bir zaman aşımının, grafiğin zaten yönlendirmeyi bildiği bir `FAILED` sonucuna dönüşmesi gerekir. Kendi `except TimeoutError` dalı var çünkü `str(TimeoutError())` boştur — kullanıcıya "Taslak üretilemedi: " diye iki nokta üst üsteden sonrası boş bir mesaj gösterilirdi. Kısmi akış korunuyor: kesilmiş bir taslak, insana boş bir taslaktan daha faydalıdır ve kullanıcı zaten yazılışını izlemiştir.
+  - `judge` girdisi bağlanmak yerine **tablodan kaldırıldı**: `settings.DRAFT_JUDGE_TIMEOUT_SECONDS` o sayının zaten sahibiydi ve tek bir değer için iki sahip, bu değişikliğin ortadan kaldırmak için var olduğu sorunun ta kendisi. Yargıç çağrısı artık o ayarı seviyenin çarpanıyla ölçekliyor.
+- **`reasoning_level` Düğüm Bütçelerine Hiç Ulaşmıyordu**: `reasoning_levels.py`, özellik eklendiğinden beri bir `timeout_multiplier` taşıyor (fast 0.6, deep 1.8) ama bu yalnızca **servis katmanının** dış zaman aşımına ulaşıyordu. Düğüm bütçeleri sabit kalıyordu; yani `deep` bir koşuya genel olarak 1.8× duvar saati veriliyor, ama fazladan işin yapıldığı yerde bu bütçe **harcanamıyordu**.
+  - Kök neden: `@node_timeout(NODE_TIMEOUT_SECONDS["analyze"])` bir float alıyordu ve bu ifade graf **derlenirken** değerlendiriliyor; graf süreçte bir kez derlendiği için istek başına hiçbir değer oraya ulaşamazdı. Dekoratör artık düğüm **adı** alıyor ve bütçeyi çağrı anında state'teki `reasoning_level`'dan çözüyor.
+  - `DocumentAnalysisState` ve `RoutingState` bu alanı taşımıyor (CHANGELOG 1.22.0 bunları kapsam dışı bırakmıştı), dolayısıyla dengeli seviyeye düşüyorlar — davranış değişmiyor, kablo alan eklendiğinde hazır.
+  - Sonuç: `deep` yazara 216 sn (dengeli 120 sn'ye karşı), `fast` 72 sn veriyor. **Hiçbir seviye, hiçbir düğüm için dengeli seviyenin bugünkü sınırından dar değil.**
+
+### Eklendi
+- **Bildirimsel, Sürümlenmiş Policy Katmanı** (`app/ai/policy/`): Deterministik karar katmanının üzerinde hareket ettiği her eşik, onu okuyan kodun yanında yaşıyordu — `draft_verifier`'da `70.0`, `routing_graph`'ta `50.0`, `llm_judge`'da `0.6/0.4`, `planning_graph`'ta `12`/`40`/`4`, `intent_scorer`'da marj tabanları. Tek tek makul, toplu hâlde **incelenemez** — ve bunlardan ikisi, aralarındaki ilişki hiçbir yerde yazılmamış hâlde **aynı kavramın** iki şiddet derecesiydi.
+  - **YAML değil, dondurulmuş dataclass** — bilinçli. Bir yapılandırma dosyası, bir eşiği kod değiştirmeden değiştirme yeteneği satın alır; burada istenmeyen tam olarak budur. Bu sayılar `evaluation/datasets` üzerinde kalibre ediliyor, dolayısıyla birini oynatmak bir CHANGELOG kaydı ve bir eval koşusu gerektirmeli, bir yeniden dağıtım değil. Tipli dataclass'lar ayrıca invaryantlara yaşayacak bir yer veriyor ve üretimle testin sapabileceği bir ayrıştırma yolu bırakmıyor.
+  - **Asıl ürün invaryantlar.** Daha önce yalnızca tesadüfen doğru olan ilişkileri kodluyorlar: yönlendirme eşiği otomasyon eşiğinin **altında kalmalı** (70 "incelemesiz gönderilebilir", 50 "hiç yönlendirilemez"; ters çevirmek, yönlendirilemeyecek kadar zayıf bir taslağı aynı anda gönderilebilecek kadar iyi yapardı); yargıç harman ağırlıkları 1.0'a toplanmalı; bileşik taban varlık tabanının altına inemez (bileşik bir okuma, tekil bir okumadan daha az kanıta ihtiyaç duyamaz); ham geçmiş sınırı birebir pencereyi aşmalı; hiçbir düğüm bütçesi iş akışı tavanını geçemez. **Import anında** çalışıyorlar — kendisiyle çelişen bir policy, üretimde sessizce yanlış karar üretmek yerine süreci düşürüyor.
+  - Tüketen modüller kendi modül seviyesi isimlerini koruyor ama policy'den **türetiyor**; mevcut 750 testin tamamı dokunulmadan geçiyor ve diff bir davranış değişikliği değil bir yönlendirme. Testler türetmenin kendisini doğruluyor: biri yeniden sabit kodlansa import'lar yine çalışırdı, yalnızca sapma görünürdü.
+  - `ROUTING_UNITS` ile `RouteOutput.destination` Literal'ını hizada tutan bir test eklendi. Daha önce bu işi yapan tek şey "birbirinden sapamaz" diyen bir yorum satırıydı.
+- **Policy Sürüm Damgası**: `DRAFT_SCORE` veya `CLAIM_MATCH`'teki bir kayma, "trafik değişti" ile "biz bir eşiği oynattık" arasında belirsizdi ve bu ikisi zıt tepkiler gerektirir. Prometheus'a `Info` olarak ekleniyor (mevcut koleksiyonerlere etiket olarak değil — kardinalite maliyeti sıfır), değerlendirme raporuna hem JSON yüküne hem Markdown başlığına yazılıyor.
+
+> Bu sürüm **davranış-nötr**dür: `make eval` policy düzenlemesinden önceki ile birebir aynı `1.0000 / 1.0000` sonucunu üretiyor. Kanıt commit'lenmiş raporda.
+
+## [1.26.0] - 2026-08-03
+### Değiştirildi
+- **Niyet Çözümleme: Sıralı Anahtar Kelime Şelalesi → Kanıt Skorlaması**: `planner.py` anahtar kelime gruplarını sabit sırayla kontrol edip ilk eşleşmede dönüyordu; bu, **sırayı** kararın kendisi hâline getiriyordu ve yeniden sıralamayla düzeltilemezdi (taslak önce kontrol edilince "Resmi yazı ne demek?" üç adımlı taslak hattını başlatıyor; analiz önce kontrol edilince "analiz sonrası taslak hazırla" analize düşüyor). 1.25.0'daki ölçüm iki kategoriyi **0.00** ile raporladı — zayıf değil, sıfır, sekiz vakanın sekizi. Artık mesaj bildirimsel bir kanıt tablosuna (`intent_rules.py`) karşı skorlanıyor ve karar, ilk eşleşen kural değil **ilk iki niyet arasındaki marj**. Kanıt kısa devre yapmak yerine biriktiği için çekişmeli bir mesaj görünür şekilde çekişmeli kalıyor; bu da onun bileşik plana yönlendirilmesini ya da dürüstçe eskale edilmesini mümkün kılıyor. Model çağrısı yok, hâlâ milisaniye altı.
+  - **Ölçüm** (`evaluation/reports/all-scored-canonical.md`): macro F1 **0.7289 → 1.0000**, eskalasyon oranı **0.1842 → 0.0000**, kalibrasyon hatası **0.3011 → 0.0702**. Kabul kriterinin iki yarısı da doğru yönde: doğruluk artarken model çağrısı **azalıyor**.
+  - Üç mekanizma ağırlığı taşıyor ve üçü de daha büyük bir sayı değil **karşı sinyal**: (a) *tanım sorusu sayacı* — "Üst yazı ne demek?" taslaktan söz eder, talep etmez; domain isminin ağırlığını düşürmek yerine çıkarma yapmak her gerçek talebi tam güçte bırakır. (b) *hafıza-hatırlama sayacı* — bu bir tercih değil, zorunluluk: deponun hâlihazırda dayandığı iki kural tek bir ağırlıkla **birlikte sağlanamıyor** (hatırlama `document_qa`'yı yenmeli → kural 4.4 üstünde olmalı; açık taslak talebi hatırlamayı yenmeli → 3.4 altında olmalı). Geçersiz kanıtı kaldırmak ikisini aynı anda sağlıyor. (c) *veda koruması* — "İyi akşamlar, yarın devam ederiz" "devam" içerir ve şimdi devam etmenin tersini söyler.
+  - Belge durumu artık baştan sona bir **ağırlık**, asla bir kapı. Selamlama kuralının `document_id is None` koşuluna bağlı olması, belge ekliyken "Merhaba"yı çözülemez yapan şeydi.
+  - **Bileşik niyet** marjdan *önce* kontrol ediliyor: "Uygunluk denetimi yap, sonra cevabı kaleme al" her iki okuma için de açık kanıt taşır ama dengesiz skorlar; marj testi bunu tek başına analize çözer ve talebin taslak yarısını sessizce düşürürdü. Yalnızca draft+analyze birleşiyor; `chat`'i `draft`'a katmak hem sohbet cevabı verip hem taslak üretmek olurdu ki bu iki okumadan hiçbirinin istediği değil.
+  - `PlanDecision` artık `confidence`, `evidence` ve `alternatives` taşıyor. Eski çözümleyici yalnızca hangi dala girdiğini bildiriyordu; üretimdeki yanlış bir karar geriye dönük açıklanamıyordu.
+  - **Yakalanan regresyon**: "evet, hazırla" hiçbir şeye çözülmüyordu — süreklilik sinyali ile kısa-mesaj ipucu aynı kanıtı iki kez sayıyor (kısa bir onay, *onay olduğu için* kısadır) ve iki skor karar verilemeyecek kadar yakın kalıyordu. Süreklilik tetiklendiğinde ipucu bastırılıyor. Bu regresyonu mevcut `test_planner.py` yakaladı.
+  - `test_planner.py`'deki `source` doğrulamaları güncellendi: `keyword`/`short_message`/`memory_recall` artık var olmayan bir şelalenin dallarını adlandırıyordu ve `source` tek bir logger çağrısı dışında tüketicisi olmayan tanılama etiketidir. Her `intent` ve `steps` doğrulaması **değişmeden geçiyor** — 1.24.0'ın hafıza-hatırlama önceliği ve süreklilik uzunluk sınırı dâhil.
+
+### Düzeltildi
+- **Taslak Doğrulamada Biçim Kaynaklı Yanlış Pozitifler**: `verify_draft` bir iddiayı kaynakla karşılaştırırken her iki tarafı küçük harf ASCII'ye katlayıp birinin diğerini içerip içermediğine bakıyordu. Bu düzyazı için çalışır, **tipli değerler** için çalışmaz: aynı olgunun iki yazımı farklı dizgelere katlanır (`01.03.2026` ↔ `1 Mart 2026`, `Madde 11` ↔ `m. 11`, `125.000,00 TL` ↔ `125.000 TL`, `E-44444444-841-77` ↔ `E-44444444/841/77`). Jeton örtüşmesi geri düşüşü de kurtaramıyordu — "12 Mart 2026" ile "12 03 2026" kısa jetonlar atıldıktan sonra yalnızca yılı paylaşır, 0.75 eşiğine karşı 0.50. 1.25.0 ölçümü, kapının ürettiği **her** yanlış pozitifin bu sınıftan olduğunu gösterdi ve `draft_graph.py` bunu bir HITL kesintisine çevirdiği için her biri doğru bir taslakta gereksiz bir kullanıcı kesintisiydi.
+  - Yeni `app/ai/verification/normalizers.py`: `canonical_date`, `canonical_document_number`, `canonical_amount`, `canonical_legislation`. Bu **kayıpsız normalleştirmedir, bulanık eşleştirme değil** — kanonik biçim bir değerin nasıl yazıldığını değiştirir, ne anlama geldiğini asla. Ay tablosu tam, imkânsız tarihler kırpılmak yerine reddediliyor, kanun ve madde ayrı ad alanlarında (`kanun:4982` ≠ `madde:4982`), ayrıştırılamayan değer tahmin üretmek yerine `None` dönüyor. Her kanonikleştiricinin eşlenik bir "farklı değerler farklı kalır" testi var; başarısızlığı bir uydurmayı dayanaklı bir iddiaya çevirecek olan özellik budur.
+  - Destek merdiveni tür-farkında: `exact → canonical → token_overlap → none`. Kanonik, jeton örtüşmesinden **önce** deneniyor; tipli bir değer için kanonik eşitlik tam ve nihaidir, ve eşleşmiyorsa iki farklı tarih arasındaki kısmi jeton örtüşmesi hiçbir şeyin kanıtı değildir.
+  - `UnsupportedClaim` artık `canonical` (kaynakta gerçekten aranan biçim) ve `best_overlap` (en iyi metinsel eşleşmenin ne kadar yaklaştığı) taşıyor. Eskiden bir bulgu yalnızca "bu dayanaksız" diyordu; bu, uydurma bir belge sayısını farklı ayırıcılarla yazılmış gerçek birinden ayırt edemiyordu.
+  - **Ölçüm**: doğruluk **0.9000 → 1.0000**, yanlış pozitif oranı **0.2353 → 0.0000**, yanlış negatif oranı **0.0000 → 0.0000** (yeni kaçak yok), ve dayanaksız ifade sayımı 40 vakanın tamamında **birebir doğru**.
+- **`LEGISLATION_PATTERN` Belge Sayısının Kuyruğunu Kanun Numarası Sanıyordu**: `E-22222222-903-118 sayılı yazınız` ifadesinde `\d{3,5}\s+sayılı` kalıbı belge sayısının kuyruğuna eşleşip hayalet bir `118 sayılı` atfı üretiyordu; bu atıf sonra taslağın gerçekten andığı mevzuata karşı denetleniyordu. Bugün bu hayalet yalnızca bağlamda **başka** bir "N sayılı" atfı bulunduğunda jeton örtüşmesi tarafından yutuluyor — hiç kanun atfı içermeyen bir bağlamda dayanaklı bir taslağın kendi referans numarası uydurma yasal atıf olarak raporlanırdı. `[-/\d]` için olumsuz geriye bakış hem bunu hem de "12345 sayılı"nın ayrıca "2345 sayılı" olarak eşleşmesini engelliyor. **Denetimle değil, değerlendirme koşumuyla bulundu.**
+
+### Eklendi
+- `CLAIM_MATCH{kind, method}` Prometheus sayacı: `DRAFT_SCORE` kapının ürettiği sayıyı kaydediyordu ama **nasıl** ürettiğini hiçbir şey kaydetmiyordu, dolayısıyla bir groundedness regresyonu tek bir iddia türüne indirgenemiyordu. İki etiket de kapalı küme — serbest metin Prometheus kardinalitesini patlatırdı.
+
+> **Aşırı uyum uyarısı**: Her iki suite'in de 1.0000 alması, kuralların ve eşiklerin bu altın kümenin başarısızlıklarına bakılarak ayarlanmış olmasını yansıtır. Altın kümeler uygulamadan **önce** yazıldı ve mevcut 30 `test_planner.py` testi (bu değişiklikle yazılmadı, eski uygulamaya karşı yazılmıştı) değişmeden geçiyor — bunlar bağımsız kontrollerdir. Yine de bu sayılar "gerçek dünyada %100 doğruluk" iddiası değildir; koşumun asıl değeri regresyonları önlemesi ve baseline karşılaştırmasıdır. Kümenin genişletilmesi ve eşiklerin plato ortasına kalibre edilmesi sonraki iştir.
+
+## [1.25.0] - 2026-08-03
+### Eklendi
+- **Deterministik Karar Katmanı için Değerlendirme Koşumu**: Sistemin LLM olmayan karar fonksiyonları (`resolve_plan_deterministic`, `verify_draft`) doğru çalışıp çalışmadığı ölçülemez durumdaydı — `evaluation/metrics.py` ve `evaluation/generate_report.py` **0 byte**, `evaluation/` altındaki sekiz klasör boş `.gitkeep` idi. Bu yüzden `draft_verifier.py:88`'deki `UNSUPPORTED_CLAIM_PENALTY=12.0`'ın 10 veya 15 olmasının daha iyi olup olmadığını, ya da `planner.py`'ye eklenen bir anahtar kelimenin başka bir vakayı bozup bozmadığını söyleyecek hiçbir mekanizma yoktu; her eşik sezgiyle seçilmişti. Artık `make eval` ile koşan, **hiç LLM çağrısı içermeyen** bir ölçüm katmanı var.
+  - `evaluation/metrics.py`: `accuracy`, `macro_f1`, `confusion_matrix`, `abstention_rate`, `risk_coverage_curve`, `expected_calibration_error`, `precision_at_k`/`recall_at_k`, `binary_rates`. Metrikler baştan sona **abstention-farkında**: ölçülen katman çekimser kalıp işi model katmanına devredebildiği için kalite, birbiriyle takas eden iki eksene bölünür — karar verdiğinde ne sıklıkla haklı olduğu, ve yanılacağı vakalarda çekimser kalıp kalmadığı. Yalnızca birincisini iyileştirmek her şeye kendinden emin ve yanlış cevap veren bir katman üretir; yalnızca ikincisini iyileştirmek tüm yükü modele yıkan bir katman üretir. Yalnızca standart kütüphane kullanıldı.
+  - `evaluation/harness/runner.py`: hangi kararı ölçtüğünü bilmeyen jenerik koşucu; suite bir JSONL altın küme ve bir çağrılabilir verir. Karar fonksiyonundan gelen istisnayı **bilinçle yakalamaz** — çökme bir kusurdur, yanlış sınıflandırma değil; ikisini birleştirmek bozuk bir üretim fonksiyonunun makul bir doğruluk düşüşü gibi okunmasına yol açardı.
+  - `evaluation/harness/intent_suite.py` ve `draft_suite.py`: her ikisi de kapının **LLM'siz yarısına** bağlanır (`resolve_plan` değil `resolve_plan_deterministic`; yargıçsız `verify_draft`) — aksi hâlde koşum yavaş ve tekrarlanamaz olur, üstelik asıl aranan sayıyı gizlerdi: deterministik katman ne sıklıkla eskale etmek zorunda kalıyor.
+  - `evaluation/datasets/intents.jsonl` (114 vaka) ve `drafts.jsonl` (40 vaka). Kategoriler trafiğin tarafsız örneklemi değil, mevcut katmanın **bilinen kusur sınıflarıdır** (`inversion`, `compound`, `precedence`, `paraphrase_*`, `escalation`); `keyword_*`/`continuation`/`document_question` ise kontrol grubudur. Şartname 6.5: tüm vakalar kurgudur.
+  - `evaluation/generate_report.py`: JSON + Markdown rapor, `--baseline` ile karşılaştırma. Delta yönü metrik başına belirlenir — macro F1'in yükselmesi iyi, eskalasyon veya yanlış pozitif oranının yükselmesi kötüdür; tek bir "yüksek iyidir" kuralı bunların yarısını ters raporlardı.
+  - `Makefile`: `make eval`, `make eval-baseline`, `make test`. Koşum `make test`ten **bilinçle ayrı**: başarısız bir altın küme vakası ölçümdür, kırmızı build'e çevrilmesi kodu değil altın kümeyi zayıflatma baskısı yaratır; ayrıca tam koşum pytest'in 60 sn zaman aşımına sığmaz.
+- **Baseline raporu** (`evaluation/reports/all-baseline.{json,md}`) commit'lendi — sonraki her değişikliğin kabul kriteri bu sayılarla karşılaştırmadır, ve her koşuda değişen bir referans noktası referans noktası değildir. Ölçüm, deterministik katmanın **tasarlandığı alanda kusursuz, tasarlanmadığı alanda tamamen kör** olduğunu gösteriyor:
+  - Niyet kapısı (114 vaka): macro F1 **0.7289**, eskalasyon **0.1842**. Kontrol kategorilerinin tamamı 1.00. Buna karşılık `inversion` **0.00** (8/8) — hepsi `source=keyword` ile `draft`'a düşüyor, çünkü `DRAFT_KEYWORDS` her şeyden önce kontrol ediliyor ve "taslak"/"resmi yazi"/"ust yazi" taslak *hakkındaki* sorularda da tetikleniyor; bugün "Resmi yazı ne demek?" üç adımlı taslak hattını başlatıyor. `precedence` **0.00** (6/6) — belge ekliyken "Merhaba" çekimser kalıyor (selamlama dalı `document_id is None` koşuluna bağlı), ve taslak turundan sonra "İyi akşamlar, yarın devam ederiz" süreklilik kuralı "devam" üzerinden tetiklendiği için `draft`'a düşüyor. `paraphrase_memory` 0.10, `paraphrase_analyze` 0.00, `paraphrase_draft` 0.12, `compound` 0.50.
+  - Taslak kapısı (40 vaka): doğruluk **0.9000**, **yanlış pozitif oranı 0.2353**. `grounded`, `hallucinated`, `structural`, `placeholder` ve `other_official` kategorilerinin tamamı 1.00 — doğrulayıcı kümedeki her uydurma sayıyı, tarihi, kurumu ve atfı yakalıyor. Hata kütlesinin tamamı `paraphrased_grounded` (0.60) içinde ve dördü de saf biçim uyuşmazlığı: `1 Mart 2026` ↔ `01.03.2026`, `15 Nisan 2026` ↔ `15.04.2026`, `5 Şubat 2026` ↔ `05.02.2026`, `m. 11` ↔ `Madde 11`. Dördü de 88.0 puan alıyor — 70.0 otomasyon eşiğinin üstünde — ama `strict` herhangi bir dayanaksız ifadede onayı zorladığı için yine de işaretleniyor. **Her biri, doğru bir taslakta gereksiz bir HITL kesintisi.**
+
+### Düzeltildi
+- `evaluation/` klasörü `compose.yml`'de mount edilmiyor ve imaja kopyalanmıyordu; `tests/unit/evaluation/` bu hâliyle toplanamazdı bile. Mount, altın küme düzenlemelerinin yeniden build gerektirmemesi için ayrıca korundu.
+- **Bilgi notu (bu sürümde çözülmedi)**: `resilience.py:53`'teki `NODE_TIMEOUT_SECONDS`'ın `writer: 120.0` ve `judge: 20.0` girdileri hiçbir yerde okunmuyor — `draft_graph.py` `node_timeout`'u import bile etmiyor, yani ~90 sn'lik taslak bütçesinin en pahalı adımının hiçbir düğüm seviyesi koruması yok. Tespit kaybolmasın diye kayda geçirildi.
+
+## [1.24.0] - 2026-08-02
+### Düzeltildi
+- **Hafıza Sorusu → Belge Soru-Cevabına Yanlış Yönlendirme**: `planner.py`'deki `resolve_plan_deterministic`, bir belge eklenmişken "az önce ne sordum" gibi konuşmanın kendisine dair soruları salt "soru gibi görünüyor + belge var" sezgisiyle `document_qa`'ya yönlendiriyordu; bu akış sistem promptunda yalnızca belge bağlamına dayanmayı zorunlu kılıyor, konuşma hafızasını "kapsam dışı" sayıyordu. Yeni `MEMORY_RECALL_MARKERS`/`_is_memory_recall_question()` bu tür mesajları belge durumundan bağımsız olarak `chat`'e yönlendiriyor.
+- **Asistan Cevapları Checkpoint'lenmiş Hafızaya Hiç Yazılmıyordu**: `execute_step_node`, `_run_chat`/`_run_document_qa`'nın döndürdüğü `history` girdisini (asistanın kendi cevabı) `chat_result`/`document_qa_result` içine gömüp hiçbir zaman üst seviye bir state güncellemesine yükseltmiyordu; bu yüzden `history` reducer'ı bunu hiç görmüyor, konuşma hafızasında yalnızca kullanıcı mesajları birikiyordu. Artık `history` her iki adımda da üst seviyeye taşınıyor.
+### Eklendi
+- **Kayan Pencere + Özet Hafıza**: `PlanningState`'e `history_summary`/`history_summarized_through` alanları eklendi; `consolidate_memory_node`, pencerenin (`HISTORY_WINDOW=12`) dışına yeteri kadar (`CONSOLIDATION_BATCH_SIZE=4`) tur çıktığında hızlı katman modeliyle (`MemorySummarizerAgent`) bu turları özetler. Ayrı bir depo/servis eklenmedi — aynı checkpoint'lenmiş state'in bir alanı (`HISTORY_RAW_CAP=40` ham tutma sınırı).
+- `document_qa.md`/`chat.md` prompt şablonlarına, konuşma özetini belge bağlamından açıkça ayıran yeni bir bölüm eklendi (`{{history_summary}}`); `TEMPLATE_CONTRACTS` ve yeni `memory_summary` şablonu/ajanı (`MemorySummarizerAgent`) eklendi.
+- Frontend: `localStorage`'da kalıcılaştırılan anonim istemci kimliği (`crypto.randomUUID()`), sayfa yenileme/yeni sekmede aynı checkpoint thread'inin (ve özetinin) yeniden kullanılmasını sağlıyor — gerçek kullanıcı kimlik doğrulaması değil, tarayıcıya özgü bir süreklilik.
+### Değiştirildi
+- `attachActiveDoc` varsayılanı `false` oldu; aktif belge artık her sohbet turuna varsayılan olarak eklenmiyor, kullanıcı onay kutusuyla açıyor.
+
+## [1.23.0] - 2026-08-02
+### Değiştirildi
+- **Tek Docker Compose Dosyası**: Kökteki `compose.yml` ile `deploy/docker/docker-compose.dev.yml` aynı geliştirme ortamını tanımlayan, zamanla birbirinden sapmış iki ayrı dosyaydı (ör. `deploy/docker/docker-compose.dev.yml`'de `frontend` servisi ve `alembic`/`pyproject.toml` mount'ları hiç yoktu, `langfuse` imaj etiketi ise iki dosyada farklıydı). Artık tek ve kanonik dosya kökteki `compose.yml`; `docker compose` bu dosyayı ekstra bir `-f` bayrağına gerek kalmadan otomatik bulur ve `Makefile` zaten bunu varsayıyordu.
+  - `langfuse` servis imajı `:2`den `:3`e hizalandı — backend'in kullandığı `langfuse` Python SDK'sı (v4) `:2` sunucusuyla uyumsuz.
+  - Postgres kullanıcı adı/şifre/veritabanı adı, Grafana admin şifresi ve Langfuse `NEXTAUTH_SECRET`/`SALT`/`ENCRYPTION_KEY` değerleri artık sabit kodlanmış değil, `.env`'den `${VAR:-varsayılan}` deseniyle okunuyor; backend'in `DATABASE_URL`'i de aynı `POSTGRES_*` değerlerinden türetiliyor ki iki servis birbirinden sapmasın.
+  - Kök `.env.example` bu değişkenlerin tamamını (daha önce yalnızca üç Ollama değişkeni ve eski bir `OLLAMA_MAX_TOKENS=1024` içeriyordu) güncel varsayılanlarla ve açıklayıcı yorumlarla kapsayacak şekilde yeniden yazıldı.
+### Kaldırıldı
+- `deploy/docker/docker-compose.dev.yml` (kökteki `compose.yml` ile tekilleştirildi) ve içeriği hiç doldurulmamış `deploy/docker/docker-compose.prod.yml` silindi.
+
+## [1.22.0] - 2026-08-02
+### Eklendi
+- **Agent Düşünme Seviyeleri (Hızlı / Dengeli / Derin)**: Kullanıcının her istekte hız/kalite tercihini seçebilmesini sağlayan `reasoning_level` alanı eklendi (Claude'daki hızlı/derin düşünme modlarının eşdeğeri).
+  - `app/core/enums/reasoning_level.py` (`ReasoningLevel`: `fast`/`balanced`/`deep`) ve `app/ai/reasoning_levels.py` (`get_reasoning_level_preset()`): her seviyenin model katmanı, Ollama "thinking mode" (`reasoning`), taslak deneme sayısı, kalite yargıcı açık/kapalı ve zaman aşımı çarpanını tek noktadan tanımlayan preset tablosu.
+  - `draft_graph.py`'deki reflexion loop (writer → verify → judge → revise) artık `reasoning_level`'a göre davranıyor: `fast` tek denemede durur ve yargıcı atlar (zaten sıcak duran hızlı-katman modelini writer/reviser için de kullanarak), `deep` aynı kalite modelini "thinking mode" açık şekilde 3 denemeye kadar çalıştırır ve yargıcı zorunlu kılar. `balanced`, bugüne kadarki sabit davranışla (2 deneme, judge ayarına bağlı, thinking mode kapalı) birebir aynı — üçüncü bir model eklenmedi, 16GB RAM'li makinelerde zaten eşzamanlı yüklü iki model (kalite+hızlı) yeniden kullanıldı.
+  - `planning_graph.py`, `chat_service.py`, `draft_service.py`: `reasoning_level` sohbet ve taslak uç noktalarından graph state'ine ve zaman aşımı hesaplamalarına taşınıyor; HITL "revise" aşamasında seviye yükseltme (ör. hızlıdan derine geçiş) desteği.
+  - `ChatMessageRequest`, `ChatResumeRequest`, `DraftRequestSchema`: yeni opsiyonel/varsayılanlı `reasoning_level` alanı.
+  - Frontend: sohbet girişi ve taslak formu yanında "Düşünme Seviyesi" seçici (`<select>`), mevcut yazışma-türü seçici deseniyle aynı stilde.
+  - Kapsam dışı bırakılanlar (sonraki iş): `document_analysis_graph`/`routing_graph` seviyelendirmesi, best-of-N örnekleme, "otomatik" adaptif seviye, `/chat/resume` seviye-yükseltme arayüzü.
+
+## [1.21.0] - 2026-08-01
+### Değiştirildi
+- **Docker Geliştirme Ortamı**: `backend.Dockerfile` artık `requirements.txt` yerine `requirements-dev.txt` kuruyor (yeni HITL entegrasyon testinin ihtiyaç duyduğu `pytest-cov`/`pytest-timeout`/`langgraph-checkpoint` imajda hiç yoktu) ve `alembic/`, `alembic.ini`, `pyproject.toml` dosyalarını imaja kopyalıyor. `compose.yml` aynı yolları `app/`/`tests/` ile aynı desende canlı volume olarak da bağlıyor; migration veya pytest yapılandırması değişiklikleri artık yeniden build gerektirmiyor.
+
+### Düzeltildi
+- **Docker İçinde Tam Test Koşusu**: Backend imajı build edilip `db`/`redis`/`qdrant`/`backend` servisleri ayağa kaldırılarak paket ilk kez uçtan uca `python -m pytest tests/` ile Docker içinde çalıştırıldı. Süreçte ortaya çıkan gerçek hatalar giderildi:
+  - `RedisCache.close()` içinde artık deprecated olan `redis.asyncio.Redis.close()` çağrısı `.aclose()` ile değiştirildi. `warnings=error` politikası altında bu tek uyarı, `/documents/analyze` gibi `rate_limit()` arkasındaki herhangi bir uç nokta tetiklendiği an sonraki **tüm** testlerin teardown'ında art arda patlıyordu (227 hata).
+  - `tests/conftest.py`'ye her testten sonra process-genelindeki Redis istemci referansını **kapatmadan** bırakan bir `autouse` fixture eklendi: bağlantının bağlı olduğu event loop (TestClient'in kısa ömürlü anyio-portal loop'u) teardown anında zaten kapanmış oluyor; kapatmayı denemek "Event loop is closed" hatasını "farklı loop'a bağlı" hatasıyla değiştirmekten öteye geçmiyordu.
+  - `test_ollama.py`, `test_base_agent.py`, `test_qdrant.py`, `test_retrieval.py`, `test_user_router.py` içindeki, kodun güncel davranışından (num_ctx/keep_alive parametreleri, `{{çift parantez}}` prompt biçimi, koleksiyon boyutu doğrulaması, `datetime.utcnow()` deprecation, silinmiş `LLMReranker` testinden kalan ölü kod parçası) sapmış eski varsayımlar güncellendi.
+  - `document_analysis_graph.py`'nin artık tek bir birleşik sınıflandırma+alan-çıkarım çağrısı yapması nedeniyle `test_document_analysis.py` tamamen bu tek çağrı etrafında yeniden yazıldı; iki ayrı ajanı (`ClassifierAgent`+`MetadataAgent`) mock'layan eski testler koleksiyonda hiç eşleşmiyordu.
+  - `alembic upgrade head` ve `GET /api/v1/health?deep=true` (postgres/redis/qdrant/ollama/checkpointer hepsi `ok`) Docker içinde doğrulandı.
+  - Sonuç: **621/621 test geçti.**
+
+## [1.20.0] - 2026-08-01
+### Eklendi
+- **Görev 2 Uç Noktaları ve Ölü Kod Temizliği**:
+  - `POST /api/v1/routing/suggest`: `POST /documents/draft`'tan bağımsız, sadece taslak metni + güven skoru okuyan tek başına birim-yönlendirme uç noktası. İnsan bir taslağı elle düzenledikten sonra yeni bir üretim ödemeden yönlendirme kararını tazeleyebilir.
+  - `frontend/src/App.tsx` içine `judge`, `revise` ve `human_gate` düğümleri SVG aşama grafiğine eklendi; her biri artık kendi gerçek `node_start`/`node_end`/`interrupt` olaylarıyla besleniyor. Taslak oluşturma formu (`POST /documents/draft`'ı önceden hiç çağırmıyordu) ve eksik-bilgi/onay kesintileri için devam formu eklendi.
+  - Sidebar artık `EvrakField`'in **15 alanının tamamını**, `missing_fields` listesini (önem derecesi + mevzuat atfıyla) ve `mevzuat_references`'ı gösteriyor — önceden yalnızca `tarih`/`sayı` görünüyordu.
+
+### Kaldırıldı
+- Hiçbir yerde kurulmayan `editor`/`evaluator`/`metadata`/`orchestrator`/`reflection` ajanları, `workflows/system_graph.py`, `infrastructure/providers/vllm.py` (LLM fabrikasındaki kayıtsız `"vllm"` dalıyla birlikte), `core/permissions/role_checker.py` (hiçbir middleware'in hiç doldurmadığı `request.state.user_role`'e bağımlıydı), sıfır route'lu `evaluation`/`feedback`/`settings` domain iskeletleri (9 dosya) ve iki 0 byte'lık worker betiği (`workers/cleanup.py`, `workers/embedding.py`) silindi.
+- `ai/retrieval/reranker.py` (`LLMReranker`) kaldırıldı: ~90 sn'lik taslak gecikme bütçesinin kritik yolunda, bu küçüklükteki bir korpusta 3 sonucu yeniden sıralamak hiçbir zaman kalitenin belirleyicisi olmadı.
+- İlk EventBus abonesi (`document.analyzed` → yapılandırılmış log satırı) kaydedildi; `DocumentService`/`DraftService`'in `publish()` çağrılarının artık gerçek bir dinleyicisi var.
+
+## [1.19.0] - 2026-08-01
+### Eklendi
+- **Tipli SSE Olay Sözleşmesi ve Gözlemlenebilirlik**:
+  - `emit_node_error`/`emit_node_skipped`/`emit_interrupt` ve kuyruk başına monotonik bir `seq` sayacı eklendi; istemci olayları sıralayabiliyor ve `interrupt()` içeren bir düğümü resume ederken oluşan tekrar (replay) olayını tekilleştirebiliyor.
+  - `event_schema.py`: on SSE olay tipinin şeklini bir kez, Pydantic modelleriyle yazan sözleşme dosyası; `test_event_contract.py` sıfır kod üretimi (codegen) kurmadan bu sözleşmeyi doğruluyor.
+  - `CorrelationIdMiddleware` (en dıştaki middleware, `X-Request-ID`) eklendi ve bir `ContextVar` aracılığıyla `JSONFormatter`'a bağlandı; yapılandırılmış loglar artık gerçekten yapılandırılmış (tek bir önceden biçimlendirilmiş mesaj string'i değil).
+  - `observability/ai_metrics.py`: düğüm/LLM süresi, token sayımı, taslak skorları, revizyon sayısı, yargıç hataları, HITL kesinti/devam sayaçları, yapılandırılmış-çıktı yeniden deneme sayaçları — `BaseAgent` ve olay yayıcılarına bağlandı.
+  - `GET /api/v1/health?deep=true`: Postgres/Redis/Qdrant/Ollama/checkpointer'ı zaman aşımı altında sınayan, hiçbir şeyi kontrol etmeyen eski kimliksiz `/health`'in yerini alan birleşik derin sağlık kontrolü.
+  - `build_trace_config()`: üç yerde birebir kopyalanmış `_trace_config` mantığını tek noktaya topladı.
+- **Prompt Enjeksiyonu Guardrail'leri ve Sınır Doğrulaması**:
+  - `scrub_extracted_text()`: çıkarılan evrak metninden sıfır-genişlikli/bidi kontrol karakterlerini ve Türkçe/İngilizce talimat-geçersizleştirme satırlarını temizler; çıkarımdan hemen sonra, `char_count` eşiği çalışmadan önce uygulanır — yüklenen bir PDF sistemin bakış açısından saldırgan kontrolündeki bir girdidir.
+  - `assert_no_prompt_leak()` artık `BaseAgent.run_structured()`'da da çalışıyor (önceden bu yolda ölüydü); yazar/revizör/sınıflandırıcı ajanları görünür bir sızıntıda denemeyi kapalı şekilde başarısız sayıp otomatik bir revizyon yerine insan incelemesine yönlendiriyor.
+  - `validate_storage_path()`: kimlik doğrulaması gerektirmeyen bir uç noktada, istemcinin verdiği `storage_path` ile `storage.get_file(...)` arasında başka hiçbir engel yoktu — biçimsel olmayan bir path-traversal okuma ilkelliğiydi.
+  - `DraftClassificationSchema`: `DraftRequestSchema.classification` artık prompt'a doğrudan giden serbest bir `dict` değil, taslak akışının gerçekten tükettiği dar ve tipli bir alan kümesi.
+  - `_read_bounded()`: yükleme 1 MiB'lik parçalar hâlinde okunuyor ve çalışan toplam limiti aştığı an reddediliyor; önceden tüm gövde boyut kontrolü hiç çalışmadan belleğe alınıyordu.
+  - `BaseAgent.__init__`'ten ölü `tools` parametresi kaldırıldı — saklanıyordu, hiç okunmuyordu, bu kod tabanındaki hiçbir ajan tool-calling kullanmıyor.
+
+## [1.18.0] - 2026-08-01
+### Eklendi
+- **Postgres Checkpointer Üzerinde HITL (Human-in-the-Loop) Kesinti/Devam**:
+  - Eksik Alembic iskeleti tamamlandı: `alembic.ini` hiç yoktu, `env.py`/`script.py.mako` 0 byte'tı, `users`/`invited_emails` tabloları için bile bir baseline migration yoktu. `env.py`, `checkpoint%` tablolarını `include_object` ile dışlıyor; bu tabloları `AsyncPostgresSaver.setup()` kendi `CREATE TABLE IF NOT EXISTS` mantığıyla yönetiyor.
+  - `infrastructure/checkpointing/` eklendi: en-iyi-çaba (best-effort) init/close bir `AsyncExitStack` etrafında — `AsyncPostgresSaver.from_conn_string()` kendisi bir async context manager olduğu için doğrudan `await` edilip bir kenara bırakılamaz.
+  - `planning_graph`'a, taslak adımını çalıştıran `executor` düğümünden **ayrı** yeni bir `human_gate` düğümü eklendi: `interrupt()` kendi düğümünü resume'da baştan tekrar çalıştırır; `execute_step_node` içinde olsaydı resume, executor'ın state'e zaten yazdığı ~30 sn'lik taslak üretimini tekrarlardı.
+  - `thread_id = session_id` `chat_service`/`chat` router'ı boyunca bağlandı; `POST /chat/resume`, `POST /chat/resume/sync`, `GET /chat/sessions/{id}/state` ve `ChatResumeRequest` (`answer`/`approve`/`revise`/`reject`) eklendi.
+  - Yalnızca `planning_graph` bir checkpointer alıyor — dört alt graf `execute_step_node` içinden `.ainvoke()` ile çağrılıyor, düğüm olarak kayıtlı değiller; üzerlerine checkpointer koymak ilgisiz, öksüz checkpoint soyağaçları başlatırdı.
+- **Checkpoint'lenmiş Graf State'i Üzerinden Konuşma Hafızası**:
+  - `CheckpointMemory`: `planning_graph.aget_state()` üzerine ince, salt-okunur bir görünüm. `thread_id` zaten `session_id`'ye eşit ve checkpointer geçmişi, kesinti payload'ını ve her şeyi zaten tutarlı biçimde saklıyor.
+  - Planlayıcıya kısa-onay devam kuralı eklendi: bir taslak/analiz teklifinden sonra "evet, hazırla" artık düz sohbete düşmek yerine o niyeti sürdürüyor; 6 kelimelik bir mesaj sınırı ve yalnızca belirsiz olmayan bir devam eylemi olan iki niyetle (`draft`/`analyze`) sınırlı.
+
+### Kaldırıldı
+- `ConversationWindowMemory`/`SummaryMemory`/`VectorMemory` kaldırıldı: checkpointer'ın yanında ikinci bir Redis tabanlı depo, çökme anında ikisi arasında bölünen bir yazma riski taşıyordu ve periyodik özet üretimi ~90 sn'lik bütçeyi zorlardı.
+
+## [1.17.0] - 2026-08-01
+### Eklendi
+- **Hibrit Kalite Kapısı ve Sınırlı Taslak Reflexion Döngüsü**:
+  - `judge_draft()`/`merge_verdicts()`: regex'in göremediği şeyler (talebe uygunluk, arz/rica yönü, resmî üslup, muhatap tutarlılığı) için deterministik doğrulayıcının üzerine hızlı-katman bir LLM yargıcı eklendi. Birleşik skor `0.6*deterministik + 0.4*yargıç`; herhangi bir kritik bulgu veya "talebi karşılamıyor" kararı skoru otomasyon eşiğinin altına sabitliyor.
+  - `build_missing_info_request()`/`apply_answers()`: bir taslağın `[...]` yer tutucularının deterministik, LLM'siz biçimde insan tarafından cevaplanabilir sorulara dönüştürülmesi ve taslağı yeniden üretmeden cevaplandıktan sonra devam edilmesi.
+  - `draft_graph` yeniden kuruldu: `validate_input → writer → verify → revise → writer`, `MAX_DRAFT_ATTEMPTS=2` ile sınırlı. Düzeltilebilir kusurlar (eksik yapı, doğrulanamayan iddialar, düzeltilebilir yargıç bulguları) yeni bir `ReviserAgent` üzerinden döngüye giriyor; kalan bir yer tutucu veya çözülememiş bir yazışma türü aynı boşluğa tekrar denemek yerine doğrudan insan incelemesine gidiyor.
+  - `_build_repair_prompt` her zaman brief'in tamamını + önceki taslağı + numaralı kusur listesini gönderiyor — `num_ctx` içinde rahatça kalıyor, yazar zaten ham `source_document`'i hiç görmüyordu.
+- **Yeniden Deneme/Zaman Aşımı Politikası ve Üçüncü Katman Analiz Yedeği**:
+  - `resilience.py`: `RetryPolicy`'yi import eden tek yer (sürümler arası `langgraph.pregel`↔`langgraph.types` taşınmasına karşı), `LLM_RETRY`/`IO_RETRY` ve `node_timeout()`. Bilerek `writer`/`revise` düğümlerine uygulanmıyor — zaten token yayınlamış bir düğümü yeniden denemek bunları UI'a tekrar oynatırdı.
+  - `document_analysis_graph` artık isteğe bağlı bir `fast_llm_client` alıyor: kalite katmanı hem birleşik hem yalnız-sınıflandırma çağrısında başarısız olursa, `DocumentType.OTHER`'a düşmeden önce hızlı katmanda bir kez daha deneniyor.
+  - `retrieve_mevzuat_node` artık `"rag"` id'si altında gerçek `node_start`/`node_end` yayıyor (getirilen belgeler ve render edilmiş bağlamla birlikte) — önceden hiçbir şey yaymıyordu ve bu, frontend'in Mevzuat panelinin hep boş kalmasının kök nedeniydi.
+
+## [1.16.0] - 2026-08-01
+### Değiştirildi
+- **Bağımlılık ve Araç Zinciri Yükseltmesi**: `langgraph`, `interrupt`/`Command`/`RetryPolicy` garanti eden bir sürüm aralığına sabitlendi; `langgraph-checkpoint-postgres`, `psycopg[binary,pool]`, `prometheus-client` eklendi. `pytest-cov`/`pytest-timeout` ve tutarlı async test davranışı için `[tool.pytest.ini_options]` (asyncio_mode=auto, testpaths, timeout) eklendi. Frontend'e eslint + typescript-eslint, vitest + testing-library eklendi (`npm run lint` daha önce çalışacağı bir yapılandırmaya bile sahip değildi).
+- **Prompt Yöneticisi ve Şablon Seti Konsolidasyonu**:
+  - Modül seviyesi `prompt_manager` tekil örneği kaldırıldı; `get_prompt_manager()` artık tek giriş noktası. `TEMPLATE_CONTRACTS` + `declared_placeholders()` eklendi; her şablonun `{{placeholder}}` kümesi, ilgili ajanın gerçekten sağladığıyla karşılaştırılıyor.
+  - `orchestrator.md`/`metadata.md`/`editor.md`/`evaluator.md`/`reflection.md` şablonları silindi (hiçbir ajan tarafından referans verilmiyorlardı ya da artık çalışmayan bir akışı tanımlıyorlardı); `judge.md` ve `reviser.md` eklendi. `chat.md`'nin kaldırılmış bir "editör ve kendini denetleme" aşamasını kullanıcıya duyuran metni düzeltildi.
+  - Yeni `test_prompt_templates.py`: her şablonun deklare edilip edilmediğini, diskte var olup olmadığını ve tam olarak bir ajan modülü tarafından referans verilip verilmediğini doğrulayan iki yönlü sözleşme testi — beş öksüz şablonu tam olarak yakalayacak türden bir kontrol.
 
 ## [1.15.0] - 2026-07-31
 ### Eklendi

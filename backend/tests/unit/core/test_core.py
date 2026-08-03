@@ -25,7 +25,6 @@ from app.core.constants import (
     MAX_RETRY_ATTEMPTS,
 )
 from app.core.enums import DocumentStatus, UserRole
-from app.core.permissions import RoleChecker
 
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -87,69 +86,8 @@ class TestSystemConstants:
         assert MAX_RETRY_ATTEMPTS > 0
 
 
-# ────────────────────────────────────────────────────────────────────────────────
-# Permissions — RoleChecker
-# ────────────────────────────────────────────────────────────────────────────────
-
-
-class TestRoleChecker:
-    def test_authorized_role_passes(self):
-        """Correct role should pass without raising an exception."""
-        from fastapi import Request
-
-        checker = RoleChecker(allowed_roles=[UserRole.ADMIN])
-
-        scope = {
-            "type": "http",
-            "method": "GET",
-            "path": "/",
-            "headers": [],
-            "query_string": b"",
-        }
-        request = Request(scope=scope)
-        request.state.user_role = UserRole.ADMIN
-
-        result = checker(request)
-        assert result is None
-
-    def test_unauthorized_role_raises(self):
-        """Incorrect role should raise AuthorizationException."""
-        from fastapi import Request
-
-        from app.api.exceptions import AuthorizationException
-
-        checker = RoleChecker(allowed_roles=[UserRole.ADMIN])
-
-        scope = {
-            "type": "http",
-            "method": "GET",
-            "path": "/",
-            "headers": [],
-            "query_string": b"",
-        }
-        request = Request(scope=scope)
-        request.state.user_role = UserRole.EMPLOYEE
-
-        with pytest.raises(AuthorizationException):
-            checker(request)
-
-    def test_missing_role_raises(self):
-        """Request with no role state should raise AuthorizationException."""
-        from fastapi import Request
-
-        from app.api.exceptions import AuthorizationException
-
-        checker = RoleChecker(allowed_roles=[UserRole.ADMIN])
-
-        scope = {
-            "type": "http",
-            "method": "GET",
-            "path": "/",
-            "headers": [],
-            "query_string": b"",
-        }
-        request = Request(scope=scope)
-        # user_role intentionally not set on request.state
-
-        with pytest.raises(AuthorizationException):
-            checker(request)
+# Role-based access control is tested through the working implementation,
+# app.api.dependency.require_roles (see tests/unit/domains/test_user_router.py).
+# The unused core.permissions.RoleChecker it superseded -- which depended on a
+# request.state.user_role that no authentication middleware ever populated --
+# was removed along with its tests.

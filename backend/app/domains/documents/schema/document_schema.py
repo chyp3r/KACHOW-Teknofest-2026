@@ -1,42 +1,14 @@
-from pydantic import BaseModel, Field
 from typing import List
 
+from pydantic import BaseModel, Field, field_validator
+
 from app.ai.compliance.evrak_field import EvrakField, MissingField
+from app.ai.verification import InfoQuestion
 from app.core.enums.compliance_status import ComplianceStatus
+from app.core.enums.correspondence_type import CorrespondenceType
 from app.core.enums.document_type import DocumentType
-
-class DocumentUploadSchema(BaseModel):
-    filename: str
-
-class DocumentClassificationSchema(BaseModel):
-    document_id: str
-    document_type: str
-    confidence: float
-
-class DocumentAnalysisSchema(BaseModel):
-    document_id: str
-    extracted_entities: List[str]
-    missing_info: List[str]
-    recommended_rules: List[str]
-    summary: str
-
-class DraftRequestSchema(BaseModel):
-    """Payload for initiating a drafting and routing workflow."""
-
-    storage_path: str = Field(description="Ham evrakın saklandığı referans yol (Görev 1 çıktısından gelir).")
-    classification: dict = Field(description="Görev 1'den elde edilen belge analiz ve sınıflandırma sonucu (EvrakField dahil).")
-    instructions: str = Field(default="", description="Opsiyonel kullanıcı talimatı veya prompt eklemesi.")
-    correspondence_type: str | None = Field(default=None, description="Zorunlu tutulmak istenen yazışma türü (örn. 'cover_letter').")
-
-
-class DraftResponseSchema(BaseModel):
-    """Result of the drafting and routing workflow."""
-
-    draft: str = Field(description="Üretilen nihai resmî yazı taslağı.")
-    confidence_score: float = Field(description="Taslak kalitesine verilen güven skoru (0-100).")
-    requires_human_approval: bool = Field(description="İnsan onayı gerektirip gerektirmediği (eksik bilgi vb. durumlar).")
-    destination: str = Field(description="Evrakın yönlendirildiği birim (HR, Legal vb.) veya aksiyon.")
-    justification: str = Field(description="Yönlendirme kararının gerekçesi.")
+from app.core.enums.reasoning_level import ReasoningLevel
+from app.shared.validator.storage_path_validator import validate_storage_path
 
 
 class ExtractionInfoSchema(BaseModel):
@@ -47,6 +19,10 @@ class ExtractionInfoSchema(BaseModel):
     char_count: int = Field(description="Çıkarılan karakter sayısı.")
     used_ocr: bool = Field(
         description="Metin OCR ile okunduysa true; alanlar doğrulanmalıdır."
+    )
+    scrubbed_markers: List[str] = Field(
+        default_factory=list,
+        description="Metinden temizlenen olası talimat-enjeksiyonu işaretçileri.",
     )
 
 
@@ -67,6 +43,9 @@ class DocumentAnalysisResponseSchema(BaseModel):
 
     file_name: str = Field(description="Yüklenen dosyanın adı.")
     storage_path: str = Field(description="Ham evrakın saklandığı referans yol.")
+    analysis_id: str = Field(
+        default="", description="Bu analiz sonucunun kimliği (storage_path ile aynı)."
+    )
     extraction: ExtractionInfoSchema = Field(description="Metin çıkarma bilgisi.")
     document_type: DocumentType = Field(description="Belirlenen evrak türü.")
     document_type_label: str = Field(description="Evrak türünün Türkçe adı.")
@@ -80,3 +59,69 @@ class DocumentAnalysisResponseSchema(BaseModel):
     mevzuat_references: List[MevzuatReferenceSchema] = Field(
         default_factory=list, description="İlgili mevzuat önerileri."
     )
+
+
+class DraftClassificationSchema(BaseModel):
+    """The narrow slice of Görev 1's output the draft flow actually consumes.
+
+    Replaces ``DraftRequestSchema.classification: dict`` (was a free-form,
+    unvalidated dict fed straight into prompts -- a correctness hole and an
+    injection surface at once).
+    """
+
+    document_type: DocumentType = Field(description="Gelen evrakın türü.")
+    document_type_label: str = Field(default="", description="Evrak türünün Türkçe adı.")
+    summary: str = Field(default="", description="Evrakın kısa Türkçe özeti.")
+    fields: EvrakField = Field(default_factory=EvrakField)
+    missing_fields: List[MissingField] = Field(default_factory=list)
+    mevzuat_references: List[MevzuatReferenceSchema] = Field(default_factory=list)
+
+
+class DraftRequestSchema(BaseModel):
+    """Payload for initiating a drafting and routing workflow."""
+
+    storage_path: str = Field(
+        min_length=1,
+        max_length=512,
+        description="Ham evrakın saklandığı referans yol (Görev 1 çıktısından gelir).",
+    )
+    classification: DraftClassificationSchema = Field(
+        description="Görev 1'den elde edilen belge analiz ve sınıflandırma sonucu."
+    )
+    instructions: str = Field(
+        default="", max_length=4000, description="Opsiyonel kullanıcı talimatı veya prompt eklemesi."
+    )
+    correspondence_type: CorrespondenceType | None = Field(
+        default=None, description="Zorunlu tutulmak istenen yazışma türü."
+    )
+    reasoning_level: ReasoningLevel = Field(
+        default=ReasoningLevel.BALANCED,
+        description="Hız/kalite tercihi: fast (hızlı), balanced (dengeli, varsayılan), deep (derin muhakeme).",
+    )
+
+    @field_validator("storage_path")
+    @classmethod
+    def _validate_storage_path(cls, value: str) -> str:
+        return validate_storage_path(value)
+
+
+class DraftResponseSchema(BaseModel):
+    """Result of the drafting and routing workflow."""
+
+    draft_id: str = Field(default="", description="Kalıcı taslak kaydının kimliği.")
+    draft: str = Field(description="Üretilen nihai resmî yazı taslağı.")
+    confidence_score: float = Field(description="Taslak kalitesine verilen hibrit güven skoru (0-100).")
+    requires_human_approval: bool = Field(description="İnsan onayı gerektirip gerektirmediği.")
+    attempts: int = Field(default=1, description="Taslak üretim/revizyon deneme sayısı.")
+    verification: dict = Field(
+        default_factory=dict, description="Deterministik doğrulayıcının raporu (VerificationReport)."
+    )
+    judge: dict = Field(
+        default_factory=dict, description="Kalite yargıcının verdiği (varsa) yapılandırılmış değerlendirme."
+    )
+    missing_information: List[InfoQuestion] = Field(
+        default_factory=list,
+        description="Taslağı tamamlamak için kullanıcıdan istenen eksik bilgiler.",
+    )
+    destination: str = Field(description="Evrakın yönlendirildiği birim veya aksiyon.")
+    justification: str = Field(description="Yönlendirme kararının gerekçesi.")

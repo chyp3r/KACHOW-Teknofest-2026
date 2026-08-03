@@ -1,8 +1,6 @@
 from app.domains.documents.schema.document_schema import (
-    DocumentUploadSchema,
-    DocumentClassificationSchema,
     DocumentAnalysisResponseSchema,
-    DocumentAnalysisSchema,
+    DraftClassificationSchema,
     DraftRequestSchema,
     DraftResponseSchema,
     ExtractionInfoSchema,
@@ -10,10 +8,8 @@ from app.domains.documents.schema.document_schema import (
 )
 
 __all__ = [
-    "DocumentUploadSchema",
-    "DocumentClassificationSchema",
-    "DocumentAnalysisSchema",
     "DocumentAnalysisResponseSchema",
+    "DraftClassificationSchema",
     "DraftRequestSchema",
     "DraftResponseSchema",
     "ExtractionInfoSchema",

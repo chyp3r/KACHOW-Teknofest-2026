@@ -1,3 +1,6 @@
 -r requirements.txt
-reportlab>=4.2.0
-Levenshtein>=0.25.0
+reportlab==5.0.0
+Levenshtein==0.27.3
+pytest-cov==7.1.0
+pytest-timeout==2.4.0
+langgraph-checkpoint==4.1.1

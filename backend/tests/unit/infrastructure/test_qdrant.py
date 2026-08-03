@@ -14,8 +14,27 @@ def store():
 
 @pytest.mark.asyncio
 async def test_create_collection_exists(store):
+    """An existing collection is validated, not blindly accepted -- a
+    dimension mismatch would otherwise fail every write silently."""
     store.client.collection_exists.return_value = True
+    info = MagicMock()
+    info.config.params.vectors = MagicMock(size=384)
+    info.config.params.sparse_vectors = {"text-sparse": MagicMock()}
+    store.client.get_collection.return_value = info
+
     assert await store.create_collection("col1", 384) is True
+    store.client.create_collection.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_collection_exists_but_dimension_mismatch(store):
+    store.client.collection_exists.return_value = True
+    info = MagicMock()
+    info.config.params.vectors = MagicMock(size=768)
+    info.config.params.sparse_vectors = {}
+    store.client.get_collection.return_value = info
+
+    assert await store.create_collection("col1", 384) is False
     store.client.create_collection.assert_not_called()
 
 @pytest.mark.asyncio

@@ -1,26 +1,52 @@
 import logging
 from typing import Any, Dict, Literal, TypedDict
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
 from app.ai.agents.router import RouterAgent
+from app.ai.policy import get_policy
 from app.ai.llms.base import BaseLLMClient
+from app.ai.workflows.events import emit_node_end, emit_node_start
+from app.ai.workflows.resilience import LLM_RETRY, TRANSIENT_ERRORS, node_timeout
 
 logger = logging.getLogger(__name__)
 
+#: Below this score the draft is not trustworthy enough to route automatically.
+#: Policy owns it alongside `MIN_AUTOMATED_CONFIDENCE_SCORE`, whose relationship
+#: to it is an enforced invariant: 70 is "may be sent without review", 50 is
+#: "may not be routed at all", and inverting them would make a draft too weak to
+#: route simultaneously good enough to send.
+HUMAN_APPROVAL_SCORE_THRESHOLD = get_policy().routing.human_approval_score_threshold
 
-class RoutingState(TypedDict):
-    """LangGraph State representing the routing workflow context."""
+HUMAN_APPROVAL_UNIT = get_policy().routing.human_approval_unit
+
+#: The routing target list. Kept as a module constant so the Literal below, the
+#: prompt and any consumer cannot drift apart.
+ROUTING_UNITS = get_policy().routing.units
+
+
+class RoutingState(TypedDict, total=False):
+    """LangGraph state for the unit-routing workflow.
+
+    Declared with ``total=False`` and including every key the node writes.
+    LangGraph drops updates for keys absent from the state schema, which is why
+    ``routed_unit``/``reasoning``/``priority`` previously never reached the API
+    response even though the node returned them.
+    """
 
     draft: str
     confidence_score: float
-    final_destination: str  # HR, Legal, Accounting, Citizen, HumanApproval
+    final_destination: str
     justification: str
+    routed_unit: str
+    reasoning: str
+    priority: str
 
 
 class RouteOutput(BaseModel):
-    """Pydantic schema for structured routing decisions."""
+    """Structured routing decision."""
 
     destination: Literal[
         "İnsan Kaynakları",
@@ -29,73 +55,100 @@ class RouteOutput(BaseModel):
         "Vatandaş İlişkileri",
         "Bilgi İşlem Dairesi",
         "Destek Hizmetleri",
-        "İnsan Onayı Gerekli"
+        "İnsan Onayı Gerekli",
     ] = Field(
         description="Yazının yönlendirileceği birim. Yalnızca tanımlı listeden bir birim seçilmelidir."
     )
     justification: str = Field(
-        description="Yazının içeriğine göre neden bu birime yönlendirildiğinin Türkçe gerekçesi."
+        description="Yazının içeriğine göre neden bu birime yönlendirildiğinin kısa Türkçe gerekçesi."
     )
 
 
-def create_routing_graph(llm_client: BaseLLMClient):
-    """Create and compile the LangGraph document routing workflow.
+def _decision(destination: str, justification: str) -> Dict[str, Any]:
+    """Build the full routing state update for a decision.
 
-    Flow: START -> Router Node -> END
+    Args:
+        destination: The chosen unit.
+        justification: Turkish rationale.
+
+    Returns:
+        The state update, with both the canonical and the API-facing key names.
+    """
+    return {
+        "final_destination": destination,
+        "justification": justification,
+        "routed_unit": destination,
+        "reasoning": justification,
+        "priority": "Yüksek" if destination == HUMAN_APPROVAL_UNIT else "Normal",
+    }
+
+
+def create_routing_graph(llm_client: BaseLLMClient):
+    """Create and compile the unit-routing workflow.
+
+    Flow: START -> route -> END
+
+    Args:
+        llm_client: LLM used for the routing decision. Pass the fast-tier client:
+            the output is one label plus one sentence.
+
+    Returns:
+        The compiled LangGraph workflow.
     """
     router_agent = RouterAgent(llm_client)
 
-    # 1. Routing Node
-    async def routing_node(state: RoutingState) -> Dict[str, Any]:
+    @node_timeout("route")
+    async def routing_node(state: RoutingState, config: RunnableConfig) -> Dict[str, Any]:
         logger.info("Running Routing Node...")
-
-        prompt = (
-            f"Taslak İçeriği:\n\"\"\"\n{state['draft']}\n\"\"\"\n"
-            f"Güven Skoru: {state.get('confidence_score', 100.0)}\n\n"
-            "Bu yazının konusunu analiz ederek en uygun birime yönlendir.\n"
-            "Birim adını Türkçe olarak yaz (örn. 'İnsan Kaynakları', 'Hukuk Müşavirliği', 'Mali İşler', 'Vatandaş İlişkileri').\n"
-            "Güven skoru düşükse veya hassas bir durum varsa 'İnsan Onayı Gerekli' yönlendir.\n\n"
-            "Yönlendirme kararını ve gerekçesini yapılandırılmış Türkçe formatta döndür."
+        await emit_node_start(
+            config, "routing", "Birim Yönlendirme", "İlgili birim belirleniyor..."
         )
 
-        try:
-            # Fallback to HumanApproval if confidence score is critically low (< 50)
-            if state.get("confidence_score", 100.0) < 50.0:
-                logger.warning(
-                    f"Confidence score too low ({state['confidence_score']}). Forcing HumanApproval route."
-                )
-                return {
-                    "final_destination": "İnsan Onayı Gerekli",
-                    "justification": "Yazı güven skoru kritik düzeyde düşük olduğu için insan onayına yönlendirildi.",
-                    "routed_unit": "İnsan Onayı Gerekli",
-                    "reasoning": "Yazı güven skoru kritik düzeyde düşük olduğu için insan onayına yönlendirildi.",
-                    "priority": "Yüksek",
-                }
+        score = state.get("confidence_score", 100.0)
+        draft = (state.get("draft") or "").strip()
 
-            res: RouteOutput = await router_agent.run_structured(
-                messages=prompt, response_model=RouteOutput
+        if not draft:
+            update = _decision(
+                HUMAN_APPROVAL_UNIT,
+                "Yönlendirilecek bir taslak bulunmadığı için insan onayına yönlendirildi.",
             )
-            return {
-                "final_destination": res.destination,
-                "justification": res.justification,
-                "routed_unit": res.destination,
-                "reasoning": res.justification,
-                "priority": "Yüksek" if res.destination == "İnsan Onayı Gerekli" else "Normal",
-            }
-        except Exception as e:
-            logger.error(f"Routing Node failed: {e}", exc_info=True)
-            return {
-                "final_destination": "İnsan Onayı Gerekli",
-                "justification": "Yönlendirme hatası nedeniyle insan onayına yönlendirildi.",
-                "routed_unit": "İnsan Onayı Gerekli",
-                "reasoning": "Yönlendirme hatası nedeniyle insan onayına yönlendirildi.",
-                "priority": "Yüksek",
-            }
+        elif score < HUMAN_APPROVAL_SCORE_THRESHOLD:
+            logger.warning("Confidence score %.1f too low; forcing human approval.", score)
+            update = _decision(
+                HUMAN_APPROVAL_UNIT,
+                "Yazı güven skoru kritik düzeyde düşük olduğu için insan onayına yönlendirildi.",
+            )
+        else:
+            prompt = (
+                f'Taslak İçeriği:\n"""\n{draft}\n"""\n'
+                f"Güven Skoru: {score}\n\n"
+                "Bu yazının konusunu analiz ederek en uygun birime yönlendir.\n"
+                f"Yalnızca şu birimlerden birini seç: {', '.join(ROUTING_UNITS)}.\n"
+                "Hassas veya belirsiz bir durum varsa 'İnsan Onayı Gerekli' seç.\n\n"
+                "Yönlendirme kararını ve kısa gerekçesini yapılandırılmış Türkçe formatta döndür."
+            )
+            try:
+                res: RouteOutput = await router_agent.run_structured(
+                    messages=prompt, response_model=RouteOutput, temperature=0.0
+                )
+                update = _decision(res.destination, res.justification)
+            except TRANSIENT_ERRORS:
+                logger.warning("Routing Node hit a transient error; retrying.")
+                raise
+            except Exception:
+                logger.exception("Routing Node failed")
+                update = _decision(
+                    HUMAN_APPROVAL_UNIT,
+                    "Yönlendirme hatası nedeniyle insan onayına yönlendirildi.",
+                )
 
-    # Define Graph
+        await emit_node_end(
+            config, "routing", "Birim Yönlendirme", "Birim yönlendirmesi tamamlandı.", update
+        )
+        return update
+
     builder = StateGraph(RoutingState)
-    builder.add_node("route", routing_node)
-
+    builder.add_node("route", routing_node, retry_policy=LLM_RETRY)
     builder.add_edge(START, "route")
     builder.add_edge("route", END)
 
