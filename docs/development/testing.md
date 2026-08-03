@@ -196,6 +196,30 @@ Yeni Agent veya Workflow aşağıdaki metriklerle değerlendirilmelidir.
 * Token kullanımı
 * Tool başarı oranı
 
+### Deterministik Karar Katmanı Koşumu
+
+LLM olmayan karar fonksiyonları (`resolve_plan_deterministic`, `verify_draft`)
+`evaluation/` altındaki koşumla ölçülür. Ayrıntı: `evaluation/README.md`.
+
+```bash
+make eval           # tüm suite'ler -> evaluation/reports/all-latest.{json,md}
+make eval-baseline  # değişiklik öncesi referans noktası
+```
+
+Bu koşum **test değildir, ölçümdür** ve bilinçle `make test`ten ayrıdır:
+
+* Başarısız bir altın küme vakası, katmanın nerede zayıf olduğu bilgisidir; kırmızı
+  build'e çevrilmesi, kodu değil altın kümeyi zayıflatma baskısı yaratır.
+* Tam koşum pytest'in 60 sn'lik test başına zaman aşımına sığmaz.
+
+Regresyon kilidi `tests/unit/` altında kalır. Bir eşik veya karar kuralı
+değiştiren PR'lar `make eval` çıktısını `--baseline` ile karşılaştırıp raporu
+`evaluation/reports/` altına eklemelidir.
+
+> **LLM-as-judge kullanılmaz.** Yerel modelde yüzlerce yargı çağrısı saatler
+> sürer ve ölçüm aracının kendisi ölçümdeki en gürültülü terim olur; eşik
+> kalibrasyonu için elle yazılmış deterministik altın küme kullanılır.
+
 ---
 
 # Mock Kullanımı

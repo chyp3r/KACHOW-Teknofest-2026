@@ -1,8 +1,15 @@
 """Unit tests for the deterministic intent planner.
 
-The system has four fixed flows and the choice between them is a lookup, not
-a reasoning task for the vast majority of messages -- only genuinely
-ambiguous ones fall through to a single-label model call.
+The choice between the system's four flows is scored, not looked up: a message
+is weighed against a declarative evidence table and the decision is the margin
+between the top two intents. Only genuinely balanced or evidence-free messages
+fall through to a single-label model call.
+
+The `source` assertions below describe the *mechanism* that decided, and its
+vocabulary changed with the rewrite -- "keyword"/"short_message"/"memory_recall"
+named branches of an ordered cascade that no longer exists. What has not
+changed, and is what these tests actually guard, is the resolved intent and its
+step list for every case the cascade got right.
 """
 
 import pytest
@@ -39,7 +46,7 @@ def test_draft_keywords_resolve_to_the_draft_plan(message):
     decision = resolve_plan_deterministic(message, "uploads/doc.pdf")
     assert decision.intent == "draft"
     assert decision.steps == PLAN_BY_INTENT["draft"]
-    assert decision.source == "keyword"
+    assert decision.source == "scored"
 
 
 def test_analyze_keywords_resolve_to_the_analyze_plan():
@@ -71,7 +78,7 @@ def test_continuation_does_not_apply_to_non_continuable_previous_intents():
     instead of silently continuing those flows."""
     decision = resolve_plan_deterministic("evet", None, "chat")
     assert decision.source != "continuation"
-    assert decision.source == "short_message"
+    assert decision.source == "scored"
 
 
 def test_continuation_does_not_apply_to_long_messages():
@@ -85,7 +92,7 @@ def test_continuation_does_not_apply_to_long_messages():
 def test_continuation_requires_a_continuation_keyword():
     decision = resolve_plan_deterministic("hayır istemiyorum", None, "draft")
     assert decision.source != "continuation"
-    assert decision.source == "short_message"
+    assert decision.source == "scored"
 
 
 def test_chat_keywords_without_a_document_resolve_to_chat():
@@ -118,7 +125,7 @@ def test_a_question_word_without_a_question_mark_still_triggers_document_qa():
 def test_memory_recall_question_resolves_to_chat_even_with_a_document(message):
     decision = resolve_plan_deterministic(message, "uploads/doc.pdf")
     assert decision.intent == "chat"
-    assert decision.source == "memory_recall"
+    assert decision.source == "scored"
 
 
 def test_memory_recall_question_resolves_to_chat_without_a_document():
@@ -126,7 +133,7 @@ def test_memory_recall_question_resolves_to_chat_without_a_document():
         "Bu konuşmada daha önce hangi konuyu konuştuk, hatırlıyor musun?", None
     )
     assert decision.intent == "chat"
-    assert decision.source == "memory_recall"
+    assert decision.source == "scored"
 
 
 def test_memory_recall_wins_even_when_the_message_also_looks_like_a_document_question():
@@ -149,7 +156,7 @@ def test_memory_recall_does_not_override_draft_keyword_precedence():
 def test_short_message_without_a_document_resolves_to_chat():
     decision = resolve_plan_deterministic("tamam güzel", None)
     assert decision.intent == "chat"
-    assert decision.source == "short_message"
+    assert decision.source == "scored"
 
 
 def test_ambiguous_message_returns_none():
@@ -208,3 +215,81 @@ async def test_resolve_plan_without_a_client_uses_the_context_default_for_ambigu
 
     assert decision.intent == "document_qa"
     assert decision.source == "context_default"
+
+
+# --- Scored resolution: the categories the cascade could not reach -----------
+#
+# `evaluation/reports/all-baseline.md` measured the ordered cascade at 0.00 on
+# `inversion` and `precedence` -- not "weak", zero, every case. These pin the
+# behaviour that replaced it, and the plan-shape guarantees that come with it.
+
+
+def test_a_question_about_drafting_does_not_start_a_drafting_run():
+    """The `inversion` failure: "resmi yazi" matched before anything else could
+    object, so a definition question ran classification -> draft -> routing."""
+    decision = resolve_plan_deterministic("Resmi yazı ne demek, kısaca anlatır mısın?", None)
+
+    assert decision.intent == "chat"
+    assert decision.steps == PLAN_BY_INTENT["chat"]
+
+
+def test_a_greeting_still_resolves_when_a_document_is_attached():
+    """The `precedence` failure: the greeting branch was gated on
+    `document_id is None`, so this fell through every branch and escalated."""
+    decision = resolve_plan_deterministic("Merhaba", "uploads/doc.pdf")
+
+    assert decision.intent == "chat"
+
+
+def test_a_farewell_after_a_draft_turn_does_not_produce_a_draft():
+    decision = resolve_plan_deterministic(
+        "İyi akşamlar, yarın devam ederiz.", "uploads/doc.pdf", "draft"
+    )
+
+    assert decision.intent == "chat"
+
+
+def test_a_compound_request_runs_one_pipeline_covering_both_readings():
+    decision = resolve_plan_deterministic(
+        "Uygunluk denetimi yap, sonra cevabı kaleme al.", "uploads/doc.pdf"
+    )
+
+    assert decision.source == "compound"
+    assert decision.intent == "draft"
+    assert decision.steps == ["classification", "draft", "routing"]
+
+
+def test_compound_merging_keeps_canonical_step_order():
+    """The merge must not invent an ordering -- routing after draft after
+    classification, whichever intent contributed which step."""
+    decision = resolve_plan_deterministic(
+        "Belgeyi kontrol et ve gerekiyorsa bir üst yazı çıkar.", "uploads/doc.pdf"
+    )
+
+    assert decision.steps == ["classification", "draft", "routing"]
+
+
+def test_only_draft_and_analyze_compose_into_one_plan():
+    """Merging `chat` into `draft` would answer conversationally *and* start a
+    drafting run, which is not what either reading asked for."""
+    decision = resolve_plan_deterministic("Merhaba", "uploads/doc.pdf")
+
+    assert decision.source != "compound"
+    assert decision.steps == PLAN_BY_INTENT["chat"]
+
+
+def test_an_underspecified_command_escalates_rather_than_guessing():
+    decision = resolve_plan_deterministic("Gereğini yap.", "uploads/doc.pdf")
+
+    assert decision is None
+
+
+def test_every_decision_carries_its_confidence_and_evidence():
+    """The cascade reported only which branch it took. A production decision
+    now has to be explainable after the fact."""
+    decision = resolve_plan_deterministic("Bu evraka bir cevap yazısı hazırla.", "uploads/doc.pdf")
+
+    assert 0.0 <= decision.confidence <= 1.0
+    assert decision.evidence
+    assert "draft.explicit_request" in decision.evidence
+    assert isinstance(decision.alternatives, tuple)

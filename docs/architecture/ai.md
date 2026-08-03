@@ -117,7 +117,7 @@ Tüm sistem, yöneticilik yapan 2 katman ve 5 asenkron iş akışından (workflo
 ## Yönetici Katman
 
 ### Planning Graph (`planning_graph.py`)
-Sistemin tek orkestrasyon grafiğidir ve **tek checkpointer alan graf**budur (bkz. HITL bölümü). `planner.py`'deki **deterministik planlayıcı** ile gelen mesajı/eki analiz eder ve çalıştırılacak alt adımları (`classification`, `rag`, `draft`, `routing`, `chat`, `document_qa`) bir plan olarak belirler — bu artık bir LLM çağrısı değil, anahtar kelime/soru-işareti/önceki-niyet tabanlı bir arama tablosudur (`resolve_plan_deterministic`); yalnızca gerçekten belirsiz mesajlar hızlı-katman modele düşer. `executor` düğümü planı adım adım yürütür ve her adımın bağımlılığı başarısız olduysa (`_STEP_DEPENDENCIES`) o adımı hiç çalıştırmadan `SKIPPED` işaretler — başarısız bir taslağın üzerine boş girdiyle yönlendirme çalıştırılması buradan engellenir.
+Sistemin tek orkestrasyon grafiğidir ve **tek checkpointer alan graf**budur (bkz. HITL bölümü). `planner.py`'deki **deterministik planlayıcı** ile gelen mesajı/eki analiz eder ve çalıştırılacak alt adımları (`classification`, `rag`, `draft`, `routing`, `chat`, `document_qa`) bir plan olarak belirler — bu artık bir LLM çağrısı değil, bildirimsel bir kanıt tablosu üzerinde marj tabanlı bir skorlamadır (`resolve_plan_deterministic`, bkz. Planner bölümü); yalnızca kanıtı gerçekten dengeli ya da yok olan mesajlar hızlı-katman modele düşer. `executor` düğümü planı adım adım yürütür ve her adımın bağımlılığı başarısız olduysa (`_STEP_DEPENDENCIES`) o adımı hiç çalıştırmadan `SKIPPED` işaretler — başarısız bir taslağın üzerine boş girdiyle yönlendirme çalıştırılması buradan engellenir.
 
 ---
 
@@ -203,10 +203,17 @@ Her agent yalnızca kendi görevinden sorumludur ve prompt şablonunu `get_promp
 
 `app/ai/workflows/planner.py` — sistemin dört sabit akışı vardır ve aralarındaki seçim çoğu mesaj için bir akıl yürütme değil, bir arama işidir.
 
-* **`resolve_plan_deterministic()`**: mesajı Türkçe karakterleri katlayarak normalize eder, sırasıyla taslak anahtar kelimeleri, analiz anahtar kelimeleri, **kısa-onay devam kuralı** ("evet, hazırla" bir taslak/analiz teklifinden sonra o niyeti sürdürür — yalnızca 6 kelimeye kadar ve yalnızca belirsiz olmayan bir devamı olan iki niyet için), sohbet anahtar kelimeleri ve soru-işareti/soru-sözcüğü sezgiselini dener.
-* Yalnızca bunların hiçbiri eşleşmezse **belirsiz** kabul edilir ve tek bir etiketlik hızlı-katman model çağrısına düşer (`classify_intent_with_model`); model de başarısız olursa güvenli varsayılan (belge varsa `document_qa`, yoksa `chat`) seçilir — hiçbir zaman en yavaş dört-adımlı boru hattına değil.
+* **`intent_rules.py`** — bildirimsel kanıt tablosu. Her kural bir `EvidenceRule` (id, niyet, ağırlık, yüzey ifadeleri, `requires_document`). Ayrı bir modülde olması, ifade eklemenin **veri değişikliği** olmasını sağlar; hiçbir kontrol akışı bağlı değildir.
+* **`intent_scorer.py`** — mesajı tabloya karşı skorlar. Kanıt **kısa devre yapmaz, birikir**: iki niyet içeren bir mesaj iki skor üretir ve aradaki fark görünür kalır. Üç karşı sinyal taşır — *tanım sorusu* ("Üst yazı ne demek?" taslaktan söz eder, talep etmez), *hafıza-hatırlama* (konuşmaya dair bir soruda belge ifadeleri kanıt değil, hatırlanan konudur) ve *veda* ("yarın devam ederiz" içindeki "devam" onay değildir). Bunlar daha büyük bir sayı değil, **geçersiz kanıtın kaldırılmasıdır**.
+* **`resolve_plan_deterministic()`** — kararı ilk eşleşen kural değil, **ilk iki niyet arasındaki marj** verir:
+  * `PRESENCE_FLOOR` altında hiçbir niyet aday sayılmaz → eskale.
+  * draft ve analyze'ın ikisi de `COMPOUND_FLOOR` üstündeyse → **bileşik plan** (adımlar kanonik sırayla birleştirilir). Bu kontrol marjdan *önce* yapılır: bileşik bir talep dengesiz skorlanabilir ve marj testi talebin bir yarısını sessizce düşürürdü.
+  * Marj `DECISIVE_MARGIN` üstündeyse → tek niyet.
+  * Aksi hâlde → eskale.
+* `PlanDecision` kararla birlikte `confidence`, `evidence` (tetiklenen kural id'leri) ve `alternatives` taşır; üretimdeki bir karar geriye dönük açıklanabilir.
+* Yalnızca gerçekten dengeli ya da kanıtsız mesajlar tek etiketlik hızlı-katman model çağrısına düşer (`classify_intent_with_model`); model de başarısız olursa güvenli varsayılan (belge varsa `document_qa`, yoksa `chat`) seçilir — hiçbir zaman en yavaş dört-adımlı boru hattına değil.
 
-Önceki tasarımda bu seçim, tam bir yapılandırılmış çıktı şeması bekleyen bir `OrchestratorAgent` çağrısıydı ve kritik yolda bir round-trip + Pydantic yeniden deneme döngüsü maliyeti taşıyordu. Planner artık sistemin karar mekanizmasıdır ama LLM'siz çalışır.
+Önceki tasarımda bu seçim, tam bir yapılandırılmış çıktı şeması bekleyen bir `OrchestratorAgent` çağrısıydı. Onun yerine gelen sıralı anahtar kelime şelalesi LLM çağrısını kaldırdı ama **sırayı** kararın kendisi hâline getirdi ve `evaluation/` ölçümünde iki kategoriyi 0.00 ile raporladı. Skorlama bunu çözer; planner hâlâ LLM'siz ve milisaniye altıdır.
 
 ---
 
@@ -355,7 +362,7 @@ Konuşma geçmişi, **checkpoint'lenmiş graf state'i** üzerinde taşınır —
 Sunucu, istemci bir `session_id` göndermezse `anon:<uuid4>` üretir (`ChatService._thread_id`). Frontend, `crypto.randomUUID()` ile üretilen bir kimliği `localStorage`'da (`kachow_client_session_id`) kalıcılaştırıp her istekte gönderir, böylece sayfa yenilemede/aynı tarayıcıda yeni sekmede AYNI checkpoint thread'i (ve özeti) yeniden kullanılır. Bu, gerçek kullanıcı kimlik doğrulaması değildir: anonim, tarayıcıya özgüdür ve cihazlar arası değildir (`REQUIRE_AUTH` hâlâ kapalı; gerçek kullanıcı kimliğine bağlı kalıcı memory ayrı bir konu olarak bırakılmıştır).
 
 ### Planlama ve Memory
-`planner.py`'nin `resolve_plan_deterministic`'i, bir belge ekliyken bile konuşmanın kendisine dair sorular (`MEMORY_RECALL_MARKERS`, ör. "az önce ne sordum") tespit ettiğinde `document_id`'den bağımsız olarak `chat`'e yönlendirir — bir belgenin ekli olması, konuşma hafızasına dair bir soruyu asla belge sorusuna çevirmez.
+`intent_scorer.py`, konuşmanın kendisine dair bir soru (`chat.memory_recall`, ör. "az önce ne sordum") tespit ettiğinde `document_qa` kanıtını **geçersiz kılar** ve mesaj `document_id`'den bağımsız olarak `chat`'e gider — bir belgenin ekli olması, konuşma hafızasına dair bir soruyu asla belge sorusuna çevirmez.
 
 ---
 

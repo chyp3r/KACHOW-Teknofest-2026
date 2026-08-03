@@ -32,6 +32,11 @@ COPY backend/alembic.ini backend/pyproject.toml /workspace/
 # is empty and mevzuat suggestions silently degrade.
 COPY datasets /workspace/datasets
 
+# Copy the evaluation harness. tests/unit/evaluation/ imports `evaluation.*`,
+# so this has to be in the image for the test suite to collect at all -- not
+# just mounted for `make eval`.
+COPY evaluation /workspace/evaluation
+
 # Set Python Path
 ENV PYTHONPATH=/workspace
 
