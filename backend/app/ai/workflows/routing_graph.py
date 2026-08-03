@@ -6,28 +6,25 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
 from app.ai.agents.router import RouterAgent
+from app.ai.policy import get_policy
 from app.ai.llms.base import BaseLLMClient
 from app.ai.workflows.events import emit_node_end, emit_node_start
-from app.ai.workflows.resilience import LLM_RETRY, NODE_TIMEOUT_SECONDS, TRANSIENT_ERRORS, node_timeout
+from app.ai.workflows.resilience import LLM_RETRY, TRANSIENT_ERRORS, node_timeout
 
 logger = logging.getLogger(__name__)
 
 #: Below this score the draft is not trustworthy enough to route automatically.
-HUMAN_APPROVAL_SCORE_THRESHOLD = 50.0
+#: Policy owns it alongside `MIN_AUTOMATED_CONFIDENCE_SCORE`, whose relationship
+#: to it is an enforced invariant: 70 is "may be sent without review", 50 is
+#: "may not be routed at all", and inverting them would make a draft too weak to
+#: route simultaneously good enough to send.
+HUMAN_APPROVAL_SCORE_THRESHOLD = get_policy().routing.human_approval_score_threshold
 
-HUMAN_APPROVAL_UNIT = "İnsan Onayı Gerekli"
+HUMAN_APPROVAL_UNIT = get_policy().routing.human_approval_unit
 
 #: The routing target list. Kept as a module constant so the Literal below, the
 #: prompt and any consumer cannot drift apart.
-ROUTING_UNITS = (
-    "İnsan Kaynakları",
-    "Hukuk Müşavirliği",
-    "Mali İşler",
-    "Vatandaş İlişkileri",
-    "Bilgi İşlem Dairesi",
-    "Destek Hizmetleri",
-    HUMAN_APPROVAL_UNIT,
-)
+ROUTING_UNITS = get_policy().routing.units
 
 
 class RoutingState(TypedDict, total=False):
@@ -100,7 +97,7 @@ def create_routing_graph(llm_client: BaseLLMClient):
     """
     router_agent = RouterAgent(llm_client)
 
-    @node_timeout(NODE_TIMEOUT_SECONDS["route"])
+    @node_timeout("route")
     async def routing_node(state: RoutingState, config: RunnableConfig) -> Dict[str, Any]:
         logger.info("Running Routing Node...")
         await emit_node_start(

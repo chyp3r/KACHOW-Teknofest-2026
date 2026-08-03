@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Any, TypedDict
@@ -9,6 +10,7 @@ from app.ai.agents.judge import JudgeAgent
 from app.ai.agents.reviser import ReviserAgent
 from app.ai.agents.writer import WriterAgent
 from app.ai.guardrails.injection import assert_no_prompt_leak
+from app.ai.policy.budget import node_budget
 from app.ai.llms.base import BaseLLMClient
 from app.ai.verification import (
     DraftJudgeVerdict,
@@ -365,16 +367,26 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
         # under the same "draft" node id, so the frontend clears any
         # in-progress streamingText on every node_start rather than only the
         # first -- otherwise the two attempts would visually concatenate.
+        # The writer's budget is applied *inside* the node rather than by the
+        # @node_timeout decorator. A decorator would raise past the except
+        # clauses below and crash the draft graph; here a timeout becomes a
+        # FAILED result carrying whatever was streamed, which is what the rest
+        # of the graph already knows how to handle. This is also the first time
+        # the most expensive step in the ~90s draft budget has had any node-level
+        # protection at all -- resilience.py has carried a "writer" entry since
+        # it was written, and nothing ever read it.
+        budget = node_budget("writer", preset.level)
         chunks: list[str] = []
         try:
-            async for chunk in agent.stream(
-                messages=prompt,
-                temperature=temperature,
-                max_tokens=preset.draft_max_tokens,
-                reasoning=preset.reasoning,
-            ):
-                chunks.append(chunk)
-                await emit_token(config, "draft", chunk)
+            async with asyncio.timeout(budget):
+                async for chunk in agent.stream(
+                    messages=prompt,
+                    temperature=temperature,
+                    max_tokens=preset.draft_max_tokens,
+                    reasoning=preset.reasoning,
+                ):
+                    chunks.append(chunk)
+                    await emit_token(config, "draft", chunk)
 
             draft = "".join(chunks).strip()
             if not draft:
@@ -388,6 +400,26 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
             assert_no_prompt_leak(draft)
 
             return {"draft": draft, "attempts": attempt_number, "status": "IN_PROGRESS"}
+        except TimeoutError:
+            # Distinguished from a generic failure because str(TimeoutError())
+            # is empty -- the user would have been shown "Taslak üretilemedi: ".
+            logger.warning(
+                "Writer node exceeded its %.0fs budget (attempt %d, level %s).",
+                budget,
+                attempt_number,
+                preset.level.value,
+            )
+            return {
+                "draft": "".join(chunks).strip(),
+                "attempts": attempt_number,
+                "confidence_score": 0.0,
+                "requires_human_approval": True,
+                "status": "FAILED",
+                "error": (
+                    f"Taslak üretimi {budget:.0f} saniyelik süre sınırını aştı; "
+                    "daha düşük bir düşünme seviyesiyle yeniden deneyin."
+                ),
+            }
         except Exception as exc:
             logger.exception("Writer/Reviser node failed (attempt %d)", attempt_number)
             return {
@@ -446,12 +478,17 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
                 "Kalite Yargıcı",
                 "[Yargıç] Talebe uygunluk, üslup ve kapanış yönü değerlendiriliyor...",
             )
+            # Scaled by the level, same as every other budget: a `deep` run
+            # buys more wall clock overall and the judge is part of what it
+            # buys. settings.DRAFT_JUDGE_TIMEOUT_SECONDS stays the single owner
+            # of the base value -- it is a deployment knob, not a policy one.
             verdict = await judge_draft(
                 judge_agent,
                 draft=draft_text,
                 brief=state.get("brief", ""),
                 correspondence_type=state.get("correspondence_type") or "other_official",
                 instructions=state.get("instructions", ""),
+                timeout_s=settings.DRAFT_JUDGE_TIMEOUT_SECONDS * preset.timeout_multiplier,
             )
             if verdict is None:
                 await emit_node_error(

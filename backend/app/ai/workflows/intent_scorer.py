@@ -25,6 +25,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Optional
 
+from app.ai.policy import get_policy
 from app.ai.workflows.intent_rules import (
     ALL_RULES,
     CONTINUABLE_INTENTS,
@@ -39,22 +40,24 @@ from app.ai.workflows.intent_rules import (
 
 logger = logging.getLogger(__name__)
 
+_INTENT_POLICY = get_policy().intent
+
 #: Minimum lead the top intent needs over the runner-up to be decisive.
-DECISIVE_MARGIN = 1.2
+DECISIVE_MARGIN = _INTENT_POLICY.decisive_margin
 
 #: Minimum score for an intent to count as genuinely present at all. Below this
 #: an intent is noise, not a candidate -- without a floor, two rules scoring
 #: 0.1 and 0.0 would read as a confident decision.
-PRESENCE_FLOOR = 1.4
+PRESENCE_FLOOR = _INTENT_POLICY.presence_floor
 
 #: With the margin below `DECISIVE_MARGIN`, both intents at or above this are
 #: treated as a compound request rather than an ambiguity to escalate.
-COMPOUND_FLOOR = 2.6
+COMPOUND_FLOOR = _INTENT_POLICY.compound_floor
 
 #: Score used to convert a margin into a [0, 1] confidence. A lead of this much
 #: reads as full confidence; the value is the observed spread between a clean
 #: single-rule hit and a contested one.
-CONFIDENCE_SCALE = 4.0
+CONFIDENCE_SCALE = _INTENT_POLICY.confidence_scale
 
 _TURKISH_MAP = str.maketrans(
     {

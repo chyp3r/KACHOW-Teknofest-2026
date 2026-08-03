@@ -9,9 +9,12 @@ needs one import path fixed instead of a grep-and-replace across every graph.
 import asyncio
 import functools
 import logging
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, Awaitable, Callable, Optional, TypeVar
 
 import httpx
+
+from app.ai.policy import get_policy
+from app.ai.policy.budget import node_budget
 
 try:
     from langgraph.types import RetryPolicy
@@ -47,24 +50,44 @@ IO_RETRY = RetryPolicy(
     retry_on=TRANSIENT_ERRORS,
 )
 
-#: Per-node timeout budgets, all well inside the 300s whole-workflow ceiling
-#: (see app.core.constants.AI_WORKFLOW_TIMEOUT_SECONDS). Centralised here so
-#: the numbers are visible in one place rather than scattered per graph.
-NODE_TIMEOUT_SECONDS = {
-    "analyze": 90.0,
-    "retrieve_mevzuat": 15.0,
-    "suggest_mevzuat": 45.0,
-    "route": 30.0,
-    "writer": 120.0,
-    "judge": 20.0,
-}
+#: Per-node timeout budgets, kept as a module alias for readability at the call
+#: sites that report them. The values live in ``app.ai.policy`` so they sit
+#: beside the invariants that relate them to the workflow ceiling.
+NODE_TIMEOUT_SECONDS = get_policy().budget.node_seconds
 
 
-def node_timeout(seconds: float) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
-    """Decorator wrapping an async node coroutine in a hard timeout.
+def _reasoning_level_of(args: tuple[Any, ...]) -> Optional[str]:
+    """Read the run's reasoning level out of a LangGraph node's state argument.
 
     Args:
-        seconds: Timeout budget for the wrapped node.
+        args: The wrapped node's positional arguments. LangGraph always passes
+            state first.
+
+    Returns:
+        The level, or None when the graph's state carries no such field --
+        ``DocumentAnalysisState`` and ``RoutingState`` do not, and budget
+        resolution falls back to balanced for them.
+    """
+    state = args[0] if args else None
+    if isinstance(state, dict):
+        level = state.get("reasoning_level")
+        return level if isinstance(level, str) else None
+    return None
+
+
+def node_timeout(
+    node: str,
+) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
+    """Decorator wrapping an async node in a budget resolved at call time.
+
+    Takes a node *name* rather than a number on purpose. The previous signature
+    took a float, which was evaluated when the graph was built -- and a graph is
+    compiled once per process, so no per-request value could ever reach it. That
+    is why ``reasoning_levels.timeout_multiplier`` never affected a node budget
+    despite existing since the feature landed.
+
+    Args:
+        node: The node's name, as keyed in ``BudgetPolicy.node_seconds``.
 
     Returns:
         The decorator.
@@ -73,7 +96,8 @@ def node_timeout(seconds: float) -> Callable[[Callable[..., Awaitable[T]]], Call
     def _decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         @functools.wraps(func)
         async def _wrapped(*args: Any, **kwargs: Any) -> T:
-            return await asyncio.wait_for(func(*args, **kwargs), timeout=seconds)
+            budget = node_budget(node, _reasoning_level_of(args))
+            return await asyncio.wait_for(func(*args, **kwargs), timeout=budget)
 
         return _wrapped
 

@@ -15,6 +15,7 @@ from app.ai.agents.document_qa import DocumentQAAgent
 from app.ai.agents.memory_summarizer import MemorySummarizerAgent
 from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.llms.base import BaseLLMClient
+from app.ai.policy import get_policy
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.ai.verification import apply_answers, verify_draft
 from app.ai.workflows.events import (
@@ -37,7 +38,7 @@ from app.observability.ai_metrics import HITL_INTERRUPTS
 logger = logging.getLogger(__name__)
 
 QA_COLLECTION_NAME = "document_qa"
-QA_RESULT_LIMIT = 4
+QA_RESULT_LIMIT = get_policy().memory.qa_result_limit
 
 STEP_LABELS = {
     "classification": "Evrak Analizi",
@@ -92,17 +93,17 @@ def _dependency_failed(
 #: Turns kept verbatim in the prompt sent to chat/document_qa on every turn.
 #: ~6 exchanges is enough for pronoun/ellipsis resolution ("evet, hazırla"
 #: after "taslak ister misiniz?") without growing that prompt without bound.
-HISTORY_WINDOW = 12
+HISTORY_WINDOW = get_policy().memory.history_window
 
 #: Raw turns retained in state before consolidation must have folded them
 #: into history_summary. Comfortably larger than HISTORY_WINDOW so
 #: consolidate_memory_node always has the overflow available when it runs
 #: (it runs once per turn, after HISTORY_WINDOW turns are already appended).
-HISTORY_RAW_CAP = 40
+HISTORY_RAW_CAP = get_policy().memory.history_raw_cap
 
 #: Only bother calling the model once there's a worth-while batch to fold in,
 #: not for every single turn's 1-2-entry dribble past the window.
-CONSOLIDATION_BATCH_SIZE = 4
+CONSOLIDATION_BATCH_SIZE = get_policy().memory.consolidation_batch_size
 
 
 def _append_history(

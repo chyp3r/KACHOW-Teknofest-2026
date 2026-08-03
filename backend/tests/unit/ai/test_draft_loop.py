@@ -9,6 +9,7 @@ stops at MAX_DRAFT_ATTEMPTS, and short-circuits to a human question when the
 writer leaves an explicit placeholder instead.
 """
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -262,3 +263,75 @@ async def test_deep_level_allows_a_third_attempt_and_forces_the_judge_on(monkeyp
     assert mock_judge_draft.call_count == 3
     assert result["attempts"] == 3
     assert result["reasoning_level"] == "deep"
+
+
+# --- Writer budget -----------------------------------------------------------
+#
+# `resilience.py` has carried a `writer: 120.0` budget since it was written and
+# nothing ever read it -- `draft_graph.py` did not import `node_timeout` at all,
+# so the single most expensive step in the ~90s draft budget had no node-level
+# protection while appearing in the table as though it did.
+#
+# The budget is applied inside the node rather than by the decorator on purpose:
+# a decorator raises past the node's except clauses and takes the graph down,
+# where a timeout has to become a FAILED result the rest of the graph already
+# knows how to route.
+
+
+async def _never_finishes(*_args, **_kwargs):
+    """A writer stream that emits one chunk and then hangs."""
+    yield "Konu: "
+    await asyncio.sleep(3600)
+
+
+@pytest.mark.asyncio
+async def test_a_writer_that_exceeds_its_budget_fails_the_draft_rather_than_the_graph(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "app.ai.workflows.draft_graph.node_budget", lambda node, level: 0.05
+    )
+    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+
+    with patch.object(WriterAgent, "stream") as mock_writer:
+        mock_writer.side_effect = _never_finishes
+
+        result = await graph.ainvoke(BASE_STATE)
+
+    assert result["status"] == "FAILED"
+    assert result["requires_human_approval"] is True
+    assert result["confidence_score"] == 0.0
+    # The partial stream is kept: a truncated draft is more useful to a human
+    # than an empty one, and the user already watched it being typed.
+    assert result["draft"] == "Konu:"
+
+
+@pytest.mark.asyncio
+async def test_a_writer_timeout_reports_a_readable_reason(monkeypatch):
+    """str(TimeoutError()) is empty -- without its own branch the user would
+    have been shown "Taslak üretilemedi: " with nothing after the colon."""
+    monkeypatch.setattr(
+        "app.ai.workflows.draft_graph.node_budget", lambda node, level: 0.05
+    )
+    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+
+    with patch.object(WriterAgent, "stream") as mock_writer:
+        mock_writer.side_effect = _never_finishes
+
+        result = await graph.ainvoke(BASE_STATE)
+
+    assert "süre sınırını aştı" in result["error"]
+    assert not result["error"].rstrip().endswith(":")
+
+
+@pytest.mark.asyncio
+async def test_the_writer_budget_follows_the_run_s_reasoning_level():
+    """`deep` buys wall clock; the writer is where most of it is spent."""
+    from app.ai.policy.budget import node_budget
+
+    assert node_budget("writer", ReasoningLevel.DEEP) > node_budget(
+        "writer", ReasoningLevel.BALANCED
+    )
+    assert node_budget("writer", ReasoningLevel.FAST) < node_budget(
+        "writer", ReasoningLevel.BALANCED
+    )
