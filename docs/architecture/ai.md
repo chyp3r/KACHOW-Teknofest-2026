@@ -252,9 +252,24 @@ docker compose run --rm --no-deps backend python scripts/build_prototypes.py
 
 `app/ai/policy/prototypes.py` değiştiğinde, gömme modeli değiştiğinde veya `POLICY_VERSION` arttığında yeniden çalıştırılmalıdır.
 
+## Ölçülen katkı
+
+Canlı `nomic-embed-text` ile, sözlüksel katmanın çekimser kaldığı 15 mesaj üzerinde:
+
+| | |
+|---|---|
+| Çözülen | **2 / 130 mesaj** |
+| Yanlış karar | 0 |
+| Hâlâ eskale | 13 |
+| Gecikme | p50 **19.7 ms**, p95 **22.0 ms** |
+
+**Beklenenden çok daha az.** Neden sayılarda görünüyor: resmî registerdeki Türkçe cümleler karşılıklı benzer olduğu için tamamen belirsiz bir mesaj bile alakasız prototiplere karşı 0.60–0.74 alıyor. Kullanılabilir bant, bu gürültü tabanının (`0.740`) üstünde kalan dar aralık. Eşik `0.80` — güvenli bandın (`0.758 → 0.859`) ortası.
+
+Bu, katmanın yanlış olduğu anlamına gelmiyor: 0 yanlış kararla, ödediği ~20 ms karşılığında iki model çağrısını kaldırıyor. Ama planın varsaydığı "eskalasyonların çoğunu soğurur" beklentisi **doğrulanmadı**.
+
 ## Bilinen sınırı
 
-Semantik katman yalnızca **çekimserlik** üzerinde çalışır. Sözlüksel katmanın *eminden yanlış* karar verdiği bir mesajı hiç görmez. Held-out ölçümü (bkz. CHANGELOG 1.28.0) bu sınıfın gerçek olduğunu gösteriyor: 16 parafrazın 5'i eminden yanlış, 4'ü `document_qa`'ya düşüyor.
+Semantik katman yalnızca **çekimserlik** üzerinde çalışır. Sözlüksel katmanın *eminden yanlış* karar verdiği bir mesajı hiç görmez. Held-out ölçümü (bkz. CHANGELOG 1.28.0) bu sınıfın gerçek olduğunu gösteriyor: 16 parafrazın 5'i eminden yanlış, 4'ü `document_qa`'ya düşüyor. Bu, semantik katmanın çözebileceği bir problem değil — sözlüksel katmanın kalibrasyonuna ait.
 
 ---
 
