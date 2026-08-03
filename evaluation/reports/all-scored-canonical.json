@@ -1,0 +1,324 @@
+{
+  "meta": {
+    "drafts": {
+      "dataset": "drafts",
+      "started_at": "2026-08-03T09:59:37",
+      "total_ms": 4.47
+    },
+    "intents": {
+      "dataset": "intents",
+      "started_at": "2026-08-03T09:59:37",
+      "total_ms": 1.662
+    }
+  },
+  "suites": {
+    "drafts": {
+      "accuracy": 1.0,
+      "by_category": {
+        "grounded": {
+          "accuracy": 1.0,
+          "cases": 5,
+          "false_negative": 0,
+          "false_positive": 0
+        },
+        "hallucinated": {
+          "accuracy": 1.0,
+          "cases": 12,
+          "false_negative": 0,
+          "false_positive": 0
+        },
+        "other_official": {
+          "accuracy": 1.0,
+          "cases": 3,
+          "false_negative": 0,
+          "false_positive": 0
+        },
+        "paraphrased_grounded": {
+          "accuracy": 1.0,
+          "cases": 10,
+          "false_negative": 0,
+          "false_positive": 0
+        },
+        "placeholder": {
+          "accuracy": 1.0,
+          "cases": 4,
+          "false_negative": 0,
+          "false_positive": 0
+        },
+        "structural": {
+          "accuracy": 1.0,
+          "cases": 6,
+          "false_negative": 0,
+          "false_positive": 0
+        }
+      },
+      "cases": 40,
+      "claim_detection_gaps": [],
+      "counts": {
+        "false_negative": 0,
+        "false_positive": 0,
+        "true_negative": 17,
+        "true_positive": 23
+      },
+      "failures": [],
+      "false_negative_rate": 0.0,
+      "false_positive_rate": 0.0
+    },
+    "intents": {
+      "abstention_rate": 0.0,
+      "accuracy_over_all": 1.0,
+      "accuracy_over_decided": 1.0,
+      "by_category": {
+        "compound": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 8
+        },
+        "continuation": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 8
+        },
+        "document_question": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 10
+        },
+        "escalation": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 8
+        },
+        "inversion": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 8
+        },
+        "keyword_analyze": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 8
+        },
+        "keyword_chat": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 8
+        },
+        "keyword_draft": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 10
+        },
+        "memory_recall": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 10
+        },
+        "paraphrase_analyze": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 6
+        },
+        "paraphrase_draft": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 8
+        },
+        "paraphrase_memory": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 10
+        },
+        "precedence": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 6
+        },
+        "short_message": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 6
+        }
+      },
+      "cases": 114,
+      "confusion_matrix": {
+        "<abstain>": {
+          "<abstain>": 8
+        },
+        "analyze": {
+          "analyze": 20
+        },
+        "chat": {
+          "chat": 46
+        },
+        "document_qa": {
+          "document_qa": 10
+        },
+        "draft": {
+          "draft": 30
+        }
+      },
+      "expected_calibration_error": 0.0702,
+      "failures": [],
+      "macro_f1": 1.0,
+      "per_label": [
+        {
+          "f1": 1.0,
+          "label": "<abstain>",
+          "precision": 1.0,
+          "recall": 1.0,
+          "support": 8
+        },
+        {
+          "f1": 1.0,
+          "label": "analyze",
+          "precision": 1.0,
+          "recall": 1.0,
+          "support": 20
+        },
+        {
+          "f1": 1.0,
+          "label": "chat",
+          "precision": 1.0,
+          "recall": 1.0,
+          "support": 46
+        },
+        {
+          "f1": 1.0,
+          "label": "document_qa",
+          "precision": 1.0,
+          "recall": 1.0,
+          "support": 10
+        },
+        {
+          "f1": 1.0,
+          "label": "draft",
+          "precision": 1.0,
+          "recall": 1.0,
+          "support": 30
+        }
+      ],
+      "risk_coverage": [
+        {
+          "coverage": 1.0,
+          "risk": 0.0,
+          "threshold": 0.0
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.05
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.1
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.15
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.2
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.25
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.3
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.35
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.4
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.45
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.5
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.55
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.6
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.65
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.7
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.75
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.8
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.85
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.9
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 0.95
+        },
+        {
+          "coverage": 0.9298245614035088,
+          "risk": 0.0,
+          "threshold": 1.0
+        }
+      ]
+    }
+  }
+}
