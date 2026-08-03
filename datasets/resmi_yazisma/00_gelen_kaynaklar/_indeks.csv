@@ -1,0 +1,874 @@
+id,niyet,baslik,belge_turu,dosya
+BAK-001,egitim_mufredat_duyurusu,Türkiye Yüzyılı Maarif Modeli'ne İlişkin İş ve İşlemler (Genelge No: 2024/54),gercek_acik_kaynak,BAK-001_turkiye_yuzyili_maarif_modeli_genelgesi.md
+BAK-002,egitim_ogretim_yili_talimati,2024-2025 Eğitim ve Öğretim Yılına İlişkin İş ve İşlemler (Genelge No: 2024/53),gercek_acik_kaynak,BAK-002_2024_2025_egitim_ogretim_yili_is_ve_islemler_genelgesi.md
+BAK-003,kentsel_donusum_talimati,6306 Sayılı Kanun Kentsel Dönüşüm Uygulamaları Hakkında Genelge (Genelge No: 2024/1),gercek_acik_kaynak,BAK-003_kentsel_donusum_6306_sayili_kanun_genelgesi.md
+BAK-004,afet_yonetimi_duyurusu,Afet Risk Azaltma ve Önleme Çalışmaları Hakkında Genelge (Genelge No: 2024/6),gercek_acik_kaynak,BAK-004_afet_ve_acil_durum_yonetimi_deprem_azaltma_genelgesi.md
+BAK-005,gumruk_ve_ithalat_duzenlemesi,TPS-Anne ve Bebek Ürünleri Uygunluk Belgesi Uygulaması (Genelge No: 2024/1),gercek_acik_kaynak,BAK-005_tps_anne_bebek_urunleri_uygunluk_belgesi_genelgesi.md
+BAK-006,kamulastirma_ve_malkuliyet_talimati,Kamulaştırma İşlemlerinde Tapu ve Kadastro Uygulamaları (Genelge No: 2024/3),gercek_acik_kaynak,BAK-006_kamulastirma_uygulamalari_genelgesi.md
+BAK-007,saglik_hizmetleri_duyurusu,Sağlık Kurumlarında Hasta Hakları ve Güvenliği Uygulamaları Genelgesi (Genelge No: 2024/2),gercek_acik_kaynak,BAK-007_saglik_kurumlarinda_hasta_haklari_genelgesi.md
+BAK-008,turizm_veri_tabani_duzenlemesi,Merkezi Turizm Veri Tabanı Uygulamaları Hakkında Genelge (Genelge No: 2026/1),gercek_acik_kaynak,BAK-008_merkezi_turizm_veri_tabani_genelgesi.md
+BEL-001,belediye_proje_ve_ihale_karari,T.C. Salihli Belediye Meclis Kararı (Karar No: 2026/33),gercek_acik_kaynak,BEL-001_salihli_belediyesi_bilim_merkezi_ve_ruhsat_karari.md
+BEL-002,imar_plani_degisikligi,T.C. Salihli Belediye Meclis Kararı (Karar No: 2026/27),gercek_acik_kaynak,BEL-002_salihli_belediyesi_caferbey_imar.md
+BEL-003,belediye_tarife_ve_ucret_karari,T.C. Ortaca Belediye Meclis Kararı (Karar No: 63),gercek_acik_kaynak,BEL-003_ortaca_belediyesi_evsel_kati_atik_tarifeleri.md
+BEL-004,tasinmaz_kiralama_karari,T.C. Ortaca Belediye Meclis Kararı (Karar No: 53),gercek_acik_kaynak,BEL-004_ortaca_belediyesi_tasinmaz_ve_cay_bahcesi_kiralama.md
+BEL-005,meclis_calisma_takvimi,T.C. Adalar Belediye Meclis Kararı (Karar No: 2026/01),gercek_acik_kaynak,BEL-005_adalar_belediyesi_meclis_tatil_ayi_karari.md
+BEL-006,pazaryeri_duzenlemesi,T.C. Başakşehir Belediye Meclis Kararı (Karar No: 2024/42),gercek_acik_kaynak,BEL-006_basaksehir_belediyesi_pazaryeri_duzenlemesi.md
+BEL-007,iklim_eylem_plani,T.C. Kadıköy Belediye Meclis Kararı (Karar No: 2024/18),gercek_acik_kaynak,BEL-007_kadikoy_belediyesi_iklim_eylem_plani.md
+KAY-001,teblig_bildirim,Çankaya Kaymakamlığı İlçe Hıfzıssıhha Kurulu Gıda Güvenliği ve Denetim Kararı,gercek_acik_kaynak,KAY-001_cankaya-kaymakamligi-ilce-hifzissihha-gida-denetim-karari.md
+KAY-002,duyuru,Kadıköy Kaymakamlığı SYDV Aşırı Sıcak Yardımı ve Sosyal İnceleme Duyurusu,gercek_acik_kaynak,KAY-002_kadikoy-kaymakamligi-sydv-sosyal-yardim-basvuru-duyurusu.md
+KAY-003,duyuru,Osmangazi Kaymakamlığı SYDV Belirsiz Süreli Personel Alım İlanı Duyurusu,gercek_acik_kaynak,KAY-003_osmangazi-kaymakamligi-sydv-personel-alim-duyurusu.md
+KAY-004,duyuru,Seyhan Kaymakamlığı İlçe Sağlık Müdürlüğü Aşırı Sıcaklar Sağlık Tedbirleri Duyurusu,gercek_acik_kaynak,KAY-004_seyhan-kaymakamligi-ilce-salgin-ve-toplum-sagligi-duyurusu.md
+KAY-005,teblig_bildirim,Bodrum Kaymakamlığı Çevresel Gürültü ve Canlı Müzik Yayın Usul ve Esasları Genelgesi,gercek_acik_kaynak,KAY-005_bodrum-kaymakamligi-gurultu-kirliligi-ve-muzik-yayini-genelgesi.md
+KAYMEB-001,meb_gorevlendirme,T.C. Çankaya İlçe Milli Eğitim Müdürlüğü 2024 Yılı LGS Sınav Binası Görevlendirme Üst Yazısı,gercek_acik_kaynak,KAYMEB-001_cankaya_meb_ogretmen_gorevlendirme.md
+MEB-001,mevzuat_hak_yukumluluk,T.C. MİLLÎ EĞİTİM BAKANLIĞI,gercek_acik_kaynak,MEB-001_meb-genelgesi-maarif-modeli.md
+MEB-002,etkinlik_program,T.C. MİLLÎ EĞİTİM BAKANLIĞI,gercek_acik_kaynak,MEB-002_meb-genelgesi-ogretmenler-gunu.md
+MEB-003,basvuru_talep,Belirtilmemiş Başlık,gercek_acik_kaynak,MEB-003_meb-personel-il-ici-atama-ust-yazisi.md
+MEB-004,ek_belge_iletimi,Belirtilmemiş Başlık,gercek_acik_kaynak,MEB-004_meb-odsgm-ortak-sinavlar-ust-yazi.md
+MEB-005,gorevlendirme,Belirtilmemiş Başlık,gercek_acik_kaynak,MEB-005_ankara-il-meb-sinav-gorevlendirme-olur.md
+MEB-006,duyuru,T.C. MİLLÎ EĞİTİM BAKANLIĞI,gercek_acik_kaynak,MEB-006_meb-orgm-bilsem-kilavuz-duyurusu.md
+MEB-007,bilgi_edinme,Belirtilmemiş Başlık,gercek_acik_kaynak,MEB-007_meb-dhgm-bilgi-edinme-cevap-yazisi.md
+MEB-008,rapor_sunum,Belirtilmemiş Başlık,gercek_acik_kaynak,MEB-008_meb-tegm-surec-odakli-olcme-ust-yazi.md
+MEB-009,etkinlik_program,T.C. MİLLÎ EĞİTİM BAKANLIĞI,gercek_acik_kaynak,MEB-009_meb-dogm-hedef-yks-lgs-duyurusu.md
+MEB-010,ret_kismen_kabul,Belirtilmemiş Başlık,gercek_acik_kaynak,MEB-010_meb-mtegm-mesem-devlet-katkisi-cevap.md
+MEB-011,onay_izin,Belirtilmemiş Başlık,gercek_acik_kaynak,MEB-011_meb-yyegm-ylsy-burs-onay-ust-yazisi.md
+MERK-001,sgk_asgari_ucret_destegi,2024 Yılı Asgari Ücret Desteği Uygulama Usul ve Esasları Genelgesi (Genelge No: 2024/12),gercek_acik_kaynak,MERK-001_sgk_asgari_ucret_destegi_2024.md
+MERK-002,iskur_toplum_yararina_program,Toplum Yararına Programlar (TYP) Uygulama Esasları ve Katılım Şartları Genelgesi,gercek_acik_kaynak,MERK-002_iskur_toplum_yararina_program_2024.md
+OS-01-001,ust_yazi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-001.md
+OS-01-002,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-002.md
+OS-01-003,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-003.md
+OS-01-004,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-004.md
+OS-01-005,ust_yazi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-01-005.md
+OS-01-006,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-006.md
+OS-01-007,ust_yazi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-01-007.md
+OS-01-008,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-01-008.md
+OS-01-009,ust_yazi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-01-009.md
+OS-01-010,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-010.md
+OS-01-011,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-011.md
+OS-01-012,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-012.md
+OS-01-013,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-013.md
+OS-01-014,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-014.md
+OS-01-015,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-015.md
+OS-01-016,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-016.md
+OS-01-017,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-017.md
+OS-01-018,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-018.md
+OS-01-019,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-019.md
+OS-01-020,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-020.md
+OS-01-021,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-021.md
+OS-01-022,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-022.md
+OS-01-023,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-023.md
+OS-01-024,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-024.md
+OS-01-025,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-025.md
+OS-01-026,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-026.md
+OS-01-027,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-027.md
+OS-01-028,ust_yazi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-028.md
+OS-01-029,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-029.md
+OS-01-030,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-01-030.md
+OS-01-031,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-031.md
+OS-01-032,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-032.md
+OS-01-033,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-033.md
+OS-01-034,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-034.md
+OS-01-035,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-035.md
+OS-01-036,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-036.md
+OS-01-037,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-037.md
+OS-01-038,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-038.md
+OS-01-039,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-039.md
+OS-01-040,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-040.md
+OS-01-041,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-041.md
+OS-01-042,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-042.md
+OS-01-043,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-043.md
+OS-01-044,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-044.md
+OS-01-045,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-01-045.md
+OS-01-046,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-046.md
+OS-01-047,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-047.md
+OS-01-048,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-048.md
+OS-01-049,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-049.md
+OS-01-050,ust_yazi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-01-050.md
+OS-01-051,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-051.md
+OS-01-052,ust_yazi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-052.md
+OS-01-053,ust_yazi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-01-053.md
+OS-01-054,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-054.md
+OS-01-055,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-055.md
+OS-01-056,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-056.md
+OS-01-057,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-057.md
+OS-01-058,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-058.md
+OS-01-059,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-059.md
+OS-01-060,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-01-060.md
+OS-01-061,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-061.md
+OS-01-062,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-062.md
+OS-01-063,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-063.md
+OS-01-064,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-064.md
+OS-01-065,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-065.md
+OS-01-066,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-066.md
+OS-01-067,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-067.md
+OS-01-068,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-068.md
+OS-01-069,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-069.md
+OS-01-070,ust_yazi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-01-070.md
+OS-01-071,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-01-071.md
+OS-01-072,ust_yazi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-072.md
+OS-01-073,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-073.md
+OS-01-074,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-074.md
+OS-01-075,ust_yazi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-075.md
+OS-01-076,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-076.md
+OS-01-077,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-077.md
+OS-01-078,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-078.md
+OS-01-079,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-079.md
+OS-01-080,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-080.md
+OS-01-081,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-081.md
+OS-01-082,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-082.md
+OS-01-083,ust_yazi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-01-083.md
+OS-01-084,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-084.md
+OS-01-085,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-085.md
+OS-01-086,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-01-086.md
+OS-01-087,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-087.md
+OS-01-088,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-088.md
+OS-01-089,ust_yazi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-01-089.md
+OS-01-090,ust_yazi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-01-090.md
+OS-01-091,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-091.md
+OS-01-092,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-092.md
+OS-01-093,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-093.md
+OS-01-094,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-094.md
+OS-01-095,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-095.md
+OS-01-096,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-01-096.md
+OS-01-097,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-097.md
+OS-01-098,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-098.md
+OS-01-099,ust_yazi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-099.md
+OS-01-100,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-100.md
+OS-01-101,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-101.md
+OS-01-102,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-102.md
+OS-01-103,ust_yazi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-01-103.md
+OS-01-104,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-01-104.md
+OS-01-105,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-105.md
+OS-01-106,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-106.md
+OS-01-107,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-01-107.md
+OS-01-108,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-108.md
+OS-01-109,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-109.md
+OS-01-110,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-110.md
+OS-01-111,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-111.md
+OS-01-112,ust_yazi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-112.md
+OS-01-113,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-113.md
+OS-01-114,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-114.md
+OS-01-115,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-115.md
+OS-01-116,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-116.md
+OS-01-117,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-01-117.md
+OS-01-118,ust_yazi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-01-118.md
+OS-01-119,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-119.md
+OS-01-120,ust_yazi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-01-120.md
+OS-01-121,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-121.md
+OS-01-122,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-122.md
+OS-01-123,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-123.md
+OS-01-124,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-124.md
+OS-01-125,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-125.md
+OS-01-126,ust_yazi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-01-126.md
+OS-01-127,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-127.md
+OS-01-128,ust_yazi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-128.md
+OS-01-129,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-129.md
+OS-01-130,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-130.md
+OS-01-131,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-131.md
+OS-01-132,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-132.md
+OS-01-133,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-133.md
+OS-01-134,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-134.md
+OS-01-135,ust_yazi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-01-135.md
+OS-01-136,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-136.md
+OS-01-137,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-137.md
+OS-01-138,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-138.md
+OS-01-139,ust_yazi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-139.md
+OS-01-140,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-140.md
+OS-01-141,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-141.md
+OS-01-142,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-142.md
+OS-01-143,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-143.md
+OS-01-144,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-144.md
+OS-01-145,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-145.md
+OS-01-146,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-146.md
+OS-01-147,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-147.md
+OS-01-148,ust_yazi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-01-148.md
+OS-01-149,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-149.md
+OS-01-150,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-150.md
+OS-01-151,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-151.md
+OS-01-152,ust_yazi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-01-152.md
+OS-01-153,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-153.md
+OS-01-154,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-154.md
+OS-01-155,ust_yazi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-155.md
+OS-01-156,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-156.md
+OS-01-157,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-157.md
+OS-01-158,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-158.md
+OS-01-159,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-159.md
+OS-01-160,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-160.md
+OS-01-161,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-161.md
+OS-01-162,ust_yazi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-01-162.md
+OS-01-163,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-163.md
+OS-01-164,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-164.md
+OS-01-165,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-165.md
+OS-01-166,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-166.md
+OS-01-167,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-167.md
+OS-01-168,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-168.md
+OS-01-169,ust_yazi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-01-169.md
+OS-01-170,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-170.md
+OS-01-171,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-171.md
+OS-01-172,ust_yazi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-172.md
+OS-01-173,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-173.md
+OS-01-174,ust_yazi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-01-174.md
+OS-01-175,ust_yazi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-175.md
+OS-01-176,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-176.md
+OS-01-177,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-01-177.md
+OS-01-178,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-178.md
+OS-01-179,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-179.md
+OS-01-180,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-180.md
+OS-01-181,ust_yazi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-01-181.md
+OS-01-182,ust_yazi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-182.md
+OS-01-183,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-183.md
+OS-01-184,ust_yazi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-01-184.md
+OS-01-185,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-185.md
+OS-01-186,ust_yazi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-01-186.md
+OS-01-187,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-187.md
+OS-01-188,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-188.md
+OS-01-189,ust_yazi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-01-189.md
+OS-01-190,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-190.md
+OS-01-191,ust_yazi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-01-191.md
+OS-01-192,ust_yazi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-01-192.md
+OS-01-193,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-193.md
+OS-01-194,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-01-194.md
+OS-01-195,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-195.md
+OS-01-196,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-196.md
+OS-01-197,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-197.md
+OS-01-198,ust_yazi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-01-198.md
+OS-01-199,ust_yazi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-199.md
+OS-01-200,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-01-200.md
+OS-02-001,itiraz_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-001.md
+OS-02-002,cevap_yazisi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-002.md
+OS-02-003,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-003.md
+OS-02-004,itiraz_cevabi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-004.md
+OS-02-005,itiraz_cevabi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-005.md
+OS-02-006,soru_onergesi_cevabi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-006.md
+OS-02-007,cevap_yazisi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-007.md
+OS-02-008,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-008.md
+OS-02-009,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-009.md
+OS-02-010,cevap_yazisi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-010.md
+OS-02-011,itiraz_cevabi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-011.md
+OS-02-012,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-012.md
+OS-02-013,itiraz_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-013.md
+OS-02-014,cevap_yazisi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-014.md
+OS-02-015,cevap_yazisi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-015.md
+OS-02-016,soru_onergesi_cevabi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-016.md
+OS-02-017,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-017.md
+OS-02-018,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-018.md
+OS-02-019,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-019.md
+OS-02-020,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-020.md
+OS-02-021,cevap_yazisi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-021.md
+OS-02-022,soru_onergesi_cevabi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-022.md
+OS-02-023,itiraz_cevabi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-023.md
+OS-02-024,itiraz_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-024.md
+OS-02-025,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-025.md
+OS-02-026,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-026.md
+OS-02-027,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-027.md
+OS-02-028,cevap_yazisi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-028.md
+OS-02-029,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-029.md
+OS-02-030,itiraz_cevabi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-030.md
+OS-02-031,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-031.md
+OS-02-032,itiraz_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-032.md
+OS-02-033,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-033.md
+OS-02-034,itiraz_cevabi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-034.md
+OS-02-035,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-035.md
+OS-02-036,cevap_yazisi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-036.md
+OS-02-037,soru_onergesi_cevabi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-037.md
+OS-02-038,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-038.md
+OS-02-039,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-039.md
+OS-02-040,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-040.md
+OS-02-041,soru_onergesi_cevabi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-041.md
+OS-02-042,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-042.md
+OS-02-043,cevap_yazisi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-043.md
+OS-02-044,soru_onergesi_cevabi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-044.md
+OS-02-045,itiraz_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-045.md
+OS-02-046,itiraz_cevabi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-046.md
+OS-02-047,cevap_yazisi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-047.md
+OS-02-048,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-048.md
+OS-02-049,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-049.md
+OS-02-050,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-050.md
+OS-02-051,cevap_yazisi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-051.md
+OS-02-052,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-052.md
+OS-02-053,soru_onergesi_cevabi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-053.md
+OS-02-054,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-054.md
+OS-02-055,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-055.md
+OS-02-056,soru_onergesi_cevabi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-056.md
+OS-02-057,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-057.md
+OS-02-058,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-058.md
+OS-02-059,cevap_yazisi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-059.md
+OS-02-060,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-060.md
+OS-02-061,soru_onergesi_cevabi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-061.md
+OS-02-062,soru_onergesi_cevabi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-062.md
+OS-02-063,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-063.md
+OS-02-064,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-064.md
+OS-02-065,soru_onergesi_cevabi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-065.md
+OS-02-066,itiraz_cevabi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-066.md
+OS-02-067,itiraz_cevabi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-067.md
+OS-02-068,itiraz_cevabi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-068.md
+OS-02-069,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-069.md
+OS-02-070,cevap_yazisi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-070.md
+OS-02-071,itiraz_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-071.md
+OS-02-072,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-072.md
+OS-02-073,itiraz_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-073.md
+OS-02-074,itiraz_cevabi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-074.md
+OS-02-075,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-075.md
+OS-02-076,soru_onergesi_cevabi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-076.md
+OS-02-077,soru_onergesi_cevabi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-077.md
+OS-02-078,cevap_yazisi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-078.md
+OS-02-079,cevap_yazisi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-079.md
+OS-02-080,cevap_yazisi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-080.md
+OS-02-081,cevap_yazisi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-081.md
+OS-02-082,soru_onergesi_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-082.md
+OS-02-083,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-083.md
+OS-02-084,cevap_yazisi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-084.md
+OS-02-085,cevap_yazisi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-085.md
+OS-02-086,cevap_yazisi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-086.md
+OS-02-087,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-087.md
+OS-02-088,soru_onergesi_cevabi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-088.md
+OS-02-089,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-089.md
+OS-02-090,cevap_yazisi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-090.md
+OS-02-091,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-091.md
+OS-02-092,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-092.md
+OS-02-093,cevap_yazisi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-093.md
+OS-02-094,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-094.md
+OS-02-095,soru_onergesi_cevabi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-095.md
+OS-02-096,itiraz_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-096.md
+OS-02-097,soru_onergesi_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-097.md
+OS-02-098,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-098.md
+OS-02-099,itiraz_cevabi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-099.md
+OS-02-100,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-100.md
+OS-02-101,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-101.md
+OS-02-102,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-102.md
+OS-02-103,itiraz_cevabi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-103.md
+OS-02-104,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-104.md
+OS-02-105,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-105.md
+OS-02-106,cevap_yazisi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-106.md
+OS-02-107,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-107.md
+OS-02-108,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-108.md
+OS-02-109,cevap_yazisi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-109.md
+OS-02-110,cevap_yazisi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-110.md
+OS-02-111,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-111.md
+OS-02-112,itiraz_cevabi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-112.md
+OS-02-113,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-113.md
+OS-02-114,cevap_yazisi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-114.md
+OS-02-115,itiraz_cevabi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-115.md
+OS-02-116,soru_onergesi_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-116.md
+OS-02-117,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-117.md
+OS-02-118,cevap_yazisi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-118.md
+OS-02-119,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-119.md
+OS-02-120,itiraz_cevabi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-120.md
+OS-02-121,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-121.md
+OS-02-122,soru_onergesi_cevabi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-122.md
+OS-02-123,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-123.md
+OS-02-124,itiraz_cevabi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-124.md
+OS-02-125,soru_onergesi_cevabi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-125.md
+OS-02-126,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-126.md
+OS-02-127,itiraz_cevabi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-127.md
+OS-02-128,cevap_yazisi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-128.md
+OS-02-129,soru_onergesi_cevabi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-129.md
+OS-02-130,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-130.md
+OS-02-131,soru_onergesi_cevabi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-131.md
+OS-02-132,soru_onergesi_cevabi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-132.md
+OS-02-133,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-133.md
+OS-02-134,cevap_yazisi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-134.md
+OS-02-135,itiraz_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-135.md
+OS-02-136,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-136.md
+OS-02-137,soru_onergesi_cevabi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-137.md
+OS-02-138,cevap_yazisi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-138.md
+OS-02-139,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-139.md
+OS-02-140,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-140.md
+OS-02-141,cevap_yazisi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-141.md
+OS-02-142,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-142.md
+OS-02-143,cevap_yazisi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-143.md
+OS-02-144,soru_onergesi_cevabi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-144.md
+OS-02-145,soru_onergesi_cevabi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-145.md
+OS-02-146,itiraz_cevabi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-146.md
+OS-02-147,soru_onergesi_cevabi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-147.md
+OS-02-148,soru_onergesi_cevabi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-148.md
+OS-02-149,itiraz_cevabi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-149.md
+OS-02-150,soru_onergesi_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-150.md
+OS-02-151,itiraz_cevabi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-151.md
+OS-02-152,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-152.md
+OS-02-153,cevap_yazisi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-153.md
+OS-02-154,soru_onergesi_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-154.md
+OS-02-155,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-155.md
+OS-02-156,soru_onergesi_cevabi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-156.md
+OS-02-157,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-157.md
+OS-02-158,cevap_yazisi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-158.md
+OS-02-159,itiraz_cevabi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-159.md
+OS-02-160,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-160.md
+OS-02-161,cevap_yazisi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-161.md
+OS-02-162,soru_onergesi_cevabi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-162.md
+OS-02-163,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-163.md
+OS-02-164,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-164.md
+OS-02-165,cevap_yazisi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-165.md
+OS-02-166,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-166.md
+OS-02-167,cevap_yazisi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-167.md
+OS-02-168,cevap_yazisi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-168.md
+OS-02-169,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-169.md
+OS-02-170,cevap_yazisi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-170.md
+OS-02-171,cevap_yazisi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-171.md
+OS-02-172,cevap_yazisi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-172.md
+OS-02-173,itiraz_cevabi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-173.md
+OS-02-174,cevap_yazisi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-174.md
+OS-02-175,soru_onergesi_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-175.md
+OS-02-176,itiraz_cevabi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-176.md
+OS-02-177,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-177.md
+OS-02-178,cevap_yazisi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-178.md
+OS-02-179,itiraz_cevabi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-179.md
+OS-02-180,soru_onergesi_cevabi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-180.md
+OS-02-181,cevap_yazisi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-181.md
+OS-02-182,soru_onergesi_cevabi,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-182.md
+OS-02-183,cevap_yazisi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-183.md
+OS-02-184,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-184.md
+OS-02-185,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-185.md
+OS-02-186,cevap_yazisi,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-02-186.md
+OS-02-187,cevap_yazisi,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-187.md
+OS-02-188,itiraz_cevabi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-188.md
+OS-02-189,cevap_yazisi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-189.md
+OS-02-190,soru_onergesi_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-190.md
+OS-02-191,cevap_yazisi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-191.md
+OS-02-192,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-02-192.md
+OS-02-193,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-193.md
+OS-02-194,soru_onergesi_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-194.md
+OS-02-195,cevap_yazisi,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-02-195.md
+OS-02-196,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-196.md
+OS-02-197,cevap_yazisi,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-02-197.md
+OS-02-198,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-02-198.md
+OS-02-199,soru_onergesi_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-02-199.md
+OS-02-200,soru_onergesi_cevabi,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-02-200.md
+OS-03-001,genelge,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-001.md
+OS-03-002,mahkeme_karari,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-03-002.md
+OS-03-003,mahkeme_karari,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-003.md
+OS-03-004,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-004.md
+OS-03-005,genelge,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-005.md
+OS-03-006,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-006.md
+OS-03-007,mahkeme_karari,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-03-007.md
+OS-03-008,genelge,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-008.md
+OS-03-009,mahkeme_karari,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-03-009.md
+OS-03-010,genelge,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-010.md
+OS-03-011,mahkeme_karari,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-011.md
+OS-03-012,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-012.md
+OS-03-013,mahkeme_karari,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-013.md
+OS-03-014,mahkeme_karari,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-014.md
+OS-03-015,bilgilendirme_metni,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-015.md
+OS-03-016,genelge,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-016.md
+OS-03-017,genelge,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-017.md
+OS-03-018,bilgilendirme_metni,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-018.md
+OS-03-019,bilgilendirme_metni,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-019.md
+OS-03-020,bilgilendirme_metni,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-020.md
+OS-03-021,mahkeme_karari,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-021.md
+OS-03-022,genelge,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-03-022.md
+OS-03-023,mahkeme_karari,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-023.md
+OS-03-024,mahkeme_karari,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-024.md
+OS-03-025,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-025.md
+OS-03-026,bilgilendirme_metni,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-026.md
+OS-03-027,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-027.md
+OS-03-028,genelge,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-028.md
+OS-03-029,bilgilendirme_metni,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-03-029.md
+OS-03-030,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-030.md
+OS-03-031,mahkeme_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-031.md
+OS-03-032,mahkeme_karari,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-032.md
+OS-03-033,genelge,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-03-033.md
+OS-03-034,mahkeme_karari,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-034.md
+OS-03-035,mahkeme_karari,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-035.md
+OS-03-036,genelge,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-036.md
+OS-03-037,mahkeme_karari,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-037.md
+OS-03-038,mahkeme_karari,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-038.md
+OS-03-039,genelge,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-039.md
+OS-03-040,mahkeme_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-040.md
+OS-03-041,genelge,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-041.md
+OS-03-042,mahkeme_karari,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-042.md
+OS-03-043,mahkeme_karari,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-043.md
+OS-03-044,bilgilendirme_metni,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-044.md
+OS-03-045,mahkeme_karari,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-045.md
+OS-03-046,mahkeme_karari,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-03-046.md
+OS-03-047,genelge,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-047.md
+OS-03-048,bilgilendirme_metni,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-048.md
+OS-03-049,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-049.md
+OS-03-050,bilgilendirme_metni,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-050.md
+OS-03-051,bilgilendirme_metni,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-051.md
+OS-03-052,genelge,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-052.md
+OS-03-053,bilgilendirme_metni,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-053.md
+OS-03-054,bilgilendirme_metni,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-054.md
+OS-03-055,mahkeme_karari,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-03-055.md
+OS-03-056,genelge,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-056.md
+OS-03-057,genelge,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-057.md
+OS-03-058,genelge,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-058.md
+OS-03-059,bilgilendirme_metni,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-059.md
+OS-03-060,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-060.md
+OS-03-061,genelge,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-03-061.md
+OS-03-062,bilgilendirme_metni,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-062.md
+OS-03-063,genelge,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-03-063.md
+OS-03-064,mahkeme_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-064.md
+OS-03-065,genelge,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-065.md
+OS-03-066,mahkeme_karari,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-066.md
+OS-03-067,bilgilendirme_metni,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-03-067.md
+OS-03-068,bilgilendirme_metni,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-03-068.md
+OS-03-069,genelge,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-069.md
+OS-03-070,bilgilendirme_metni,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-03-070.md
+OS-03-071,mahkeme_karari,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-071.md
+OS-03-072,genelge,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-072.md
+OS-03-073,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-073.md
+OS-03-074,mahkeme_karari,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-03-074.md
+OS-03-075,bilgilendirme_metni,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-03-075.md
+OS-03-076,bilgilendirme_metni,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-076.md
+OS-03-077,bilgilendirme_metni,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-077.md
+OS-03-078,mahkeme_karari,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-078.md
+OS-03-079,mahkeme_karari,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-079.md
+OS-03-080,mahkeme_karari,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-03-080.md
+OS-03-081,mahkeme_karari,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-081.md
+OS-03-082,genelge,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-082.md
+OS-03-083,genelge,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-083.md
+OS-03-084,genelge,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-084.md
+OS-03-085,mahkeme_karari,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-085.md
+OS-03-086,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-086.md
+OS-03-087,genelge,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-087.md
+OS-03-088,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-088.md
+OS-03-089,mahkeme_karari,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-089.md
+OS-03-090,bilgilendirme_metni,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-090.md
+OS-03-091,mahkeme_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-091.md
+OS-03-092,bilgilendirme_metni,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-092.md
+OS-03-093,mahkeme_karari,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-093.md
+OS-03-094,mahkeme_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-094.md
+OS-03-095,genelge,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-095.md
+OS-03-096,genelge,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-096.md
+OS-03-097,bilgilendirme_metni,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-03-097.md
+OS-03-098,bilgilendirme_metni,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-03-098.md
+OS-03-099,genelge,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-099.md
+OS-03-100,genelge,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-100.md
+OS-03-101,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-101.md
+OS-03-102,mahkeme_karari,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-102.md
+OS-03-103,mahkeme_karari,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-103.md
+OS-03-104,genelge,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-104.md
+OS-03-105,mahkeme_karari,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-105.md
+OS-03-106,genelge,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-03-106.md
+OS-03-107,bilgilendirme_metni,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-107.md
+OS-03-108,mahkeme_karari,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-108.md
+OS-03-109,mahkeme_karari,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-109.md
+OS-03-110,mahkeme_karari,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-110.md
+OS-03-111,mahkeme_karari,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-111.md
+OS-03-112,bilgilendirme_metni,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-112.md
+OS-03-113,mahkeme_karari,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-113.md
+OS-03-114,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-114.md
+OS-03-115,bilgilendirme_metni,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-115.md
+OS-03-116,bilgilendirme_metni,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-116.md
+OS-03-117,mahkeme_karari,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-117.md
+OS-03-118,bilgilendirme_metni,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-03-118.md
+OS-03-119,mahkeme_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-03-119.md
+OS-03-120,bilgilendirme_metni,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-03-120.md
+OS-03-121,genelge,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-03-121.md
+OS-03-122,bilgilendirme_metni,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-03-122.md
+OS-03-123,bilgilendirme_metni,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-123.md
+OS-03-124,mahkeme_karari,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-124.md
+OS-03-125,mahkeme_karari,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-125.md
+OS-03-126,bilgilendirme_metni,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-126.md
+OS-03-127,mahkeme_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-127.md
+OS-03-128,bilgilendirme_metni,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-03-128.md
+OS-03-129,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-129.md
+OS-03-130,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-130.md
+OS-03-131,genelge,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-131.md
+OS-03-132,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-132.md
+OS-03-133,genelge,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-03-133.md
+OS-03-134,mahkeme_karari,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-03-134.md
+OS-03-135,genelge,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-135.md
+OS-03-136,genelge,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-136.md
+OS-03-137,mahkeme_karari,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-137.md
+OS-03-138,bilgilendirme_metni,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-138.md
+OS-03-139,bilgilendirme_metni,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-03-139.md
+OS-03-140,genelge,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-03-140.md
+OS-03-141,genelge,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-03-141.md
+OS-03-142,bilgilendirme_metni,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-03-142.md
+OS-03-143,bilgilendirme_metni,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-143.md
+OS-03-144,mahkeme_karari,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-144.md
+OS-03-145,genelge,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-145.md
+OS-03-146,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-146.md
+OS-03-147,mahkeme_karari,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-03-147.md
+OS-03-148,mahkeme_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-03-148.md
+OS-03-149,genelge,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-149.md
+OS-03-150,mahkeme_karari,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-150.md
+OS-03-151,bilgilendirme_metni,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-151.md
+OS-03-152,bilgilendirme_metni,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-152.md
+OS-03-153,mahkeme_karari,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-03-153.md
+OS-03-154,mahkeme_karari,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-154.md
+OS-03-155,bilgilendirme_metni,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-155.md
+OS-03-156,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-156.md
+OS-03-157,genelge,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-03-157.md
+OS-03-158,genelge,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-158.md
+OS-03-159,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-159.md
+OS-03-160,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-160.md
+OS-03-161,bilgilendirme_metni,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-161.md
+OS-03-162,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-162.md
+OS-03-163,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-163.md
+OS-03-164,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-164.md
+OS-03-165,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-165.md
+OS-03-166,genelge,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-166.md
+OS-03-167,mahkeme_karari,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-167.md
+OS-03-168,mahkeme_karari,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-168.md
+OS-03-169,mahkeme_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-169.md
+OS-03-170,mahkeme_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-170.md
+OS-03-171,mahkeme_karari,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-03-171.md
+OS-03-172,genelge,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-172.md
+OS-03-173,mahkeme_karari,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-173.md
+OS-03-174,bilgilendirme_metni,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-174.md
+OS-03-175,genelge,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-175.md
+OS-03-176,mahkeme_karari,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-176.md
+OS-03-177,mahkeme_karari,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-177.md
+OS-03-178,genelge,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-178.md
+OS-03-179,genelge,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-179.md
+OS-03-180,mahkeme_karari,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-180.md
+OS-03-181,genelge,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-181.md
+OS-03-182,bilgilendirme_metni,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-182.md
+OS-03-183,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-183.md
+OS-03-184,bilgilendirme_metni,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-03-184.md
+OS-03-185,mahkeme_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-185.md
+OS-03-186,bilgilendirme_metni,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-03-186.md
+OS-03-187,mahkeme_karari,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-187.md
+OS-03-188,mahkeme_karari,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-03-188.md
+OS-03-189,genelge,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-189.md
+OS-03-190,mahkeme_karari,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-03-190.md
+OS-03-191,mahkeme_karari,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-191.md
+OS-03-192,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-192.md
+OS-03-193,genelge,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-193.md
+OS-03-194,mahkeme_karari,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-194.md
+OS-03-195,bilgilendirme_metni,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-03-195.md
+OS-03-196,genelge,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-03-196.md
+OS-03-197,bilgilendirme_metni,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-03-197.md
+OS-03-198,genelge,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-03-198.md
+OS-03-199,mahkeme_karari,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-03-199.md
+OS-03-200,mahkeme_karari,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-03-200.md
+OS-04-001,diger_resmi_yazisma,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-001.md
+OS-04-002,diger_resmi_yazisma,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-002.md
+OS-04-003,diger_resmi_yazisma,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-003.md
+OS-04-004,diger_resmi_yazisma,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-004.md
+OS-04-005,meclis_karari,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-005.md
+OS-04-006,diger_resmi_yazisma,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-006.md
+OS-04-007,tutanak,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-007.md
+OS-04-008,tutanak,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-008.md
+OS-04-009,meclis_karari,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-009.md
+OS-04-010,diger_resmi_yazisma,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-010.md
+OS-04-011,meclis_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-011.md
+OS-04-012,meclis_karari,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-012.md
+OS-04-013,diger_resmi_yazisma,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-013.md
+OS-04-014,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-014.md
+OS-04-015,meclis_karari,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-015.md
+OS-04-016,meclis_karari,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-016.md
+OS-04-017,tutanak,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-017.md
+OS-04-018,diger_resmi_yazisma,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-04-018.md
+OS-04-019,diger_resmi_yazisma,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-019.md
+OS-04-020,tutanak,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-020.md
+OS-04-021,meclis_karari,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-021.md
+OS-04-022,meclis_karari,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-022.md
+OS-04-023,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-023.md
+OS-04-024,meclis_karari,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-024.md
+OS-04-025,meclis_karari,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-025.md
+OS-04-026,diger_resmi_yazisma,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-026.md
+OS-04-027,diger_resmi_yazisma,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-027.md
+OS-04-028,diger_resmi_yazisma,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-04-028.md
+OS-04-029,tutanak,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-029.md
+OS-04-030,meclis_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-030.md
+OS-04-031,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-031.md
+OS-04-032,diger_resmi_yazisma,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-032.md
+OS-04-033,tutanak,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-033.md
+OS-04-034,diger_resmi_yazisma,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-034.md
+OS-04-035,tutanak,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-035.md
+OS-04-036,tutanak,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-036.md
+OS-04-037,diger_resmi_yazisma,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-037.md
+OS-04-038,tutanak,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-038.md
+OS-04-039,tutanak,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-039.md
+OS-04-040,tutanak,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-040.md
+OS-04-041,meclis_karari,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-041.md
+OS-04-042,tutanak,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-042.md
+OS-04-043,diger_resmi_yazisma,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-043.md
+OS-04-044,meclis_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-044.md
+OS-04-045,tutanak,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-045.md
+OS-04-046,tutanak,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-046.md
+OS-04-047,tutanak,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-047.md
+OS-04-048,tutanak,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-048.md
+OS-04-049,diger_resmi_yazisma,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-049.md
+OS-04-050,diger_resmi_yazisma,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-04-050.md
+OS-04-051,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-051.md
+OS-04-052,tutanak,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-052.md
+OS-04-053,diger_resmi_yazisma,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-04-053.md
+OS-04-054,meclis_karari,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-054.md
+OS-04-055,diger_resmi_yazisma,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-055.md
+OS-04-056,diger_resmi_yazisma,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-056.md
+OS-04-057,meclis_karari,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-057.md
+OS-04-058,tutanak,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-058.md
+OS-04-059,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-059.md
+OS-04-060,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-060.md
+OS-04-061,meclis_karari,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-061.md
+OS-04-062,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-062.md
+OS-04-063,tutanak,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-063.md
+OS-04-064,meclis_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-064.md
+OS-04-065,meclis_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-065.md
+OS-04-066,meclis_karari,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-066.md
+OS-04-067,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-067.md
+OS-04-068,tutanak,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-068.md
+OS-04-069,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-069.md
+OS-04-070,diger_resmi_yazisma,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-070.md
+OS-04-071,tutanak,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-071.md
+OS-04-072,meclis_karari,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-072.md
+OS-04-073,tutanak,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-073.md
+OS-04-074,diger_resmi_yazisma,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-074.md
+OS-04-075,meclis_karari,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-075.md
+OS-04-076,tutanak,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-076.md
+OS-04-077,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-077.md
+OS-04-078,tutanak,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-078.md
+OS-04-079,diger_resmi_yazisma,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-079.md
+OS-04-080,tutanak,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-04-080.md
+OS-04-081,meclis_karari,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-081.md
+OS-04-082,tutanak,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-082.md
+OS-04-083,tutanak,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-083.md
+OS-04-084,diger_resmi_yazisma,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-084.md
+OS-04-085,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-085.md
+OS-04-086,diger_resmi_yazisma,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-086.md
+OS-04-087,diger_resmi_yazisma,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-087.md
+OS-04-088,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-088.md
+OS-04-089,meclis_karari,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-04-089.md
+OS-04-090,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-090.md
+OS-04-091,tutanak,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-091.md
+OS-04-092,diger_resmi_yazisma,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-092.md
+OS-04-093,meclis_karari,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-093.md
+OS-04-094,meclis_karari,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-094.md
+OS-04-095,meclis_karari,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-095.md
+OS-04-096,tutanak,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-096.md
+OS-04-097,diger_resmi_yazisma,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-097.md
+OS-04-098,diger_resmi_yazisma,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-098.md
+OS-04-099,tutanak,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-099.md
+OS-04-100,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-100.md
+OS-04-101,tutanak,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-101.md
+OS-04-102,tutanak,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-102.md
+OS-04-103,meclis_karari,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-103.md
+OS-04-104,meclis_karari,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-04-104.md
+OS-04-105,diger_resmi_yazisma,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-105.md
+OS-04-106,tutanak,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-04-106.md
+OS-04-107,tutanak,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-107.md
+OS-04-108,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-108.md
+OS-04-109,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-109.md
+OS-04-110,tutanak,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-110.md
+OS-04-111,tutanak,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-111.md
+OS-04-112,tutanak,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-112.md
+OS-04-113,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-113.md
+OS-04-114,tutanak,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-04-114.md
+OS-04-115,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-115.md
+OS-04-116,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-116.md
+OS-04-117,tutanak,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-117.md
+OS-04-118,meclis_karari,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-118.md
+OS-04-119,meclis_karari,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-119.md
+OS-04-120,meclis_karari,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-120.md
+OS-04-121,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-121.md
+OS-04-122,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-122.md
+OS-04-123,diger_resmi_yazisma,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-123.md
+OS-04-124,meclis_karari,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-124.md
+OS-04-125,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-125.md
+OS-04-126,meclis_karari,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-126.md
+OS-04-127,diger_resmi_yazisma,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-127.md
+OS-04-128,meclis_karari,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-128.md
+OS-04-129,tutanak,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-04-129.md
+OS-04-130,meclis_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-130.md
+OS-04-131,meclis_karari,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-131.md
+OS-04-132,diger_resmi_yazisma,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-132.md
+OS-04-133,meclis_karari,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-133.md
+OS-04-134,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-134.md
+OS-04-135,meclis_karari,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-135.md
+OS-04-136,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-136.md
+OS-04-137,diger_resmi_yazisma,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-137.md
+OS-04-138,diger_resmi_yazisma,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-138.md
+OS-04-139,tutanak,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-139.md
+OS-04-140,tutanak,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-140.md
+OS-04-141,meclis_karari,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-141.md
+OS-04-142,meclis_karari,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-142.md
+OS-04-143,tutanak,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-143.md
+OS-04-144,meclis_karari,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-144.md
+OS-04-145,diger_resmi_yazisma,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-145.md
+OS-04-146,meclis_karari,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-04-146.md
+OS-04-147,tutanak,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-147.md
+OS-04-148,tutanak,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-148.md
+OS-04-149,meclis_karari,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-149.md
+OS-04-150,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-150.md
+OS-04-151,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-151.md
+OS-04-152,diger_resmi_yazisma,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-152.md
+OS-04-153,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-153.md
+OS-04-154,tutanak,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-154.md
+OS-04-155,tutanak,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-155.md
+OS-04-156,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-156.md
+OS-04-157,tutanak,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-157.md
+OS-04-158,diger_resmi_yazisma,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-158.md
+OS-04-159,diger_resmi_yazisma,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-159.md
+OS-04-160,diger_resmi_yazisma,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-160.md
+OS-04-161,meclis_karari,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-161.md
+OS-04-162,diger_resmi_yazisma,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-162.md
+OS-04-163,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-163.md
+OS-04-164,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-164.md
+OS-04-165,tutanak,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-165.md
+OS-04-166,meclis_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-166.md
+OS-04-167,meclis_karari,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-167.md
+OS-04-168,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-168.md
+OS-04-169,diger_resmi_yazisma,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-169.md
+OS-04-170,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-170.md
+OS-04-171,tutanak,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-171.md
+OS-04-172,tutanak,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-172.md
+OS-04-173,meclis_karari,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-173.md
+OS-04-174,tutanak,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-174.md
+OS-04-175,meclis_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-175.md
+OS-04-176,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-176.md
+OS-04-177,tutanak,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-177.md
+OS-04-178,diger_resmi_yazisma,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-178.md
+OS-04-179,diger_resmi_yazisma,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-179.md
+OS-04-180,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,gercek_acik_kaynak_orneklemi,OS-04-180.md
+OS-04-181,tutanak,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-04-181.md
+OS-04-182,tutanak,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-182.md
+OS-04-183,diger_resmi_yazisma,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-183.md
+OS-04-184,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,gercek_acik_kaynak_orneklemi,OS-04-184.md
+OS-04-185,diger_resmi_yazisma,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-185.md
+OS-04-186,tutanak,İhale Onay İşlemleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-186.md
+OS-04-187,meclis_karari,Sayıştay Denetim Raporu Hakkında,gercek_acik_kaynak_orneklemi,OS-04-187.md
+OS-04-188,tutanak,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-188.md
+OS-04-189,meclis_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-189.md
+OS-04-190,meclis_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-190.md
+OS-04-191,meclis_karari,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-191.md
+OS-04-192,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-192.md
+OS-04-193,meclis_karari,Bütçe Ödeneği Aktarımı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-193.md
+OS-04-194,meclis_karari,Halk Sağlığı Tedbirleri Hakkında,gercek_acik_kaynak_orneklemi,OS-04-194.md
+OS-04-195,meclis_karari,Soruşturma İzni Hakkında,gercek_acik_kaynak_orneklemi,OS-04-195.md
+OS-04-196,meclis_karari,Kentsel Dönüşüm Projesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-196.md
+OS-04-197,diger_resmi_yazisma,Personel Görevlendirmesi Hakkında,gercek_acik_kaynak_orneklemi,OS-04-197.md
+OS-04-198,meclis_karari,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-198.md
+OS-04-199,tutanak,Bilgi Edinme Başvurusu Cevabı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-199.md
+OS-04-200,diger_resmi_yazisma,Kamu İhale Kurumu İtirazı Hakkında,gercek_acik_kaynak_orneklemi,OS-04-200.md
+TBMM-001,soru_onergesi_cevabi,Trafik Elektronik Denetleme Sistemleri (TEDES) ve Kent Güvenlik Yönetim Sistemi Hakkında Yazılı Soru Önergesi Cevabı,gercek_acik_kaynak,TBMM-001_trafik_elektronik_denetleme_sistemleri_cevap.md
+TBMM-002,soru_onergesi_cevabi,Köy Okullarının İhyası ve Taşımalı Eğitim Kapsamındaki Öğrencilere İlişkin Yazılı Soru Önergesi Cevabı,gercek_acik_kaynak,TBMM-002_koy_okullari_tasimali_egitim_cevap.md
+TBMM-003,soru_onergesi_cevabi,MHRS Randevu Tedarik Oranları ve Yan Dal Uzman Hekim Atamaları Hakkında Yazılı Soru Önergesi Cevabı,gercek_acik_kaynak,TBMM-003_mhrs_randevu_ve_hekim_istihdami_cevap.md
+TBMM-004,soru_onergesi_cevabi,Yeraltı Depolama Tesisleri ve Tarımsal Sulama Destekleri Hakkında Yazılı Soru Önergesi Cevabı,gercek_acik_kaynak,TBMM-004_yaralti_depolama_ve_tarimsal_sulama_cevap.md
+TBMM-005,soru_onergesi_cevabi,Demiryolu Ağı Genişletme Projeleri ve Kırsal Alan Fiber İnternet Altyapısı Yazılı Soru Önergesi Cevabı,gercek_acik_kaynak,TBMM-005_demiryolu_ve_fiber_internet_altyapisi_cevap.md
+TBMM-006,soru_onergesi_cevabi,Deprem Bölgesi Kalıcı Konut Teslimatları ve Kentsel Dönüşüm Hibe-Kredi Destekleri Cevabı,gercek_acik_kaynak,TBMM-006_deprem_konutlari_kentsel_donusum_cevap.md
+TBMM-007,soru_onergesi_cevabi,Maden ve İnşaat Sektörlerinde İş Kazası Denetimleri ve İdari Yaptırımlar Soru Önergesi Cevabı,gercek_acik_kaynak,TBMM-007_is_sagligi_ve_guvenligi_denetimleri_cevap.md
+TBMM-008,soru_onergesi_cevabi,Hukuk ve Ceza Mahkemelerinde Hedef Süre Uyumu ile Dava Şartı Arabuluculuk İstatistikleri Cevabı,gercek_acik_kaynak,TBMM-008_yargida_hedef_sure_ve_arabuluculuk_cevap.md
+UNI-001,toplanti,T.C. TEKİRDAĞ NAMIK KEMAL ÜNİVERSİTESİ SENATO KARARI,gercek_acik_kaynak,UNI-001_tekirdag-namik-kemal-universitesi-senato-karari.md
+UNI-002,toplanti,T.C. SELÇUK ÜNİVERSİTESİ SENATO KARARI,gercek_acik_kaynak,UNI-002_selcuk-universitesi-senato-karari-sinav-tarihleri.md
+UNI-003,toplanti,T.C. SAĞLIK BİLİMLERİ ÜNİVERSİTESİ SENATO KARARI,gercek_acik_kaynak,UNI-003_saglik-bilimleri-universitesi-akademik-takvim-karari.md
+UNI-004,toplanti,T.C. ÇANAKKALE ONSEKİZ MART ÜNİVERSİTESİ SENATO KARARI,gercek_acik_kaynak,UNI-004_comu-senato-karari-intibak-muafiyet.md
+UNI-005,toplanti,T.C. GAZİ ÜNİVERSİTESİ SAĞLIK BİLİMLERİ ENSTİTÜSÜ YÖNETİM KURULU KARARI,gercek_acik_kaynak,UNI-005_gazi-universitesi-yonetim-kurulu-karari.md
+UNI-006,gorevlendirme_personel,Belirtilmemiş Başlık,gercek_acik_kaynak,UNI-006_odtu-akademik-personel-gorevlendirme-ust-yazi.md
+UNI-007,gorevlendirme,Belirtilmemiş Başlık,gercek_acik_kaynak,UNI-007_istanbul-universitesi-komisyon-gorevlendirme.md
+UNI-008,ek_belge_iletimi,Belirtilmemiş Başlık,gercek_acik_kaynak,UNI-008_marmara-universitesi-yaz-okulu-ust-yazisi.md
+UNI-009,gorus_talebi,Belirtilmemiş Başlık,gercek_acik_kaynak,UNI-009_ege-universitesi-yatay-gecis-itiraz-cevap-yazisi.md
+UNI-010,teklif_proje,Belirtilmemiş Başlık,gercek_acik_kaynak,UNI-010_deu-bap-proje-cagrisi-ust-yazi.md
+UNI-011,gorevlendirme,Belirtilmemiş Başlık,gercek_acik_kaynak,UNI-011_anadolu-universitesi-aof-sinav-gorevlendirmesi.md
+UNI-012,toplanti,T.C. HACETTEPE ÜNİVERSİTESİ SENATO KARARI,gercek_acik_kaynak,UNI-012_hacettepe-universitesi-senato-karari.md
+UNI-013,uyari_guvenlik,T.C. BOĞAZİÇİ ÜNİVERSİTESİ REKTÖRLÜĞÜ,gercek_acik_kaynak,UNI-013_bogazici-universitesi-guvenlik-duyurusu.md
+VAL-001,duyuru,Ankara Valiliği Orman Yangınlarıyla Mücadele Komisyon Kararı,gercek_acik_kaynak,VAL-001_ankara-valiligi-orman-yanginlariyla-mucadele-karari.md
+VAL-002,teblig_bildirim,İstanbul Valiliği Sahipsiz Hayvanların Korunması ve Rehabilitasyonu Genelgesi,gercek_acik_kaynak,VAL-002_istanbul-valiligi-sahipsiz-hayvanlar-genelgesi.md
+VAL-003,duyuru,Antalya Valiliği Mavi Akdeniz İnisiyatifi Dumansız Plaj Uygulama Genelgesi,gercek_acik_kaynak,VAL-003_antalya-valiligi-dumansiz-plaj-uygulama-genelgesi.md
+VAL-004,teblig_bildirim,İzmir Valiliği İl Umumi Hıfzıssıhha Kurulu Kamusal Alan Güvenliği ve Sağlık Tedbirleri Kararı,gercek_acik_kaynak,VAL-004_izmir-valiligi-il-umumi-hifzissihha-kurul-karari.md
+VAL-005,duyuru,Muğla Valiliği Ormanlık Alanlara Giriş Yasağı ve Yangın Tedbirleri Genelgesi,gercek_acik_kaynak,VAL-005_mugla-valiligi-ormanlik-alanlara-giris-yasagi-genelgesi.md
+VAL-006,duyuru,Bursa Valiliği Kış Mevsimi Karayolu Trafik Tedbirleri Genelgesi,gercek_acik_kaynak,VAL-006_bursa-valiligi-kis-mevsimi-trafik-tedbirleri-genelgesi.md
+VAL-007,duyuru,Trabzon Valiliği Suda Boğulma Olaylarının Önlenmesi ve Deniz Güvenliği Genelgesi,gercek_acik_kaynak,VAL-007_trabzon-valiligi-suda-bogulma-olaylarinin-onlenmesi-genelgesi.md
+VAL-008,duyuru,Denizli Valiliği Kadına Yönelik Şiddetle Mücadele İl Eylem Planı Genelgesi,gercek_acik_kaynak,VAL-008_denizli-valiligi-kadina-yonelik-siddetle-mucadele-genelgesi.md
+VAL-009,teblig_bildirim,Kocaeli Valiliği Mahalli Çevre Kurulu Sanayi Emisyon Denetim Kararı,gercek_acik_kaynak,VAL-009_kocaeli-valiligi-sanayi-emisyonu-ve-hava-kalitesi-kurul-karari.md
+VAL-010,koordinasyon,Diyarbakır Valiliği Bağımlılıkla Mücadele İl Koordinasyon Kurulu Kararı,gercek_acik_kaynak,VAL-010_diyarbakir-valiligi-bagimlilikla-mucadele-koordinasyon-karari.md
+VAL-011,teblig_bildirim,Eskişehir Valiliği Kamu Düzeninin Korunması ve Çevresel Temizlik Genelgesi,gercek_acik_kaynak,VAL-011_eskisehir-valiligi-kamu-duzeni-ve-cevre-koruma-genelgesi.md
+YARG-001,mahkeme_karari,"Anayasa Mahkemesi Kararı - Esas Sayısı: 2023/131, Karar Sayısı: 2023/160",gercek_acik_kaynak,YARG-001_aym_ek_mtv_iptal_isteminin_reddi.md
+YARG-002,mahkeme_karari,Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: 2020/18234,gercek_acik_kaynak,YARG-002_aym_mulkiyet_hakki_ihlali_bireysel_basvuru.md
+YARG-003,mahkeme_karari,Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: 2021/34521,gercek_acik_kaynak,YARG-003_aym_makul_surede_yargilanma_hakki.md
+YARG-004,mahkeme_karari,"Anayasa Mahkemesi Kararı - Esas Sayısı: 2022/45, Karar Sayısı: 2023/12",gercek_acik_kaynak,YARG-004_aym_iyuk_parasal_sinirlar_iptal_karari.md
+YARG-005,mahkeme_karari,"Danıştay İdari Dava Daireleri Kurulu Kararı - E.2022/1120, K.2023/450",gercek_acik_kaynak,YARG-005_danistay_iddk_sozlesmeli_personel_atama.md
+YARG-006,mahkeme_karari,"Danıştay 10. Daire Kararı - E.2021/4890, K.2022/3120",gercek_acik_kaynak,YARG-006_danistay_10d_bilgi_edinme_hakki_iptal.md
+YARG-007,mahkeme_karari,Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: 2019/29104,gercek_acik_kaynak,YARG-007_aym_ifade_ozgurllugu_ve_erisim_engeli.md

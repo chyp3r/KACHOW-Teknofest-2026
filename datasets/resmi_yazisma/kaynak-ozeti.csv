@@ -1,4 +1,19 @@
 id,kategori,niyet,baslik,kurum,belge_turu,kart
+BAK-001,bilgilendirme_metni,egitim_mufredat_duyurusu,Türkiye Yüzyılı Maarif Modeli'ne İlişkin İş ve İşlemler (Genelge No: 2024/54),T.C. Millî Eğitim Bakanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/BAK-001_turkiye_yuzyili_maarif_modeli_genelgesi.md
+BAK-002,ust_yazi,egitim_ogretim_yili_talimati,2024-2025 Eğitim ve Öğretim Yılına İlişkin İş ve İşlemler (Genelge No: 2024/53),T.C. Millî Eğitim Bakanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/ust_yazi/BAK-002_2024_2025_egitim_ogretim_yili_is_ve_islemler_genelgesi.md
+BAK-003,ust_yazi,kentsel_donusum_talimati,6306 Sayılı Kanun Kentsel Dönüşüm Uygulamaları Hakkında Genelge (Genelge No: 2024/1),"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak,00_gelen_kaynaklar/ust_yazi/BAK-003_kentsel_donusum_6306_sayili_kanun_genelgesi.md
+BAK-004,bilgilendirme_metni,afet_yonetimi_duyurusu,Afet Risk Azaltma ve Önleme Çalışmaları Hakkında Genelge (Genelge No: 2024/6),T.C. İçişleri Bakanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/BAK-004_afet_ve_acil_durum_yonetimi_deprem_azaltma_genelgesi.md
+BAK-005,diger_resmi_yazisma,gumruk_ve_ithalat_duzenlemesi,TPS-Anne ve Bebek Ürünleri Uygunluk Belgesi Uygulaması (Genelge No: 2024/1),T.C. Ticaret Bakanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/diger_resmi_yazisma/BAK-005_tps_anne_bebek_urunleri_uygunluk_belgesi_genelgesi.md
+BAK-006,ust_yazi,kamulastirma_ve_malkuliyet_talimati,Kamulaştırma İşlemlerinde Tapu ve Kadastro Uygulamaları (Genelge No: 2024/3),"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı - Tapu ve Kadastro Genel Müdürlüğü",gercek_acik_kaynak,00_gelen_kaynaklar/ust_yazi/BAK-006_kamulastirma_uygulamalari_genelgesi.md
+BAK-007,bilgilendirme_metni,saglik_hizmetleri_duyurusu,Sağlık Kurumlarında Hasta Hakları ve Güvenliği Uygulamaları Genelgesi (Genelge No: 2024/2),T.C. Sağlık Bakanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/BAK-007_saglik_kurumlarinda_hasta_haklari_genelgesi.md
+BAK-008,diger_resmi_yazisma,turizm_veri_tabani_duzenlemesi,Merkezi Turizm Veri Tabanı Uygulamaları Hakkında Genelge (Genelge No: 2026/1),T.C. Kültür ve Turizm Bakanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/diger_resmi_yazisma/BAK-008_merkezi_turizm_veri_tabani_genelgesi.md
+BEL-001,cevap_yazisi,belediye_proje_ve_ihale_karari,T.C. Salihli Belediye Meclis Kararı (Karar No: 2026/33),T.C. Salihli Belediye Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/cevap_yazisi/BEL-001_salihli_belediyesi_bilim_merkezi_ve_ruhsat_karari.md
+BEL-002,diger_resmi_yazisma,imar_plani_degisikligi,T.C. Salihli Belediye Meclis Kararı (Karar No: 2026/27),T.C. Salihli Belediye Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/diger_resmi_yazisma/BEL-002_salihli_belediyesi_caferbey_imar.md
+BEL-003,ust_yazi,belediye_tarife_ve_ucret_karari,T.C. Ortaca Belediye Meclis Kararı (Karar No: 63),T.C. Ortaca Belediye Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/ust_yazi/BEL-003_ortaca_belediyesi_evsel_kati_atik_tarifeleri.md
+BEL-004,cevap_yazisi,tasinmaz_kiralama_karari,T.C. Ortaca Belediye Meclis Kararı (Karar No: 53),T.C. Ortaca Belediye Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/cevap_yazisi/BEL-004_ortaca_belediyesi_tasinmaz_ve_cay_bahcesi_kiralama.md
+BEL-005,bilgilendirme_metni,meclis_calisma_takvimi,T.C. Adalar Belediye Meclis Kararı (Karar No: 2026/01),T.C. Adalar Belediye Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/BEL-005_adalar_belediyesi_meclis_tatil_ayi_karari.md
+BEL-006,diger_resmi_yazisma,pazaryeri_duzenlemesi,T.C. Başakşehir Belediye Meclis Kararı (Karar No: 2024/42),T.C. Başakşehir Belediye Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/diger_resmi_yazisma/BEL-006_basaksehir_belediyesi_pazaryeri_duzenlemesi.md
+BEL-007,bilgilendirme_metni,iklim_eylem_plani,T.C. Kadıköy Belediye Meclis Kararı (Karar No: 2024/18),T.C. Kadıköy Belediye Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/BEL-007_kadikoy_belediyesi_iklim_eylem_plani.md
 BM-001,bilgilendirme_metni,03_uyari_guvenlik,"TAREKS, PGDBİS ve İthalat Sistemlerinde Planlı Kesinti",Ticaret Bakanlığı,yayimlanmis_resmi_bilgilendirme,03_bilgilendirme_metni/03_uyari_guvenlik/BM-001_tareks-pgdbis-ve-ithalat-sistemlerinde-planli-kesinti.md
 BM-002,bilgilendirme_metni,03_uyari_guvenlik,Yunanistan’daki Gümrük Personelinin Olası Grevi,Ticaret Bakanlığı,yayimlanmis_resmi_bilgilendirme,03_bilgilendirme_metni/03_uyari_guvenlik/BM-002_yunanistan-daki-gumruk-personelinin-olasi-grevi.md
 BM-003,bilgilendirme_metni,01_islem_sureci,EBYS Kurum Dışı Erişimi Hakkında Duyuru,Ticaret Bakanlığı,yayimlanmis_resmi_bilgilendirme,03_bilgilendirme_metni/01_islem_sureci/BM-003_ebys-kurum-disi-erisimi-hakkinda-duyuru.md
@@ -196,6 +211,846 @@ DY-208,diger_resmi_yazisma,10_iade_yetkisizlik,Belirtilmemiş Başlık,Eskişehi
 DY-209,diger_resmi_yazisma,10_iade_yetkisizlik,Belirtilmemiş Başlık,Trabzon Valiliği,sentetik_belge,04_diger_resmi_yazisma/10_iade_yetkisizlik/DY-209.md
 DY-210,diger_resmi_yazisma,10_iade_yetkisizlik,Belirtilmemiş Başlık,"Konya Çevre, Şehircilik ve İklim Değişikliği İl Müdürlüğü",sentetik_belge,04_diger_resmi_yazisma/10_iade_yetkisizlik/DY-210.md
 DY-211,diger_resmi_yazisma,10_iade_yetkisizlik,Belirtilmemiş Başlık,Kamu Denetçiliği Kurumu,sentetik_belge,04_diger_resmi_yazisma/10_iade_yetkisizlik/DY-211.md
+KAY-001,diger_resmi_yazisma,teblig_bildirim,Çankaya Kaymakamlığı İlçe Hıfzıssıhha Kurulu Gıda Güvenliği ve Denetim Kararı,T.C. Çankaya Kaymakamlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/KAY-001_cankaya-kaymakamligi-ilce-hifzissihha-gida-denetim-karari.md
+KAY-002,bilgilendirme_metni,duyuru,Kadıköy Kaymakamlığı SYDV Aşırı Sıcak Yardımı ve Sosyal İnceleme Duyurusu,T.C. Kadıköy Kaymakamlığı Sosyal Yardımlaşma ve Dayanışma Vakfı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/KAY-002_kadikoy-kaymakamligi-sydv-sosyal-yardim-basvuru-duyurusu.md
+KAY-003,bilgilendirme_metni,duyuru,Osmangazi Kaymakamlığı SYDV Belirsiz Süreli Personel Alım İlanı Duyurusu,T.C. Osmangazi Kaymakamlığı Sosyal Yardımlaşma ve Dayanışma Vakfı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/KAY-003_osmangazi-kaymakamligi-sydv-personel-alim-duyurusu.md
+KAY-004,bilgilendirme_metni,duyuru,Seyhan Kaymakamlığı İlçe Sağlık Müdürlüğü Aşırı Sıcaklar Sağlık Tedbirleri Duyurusu,T.C. Seyhan Kaymakamlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/KAY-004_seyhan-kaymakamligi-ilce-salgin-ve-toplum-sagligi-duyurusu.md
+KAY-005,diger_resmi_yazisma,teblig_bildirim,Bodrum Kaymakamlığı Çevresel Gürültü ve Canlı Müzik Yayın Usul ve Esasları Genelgesi,T.C. Bodrum Kaymakamlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/KAY-005_bodrum-kaymakamligi-gurultu-kirliligi-ve-muzik-yayini-genelgesi.md
+KAYMEB-001,ust_yazi,meb_gorevlendirme,T.C. Çankaya İlçe Milli Eğitim Müdürlüğü 2024 Yılı LGS Sınav Binası Görevlendirme Üst Yazısı,T.C. Çankaya İlçe Milli Eğitim Müdürlüğü,gercek_acik_kaynak,00_gelen_kaynaklar/ust_yazi/KAYMEB-001_cankaya_meb_ogretmen_gorevlendirme.md
+MEB-001,bilgilendirme_metni,mevzuat_hak_yukumluluk,T.C. MİLLÎ EĞİTİM BAKANLIĞI,Millî Eğitim Bakanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/MEB-001_meb-genelgesi-maarif-modeli.md
+MEB-002,bilgilendirme_metni,etkinlik_program,T.C. MİLLÎ EĞİTİM BAKANLIĞI,Millî Eğitim Bakanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/MEB-002_meb-genelgesi-ogretmenler-gunu.md
+MEB-003,ust_yazi,basvuru_talep,Belirtilmemiş Başlık,Millî Eğitim Bakanlığı Personel Genel Müdürlüğü,gercek_acik_kaynak,00_gelen_kaynaklar/ust_yazi/MEB-003_meb-personel-il-ici-atama-ust-yazisi.md
+MEB-004,ust_yazi,ek_belge_iletimi,Belirtilmemiş Başlık,"Millî Eğitim Bakanlığı Ölçme, Değerlendirme ve Sınav Hizmetleri Genel Müdürlüğü",gercek_acik_kaynak,00_gelen_kaynaklar/ust_yazi/MEB-004_meb-odsgm-ortak-sinavlar-ust-yazi.md
+MEB-005,diger_resmi_yazisma,gorevlendirme,Belirtilmemiş Başlık,Ankara İl Millî Eğitim Müdürlüğü,gercek_acik_kaynak,00_gelen_kaynaklar/diger_resmi_yazisma/MEB-005_ankara-il-meb-sinav-gorevlendirme-olur.md
+MEB-006,bilgilendirme_metni,duyuru,T.C. MİLLÎ EĞİTİM BAKANLIĞI,Millî Eğitim Bakanlığı Özel Eğitim ve Rehberlik Hizmetleri Genel Müdürlüğü,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/MEB-006_meb-orgm-bilsem-kilavuz-duyurusu.md
+MEB-007,cevap_yazisi,bilgi_edinme,Belirtilmemiş Başlık,Millî Eğitim Bakanlığı Destek Hizmetleri Genel Müdürlüğü,gercek_acik_kaynak,00_gelen_kaynaklar/cevap_yazisi/MEB-007_meb-dhgm-bilgi-edinme-cevap-yazisi.md
+MEB-008,ust_yazi,rapor_sunum,Belirtilmemiş Başlık,Millî Eğitim Bakanlığı Temel Eğitim Genel Müdürlüğü,gercek_acik_kaynak,00_gelen_kaynaklar/ust_yazi/MEB-008_meb-tegm-surec-odakli-olcme-ust-yazi.md
+MEB-009,bilgilendirme_metni,etkinlik_program,T.C. MİLLÎ EĞİTİM BAKANLIĞI,Millî Eğitim Bakanlığı Din Öğretimi Genel Müdürlüğü,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/MEB-009_meb-dogm-hedef-yks-lgs-duyurusu.md
+MEB-010,cevap_yazisi,ret_kismen_kabul,Belirtilmemiş Başlık,Millî Eğitim Bakanlığı Mesleki ve Teknik Eğitim Genel Müdürlüğü,gercek_acik_kaynak,00_gelen_kaynaklar/cevap_yazisi/MEB-010_meb-mtegm-mesem-devlet-katkisi-cevap.md
+MEB-011,ust_yazi,onay_izin,Belirtilmemiş Başlık,Millî Eğitim Bakanlığı Yükseköğretim ve Yurt Dışı Eğitim Genel Müdürlüğü,gercek_acik_kaynak,00_gelen_kaynaklar/ust_yazi/MEB-011_meb-yyegm-ylsy-burs-onay-ust-yazisi.md
+MERK-001,bilgilendirme_metni,sgk_asgari_ucret_destegi,2024 Yılı Asgari Ücret Desteği Uygulama Usul ve Esasları Genelgesi (Genelge No: 2024/12),T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/MERK-001_sgk_asgari_ucret_destegi_2024.md
+MERK-002,bilgilendirme_metni,iskur_toplum_yararina_program,Toplum Yararına Programlar (TYP) Uygulama Esasları ve Katılım Şartları Genelgesi,T.C. Türkiye İş Kurumu Genel Müdürlüğü,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/MERK-002_iskur_toplum_yararina_program_2024.md
+OS-01-001,01_ust_yazi,ust_yazi,Personel Görevlendirmesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-001.md
+OS-01-002,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-002.md
+OS-01-003,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-003.md
+OS-01-004,01_ust_yazi,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-004.md
+OS-01-005,01_ust_yazi,ust_yazi,İmar Planı Değişikliği Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-005.md
+OS-01-006,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-006.md
+OS-01-007,01_ust_yazi,ust_yazi,Soruşturma İzni Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-007.md
+OS-01-008,01_ust_yazi,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-008.md
+OS-01-009,01_ust_yazi,ust_yazi,İmar Planı Değişikliği Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-009.md
+OS-01-010,01_ust_yazi,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-010.md
+OS-01-011,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-011.md
+OS-01-012,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-012.md
+OS-01-013,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-013.md
+OS-01-014,01_ust_yazi,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-014.md
+OS-01-015,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-015.md
+OS-01-016,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-016.md
+OS-01-017,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-017.md
+OS-01-018,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-018.md
+OS-01-019,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-019.md
+OS-01-020,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-020.md
+OS-01-021,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-021.md
+OS-01-022,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-022.md
+OS-01-023,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-023.md
+OS-01-024,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-024.md
+OS-01-025,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-025.md
+OS-01-026,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-026.md
+OS-01-027,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-027.md
+OS-01-028,01_ust_yazi,ust_yazi,Personel Görevlendirmesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-028.md
+OS-01-029,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-029.md
+OS-01-030,01_ust_yazi,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-030.md
+OS-01-031,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-031.md
+OS-01-032,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-032.md
+OS-01-033,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-033.md
+OS-01-034,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-034.md
+OS-01-035,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-035.md
+OS-01-036,01_ust_yazi,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-036.md
+OS-01-037,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-037.md
+OS-01-038,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-038.md
+OS-01-039,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-039.md
+OS-01-040,01_ust_yazi,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-040.md
+OS-01-041,01_ust_yazi,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-041.md
+OS-01-042,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-042.md
+OS-01-043,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-043.md
+OS-01-044,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-044.md
+OS-01-045,01_ust_yazi,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-045.md
+OS-01-046,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-046.md
+OS-01-047,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-047.md
+OS-01-048,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-048.md
+OS-01-049,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-049.md
+OS-01-050,01_ust_yazi,ust_yazi,İmar Planı Değişikliği Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-050.md
+OS-01-051,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-051.md
+OS-01-052,01_ust_yazi,ust_yazi,Personel Görevlendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-052.md
+OS-01-053,01_ust_yazi,ust_yazi,Soruşturma İzni Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-053.md
+OS-01-054,01_ust_yazi,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-054.md
+OS-01-055,01_ust_yazi,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-055.md
+OS-01-056,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-056.md
+OS-01-057,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-057.md
+OS-01-058,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-058.md
+OS-01-059,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-059.md
+OS-01-060,01_ust_yazi,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-060.md
+OS-01-061,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-061.md
+OS-01-062,01_ust_yazi,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-062.md
+OS-01-063,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-063.md
+OS-01-064,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-064.md
+OS-01-065,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-065.md
+OS-01-066,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-066.md
+OS-01-067,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-067.md
+OS-01-068,01_ust_yazi,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-068.md
+OS-01-069,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-069.md
+OS-01-070,01_ust_yazi,ust_yazi,Soruşturma İzni Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-070.md
+OS-01-071,01_ust_yazi,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-071.md
+OS-01-072,01_ust_yazi,ust_yazi,Personel Görevlendirmesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-072.md
+OS-01-073,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-073.md
+OS-01-074,01_ust_yazi,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-074.md
+OS-01-075,01_ust_yazi,ust_yazi,Personel Görevlendirmesi Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-075.md
+OS-01-076,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-076.md
+OS-01-077,01_ust_yazi,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-077.md
+OS-01-078,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-078.md
+OS-01-079,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-079.md
+OS-01-080,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-080.md
+OS-01-081,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-081.md
+OS-01-082,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-082.md
+OS-01-083,01_ust_yazi,ust_yazi,Soruşturma İzni Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-083.md
+OS-01-084,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-084.md
+OS-01-085,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-085.md
+OS-01-086,01_ust_yazi,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-086.md
+OS-01-087,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-087.md
+OS-01-088,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-088.md
+OS-01-089,01_ust_yazi,ust_yazi,İmar Planı Değişikliği Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-089.md
+OS-01-090,01_ust_yazi,ust_yazi,Soruşturma İzni Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-090.md
+OS-01-091,01_ust_yazi,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-091.md
+OS-01-092,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-092.md
+OS-01-093,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-093.md
+OS-01-094,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-094.md
+OS-01-095,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-095.md
+OS-01-096,01_ust_yazi,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-096.md
+OS-01-097,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-097.md
+OS-01-098,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-098.md
+OS-01-099,01_ust_yazi,ust_yazi,Personel Görevlendirmesi Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-099.md
+OS-01-100,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-100.md
+OS-01-101,01_ust_yazi,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-101.md
+OS-01-102,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-102.md
+OS-01-103,01_ust_yazi,ust_yazi,İmar Planı Değişikliği Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-103.md
+OS-01-104,01_ust_yazi,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-104.md
+OS-01-105,01_ust_yazi,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-105.md
+OS-01-106,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-106.md
+OS-01-107,01_ust_yazi,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-107.md
+OS-01-108,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-108.md
+OS-01-109,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-109.md
+OS-01-110,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-110.md
+OS-01-111,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-111.md
+OS-01-112,01_ust_yazi,ust_yazi,Personel Görevlendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-112.md
+OS-01-113,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-113.md
+OS-01-114,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-114.md
+OS-01-115,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-115.md
+OS-01-116,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-116.md
+OS-01-117,01_ust_yazi,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-117.md
+OS-01-118,01_ust_yazi,ust_yazi,İmar Planı Değişikliği Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-118.md
+OS-01-119,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-119.md
+OS-01-120,01_ust_yazi,ust_yazi,Soruşturma İzni Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-120.md
+OS-01-121,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-121.md
+OS-01-122,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-122.md
+OS-01-123,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-123.md
+OS-01-124,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-124.md
+OS-01-125,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-125.md
+OS-01-126,01_ust_yazi,ust_yazi,Soruşturma İzni Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-126.md
+OS-01-127,01_ust_yazi,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-127.md
+OS-01-128,01_ust_yazi,ust_yazi,Personel Görevlendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-128.md
+OS-01-129,01_ust_yazi,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-129.md
+OS-01-130,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-130.md
+OS-01-131,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-131.md
+OS-01-132,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-132.md
+OS-01-133,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-133.md
+OS-01-134,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-134.md
+OS-01-135,01_ust_yazi,ust_yazi,Soruşturma İzni Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-135.md
+OS-01-136,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-136.md
+OS-01-137,01_ust_yazi,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-137.md
+OS-01-138,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-138.md
+OS-01-139,01_ust_yazi,ust_yazi,Personel Görevlendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-139.md
+OS-01-140,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-140.md
+OS-01-141,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-141.md
+OS-01-142,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-142.md
+OS-01-143,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-143.md
+OS-01-144,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-144.md
+OS-01-145,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-145.md
+OS-01-146,01_ust_yazi,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-146.md
+OS-01-147,01_ust_yazi,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-147.md
+OS-01-148,01_ust_yazi,ust_yazi,Soruşturma İzni Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-148.md
+OS-01-149,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-149.md
+OS-01-150,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-150.md
+OS-01-151,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-151.md
+OS-01-152,01_ust_yazi,ust_yazi,İmar Planı Değişikliği Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-152.md
+OS-01-153,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-153.md
+OS-01-154,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-154.md
+OS-01-155,01_ust_yazi,ust_yazi,Personel Görevlendirmesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-155.md
+OS-01-156,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-156.md
+OS-01-157,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-157.md
+OS-01-158,01_ust_yazi,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-158.md
+OS-01-159,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-159.md
+OS-01-160,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-160.md
+OS-01-161,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-161.md
+OS-01-162,01_ust_yazi,ust_yazi,Soruşturma İzni Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-162.md
+OS-01-163,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-163.md
+OS-01-164,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-164.md
+OS-01-165,01_ust_yazi,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-165.md
+OS-01-166,01_ust_yazi,ust_yazi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-166.md
+OS-01-167,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-167.md
+OS-01-168,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-168.md
+OS-01-169,01_ust_yazi,ust_yazi,Soruşturma İzni Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-169.md
+OS-01-170,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-170.md
+OS-01-171,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-171.md
+OS-01-172,01_ust_yazi,ust_yazi,Personel Görevlendirmesi Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-172.md
+OS-01-173,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-173.md
+OS-01-174,01_ust_yazi,ust_yazi,İmar Planı Değişikliği Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-174.md
+OS-01-175,01_ust_yazi,ust_yazi,Personel Görevlendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-175.md
+OS-01-176,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-176.md
+OS-01-177,01_ust_yazi,ust_yazi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-177.md
+OS-01-178,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-178.md
+OS-01-179,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-179.md
+OS-01-180,01_ust_yazi,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-180.md
+OS-01-181,01_ust_yazi,ust_yazi,Soruşturma İzni Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-181.md
+OS-01-182,01_ust_yazi,ust_yazi,Personel Görevlendirmesi Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-182.md
+OS-01-183,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-183.md
+OS-01-184,01_ust_yazi,ust_yazi,İmar Planı Değişikliği Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-184.md
+OS-01-185,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-185.md
+OS-01-186,01_ust_yazi,ust_yazi,İmar Planı Değişikliği Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-186.md
+OS-01-187,01_ust_yazi,ust_yazi,Kentsel Dönüşüm Projesi Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-187.md
+OS-01-188,01_ust_yazi,ust_yazi,Bilgi Edinme Başvurusu Cevabı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-188.md
+OS-01-189,01_ust_yazi,ust_yazi,Sayıştay Denetim Raporu Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-189.md
+OS-01-190,01_ust_yazi,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-190.md
+OS-01-191,01_ust_yazi,ust_yazi,Soruşturma İzni Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-191.md
+OS-01-192,01_ust_yazi,ust_yazi,Soruşturma İzni Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-192.md
+OS-01-193,01_ust_yazi,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-193.md
+OS-01-194,01_ust_yazi,ust_yazi,Kamu İhale Kurumu İtirazı Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-194.md
+OS-01-195,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-195.md
+OS-01-196,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-196.md
+OS-01-197,01_ust_yazi,ust_yazi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-197.md
+OS-01-198,01_ust_yazi,ust_yazi,Personel Görevlendirmesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-198.md
+OS-01-199,01_ust_yazi,ust_yazi,İhale Onay İşlemleri Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-199.md
+OS-01-200,01_ust_yazi,ust_yazi,Halk Sağlığı Tedbirleri Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/ust_yazi/OS-01-200.md
+OS-02-001,02_cevap_yazisi,itiraz_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-001.md
+OS-02-002,02_cevap_yazisi,cevap_yazisi,İmar Planı Değişikliği Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-002.md
+OS-02-003,02_cevap_yazisi,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-003.md
+OS-02-004,02_cevap_yazisi,itiraz_cevabi,İmar Planı Değişikliği Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-004.md
+OS-02-005,02_cevap_yazisi,itiraz_cevabi,İhale Onay İşlemleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-005.md
+OS-02-006,02_cevap_yazisi,soru_onergesi_cevabi,İhale Onay İşlemleri Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-006.md
+OS-02-007,02_cevap_yazisi,cevap_yazisi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-007.md
+OS-02-008,02_cevap_yazisi,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-008.md
+OS-02-009,02_cevap_yazisi,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-009.md
+OS-02-010,02_cevap_yazisi,cevap_yazisi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-010.md
+OS-02-011,02_cevap_yazisi,itiraz_cevabi,Sayıştay Denetim Raporu Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-011.md
+OS-02-012,02_cevap_yazisi,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-012.md
+OS-02-013,02_cevap_yazisi,itiraz_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-013.md
+OS-02-014,02_cevap_yazisi,cevap_yazisi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-014.md
+OS-02-015,02_cevap_yazisi,cevap_yazisi,Soruşturma İzni Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-015.md
+OS-02-016,02_cevap_yazisi,soru_onergesi_cevabi,İhale Onay İşlemleri Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-016.md
+OS-02-017,02_cevap_yazisi,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-017.md
+OS-02-018,02_cevap_yazisi,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-018.md
+OS-02-019,02_cevap_yazisi,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-019.md
+OS-02-020,02_cevap_yazisi,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-020.md
+OS-02-021,02_cevap_yazisi,cevap_yazisi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-021.md
+OS-02-022,02_cevap_yazisi,soru_onergesi_cevabi,Sayıştay Denetim Raporu Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-022.md
+OS-02-023,02_cevap_yazisi,itiraz_cevabi,Personel Görevlendirmesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-023.md
+OS-02-024,02_cevap_yazisi,itiraz_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-024.md
+OS-02-025,02_cevap_yazisi,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-025.md
+OS-02-026,02_cevap_yazisi,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-026.md
+OS-02-027,02_cevap_yazisi,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-027.md
+OS-02-028,02_cevap_yazisi,cevap_yazisi,Personel Görevlendirmesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-028.md
+OS-02-029,02_cevap_yazisi,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-029.md
+OS-02-030,02_cevap_yazisi,itiraz_cevabi,İmar Planı Değişikliği Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-030.md
+OS-02-031,02_cevap_yazisi,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-031.md
+OS-02-032,02_cevap_yazisi,itiraz_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-032.md
+OS-02-033,02_cevap_yazisi,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-033.md
+OS-02-034,02_cevap_yazisi,itiraz_cevabi,Sayıştay Denetim Raporu Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-034.md
+OS-02-035,02_cevap_yazisi,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-035.md
+OS-02-036,02_cevap_yazisi,cevap_yazisi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-036.md
+OS-02-037,02_cevap_yazisi,soru_onergesi_cevabi,Personel Görevlendirmesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-037.md
+OS-02-038,02_cevap_yazisi,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-038.md
+OS-02-039,02_cevap_yazisi,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-039.md
+OS-02-040,02_cevap_yazisi,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-040.md
+OS-02-041,02_cevap_yazisi,soru_onergesi_cevabi,Bütçe Ödeneği Aktarımı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-041.md
+OS-02-042,02_cevap_yazisi,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-042.md
+OS-02-043,02_cevap_yazisi,cevap_yazisi,Kentsel Dönüşüm Projesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-043.md
+OS-02-044,02_cevap_yazisi,soru_onergesi_cevabi,Kentsel Dönüşüm Projesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-044.md
+OS-02-045,02_cevap_yazisi,itiraz_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-045.md
+OS-02-046,02_cevap_yazisi,itiraz_cevabi,Soruşturma İzni Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-046.md
+OS-02-047,02_cevap_yazisi,cevap_yazisi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-047.md
+OS-02-048,02_cevap_yazisi,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-048.md
+OS-02-049,02_cevap_yazisi,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-049.md
+OS-02-050,02_cevap_yazisi,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-050.md
+OS-02-051,02_cevap_yazisi,cevap_yazisi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-051.md
+OS-02-052,02_cevap_yazisi,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-052.md
+OS-02-053,02_cevap_yazisi,soru_onergesi_cevabi,İhale Onay İşlemleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-053.md
+OS-02-054,02_cevap_yazisi,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-054.md
+OS-02-055,02_cevap_yazisi,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-055.md
+OS-02-056,02_cevap_yazisi,soru_onergesi_cevabi,Sayıştay Denetim Raporu Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-056.md
+OS-02-057,02_cevap_yazisi,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-057.md
+OS-02-058,02_cevap_yazisi,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-058.md
+OS-02-059,02_cevap_yazisi,cevap_yazisi,Kentsel Dönüşüm Projesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-059.md
+OS-02-060,02_cevap_yazisi,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-060.md
+OS-02-061,02_cevap_yazisi,soru_onergesi_cevabi,Soruşturma İzni Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-061.md
+OS-02-062,02_cevap_yazisi,soru_onergesi_cevabi,Soruşturma İzni Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-062.md
+OS-02-063,02_cevap_yazisi,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-063.md
+OS-02-064,02_cevap_yazisi,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-064.md
+OS-02-065,02_cevap_yazisi,soru_onergesi_cevabi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-065.md
+OS-02-066,02_cevap_yazisi,itiraz_cevabi,Kentsel Dönüşüm Projesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-066.md
+OS-02-067,02_cevap_yazisi,itiraz_cevabi,Personel Görevlendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-067.md
+OS-02-068,02_cevap_yazisi,itiraz_cevabi,Soruşturma İzni Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-068.md
+OS-02-069,02_cevap_yazisi,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-069.md
+OS-02-070,02_cevap_yazisi,cevap_yazisi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-070.md
+OS-02-071,02_cevap_yazisi,itiraz_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-071.md
+OS-02-072,02_cevap_yazisi,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-072.md
+OS-02-073,02_cevap_yazisi,itiraz_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-073.md
+OS-02-074,02_cevap_yazisi,itiraz_cevabi,Soruşturma İzni Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-074.md
+OS-02-075,02_cevap_yazisi,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-075.md
+OS-02-076,02_cevap_yazisi,soru_onergesi_cevabi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-076.md
+OS-02-077,02_cevap_yazisi,soru_onergesi_cevabi,Bütçe Ödeneği Aktarımı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-077.md
+OS-02-078,02_cevap_yazisi,cevap_yazisi,Halk Sağlığı Tedbirleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-078.md
+OS-02-079,02_cevap_yazisi,cevap_yazisi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-079.md
+OS-02-080,02_cevap_yazisi,cevap_yazisi,İhale Onay İşlemleri Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-080.md
+OS-02-081,02_cevap_yazisi,cevap_yazisi,Kentsel Dönüşüm Projesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-081.md
+OS-02-082,02_cevap_yazisi,soru_onergesi_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-082.md
+OS-02-083,02_cevap_yazisi,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-083.md
+OS-02-084,02_cevap_yazisi,cevap_yazisi,Halk Sağlığı Tedbirleri Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-084.md
+OS-02-085,02_cevap_yazisi,cevap_yazisi,İmar Planı Değişikliği Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-085.md
+OS-02-086,02_cevap_yazisi,cevap_yazisi,Kentsel Dönüşüm Projesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-086.md
+OS-02-087,02_cevap_yazisi,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-087.md
+OS-02-088,02_cevap_yazisi,soru_onergesi_cevabi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-088.md
+OS-02-089,02_cevap_yazisi,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-089.md
+OS-02-090,02_cevap_yazisi,cevap_yazisi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-090.md
+OS-02-091,02_cevap_yazisi,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-091.md
+OS-02-092,02_cevap_yazisi,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-092.md
+OS-02-093,02_cevap_yazisi,cevap_yazisi,Personel Görevlendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-093.md
+OS-02-094,02_cevap_yazisi,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-094.md
+OS-02-095,02_cevap_yazisi,soru_onergesi_cevabi,Sayıştay Denetim Raporu Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-095.md
+OS-02-096,02_cevap_yazisi,itiraz_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-096.md
+OS-02-097,02_cevap_yazisi,soru_onergesi_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-097.md
+OS-02-098,02_cevap_yazisi,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-098.md
+OS-02-099,02_cevap_yazisi,itiraz_cevabi,İhale Onay İşlemleri Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-099.md
+OS-02-100,02_cevap_yazisi,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-100.md
+OS-02-101,02_cevap_yazisi,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-101.md
+OS-02-102,02_cevap_yazisi,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-102.md
+OS-02-103,02_cevap_yazisi,itiraz_cevabi,İhale Onay İşlemleri Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-103.md
+OS-02-104,02_cevap_yazisi,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-104.md
+OS-02-105,02_cevap_yazisi,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-105.md
+OS-02-106,02_cevap_yazisi,cevap_yazisi,Soruşturma İzni Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-106.md
+OS-02-107,02_cevap_yazisi,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-107.md
+OS-02-108,02_cevap_yazisi,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-108.md
+OS-02-109,02_cevap_yazisi,cevap_yazisi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-109.md
+OS-02-110,02_cevap_yazisi,cevap_yazisi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-110.md
+OS-02-111,02_cevap_yazisi,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-111.md
+OS-02-112,02_cevap_yazisi,itiraz_cevabi,İmar Planı Değişikliği Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-112.md
+OS-02-113,02_cevap_yazisi,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-113.md
+OS-02-114,02_cevap_yazisi,cevap_yazisi,Soruşturma İzni Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-114.md
+OS-02-115,02_cevap_yazisi,itiraz_cevabi,Personel Görevlendirmesi Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-115.md
+OS-02-116,02_cevap_yazisi,soru_onergesi_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-116.md
+OS-02-117,02_cevap_yazisi,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-117.md
+OS-02-118,02_cevap_yazisi,cevap_yazisi,İhale Onay İşlemleri Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-118.md
+OS-02-119,02_cevap_yazisi,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-119.md
+OS-02-120,02_cevap_yazisi,itiraz_cevabi,İhale Onay İşlemleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-120.md
+OS-02-121,02_cevap_yazisi,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-121.md
+OS-02-122,02_cevap_yazisi,soru_onergesi_cevabi,İhale Onay İşlemleri Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-122.md
+OS-02-123,02_cevap_yazisi,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-123.md
+OS-02-124,02_cevap_yazisi,itiraz_cevabi,Sayıştay Denetim Raporu Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-124.md
+OS-02-125,02_cevap_yazisi,soru_onergesi_cevabi,İhale Onay İşlemleri Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-125.md
+OS-02-126,02_cevap_yazisi,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-126.md
+OS-02-127,02_cevap_yazisi,itiraz_cevabi,Soruşturma İzni Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-127.md
+OS-02-128,02_cevap_yazisi,cevap_yazisi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-128.md
+OS-02-129,02_cevap_yazisi,soru_onergesi_cevabi,Halk Sağlığı Tedbirleri Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-129.md
+OS-02-130,02_cevap_yazisi,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-130.md
+OS-02-131,02_cevap_yazisi,soru_onergesi_cevabi,Personel Görevlendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-131.md
+OS-02-132,02_cevap_yazisi,soru_onergesi_cevabi,Bütçe Ödeneği Aktarımı Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-132.md
+OS-02-133,02_cevap_yazisi,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-133.md
+OS-02-134,02_cevap_yazisi,cevap_yazisi,Halk Sağlığı Tedbirleri Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-134.md
+OS-02-135,02_cevap_yazisi,itiraz_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-135.md
+OS-02-136,02_cevap_yazisi,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-136.md
+OS-02-137,02_cevap_yazisi,soru_onergesi_cevabi,Sayıştay Denetim Raporu Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-137.md
+OS-02-138,02_cevap_yazisi,cevap_yazisi,İmar Planı Değişikliği Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-138.md
+OS-02-139,02_cevap_yazisi,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-139.md
+OS-02-140,02_cevap_yazisi,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-140.md
+OS-02-141,02_cevap_yazisi,cevap_yazisi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-141.md
+OS-02-142,02_cevap_yazisi,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-142.md
+OS-02-143,02_cevap_yazisi,cevap_yazisi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-143.md
+OS-02-144,02_cevap_yazisi,soru_onergesi_cevabi,Soruşturma İzni Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-144.md
+OS-02-145,02_cevap_yazisi,soru_onergesi_cevabi,Soruşturma İzni Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-145.md
+OS-02-146,02_cevap_yazisi,itiraz_cevabi,Sayıştay Denetim Raporu Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-146.md
+OS-02-147,02_cevap_yazisi,soru_onergesi_cevabi,Soruşturma İzni Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-147.md
+OS-02-148,02_cevap_yazisi,soru_onergesi_cevabi,Soruşturma İzni Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-148.md
+OS-02-149,02_cevap_yazisi,itiraz_cevabi,Kentsel Dönüşüm Projesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-149.md
+OS-02-150,02_cevap_yazisi,soru_onergesi_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-150.md
+OS-02-151,02_cevap_yazisi,itiraz_cevabi,İhale Onay İşlemleri Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-151.md
+OS-02-152,02_cevap_yazisi,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-152.md
+OS-02-153,02_cevap_yazisi,cevap_yazisi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-153.md
+OS-02-154,02_cevap_yazisi,soru_onergesi_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-154.md
+OS-02-155,02_cevap_yazisi,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-155.md
+OS-02-156,02_cevap_yazisi,soru_onergesi_cevabi,İhale Onay İşlemleri Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-156.md
+OS-02-157,02_cevap_yazisi,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-157.md
+OS-02-158,02_cevap_yazisi,cevap_yazisi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-158.md
+OS-02-159,02_cevap_yazisi,itiraz_cevabi,İmar Planı Değişikliği Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-159.md
+OS-02-160,02_cevap_yazisi,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-160.md
+OS-02-161,02_cevap_yazisi,cevap_yazisi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-161.md
+OS-02-162,02_cevap_yazisi,soru_onergesi_cevabi,Soruşturma İzni Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-162.md
+OS-02-163,02_cevap_yazisi,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-163.md
+OS-02-164,02_cevap_yazisi,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-164.md
+OS-02-165,02_cevap_yazisi,cevap_yazisi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-165.md
+OS-02-166,02_cevap_yazisi,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-166.md
+OS-02-167,02_cevap_yazisi,cevap_yazisi,Kentsel Dönüşüm Projesi Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-167.md
+OS-02-168,02_cevap_yazisi,cevap_yazisi,Bütçe Ödeneği Aktarımı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-168.md
+OS-02-169,02_cevap_yazisi,soru_onergesi_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-169.md
+OS-02-170,02_cevap_yazisi,cevap_yazisi,İmar Planı Değişikliği Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-170.md
+OS-02-171,02_cevap_yazisi,cevap_yazisi,Soruşturma İzni Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-171.md
+OS-02-172,02_cevap_yazisi,cevap_yazisi,İhale Onay İşlemleri Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-172.md
+OS-02-173,02_cevap_yazisi,itiraz_cevabi,Halk Sağlığı Tedbirleri Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-173.md
+OS-02-174,02_cevap_yazisi,cevap_yazisi,Soruşturma İzni Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-174.md
+OS-02-175,02_cevap_yazisi,soru_onergesi_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-175.md
+OS-02-176,02_cevap_yazisi,itiraz_cevabi,Soruşturma İzni Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-176.md
+OS-02-177,02_cevap_yazisi,cevap_yazisi,Sayıştay Denetim Raporu Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-177.md
+OS-02-178,02_cevap_yazisi,cevap_yazisi,Soruşturma İzni Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-178.md
+OS-02-179,02_cevap_yazisi,itiraz_cevabi,Kentsel Dönüşüm Projesi Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-179.md
+OS-02-180,02_cevap_yazisi,soru_onergesi_cevabi,Sayıştay Denetim Raporu Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-180.md
+OS-02-181,02_cevap_yazisi,cevap_yazisi,Soruşturma İzni Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-181.md
+OS-02-182,02_cevap_yazisi,soru_onergesi_cevabi,İhale Onay İşlemleri Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-182.md
+OS-02-183,02_cevap_yazisi,cevap_yazisi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-183.md
+OS-02-184,02_cevap_yazisi,itiraz_cevabi,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-184.md
+OS-02-185,02_cevap_yazisi,cevap_yazisi,Kamu İhale Kurumu İtirazı Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-185.md
+OS-02-186,02_cevap_yazisi,cevap_yazisi,Halk Sağlığı Tedbirleri Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-186.md
+OS-02-187,02_cevap_yazisi,cevap_yazisi,Personel Görevlendirmesi Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-187.md
+OS-02-188,02_cevap_yazisi,itiraz_cevabi,İmar Planı Değişikliği Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-188.md
+OS-02-189,02_cevap_yazisi,cevap_yazisi,Kentsel Dönüşüm Projesi Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-189.md
+OS-02-190,02_cevap_yazisi,soru_onergesi_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-190.md
+OS-02-191,02_cevap_yazisi,cevap_yazisi,Soruşturma İzni Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-191.md
+OS-02-192,02_cevap_yazisi,soru_onergesi_cevabi,İmar Planı Değişikliği Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-192.md
+OS-02-193,02_cevap_yazisi,itiraz_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-193.md
+OS-02-194,02_cevap_yazisi,soru_onergesi_cevabi,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-194.md
+OS-02-195,02_cevap_yazisi,cevap_yazisi,Soruşturma İzni Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-195.md
+OS-02-196,02_cevap_yazisi,soru_onergesi_cevabi,Kamu İhale Kurumu İtirazı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-196.md
+OS-02-197,02_cevap_yazisi,cevap_yazisi,Kentsel Dönüşüm Projesi Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-197.md
+OS-02-198,02_cevap_yazisi,itiraz_cevabi,Bütçe Ödeneği Aktarımı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-198.md
+OS-02-199,02_cevap_yazisi,soru_onergesi_cevabi,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-199.md
+OS-02-200,02_cevap_yazisi,soru_onergesi_cevabi,Sayıştay Denetim Raporu Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/cevap_yazisi/OS-02-200.md
+OS-03-001,03_bilgilendirme_metni,genelge,Bütçe Ödeneği Aktarımı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-001.md
+OS-03-002,03_bilgilendirme_metni,mahkeme_karari,İmar Planı Değişikliği Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-002.md
+OS-03-003,03_bilgilendirme_metni,mahkeme_karari,Halk Sağlığı Tedbirleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-003.md
+OS-03-004,03_bilgilendirme_metni,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-004.md
+OS-03-005,03_bilgilendirme_metni,genelge,Halk Sağlığı Tedbirleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-005.md
+OS-03-006,03_bilgilendirme_metni,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-006.md
+OS-03-007,03_bilgilendirme_metni,mahkeme_karari,Sayıştay Denetim Raporu Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-007.md
+OS-03-008,03_bilgilendirme_metni,genelge,Halk Sağlığı Tedbirleri Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-008.md
+OS-03-009,03_bilgilendirme_metni,mahkeme_karari,İmar Planı Değişikliği Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-009.md
+OS-03-010,03_bilgilendirme_metni,genelge,Bütçe Ödeneği Aktarımı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-010.md
+OS-03-011,03_bilgilendirme_metni,mahkeme_karari,Kentsel Dönüşüm Projesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-011.md
+OS-03-012,03_bilgilendirme_metni,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-012.md
+OS-03-013,03_bilgilendirme_metni,mahkeme_karari,Bütçe Ödeneği Aktarımı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-013.md
+OS-03-014,03_bilgilendirme_metni,mahkeme_karari,Halk Sağlığı Tedbirleri Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-014.md
+OS-03-015,03_bilgilendirme_metni,bilgilendirme_metni,Bütçe Ödeneği Aktarımı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-015.md
+OS-03-016,03_bilgilendirme_metni,genelge,İhale Onay İşlemleri Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-016.md
+OS-03-017,03_bilgilendirme_metni,genelge,Personel Görevlendirmesi Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-017.md
+OS-03-018,03_bilgilendirme_metni,bilgilendirme_metni,Halk Sağlığı Tedbirleri Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-018.md
+OS-03-019,03_bilgilendirme_metni,bilgilendirme_metni,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-019.md
+OS-03-020,03_bilgilendirme_metni,bilgilendirme_metni,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-020.md
+OS-03-021,03_bilgilendirme_metni,mahkeme_karari,Personel Görevlendirmesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-021.md
+OS-03-022,03_bilgilendirme_metni,genelge,Sayıştay Denetim Raporu Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-022.md
+OS-03-023,03_bilgilendirme_metni,mahkeme_karari,Personel Görevlendirmesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-023.md
+OS-03-024,03_bilgilendirme_metni,mahkeme_karari,Soruşturma İzni Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-024.md
+OS-03-025,03_bilgilendirme_metni,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-025.md
+OS-03-026,03_bilgilendirme_metni,bilgilendirme_metni,Kamu İhale Kurumu İtirazı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-026.md
+OS-03-027,03_bilgilendirme_metni,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-027.md
+OS-03-028,03_bilgilendirme_metni,genelge,İhale Onay İşlemleri Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-028.md
+OS-03-029,03_bilgilendirme_metni,bilgilendirme_metni,İmar Planı Değişikliği Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-029.md
+OS-03-030,03_bilgilendirme_metni,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-030.md
+OS-03-031,03_bilgilendirme_metni,mahkeme_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-031.md
+OS-03-032,03_bilgilendirme_metni,mahkeme_karari,Personel Görevlendirmesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-032.md
+OS-03-033,03_bilgilendirme_metni,genelge,İmar Planı Değişikliği Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-033.md
+OS-03-034,03_bilgilendirme_metni,mahkeme_karari,İhale Onay İşlemleri Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-034.md
+OS-03-035,03_bilgilendirme_metni,mahkeme_karari,Personel Görevlendirmesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-035.md
+OS-03-036,03_bilgilendirme_metni,genelge,Kentsel Dönüşüm Projesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-036.md
+OS-03-037,03_bilgilendirme_metni,mahkeme_karari,Soruşturma İzni Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-037.md
+OS-03-038,03_bilgilendirme_metni,mahkeme_karari,Halk Sağlığı Tedbirleri Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-038.md
+OS-03-039,03_bilgilendirme_metni,genelge,İhale Onay İşlemleri Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-039.md
+OS-03-040,03_bilgilendirme_metni,mahkeme_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-040.md
+OS-03-041,03_bilgilendirme_metni,genelge,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-041.md
+OS-03-042,03_bilgilendirme_metni,mahkeme_karari,Kentsel Dönüşüm Projesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-042.md
+OS-03-043,03_bilgilendirme_metni,mahkeme_karari,Personel Görevlendirmesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-043.md
+OS-03-044,03_bilgilendirme_metni,bilgilendirme_metni,İhale Onay İşlemleri Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-044.md
+OS-03-045,03_bilgilendirme_metni,mahkeme_karari,Soruşturma İzni Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-045.md
+OS-03-046,03_bilgilendirme_metni,mahkeme_karari,Sayıştay Denetim Raporu Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-046.md
+OS-03-047,03_bilgilendirme_metni,genelge,Halk Sağlığı Tedbirleri Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-047.md
+OS-03-048,03_bilgilendirme_metni,bilgilendirme_metni,Bütçe Ödeneği Aktarımı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-048.md
+OS-03-049,03_bilgilendirme_metni,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-049.md
+OS-03-050,03_bilgilendirme_metni,bilgilendirme_metni,Kamu İhale Kurumu İtirazı Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-050.md
+OS-03-051,03_bilgilendirme_metni,bilgilendirme_metni,İhale Onay İşlemleri Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-051.md
+OS-03-052,03_bilgilendirme_metni,genelge,Kamu İhale Kurumu İtirazı Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-052.md
+OS-03-053,03_bilgilendirme_metni,bilgilendirme_metni,İhale Onay İşlemleri Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-053.md
+OS-03-054,03_bilgilendirme_metni,bilgilendirme_metni,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-054.md
+OS-03-055,03_bilgilendirme_metni,mahkeme_karari,Sayıştay Denetim Raporu Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-055.md
+OS-03-056,03_bilgilendirme_metni,genelge,Soruşturma İzni Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-056.md
+OS-03-057,03_bilgilendirme_metni,genelge,Halk Sağlığı Tedbirleri Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-057.md
+OS-03-058,03_bilgilendirme_metni,genelge,Kentsel Dönüşüm Projesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-058.md
+OS-03-059,03_bilgilendirme_metni,bilgilendirme_metni,Soruşturma İzni Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-059.md
+OS-03-060,03_bilgilendirme_metni,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-060.md
+OS-03-061,03_bilgilendirme_metni,genelge,İmar Planı Değişikliği Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-061.md
+OS-03-062,03_bilgilendirme_metni,bilgilendirme_metni,Soruşturma İzni Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-062.md
+OS-03-063,03_bilgilendirme_metni,genelge,Sayıştay Denetim Raporu Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-063.md
+OS-03-064,03_bilgilendirme_metni,mahkeme_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-064.md
+OS-03-065,03_bilgilendirme_metni,genelge,Personel Görevlendirmesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-065.md
+OS-03-066,03_bilgilendirme_metni,mahkeme_karari,Kamu İhale Kurumu İtirazı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-066.md
+OS-03-067,03_bilgilendirme_metni,bilgilendirme_metni,Sayıştay Denetim Raporu Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-067.md
+OS-03-068,03_bilgilendirme_metni,bilgilendirme_metni,İmar Planı Değişikliği Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-068.md
+OS-03-069,03_bilgilendirme_metni,genelge,Kentsel Dönüşüm Projesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-069.md
+OS-03-070,03_bilgilendirme_metni,bilgilendirme_metni,Sayıştay Denetim Raporu Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-070.md
+OS-03-071,03_bilgilendirme_metni,mahkeme_karari,İhale Onay İşlemleri Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-071.md
+OS-03-072,03_bilgilendirme_metni,genelge,İhale Onay İşlemleri Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-072.md
+OS-03-073,03_bilgilendirme_metni,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-073.md
+OS-03-074,03_bilgilendirme_metni,mahkeme_karari,İmar Planı Değişikliği Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-074.md
+OS-03-075,03_bilgilendirme_metni,bilgilendirme_metni,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-075.md
+OS-03-076,03_bilgilendirme_metni,bilgilendirme_metni,Halk Sağlığı Tedbirleri Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-076.md
+OS-03-077,03_bilgilendirme_metni,bilgilendirme_metni,Bütçe Ödeneği Aktarımı Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-077.md
+OS-03-078,03_bilgilendirme_metni,mahkeme_karari,Bütçe Ödeneği Aktarımı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-078.md
+OS-03-079,03_bilgilendirme_metni,mahkeme_karari,Kentsel Dönüşüm Projesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-079.md
+OS-03-080,03_bilgilendirme_metni,mahkeme_karari,Sayıştay Denetim Raporu Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-080.md
+OS-03-081,03_bilgilendirme_metni,mahkeme_karari,Soruşturma İzni Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-081.md
+OS-03-082,03_bilgilendirme_metni,genelge,Personel Görevlendirmesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-082.md
+OS-03-083,03_bilgilendirme_metni,genelge,Soruşturma İzni Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-083.md
+OS-03-084,03_bilgilendirme_metni,genelge,Bütçe Ödeneği Aktarımı Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-084.md
+OS-03-085,03_bilgilendirme_metni,mahkeme_karari,Soruşturma İzni Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-085.md
+OS-03-086,03_bilgilendirme_metni,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-086.md
+OS-03-087,03_bilgilendirme_metni,genelge,Kentsel Dönüşüm Projesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-087.md
+OS-03-088,03_bilgilendirme_metni,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-088.md
+OS-03-089,03_bilgilendirme_metni,mahkeme_karari,Kamu İhale Kurumu İtirazı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-089.md
+OS-03-090,03_bilgilendirme_metni,bilgilendirme_metni,İhale Onay İşlemleri Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-090.md
+OS-03-091,03_bilgilendirme_metni,mahkeme_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-091.md
+OS-03-092,03_bilgilendirme_metni,bilgilendirme_metni,Soruşturma İzni Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-092.md
+OS-03-093,03_bilgilendirme_metni,mahkeme_karari,Soruşturma İzni Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-093.md
+OS-03-094,03_bilgilendirme_metni,mahkeme_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-094.md
+OS-03-095,03_bilgilendirme_metni,genelge,Personel Görevlendirmesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-095.md
+OS-03-096,03_bilgilendirme_metni,genelge,Soruşturma İzni Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-096.md
+OS-03-097,03_bilgilendirme_metni,bilgilendirme_metni,İmar Planı Değişikliği Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-097.md
+OS-03-098,03_bilgilendirme_metni,bilgilendirme_metni,İmar Planı Değişikliği Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-098.md
+OS-03-099,03_bilgilendirme_metni,genelge,Bütçe Ödeneği Aktarımı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-099.md
+OS-03-100,03_bilgilendirme_metni,genelge,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-100.md
+OS-03-101,03_bilgilendirme_metni,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-101.md
+OS-03-102,03_bilgilendirme_metni,mahkeme_karari,Kamu İhale Kurumu İtirazı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-102.md
+OS-03-103,03_bilgilendirme_metni,mahkeme_karari,Personel Görevlendirmesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-103.md
+OS-03-104,03_bilgilendirme_metni,genelge,Kentsel Dönüşüm Projesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-104.md
+OS-03-105,03_bilgilendirme_metni,mahkeme_karari,Personel Görevlendirmesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-105.md
+OS-03-106,03_bilgilendirme_metni,genelge,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-106.md
+OS-03-107,03_bilgilendirme_metni,bilgilendirme_metni,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-107.md
+OS-03-108,03_bilgilendirme_metni,mahkeme_karari,Bütçe Ödeneği Aktarımı Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-108.md
+OS-03-109,03_bilgilendirme_metni,mahkeme_karari,İhale Onay İşlemleri Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-109.md
+OS-03-110,03_bilgilendirme_metni,mahkeme_karari,Personel Görevlendirmesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-110.md
+OS-03-111,03_bilgilendirme_metni,mahkeme_karari,İhale Onay İşlemleri Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-111.md
+OS-03-112,03_bilgilendirme_metni,bilgilendirme_metni,Kamu İhale Kurumu İtirazı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-112.md
+OS-03-113,03_bilgilendirme_metni,mahkeme_karari,Personel Görevlendirmesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-113.md
+OS-03-114,03_bilgilendirme_metni,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-114.md
+OS-03-115,03_bilgilendirme_metni,bilgilendirme_metni,Kamu İhale Kurumu İtirazı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-115.md
+OS-03-116,03_bilgilendirme_metni,bilgilendirme_metni,Bütçe Ödeneği Aktarımı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-116.md
+OS-03-117,03_bilgilendirme_metni,mahkeme_karari,Soruşturma İzni Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-117.md
+OS-03-118,03_bilgilendirme_metni,bilgilendirme_metni,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-118.md
+OS-03-119,03_bilgilendirme_metni,mahkeme_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-119.md
+OS-03-120,03_bilgilendirme_metni,bilgilendirme_metni,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-120.md
+OS-03-121,03_bilgilendirme_metni,genelge,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-121.md
+OS-03-122,03_bilgilendirme_metni,bilgilendirme_metni,İmar Planı Değişikliği Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-122.md
+OS-03-123,03_bilgilendirme_metni,bilgilendirme_metni,Halk Sağlığı Tedbirleri Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-123.md
+OS-03-124,03_bilgilendirme_metni,mahkeme_karari,Kamu İhale Kurumu İtirazı Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-124.md
+OS-03-125,03_bilgilendirme_metni,mahkeme_karari,Kamu İhale Kurumu İtirazı Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-125.md
+OS-03-126,03_bilgilendirme_metni,bilgilendirme_metni,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-126.md
+OS-03-127,03_bilgilendirme_metni,mahkeme_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-127.md
+OS-03-128,03_bilgilendirme_metni,bilgilendirme_metni,Sayıştay Denetim Raporu Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-128.md
+OS-03-129,03_bilgilendirme_metni,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-129.md
+OS-03-130,03_bilgilendirme_metni,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-130.md
+OS-03-131,03_bilgilendirme_metni,genelge,Halk Sağlığı Tedbirleri Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-131.md
+OS-03-132,03_bilgilendirme_metni,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-132.md
+OS-03-133,03_bilgilendirme_metni,genelge,İmar Planı Değişikliği Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-133.md
+OS-03-134,03_bilgilendirme_metni,mahkeme_karari,İmar Planı Değişikliği Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-134.md
+OS-03-135,03_bilgilendirme_metni,genelge,Halk Sağlığı Tedbirleri Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-135.md
+OS-03-136,03_bilgilendirme_metni,genelge,Bütçe Ödeneği Aktarımı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-136.md
+OS-03-137,03_bilgilendirme_metni,mahkeme_karari,Kentsel Dönüşüm Projesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-137.md
+OS-03-138,03_bilgilendirme_metni,bilgilendirme_metni,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-138.md
+OS-03-139,03_bilgilendirme_metni,bilgilendirme_metni,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-139.md
+OS-03-140,03_bilgilendirme_metni,genelge,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-140.md
+OS-03-141,03_bilgilendirme_metni,genelge,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-141.md
+OS-03-142,03_bilgilendirme_metni,bilgilendirme_metni,Sayıştay Denetim Raporu Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-142.md
+OS-03-143,03_bilgilendirme_metni,bilgilendirme_metni,Kamu İhale Kurumu İtirazı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-143.md
+OS-03-144,03_bilgilendirme_metni,mahkeme_karari,Kentsel Dönüşüm Projesi Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-144.md
+OS-03-145,03_bilgilendirme_metni,genelge,Kentsel Dönüşüm Projesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-145.md
+OS-03-146,03_bilgilendirme_metni,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-146.md
+OS-03-147,03_bilgilendirme_metni,mahkeme_karari,Sayıştay Denetim Raporu Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-147.md
+OS-03-148,03_bilgilendirme_metni,mahkeme_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-148.md
+OS-03-149,03_bilgilendirme_metni,genelge,İhale Onay İşlemleri Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-149.md
+OS-03-150,03_bilgilendirme_metni,mahkeme_karari,Soruşturma İzni Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-150.md
+OS-03-151,03_bilgilendirme_metni,bilgilendirme_metni,Halk Sağlığı Tedbirleri Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-151.md
+OS-03-152,03_bilgilendirme_metni,bilgilendirme_metni,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-152.md
+OS-03-153,03_bilgilendirme_metni,mahkeme_karari,İmar Planı Değişikliği Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-153.md
+OS-03-154,03_bilgilendirme_metni,mahkeme_karari,Kentsel Dönüşüm Projesi Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-154.md
+OS-03-155,03_bilgilendirme_metni,bilgilendirme_metni,İhale Onay İşlemleri Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-155.md
+OS-03-156,03_bilgilendirme_metni,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-156.md
+OS-03-157,03_bilgilendirme_metni,genelge,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-157.md
+OS-03-158,03_bilgilendirme_metni,genelge,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-158.md
+OS-03-159,03_bilgilendirme_metni,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-159.md
+OS-03-160,03_bilgilendirme_metni,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-160.md
+OS-03-161,03_bilgilendirme_metni,bilgilendirme_metni,Soruşturma İzni Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-161.md
+OS-03-162,03_bilgilendirme_metni,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-162.md
+OS-03-163,03_bilgilendirme_metni,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-163.md
+OS-03-164,03_bilgilendirme_metni,bilgilendirme_metni,Kentsel Dönüşüm Projesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-164.md
+OS-03-165,03_bilgilendirme_metni,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-165.md
+OS-03-166,03_bilgilendirme_metni,genelge,Kentsel Dönüşüm Projesi Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-166.md
+OS-03-167,03_bilgilendirme_metni,mahkeme_karari,Bütçe Ödeneği Aktarımı Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-167.md
+OS-03-168,03_bilgilendirme_metni,mahkeme_karari,Halk Sağlığı Tedbirleri Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-168.md
+OS-03-169,03_bilgilendirme_metni,mahkeme_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-169.md
+OS-03-170,03_bilgilendirme_metni,mahkeme_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-170.md
+OS-03-171,03_bilgilendirme_metni,mahkeme_karari,İmar Planı Değişikliği Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-171.md
+OS-03-172,03_bilgilendirme_metni,genelge,Bütçe Ödeneği Aktarımı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-172.md
+OS-03-173,03_bilgilendirme_metni,mahkeme_karari,Kentsel Dönüşüm Projesi Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-173.md
+OS-03-174,03_bilgilendirme_metni,bilgilendirme_metni,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-174.md
+OS-03-175,03_bilgilendirme_metni,genelge,Soruşturma İzni Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-175.md
+OS-03-176,03_bilgilendirme_metni,mahkeme_karari,İhale Onay İşlemleri Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-176.md
+OS-03-177,03_bilgilendirme_metni,mahkeme_karari,Soruşturma İzni Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-177.md
+OS-03-178,03_bilgilendirme_metni,genelge,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-178.md
+OS-03-179,03_bilgilendirme_metni,genelge,Kentsel Dönüşüm Projesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-179.md
+OS-03-180,03_bilgilendirme_metni,mahkeme_karari,Halk Sağlığı Tedbirleri Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-180.md
+OS-03-181,03_bilgilendirme_metni,genelge,Soruşturma İzni Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-181.md
+OS-03-182,03_bilgilendirme_metni,bilgilendirme_metni,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-182.md
+OS-03-183,03_bilgilendirme_metni,bilgilendirme_metni,Personel Görevlendirmesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-183.md
+OS-03-184,03_bilgilendirme_metni,bilgilendirme_metni,Sayıştay Denetim Raporu Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-184.md
+OS-03-185,03_bilgilendirme_metni,mahkeme_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-185.md
+OS-03-186,03_bilgilendirme_metni,bilgilendirme_metni,Sayıştay Denetim Raporu Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-186.md
+OS-03-187,03_bilgilendirme_metni,mahkeme_karari,Kamu İhale Kurumu İtirazı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-187.md
+OS-03-188,03_bilgilendirme_metni,mahkeme_karari,İmar Planı Değişikliği Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-188.md
+OS-03-189,03_bilgilendirme_metni,genelge,İhale Onay İşlemleri Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-189.md
+OS-03-190,03_bilgilendirme_metni,mahkeme_karari,Sayıştay Denetim Raporu Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-190.md
+OS-03-191,03_bilgilendirme_metni,mahkeme_karari,İhale Onay İşlemleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-191.md
+OS-03-192,03_bilgilendirme_metni,genelge,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-192.md
+OS-03-193,03_bilgilendirme_metni,genelge,Personel Görevlendirmesi Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-193.md
+OS-03-194,03_bilgilendirme_metni,mahkeme_karari,Bütçe Ödeneği Aktarımı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-194.md
+OS-03-195,03_bilgilendirme_metni,bilgilendirme_metni,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-195.md
+OS-03-196,03_bilgilendirme_metni,genelge,İhale Onay İşlemleri Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-196.md
+OS-03-197,03_bilgilendirme_metni,bilgilendirme_metni,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-197.md
+OS-03-198,03_bilgilendirme_metni,genelge,Sayıştay Denetim Raporu Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-198.md
+OS-03-199,03_bilgilendirme_metni,mahkeme_karari,Soruşturma İzni Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-199.md
+OS-03-200,03_bilgilendirme_metni,mahkeme_karari,Bütçe Ödeneği Aktarımı Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/bilgilendirme_metni/OS-03-200.md
+OS-04-001,04_diger_resmi_yazisma,diger_resmi_yazisma,Bütçe Ödeneği Aktarımı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-001.md
+OS-04-002,04_diger_resmi_yazisma,diger_resmi_yazisma,Kamu İhale Kurumu İtirazı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-002.md
+OS-04-003,04_diger_resmi_yazisma,diger_resmi_yazisma,Bütçe Ödeneği Aktarımı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-003.md
+OS-04-004,04_diger_resmi_yazisma,diger_resmi_yazisma,Kamu İhale Kurumu İtirazı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-004.md
+OS-04-005,04_diger_resmi_yazisma,meclis_karari,Bütçe Ödeneği Aktarımı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-005.md
+OS-04-006,04_diger_resmi_yazisma,diger_resmi_yazisma,Sayıştay Denetim Raporu Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-006.md
+OS-04-007,04_diger_resmi_yazisma,tutanak,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-007.md
+OS-04-008,04_diger_resmi_yazisma,tutanak,Kamu İhale Kurumu İtirazı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-008.md
+OS-04-009,04_diger_resmi_yazisma,meclis_karari,Personel Görevlendirmesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-009.md
+OS-04-010,04_diger_resmi_yazisma,diger_resmi_yazisma,Personel Görevlendirmesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-010.md
+OS-04-011,04_diger_resmi_yazisma,meclis_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-011.md
+OS-04-012,04_diger_resmi_yazisma,meclis_karari,Personel Görevlendirmesi Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-012.md
+OS-04-013,04_diger_resmi_yazisma,diger_resmi_yazisma,İhale Onay İşlemleri Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-013.md
+OS-04-014,04_diger_resmi_yazisma,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-014.md
+OS-04-015,04_diger_resmi_yazisma,meclis_karari,Sayıştay Denetim Raporu Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-015.md
+OS-04-016,04_diger_resmi_yazisma,meclis_karari,Personel Görevlendirmesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-016.md
+OS-04-017,04_diger_resmi_yazisma,tutanak,Sayıştay Denetim Raporu Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-017.md
+OS-04-018,04_diger_resmi_yazisma,diger_resmi_yazisma,Soruşturma İzni Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-018.md
+OS-04-019,04_diger_resmi_yazisma,diger_resmi_yazisma,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-019.md
+OS-04-020,04_diger_resmi_yazisma,tutanak,Kamu İhale Kurumu İtirazı Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-020.md
+OS-04-021,04_diger_resmi_yazisma,meclis_karari,Sayıştay Denetim Raporu Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-021.md
+OS-04-022,04_diger_resmi_yazisma,meclis_karari,Kamu İhale Kurumu İtirazı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-022.md
+OS-04-023,04_diger_resmi_yazisma,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-023.md
+OS-04-024,04_diger_resmi_yazisma,meclis_karari,Kamu İhale Kurumu İtirazı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-024.md
+OS-04-025,04_diger_resmi_yazisma,meclis_karari,Sayıştay Denetim Raporu Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-025.md
+OS-04-026,04_diger_resmi_yazisma,diger_resmi_yazisma,İhale Onay İşlemleri Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-026.md
+OS-04-027,04_diger_resmi_yazisma,diger_resmi_yazisma,Bütçe Ödeneği Aktarımı Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-027.md
+OS-04-028,04_diger_resmi_yazisma,diger_resmi_yazisma,Soruşturma İzni Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-028.md
+OS-04-029,04_diger_resmi_yazisma,tutanak,Bütçe Ödeneği Aktarımı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-029.md
+OS-04-030,04_diger_resmi_yazisma,meclis_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-030.md
+OS-04-031,04_diger_resmi_yazisma,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-031.md
+OS-04-032,04_diger_resmi_yazisma,diger_resmi_yazisma,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-032.md
+OS-04-033,04_diger_resmi_yazisma,tutanak,Sayıştay Denetim Raporu Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-033.md
+OS-04-034,04_diger_resmi_yazisma,diger_resmi_yazisma,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-034.md
+OS-04-035,04_diger_resmi_yazisma,tutanak,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-035.md
+OS-04-036,04_diger_resmi_yazisma,tutanak,Sayıştay Denetim Raporu Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-036.md
+OS-04-037,04_diger_resmi_yazisma,diger_resmi_yazisma,Sayıştay Denetim Raporu Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-037.md
+OS-04-038,04_diger_resmi_yazisma,tutanak,Personel Görevlendirmesi Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-038.md
+OS-04-039,04_diger_resmi_yazisma,tutanak,İmar Planı Değişikliği Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-039.md
+OS-04-040,04_diger_resmi_yazisma,tutanak,Halk Sağlığı Tedbirleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-040.md
+OS-04-041,04_diger_resmi_yazisma,meclis_karari,Kentsel Dönüşüm Projesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-041.md
+OS-04-042,04_diger_resmi_yazisma,tutanak,Kentsel Dönüşüm Projesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-042.md
+OS-04-043,04_diger_resmi_yazisma,diger_resmi_yazisma,Halk Sağlığı Tedbirleri Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-043.md
+OS-04-044,04_diger_resmi_yazisma,meclis_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-044.md
+OS-04-045,04_diger_resmi_yazisma,tutanak,Bilgi Edinme Başvurusu Cevabı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-045.md
+OS-04-046,04_diger_resmi_yazisma,tutanak,Kentsel Dönüşüm Projesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-046.md
+OS-04-047,04_diger_resmi_yazisma,tutanak,Kamu İhale Kurumu İtirazı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-047.md
+OS-04-048,04_diger_resmi_yazisma,tutanak,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-048.md
+OS-04-049,04_diger_resmi_yazisma,diger_resmi_yazisma,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-049.md
+OS-04-050,04_diger_resmi_yazisma,diger_resmi_yazisma,Soruşturma İzni Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-050.md
+OS-04-051,04_diger_resmi_yazisma,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-051.md
+OS-04-052,04_diger_resmi_yazisma,tutanak,Kentsel Dönüşüm Projesi Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-052.md
+OS-04-053,04_diger_resmi_yazisma,diger_resmi_yazisma,Soruşturma İzni Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-053.md
+OS-04-054,04_diger_resmi_yazisma,meclis_karari,İmar Planı Değişikliği Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-054.md
+OS-04-055,04_diger_resmi_yazisma,diger_resmi_yazisma,Halk Sağlığı Tedbirleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-055.md
+OS-04-056,04_diger_resmi_yazisma,diger_resmi_yazisma,Sayıştay Denetim Raporu Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-056.md
+OS-04-057,04_diger_resmi_yazisma,meclis_karari,İhale Onay İşlemleri Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-057.md
+OS-04-058,04_diger_resmi_yazisma,tutanak,Kentsel Dönüşüm Projesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-058.md
+OS-04-059,04_diger_resmi_yazisma,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-059.md
+OS-04-060,04_diger_resmi_yazisma,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-060.md
+OS-04-061,04_diger_resmi_yazisma,meclis_karari,Personel Görevlendirmesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-061.md
+OS-04-062,04_diger_resmi_yazisma,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-062.md
+OS-04-063,04_diger_resmi_yazisma,tutanak,Bütçe Ödeneği Aktarımı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-063.md
+OS-04-064,04_diger_resmi_yazisma,meclis_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-064.md
+OS-04-065,04_diger_resmi_yazisma,meclis_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-065.md
+OS-04-066,04_diger_resmi_yazisma,meclis_karari,Kentsel Dönüşüm Projesi Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-066.md
+OS-04-067,04_diger_resmi_yazisma,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-067.md
+OS-04-068,04_diger_resmi_yazisma,tutanak,İmar Planı Değişikliği Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-068.md
+OS-04-069,04_diger_resmi_yazisma,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-069.md
+OS-04-070,04_diger_resmi_yazisma,diger_resmi_yazisma,İhale Onay İşlemleri Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-070.md
+OS-04-071,04_diger_resmi_yazisma,tutanak,Bütçe Ödeneği Aktarımı Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-071.md
+OS-04-072,04_diger_resmi_yazisma,meclis_karari,Bütçe Ödeneği Aktarımı Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-072.md
+OS-04-073,04_diger_resmi_yazisma,tutanak,Kentsel Dönüşüm Projesi Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-073.md
+OS-04-074,04_diger_resmi_yazisma,diger_resmi_yazisma,Kamu İhale Kurumu İtirazı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-074.md
+OS-04-075,04_diger_resmi_yazisma,meclis_karari,Halk Sağlığı Tedbirleri Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-075.md
+OS-04-076,04_diger_resmi_yazisma,tutanak,Sayıştay Denetim Raporu Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-076.md
+OS-04-077,04_diger_resmi_yazisma,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-077.md
+OS-04-078,04_diger_resmi_yazisma,tutanak,Bilgi Edinme Başvurusu Cevabı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-078.md
+OS-04-079,04_diger_resmi_yazisma,diger_resmi_yazisma,Bütçe Ödeneği Aktarımı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-079.md
+OS-04-080,04_diger_resmi_yazisma,tutanak,Soruşturma İzni Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-080.md
+OS-04-081,04_diger_resmi_yazisma,meclis_karari,Bütçe Ödeneği Aktarımı Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-081.md
+OS-04-082,04_diger_resmi_yazisma,tutanak,Bütçe Ödeneği Aktarımı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-082.md
+OS-04-083,04_diger_resmi_yazisma,tutanak,İmar Planı Değişikliği Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-083.md
+OS-04-084,04_diger_resmi_yazisma,diger_resmi_yazisma,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-084.md
+OS-04-085,04_diger_resmi_yazisma,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-085.md
+OS-04-086,04_diger_resmi_yazisma,diger_resmi_yazisma,İhale Onay İşlemleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-086.md
+OS-04-087,04_diger_resmi_yazisma,diger_resmi_yazisma,Sayıştay Denetim Raporu Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-087.md
+OS-04-088,04_diger_resmi_yazisma,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-088.md
+OS-04-089,04_diger_resmi_yazisma,meclis_karari,Soruşturma İzni Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-089.md
+OS-04-090,04_diger_resmi_yazisma,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-090.md
+OS-04-091,04_diger_resmi_yazisma,tutanak,Bütçe Ödeneği Aktarımı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-091.md
+OS-04-092,04_diger_resmi_yazisma,diger_resmi_yazisma,İhale Onay İşlemleri Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-092.md
+OS-04-093,04_diger_resmi_yazisma,meclis_karari,İhale Onay İşlemleri Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-093.md
+OS-04-094,04_diger_resmi_yazisma,meclis_karari,İmar Planı Değişikliği Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-094.md
+OS-04-095,04_diger_resmi_yazisma,meclis_karari,Kentsel Dönüşüm Projesi Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-095.md
+OS-04-096,04_diger_resmi_yazisma,tutanak,Bilgi Edinme Başvurusu Cevabı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-096.md
+OS-04-097,04_diger_resmi_yazisma,diger_resmi_yazisma,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-097.md
+OS-04-098,04_diger_resmi_yazisma,diger_resmi_yazisma,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-098.md
+OS-04-099,04_diger_resmi_yazisma,tutanak,İmar Planı Değişikliği Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-099.md
+OS-04-100,04_diger_resmi_yazisma,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-100.md
+OS-04-101,04_diger_resmi_yazisma,tutanak,Sayıştay Denetim Raporu Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-101.md
+OS-04-102,04_diger_resmi_yazisma,tutanak,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-102.md
+OS-04-103,04_diger_resmi_yazisma,meclis_karari,Kentsel Dönüşüm Projesi Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-103.md
+OS-04-104,04_diger_resmi_yazisma,meclis_karari,Soruşturma İzni Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-104.md
+OS-04-105,04_diger_resmi_yazisma,diger_resmi_yazisma,Bütçe Ödeneği Aktarımı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-105.md
+OS-04-106,04_diger_resmi_yazisma,tutanak,Soruşturma İzni Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-106.md
+OS-04-107,04_diger_resmi_yazisma,tutanak,Personel Görevlendirmesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-107.md
+OS-04-108,04_diger_resmi_yazisma,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-108.md
+OS-04-109,04_diger_resmi_yazisma,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-109.md
+OS-04-110,04_diger_resmi_yazisma,tutanak,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-110.md
+OS-04-111,04_diger_resmi_yazisma,tutanak,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-111.md
+OS-04-112,04_diger_resmi_yazisma,tutanak,İmar Planı Değişikliği Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-112.md
+OS-04-113,04_diger_resmi_yazisma,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-113.md
+OS-04-114,04_diger_resmi_yazisma,tutanak,Soruşturma İzni Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-114.md
+OS-04-115,04_diger_resmi_yazisma,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-115.md
+OS-04-116,04_diger_resmi_yazisma,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-116.md
+OS-04-117,04_diger_resmi_yazisma,tutanak,Halk Sağlığı Tedbirleri Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-117.md
+OS-04-118,04_diger_resmi_yazisma,meclis_karari,İhale Onay İşlemleri Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-118.md
+OS-04-119,04_diger_resmi_yazisma,meclis_karari,İhale Onay İşlemleri Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-119.md
+OS-04-120,04_diger_resmi_yazisma,meclis_karari,İhale Onay İşlemleri Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-120.md
+OS-04-121,04_diger_resmi_yazisma,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-121.md
+OS-04-122,04_diger_resmi_yazisma,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-122.md
+OS-04-123,04_diger_resmi_yazisma,diger_resmi_yazisma,Halk Sağlığı Tedbirleri Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-123.md
+OS-04-124,04_diger_resmi_yazisma,meclis_karari,İhale Onay İşlemleri Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-124.md
+OS-04-125,04_diger_resmi_yazisma,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-125.md
+OS-04-126,04_diger_resmi_yazisma,meclis_karari,Personel Görevlendirmesi Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-126.md
+OS-04-127,04_diger_resmi_yazisma,diger_resmi_yazisma,Personel Görevlendirmesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-127.md
+OS-04-128,04_diger_resmi_yazisma,meclis_karari,İmar Planı Değişikliği Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-128.md
+OS-04-129,04_diger_resmi_yazisma,tutanak,Soruşturma İzni Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-129.md
+OS-04-130,04_diger_resmi_yazisma,meclis_karari,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-130.md
+OS-04-131,04_diger_resmi_yazisma,meclis_karari,Halk Sağlığı Tedbirleri Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-131.md
+OS-04-132,04_diger_resmi_yazisma,diger_resmi_yazisma,Bilgi Edinme Başvurusu Cevabı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-132.md
+OS-04-133,04_diger_resmi_yazisma,meclis_karari,İhale Onay İşlemleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-133.md
+OS-04-134,04_diger_resmi_yazisma,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-134.md
+OS-04-135,04_diger_resmi_yazisma,meclis_karari,İmar Planı Değişikliği Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-135.md
+OS-04-136,04_diger_resmi_yazisma,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Danıştay Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-136.md
+OS-04-137,04_diger_resmi_yazisma,diger_resmi_yazisma,Kamu İhale Kurumu İtirazı Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-137.md
+OS-04-138,04_diger_resmi_yazisma,diger_resmi_yazisma,Halk Sağlığı Tedbirleri Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-138.md
+OS-04-139,04_diger_resmi_yazisma,tutanak,Kamu İhale Kurumu İtirazı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-139.md
+OS-04-140,04_diger_resmi_yazisma,tutanak,Bütçe Ödeneği Aktarımı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-140.md
+OS-04-141,04_diger_resmi_yazisma,meclis_karari,Halk Sağlığı Tedbirleri Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-141.md
+OS-04-142,04_diger_resmi_yazisma,meclis_karari,Halk Sağlığı Tedbirleri Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-142.md
+OS-04-143,04_diger_resmi_yazisma,tutanak,Kamu İhale Kurumu İtirazı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-143.md
+OS-04-144,04_diger_resmi_yazisma,meclis_karari,Kamu İhale Kurumu İtirazı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-144.md
+OS-04-145,04_diger_resmi_yazisma,diger_resmi_yazisma,Personel Görevlendirmesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-145.md
+OS-04-146,04_diger_resmi_yazisma,meclis_karari,Soruşturma İzni Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-146.md
+OS-04-147,04_diger_resmi_yazisma,tutanak,İmar Planı Değişikliği Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-147.md
+OS-04-148,04_diger_resmi_yazisma,tutanak,Kentsel Dönüşüm Projesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-148.md
+OS-04-149,04_diger_resmi_yazisma,meclis_karari,Kentsel Dönüşüm Projesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-149.md
+OS-04-150,04_diger_resmi_yazisma,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-150.md
+OS-04-151,04_diger_resmi_yazisma,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-151.md
+OS-04-152,04_diger_resmi_yazisma,diger_resmi_yazisma,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-152.md
+OS-04-153,04_diger_resmi_yazisma,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-153.md
+OS-04-154,04_diger_resmi_yazisma,tutanak,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-154.md
+OS-04-155,04_diger_resmi_yazisma,tutanak,Sayıştay Denetim Raporu Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-155.md
+OS-04-156,04_diger_resmi_yazisma,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-156.md
+OS-04-157,04_diger_resmi_yazisma,tutanak,İmar Planı Değişikliği Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-157.md
+OS-04-158,04_diger_resmi_yazisma,diger_resmi_yazisma,Sayıştay Denetim Raporu Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-158.md
+OS-04-159,04_diger_resmi_yazisma,diger_resmi_yazisma,Personel Görevlendirmesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-159.md
+OS-04-160,04_diger_resmi_yazisma,diger_resmi_yazisma,Sayıştay Denetim Raporu Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-160.md
+OS-04-161,04_diger_resmi_yazisma,meclis_karari,İhale Onay İşlemleri Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-161.md
+OS-04-162,04_diger_resmi_yazisma,diger_resmi_yazisma,Sayıştay Denetim Raporu Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-162.md
+OS-04-163,04_diger_resmi_yazisma,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-163.md
+OS-04-164,04_diger_resmi_yazisma,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-164.md
+OS-04-165,04_diger_resmi_yazisma,tutanak,İmar Planı Değişikliği Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-165.md
+OS-04-166,04_diger_resmi_yazisma,meclis_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-166.md
+OS-04-167,04_diger_resmi_yazisma,meclis_karari,Kentsel Dönüşüm Projesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-167.md
+OS-04-168,04_diger_resmi_yazisma,diger_resmi_yazisma,Mevzuat Değişikliği Bilgilendirmesi Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-168.md
+OS-04-169,04_diger_resmi_yazisma,diger_resmi_yazisma,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-169.md
+OS-04-170,04_diger_resmi_yazisma,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-170.md
+OS-04-171,04_diger_resmi_yazisma,tutanak,Personel Görevlendirmesi Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-171.md
+OS-04-172,04_diger_resmi_yazisma,tutanak,Kamu İhale Kurumu İtirazı Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-172.md
+OS-04-173,04_diger_resmi_yazisma,meclis_karari,Sayıştay Denetim Raporu Hakkında,T.C. Sağlık Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-173.md
+OS-04-174,04_diger_resmi_yazisma,tutanak,Halk Sağlığı Tedbirleri Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-174.md
+OS-04-175,04_diger_resmi_yazisma,meclis_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-175.md
+OS-04-176,04_diger_resmi_yazisma,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-176.md
+OS-04-177,04_diger_resmi_yazisma,tutanak,Sayıştay Denetim Raporu Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-177.md
+OS-04-178,04_diger_resmi_yazisma,diger_resmi_yazisma,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-178.md
+OS-04-179,04_diger_resmi_yazisma,diger_resmi_yazisma,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-179.md
+OS-04-180,04_diger_resmi_yazisma,diger_resmi_yazisma,İmar Planı Değişikliği Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-180.md
+OS-04-181,04_diger_resmi_yazisma,tutanak,Soruşturma İzni Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-181.md
+OS-04-182,04_diger_resmi_yazisma,tutanak,İhale Onay İşlemleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-182.md
+OS-04-183,04_diger_resmi_yazisma,diger_resmi_yazisma,Bütçe Ödeneği Aktarımı Hakkında,T.C. İzmir Valiliği,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-183.md
+OS-04-184,04_diger_resmi_yazisma,meclis_karari,Eğitim ve Öğretim Yılı Hazırlıkları Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-184.md
+OS-04-185,04_diger_resmi_yazisma,diger_resmi_yazisma,İhale Onay İşlemleri Hakkında,T.C. Anayasa Mahkemesi,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-185.md
+OS-04-186,04_diger_resmi_yazisma,tutanak,İhale Onay İşlemleri Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-186.md
+OS-04-187,04_diger_resmi_yazisma,meclis_karari,Sayıştay Denetim Raporu Hakkında,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-187.md
+OS-04-188,04_diger_resmi_yazisma,tutanak,Kentsel Dönüşüm Projesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-188.md
+OS-04-189,04_diger_resmi_yazisma,meclis_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-189.md
+OS-04-190,04_diger_resmi_yazisma,meclis_karari,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. İçişleri Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-190.md
+OS-04-191,04_diger_resmi_yazisma,meclis_karari,Bütçe Ödeneği Aktarımı Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-191.md
+OS-04-192,04_diger_resmi_yazisma,diger_resmi_yazisma,Kentsel Dönüşüm Projesi Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-192.md
+OS-04-193,04_diger_resmi_yazisma,meclis_karari,Bütçe Ödeneği Aktarımı Hakkında,T.C. Kamu Denetçiliği Kurumu,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-193.md
+OS-04-194,04_diger_resmi_yazisma,meclis_karari,Halk Sağlığı Tedbirleri Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-194.md
+OS-04-195,04_diger_resmi_yazisma,meclis_karari,Soruşturma İzni Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-195.md
+OS-04-196,04_diger_resmi_yazisma,meclis_karari,Kentsel Dönüşüm Projesi Hakkında,T.C. Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-196.md
+OS-04-197,04_diger_resmi_yazisma,diger_resmi_yazisma,Personel Görevlendirmesi Hakkında,T.C. Ankara Büyükşehir Belediye Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-197.md
+OS-04-198,04_diger_resmi_yazisma,meclis_karari,Kamu İhale Kurumu İtirazı Hakkında,T.C. Sosyal Güvenlik Kurumu Başkanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-198.md
+OS-04-199,04_diger_resmi_yazisma,tutanak,Bilgi Edinme Başvurusu Cevabı Hakkında,T.C. Karşıyaka Kaymakamlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-199.md
+OS-04-200,04_diger_resmi_yazisma,diger_resmi_yazisma,Kamu İhale Kurumu İtirazı Hakkında,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak_orneklemi,00_gelen_kaynaklar/diger_resmi_yazisma/OS-04-200.md
+TBMM-001,cevap_yazisi,soru_onergesi_cevabi,Trafik Elektronik Denetleme Sistemleri (TEDES) ve Kent Güvenlik Yönetim Sistemi Hakkında Yazılı Soru Önergesi Cevabı,T.C. İçişleri Bakanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/cevap_yazisi/TBMM-001_trafik_elektronik_denetleme_sistemleri_cevap.md
+TBMM-002,cevap_yazisi,soru_onergesi_cevabi,Köy Okullarının İhyası ve Taşımalı Eğitim Kapsamındaki Öğrencilere İlişkin Yazılı Soru Önergesi Cevabı,T.C. Milli Eğitim Bakanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/cevap_yazisi/TBMM-002_koy_okullari_tasimali_egitim_cevap.md
+TBMM-003,cevap_yazisi,soru_onergesi_cevabi,MHRS Randevu Tedarik Oranları ve Yan Dal Uzman Hekim Atamaları Hakkında Yazılı Soru Önergesi Cevabı,T.C. Sağlık Bakanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/cevap_yazisi/TBMM-003_mhrs_randevu_ve_hekim_istihdami_cevap.md
+TBMM-004,cevap_yazisi,soru_onergesi_cevabi,Yeraltı Depolama Tesisleri ve Tarımsal Sulama Destekleri Hakkında Yazılı Soru Önergesi Cevabı,T.C. Tarım ve Orman Bakanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/cevap_yazisi/TBMM-004_yaralti_depolama_ve_tarimsal_sulama_cevap.md
+TBMM-005,cevap_yazisi,soru_onergesi_cevabi,Demiryolu Ağı Genişletme Projeleri ve Kırsal Alan Fiber İnternet Altyapısı Yazılı Soru Önergesi Cevabı,T.C. Ulaştırma ve Altyapı Bakanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/cevap_yazisi/TBMM-005_demiryolu_ve_fiber_internet_altyapisi_cevap.md
+TBMM-006,cevap_yazisi,soru_onergesi_cevabi,Deprem Bölgesi Kalıcı Konut Teslimatları ve Kentsel Dönüşüm Hibe-Kredi Destekleri Cevabı,"T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı",gercek_acik_kaynak,00_gelen_kaynaklar/cevap_yazisi/TBMM-006_deprem_konutlari_kentsel_donusum_cevap.md
+TBMM-007,cevap_yazisi,soru_onergesi_cevabi,Maden ve İnşaat Sektörlerinde İş Kazası Denetimleri ve İdari Yaptırımlar Soru Önergesi Cevabı,T.C. Çalışma ve Sosyal Güvenlik Bakanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/cevap_yazisi/TBMM-007_is_sagligi_ve_guvenligi_denetimleri_cevap.md
+TBMM-008,cevap_yazisi,soru_onergesi_cevabi,Hukuk ve Ceza Mahkemelerinde Hedef Süre Uyumu ile Dava Şartı Arabuluculuk İstatistikleri Cevabı,T.C. Adalet Bakanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/cevap_yazisi/TBMM-008_yargida_hedef_sure_ve_arabuluculuk_cevap.md
+UNI-001,diger_resmi_yazisma,toplanti,T.C. TEKİRDAĞ NAMIK KEMAL ÜNİVERSİTESİ SENATO KARARI,Tekirdağ Namık Kemal Üniversitesi,gercek_acik_kaynak,00_gelen_kaynaklar/diger_resmi_yazisma/UNI-001_tekirdag-namik-kemal-universitesi-senato-karari.md
+UNI-002,diger_resmi_yazisma,toplanti,T.C. SELÇUK ÜNİVERSİTESİ SENATO KARARI,Selçuk Üniversitesi,gercek_acik_kaynak,00_gelen_kaynaklar/diger_resmi_yazisma/UNI-002_selcuk-universitesi-senato-karari-sinav-tarihleri.md
+UNI-003,diger_resmi_yazisma,toplanti,T.C. SAĞLIK BİLİMLERİ ÜNİVERSİTESİ SENATO KARARI,Sağlık Bilimleri Üniversitesi,gercek_acik_kaynak,00_gelen_kaynaklar/diger_resmi_yazisma/UNI-003_saglik-bilimleri-universitesi-akademik-takvim-karari.md
+UNI-004,diger_resmi_yazisma,toplanti,T.C. ÇANAKKALE ONSEKİZ MART ÜNİVERSİTESİ SENATO KARARI,Çanakkale Onsekiz Mart Üniversitesi,gercek_acik_kaynak,00_gelen_kaynaklar/diger_resmi_yazisma/UNI-004_comu-senato-karari-intibak-muafiyet.md
+UNI-005,diger_resmi_yazisma,toplanti,T.C. GAZİ ÜNİVERSİTESİ SAĞLIK BİLİMLERİ ENSTİTÜSÜ YÖNETİM KURULU KARARI,Gazi Üniversitesi,gercek_acik_kaynak,00_gelen_kaynaklar/diger_resmi_yazisma/UNI-005_gazi-universitesi-yonetim-kurulu-karari.md
+UNI-006,ust_yazi,gorevlendirme_personel,Belirtilmemiş Başlık,Orta Doğu Teknik Üniversitesi,gercek_acik_kaynak,00_gelen_kaynaklar/ust_yazi/UNI-006_odtu-akademik-personel-gorevlendirme-ust-yazi.md
+UNI-007,diger_resmi_yazisma,gorevlendirme,Belirtilmemiş Başlık,İstanbul Üniversitesi Rektörlüğü,gercek_acik_kaynak,00_gelen_kaynaklar/diger_resmi_yazisma/UNI-007_istanbul-universitesi-komisyon-gorevlendirme.md
+UNI-008,ust_yazi,ek_belge_iletimi,Belirtilmemiş Başlık,Marmara Üniversitesi,gercek_acik_kaynak,00_gelen_kaynaklar/ust_yazi/UNI-008_marmara-universitesi-yaz-okulu-ust-yazisi.md
+UNI-009,cevap_yazisi,gorus_talebi,Belirtilmemiş Başlık,Ege Üniversitesi Öğrenci İşleri Daire Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/cevap_yazisi/UNI-009_ege-universitesi-yatay-gecis-itiraz-cevap-yazisi.md
+UNI-010,ust_yazi,teklif_proje,Belirtilmemiş Başlık,Dokuz Eylül Üniversitesi Rektörlüğü,gercek_acik_kaynak,00_gelen_kaynaklar/ust_yazi/UNI-010_deu-bap-proje-cagrisi-ust-yazi.md
+UNI-011,diger_resmi_yazisma,gorevlendirme,Belirtilmemiş Başlık,Anadolu Üniversitesi,gercek_acik_kaynak,00_gelen_kaynaklar/diger_resmi_yazisma/UNI-011_anadolu-universitesi-aof-sinav-gorevlendirmesi.md
+UNI-012,diger_resmi_yazisma,toplanti,T.C. HACETTEPE ÜNİVERSİTESİ SENATO KARARI,Hacettepe Üniversitesi,gercek_acik_kaynak,00_gelen_kaynaklar/diger_resmi_yazisma/UNI-012_hacettepe-universitesi-senato-karari.md
+UNI-013,bilgilendirme_metni,uyari_guvenlik,T.C. BOĞAZİÇİ ÜNİVERSİTESİ REKTÖRLÜĞÜ,Boğaziçi Üniversitesi Rektörlüğü,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/UNI-013_bogazici-universitesi-guvenlik-duyurusu.md
 UY-001,ust_yazi,04_gorevlendirme_personel,Araştırma Eczacısı Görevlendirme Üst Yazı Örneği,Van Eğitim ve Araştırma Hastanesi,resmi_sablon,01_ust_yazi/04_gorevlendirme_personel/UY-001_arastirma-eczacisi-gorevlendirme-ust-yazi-ornegi.md
 UY-002,ust_yazi,04_gorevlendirme_personel,Araştırma Hemşiresi Görevlendirme Üst Yazı Örneği,Van Eğitim ve Araştırma Hastanesi,resmi_sablon,01_ust_yazi/04_gorevlendirme_personel/UY-002_arastirma-hemsiresi-gorevlendirme-ust-yazi-ornegi.md
 UY-003,ust_yazi,02_basvuru_talep,Araştırma Ürünü İthalatı Üst Yazı Örneği,Van Eğitim ve Araştırma Hastanesi,resmi_sablon,01_ust_yazi/02_basvuru_talep/UY-003_arastirma-urunu-ithalati-ust-yazi-ornegi.md
@@ -252,3 +1107,21 @@ UY-203,ust_yazi,05_teklif_proje,Belirtilmemiş Başlık,Türkiye Çevre Koruma V
 UY-204,ust_yazi,05_teklif_proje,Belirtilmemiş Başlık,Orta Doğu Teknik Üniversitesi,sentetik_belge,01_ust_yazi/05_teklif_proje/UY-204.md
 UY-205,ust_yazi,05_teklif_proje,Belirtilmemiş Başlık,Antalya Büyükşehir Belediye Başkanlığı,sentetik_belge,01_ust_yazi/05_teklif_proje/UY-205.md
 UY-206,ust_yazi,05_teklif_proje,Belirtilmemiş Başlık,Erzurum Şehir Hastanesi,sentetik_belge,01_ust_yazi/05_teklif_proje/UY-206.md
+VAL-001,bilgilendirme_metni,duyuru,Ankara Valiliği Orman Yangınlarıyla Mücadele Komisyon Kararı,T.C. Ankara Valiliği,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/VAL-001_ankara-valiligi-orman-yanginlariyla-mucadele-karari.md
+VAL-002,diger_resmi_yazisma,teblig_bildirim,İstanbul Valiliği Sahipsiz Hayvanların Korunması ve Rehabilitasyonu Genelgesi,T.C. İstanbul Valiliği,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/VAL-002_istanbul-valiligi-sahipsiz-hayvanlar-genelgesi.md
+VAL-003,bilgilendirme_metni,duyuru,Antalya Valiliği Mavi Akdeniz İnisiyatifi Dumansız Plaj Uygulama Genelgesi,T.C. Antalya Valiliği,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/VAL-003_antalya-valiligi-dumansiz-plaj-uygulama-genelgesi.md
+VAL-004,diger_resmi_yazisma,teblig_bildirim,İzmir Valiliği İl Umumi Hıfzıssıhha Kurulu Kamusal Alan Güvenliği ve Sağlık Tedbirleri Kararı,T.C. İzmir Valiliği,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/VAL-004_izmir-valiligi-il-umumi-hifzissihha-kurul-karari.md
+VAL-005,bilgilendirme_metni,duyuru,Muğla Valiliği Ormanlık Alanlara Giriş Yasağı ve Yangın Tedbirleri Genelgesi,T.C. Muğla Valiliği,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/VAL-005_mugla-valiligi-ormanlik-alanlara-giris-yasagi-genelgesi.md
+VAL-006,bilgilendirme_metni,duyuru,Bursa Valiliği Kış Mevsimi Karayolu Trafik Tedbirleri Genelgesi,T.C. Bursa Valiliği,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/VAL-006_bursa-valiligi-kis-mevsimi-trafik-tedbirleri-genelgesi.md
+VAL-007,bilgilendirme_metni,duyuru,Trabzon Valiliği Suda Boğulma Olaylarının Önlenmesi ve Deniz Güvenliği Genelgesi,T.C. Trabzon Valiliği,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/VAL-007_trabzon-valiligi-suda-bogulma-olaylarinin-onlenmesi-genelgesi.md
+VAL-008,bilgilendirme_metni,duyuru,Denizli Valiliği Kadına Yönelik Şiddetle Mücadele İl Eylem Planı Genelgesi,T.C. Denizli Valiliği,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/VAL-008_denizli-valiligi-kadina-yonelik-siddetle-mucadele-genelgesi.md
+VAL-009,diger_resmi_yazisma,teblig_bildirim,Kocaeli Valiliği Mahalli Çevre Kurulu Sanayi Emisyon Denetim Kararı,T.C. Kocaeli Valiliği,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/VAL-009_kocaeli-valiligi-sanayi-emisyonu-ve-hava-kalitesi-kurul-karari.md
+VAL-010,diger_resmi_yazisma,koordinasyon,Diyarbakır Valiliği Bağımlılıkla Mücadele İl Koordinasyon Kurulu Kararı,T.C. Diyarbakır Valiliği,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/VAL-010_diyarbakir-valiligi-bagimlilikla-mucadele-koordinasyon-karari.md
+VAL-011,diger_resmi_yazisma,teblig_bildirim,Eskişehir Valiliği Kamu Düzeninin Korunması ve Çevresel Temizlik Genelgesi,T.C. Eskişehir Valiliği,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/VAL-011_eskisehir-valiligi-kamu-duzeni-ve-cevre-koruma-genelgesi.md
+YARG-001,bilgilendirme_metni,mahkeme_karari,"Anayasa Mahkemesi Kararı - Esas Sayısı: 2023/131, Karar Sayısı: 2023/160",Anayasa Mahkemesi Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/YARG-001_aym_ek_mtv_iptal_isteminin_reddi.md
+YARG-002,bilgilendirme_metni,mahkeme_karari,Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: 2020/18234,Anayasa Mahkemesi Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/YARG-002_aym_mulkiyet_hakki_ihlali_bireysel_basvuru.md
+YARG-003,bilgilendirme_metni,mahkeme_karari,Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: 2021/34521,Anayasa Mahkemesi Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/YARG-003_aym_makul_surede_yargilanma_hakki.md
+YARG-004,bilgilendirme_metni,mahkeme_karari,"Anayasa Mahkemesi Kararı - Esas Sayısı: 2022/45, Karar Sayısı: 2023/12",Anayasa Mahkemesi Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/YARG-004_aym_iyuk_parasal_sinirlar_iptal_karari.md
+YARG-005,bilgilendirme_metni,mahkeme_karari,"Danıştay İdari Dava Daireleri Kurulu Kararı - E.2022/1120, K.2023/450",Danıştay Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/YARG-005_danistay_iddk_sozlesmeli_personel_atama.md
+YARG-006,bilgilendirme_metni,mahkeme_karari,"Danıştay 10. Daire Kararı - E.2021/4890, K.2022/3120",Danıştay Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/YARG-006_danistay_10d_bilgi_edinme_hakki_iptal.md
+YARG-007,bilgilendirme_metni,mahkeme_karari,Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: 2019/29104,Anayasa Mahkemesi Başkanlığı,gercek_acik_kaynak,00_gelen_kaynaklar/bilgilendirme_metni/YARG-007_aym_ifade_ozgurllugu_ve_erisim_engeli.md

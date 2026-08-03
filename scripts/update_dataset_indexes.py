@@ -6,7 +6,7 @@ from pathlib import Path
 
 # Config
 DATASET_ROOT = Path(__file__).parent.parent / "datasets" / "resmi_yazisma"
-ALLOWED_DIRS = ["01_ust_yazi", "02_cevap_yazisi", "03_bilgilendirme_metni", "04_diger_resmi_yazisma"]
+ALLOWED_DIRS = ["01_ust_yazi", "02_cevap_yazisi", "03_bilgilendirme_metni", "04_diger_resmi_yazisma", "00_gelen_kaynaklar"]
 
 JSONL_OUT = DATASET_ROOT / "kaynak-katalogu.jsonl"
 CSV_OUT = DATASET_ROOT / "kaynak-ozeti.csv"

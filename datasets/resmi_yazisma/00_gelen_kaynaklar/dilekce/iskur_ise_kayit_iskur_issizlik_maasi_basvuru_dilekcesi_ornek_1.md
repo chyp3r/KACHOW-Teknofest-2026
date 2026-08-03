@@ -1,0 +1,37 @@
+---
+id: DILEKCE-D45F4436
+kategori: dilekce
+alt_kategori: iskur_ise_kayit
+baslik: "İŞKUR İşsizlik Maaşı Başvuru Dilekçesi (Ornek 1)"
+kaynak: "sentetik-sablon"
+---
+
+# İŞKUR İşsizlik Maaşı Başvuru Dilekçesi (Ornek 1)
+
+TÜRKİYE İŞ KURUMU (İŞKUR) Samsun İL MÜDÜRLÜĞÜ'NE
+
+Konu: İşsizlik Ödeneği Başvurusu
+
+Sahin A.S. işyerinden 06.01.2021 tarihinde işten çıkarılmış bulunmaktayım. 4447 sayılı İşsizlik Sigortası Kanunu kapsamında işsizlik ödeneği almaya hak kazandığımı düşünmekteyim.
+
+Kişisel Bilgilerim:
+- Adı Soyadı: Zeynep Koc
+- T.C. Kimlik No: 17668506584
+- SGK Sicil No: 8475984
+- Son Çalışılan İşyeri: Sahin A.S.
+- İşten Ayrılma Tarihi: 06.01.2021
+- İşten Ayrılma Nedeni: İşveren feshi (Kod: 22)
+- Son 120 Gün Prim Gün Sayısı: 5579 gün
+
+İşsizlik ödeneği başvurumun değerlendirilmesini saygılarımla arz ederim.
+
+06.01.2021
+Zeynep Koc
+T.C. Kimlik No: 17668506584
+Adres: Bahcelievler Mah. 78. Sok. No:36 Gaziantep
+Tel: 0551 170 88 79
+
+EKLER:
+1- İşten çıkış belgesi / SGK işten ayrılış bildirgesi
+2- Kimlik fotokopisi
+3- Banka hesap bilgileri (IBAN)

@@ -2,6 +2,12 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [1.17.0] - 2026-08-03
+### Eklendi
+- **Gelişmiş Sentetik PDF Veri Kümesi**: KVKK/PII ve RAG süreçlerinin testi için, 6 farklı kurum (MEB, İSKİ, SGK, YÖK, BOTAŞ, Ankara BŞB) formatına (antet, mizanpaj, Türkçe TrueType fontlar) birebir uygun ve sahte PII verileri içeren 300 adet zengin içerikli simülasyon PDF belgesi üretilerek veri setine döküldü (`scripts/generate_diverse_pdfs.py`).
+- **Dilekçe Veri Kümesi Operasyonu**: Açık kaynak sitelerden (dilekceornegi.net vb.) gerçek dilekçe örnekleri kazındı. Buna ek olarak 12 farklı kategoride kurgusal sahte PII barındıran zengin dilekçe şablonları üretildi (`scripts/scrape_dilekce.py`). Veri setine 74 yeni dilekçe örneği dâhil edildi.
+- **Ek Sentetik Veriler**: İhtiyaca yönelik olarak çok sayıda sentetik üst yazı dosyası oluşturuldu.
+
 ## [1.16.0] - 2026-08-01
 ### Eklendi
 - **Sentetik RAG Veri Kümesi Genişletmesi**: Veri kümesinde eksik (0-1 adet) olan 9 farklı resmî yazışma kategorisi (İtiraz, Görüş Talebi, Ret/Kısmi Kabul, Eksik Belge, Proje Teklifi, Tekit, İade/Yetkisizlik vb.) için Şartnamenin 6.5 maddesine uygun olarak tamamen kurgusal, ancak kurumsal yapıya ve Yönetmeliğe uygun 53 adet yeni sentetik belge eklendi. Katalogdaki doğrulanmış örnek sayısı 253'e ulaştı.
