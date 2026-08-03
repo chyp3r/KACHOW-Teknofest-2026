@@ -145,12 +145,28 @@ class SemanticPolicy:
     constantly, while a margin alone fires on two equally-poor matches that
     happen to differ.
 
+    Calibrated against ``evaluation/datasets/intents.jsonl`` with real
+    nomic-embed-text vectors. The measurement is stark: correct decisions score
+    0.859 and 0.880, while 0.747-0.758 is a coin flip (one correct, three wrong)
+    and every genuinely under-specified message tops out at 0.740. The initial
+    0.72 sat inside the noise band and produced three correct decisions against
+    three wrong ones -- a layer that decides at random is worse than no layer,
+    because the messages it gets wrong were previously escalating to a model
+    that might have got them right.
+
+    0.80 is the middle of the safe band (0.758 -> 0.859), not its edge. Picking
+    the point that merely beats the last error would leave 0.002 of headroom on
+    a fifteen-case sample.
+
     Attributes:
         decisive_similarity: Minimum cosine similarity to the winning class.
-        decisive_margin: Minimum lead over the runner-up class.
+        decisive_margin: Minimum lead over the runner-up class. Not binding at
+            the calibrated similarity -- both surviving decisions clear it
+            comfortably (0.154, 0.098) -- but retained because two equally-good
+            matches should not be separated by rounding.
     """
 
-    decisive_similarity: float = 0.72
+    decisive_similarity: float = 0.80
     decisive_margin: float = 0.04
 
 
