@@ -3,6 +3,12 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 
+## [1.32.0] - 2026-08-03
+### Değiştirildi
+- **Plan Yürütücüsü: Dispatch Tablosu + `StepStatus` Enum'u** (AP-5 PR-1/3, davranış-nötr): `planning_graph.py`'nin `execute_step_node`'undaki altı dallı `if/elif` zinciri, her adımın kendi `async` fonksiyonuna taşındığı bir `STEP_RUNNERS: dict[str, Callable]` dispatch tablosuna çevrildi. Bu, adım yürütmeyi bir bağımlılık grafiğine (AP-5 PR-2) oturtmanın önkoşuluydu -- dallanmış bir `if` zincirinin üzerine bağımlılık çözümlemesi kurulamaz.
+  - Yeni `backend/app/core/enums/step_status.py`: `StepStatus(StrEnum)` -- `planning_graph.py`'de dağınık duran sekiz çıplak durum string'i (`FAILED`, `SKIPPED`, `COMPLETED`, `NEEDS_HUMAN_APPROVAL`, `NEEDS_INPUT`, `REVISE_REQUESTED`, `REJECTED`, `APPROVED`) artık tek bir yerde. `StrEnum` seçildi (mevcut `ReasoningLevel` ile aynı desen) çünkü `draft_graph.py` gibi henüz migrate edilmemiş modüllerin ürettiği düz string'lerle karşılaştırma otomatik çalışıyor, ve SSE üzerinden JSON'a giden değerler kendi string biçimiyle serileşmeye devam ediyor.
+  - **Doğrulama:** `make eval` (`intents`: macro F1 0.9326, `drafts`: accuracy 1.0000) main'in mevcut haliyle birebir aynı; `docker compose run --rm backend pytest -q` 798 test değişmeden geçiyor; `test_event_contract.py` ve `test_hitl_flow.py` özellikle koşuldu (kaynak-metin greplemesi ve interrupt-replay davranışı bu refaktörün en kırılgan noktalarıydı).
+
 ## [1.31.0] - 2026-08-03
 ### Eklendi
 - **Gelişmiş Sentetik PDF Veri Kümesi**: KVKK/PII ve RAG süreçlerinin testi için, 6 farklı kurum (MEB, İSKİ, SGK, YÖK, BOTAŞ, Ankara BŞB) formatına (antet, mizanpaj, Türkçe TrueType fontlar) birebir uygun ve sahte PII verileri içeren 300 adet zengin içerikli simülasyon PDF belgesi üretilerek veri setine döküldü (`scripts/generate_diverse_pdfs.py`).
