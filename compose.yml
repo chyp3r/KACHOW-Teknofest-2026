@@ -15,6 +15,10 @@ services:
       - ./backend/pyproject.toml:/workspace/pyproject.toml
       - ./scripts:/workspace/scripts
       - ./datasets:/workspace/datasets
+      # The evaluation harness and its gold sets. Mounted rather than only
+      # baked into the image so `make eval` picks up dataset edits without a
+      # rebuild -- the gold sets are edited far more often than the code.
+      - ./evaluation:/workspace/evaluation
     environment:
       - ENVIRONMENT=development
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
