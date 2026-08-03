@@ -9,8 +9,11 @@ import asyncio
 from typing import Any, AsyncIterator, Optional
 from unittest.mock import AsyncMock, MagicMock
 
+import zlib
+
 import pytest
 
+from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.llms.base import BaseLLMClient
 
 
@@ -61,6 +64,51 @@ class FakeLLMClient(BaseLLMClient):
                 yield chunk
 
         return _gen()
+
+
+class FakeEmbeddingsClient(BaseEmbeddingsClient):
+    """A deterministic stand-in for a real embeddings client.
+
+    Same rationale as ``FakeLLMClient``: a real subclass rather than a
+    ``MagicMock``, so ``isinstance`` checks and constructors that inspect the
+    client keep working.
+
+    Vectors are derived from the text itself so a test can assert *which* text
+    is closest to which prototype without hardcoding an embedding. Configure
+    ``vectors`` to map exact strings to exact vectors; anything unmapped falls
+    back to a deterministic hash-derived vector, which is near-orthogonal to
+    everything else and therefore reads as "no semantic match" -- the right
+    default for a test that only cares that some other text *did* match.
+    """
+
+    def __init__(self, dimension: int = 8) -> None:
+        self.dimension = dimension
+        self.vectors: dict[str, list[float]] = {}
+        self.embed_query_calls: list[str] = []
+        self.embed_documents_calls: list[list[str]] = []
+        self.raise_on_query: Exception | None = None
+
+    def _vector_for(self, text: str) -> list[float]:
+        if text in self.vectors:
+            return list(self.vectors[text])
+        seed = zlib.crc32(text.encode("utf-8"))
+        return [((seed >> (index * 3)) & 0xFF) / 255.0 for index in range(self.dimension)]
+
+    async def embed_query(self, text: str) -> list[float]:
+        self.embed_query_calls.append(text)
+        if self.raise_on_query is not None:
+            raise self.raise_on_query
+        return self._vector_for(text)
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self.embed_documents_calls.append(list(texts))
+        return [self._vector_for(text) for text in texts]
+
+
+@pytest.fixture
+def fake_embeddings() -> FakeEmbeddingsClient:
+    """A deterministic embeddings client for the semantic decision layer."""
+    return FakeEmbeddingsClient()
 
 
 @pytest.fixture
