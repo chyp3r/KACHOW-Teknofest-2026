@@ -217,6 +217,43 @@ Her agent yalnızca kendi görevinden sorumludur ve prompt şablonunu `get_promp
 
 ---
 
+# Policy Katmanı
+
+`app/ai/policy/` — deterministik karar katmanının **tüm parametre yüzeyi**. Eşikler, ağırlıklar ve düğüm bütçeleri burada; onları okuyan modüller değerleri kendi modül seviyesi isimlerine türeterek alır (`MIN_AUTOMATED_CONFIDENCE_SCORE = get_policy().verification.min_automated_confidence`).
+
+## Neden dosya değil de tipli dataclass
+
+Bir yapılandırma dosyası, bir eşiği **kod değiştirmeden** değiştirme yeteneği satın alır — burada istenmeyen tam olarak budur. Bu sayılar `evaluation/datasets` üzerinde kalibre edilir; birini oynatmak bir CHANGELOG kaydı ve bir `make eval` koşusu gerektirmeli. Tipli dataclass ayrıca invaryantlara yaşayacak bir yer verir ve üretimle testin sapabileceği bir ayrıştırma yolu bırakmaz.
+
+## İnvaryantlar
+
+Modülün asıl ürünü bunlardır; daha önce yalnızca **tesadüfen** doğru olan ilişkileri kodlarlar. `check_invariants()` import anında çalışır — kendisiyle çelişen bir policy, üretimde sessizce yanlış karar üretmek yerine süreci düşürür.
+
+| İnvaryant | Neden |
+|---|---|
+| `routing.human_approval_score_threshold < verification.min_automated_confidence` | İkisi aynı kavramın iki şiddet derecesi: **70** = "incelemesiz gönderilebilir", **50** = "hiç yönlendirilemez". Ters çevirmek, yönlendirilemeyecek kadar zayıf bir taslağı aynı anda gönderilebilecek kadar iyi yapardı. |
+| Yargıç harman ağırlıkları 1.0'a toplanır | `0.6 × deterministik + 0.4 × yargıç` bir ortalamadır; toplamı 1 değilse skor ölçek değiştirir. |
+| `intent.compound_floor ≥ intent.presence_floor` | Bileşik bir okuma, tekil bir okumadan daha az kanıta ihtiyaç duyamaz. |
+| `memory.history_raw_cap > memory.history_window` | Aksi hâlde konsolidasyonun özete katacak taşma turu hiç olmaz. |
+| Her düğüm bütçesi ≤ iş akışı tavanı | Dış zaman aşımına çarpıp tüm turu kaybetmeyi engeller. |
+| `budget.node_seconds`'ın her anahtarı bir çağrı yerinde uygulanır | `writer` ve `judge` var oldukları süre boyunca hiç okunmadı. **Uygulanmayan bir bütçe, bütçesizlikten kötüdür**: koruma olduğu izlenimi verir. Testle kilitli. |
+
+## Bütçe çözümlemesi
+
+`policy/budget.py` `node_budget(node, level)` — taban bütçe × seviyenin `timeout_multiplier`'ı, iş akışı tavanına kırpılmış.
+
+`@node_timeout` bir **düğüm adı** alır, sayı değil. Eski imza float alıyordu ve bu ifade graf **derlenirken** değerlendiriliyordu; graf süreçte bir kez derlendiği için istek başına hiçbir değer oraya ulaşamazdı — `reasoning_levels.timeout_multiplier`'ın var olduğu hâlde hiçbir düğüm bütçesini etkilememesinin nedeni budur.
+
+Yazarın bütçesi dekoratörle değil **düğümün içinde** uygulanır: dekoratör düğümün `except` bloklarını aşarak yükselir ve grafiği düşürür; oysa bir zaman aşımının grafiğin zaten yönlendirmeyi bildiği bir `FAILED` sonucuna dönüşmesi gerekir.
+
+`DocumentAnalysisState` ve `RoutingState` `reasoning_level` taşımaz (bkz. CHANGELOG 1.22.0), dolayısıyla dengeli seviyeye düşerler.
+
+## Sürümleme
+
+`POLICY_VERSION` her değer değişiminde artırılır ve Prometheus'a `Info` olarak, değerlendirme raporuna da başlık olarak damgalanır. Bir metrik kayması, "trafik değişti" ile "biz bir eşiği oynattık" arasında belirsiz kalmasın diye.
+
+---
+
 # LLM Katmanı
 
 LLM katmanı farklı model sağlayıcılarını tek bir arayüz altında toplar.
