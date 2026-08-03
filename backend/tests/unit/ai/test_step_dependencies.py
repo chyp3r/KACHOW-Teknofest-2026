@@ -8,11 +8,11 @@ consults before dispatching a step at all.
 """
 
 from app.ai.workflows.planning_graph import (
-    _STEP_DEPENDENCIES,
     _append_history,
     _dependency_failed,
     _pending_consolidation,
 )
+from app.ai.workflows.step_graph import STEP_SPECS
 
 
 def test_draft_depends_on_a_successful_classification():
@@ -59,8 +59,15 @@ def test_routing_is_unaffected_by_a_failed_classification_it_does_not_depend_on(
     assert _dependency_failed("routing", state, {}) is None
 
 
-def test_step_dependency_table_only_covers_the_two_declared_edges():
-    assert _STEP_DEPENDENCIES == {"draft": ("classification",), "routing": ("draft",)}
+def test_step_specs_cover_all_six_dispatchable_steps_with_only_two_edges():
+    assert set(STEP_SPECS) == {
+        "classification", "rag", "draft", "routing", "chat", "document_qa",
+    }
+    assert STEP_SPECS["draft"].depends_on == ("classification",)
+    assert STEP_SPECS["routing"].depends_on == ("draft",)
+    assert STEP_SPECS["rag"].depends_on == ("classification",)
+    for name in ("classification", "chat", "document_qa"):
+        assert STEP_SPECS[name].depends_on == ()
 
 
 # ==========================================

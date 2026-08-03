@@ -31,6 +31,7 @@ from app.ai.workflows.events import (
     emit_token,
 )
 from app.ai.workflows.planner import resolve_plan
+from app.ai.workflows.step_graph import STEP_SPECS, StepSpec, all_steps_settled, ready_steps
 from app.core.config import settings
 from app.core.enums.reasoning_level import ReasoningLevel
 from app.core.enums.step_status import StepStatus
@@ -60,20 +61,18 @@ STEP_MESSAGES = {
     "document_qa": "Belge içeriği doğrultusunda cevap aranıyor...",
 }
 
-#: A step whose dependency's own result carries status FAILED must not run on
-#: empty/garbage input. Without this a failed draft still let routing run on
-#: draft="" and route to human approval -- an outcome visually identical to a
-#: real routing decision (see planning_graph D6 in the implementation notes).
-_STEP_DEPENDENCIES: dict[str, tuple[str, ...]] = {
-    "draft": ("classification",),
-    "routing": ("draft",),
-}
-
-
 def _dependency_failed(
     step: str, state: "PlanningState", updates: dict[str, Any]
 ) -> Optional[str]:
     """Return the name of a failed dependency for ``step``, if any.
+
+    A step whose dependency's own result carries status FAILED must not run
+    on empty/garbage input. Without this a failed draft still let routing
+    run on draft="" and route to human approval -- an outcome visually
+    identical to a real routing decision. The dependency edges themselves
+    live in ``step_graph.STEP_SPECS`` (shared with ``ready_steps``); this
+    function is the other half -- *whether a failure* should skip the step,
+    which is deliberately not `ready_steps`'s concern (see its docstring).
 
     Args:
         step: The plan step about to run.
@@ -85,7 +84,8 @@ def _dependency_failed(
         The failed dependency's step name, or None when every dependency (if
         any) succeeded or has not run yet.
     """
-    for dependency in _STEP_DEPENDENCIES.get(step, ()):
+    spec = STEP_SPECS.get(step, StepSpec(name=step))
+    for dependency in spec.depends_on:
         result = updates.get(f"{dependency}_result") or state.get(f"{dependency}_result") or {}
         if result.get("status") == StepStatus.FAILED:
             return dependency
@@ -162,7 +162,15 @@ class PlanningState(TypedDict, total=False):
     reasoning_level: str
     plan_steps: list[str]
     plan_intent: str
+    #: Monotonic turn counter, no longer used to index into `plan_steps`
+    #: (see `ready_steps`/`all_steps_settled` in `step_graph.py`) -- kept
+    #: only as an ingredient of `human_gate_node`'s interrupt-id hash and
+    #: for the step-progress log line.
     current_step_idx: int
+    #: Name of the step `execute_step_node` most recently ran, so
+    #: `route_after_step` can check "did draft just run" without indexing
+    #: `plan_steps[current_step_idx - 1]`.
+    _last_ran_step: Optional[str]
     cached_document: dict[str, Any]
     classification_result: dict[str, Any]
     rag_result: dict[str, Any]
@@ -384,6 +392,7 @@ def create_planning_graph(
             "plan_steps": decision.steps,
             "plan_intent": decision.intent,
             "current_step_idx": 0,
+            "_last_ran_step": None,
             "cached_document": _load_cached_document(state.get("document_id")),
             "classification_result": {},
             "rag_result": {},
@@ -684,20 +693,21 @@ def create_planning_graph(
         "document_qa": _step_document_qa,
     }
 
-    async def execute_step_node(
-        state: PlanningState, config: RunnableConfig
+    async def _execute_one_step(
+        state: PlanningState, config: RunnableConfig, step: str
     ) -> dict[str, Any]:
-        """Run the current plan step and advance the cursor."""
-        idx = state.get("current_step_idx", 0)
-        steps = state.get("plan_steps") or []
-        if idx >= len(steps):
-            return {}
+        """Run exactly one plan step and return its own partial state update.
 
-        step = steps[idx].lower()
+        Everything `execute_step_node` used to do inline for the single step
+        at `current_step_idx` -- cache-seeding, the dependency skip-gate,
+        dispatch, event emission -- unchanged behaviourally. Split into its
+        own coroutine so a `parallel_safe` batch (see `execute_step_node`)
+        can run more than one of these concurrently via `asyncio.gather`;
+        every plan `PLAN_BY_INTENT` produces today is a linear chain, so in
+        practice this still always runs one at a time, sequentially.
+        """
         label = STEP_LABELS.get(step, step.capitalize())
-        logger.info("Executing plan step %d/%d: '%s'", idx + 1, len(steps), step)
-
-        updates: dict[str, Any] = {"current_step_idx": idx + 1}
+        updates: dict[str, Any] = {}
         cached = state.get("cached_document") or {}
 
         # Seed the classification from cache when the plan skips the analysis
@@ -718,8 +728,6 @@ def create_planning_graph(
             logger.warning("Skipping plan step '%s': %s", step, reason)
             await emit_node_skipped(config, step, label, reason)
             updates[f"{step}_result"] = {"status": StepStatus.SKIPPED, "reason": reason}
-            if idx + 1 >= len(steps):
-                updates["final_output"] = _compile_final_output(state, updates)
             return updates
 
         await emit_node_start(
@@ -740,7 +748,10 @@ def create_planning_graph(
             # step failure to the rest of the graph. No sub-graph calls
             # interrupt() today, but this node has a checkpointer attached
             # once one is configured, so a future one must not be silently
-            # eaten here.
+            # eaten here. Also why the batch below never uses
+            # `asyncio.gather(..., return_exceptions=True)`: that would box
+            # this exception alongside an ordinary step failure instead of
+            # letting it propagate.
             raise
         except Exception as exc:
             logger.exception("Plan step '%s' failed", step)
@@ -748,9 +759,6 @@ def create_planning_graph(
             await emit_node_error(
                 config, step, label, f"{label} sırasında bir hata oluştu.", detail=str(exc)
             )
-
-        if idx + 1 >= len(steps):
-            updates["final_output"] = _compile_final_output(state, updates)
 
         # The sub-graphs emit their own node_end events with richer payloads;
         # only announce completion here for steps that have none, and only
@@ -765,6 +773,57 @@ def create_planning_graph(
             )
 
         return updates
+
+    async def execute_step_node(
+        state: PlanningState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Run every currently-ready plan step and advance the turn counter.
+
+        Readiness (`ready_steps`) replaces the old `current_step_idx`-based
+        array indexing -- a step runs once its in-plan dependencies have,
+        regardless of position. With no `StepSpec` marked `parallel_safe`
+        today, `batch` is always a single step, so this reproduces the old
+        strictly-linear order exactly; the multi-step branch exists for a
+        future step type that genuinely doesn't touch an LLM (see
+        `step_graph.ready_steps`'s docstring for why none does yet).
+        """
+        steps = state.get("plan_steps") or []
+        if all_steps_settled(steps, state):
+            return {}
+
+        ready = ready_steps(steps, state)
+        if not ready:
+            # Not reachable by any PLAN_BY_INTENT combination today -- would
+            # mean a cycle or an unsatisfiable dependency in STEP_SPECS.
+            # Ending the turn here rather than looping forever if it ever is.
+            logger.error("No plan step is ready but the plan is not settled: %s", steps)
+            return {}
+
+        parallel_batch = [
+            name for name in ready if STEP_SPECS.get(name, StepSpec(name=name)).parallel_safe
+        ]
+        batch = parallel_batch if len(parallel_batch) > 1 else ready[:1]
+
+        idx = state.get("current_step_idx", 0)
+        logger.info(
+            "Executing plan step(s) %d-%d/%d: %s", idx + 1, idx + len(batch), len(steps), batch
+        )
+
+        if len(batch) > 1:
+            partials = await asyncio.gather(
+                *(_execute_one_step(state, config, name) for name in batch)
+            )
+        else:
+            partials = [await _execute_one_step(state, config, batch[0])]
+
+        merged: dict[str, Any] = {"current_step_idx": idx + len(batch), "_last_ran_step": batch[-1]}
+        for partial in partials:
+            merged.update(partial)
+
+        if all_steps_settled(steps, {**state, **merged}):
+            merged["final_output"] = _compile_final_output(state, merged)
+
+        return merged
 
     def _compile_final_output(
         state: PlanningState, updates: dict[str, Any]
@@ -923,23 +982,20 @@ def create_planning_graph(
         return {"draft_result": updated}
 
     def route_after_step(state: PlanningState) -> str:
-        idx = state.get("current_step_idx", 0)
         steps = state.get("plan_steps") or []
 
-        if has_checkpointer and idx > 0:
-            just_ran = steps[idx - 1].lower()
-            if just_ran == "draft":
-                draft_result = state.get("draft_result") or {}
-                draft_status = draft_result.get("status")
-                if draft_status == StepStatus.NEEDS_INPUT:
-                    return "human_gate"
-                if (
-                    draft_status == StepStatus.NEEDS_HUMAN_APPROVAL
-                    and settings.HITL_APPROVAL_GATE_ENABLED
-                ):
-                    return "human_gate"
+        if has_checkpointer and state.get("_last_ran_step") == "draft":
+            draft_result = state.get("draft_result") or {}
+            draft_status = draft_result.get("status")
+            if draft_status == StepStatus.NEEDS_INPUT:
+                return "human_gate"
+            if (
+                draft_status == StepStatus.NEEDS_HUMAN_APPROVAL
+                and settings.HITL_APPROVAL_GATE_ENABLED
+            ):
+                return "human_gate"
 
-        return "continue" if idx < len(steps) else "end"
+        return "end" if all_steps_settled(steps, state) else "continue"
 
     def route_after_gate(state: PlanningState) -> str:
         draft_result = state.get("draft_result") or {}
