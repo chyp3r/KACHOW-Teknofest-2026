@@ -17,6 +17,7 @@ from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
+from app.ai.semantic.prototype_matcher import PrototypeMatcher
 from app.ai.verification import apply_answers, verify_draft
 from app.ai.workflows.events import (
     child_config,
@@ -332,6 +333,19 @@ def create_planning_graph(
     # vector.
     qa_sparse_encoder = SparseBM25Encoder()
 
+    # Layer 2 of the intent ladder. Built once per graph, and only when there is
+    # an embeddings client to build it with -- without one the ladder simply
+    # skips the rung, exactly as it behaved before the layer existed. The
+    # matcher disables itself on a stale or missing vector file too, so a
+    # deployment that never ran scripts/build_prototypes.py degrades rather
+    # than fails.
+    prototype_matcher: PrototypeMatcher | None = None
+    if embeddings_client is not None:
+        candidate = PrototypeMatcher(
+            embeddings_client, model_name=settings.OLLAMA_EMBEDDING_MODEL
+        )
+        prototype_matcher = candidate if candidate.available else None
+
     async def planning_node(
         state: PlanningState, config: RunnableConfig
     ) -> dict[str, Any]:
@@ -345,6 +359,7 @@ def create_planning_graph(
             state.get("document_id"),
             intent_client,
             previous_intent=state.get("plan_intent"),
+            matcher=prototype_matcher,
         )
         logger.info(
             "Plan: %s (intent=%s, source=%s)",

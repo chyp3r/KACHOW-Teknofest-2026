@@ -12,6 +12,8 @@ changed, and is what these tests actually guard, is the resolved intent and its
 step list for every case the cascade got right.
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from app.ai.workflows.planner import (
@@ -293,3 +295,116 @@ def test_every_decision_carries_its_confidence_and_evidence():
     assert decision.evidence
     assert "draft.explicit_request" in decision.evidence
     assert isinstance(decision.alternatives, tuple)
+
+
+# --- The escalation ladder ---------------------------------------------------
+#
+# Three rungs, cheapest first: lexical rules (~0ms), semantic prototypes
+# (~50-150ms), fast-tier model (~1-3s). What matters structurally is that each
+# rung only sees what the one below it declined, and that a non-decisive
+# semantic match falls through rather than being acted on.
+
+
+class _StubMatch:
+    def __init__(self, label, decisive, similarity=0.9, gap=0.2):
+        self.label = label
+        self.decisive = decisive
+        self.similarity = similarity
+        self.runner_up_gap = gap
+
+
+class _StubMatcher:
+    def __init__(self, result):
+        self._result = result
+        self.calls = []
+
+    async def match(self, text, family):
+        self.calls.append((text, family))
+        return self._result
+
+
+@pytest.mark.asyncio
+async def test_the_semantic_rung_is_skipped_when_the_lexical_layer_decides():
+    """The fast path must stay free: a message the rules resolve never pays for
+    an embedding."""
+    matcher = _StubMatcher(_StubMatch("chat", decisive=True))
+
+    decision = await resolve_plan(
+        "Bu evraka bir cevap yazısı hazırla.", "uploads/doc.pdf", matcher=matcher
+    )
+
+    assert decision.intent == "draft"
+    assert decision.source != "semantic"
+    assert matcher.calls == []
+
+
+@pytest.mark.asyncio
+async def test_a_decisive_semantic_match_resolves_without_a_model_call():
+    matcher = _StubMatcher(_StubMatch("draft", decisive=True))
+    llm = MagicMock()
+
+    decision = await resolve_plan(
+        "Gereğini yap.", "uploads/doc.pdf", llm_client=llm, matcher=matcher
+    )
+
+    assert decision.intent == "draft"
+    assert decision.source == "semantic"
+    assert decision.evidence == ("semantic.draft",)
+    assert matcher.calls == [("Gereğini yap.", "intent")]
+    llm.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_a_non_decisive_semantic_match_falls_through_to_the_model():
+    """Having a favourite is not the same as having an answer."""
+    matcher = _StubMatcher(_StubMatch("draft", decisive=False))
+
+    with patch(
+        "app.ai.workflows.planner.classify_intent_with_model",
+        new=AsyncMock(return_value="chat"),
+    ) as classify:
+        decision = await resolve_plan(
+            "Gereğini yap.", "uploads/doc.pdf", llm_client=MagicMock(), matcher=matcher
+        )
+
+    assert decision.source == "model"
+    assert decision.intent == "chat"
+    classify.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_an_unavailable_matcher_leaves_the_ladder_as_it_was():
+    """No matcher configured, or one that returns nothing, must behave exactly
+    like the two-rung ladder that existed before this layer."""
+    with patch(
+        "app.ai.workflows.planner.classify_intent_with_model",
+        new=AsyncMock(return_value="chat"),
+    ):
+        without = await resolve_plan(
+            "Gereğini yap.", "uploads/doc.pdf", llm_client=MagicMock()
+        )
+        with_empty = await resolve_plan(
+            "Gereğini yap.",
+            "uploads/doc.pdf",
+            llm_client=MagicMock(),
+            matcher=_StubMatcher(None),
+        )
+
+    assert without.source == with_empty.source == "model"
+
+
+@pytest.mark.asyncio
+async def test_a_semantic_label_outside_the_known_intents_is_ignored():
+    """The vector file is data on disk; a label that is not a plan must not be
+    turned into one."""
+    matcher = _StubMatcher(_StubMatch("bilinmeyen", decisive=True))
+
+    with patch(
+        "app.ai.workflows.planner.classify_intent_with_model",
+        new=AsyncMock(return_value="chat"),
+    ):
+        decision = await resolve_plan(
+            "Gereğini yap.", "uploads/doc.pdf", llm_client=MagicMock(), matcher=matcher
+        )
+
+    assert decision.source == "model"

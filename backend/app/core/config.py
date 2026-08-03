@@ -100,6 +100,12 @@ class Settings(BaseSettings):
     LANGFUSE_SECRET_KEY: str | None = None
     LANGFUSE_HOST: str = "http://localhost:3000"
 
+    # Semantic prototype vectors, written by scripts/build_prototypes.py.
+    # Same relative-to-working-directory convention as the corpus below, which
+    # is what makes it resolve identically in the container (/workspace) and in
+    # a host run from the repo root.
+    PROTOTYPE_DIR: str = "./datasets/prototypes"
+
     # Legislation (Mevzuat) Corpus Configuration
     MEVZUAT_CORPUS_DIR: str = "./datasets/mevzuat"
     MEVZUAT_COLLECTION_NAME: str = "mevzuat"

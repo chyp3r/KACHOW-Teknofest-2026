@@ -17,12 +17,13 @@ from app.ai.policy.schema import (
     MemoryPolicy,
     Policy,
     RoutingPolicy,
+    SemanticPolicy,
     VerificationPolicy,
 )
 
 #: Semantic version of the parameter set. Bump on any value change:
 #: patch for a threshold, minor for a new parameter, major for a removed one.
-POLICY_VERSION = "1.0.0"
+POLICY_VERSION = "1.2.0"
 
 _POLICY = Policy(version=POLICY_VERSION)
 
@@ -48,6 +49,7 @@ __all__ = [
     "POLICY_VERSION",
     "Policy",
     "RoutingPolicy",
+    "SemanticPolicy",
     "VerificationPolicy",
     "get_policy",
 ]

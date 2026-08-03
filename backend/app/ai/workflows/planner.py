@@ -31,7 +31,7 @@ that call remains a single label from the fast tier.
 """
 
 import logging
-from typing import Literal, NamedTuple, Optional
+from typing import TYPE_CHECKING, Literal, NamedTuple, Optional
 
 from pydantic import BaseModel, Field
 
@@ -45,6 +45,9 @@ from app.ai.workflows.intent_scorer import (
     normalize,
     score_intents,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle avoidance only
+    from app.ai.semantic.prototype_matcher import PrototypeMatcher
 
 logger = logging.getLogger(__name__)
 
@@ -306,8 +309,15 @@ async def resolve_plan(
     document_id: Optional[str],
     llm_client: Optional[BaseLLMClient] = None,
     previous_intent: Optional[str] = None,
+    matcher: Optional["PrototypeMatcher"] = None,
 ) -> PlanDecision:
     """Resolve the execution plan for a user message.
+
+    Three rungs, cheapest first. The lexical layer answers almost everything at
+    no cost; what it abstains on is a paraphrase it has no surface for, or a
+    genuinely unclear message. The semantic layer separates those two at roughly
+    a twentieth of what the model rung costs, and the model rung remains for
+    what is actually unclear.
 
     Args:
         message: The user's message.
@@ -316,6 +326,8 @@ async def resolve_plan(
             ambiguous message resolves by context instead of by model.
         previous_intent: The intent resolved for this thread's previous turn,
             when known -- enables the short-affirmative continuation rule.
+        matcher: Prototype matcher for the semantic rung. Omitted or unavailable
+            means the ladder simply skips it, exactly as before it existed.
 
     Returns:
         The execution plan and the rationale shown to the user.
@@ -326,6 +338,32 @@ async def resolve_plan(
             "Plan resolved deterministically (%s): %s", decided.source, decided.steps
         )
         return decided
+
+    if matcher is not None:
+        match = await matcher.match(message, "intent")
+        if match is not None and match.decisive and match.label in PLAN_BY_INTENT:
+            logger.info(
+                "Plan resolved semantically: intent=%s similarity=%.3f gap=%.3f",
+                match.label,
+                match.similarity,
+                match.runner_up_gap,
+            )
+            return PlanDecision(
+                steps=list(PLAN_BY_INTENT[match.label]),
+                intent=match.label,  # type: ignore[arg-type]
+                reasoning=REASONING_BY_INTENT[match.label],
+                source="semantic",
+                confidence=round(match.similarity, 3),
+                evidence=(f"semantic.{match.label}",),
+            )
+        if match is not None:
+            logger.info(
+                "Semantic match not decisive (%s, similarity=%.3f, gap=%.3f); "
+                "escalating to the model.",
+                match.label,
+                match.similarity,
+                match.runner_up_gap,
+            )
 
     if llm_client is None:
         intent: Intent = "document_qa" if document_id else "chat"

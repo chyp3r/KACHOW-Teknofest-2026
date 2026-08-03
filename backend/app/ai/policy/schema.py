@@ -30,6 +30,7 @@ __all__ = [
     "IntentPolicy",
     "MemoryPolicy",
     "Policy",
+    "SemanticPolicy",
     "RoutingPolicy",
     "VerificationPolicy",
 ]
@@ -135,6 +136,41 @@ class MemoryPolicy:
 
 
 @dataclass(frozen=True)
+class SemanticPolicy:
+    """Thresholds for the embedding-based prototype layer.
+
+    Both must be cleared for a semantic match to be acted on. Cosine similarity
+    between short Turkish sentences is compressed -- unrelated official-register
+    sentences routinely sit around 0.6 -- so an absolute threshold alone fires
+    constantly, while a margin alone fires on two equally-poor matches that
+    happen to differ.
+
+    Calibrated against ``evaluation/datasets/intents.jsonl`` with real
+    nomic-embed-text vectors. The measurement is stark: correct decisions score
+    0.859 and 0.880, while 0.747-0.758 is a coin flip (one correct, three wrong)
+    and every genuinely under-specified message tops out at 0.740. The initial
+    0.72 sat inside the noise band and produced three correct decisions against
+    three wrong ones -- a layer that decides at random is worse than no layer,
+    because the messages it gets wrong were previously escalating to a model
+    that might have got them right.
+
+    0.80 is the middle of the safe band (0.758 -> 0.859), not its edge. Picking
+    the point that merely beats the last error would leave 0.002 of headroom on
+    a fifteen-case sample.
+
+    Attributes:
+        decisive_similarity: Minimum cosine similarity to the winning class.
+        decisive_margin: Minimum lead over the runner-up class. Not binding at
+            the calibrated similarity -- both surviving decisions clear it
+            comfortably (0.154, 0.098) -- but retained because two equally-good
+            matches should not be separated by rounding.
+    """
+
+    decisive_similarity: float = 0.80
+    decisive_margin: float = 0.04
+
+
+@dataclass(frozen=True)
 class BudgetPolicy:
     """Per-node time budgets at the balanced reasoning level.
 
@@ -169,6 +205,7 @@ class Policy:
     routing: RoutingPolicy = field(default_factory=RoutingPolicy)
     intent: IntentPolicy = field(default_factory=IntentPolicy)
     memory: MemoryPolicy = field(default_factory=MemoryPolicy)
+    semantic: SemanticPolicy = field(default_factory=SemanticPolicy)
     budget: BudgetPolicy = field(default_factory=BudgetPolicy)
 
     def check_invariants(self) -> None:
@@ -201,6 +238,13 @@ class Policy:
         for name, value in (
             ("token_overlap_threshold", verification.token_overlap_threshold),
             ("judge_echo_overlap_threshold", verification.judge_echo_overlap_threshold),
+        ):
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be a share in [0, 1]")
+
+        for name, value in (
+            ("semantic.decisive_similarity", self.semantic.decisive_similarity),
+            ("semantic.decisive_margin", self.semantic.decisive_margin),
         ):
             if not 0.0 <= value <= 1.0:
                 raise ValueError(f"{name} must be a share in [0, 1]")
