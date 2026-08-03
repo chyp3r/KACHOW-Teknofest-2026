@@ -269,7 +269,11 @@ Bu, katmanın yanlış olduğu anlamına gelmiyor: 0 yanlış kararla, ödediği
 
 ## Bilinen sınırı
 
-Semantik katman yalnızca **çekimserlik** üzerinde çalışır. Sözlüksel katmanın *eminden yanlış* karar verdiği bir mesajı hiç görmez. Held-out ölçümü (bkz. CHANGELOG 1.28.0) bu sınıfın gerçek olduğunu gösteriyor: 16 parafrazın 5'i eminden yanlış, 4'ü `document_qa`'ya düşüyor. Bu, semantik katmanın çözebileceği bir problem değil — sözlüksel katmanın kalibrasyonuna ait.
+Semantik katman yalnızca **çekimserlik** üzerinde çalışır. Sözlüksel katmanın *eminden yanlış* karar verdiği bir mesajı hiç görmez.
+
+Held-out ölçümü (CHANGELOG 1.28.0) bu sınıfın gerçek olduğunu göstermişti: 16 parafrazın 5'i eminden yanlış, 4'ü `document_qa`'ya düşüyordu. CHANGELOG 1.32.0 bu 5'i sözlüksel katmanın kendisinde ele aldı — `document_qa.question_with_document` sezgisel kuralı, belge ekliyken *herhangi* bir soru işaretini içerik sorgusu sayıyordu, kibarlık ekiyle ("mısın/misin") söylenmiş bir eylem isteğini ayırt etmeden. Sonuç: 5 yanlış-kesin karardan 4'ü artık dürüst bir çekimserliğe düşüyor (semantik/model katmanına eskale edilebilir hale geliyor); kalan tek vaka ("bir sorun var mı" ile "gizlilik derecesi var mı" arasındaki fark) sözlüksel olarak gerçekten ayırt edilemez ve bilinen sınır olarak kalıyor.
+
+Bu, semantik katmanın kapsamını **genişletmiyor** — hâlâ yalnızca çekimserlik üzerinde çalışıyor. Ama artık ona ulaşan çekimserlik sayısı, sözlüksel katmanın kendi kalibrasyon hatalarıyla şişirilmiş değil.
 
 ---
 

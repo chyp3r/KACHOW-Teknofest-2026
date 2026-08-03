@@ -3,6 +3,16 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 
+## [1.32.0] - 2026-08-03
+### Düzeltildi
+- **`document_qa` Aşırı Tetikleniyordu**: `heldout_paraphrase` kümesindeki 16 vakanın 5'i `<abstain>` değil, **yanlış ve kesin** karar veriyordu -- sistemin kendi ilkesini ("yanlış kesin karar, abstention'dan beterdir") ihlal eden asıl olan buydu, 6 zararsız abstention değil. Kök neden: `document_qa.question_with_document` sezgisel kuralı, belge ekliyken **herhangi bir soru işaretiyle biten her mesajı** +1.6 puanla (`WEIGHT_DOMAIN`) işaretliyordu -- tek başına hem `presence_floor` (1.4) hem `decisive_margin`'i (1.2, ikinci aday yokken) geçen bir değer. "Bunun cevabını sen yazar mısın?" (draft) ile "Belgede gizlilik derecesi var mı?" (gerçek içerik sorusu) arasında yapısal bir fark yoktu.
+  - Yeni `document_qa.request_softener_counter`: kibarlık eki taşıyan (`mısın/misin/musun/müsün`) ve **belgeye dair hiçbir içerik kanıtı** taşımayan sorular artık `document_qa`'yı geçersiz kılıyor -- `document_qa.about_the_document` zaten ateşlenmişse dokunmuyor (hafıza-hatırlatma karşı sinyalinin aksine, bu yalnızca dilbilgisel bir kip, bir konu sinyali değil; "Bu belgede ne yazdığını söyler misin?" hâlâ gerçek bir belge sorusu).
+  - `chat.definitional_question`'daki çıplak `"açıklar mısın"`/`"anlatır mısın"` yüzeyleri kaldırıldı: "Şu belgeye bakıp durumu anlatır mısın?" genel bir kavram sorusu değil, belgeye özgü bir analiz isteğiydi ve bu iki yüzey yüzünden `chat`'e düşüyordu. Mevcut 130 vakanın hiçbiri yalnızca bu iki yüzeye dayanmıyordu (doğrulandı) -- her biri kendi tanımsal işaretini ("ne demek", "nasıl çalışır") de taşıyor.
+  - `analyze.explicit_request`'e `"kurallara uy"` eklendi -- zaten var olan `"mevzuata uygun"` / `"uygunluk denetimi"` uygunluk kavramının farklı bir çekimi, yeni bir kavram değil.
+  - `chat.memory_recall`'a `"evvelki"` eklendi -- zaten kapsanan `"önceki"`nin eşanlamlısı.
+  - **Sonuç** (`evaluation/datasets/intents.jsonl`, 130 vaka): macro F1 `0.9326` → `0.9559`; orijinal 114 vakanın hiçbirinde regresyon yok (doğrulandı, kategori kırılımı birebir `1.00`). `heldout_paraphrase` kümesinde **yanlış-kesin cevap sayısı 5'ten 1'e düştü** -- kalan tek vaka ("Bu evrakta bir sorun var mı acaba?") gerçekten belirsiz: "sorun var mı" ile "gizlilik derecesi var mı" (gerçek içerik sorusu) sözlüksel olarak ayırt edilemez, semantik anlayış gerektirir; kırılgan tek-vakalık bir yama yerine bilinen sınır olarak bırakıldı.
+  - **Metodoloji notu**: bu düzeltme, `heldout_paraphrase` başarısızlıklarını inceleyerek bulundu -- kümenin "kurallar yazıldıktan sonra eklendi, hiçbir kural buna göre ayarlanmadı" saflığını bir miktar zedeliyor. Ancak düzeltme belirli cümlelere değil genel bir gramer örüntüsüne (kibarlık eki ≠ içerik sorgusu) dayanıyor. Bu küme artık kalibrasyon açısından "harcanmış" sayılmalı; AP-8'de taze bir held-out turu önerilir.
+
 ## [1.31.0] - 2026-08-03
 ### Eklendi
 - **Gelişmiş Sentetik PDF Veri Kümesi**: KVKK/PII ve RAG süreçlerinin testi için, 6 farklı kurum (MEB, İSKİ, SGK, YÖK, BOTAŞ, Ankara BŞB) formatına (antet, mizanpaj, Türkçe TrueType fontlar) birebir uygun ve sahte PII verileri içeren 300 adet zengin içerikli simülasyon PDF belgesi üretilerek veri setine döküldü (`scripts/generate_diverse_pdfs.py`).
