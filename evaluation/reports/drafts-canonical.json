@@ -1,0 +1,63 @@
+{
+  "meta": {
+    "drafts": {
+      "dataset": "drafts",
+      "started_at": "2026-08-03T09:35:02",
+      "total_ms": 4.787
+    }
+  },
+  "suites": {
+    "drafts": {
+      "accuracy": 1.0,
+      "by_category": {
+        "grounded": {
+          "accuracy": 1.0,
+          "cases": 5,
+          "false_negative": 0,
+          "false_positive": 0
+        },
+        "hallucinated": {
+          "accuracy": 1.0,
+          "cases": 12,
+          "false_negative": 0,
+          "false_positive": 0
+        },
+        "other_official": {
+          "accuracy": 1.0,
+          "cases": 3,
+          "false_negative": 0,
+          "false_positive": 0
+        },
+        "paraphrased_grounded": {
+          "accuracy": 1.0,
+          "cases": 10,
+          "false_negative": 0,
+          "false_positive": 0
+        },
+        "placeholder": {
+          "accuracy": 1.0,
+          "cases": 4,
+          "false_negative": 0,
+          "false_positive": 0
+        },
+        "structural": {
+          "accuracy": 1.0,
+          "cases": 6,
+          "false_negative": 0,
+          "false_positive": 0
+        }
+      },
+      "cases": 40,
+      "claim_detection_gaps": [],
+      "counts": {
+        "false_negative": 0,
+        "false_positive": 0,
+        "true_negative": 17,
+        "true_positive": 23
+      },
+      "failures": [],
+      "false_negative_rate": 0.0,
+      "false_positive_rate": 0.0
+    }
+  }
+}

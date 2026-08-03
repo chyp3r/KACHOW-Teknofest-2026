@@ -20,9 +20,13 @@ institution in the draft trace back to the source or the retrieved legislation?
 import logging
 import re
 import unicodedata
-from typing import Any, Iterable
+from dataclasses import dataclass
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
+
+from app.ai.verification.normalizers import canonical_for_kind
+from app.observability.ai_metrics import CLAIM_MATCH
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +48,19 @@ DATE_PATTERN = re.compile(
 )
 
 #: Legislation citations: "4982 sayılı", "madde 12", "m. 7/2".
+#:
+#: The lookbehind is load-bearing. Without it the pattern reads the tail of an
+#: official document number as a law number -- "E-22222222-903-118 sayılı
+#: yazınız" yields a phantom "118 sayılı" citation, which is then checked
+#: against the legislation the draft actually cites and can be reported as a
+#: fabricated reference on a perfectly grounded draft. Today that phantom is
+#: absorbed by the token-overlap fallback only when some *other* "N sayılı"
+#: citation happens to be in context; a draft whose context contains none would
+#: have its own reference number flagged. Guarding against a preceding digit
+#: also stops "12345 sayılı" from additionally matching as "2345 sayılı".
 LEGISLATION_PATTERN = re.compile(
-    r"\b\d{3,5}\s+say[ıi]l[ıi]\b|\bmadde\s+\d+\b|\bm\.\s*\d+\b", re.IGNORECASE
+    r"(?<![-/\d])\b\d{3,5}\s+say[ıi]l[ıi]\b|\bmadde\s+\d+\b|\bm\.\s*\d+\b",
+    re.IGNORECASE,
 )
 
 #: Institution names ending in a recognisable public-body suffix.
@@ -89,12 +104,46 @@ UNSUPPORTED_CLAIM_PENALTY = 12.0
 MAX_UNSUPPORTED_PENALTY = 60.0
 
 
+#: How a claim was matched against the trusted sources, weakest last.
+#: ``exact`` and ``normalized`` are substring hits, ``canonical`` is a
+#: type-aware equality (see :mod:`app.ai.verification.normalizers`),
+#: ``token_overlap`` is the tolerant fallback for names, ``none`` means the
+#: claim is ungrounded.
+MatchMethod = Literal["exact", "canonical", "token_overlap", "empty", "none"]
+
+
+@dataclass(frozen=True)
+class _Support:
+    """The outcome of checking one claim against the trusted material."""
+
+    supported: bool
+    method: MatchMethod
+    canonical: Optional[str] = None
+    best_overlap: float = 0.0
+
+
 class UnsupportedClaim(BaseModel):
     """A concrete assertion in the draft with no basis in the source material."""
 
     kind: str = Field(description="Bulgunun türü (ör. 'sayı', 'tarih', 'kurum').")
     value: str = Field(description="Taslakta geçen, kaynakta doğrulanamayan ifade.")
     explanation: str = Field(description="Bulgunun kısa Türkçe açıklaması.")
+    canonical: str = Field(
+        default="",
+        description=(
+            "İfadenin kaynakta aranan kanonik biçimi (ör. '2026-03-12'). Boşsa "
+            "bu tür için kanonikleştirme yok ya da değer ayrıştırılamadı."
+        ),
+    )
+    best_overlap: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Kaynakla en iyi jeton örtüşme oranı. Eşiğe ne kadar yaklaşıldığını "
+            "gösterir; 0.0 hiçbir ortak jeton bulunamadığı anlamına gelir."
+        ),
+    )
 
 
 class VerificationReport(BaseModel):
@@ -151,58 +200,146 @@ def _findall(pattern: re.Pattern[str], text: str) -> list[str]:
     return list(seen)
 
 
-def _is_supported(value: str, haystack: str) -> bool:
-    """Report whether a value appears in the reference material.
+#: Claim kinds, their extraction pattern and the Turkish explanation shown when
+#: one turns out to be ungrounded. Module level so the canonical index and the
+#: claim collector are guaranteed to iterate the same set of kinds.
+CLAIM_CHECKS: tuple[tuple[str, re.Pattern[str], str], ...] = (
+    ("sayı", DOCUMENT_NUMBER_PATTERN, "Kaynak evrakta veya bağlamda geçmeyen bir belge sayısı."),
+    ("tarih", DATE_PATTERN, "Kaynak evrakta veya bağlamda geçmeyen bir tarih."),
+    ("mevzuat", LEGISLATION_PATTERN, "Doğrulanmış mevzuat bağlamında bulunmayan bir atıf."),
+    ("kurum", INSTITUTION_PATTERN, "Kaynak evrakta veya bağlamda geçmeyen bir kurum adı."),
+    ("tutar", AMOUNT_PATTERN, "Kaynak evrakta veya bağlamda geçmeyen bir parasal tutar."),
+)
+
+#: Minimum share of a value's significant tokens that must appear in the
+#: sources for the tolerant fallback to accept it.
+TOKEN_OVERLAP_THRESHOLD = 0.75
+
+
+def _build_canonical_index(raw_sources: str) -> dict[str, set[str]]:
+    """Index every typed value in the trusted material by its canonical form.
+
+    Built from the *raw* sources rather than the folded haystack: the extraction
+    patterns are case-sensitive where it matters (``INSTITUTION_PATTERN``) and
+    the textual date alternation matches "Mart", not "mart".
 
     Args:
-        value: The claim as written in the draft.
+        raw_sources: The trusted material, joined but not folded.
+
+    Returns:
+        Claim kind -> the set of canonical forms present in the sources.
+    """
+    index: dict[str, set[str]] = {}
+    for kind, pattern, _explanation in CLAIM_CHECKS:
+        forms: set[str] = set()
+        for value in _findall(pattern, raw_sources):
+            canonical = canonical_for_kind(kind, value)
+            if canonical:
+                forms.add(canonical)
+        index[kind] = forms
+    return index
+
+
+def _token_overlap(folded: str, haystack: str) -> float:
+    """Share of a value's significant tokens that appear in the sources.
+
+    Args:
+        folded: The folded claim value.
         haystack: Folded concatenation of every trusted source.
 
     Returns:
-        True when the value is grounded.
+        The overlap in [0, 1]. Values with fewer than two significant tokens
+        score 0.0 -- a single token either matched exactly or is not evidence.
+    """
+    tokens = [token for token in folded.split() if len(token) > 2]
+    if len(tokens) < 2:
+        return 0.0
+    return sum(1 for token in tokens if token in haystack) / len(tokens)
+
+
+def _support_for(
+    kind: str, value: str, haystack: str, canonical_index: dict[str, set[str]]
+) -> _Support:
+    """Decide whether one claim is grounded, and record how.
+
+    The ladder is ordered strongest first, and the canonical rung is what
+    closes the gap this module's docstring describes: a date written
+    "1 Mart 2026" against a source that says "01.03.2026" is the *same fact*,
+    but no amount of substring or token comparison can see that.
+
+    ``canonical`` is checked before ``token_overlap`` deliberately. For a typed
+    value, canonical equality is exact and total -- if it matches, the value is
+    grounded, and if it does not, a partial token overlap between two different
+    dates is not evidence of anything.
+
+    Args:
+        kind: The claim kind.
+        value: The claim as written in the draft.
+        haystack: Folded concatenation of every trusted source.
+        canonical_index: Canonical forms present in the sources, by kind.
+
+    Returns:
+        The support decision, the rung that produced it, and the evidence.
     """
     folded = _fold(value)
     if not folded:
-        return True
+        return _Support(supported=True, method="empty")
+
     if folded in haystack:
-        return True
+        return _Support(supported=True, method="exact")
+
+    canonical = canonical_for_kind(kind, value)
+    if canonical is not None and canonical in canonical_index.get(kind, set()):
+        return _Support(supported=True, method="canonical", canonical=canonical)
 
     # Institution names survive minor rewording ("Çevre ve Şehircilik İl
     # Müdürlüğü" vs "İl Müdürlüğü"), so accept a strong token overlap rather
     # than demanding an exact span and flagging every legitimate paraphrase.
-    tokens = [token for token in folded.split() if len(token) > 2]
-    if len(tokens) >= 2:
-        matched = sum(1 for token in tokens if token in haystack)
-        if matched / len(tokens) >= 0.75:
-            return True
-    return False
+    overlap = _token_overlap(folded, haystack)
+    if overlap >= TOKEN_OVERLAP_THRESHOLD:
+        return _Support(
+            supported=True, method="token_overlap", canonical=canonical, best_overlap=overlap
+        )
+
+    return _Support(
+        supported=False, method="none", canonical=canonical, best_overlap=overlap
+    )
 
 
-def _collect_claims(draft: str, haystack: str) -> list[UnsupportedClaim]:
+def _collect_claims(
+    draft: str, haystack: str, canonical_index: dict[str, set[str]]
+) -> list[UnsupportedClaim]:
     """Find every concrete claim in the draft that the sources do not support.
 
     Args:
         draft: The generated draft, with placeholders already stripped.
         haystack: Folded concatenation of every trusted source.
+        canonical_index: Canonical forms present in the sources, by kind.
 
     Returns:
-        The unsupported claims, in document order by category.
+        The unsupported claims, in document order by category, each carrying
+        the canonical form that was searched for and how close the best textual
+        match came.
     """
-    checks: tuple[tuple[str, re.Pattern[str], str], ...] = (
-        ("sayı", DOCUMENT_NUMBER_PATTERN, "Kaynak evrakta veya bağlamda geçmeyen bir belge sayısı."),
-        ("tarih", DATE_PATTERN, "Kaynak evrakta veya bağlamda geçmeyen bir tarih."),
-        ("mevzuat", LEGISLATION_PATTERN, "Doğrulanmış mevzuat bağlamında bulunmayan bir atıf."),
-        ("kurum", INSTITUTION_PATTERN, "Kaynak evrakta veya bağlamda geçmeyen bir kurum adı."),
-        ("tutar", AMOUNT_PATTERN, "Kaynak evrakta veya bağlamda geçmeyen bir parasal tutar."),
-    )
-
     claims: list[UnsupportedClaim] = []
-    for kind, pattern, explanation in checks:
+
+    for kind, pattern, explanation in CLAIM_CHECKS:
         for value in _findall(pattern, draft):
-            if not _is_supported(value, haystack):
-                claims.append(
-                    UnsupportedClaim(kind=kind, value=value, explanation=explanation)
+            support = _support_for(kind, value, haystack, canonical_index)
+            CLAIM_MATCH.labels(kind=kind, method=support.method).inc()
+
+            if support.supported:
+                continue
+
+            claims.append(
+                UnsupportedClaim(
+                    kind=kind,
+                    value=value,
+                    explanation=explanation,
+                    canonical=support.canonical or "",
+                    best_overlap=round(support.best_overlap, 2),
                 )
+            )
     return claims
 
 
@@ -222,11 +359,6 @@ def _check_structure(draft: str) -> tuple[list[str], float]:
             missing.append(label)
             penalty += weight
     return missing, penalty
-
-
-def _build_haystack(sources: Iterable[str]) -> str:
-    """Fold every trusted source into one searchable string."""
-    return _fold(" \n ".join(source for source in sources if source))
 
 
 def verify_draft(
@@ -265,12 +397,18 @@ def verify_draft(
     trusted: list[str] = [source_document, context, instructions]
     if classification:
         trusted.append(_flatten_classification(classification))
-    haystack = _build_haystack(trusted)
+
+    # Two views of the same material: the folded one for substring comparison,
+    # the raw one for the case-sensitive extraction patterns that feed the
+    # canonical index.
+    raw_sources = " \n ".join(source for source in trusted if source)
+    haystack = _fold(raw_sources)
+    canonical_index = _build_canonical_index(raw_sources)
 
     placeholder_count = len(PLACEHOLDER_PATTERN.findall(draft))
     auditable = _strip_placeholders(draft)
 
-    claims = _collect_claims(auditable, haystack)
+    claims = _collect_claims(auditable, haystack, canonical_index)
     missing_structure, structure_penalty = _check_structure(draft)
 
     claim_penalty = min(
