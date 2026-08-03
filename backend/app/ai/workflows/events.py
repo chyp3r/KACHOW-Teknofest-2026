@@ -260,6 +260,23 @@ async def emit_interrupt(
     )
 
 
+async def emit_tool_call(
+    config: Optional[RunnableConfig], node: str, tool: str, args: Mapping[str, Any]
+) -> None:
+    """Publish that the assistant agent invoked a tool for this turn.
+
+    Args:
+        config: The node's runnable config.
+        node: The node running the tool loop (``"assist"``).
+        tool: The tool's name, as declared in its ``ToolSpec``.
+        args: The arguments the model supplied.
+    """
+    await emit(
+        config,
+        {"event": "tool_call", "node": node, "tool": tool, "args": dict(args)},
+    )
+
+
 async def emit_partial(
     config: Optional[RunnableConfig], key: str, value: Any
 ) -> None:

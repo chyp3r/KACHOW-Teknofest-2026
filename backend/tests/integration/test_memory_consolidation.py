@@ -20,8 +20,8 @@ from app.ai.workflows.planning_graph import create_planning_graph
 
 def _build_graph(fake_llm, fake_fast_llm):
     """Mirrors test_hitl_flow.py's _build_graph -- sub-graphs are mocked
-    since a chat-intent turn never invokes them; only chat_agent (fake_llm)
-    and the memory summarizer (fake_fast_llm) are exercised."""
+    since a chat-intent turn never invokes them; only the assistant agent
+    (fake_llm) and the memory summarizer (fake_fast_llm) are exercised."""
     graph = create_planning_graph(
         llm_client=fake_llm,
         document_analysis_graph=AsyncMock(),

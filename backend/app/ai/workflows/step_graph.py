@@ -23,7 +23,7 @@ class StepSpec:
         depends_on: Other step names that must have run -- with any outcome,
             success, failure, or skip -- before this one is eligible. Only
             dependencies that are *also* part of the current turn's plan
-            apply: `document_qa`'s plan never includes `classification`, so
+            apply: `assist`'s plan never includes `classification`, so
             `rag`'s declared dependency on it is a no-op there.
         parallel_safe: Whether this step may run concurrently with another
             `parallel_safe` step that is also ready in the same turn. No
@@ -45,8 +45,7 @@ STEP_SPECS: dict[str, StepSpec] = {
     "rag": StepSpec(name="rag", depends_on=("classification",)),
     "draft": StepSpec(name="draft", depends_on=("classification",)),
     "routing": StepSpec(name="routing", depends_on=("draft",)),
-    "chat": StepSpec(name="chat"),
-    "document_qa": StepSpec(name="document_qa"),
+    "assist": StepSpec(name="assist"),
 }
 
 

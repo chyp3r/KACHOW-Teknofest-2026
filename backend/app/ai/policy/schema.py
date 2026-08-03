@@ -190,6 +190,7 @@ class BudgetPolicy:
                 "suggest_mevzuat": 45.0,
                 "route": 30.0,
                 "writer": 120.0,
+                "assist": 45.0,
             }
         )
     )

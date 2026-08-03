@@ -1,0 +1,213 @@
+"""Tool factories the assistant agent can bind for one turn.
+
+Every handler here is a closure over the document already attached to *this*
+request (``document_id``, ``cached_document``) -- the model is never given a
+document id to pass as an argument, so it structurally cannot search or read
+any document other than the one the user actually attached. When no document
+is attached, :func:`build_assistant_tools` simply omits the document-scoped
+tools; the model never sees them to call in the first place.
+"""
+
+import json
+import logging
+from typing import Any, Literal, Optional
+
+from langchain_core.runnables import RunnableConfig
+from pydantic import BaseModel, Field
+
+from app.ai.embeddings.models import BaseEmbeddingsClient
+from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
+from app.ai.tools.registry import ToolSpec
+from app.ai.workflows.events import child_config
+from app.infrastructure.vectorstore.base import BaseVectorStore
+
+logger = logging.getLogger(__name__)
+
+QA_COLLECTION_NAME = "document_qa"
+
+#: Extracted-text slice size. Matches the fallback the retrieval-based path
+#: already used (see the pre-merge ``_run_document_qa``) -- large enough for a
+#: short official document, bounded so it doesn't blow the prompt budget.
+TEXT_SLICE_CHARS = 8000
+
+
+class SearchDocumentArgs(BaseModel):
+    """Arguments for the ``search_document`` tool."""
+
+    query: str = Field(description="Belgede aranacak soru veya anahtar kelimeler.")
+
+
+class GetDocumentDetailsArgs(BaseModel):
+    """``get_document_details`` takes no arguments; analysis is already scoped
+    to the one attached document."""
+
+
+class GetDocumentTextArgs(BaseModel):
+    """Arguments for the ``get_document_text`` tool."""
+
+    part: Literal["start", "end"] = Field(
+        default="start",
+        description="Belge metninin başı mı sonu mu okunacak.",
+    )
+
+
+class SearchLegislationArgs(BaseModel):
+    """Arguments for the ``search_legislation`` tool."""
+
+    query: str = Field(description="Mevzuat veritabanında aranacak konu veya soru.")
+
+
+def build_assistant_tools(
+    *,
+    document_id: Optional[str],
+    cached_document: dict[str, Any],
+    vector_store: Optional[BaseVectorStore],
+    embeddings_client: Optional[BaseEmbeddingsClient],
+    qa_sparse_encoder: SparseBM25Encoder,
+    qa_result_limit: int,
+    rag_graph: Any,
+    config: Optional[RunnableConfig],
+) -> list[ToolSpec]:
+    """Build the tool set available to the assistant agent for one turn.
+
+    Args:
+        document_id: Storage path of the attached document, or None.
+        cached_document: The document's cached analysis/extracted text, when
+            ``document_id`` is set (see ``planning_graph._load_cached_document``).
+        vector_store: Vector store backing document retrieval.
+        embeddings_client: Embeddings client backing document retrieval.
+        qa_sparse_encoder: Unfit sparse encoder, same one the pre-merge
+            document Q&A path used for RRF fusion's lexical half.
+        qa_result_limit: Max passages a document search returns.
+        rag_graph: Compiled legislation retrieval sub-graph.
+        config: The assist step's runnable config, forwarded to the RAG
+            sub-graph via ``child_config`` so its own progress events (and any
+            tracing callbacks) still reach the SSE stream.
+
+    Returns:
+        Document-scoped tools only when a document is attached; legislation
+        search whenever a RAG graph is available, document or not.
+    """
+    tools: list[ToolSpec] = []
+
+    if document_id:
+
+        async def _search_document(query: str) -> str:
+            if not (vector_store and embeddings_client):
+                return "Belge arama şu anda kullanılamıyor."
+            passages: list[str] = []
+            try:
+                query_vector = await embeddings_client.embed_query(query)
+                sparse_indices, sparse_values = qa_sparse_encoder.encode_query(query)
+                hits = await vector_store.hybrid_search(
+                    collection_name=QA_COLLECTION_NAME,
+                    query_vector=query_vector,
+                    sparse_indices=sparse_indices,
+                    sparse_values=sparse_values,
+                    limit=qa_result_limit,
+                    filter_dict={"storage_path": document_id},
+                )
+                passages = [hit["text"] for hit in hits if hit.get("text")]
+            except Exception:
+                logger.exception("Assistant document search failed")
+
+            if not passages and cached_document.get("extracted_text"):
+                passages = [cached_document["extracted_text"][:TEXT_SLICE_CHARS]]
+            if not passages:
+                return "Belgede bu soruyla ilgili bir içerik bulunamadı."
+            return "\n\n---\n\n".join(passages)
+
+        async def _get_document_details() -> str:
+            analysis = cached_document.get("analysis") or {}
+            if not analysis:
+                return "Belge analiz bilgisi mevcut değil."
+
+            raw_metadata = analysis.get("fields") or analysis.get("metadata") or {}
+            metadata = (
+                json.dumps(raw_metadata, ensure_ascii=False, indent=2, default=str)
+                if isinstance(raw_metadata, dict)
+                else str(raw_metadata)
+            )
+            parts = [
+                f"Özet: {analysis.get('summary') or 'Özet mevcut değil.'}",
+                f"Üst veri: {metadata}",
+            ]
+            if analysis.get("compliance_status"):
+                parts.append(f"Uygunluk durumu: {analysis['compliance_status']}")
+            if analysis.get("missing_fields"):
+                parts.append(
+                    "Eksik alanlar: " + ", ".join(analysis["missing_fields"])
+                )
+            return "\n\n".join(parts)
+
+        async def _get_document_text(part: str = "start") -> str:
+            text = cached_document.get("extracted_text") or ""
+            if not text:
+                return "Belge metni mevcut değil."
+            if part == "end":
+                return text[-TEXT_SLICE_CHARS:]
+            return text[:TEXT_SLICE_CHARS]
+
+        tools.extend(
+            [
+                ToolSpec(
+                    name="search_document",
+                    description=(
+                        "Yüklenmiş belgede belirli bir soru veya konuyla ilgili "
+                        "içerik ara. Belgenin belirli bir kısmı hakkında soru "
+                        "sorulduğunda kullan."
+                    ),
+                    args_schema=SearchDocumentArgs,
+                    handler=_search_document,
+                ),
+                ToolSpec(
+                    name="get_document_details",
+                    description=(
+                        "Belgenin özetini, üst verilerini (tarih, sayı, konu, "
+                        "muhatap vb.) ve uygunluk denetimi sonucunu getirir. "
+                        "Belgenin genel niteliği hakkında soru sorulduğunda kullan."
+                    ),
+                    args_schema=GetDocumentDetailsArgs,
+                    handler=_get_document_details,
+                ),
+                ToolSpec(
+                    name="get_document_text",
+                    description=(
+                        "Belgenin ham metninin başını veya sonunu okur. Arama "
+                        "sonuç vermediğinde veya belgenin tam metni gerektiğinde "
+                        "kullan."
+                    ),
+                    args_schema=GetDocumentTextArgs,
+                    handler=_get_document_text,
+                ),
+            ]
+        )
+
+    if rag_graph is not None:
+
+        async def _search_legislation(query: str) -> str:
+            try:
+                result = await rag_graph.ainvoke(
+                    {"original_query": query, "attempts": 0},
+                    config=child_config(config),
+                )
+                context = result.get("context") or ""
+            except Exception:
+                logger.exception("Assistant legislation search failed")
+                context = ""
+            return context or "İlgili bir mevzuat maddesi bulunamadı."
+
+        tools.append(
+            ToolSpec(
+                name="search_legislation",
+                description=(
+                    "İlgili kanun, yönetmelik ve mevzuat maddelerini ara. "
+                    "Kullanıcı mevzuat veya hukuki dayanak hakkında soru "
+                    "sorduğunda kullan."
+                ),
+                args_schema=SearchLegislationArgs,
+                handler=_search_legislation,
+            )
+        )
+
+    return tools

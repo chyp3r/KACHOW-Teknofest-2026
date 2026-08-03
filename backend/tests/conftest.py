@@ -14,7 +14,7 @@ import zlib
 import pytest
 
 from app.ai.embeddings.models import BaseEmbeddingsClient
-from app.ai.llms.base import BaseLLMClient
+from app.ai.llms.base import BaseLLMClient, ToolCallResponse
 
 
 class FakeLLMClient(BaseLLMClient):
@@ -33,9 +33,12 @@ class FakeLLMClient(BaseLLMClient):
         self.generate_structured_return: Any = None
         self.generate_structured_side_effect: Optional[list[Any]] = None
         self.stream_chunks: list[str] = []
+        self.generate_with_tools_side_effect: Optional[list[ToolCallResponse]] = None
+        self.generate_with_tools_return: ToolCallResponse = ToolCallResponse()
         self.generate_calls: list[dict] = []
         self.generate_structured_calls: list[dict] = []
         self.stream_calls: list[dict] = []
+        self.generate_with_tools_calls: list[dict] = []
 
     async def generate(self, messages, temperature=None, max_tokens=None, **kwargs) -> str:
         self.generate_calls.append(
@@ -64,6 +67,19 @@ class FakeLLMClient(BaseLLMClient):
                 yield chunk
 
         return _gen()
+
+    async def generate_with_tools(
+        self, messages, tools, temperature=None, max_tokens=None, **kwargs
+    ) -> ToolCallResponse:
+        self.generate_with_tools_calls.append(
+            {"messages": messages, "tools": tools, "temperature": temperature, "max_tokens": max_tokens, **kwargs}
+        )
+        if self.generate_with_tools_side_effect is not None:
+            outcome = self.generate_with_tools_side_effect.pop(0)
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome
+        return self.generate_with_tools_return
 
 
 class FakeEmbeddingsClient(BaseEmbeddingsClient):

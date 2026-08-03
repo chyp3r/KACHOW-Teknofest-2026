@@ -35,7 +35,7 @@ def test_no_dependency_failure_when_dependency_has_not_run_yet():
     has no result yet, must not be blocked."""
     assert _dependency_failed("draft", {}, {}) is None
     assert _dependency_failed("classification", {"draft_result": {"status": "FAILED"}}, {}) is None
-    assert _dependency_failed("chat", {}, {}) is None
+    assert _dependency_failed("assist", {}, {}) is None
 
 
 def test_a_dependency_that_ran_earlier_this_same_superstep_is_visible_via_updates():
@@ -59,14 +59,14 @@ def test_routing_is_unaffected_by_a_failed_classification_it_does_not_depend_on(
     assert _dependency_failed("routing", state, {}) is None
 
 
-def test_step_specs_cover_all_six_dispatchable_steps_with_only_two_edges():
+def test_step_specs_cover_all_five_dispatchable_steps_with_only_two_edges():
     assert set(STEP_SPECS) == {
-        "classification", "rag", "draft", "routing", "chat", "document_qa",
+        "classification", "rag", "draft", "routing", "assist",
     }
     assert STEP_SPECS["draft"].depends_on == ("classification",)
     assert STEP_SPECS["routing"].depends_on == ("draft",)
     assert STEP_SPECS["rag"].depends_on == ("classification",)
-    for name in ("classification", "chat", "document_qa"):
+    for name in ("classification", "assist"):
         assert STEP_SPECS[name].depends_on == ()
 
 

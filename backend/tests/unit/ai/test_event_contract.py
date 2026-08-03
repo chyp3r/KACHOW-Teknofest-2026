@@ -19,6 +19,7 @@ EVENT_MODELS = [
     event_schema.NodeErrorEvent,
     event_schema.NodeSkippedEvent,
     event_schema.TokenEvent,
+    event_schema.ToolCallEvent,
     event_schema.PartialResultEvent,
     event_schema.PlanningCompletedEvent,
     event_schema.InterruptEvent,

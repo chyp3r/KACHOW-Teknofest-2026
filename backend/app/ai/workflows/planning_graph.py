@@ -10,14 +10,15 @@ from langgraph.errors import GraphInterrupt
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
-from app.ai.agents.chat import ChatAgent
-from app.ai.agents.document_qa import DocumentQAAgent
+from app.ai.agents.assistant import AssistantAgent
 from app.ai.agents.memory_summarizer import MemorySummarizerAgent
 from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
+from app.ai.policy.budget import node_budget
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.ai.semantic.prototype_matcher import PrototypeMatcher
+from app.ai.tools.document_tools import build_assistant_tools
 from app.ai.verification import apply_answers, verify_draft
 from app.ai.workflows.events import (
     child_config,
@@ -40,7 +41,6 @@ from app.observability.ai_metrics import HITL_INTERRUPTS
 
 logger = logging.getLogger(__name__)
 
-QA_COLLECTION_NAME = "document_qa"
 QA_RESULT_LIMIT = get_policy().memory.qa_result_limit
 
 STEP_LABELS = {
@@ -48,8 +48,7 @@ STEP_LABELS = {
     "rag": "Mevzuat Tarama",
     "draft": "Taslak Oluşturma",
     "routing": "Birim Yönlendirme",
-    "chat": "Sohbet",
-    "document_qa": "Belge Soru-Cevap",
+    "assist": "Asistan",
 }
 
 STEP_MESSAGES = {
@@ -57,8 +56,7 @@ STEP_MESSAGES = {
     "rag": "Mevzuat veri tabanında ilgili maddeler taranıyor...",
     "draft": "Resmî cevap taslağı hazırlanıyor...",
     "routing": "Cevap taslağının iletileceği birim analiz ediliyor...",
-    "chat": "Sohbet yanıtı hazırlanıyor...",
-    "document_qa": "Belge içeriği doğrultusunda cevap aranıyor...",
+    "assist": "Asistan yanıtı hazırlanıyor...",
 }
 
 def _dependency_failed(
@@ -92,7 +90,7 @@ def _dependency_failed(
     return None
 
 
-#: Turns kept verbatim in the prompt sent to chat/document_qa on every turn.
+#: Turns kept verbatim in the prompt sent to the assist step on every turn.
 #: ~6 exchanges is enough for pronoun/ellipsis resolution ("evet, hazırla"
 #: after "taslak ister misiniz?") without growing that prompt without bound.
 HISTORY_WINDOW = get_policy().memory.history_window
@@ -176,14 +174,13 @@ class PlanningState(TypedDict, total=False):
     rag_result: dict[str, Any]
     draft_result: dict[str, Any]
     routing_result: dict[str, Any]
-    chat_result: dict[str, Any]
-    document_qa_result: dict[str, Any]
+    assist_result: dict[str, Any]
     final_output: dict[str, Any]
     #: Persists across separate ainvoke() calls on the same checkpointer
     #: thread_id (see ChatService._thread_id) -- this is the whole memory
     #: story; there is no separate store to keep consistent with it. Holds up
     #: to HISTORY_RAW_CAP raw turns; only the trailing HISTORY_WINDOW are sent
-    #: verbatim to chat/document_qa (see _prior_turns).
+    #: verbatim to the assist step (see _prior_turns).
     history: Annotated[list[dict[str, str]], _append_history]
     #: Rolling summary of turns that have aged out of the verbatim window
     #: (see consolidate_memory_node). Plain string field -- LangGraph's
@@ -270,9 +267,9 @@ def _prior_turns(state: PlanningState, limit: int) -> list[dict[str, str]]:
     """History entries from before the current turn, most-recent last.
 
     ``planning_node`` always appends the current user turn to ``history``
-    before ``chat``/``document_qa`` run, so the last entry is always the
-    message being answered right now -- excluded here, or it would appear
-    twice once the agent appends it again as the live query turn.
+    before the ``assist`` step runs, so the last entry is always the message
+    being answered right now -- excluded here, or it would appear twice once
+    the agent appends it again as the live query turn.
 
     Args:
         state: Current graph state.
@@ -305,13 +302,15 @@ def create_planning_graph(
     and needed sixty lines of output-shape repair to be usable at all.
 
     Args:
-        llm_client: Quality-tier model, used for chat and document Q&A.
+        llm_client: Quality-tier model, used for the assist step.
         document_analysis_graph: Compiled analysis sub-graph.
-        rag_graph: Compiled retrieval sub-graph.
+        rag_graph: Compiled retrieval sub-graph, also handed to the assist
+            step's ``search_legislation`` tool.
         draft_graph: Compiled drafting sub-graph.
         routing_graph: Compiled routing sub-graph.
-        vector_store: Vector store backing document Q&A.
-        embeddings_client: Embeddings client backing document Q&A.
+        vector_store: Vector store backing the assist step's document search.
+        embeddings_client: Embeddings client backing the assist step's
+            document search.
         fast_llm_client: Small model for intent classification on ambiguous
             messages. Falls back to ``llm_client``.
         checkpointer: Optional LangGraph checkpointer (see
@@ -329,8 +328,7 @@ def create_planning_graph(
         The compiled LangGraph workflow.
     """
     has_checkpointer = checkpointer is not None
-    chat_agent = ChatAgent(llm_client)
-    document_qa_agent = DocumentQAAgent(llm_client)
+    assistant_agent = AssistantAgent(llm_client)
     intent_client = fast_llm_client or llm_client
     # Reuses the fast tier already resolved for intent classification -- a
     # short consolidation pass doesn't warrant a third model in the mix.
@@ -398,8 +396,7 @@ def create_planning_graph(
             "rag_result": {},
             "draft_result": {},
             "routing_result": {},
-            "chat_result": {},
-            "document_qa_result": {},
+            "assist_result": {},
             "final_output": {},
             "history": [{"role": "user", "content": state["input_text"]}],
         }
@@ -492,110 +489,71 @@ def create_planning_graph(
             config=child_config(config),
         )
 
-    async def _run_document_qa(
+    async def _run_assist(
         state: PlanningState, classification: dict[str, Any], config: RunnableConfig
     ) -> dict[str, Any]:
-        document_id = state.get("document_id")
-        if not document_id:
-            return {
-                "reply": "Soru sorulacak bir belge belirtilmedi.",
-                "status": StepStatus.FAILED,
-            }
+        """Answer conversationally, calling document/legislation tools as needed.
 
+        Replaces the previous ``_run_chat``/``_run_document_qa`` split: which
+        of the two a message needed used to be the router's decision (and a
+        chunk of ``intent_rules.py``/``intent_scorer.py`` existed only to
+        arbitrate it). Here the model decides per-turn via
+        ``AssistantAgent.run_stream``'s tool loop -- a document being attached
+        only changes which tools exist to call, never which step runs.
+        """
+        document_id = state.get("document_id")
         cached = state.get("cached_document") or {}
         analysis = classification or cached.get("analysis") or {}
 
-        summary = analysis.get("summary") or "Özet verisi mevcut değil."
-        raw_metadata = analysis.get("fields") or analysis.get("metadata") or {}
-        metadata = (
-            json.dumps(raw_metadata, ensure_ascii=False, indent=2, default=str)
-            if isinstance(raw_metadata, dict)
-            else str(raw_metadata)
-        )
+        document_context = "(Bu turda yüklenmiş bir belge yok.)"
+        if document_id:
+            document_context = (
+                f"Bir belge yüklü. Özet: {analysis.get('summary') or 'Özet mevcut değil.'}\n"
+                "Detay veya belge içeriği gerekiyorsa ilgili aracı çağır."
+            )
 
-        passages: list[str] = []
-        if vector_store and embeddings_client:
-            try:
-                query_vector = await embeddings_client.embed_query(state["input_text"])
-                sparse_indices, sparse_values = qa_sparse_encoder.encode_query(
-                    state["input_text"]
-                )
-                # filter_dict scopes both the dense and sparse prefetch branches
-                # to this document's chunks before Qdrant fuses them (RRF), so
-                # the vector similarity ranking only ever runs over this
-                # document rather than the whole document_qa collection.
-                hits = await vector_store.hybrid_search(
-                    collection_name=QA_COLLECTION_NAME,
-                    query_vector=query_vector,
-                    sparse_indices=sparse_indices,
-                    sparse_values=sparse_values,
-                    limit=QA_RESULT_LIMIT,
-                    filter_dict={"storage_path": document_id},
-                )
-                passages = [hit["text"] for hit in hits if hit.get("text")]
-            except Exception:
-                logger.exception("Document Q&A vector search failed")
-
-        # The extracted text is the reliable fallback. Vector search can miss
-        # when the document was indexed under different settings, and answering
-        # from the cached text beats refusing to answer at all.
-        if not passages and cached.get("extracted_text"):
-            passages = [cached["extracted_text"][:8000]]
-
-        context = (
-            f"--- BELGE ÖZETİ ---\n{summary}\n\n"
-            f"--- BELGE ÜSTVERİSİ ---\n{metadata}\n\n"
-            f"--- BELGE İÇERİĞİ ---\n"
-            + ("\n\n---\n\n".join(passages) if passages else "İçerik bulunamadı.")
+        tools = build_assistant_tools(
+            document_id=document_id,
+            cached_document=cached,
+            vector_store=vector_store,
+            embeddings_client=embeddings_client,
+            qa_sparse_encoder=qa_sparse_encoder,
+            qa_result_limit=QA_RESULT_LIMIT,
+            rag_graph=rag_graph,
+            config=config,
         )
 
         chunks: list[str] = []
         try:
-            async for chunk in document_qa_agent.answer_stream(
-                context=context,
-                query=state["input_text"],
-                history=_prior_turns(state, 6),
-                history_summary=state.get("history_summary"),
+            async with asyncio.timeout(
+                node_budget("assist", state.get("reasoning_level"))
             ):
-                chunks.append(chunk)
-                await emit_token(config, "document_qa", chunk)
+                async for chunk in assistant_agent.run_stream(
+                    query=state["input_text"],
+                    history=_prior_turns(state, HISTORY_WINDOW),
+                    history_summary=state.get("history_summary"),
+                    document_context=document_context,
+                    tools=tools,
+                    config=config,
+                    node="assist",
+                ):
+                    chunks.append(chunk)
+                    await emit_token(config, "assist", chunk)
             reply = "".join(chunks).strip()
             return {
                 "reply": reply,
                 "status": StepStatus.COMPLETED,
                 "history": [{"role": "assistant", "content": reply}],
             }
-        except Exception as exc:
-            logger.exception("Document QA step failed")
-            return {"reply": f"Belge sorusu yanıtlanamadı: {exc}", "status": StepStatus.FAILED}
-
-    async def _run_chat(
-        state: PlanningState, config: RunnableConfig
-    ) -> dict[str, Any]:
-        messages = [
-            *_prior_turns(state, HISTORY_WINDOW),
-            {"role": "user", "content": state["input_text"]},
-        ]
-        history_summary_context = {
-            "history_summary": state.get("history_summary")
-            or "(Bu konuşmada henüz özetlenecek eski mesaj yok.)"
-        }
-        chunks: list[str] = []
-        try:
-            async for chunk in chat_agent.stream(
-                messages=messages, context=history_summary_context
-            ):
-                chunks.append(chunk)
-                await emit_token(config, "chat", chunk)
-            reply = "".join(chunks).strip()
+        except asyncio.TimeoutError:
+            logger.warning("Assist step timed out")
             return {
-                "reply": reply,
-                "status": StepStatus.COMPLETED,
-                "history": [{"role": "assistant", "content": reply}],
+                "reply": "Yanıt üretimi zaman aşımına uğradı.",
+                "status": StepStatus.FAILED,
             }
         except Exception as exc:
-            logger.exception("Chat step failed")
-            return {"reply": f"Sohbet yanıtı üretilemedi: {exc}", "status": StepStatus.FAILED}
+            logger.exception("Assist step failed")
+            return {"reply": f"Yanıt üretilemedi: {exc}", "status": StepStatus.FAILED}
 
     async def consolidate_memory_node(
         state: PlanningState, config: RunnableConfig
@@ -656,25 +614,17 @@ def create_planning_graph(
             config=child_config(config),
         )
 
-    async def _step_chat(
+    async def _step_assist(
         state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
     ) -> None:
-        chat_result = await _run_chat(state, config)
-        updates["chat_result"] = chat_result
-        # chat_result carries its own "history" entry (the assistant's reply)
+        assist_result = await _run_assist(state, classification, config)
+        updates["assist_result"] = assist_result
+        # assist_result carries its own "history" entry (the assistant's reply)
         # nested inside it -- it must be hoisted to a top-level update or the
         # history reducer never sees it, and assistant turns silently never
         # make it into checkpointed memory.
-        if chat_result.get("history"):
-            updates["history"] = chat_result["history"]
-
-    async def _step_document_qa(
-        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
-    ) -> None:
-        document_qa_result = await _run_document_qa(state, classification, config)
-        updates["document_qa_result"] = document_qa_result
-        if document_qa_result.get("history"):
-            updates["history"] = document_qa_result["history"]
+        if assist_result.get("history"):
+            updates["history"] = assist_result["history"]
 
     #: One entry per dispatchable step name. Each runner reads whatever it
     #: needs from `state`/`classification` and writes its result(s) directly
@@ -689,8 +639,7 @@ def create_planning_graph(
         "rag": _step_rag,
         "draft": _step_draft,
         "routing": _step_routing,
-        "chat": _step_chat,
-        "document_qa": _step_document_qa,
+        "assist": _step_assist,
     }
 
     async def _execute_one_step(
@@ -854,8 +803,7 @@ def create_planning_graph(
             "rag": _pick("rag_result"),
             "draft": draft_result,
             "routing": _pick("routing_result"),
-            "chat": _pick("chat_result"),
-            "document_qa": _pick("document_qa_result"),
+            "assist": _pick("assist_result"),
         }
 
     async def human_gate_node(

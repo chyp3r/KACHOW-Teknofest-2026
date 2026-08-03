@@ -39,10 +39,10 @@ def test_readiness_advances_one_step_at_a_time_through_a_linear_plan():
 
 
 def test_a_dependency_outside_the_plan_is_not_waited_on():
-    """document_qa's plan never includes classification -- rag's declared
+    """assist's plan never includes classification -- rag's declared
     dependency on it must not block anything when rag isn't in the plan
     either, and a single-step plan must be ready immediately."""
-    assert ready_steps(["document_qa"], {}) == ["document_qa"]
+    assert ready_steps(["assist"], {}) == ["assist"]
 
 
 def test_readiness_does_not_care_whether_a_dependency_succeeded():

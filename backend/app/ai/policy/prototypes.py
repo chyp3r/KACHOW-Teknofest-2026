@@ -43,14 +43,12 @@ PROTOTYPES: Mapping[str, Mapping[str, tuple[str, ...]]] = {
             "Bu belgenin hangi türe girdiğini belirle.",
             "Evrakı gözden geçirip özetini çıkar.",
         ),
-        "document_qa": (
+        "assist": (
             "Bu belgede hangi bilgi geçiyor?",
             "Evrakın içeriğinde ne yazıyor?",
             "Belgede adı geçen kurum hangisi?",
             "Yazıda belirtilen süre ne kadar?",
             "Bu evrakta kimin imzası var?",
-        ),
-        "chat": (
             "Merhaba, nasılsın?",
             "Bu sistem ne işe yarıyor?",
             "Resmî yazışma kuralları hakkında genel bilgi verir misin?",
