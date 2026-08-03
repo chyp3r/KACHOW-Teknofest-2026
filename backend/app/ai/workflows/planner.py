@@ -75,16 +75,24 @@ __all__ = [
 #: and reaches for document retrieval itself when the question needs it, rather
 #: than the router having to decide in advance whether an answer needs the
 #: document. See ``app.ai.workflows.planning_graph``'s ``_run_assist``.
+#: ``draft_revision`` edits the conversation's existing draft (see
+#: ``planning_graph.py``'s ``last_draft``) instead of producing a new one:
+#: classification and routing don't run, the draft step itself detects
+#: ``previous_draft``/``revision_instruction`` and goes straight to the
+#: reviser. Only reachable when a last draft actually exists -- see
+#: ``intent_rules.DRAFT_REVISION_RULES``'s ``requires_last_draft``.
 PLAN_BY_INTENT: dict[str, list[str]] = {
     "draft": ["classification", "draft", "routing"],
     "analyze": ["classification"],
     "assist": ["assist"],
+    "draft_revision": ["draft"],
 }
 
 REASONING_BY_INTENT: dict[str, str] = {
     "draft": "Resmî yazı talebi tespit edildi: evrak analizi, taslak üretimi ve birim yönlendirmesi çalıştırılacak.",
     "analyze": "Evrak analizi talebi tespit edildi: sınıflandırma ve uygunluk denetimi çalıştırılacak.",
     "assist": "Genel bir soru veya belge hakkında bir soru tespit edildi: asistan yanıtı hazırlanacak.",
+    "draft_revision": "Mevcut taslağın düzenlenmesi talebi tespit edildi: taslak, yeniden analiz yapılmadan revize edilecek.",
 }
 
 #: Canonical execution order, used to merge two intents' step lists without
@@ -138,11 +146,13 @@ class PlanDecision(NamedTuple):
 class IntentOutput(BaseModel):
     """Single-label intent classification, used only for ambiguous messages."""
 
-    intent: Literal["draft", "analyze", "assist"] = Field(
+    intent: Literal["draft", "analyze", "assist", "draft_revision"] = Field(
         description=(
             "Kullanıcının niyeti. draft: resmi yazı/taslak hazırlanması isteniyor. "
             "analyze: evrakın analiz edilmesi isteniyor. "
-            "assist: genel sohbet veya yüklü bir belge hakkında soru soruluyor."
+            "assist: genel sohbet veya yüklü bir belge hakkında soru soruluyor. "
+            "draft_revision: mevcut/son taslağın düzenlenmesi/revize edilmesi isteniyor "
+            "(yalnızca bir taslak zaten varsa anlamlıdır)."
         )
     )
 
@@ -176,7 +186,10 @@ def _decision(
 
 
 def resolve_plan_deterministic(
-    message: str, document_id: Optional[str], previous_intent: Optional[str] = None
+    message: str,
+    document_id: Optional[str],
+    previous_intent: Optional[str] = None,
+    has_last_draft: bool = False,
 ) -> Optional[PlanDecision]:
     """Resolve the plan without a model, when the evidence allows it.
 
@@ -186,12 +199,15 @@ def resolve_plan_deterministic(
         previous_intent: The intent resolved for this thread's previous turn,
             when known. Lets a short affirmative ("evet, hazırla") continue a
             draft/analyze offer instead of being read as conversational filler.
+        has_last_draft: Whether this conversation already has a draft to
+            revise. Gates the ``draft_revision`` rules exactly as
+            ``document_id`` gates ``document_qa``-style ones.
 
     Returns:
         A decision, or None when the evidence is too weak or too evenly split
         to commit -- which is the signal to escalate, not a failure.
     """
-    scores = score_intents(message, document_id, previous_intent)
+    scores = score_intents(message, document_id, previous_intent, has_last_draft)
     ranked = scores.ranked
 
     if not ranked:
@@ -255,7 +271,10 @@ def resolve_plan_deterministic(
 
 
 async def classify_intent_with_model(
-    llm_client: BaseLLMClient, message: str, document_id: Optional[str]
+    llm_client: BaseLLMClient,
+    message: str,
+    document_id: Optional[str],
+    has_last_draft: bool = False,
 ) -> Intent:
     """Fall back to a one-label model call for genuinely ambiguous messages.
 
@@ -263,6 +282,9 @@ async def classify_intent_with_model(
         llm_client: Fast-tier LLM client.
         message: The user's message.
         document_id: Storage path of an attached document, when present.
+        has_last_draft: Whether this conversation already has a draft to
+            revise -- included in the prompt so the model only offers
+            ``draft_revision`` when it is a coherent reading of the message.
 
     Returns:
         The classified intent, defaulting to a safe value on failure.
@@ -274,19 +296,22 @@ async def classify_intent_with_model(
         name="IntentClassifier",
         description="Classifies a user message into one of four workflow intents.",
         system_prompt=(
-            "Kullanıcı mesajını üç niyetten birine ata. Yalnızca yapılandırılmış "
+            "Kullanıcı mesajını dört niyetten birine ata. Yalnızca yapılandırılmış "
             "JSON döndür, açıklama yazma.\n"
             "- draft: resmî yazı, cevap yazısı, üst yazı veya taslak hazırlanması isteniyor.\n"
             "- analyze: bir evrakın analiz edilmesi, sınıflandırılması veya eksiklerinin "
             "bulunması isteniyor.\n"
             "- assist: yukarıdakilerin hiçbiri; genel sohbet, sistem hakkında soru veya "
-            "yüklü bir belgenin içeriği hakkında soru."
+            "yüklü bir belgenin içeriği hakkında soru.\n"
+            "- draft_revision: sistemde zaten üretilmiş bir taslağın düzenlenmesi/revize "
+            "edilmesi isteniyor (yalnızca bir taslak zaten varsa bu niyeti seç)."
         ),
     )
 
     prompt = (
         f'Mesaj: "{message}"\n'
-        f"Sisteme yüklü bir belge var mı: {'evet' if document_id else 'hayır'}\n\n"
+        f"Sisteme yüklü bir belge var mı: {'evet' if document_id else 'hayır'}\n"
+        f"Konuşmada düzenlenebilecek bir taslak var mı: {'evet' if has_last_draft else 'hayır'}\n\n"
         "Bu mesajın niyetini belirle."
     )
 
@@ -314,6 +339,7 @@ async def resolve_plan(
     llm_client: Optional[BaseLLMClient] = None,
     previous_intent: Optional[str] = None,
     matcher: Optional["PrototypeMatcher"] = None,
+    has_last_draft: bool = False,
 ) -> PlanDecision:
     """Resolve the execution plan for a user message.
 
@@ -332,11 +358,14 @@ async def resolve_plan(
             when known -- enables the short-affirmative continuation rule.
         matcher: Prototype matcher for the semantic rung. Omitted or unavailable
             means the ladder simply skips it, exactly as before it existed.
+        has_last_draft: Whether this conversation already has a draft to
+            revise -- enables the ``draft_revision`` rules on the lexical rung
+            and the corresponding option on the model rung.
 
     Returns:
         The execution plan and the rationale shown to the user.
     """
-    decided = resolve_plan_deterministic(message, document_id, previous_intent)
+    decided = resolve_plan_deterministic(message, document_id, previous_intent, has_last_draft)
     if decided is not None:
         logger.info(
             "Plan resolved deterministically (%s): %s", decided.source, decided.steps
@@ -373,7 +402,9 @@ async def resolve_plan(
         intent: Intent = "assist"
         source = "context_default"
     else:
-        intent = await classify_intent_with_model(llm_client, message, document_id)
+        intent = await classify_intent_with_model(
+            llm_client, message, document_id, has_last_draft
+        )
         source = "model"
 
     logger.info("Plan resolved via %s: intent=%s", source, intent)

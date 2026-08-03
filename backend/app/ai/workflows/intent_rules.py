@@ -28,7 +28,7 @@ not use it.
 from dataclasses import dataclass
 from typing import Literal, Optional
 
-Intent = Literal["draft", "analyze", "assist"]
+Intent = Literal["draft", "analyze", "assist", "draft_revision"]
 
 RuleKind = Literal["phrase", "structural"]
 
@@ -48,6 +48,12 @@ class EvidenceRule:
             attached; when False only without one; when None the document state
             is irrelevant. Used sparingly -- a gate here is what broke the
             greeting path.
+        requires_last_draft: When True the rule only applies when the
+            conversation has a draft to revise (see planning_graph.py's
+            `last_draft`); when None the state is irrelevant. Every
+            `draft_revision` rule sets this -- without a prior draft "son
+            taslağı kısalt" has nothing to act on, and must fall through to
+            whatever else the message's evidence supports instead.
     """
 
     id: str
@@ -56,6 +62,7 @@ class EvidenceRule:
     surfaces: tuple[str, ...] = ()
     kind: RuleKind = "phrase"
     requires_document: Optional[bool] = None
+    requires_last_draft: Optional[bool] = None
 
 
 #: An unambiguous imperative: the user is asking for the thing, not about it.
@@ -241,6 +248,31 @@ MEMORY_RECALL_RULES: tuple[EvidenceRule, ...] = (
     ),
 )
 
+#: Editing an already-produced draft, as opposed to `draft` (produce a new one
+#: from scratch via classification -> draft -> routing). Gated on
+#: `requires_last_draft=True` so these phrases carry no evidence at all in a
+#: conversation that has no draft yet -- "bu belgeyi kısalt" without a prior
+#: draft has nothing to act on, and must resolve like any other message.
+DRAFT_REVISION_RULES: tuple[EvidenceRule, ...] = (
+    EvidenceRule(
+        id="draft_revision.explicit_request",
+        intent="draft_revision",
+        weight=WEIGHT_EXPLICIT,
+        surfaces=(
+            "son taslakta", "son taslagi", "son taslaktaki", "bu taslagi",
+            "taslaktaki", "taslakta degistir", "taslagi degistir",
+            "taslagi duzelt", "taslagi revize et", "taslagi kisalt",
+            "taslagi uzat", "taslaga ekle", "taslaktan cikar",
+            "taslagin tonunu", "tonunu daha resmi", "daha resmi bir dille",
+            "taslagi tekrar yaz", "taslagi yeniden yaz", "cumleyi degistir",
+            "paragrafi kisalt", "paragrafi degistir", "paragrafi uzat",
+            "ifadeleri degistir", "kelimeleri degistir", "ben yerine biz",
+            "birinci tekil yerine", "resmi bir uslupla tekrar",
+        ),
+        requires_last_draft=True,
+    ),
+)
+
 #: A message that both looks like a question and has a document attached is
 #: evidence for `assist` even when it matches no lexical surface above (e.g.
 #: "Evrakın konusu nedir?") -- see `intent_scorer.score_intents`'s structural
@@ -251,6 +283,7 @@ ALL_RULES: tuple[EvidenceRule, ...] = (
     *ANALYZE_RULES,
     *ASSIST_RULES,
     *MEMORY_RECALL_RULES,
+    *DRAFT_REVISION_RULES,
 )
 
 #: A short affirmative continues whatever the previous turn was about.
@@ -260,9 +293,12 @@ CONTINUATION_SURFACES: tuple[str, ...] = (
     "peki", "elbette",
 )
 
-#: Only these intents make sense to silently continue; a bare "evet" after a
-#: chat or document_qa turn has no unambiguous follow-up action.
-CONTINUABLE_INTENTS = frozenset({"draft", "analyze"})
+#: Only these intents make sense to silently continue; a bare "evet" after an
+#: assist turn has no unambiguous follow-up action. `draft_revision` is
+#: continuable for the same reason `draft` is -- a short affirmative after
+#: "taslağı kısaltayım mı?" should continue revising, not re-score from
+#: scratch.
+CONTINUABLE_INTENTS = frozenset({"draft", "analyze", "draft_revision"})
 
 #: Question markers, used as a shape hint rather than a routing decision.
 #: Bare "ne" is deliberately absent: "ne gerekiyorsa onu uygula" is an

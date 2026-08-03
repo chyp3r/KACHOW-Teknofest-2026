@@ -169,6 +169,14 @@ class PlanningState(TypedDict, total=False):
     #: `route_after_step` can check "did draft just run" without indexing
     #: `plan_steps[current_step_idx - 1]`.
     _last_ran_step: Optional[str]
+    #: The conversation's current draft (DraftModel fields as a plain dict:
+    #: content, document_id, correspondence_type, ...), fetched from the
+    #: `drafts` table by ChatService before every invoke -- empty when the
+    #: conversation has no draft yet. Deliberately NOT reset by planning_node
+    #: (unlike every `<step>_result` field below): it is set once per turn by
+    #: the caller and must survive the whole run for `_run_draft`'s revision
+    #: branch to read, the same way `input_text`/`document_id` do.
+    last_draft: dict[str, Any]
     cached_document: dict[str, Any]
     classification_result: dict[str, Any]
     rag_result: dict[str, Any]
@@ -261,6 +269,32 @@ def _mevzuat_context(classification: dict[str, Any]) -> str:
             parts.append(f"[MEVZUAT] {item['mevzuat']}: {item.get('aciklama', '')}")
 
     return "\n\n".join(parts)
+
+
+def _cached_mevzuat_context(analysis: dict[str, Any]) -> str:
+    """Render legislation context from a *cached* (JSON, not live) analysis.
+
+    The live analysis sub-graph output carries ``mevzuat_documents``/
+    ``mevzuat_suggestions`` (LangChain ``Document``s, see `_mevzuat_context`),
+    but the on-disk cache (`{document_id}_analysis.json`) only ever persists
+    ``mevzuat_references`` -- a plain list of ``{"mevzuat", "aciklama"}``
+    dicts. Used wherever a step works from the cached analysis instead of a
+    fresh sub-graph run: `_run_classification`'s cache-hit replay, and
+    `_run_draft`'s revision branch, which reloads the *original* document's
+    cache rather than the current turn's (a pure revision request usually has
+    no document attached itself).
+
+    Args:
+        analysis: A cached analysis payload (``cached_document["analysis"]``).
+
+    Returns:
+        The excerpts as prompt context, or an empty string.
+    """
+    return "\n\n".join(
+        f"[MEVZUAT] {item.get('mevzuat', '')}: {item.get('aciklama', '')}"
+        for item in analysis.get("mevzuat_references") or []
+        if isinstance(item, dict) and item.get("mevzuat")
+    )
 
 
 def _prior_turns(state: PlanningState, limit: int) -> list[dict[str, str]]:
@@ -367,6 +401,7 @@ def create_planning_graph(
             intent_client,
             previous_intent=state.get("plan_intent"),
             matcher=prototype_matcher,
+            has_last_draft=bool(state.get("last_draft")),
         )
         logger.info(
             "Plan: %s (intent=%s, source=%s)",
@@ -440,11 +475,7 @@ def create_planning_graph(
                 {
                     "search_query": "",
                     "documents": [],
-                    "context": "\n\n".join(
-                        f"[MEVZUAT] {item.get('mevzuat', '')}: {item.get('aciklama', '')}"
-                        for item in mevzuat_references
-                        if isinstance(item, dict) and item.get("mevzuat")
-                    ),
+                    "context": _cached_mevzuat_context(analysis),
                 },
             )
 
@@ -462,9 +493,54 @@ def create_planning_graph(
             config=child_config(config),
         )
 
+    async def _run_draft_revision(
+        state: PlanningState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Edit the conversation's existing draft instead of writing a new one.
+
+        No classification or routing runs for this plan (`PLAN_BY_INTENT
+        ["draft_revision"] = ["draft"]`) -- the grounding context this needs
+        is reloaded from the *original* document's cache (by the draft's own
+        `document_id`, not this turn's, since a revision message usually has
+        no attachment of its own) rather than recomputed. `writer_node` in
+        draft_graph.py already branches to the reviser whenever
+        `previous_draft` is set; `revision_instruction` is what tells the
+        reviser what changed about *this* revision when there is no verify-
+        found defect list to work from (see `_build_repair_prompt`).
+        """
+        last_draft = state.get("last_draft") or {}
+        document_id = last_draft.get("document_id") or state.get("document_id")
+        cached = _load_cached_document(document_id) if document_id else {}
+        analysis = cached.get("analysis") or {}
+
+        source_document = (
+            cached.get("extracted_text")
+            or last_draft.get("content")
+            or state["input_text"]
+        )
+        context = _cached_mevzuat_context(analysis)
+
+        return await draft_graph.ainvoke(
+            {
+                "source_document": source_document,
+                "classification": analysis,
+                "correspondence_type": last_draft.get("correspondence_type"),
+                "context": context,
+                "instructions": f"Kullanıcı İsteği: {state['input_text']}",
+                "previous_draft": last_draft.get("content", ""),
+                "revision_instruction": state["input_text"],
+                "attempts": 0,
+                "reasoning_level": state.get("reasoning_level", ReasoningLevel.BALANCED.value),
+            },
+            config=child_config(config),
+        )
+
     async def _run_draft(
         state: PlanningState, classification: dict[str, Any], config: RunnableConfig
     ) -> dict[str, Any]:
+        if state.get("plan_intent") == "draft_revision" and state.get("last_draft"):
+            return await _run_draft_revision(state, config)
+
         cached = state.get("cached_document") or {}
         source_document = cached.get("extracted_text") or state["input_text"]
 

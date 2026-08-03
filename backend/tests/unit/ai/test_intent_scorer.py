@@ -213,3 +213,53 @@ def test_evvelki_is_recognised_as_a_memory_recall_synonym():
 
     assert "assist.memory_recall" in scores.evidence
     assert scores.ranked[0][0] == "assist"
+
+
+# --- draft_revision: gated on has_last_draft ---------------------------------
+
+
+def test_draft_revision_rules_are_silent_without_a_prior_draft():
+    """"Son taslağı kısalt" carries no draft_revision evidence at all when the
+    conversation has nothing to revise -- has_last_draft defaults to False."""
+    scores = score_intents("Son taslağı kısalt.", None)
+
+    assert "draft_revision" not in scores.scores
+    assert not any(rule_id.startswith("draft_revision.") for rule_id in scores.evidence)
+
+
+def test_draft_revision_rules_fire_only_when_a_prior_draft_exists():
+    scores = score_intents("Son taslağı kısalt.", None, has_last_draft=True)
+
+    assert scores.ranked[0][0] == "draft_revision"
+    assert "draft_revision.explicit_request" in scores.evidence
+
+
+def test_a_tone_revision_request_resolves_to_draft_revision():
+    scores = score_intents(
+        "Taslağın tonunu daha resmi bir dille tekrar yaz.", None, has_last_draft=True
+    )
+
+    assert scores.ranked[0][0] == "draft_revision"
+
+
+def test_draft_revision_does_not_double_count_its_own_brevity():
+    """"Taslağı kısalt" is 3 words -- without suppression it would earn both
+    the explicit draft_revision phrase (3.0) and the short-message hint for
+    assist (2.0), a margin too small to decide a message that is not
+    actually ambiguous."""
+    scores = score_intents("Taslağı kısalt.", None, has_last_draft=True)
+
+    assert "draft_revision.explicit_request" in scores.evidence
+    assert "assist.short_message" not in scores.evidence
+    assert scores.ranked[0][0] == "draft_revision"
+    assert scores.margin >= DECISIVE_MARGIN
+
+
+def test_draft_revision_does_not_leak_into_a_fresh_drafting_request():
+    """A message with no revision-specific phrase must still resolve to
+    `draft`, not `draft_revision`, even when a prior draft exists -- having a
+    draft to revise doesn't turn every drafting request into an edit of it."""
+    scores = score_intents("Bu evraka cevap yazısı hazırla.", "uploads/x.pdf", has_last_draft=True)
+
+    assert scores.ranked[0][0] == "draft"
+    assert "draft_revision" not in scores.scores

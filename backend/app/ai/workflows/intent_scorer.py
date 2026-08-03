@@ -114,9 +114,16 @@ def normalize(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", ascii_text).strip()
 
 
-def _fires(rule: EvidenceRule, normalized: str, has_document: bool) -> bool:
+def _fires(
+    rule: EvidenceRule, normalized: str, has_document: bool, has_last_draft: bool
+) -> bool:
     """Report whether a rule applies to this message."""
     if rule.requires_document is not None and rule.requires_document is not has_document:
+        return False
+    if (
+        rule.requires_last_draft is not None
+        and rule.requires_last_draft is not has_last_draft
+    ):
         return False
     return any(surface in normalized for surface in rule.surfaces)
 
@@ -130,7 +137,10 @@ def _looks_like_question(raw: str, normalized: str) -> bool:
 
 
 def score_intents(
-    message: str, document_id: Optional[str], previous_intent: Optional[str] = None
+    message: str,
+    document_id: Optional[str],
+    previous_intent: Optional[str] = None,
+    has_last_draft: bool = False,
 ) -> IntentScores:
     """Accumulate evidence for every intent.
 
@@ -138,6 +148,11 @@ def score_intents(
         message: The user's message.
         document_id: Storage path of an attached document, when present.
         previous_intent: The intent resolved for the previous turn, when known.
+        has_last_draft: Whether this conversation already has a draft to
+            revise (see planning_graph.py's `last_draft`). Gates
+            `draft_revision.*` rules exactly as `document_id` gates
+            `requires_document` ones -- without a prior draft, "son taslağı
+            kısalt" carries no `draft_revision` evidence at all.
 
     Returns:
         The accumulated scores and the ids of every rule that fired.
@@ -153,7 +168,7 @@ def score_intents(
 
     definitional = False
     for rule in ALL_RULES:
-        if not _fires(rule, normalized, has_document):
+        if not _fires(rule, normalized, has_document, has_last_draft):
             continue
         result.scores[rule.intent] = result.scores.get(rule.intent, 0.0) + rule.weight
         result.evidence.append(rule.id)
@@ -165,7 +180,7 @@ def score_intents(
     # the action. Subtracting here rather than lowering the noun's own weight
     # keeps every genuine request at full strength.
     if definitional:
-        for intent in ("draft", "analyze"):
+        for intent in ("draft", "analyze", "draft_revision"):
             if intent in result.scores:
                 result.scores[intent] += WEIGHT_COUNTER
                 result.evidence.append(f"{intent}.definitional_counter")
@@ -219,8 +234,20 @@ def score_intents(
     # counted twice. "evet, hazırla" is short precisely because it is an
     # affirmative, and letting both signals fire left the two scores close
     # enough to escalate a message whose meaning is not in doubt.
+    #
+    # Also suppressed when draft_revision evidence already fired: "taslağı
+    # kısalt" is exactly 3 words, and without this it would earn *both* an
+    # explicit draft_revision phrase (3.0) *and* the short-message hint for
+    # assist (2.0) -- a 1.0 margin, below DECISIVE_MARGIN, over a message
+    # that is not actually ambiguous. Same reasoning as the continuation
+    # suppression just above: brevity here is a symptom of the explicit
+    # phrase being terse, not independent evidence of being conversational
+    # filler.
     continued = f"{previous_intent}.continuation" in result.evidence
-    if not has_document and not continued and len(words) <= 4:
+    has_revision_evidence = any(
+        rule_id.startswith("draft_revision.") for rule_id in result.evidence
+    )
+    if not has_document and not continued and not has_revision_evidence and len(words) <= 4:
         result.scores["assist"] = result.scores.get("assist", 0.0) + WEIGHT_HINT * 2
         result.evidence.append("assist.short_message")
 

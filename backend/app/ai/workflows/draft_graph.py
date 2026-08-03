@@ -69,6 +69,12 @@ class DraftState(TypedDict, total=False):
     instructions: str
     draft: str
     previous_draft: str
+    #: A user-driven edit request ("son taslaktaki 'ben' ifadelerini 'biz'
+    #: yap"), set when this revision was not triggered by verify_node finding
+    #: defects -- in that case `repair_items` is empty and this is the only
+    #: thing telling the reviser what to change. See
+    #: planning_graph.py's `_run_draft_revision`.
+    revision_instruction: str
     confidence_score: float
     combined_score: float
     requires_human_approval: bool
@@ -179,7 +185,11 @@ def _build_repair_prompt(state: DraftState) -> str:
 
     Args:
         state: Current draft state, expected to carry ``previous_draft`` and
-            ``repair_items`` from the preceding verify/revise pass.
+            either ``repair_items`` (a verify-triggered revision) or
+            ``revision_instruction`` (a user-driven one, see
+            planning_graph.py's ``_run_draft_revision``) -- possibly both, if
+            a user-requested revision's own output later fails verification
+            and loops back here a second time.
 
     Returns:
         The repair prompt.
@@ -190,19 +200,25 @@ def _build_repair_prompt(state: DraftState) -> str:
         + (f" -> Öneri: {item.get('suggested_fix')}" if item.get("suggested_fix") else "")
         for index, item in enumerate(defects, start=1)
     )
+    revision_instruction = (state.get("revision_instruction") or "").strip()
+    instruction_section = (
+        f"### KULLANICI TALİMATI:\n{revision_instruction}\n\n" if revision_instruction else ""
+    )
 
     return (
         "### GÖREV:\n"
-        "Aşağıdaki önceki taslağı, YALNIZCA numaralı kusur listesindeki maddeleri "
-        "gidererek düzelt. Listede olmayan hiçbir cümleyi değiştirme.\n\n"
+        "Aşağıdaki önceki taslağı, YALNIZCA numaralı kusur listesindeki ve/veya "
+        "kullanıcı talimatındaki değişiklikleri uygulayarak düzelt. Bunların "
+        "dışındaki hiçbir cümleyi değiştirme.\n\n"
         f"### BRIEF BELGESİ:\n{state.get('brief', '')}\n\n"
         f"### YAZIŞMA TÜRÜ PROFİLİ:\n"
         f"{format_correspondence_profile(state.get('correspondence_type', 'other_official'))}\n\n"
         f"### ÖNCEKİ TASLAK:\n{state.get('previous_draft', '')}\n\n"
+        f"{instruction_section}"
         f"### DÜZELTİLMESİ GEREKEN KUSURLAR:\n{numbered or '(kusur listesi boş)'}\n\n"
         "### KURAL:\n"
-        "Yalnızca listelenen kusurları düzelt. Başka hiçbir cümleyi değiştirme. "
-        "`[...]` yer tutucularını olduğu gibi bırak."
+        "Yalnızca listelenen kusurları ve/veya kullanıcı talimatını uygula. Başka "
+        "hiçbir cümleyi değiştirme. `[...]` yer tutucularını olduğu gibi bırak."
     )
 
 

@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -10,14 +10,16 @@ from app.api.rate_limit import rate_limit
 from app.api.responses import SuccessResponse
 from app.domains.chat.chat_service import ChatService
 from app.domains.chat.schema.chat_schema import ChatMessageRequest, ChatResumeRequest
+from app.domains.users.model.user_model import UserModel
 
 logger = logging.getLogger(__name__)
 
 # See require_auth_if_enabled / settings.REQUIRE_AUTH: a no-op by default so
-# the demo works without the frontend implementing a login flow.
-router = APIRouter(
-    prefix="/chat", tags=["chat"], dependencies=[Depends(require_auth_if_enabled)]
-)
+# the demo works without the frontend implementing a login flow. Declared as a
+# named parameter on each endpoint below (rather than a blanket
+# `dependencies=[...]`) so the resolved user -- when auth is enabled -- can be
+# recorded against any draft version the turn produces.
+router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 def make_serializable(obj: Any) -> Any:
@@ -104,6 +106,7 @@ def _sse_response(
 @router.post("/message", response_model=None)
 async def send_chat_message(
     request: ChatMessageRequest,
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
     service: ChatService = Depends(get_chat_service),
 ):
     """Orchestrate a chat interaction and return the completed result.
@@ -113,7 +116,9 @@ async def send_chat_message(
     May also return an ``INTERRUPTED`` status when the run paused at the
     human-in-the-loop gate; resume it via ``POST /chat/resume``.
     """
-    result = await service.handle_message(request)
+    result = await service.handle_message(
+        request, user_id=current_user.id if current_user else None
+    )
     return SuccessResponse(data=make_serializable(result.model_dump()))
 
 
@@ -121,6 +126,7 @@ async def send_chat_message(
 async def stream_chat_message(
     request: ChatMessageRequest,
     http_request: Request,
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
     service: ChatService = Depends(get_chat_service),
     _: None = Depends(rate_limit(max_requests=20, window_seconds=60, key_prefix="chat:stream")),
 ):
@@ -134,13 +140,19 @@ async def stream_chat_message(
     human-in-the-loop gate, an ``interrupt`` event carrying what the human
     needs to answer.
     """
-    return _sse_response(service.handle_message_stream(request), http_request)
+    return _sse_response(
+        service.handle_message_stream(
+            request, user_id=current_user.id if current_user else None
+        ),
+        http_request,
+    )
 
 
 @router.post("/resume", response_model=None)
 async def resume_chat_stream(
     request: ChatResumeRequest,
     http_request: Request,
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
     service: ChatService = Depends(get_chat_service),
     _: None = Depends(rate_limit(max_requests=30, window_seconds=60, key_prefix="chat:resume")),
 ):
@@ -151,23 +163,30 @@ async def resume_chat_stream(
     draft that needed a human's sign-off before unit routing.
     """
     return _sse_response(
-        service.resume_stream(request.session_id, request), http_request
+        service.resume_stream(
+            request.session_id, request, user_id=current_user.id if current_user else None
+        ),
+        http_request,
     )
 
 
 @router.post("/resume/sync", response_model=None)
 async def resume_chat_sync(
     request: ChatResumeRequest,
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
     service: ChatService = Depends(get_chat_service),
 ):
     """Resume a paused run and return the completed (or re-paused) result."""
-    result = await service.resume(request.session_id, request)
+    result = await service.resume(
+        request.session_id, request, user_id=current_user.id if current_user else None
+    )
     return SuccessResponse(data=make_serializable(result.model_dump()))
 
 
 @router.get("/sessions/{session_id}/state", response_model=None)
 async def get_session_state(
     session_id: str,
+    _current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
     service: ChatService = Depends(get_chat_service),
 ):
     """Report whether a session is idle, running, or paused on an interrupt.

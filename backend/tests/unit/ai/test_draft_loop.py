@@ -335,3 +335,101 @@ async def test_the_writer_budget_follows_the_run_s_reasoning_level():
     assert node_budget("writer", ReasoningLevel.FAST) < node_budget(
         "writer", ReasoningLevel.BALANCED
     )
+
+
+# --- User-driven revision (draft_revision intent) -----------------------------
+#
+# planning_graph.py's _run_draft_revision seeds `previous_draft` from the
+# start (not from a verify-triggered revise_node pass), so writer_node's own
+# `is_revision = bool(state.get("previous_draft"))` check sends the very
+# first pass straight to the reviser -- these tests exercise exactly that
+# entry point, with `revision_instruction` standing in for the (here absent)
+# verify-found defect list _build_repair_prompt otherwise relies on.
+
+REVISION_STATE = {
+    **BASE_STATE,
+    "previous_draft": GOOD_DRAFT,
+    "revision_instruction": "Metindeki 'ben' ifadelerini 'biz' olarak değiştir.",
+}
+
+
+@pytest.mark.asyncio
+async def test_a_seeded_previous_draft_goes_straight_to_the_reviser():
+    """No verify-found defects exist yet (repair_items is empty) -- only
+    previous_draft is set, exactly as _run_draft_revision seeds it."""
+    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+
+    with (
+        patch.object(WriterAgent, "stream") as mock_writer,
+        patch.object(ReviserAgent, "stream") as mock_reviser,
+    ):
+        mock_reviser.side_effect = lambda **kwargs: _one_chunk(GOOD_DRAFT)
+
+        result = await graph.ainvoke(REVISION_STATE)
+
+    mock_writer.assert_not_called()
+    assert mock_reviser.call_count == 1
+    assert result["status"] == "COMPLETED"
+
+
+@pytest.mark.asyncio
+async def test_the_revision_instruction_reaches_the_reviser_prompt():
+    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+
+    with patch.object(ReviserAgent, "stream") as mock_reviser:
+        mock_reviser.side_effect = lambda **kwargs: _one_chunk(GOOD_DRAFT)
+
+        await graph.ainvoke(REVISION_STATE)
+
+    prompt = mock_reviser.call_args.kwargs["messages"]
+    assert "KULLANICI TALİMATI" in prompt
+    assert REVISION_STATE["revision_instruction"] in prompt
+    # No verify-found defects this turn -- the (kusur listesi boş) fallback
+    # must still be there so the reviser isn't told to fix nothing at all.
+    assert "kusur listesi boş" in prompt
+
+
+@pytest.mark.asyncio
+async def test_a_revision_that_fails_verification_still_loops_through_revise():
+    """The quality gate is not bypassed for a user-driven revision -- a
+    defect found in the *revised* text loops back through revise -> writer
+    (now the reviser again, since previous_draft is still set) exactly like
+    any other revision."""
+    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+
+    with patch.object(ReviserAgent, "stream") as mock_reviser:
+        mock_reviser.side_effect = [
+            _one_chunk(BAD_DRAFT),
+            _one_chunk(GOOD_DRAFT),
+        ]
+
+        result = await graph.ainvoke(REVISION_STATE)
+
+    assert mock_reviser.call_count == 2
+    assert result["status"] == "COMPLETED"
+    assert result["draft"] == GOOD_DRAFT
+    # The original user instruction must still reach the second pass, on top
+    # of the defects verify_node found in the first attempt.
+    second_pass_prompt = mock_reviser.call_args_list[1].kwargs["messages"]
+    assert REVISION_STATE["revision_instruction"] in second_pass_prompt
+
+
+@pytest.mark.asyncio
+async def test_a_verify_triggered_revision_has_no_user_instruction_section():
+    """The zero-regression contract for the *pre-existing* revise loop: a
+    plain second draft attempt after verify_node found defects (no
+    revision_instruction set at all, as every non-draft_revision turn leaves
+    it) must not gain a spurious 'KULLANICI TALİMATI' section."""
+    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+
+    with (
+        patch.object(WriterAgent, "stream") as mock_writer,
+        patch.object(ReviserAgent, "stream") as mock_reviser,
+    ):
+        mock_writer.side_effect = lambda **kwargs: _one_chunk(BAD_DRAFT)
+        mock_reviser.side_effect = lambda **kwargs: _one_chunk(GOOD_DRAFT)
+
+        await graph.ainvoke(BASE_STATE)
+
+    prompt = mock_reviser.call_args.kwargs["messages"]
+    assert "KULLANICI TALİMATI" not in prompt

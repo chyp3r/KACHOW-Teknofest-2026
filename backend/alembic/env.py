@@ -12,6 +12,7 @@ from app.infrastructure.database.base import Base
 # `alembic revision --autogenerate` produces an empty migration.
 from app.domains.users.model.invited_email import InvitedEmailModel  # noqa: F401
 from app.domains.users.model.user_model import UserModel  # noqa: F401
+from app.domains.drafts.model.draft_model import DraftModel  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

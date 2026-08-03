@@ -418,3 +418,71 @@ async def test_a_semantic_label_outside_the_known_intents_is_ignored():
         )
 
     assert decision.source == "model"
+
+
+# --- draft_revision: only reachable with a prior draft ------------------------
+#
+# Editing an already-produced draft, as opposed to `draft` (a fresh
+# classification -> draft -> routing run). Gated on has_last_draft so a
+# conversation with nothing to revise behaves exactly as it did before this
+# intent existed.
+
+
+def test_draft_revision_plan_only_runs_the_draft_step():
+    """No classification, no routing -- the draft step itself detects
+    previous_draft/revision_instruction and skips straight to the reviser."""
+    assert PLAN_BY_INTENT["draft_revision"] == ["draft"]
+
+
+def test_a_revision_request_without_a_prior_draft_does_not_resolve_to_draft_revision():
+    decision = resolve_plan_deterministic("Son taslağı kısalt.", None, has_last_draft=False)
+
+    # draft_revision carries no evidence at all without a prior draft; the
+    # message still resolves (via the ordinary short-message hint, same as
+    # any other 3-word message with nothing attached), just never to
+    # draft_revision.
+    assert decision.intent != "draft_revision"
+
+
+def test_a_revision_request_with_a_prior_draft_resolves_to_draft_revision():
+    decision = resolve_plan_deterministic("Son taslağı kısalt.", None, has_last_draft=True)
+
+    assert decision.intent == "draft_revision"
+    assert decision.steps == PLAN_BY_INTENT["draft_revision"]
+    assert decision.source == "scored"
+
+
+def test_a_short_affirmative_continues_a_draft_revision_offer():
+    decision = resolve_plan_deterministic(
+        "evet, yap", None, previous_intent="draft_revision", has_last_draft=True
+    )
+
+    assert decision.intent == "draft_revision"
+    assert decision.source == "continuation"
+
+
+@pytest.mark.asyncio
+async def test_classify_intent_with_model_can_return_draft_revision(fake_fast_llm):
+    from app.ai.workflows.planner import IntentOutput
+
+    fake_fast_llm.generate_structured_return = IntentOutput(intent="draft_revision")
+
+    intent = await classify_intent_with_model(
+        fake_fast_llm, "bunu düzelt", None, has_last_draft=True
+    )
+
+    assert intent == "draft_revision"
+
+
+@pytest.mark.asyncio
+async def test_resolve_plan_threads_has_last_draft_into_the_deterministic_layer(fake_fast_llm):
+    """End-to-end through resolve_plan (not resolve_plan_deterministic
+    directly): a real caller only ever has has_last_draft to give it, so the
+    plumbing from resolve_plan's own parameter down to score_intents has to
+    actually work, not just the scorer in isolation."""
+    decision = await resolve_plan(
+        "Son taslağı kısalt.", None, fake_fast_llm, has_last_draft=True
+    )
+
+    assert decision.intent == "draft_revision"
+    assert fake_fast_llm.generate_structured_calls == []

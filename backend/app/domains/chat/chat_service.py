@@ -1,7 +1,9 @@
 import asyncio
 import logging
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator, Callable, Optional
 from uuid import uuid4
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.reasoning_levels import get_reasoning_level_preset
 from app.api.exceptions.ai_error import AIException
@@ -11,6 +13,8 @@ from app.domains.chat.schema.chat_schema import (
     ChatMessageResponse,
     ChatResumeRequest,
 )
+from app.domains.drafts.repository import DraftRepository
+from app.infrastructure.database.session import AsyncSessionLocal
 from app.observability.ai_metrics import HITL_RESUMES
 
 logger = logging.getLogger(__name__)
@@ -26,19 +30,35 @@ INTERRUPTED_REPLY = "Devam etmek için ek bilgiye veya onayınıza ihtiyaç var.
 class ChatService:
     """Orchestrates chat and AI workflows through the master planning graph."""
 
-    def __init__(self, planning_graph: Any) -> None:
+    def __init__(
+        self,
+        planning_graph: Any,
+        session_factory: Callable[[], AsyncSession] = AsyncSessionLocal,
+    ) -> None:
         """Initialise the service.
 
         Args:
             planning_graph: The compiled master planning workflow.
+            session_factory: Builds a DB session for draft persistence. A
+                constructor param (default ``AsyncSessionLocal``) rather than
+                a ``Depends(get_db)`` parameter on each call, because this
+                service's streaming methods run their graph invocation in a
+                background ``asyncio.create_task`` -- a request-scoped
+                session would already be closed by the time that task reads
+                or writes the drafts table.
         """
         self.planning_graph = planning_graph
+        self._session_factory = session_factory
 
-    async def handle_message(self, request: ChatMessageRequest) -> ChatMessageResponse:
+    async def handle_message(
+        self, request: ChatMessageRequest, user_id: Optional[str] = None
+    ) -> ChatMessageResponse:
         """Process a user message and return the completed (or paused) result.
 
         Args:
             request: The chat request.
+            user_id: The authenticated user, when auth is enabled -- recorded
+                on any draft version this turn produces.
 
         Returns:
             The orchestrated response.
@@ -49,10 +69,12 @@ class ChatService:
         thread_id = self._thread_id(request.session_id)
         config = self._trace_config(thread_id)
         state = await self._invoke(request, config=config)
-        return await self._response_from_state(state, config, thread_id)
+        return await self._response_from_state(
+            state, config, thread_id, user_id=user_id, document_id=request.document_id
+        )
 
     async def handle_message_stream(
-        self, request: ChatMessageRequest
+        self, request: ChatMessageRequest, user_id: Optional[str] = None
     ) -> AsyncIterator[dict[str, Any]]:
         """Process a user message, yielding progress events as they happen.
 
@@ -63,6 +85,7 @@ class ChatService:
 
         Args:
             request: The chat request.
+            user_id: The authenticated user, when auth is enabled.
 
         Yields:
             Progress and result events. The first event is always ``session``,
@@ -80,7 +103,14 @@ class ChatService:
                 config.setdefault("configurable", {})["status_queue"] = queue
 
                 state = await self._invoke(request, config=config)
-                await self._enqueue_terminal_event(queue, state, config, thread_id)
+                await self._enqueue_terminal_event(
+                    queue,
+                    state,
+                    config,
+                    thread_id,
+                    user_id=user_id,
+                    document_id=request.document_id,
+                )
             except asyncio.CancelledError:
                 raise
             except AIException as exc:
@@ -113,12 +143,18 @@ class ChatService:
             # let teardown of a cancelled task raise out of the generator.
             await asyncio.gather(task, return_exceptions=True)
 
-    async def resume(self, session_id: str, request: ChatResumeRequest) -> ChatMessageResponse:
+    async def resume(
+        self,
+        session_id: str,
+        request: ChatResumeRequest,
+        user_id: Optional[str] = None,
+    ) -> ChatMessageResponse:
         """Resume a run paused at the human-in-the-loop gate and await its result.
 
         Args:
             session_id: The thread_id the paused run is waiting on.
             request: The human's answer/decision.
+            user_id: The authenticated user, when auth is enabled.
 
         Returns:
             The orchestrated response, completed or paused again (e.g. when
@@ -155,10 +191,15 @@ class ChatService:
                 details={"reason": str(exc)},
             ) from exc
 
-        return await self._response_from_state(state, config, session_id)
+        return await self._response_from_state(
+            state, config, session_id, user_id=user_id, document_id=None
+        )
 
     async def resume_stream(
-        self, session_id: str, request: ChatResumeRequest
+        self,
+        session_id: str,
+        request: ChatResumeRequest,
+        user_id: Optional[str] = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Resume a paused run, yielding progress events as they happen.
 
@@ -169,6 +210,7 @@ class ChatService:
         Args:
             session_id: The thread_id the paused run is waiting on.
             request: The human's answer/decision.
+            user_id: The authenticated user, when auth is enabled.
 
         Yields:
             Progress and result events.
@@ -192,7 +234,9 @@ class ChatService:
                     ),
                     timeout=timeout,
                 )
-                await self._enqueue_terminal_event(queue, state, config, session_id)
+                await self._enqueue_terminal_event(
+                    queue, state, config, session_id, user_id=user_id, document_id=None
+                )
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -274,6 +318,9 @@ class ChatService:
                 details={"session_id": thread_id},
             )
 
+        thread_id = (config.get("configurable") or {}).get("thread_id")
+        last_draft = await self._fetch_last_draft(thread_id) if thread_id else {}
+
         timeout = ORCHESTRATION_TIMEOUT_SECONDS * get_reasoning_level_preset(
             request.reasoning_level
         ).timeout_multiplier
@@ -284,6 +331,7 @@ class ChatService:
                         "input_text": request.message,
                         "document_id": request.document_id,
                         "reasoning_level": request.reasoning_level.value,
+                        "last_draft": last_draft,
                     },
                     config=config,
                 ),
@@ -309,6 +357,9 @@ class ChatService:
         state: dict[str, Any],
         config: dict[str, Any],
         thread_id: str,
+        *,
+        user_id: Optional[str] = None,
+        document_id: Optional[str] = None,
     ) -> None:
         """Push the run's closing event: ``final_result``, or nothing if paused.
 
@@ -324,12 +375,20 @@ class ChatService:
             state: The state ``ainvoke``/resume returned.
             config: The config used for that call, reused to check pause state.
             thread_id: The session's thread_id, for logging only.
+            user_id: The authenticated user, when auth is enabled.
+            document_id: The document attached to *this* request, if any.
         """
         if await self._is_paused(config):
             logger.info("Session %s paused at a human-in-the-loop gate.", thread_id)
             return
 
         final_output = state.get("final_output", {}) or {}
+        await self._persist_draft_version(
+            session_id=thread_id,
+            final_output=final_output,
+            user_id=user_id,
+            document_id=document_id,
+        )
         await queue.put(
             {
                 "event": "final_result",
@@ -340,7 +399,13 @@ class ChatService:
         )
 
     async def _response_from_state(
-        self, state: dict[str, Any], config: dict[str, Any], thread_id: str
+        self,
+        state: dict[str, Any],
+        config: dict[str, Any],
+        thread_id: str,
+        *,
+        user_id: Optional[str] = None,
+        document_id: Optional[str] = None,
     ) -> ChatMessageResponse:
         """Build the non-streaming response, accounting for a paused run."""
         if await self._is_paused(config):
@@ -354,12 +419,102 @@ class ChatService:
             )
 
         final_output = state.get("final_output", {}) or {}
+        await self._persist_draft_version(
+            session_id=thread_id,
+            final_output=final_output,
+            user_id=user_id,
+            document_id=document_id,
+        )
         return ChatMessageResponse(
             reply=self._select_reply(final_output),
             workflow_status=final_output.get("status", "FAILED"),
             session_id=thread_id,
             details=final_output,
         )
+
+    async def _fetch_last_draft(self, session_id: str) -> dict[str, Any]:
+        """The conversation's current draft, as a plain dict for graph state.
+
+        Args:
+            session_id: The checkpointer thread_id (== drafts.session_id).
+
+        Returns:
+            The latest ``DraftModel``'s fields, or ``{}`` when the
+            conversation has no draft yet. Never raises: a DB outage here
+            must degrade to "no draft to revise", not fail the whole turn.
+        """
+        try:
+            async with self._session_factory() as db:
+                draft = await DraftRepository(db).get_latest_for_session(session_id)
+        except Exception:
+            logger.exception("Failed to fetch last draft for session %s", session_id)
+            return {}
+
+        if draft is None:
+            return {}
+        return {
+            "id": draft.id,
+            "content": draft.content,
+            "document_id": draft.document_id,
+            "correspondence_type": draft.correspondence_type,
+            "routed_unit": draft.routed_unit,
+            "status": draft.status,
+            "confidence_score": draft.confidence_score,
+        }
+
+    async def _persist_draft_version(
+        self,
+        *,
+        session_id: str,
+        final_output: dict[str, Any],
+        user_id: Optional[str],
+        document_id: Optional[str],
+    ) -> None:
+        """Append a new draft version when this turn produced or edited one.
+
+        Skipped when the draft's content is unchanged from the latest stored
+        version (e.g. a plain ``approve`` on the human-in-the-loop gate) --
+        otherwise every approval of an already-persisted draft would mint a
+        redundant version. Never raises: a persistence failure here must not
+        fail a turn whose actual workflow already completed successfully.
+
+        Args:
+            session_id: The checkpointer thread_id (== drafts.session_id).
+            final_output: The compiled workflow result for this turn.
+            user_id: The authenticated user, when auth is enabled.
+            document_id: The document attached to *this* request, if any --
+                falls back to the previous version's document_id when this
+                turn is a revision with nothing newly attached.
+        """
+        draft_result = final_output.get("draft") or {}
+        content = draft_result.get("draft")
+        if not content:
+            return
+
+        try:
+            async with self._session_factory() as db:
+                repo = DraftRepository(db)
+                latest = await repo.get_latest_for_session(session_id)
+                if latest is not None and latest.content == content:
+                    return
+
+                routing_result = final_output.get("routing") or {}
+                status = draft_result.get("status")
+                await repo.create_version(
+                    session_id=session_id,
+                    content=content,
+                    user_id=user_id,
+                    document_id=document_id or (latest.document_id if latest else None),
+                    correspondence_type=draft_result.get("correspondence_type"),
+                    routed_unit=routing_result.get("routed_unit"),
+                    status=str(status) if status else None,
+                    confidence_score=draft_result.get("confidence_score"),
+                    instructions=draft_result.get("instructions"),
+                    parent=latest,
+                )
+                await db.commit()
+        except Exception:
+            logger.exception("Failed to persist draft version for session %s", session_id)
 
     async def _is_paused(self, config: dict[str, Any]) -> bool:
         """Whether the last graph call left the run suspended on an interrupt.
