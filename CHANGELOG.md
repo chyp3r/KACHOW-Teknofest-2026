@@ -2,6 +2,35 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [1.28.0] - 2026-08-03
+### Eklendi
+- **Semantik Prototip Katmanı** (`app/ai/semantic/`, `app/ai/policy/prototypes.py`): Karar merdiveninin 2. basamağı. Sözlüksel kurallar yüzeyleri **birebir** eşleştirir, dolayısıyla parafraza yapısal olarak kördür — "cevap hazırla"nın her yeni söyleniş biçimi elle eklenmek zorundadır. Bu katman, mesajı sınıf başına birkaç **örnek ifadeyle** anlam üzerinden karşılaştırır.
+  - **Ekonomi tüm gerekçe**: kısa bir mesaj için tek `embed_query`, zaten bellekte ve sıcak duran bir modelde ~50-150 ms (`HybridRetriever` her mevzuat aramasında aynı servisi çağırıyor). Hızlı katman modelinin tek etiketlik yapılandırılmış çağrısı, JSON şeması + Pydantic doğrulama + olası retry ile ~1-3 sn. Yani burada çözülen bir parafraz, bir üst basamağın maliyetinin **yüzde birkaçına** mal olur.
+  - **Değer, karar vermeyi reddetmesinde.** Aynı resmî registerdeki kısa Türkçe cümleler arasındaki kosinüs benzerliği sıkışıktır — alakasız cümleler rutin olarak 0.6 civarında oturur — dolayısıyla "en yakın prototip" neredeyse her zaman *bir* prototiptir. Bu yüzden bir eşleşme hem yüksek mutlak benzerlik hem de ikinciye net bir fark gerektirir; tek başına mutlak eşik sürekli tetiklenir, tek başına marj ise eşit derecede kötü iki eşleşme arasında farkın rastlantısal olduğu yerde tetiklenir. Herhangi biri sağlanmazsa modele düşülür.
+  - Prototip vektörleri `scripts/build_prototypes.py` ile **önceden hesaplanır**; istek anında ~30 ifade gömmek, bu katmanın kaçınmak için var olduğu model çağrısından pahalı olurdu. Çalışma yolunda tek bir string gömülür: kullanıcının kendi mesajı (test bunu `embed_documents` hiç çağrılmadığını doğrulayarak kilitliyor).
+  - Her vektör dosyası gömme modeli, boyutu ve policy sürümüyle **damgalıdır**; damga tutmazsa matcher kendini devre dışı bırakır. Farklı bir modelle üretilmiş vektörlerden karar vermek, bir model çağrısı ödemekten kötüdür: yavaş değil, **eminden yanlış** olur. Eksik dizin, okunamayan dosya ve gömme servisi kesintisi de aynı no-op'a düşer — betiği hiç çalıştırmamış bir kurulum, katman hiç yokmuş gibi davranır.
+  - `resolve_plan` artık üç basamaklı: sözlüksel kurallar → prototipler → hızlı katman modeli. Her basamak yalnızca bir altının reddettiğini görür; kuralların çözdüğü bir mesaj **hiç gömme maliyeti ödemez** (testle kilitli).
+  - `FakeEmbeddingsClient` conftest'e eklendi (`FakeLLMClient` deseniyle: gerçek alt sınıf, MagicMock değil).
+
+### Değiştirildi
+- **Held-out parafraz kümesi** (`intents.jsonl`, `heldout_paraphrase`, 16 vaka): Kurallar ayarlandıktan **sonra** yazıldı ve hiçbir kural bunlara göre değiştirilmedi. Önceki sürümdeki `1.0000` skorunun ne değerde olduğunu öğrenmenin tek dürüst yolu buydu.
+
+| | 1.27.0 | 1.28.0 |
+|---|---|---|
+| Macro F1 (genel) | 1.0000 | **0.9326** |
+| Eskalasyon (genel) | 0.0000 | **0.0538** |
+| Held-out doğruluk | — | **0.25** (16'da 4) |
+
+  **`1.0000` uyduruldu.** Kurallar ve eşikler o kümenin başarısızlıklarına göre ayarlanmıştı; ölçtüğü şey katmanın genelleme gücü değil, o kümeye ne kadar iyi uydurulduğuydu. Bunu bir sayıyla söylemek, 1.26.0'daki uyarı notundan daha değerlidir.
+
+  On iki başarısızlık, farklı önem taşıyan iki sınıfa ayrılıyor:
+  - **Yedisi çekimser kalıyor** — semantik katmanın tam olarak kurulduğu trafik: sözlüksel yüzeyi olmayan parafrazlar, bugün doğru davranışın eskalasyon olduğu ve bir prototip eşleşmesinin bunları model çağrısının küçük bir kesrine çözebileceği yerler.
+  - **Beşi eminden yanlış** ve semantik katman bunlara **hiç yardım edemez**, çünkü yalnızca çekimserlik üzerinde çalışır. Beşin dördü `document_qa`'ya düşüyor ve bu, belirli bir karara kadar izlenebilir: `question_with_document` ipucu, "Evrakın konusu nedir?" varlık tabanını geçsin diye HINT (1.0) yerine DOMAIN (1.6) yapılmıştı. Bu düzeltme, `document_qa`'yı **belge ekliyken sorulan her soru için varsayılan** hâline getirdi — bir belge sorusu için doğru, parafraz edilmiş bir taslak/analiz/hatırlama talebi için yanlış.
+
+  Bu bulgu **düzeltilmedi, kaydedildi**. Şimdi yapılacak herhangi bir değişiklik bu on altı vakadan haberdar olurdu ve onları bir ölçüm olarak yakardı — ki bu kümenin var olma sebebi tam olarak bu hatayı açığa çıkarmak. Düzeltme, kümeleri genişletme işiyle birlikte kalibrasyon adımına ait.
+
+> **Semantik katman bu kurulumda atıl.** `datasets/prototypes/` altında vektör dosyası yok ve üretim betiği çalışan bir Ollama gerektiriyor. Katman testli olarak geliyor (`FakeEmbeddingsClient` ile 12 test + 5 merdiven testi) ama **gerçek gömmelerle uçtan uca ölçülmedi**: doğruluk katkısı ve `embed_query` p50/p95 gecikmesi bilinmiyor. `scripts/build_prototypes.py` canlı bir Ollama'ya karşı çalıştırılana kadar merdiven iki basamaklı kalır.
+
 ## [1.27.0] - 2026-08-03
 ### Düzeltildi
 - **Taslak Yazarının Zaman Bütçesi Hiç Uygulanmıyordu**: `resilience.py:53` yazıldığından beri `writer: 120.0` ve `judge: 20.0` girdilerini taşıyordu ve **hiçbiri okunmuyordu** — `draft_graph.py` `node_timeout`'u import bile etmiyordu. Yani ~90 sn'lik taslak bütçesinin **en pahalı adımının** hiçbir düğüm seviyesi koruması yoktu, ama tabloda varmış gibi görünüyordu. Uygulanmayan bir bütçe, bütçesizlikten kötüdür: koruma olduğu izlenimi verir.

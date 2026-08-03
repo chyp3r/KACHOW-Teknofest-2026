@@ -217,6 +217,47 @@ Her agent yalnızca kendi görevinden sorumludur ve prompt şablonunu `get_promp
 
 ---
 
+# Semantik Katman
+
+`app/ai/semantic/` — karar merdiveninin **2. basamağı**, sözlüksel kurallar ile hızlı katman modeli arasında.
+
+```
+Katman 0/1  Sözlüksel kanıt skorlaması   ~0 ms       intent_rules + intent_scorer
+Katman 2    Semantik prototip eşleşmesi  ~50-150 ms  semantic/prototype_matcher   <- YENİ
+Katman 3    Hızlı katman modeli          ~1-3 sn     classify_intent_with_model
+```
+
+Her basamak yalnızca bir altının **reddettiğini** görür. Kuralların çözdüğü bir mesaj hiç gömme maliyeti ödemez.
+
+## Neden bir basamak etmeye değer
+
+Kısa bir mesaj için tek `embed_query`, zaten bellekte duran bir modelde ~50-150 ms. Hızlı katmanın tek etiketlik yapılandırılmış çağrısı ~1-3 sn. Burada çözülen bir parafraz, bir üst basamağın **yüzde birkaçına** mal olur.
+
+## Neden tek başına asla karar vermez
+
+Aynı resmî registerdeki kısa Türkçe cümleler arasındaki kosinüs benzerliği sıkışıktır; alakasız cümleler rutin olarak 0.6 civarında oturur. Bu yüzden bir eşleşme **iki eşiği birden** geçmelidir:
+
+* `semantic.decisive_similarity` — kazanan sınıfa mutlak benzerlik
+* `semantic.decisive_margin` — ikinci sınıfa fark
+
+Tek başına mutlak eşik sürekli tetiklenir; tek başına marj, eşit derecede kötü iki eşleşmenin rastlantısal farkında tetiklenir. Herhangi biri sağlanmazsa modele düşülür — belirsiz bir mesaj için doğru sonuç budur.
+
+## Bayatlık
+
+Vektör dosyaları gömme modeli, boyut ve `POLICY_VERSION` ile damgalıdır. Damga tutmazsa matcher kendini **devre dışı bırakır**: farklı bir modelle üretilmiş vektörlerden karar vermek, bir model çağrısı ödemekten kötüdür — yavaş değil, eminden yanlış olur. Eksik dizin, bozuk dosya ve gömme kesintisi de aynı no-op'a düşer.
+
+```bash
+docker compose run --rm --no-deps backend python scripts/build_prototypes.py
+```
+
+`app/ai/policy/prototypes.py` değiştiğinde, gömme modeli değiştiğinde veya `POLICY_VERSION` arttığında yeniden çalıştırılmalıdır.
+
+## Bilinen sınırı
+
+Semantik katman yalnızca **çekimserlik** üzerinde çalışır. Sözlüksel katmanın *eminden yanlış* karar verdiği bir mesajı hiç görmez. Held-out ölçümü (bkz. CHANGELOG 1.28.0) bu sınıfın gerçek olduğunu gösteriyor: 16 parafrazın 5'i eminden yanlış, 4'ü `document_qa`'ya düşüyor.
+
+---
+
 # Policy Katmanı
 
 `app/ai/policy/` — deterministik karar katmanının **tüm parametre yüzeyi**. Eşikler, ağırlıklar ve düğüm bütçeleri burada; onları okuyan modüller değerleri kendi modül seviyesi isimlerine türeterek alır (`MIN_AUTOMATED_CONFIDENCE_SCORE = get_policy().verification.min_automated_confidence`).
