@@ -2,6 +2,79 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [1.29.0] - 2026-08-03
+### Düzeltildi
+- **Semantik Katman Canlı Ollama'ya Karşı Ölçüldü ve Eşikleri Yeniden Kalibre Edildi**: 1.28.0'da bu katman **atıl** ve **ölçülmemiş** olarak gönderilmişti. Ollama açıldıktan sonra prototip vektörleri üretildi ve katman gerçek `nomic-embed-text` gömmeleriyle uçtan uca ölçüldü. Gönderilen `0.72` eşiğinin **gürültü bandının içinde** olduğu ortaya çıktı:
+
+| sim | vaka | beklenen → eşleşen | |
+|---|---|---|---|
+| 0.880 | `held_01` | draft → draft | doğru |
+| 0.859 | `held_02` | draft → draft | doğru |
+| 0.758 | `held_12` | chat → **analyze** | **yanlış** |
+| 0.750 | `held_13` | chat → chat | doğru |
+| 0.749 | `held_08` | analyze → **draft** | **yanlış** |
+| 0.747 | `held_15` | chat → **document_qa** | **yanlış** |
+| 0.740 | `esc_08` | (belirsiz) | doğru şekilde kararsız |
+
+  `0.72`'de bu **3 doğru karara karşı 3 yanlış** demek. Şansa karar veren bir katman nötr değil, bir **regresyondur**: o üç mesaj daha önce doğru bilme şansı olan bir modele eskale ediliyordu, semantik basamak bu şansı elinden aldı.
+  - Eşik `0.80`'e çekildi — güvenli bandın (`0.758 → 0.859`) **ortası**, kenarı değil. Tarama `0.76`'nın da sıfır hata verdiğini gösteriyor ama bu 15 vakalık bir örneklemde son hataya `0.002` pay bırakır; bu bir eşik değil gürültüdür. Marj eşiği, benzerlik doğru ayarlandığında **hiç bağlayıcı olmuyor** (hayatta kalan iki karar 0.154 ve 0.098 ile geçiyor); yalnızca gerçekten eşit iki eşleşme yuvarlamayla ayrılmasın diye korundu.
+  - **Asıl sonuç kalibrasyon değil, kalibrasyonun ortaya çıkardığı şey**: güvenli eşikte bu katman **130 mesajın 2'sini** çözüyor. Nedeni sayılarda görünüyor — resmî registerdeki Türkçe cümleler karşılıklı olarak benzer, dolayısıyla tamamen belirsiz bir mesaj bile alakasız prototiplere karşı 0.60–0.74 alıyor; bu gürültü tabanının üstünde yalnızca dar bir bant kalıyor. Plan bu katmanın eskalasyonların çoğunu soğuracağını varsayıyordu; **yedide birini** soğuruyor.
+  - **Gecikme** (önceden bilinmiyordu): p50 **19.7 ms**, p95 **22.0 ms** — docstring'lerdeki 50-150 ms tahmininden belirgin şekilde iyi. Tahminler ölçümle değiştirildi.
+- **Prototip Dizini Mount Edilmemiş Bir Yola Yazılıyordu**: `PROTOTYPE_DIR`, `__file__` üzerinden `parents[3].parent` ile türetiliyordu. Container'da paket kökü **çalışma dizininin kendisi** (`/workspace`) olduğu için bunun bir üstü `/` oluyordu; `build_prototypes.py` 768 boyutlu vektörleri `/datasets/prototypes/` altına "başarıyla yazdım" diyerek yazıyor, container çıkınca hepsi kayboluyordu. Betiğin başarı çıktısı gerçek bir üretimden ayırt edilemiyordu. Artık `MEVZUAT_CORPUS_DIR` ile aynı deseni izliyor: `settings` içinde göreli yol.
+- **`make test` Redis'siz Koşuyordu**: Hedef `--no-deps` kullanıyordu; birim testlerinin altyapıya dokunmadığı varsayımıyla. Bu, `rate_limit()` arkasındaki yedi API testi dışında doğru — onlar Redis'e ulaşıyor ve bağlantı hatası testin beklediği 422 yerine 500 olarak yüzeye çıkıyor.
+  - **Hata kipinden kötüsü, hatanın yanlış atfedilmesiydi**: bu yedi test dört ayrı PR'da "`origin/main`'de de mevcut, httpx/starlette sürüm kayması" diye raporlandı. Hikâye makuldü — çıktıda bir `StarletteDeprecationWarning` vardı ve `origin/main`'e geçip aynı yedi hata görülmüştü. Ama o kontrol de **aynı bozuk çağrıyı** kullanıyordu, dolayısıyla hipotezi değil harness hatasını doğruladı.
+  - Redis ayaktayken paket **798 passed, 0 failed**. Ortada bir sürüm kayması yok ve hiç olmadı; deprecation uyarısı ilgisiz ve zararsız.
+  - `make eval` `--no-deps` ile kalıyor; orada gerçekten doğru — o suite'ler saf karar fonksiyonlarını çağırıyor.
+
+## [1.28.0] - 2026-08-03
+### Eklendi
+- **Semantik Prototip Katmanı** (`app/ai/semantic/`, `app/ai/policy/prototypes.py`): Karar merdiveninin 2. basamağı. Sözlüksel kurallar yüzeyleri **birebir** eşleştirir, dolayısıyla parafraza yapısal olarak kördür — "cevap hazırla"nın her yeni söyleniş biçimi elle eklenmek zorundadır. Bu katman, mesajı sınıf başına birkaç **örnek ifadeyle** anlam üzerinden karşılaştırır.
+  - **Ekonomi tüm gerekçe**: kısa bir mesaj için tek `embed_query`, zaten bellekte ve sıcak duran bir modelde ~50-150 ms (`HybridRetriever` her mevzuat aramasında aynı servisi çağırıyor). Hızlı katman modelinin tek etiketlik yapılandırılmış çağrısı, JSON şeması + Pydantic doğrulama + olası retry ile ~1-3 sn. Yani burada çözülen bir parafraz, bir üst basamağın maliyetinin **yüzde birkaçına** mal olur.
+  - **Değer, karar vermeyi reddetmesinde.** Aynı resmî registerdeki kısa Türkçe cümleler arasındaki kosinüs benzerliği sıkışıktır — alakasız cümleler rutin olarak 0.6 civarında oturur — dolayısıyla "en yakın prototip" neredeyse her zaman *bir* prototiptir. Bu yüzden bir eşleşme hem yüksek mutlak benzerlik hem de ikinciye net bir fark gerektirir; tek başına mutlak eşik sürekli tetiklenir, tek başına marj ise eşit derecede kötü iki eşleşme arasında farkın rastlantısal olduğu yerde tetiklenir. Herhangi biri sağlanmazsa modele düşülür.
+  - Prototip vektörleri `scripts/build_prototypes.py` ile **önceden hesaplanır**; istek anında ~30 ifade gömmek, bu katmanın kaçınmak için var olduğu model çağrısından pahalı olurdu. Çalışma yolunda tek bir string gömülür: kullanıcının kendi mesajı (test bunu `embed_documents` hiç çağrılmadığını doğrulayarak kilitliyor).
+  - Her vektör dosyası gömme modeli, boyutu ve policy sürümüyle **damgalıdır**; damga tutmazsa matcher kendini devre dışı bırakır. Farklı bir modelle üretilmiş vektörlerden karar vermek, bir model çağrısı ödemekten kötüdür: yavaş değil, **eminden yanlış** olur. Eksik dizin, okunamayan dosya ve gömme servisi kesintisi de aynı no-op'a düşer — betiği hiç çalıştırmamış bir kurulum, katman hiç yokmuş gibi davranır.
+  - `resolve_plan` artık üç basamaklı: sözlüksel kurallar → prototipler → hızlı katman modeli. Her basamak yalnızca bir altının reddettiğini görür; kuralların çözdüğü bir mesaj **hiç gömme maliyeti ödemez** (testle kilitli).
+  - `FakeEmbeddingsClient` conftest'e eklendi (`FakeLLMClient` deseniyle: gerçek alt sınıf, MagicMock değil).
+
+### Değiştirildi
+- **Held-out parafraz kümesi** (`intents.jsonl`, `heldout_paraphrase`, 16 vaka): Kurallar ayarlandıktan **sonra** yazıldı ve hiçbir kural bunlara göre değiştirilmedi. Önceki sürümdeki `1.0000` skorunun ne değerde olduğunu öğrenmenin tek dürüst yolu buydu.
+
+| | 1.27.0 | 1.28.0 |
+|---|---|---|
+| Macro F1 (genel) | 1.0000 | **0.9326** |
+| Eskalasyon (genel) | 0.0000 | **0.0538** |
+| Held-out doğruluk | — | **0.25** (16'da 4) |
+
+  **`1.0000` uyduruldu.** Kurallar ve eşikler o kümenin başarısızlıklarına göre ayarlanmıştı; ölçtüğü şey katmanın genelleme gücü değil, o kümeye ne kadar iyi uydurulduğuydu. Bunu bir sayıyla söylemek, 1.26.0'daki uyarı notundan daha değerlidir.
+
+  On iki başarısızlık, farklı önem taşıyan iki sınıfa ayrılıyor:
+  - **Yedisi çekimser kalıyor** — semantik katmanın tam olarak kurulduğu trafik: sözlüksel yüzeyi olmayan parafrazlar, bugün doğru davranışın eskalasyon olduğu ve bir prototip eşleşmesinin bunları model çağrısının küçük bir kesrine çözebileceği yerler.
+  - **Beşi eminden yanlış** ve semantik katman bunlara **hiç yardım edemez**, çünkü yalnızca çekimserlik üzerinde çalışır. Beşin dördü `document_qa`'ya düşüyor ve bu, belirli bir karara kadar izlenebilir: `question_with_document` ipucu, "Evrakın konusu nedir?" varlık tabanını geçsin diye HINT (1.0) yerine DOMAIN (1.6) yapılmıştı. Bu düzeltme, `document_qa`'yı **belge ekliyken sorulan her soru için varsayılan** hâline getirdi — bir belge sorusu için doğru, parafraz edilmiş bir taslak/analiz/hatırlama talebi için yanlış.
+
+  Bu bulgu **düzeltilmedi, kaydedildi**. Şimdi yapılacak herhangi bir değişiklik bu on altı vakadan haberdar olurdu ve onları bir ölçüm olarak yakardı — ki bu kümenin var olma sebebi tam olarak bu hatayı açığa çıkarmak. Düzeltme, kümeleri genişletme işiyle birlikte kalibrasyon adımına ait.
+
+> **Semantik katman bu kurulumda atıl.** `datasets/prototypes/` altında vektör dosyası yok ve üretim betiği çalışan bir Ollama gerektiriyor. Katman testli olarak geliyor (`FakeEmbeddingsClient` ile 12 test + 5 merdiven testi) ama **gerçek gömmelerle uçtan uca ölçülmedi**: doğruluk katkısı ve `embed_query` p50/p95 gecikmesi bilinmiyor. `scripts/build_prototypes.py` canlı bir Ollama'ya karşı çalıştırılana kadar merdiven iki basamaklı kalır.
+
+## [1.27.0] - 2026-08-03
+### Düzeltildi
+- **Taslak Yazarının Zaman Bütçesi Hiç Uygulanmıyordu**: `resilience.py:53` yazıldığından beri `writer: 120.0` ve `judge: 20.0` girdilerini taşıyordu ve **hiçbiri okunmuyordu** — `draft_graph.py` `node_timeout`'u import bile etmiyordu. Yani ~90 sn'lik taslak bütçesinin **en pahalı adımının** hiçbir düğüm seviyesi koruması yoktu, ama tabloda varmış gibi görünüyordu. Uygulanmayan bir bütçe, bütçesizlikten kötüdür: koruma olduğu izlenimi verir.
+  - Yazarın bütçesi dekoratörle değil **düğümün içinde** uygulanıyor. Dekoratör düğümün `except` bloklarını aşarak yükselir ve taslak grafiğini düşürür; oysa bir zaman aşımının, grafiğin zaten yönlendirmeyi bildiği bir `FAILED` sonucuna dönüşmesi gerekir. Kendi `except TimeoutError` dalı var çünkü `str(TimeoutError())` boştur — kullanıcıya "Taslak üretilemedi: " diye iki nokta üst üsteden sonrası boş bir mesaj gösterilirdi. Kısmi akış korunuyor: kesilmiş bir taslak, insana boş bir taslaktan daha faydalıdır ve kullanıcı zaten yazılışını izlemiştir.
+  - `judge` girdisi bağlanmak yerine **tablodan kaldırıldı**: `settings.DRAFT_JUDGE_TIMEOUT_SECONDS` o sayının zaten sahibiydi ve tek bir değer için iki sahip, bu değişikliğin ortadan kaldırmak için var olduğu sorunun ta kendisi. Yargıç çağrısı artık o ayarı seviyenin çarpanıyla ölçekliyor.
+- **`reasoning_level` Düğüm Bütçelerine Hiç Ulaşmıyordu**: `reasoning_levels.py`, özellik eklendiğinden beri bir `timeout_multiplier` taşıyor (fast 0.6, deep 1.8) ama bu yalnızca **servis katmanının** dış zaman aşımına ulaşıyordu. Düğüm bütçeleri sabit kalıyordu; yani `deep` bir koşuya genel olarak 1.8× duvar saati veriliyor, ama fazladan işin yapıldığı yerde bu bütçe **harcanamıyordu**.
+  - Kök neden: `@node_timeout(NODE_TIMEOUT_SECONDS["analyze"])` bir float alıyordu ve bu ifade graf **derlenirken** değerlendiriliyor; graf süreçte bir kez derlendiği için istek başına hiçbir değer oraya ulaşamazdı. Dekoratör artık düğüm **adı** alıyor ve bütçeyi çağrı anında state'teki `reasoning_level`'dan çözüyor.
+  - `DocumentAnalysisState` ve `RoutingState` bu alanı taşımıyor (CHANGELOG 1.22.0 bunları kapsam dışı bırakmıştı), dolayısıyla dengeli seviyeye düşüyorlar — davranış değişmiyor, kablo alan eklendiğinde hazır.
+  - Sonuç: `deep` yazara 216 sn (dengeli 120 sn'ye karşı), `fast` 72 sn veriyor. **Hiçbir seviye, hiçbir düğüm için dengeli seviyenin bugünkü sınırından dar değil.**
+
+### Eklendi
+- **Bildirimsel, Sürümlenmiş Policy Katmanı** (`app/ai/policy/`): Deterministik karar katmanının üzerinde hareket ettiği her eşik, onu okuyan kodun yanında yaşıyordu — `draft_verifier`'da `70.0`, `routing_graph`'ta `50.0`, `llm_judge`'da `0.6/0.4`, `planning_graph`'ta `12`/`40`/`4`, `intent_scorer`'da marj tabanları. Tek tek makul, toplu hâlde **incelenemez** — ve bunlardan ikisi, aralarındaki ilişki hiçbir yerde yazılmamış hâlde **aynı kavramın** iki şiddet derecesiydi.
+  - **YAML değil, dondurulmuş dataclass** — bilinçli. Bir yapılandırma dosyası, bir eşiği kod değiştirmeden değiştirme yeteneği satın alır; burada istenmeyen tam olarak budur. Bu sayılar `evaluation/datasets` üzerinde kalibre ediliyor, dolayısıyla birini oynatmak bir CHANGELOG kaydı ve bir eval koşusu gerektirmeli, bir yeniden dağıtım değil. Tipli dataclass'lar ayrıca invaryantlara yaşayacak bir yer veriyor ve üretimle testin sapabileceği bir ayrıştırma yolu bırakmıyor.
+  - **Asıl ürün invaryantlar.** Daha önce yalnızca tesadüfen doğru olan ilişkileri kodluyorlar: yönlendirme eşiği otomasyon eşiğinin **altında kalmalı** (70 "incelemesiz gönderilebilir", 50 "hiç yönlendirilemez"; ters çevirmek, yönlendirilemeyecek kadar zayıf bir taslağı aynı anda gönderilebilecek kadar iyi yapardı); yargıç harman ağırlıkları 1.0'a toplanmalı; bileşik taban varlık tabanının altına inemez (bileşik bir okuma, tekil bir okumadan daha az kanıta ihtiyaç duyamaz); ham geçmiş sınırı birebir pencereyi aşmalı; hiçbir düğüm bütçesi iş akışı tavanını geçemez. **Import anında** çalışıyorlar — kendisiyle çelişen bir policy, üretimde sessizce yanlış karar üretmek yerine süreci düşürüyor.
+  - Tüketen modüller kendi modül seviyesi isimlerini koruyor ama policy'den **türetiyor**; mevcut 750 testin tamamı dokunulmadan geçiyor ve diff bir davranış değişikliği değil bir yönlendirme. Testler türetmenin kendisini doğruluyor: biri yeniden sabit kodlansa import'lar yine çalışırdı, yalnızca sapma görünürdü.
+  - `ROUTING_UNITS` ile `RouteOutput.destination` Literal'ını hizada tutan bir test eklendi. Daha önce bu işi yapan tek şey "birbirinden sapamaz" diyen bir yorum satırıydı.
+- **Policy Sürüm Damgası**: `DRAFT_SCORE` veya `CLAIM_MATCH`'teki bir kayma, "trafik değişti" ile "biz bir eşiği oynattık" arasında belirsizdi ve bu ikisi zıt tepkiler gerektirir. Prometheus'a `Info` olarak ekleniyor (mevcut koleksiyonerlere etiket olarak değil — kardinalite maliyeti sıfır), değerlendirme raporuna hem JSON yüküne hem Markdown başlığına yazılıyor.
+
+> Bu sürüm **davranış-nötr**dür: `make eval` policy düzenlemesinden önceki ile birebir aynı `1.0000 / 1.0000` sonucunu üretiyor. Kanıt commit'lenmiş raporda.
+
 ## [1.26.0] - 2026-08-03
 ### Değiştirildi
 - **Niyet Çözümleme: Sıralı Anahtar Kelime Şelalesi → Kanıt Skorlaması**: `planner.py` anahtar kelime gruplarını sabit sırayla kontrol edip ilk eşleşmede dönüyordu; bu, **sırayı** kararın kendisi hâline getiriyordu ve yeniden sıralamayla düzeltilemezdi (taslak önce kontrol edilince "Resmi yazı ne demek?" üç adımlı taslak hattını başlatıyor; analiz önce kontrol edilince "analiz sonrası taslak hazırla" analize düşüyor). 1.25.0'daki ölçüm iki kategoriyi **0.00** ile raporladı — zayıf değil, sıfır, sekiz vakanın sekizi. Artık mesaj bildirimsel bir kanıt tablosuna (`intent_rules.py`) karşı skorlanıyor ve karar, ilk eşleşen kural değil **ilk iki niyet arasındaki marj**. Kanıt kısa devre yapmak yerine biriktiği için çekişmeli bir mesaj görünür şekilde çekişmeli kalıyor; bu da onun bileşik plana yönlendirilmesini ya da dürüstçe eskale edilmesini mümkün kılıyor. Model çağrısı yok, hâlâ milisaniye altı.

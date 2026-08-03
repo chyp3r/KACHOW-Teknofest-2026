@@ -3,9 +3,11 @@
 > Bu rapor `make eval` ile üretilir ve **hiç LLM çağrısı içermez**.
 > Ölçülen, üretim kodundaki deterministik karar fonksiyonlarının kendisidir.
 
+Policy sürümü: `1.0.0`
+
 ## Suite: `intents`
 
-Altın küme: `evaluation/datasets/intents.jsonl` · Koşu: 2026-08-03T09:59:37 · Süre: 1.7 ms
+Altın küme: `evaluation/datasets/intents.jsonl` · Koşu: 2026-08-03T10:24:09 · Süre: 1.6 ms
 
 ### Genel
 
@@ -62,7 +64,7 @@ Yok.
 
 ## Suite: `drafts`
 
-Altın küme: `evaluation/datasets/drafts.jsonl` · Koşu: 2026-08-03T09:59:37 · Süre: 4.5 ms
+Altın küme: `evaluation/datasets/drafts.jsonl` · Koşu: 2026-08-03T10:24:09 · Süre: 4.5 ms
 
 ### Genel
 

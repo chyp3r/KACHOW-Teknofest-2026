@@ -25,7 +25,6 @@ from app.ai.workflows.events import emit_node_end, emit_node_error, emit_node_st
 from app.ai.workflows.resilience import (
     IO_RETRY,
     LLM_RETRY,
-    NODE_TIMEOUT_SECONDS,
     TRANSIENT_ERRORS,
     node_timeout,
 )
@@ -263,7 +262,7 @@ def create_document_analysis_graph(
     compliance_agent = ComplianceAgent(reasoning_llm_client or llm_client)
     fallback_classifier_agent = ClassifierAgent(fast_llm_client) if fast_llm_client else None
 
-    @node_timeout(NODE_TIMEOUT_SECONDS["analyze"])
+    @node_timeout("analyze")
     async def analyze_node(
         state: DocumentAnalysisState, config: RunnableConfig
     ) -> dict[str, Any]:
@@ -428,7 +427,7 @@ def create_document_analysis_graph(
         await emit_partial(config, "compliance", update)
         return update
 
-    @node_timeout(NODE_TIMEOUT_SECONDS["retrieve_mevzuat"])
+    @node_timeout("retrieve_mevzuat")
     async def retrieve_mevzuat_node(
         state: DocumentAnalysisState, config: RunnableConfig
     ) -> dict[str, Any]:
@@ -494,7 +493,7 @@ def create_document_analysis_graph(
             )
             return {"mevzuat_documents": []}
 
-    @node_timeout(NODE_TIMEOUT_SECONDS["suggest_mevzuat"])
+    @node_timeout("suggest_mevzuat")
     async def suggest_mevzuat_node(
         state: DocumentAnalysisState, config: RunnableConfig
     ) -> dict[str, Any]:

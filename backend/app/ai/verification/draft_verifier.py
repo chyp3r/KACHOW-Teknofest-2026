@@ -25,13 +25,17 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.ai.policy import get_policy
 from app.ai.verification.normalizers import canonical_for_kind
 from app.observability.ai_metrics import CLAIM_MATCH
 
 logger = logging.getLogger(__name__)
 
 #: Drafts scoring below this need a human before they can be sent.
-MIN_AUTOMATED_CONFIDENCE_SCORE = 70.0
+#: Derived from the policy rather than duplicated, so the invariant tying it to
+#: the routing threshold (see app.ai.policy.schema) cannot be violated by
+#: editing one of the two numbers in isolation.
+MIN_AUTOMATED_CONFIDENCE_SCORE = get_policy().verification.min_automated_confidence
 
 #: Placeholders the writer is instructed to emit for missing information.
 #: Content inside them is a deliberate gap, not a hallucination.
@@ -100,8 +104,8 @@ STRUCTURE_CHECKS: tuple[tuple[str, str, re.Pattern[str], float], ...] = (
 #: Penalty per ungrounded claim, and the ceiling on that penalty. Capped so a
 #: draft with many small issues still scores above one that is structurally
 #: broken -- the two failure modes should not collapse onto the same number.
-UNSUPPORTED_CLAIM_PENALTY = 12.0
-MAX_UNSUPPORTED_PENALTY = 60.0
+UNSUPPORTED_CLAIM_PENALTY = get_policy().verification.unsupported_claim_penalty
+MAX_UNSUPPORTED_PENALTY = get_policy().verification.max_unsupported_penalty
 
 
 #: How a claim was matched against the trusted sources, weakest last.
@@ -213,7 +217,7 @@ CLAIM_CHECKS: tuple[tuple[str, re.Pattern[str], str], ...] = (
 
 #: Minimum share of a value's significant tokens that must appear in the
 #: sources for the tolerant fallback to accept it.
-TOKEN_OVERLAP_THRESHOLD = 0.75
+TOKEN_OVERLAP_THRESHOLD = get_policy().verification.token_overlap_threshold
 
 
 def _build_canonical_index(raw_sources: str) -> dict[str, set[str]]:

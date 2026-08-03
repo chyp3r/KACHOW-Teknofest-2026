@@ -22,6 +22,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.ai.agents.judge import JudgeAgent
+from app.ai.policy import get_policy
 from app.ai.verification.draft_verifier import (
     MIN_AUTOMATED_CONFIDENCE_SCORE,
     VerificationReport,
@@ -44,7 +45,7 @@ REVISABLE_JUDGE_KINDS = frozenset({"kapanis", "uslup", "talep", "muhatap"})
 
 #: Above this fraction of a judge verdict's own tokens appearing in the draft,
 #: treat the verdict as an echo of the draft rather than a judgement of it.
-_ECHO_OVERLAP_THRESHOLD = 0.40
+_ECHO_OVERLAP_THRESHOLD = get_policy().verification.judge_echo_overlap_threshold
 
 
 class JudgeFinding(BaseModel):
@@ -210,8 +211,13 @@ def merge_verdicts(
         The combined verdict the draft graph's router acts on.
     """
     judge_available = verdict is not None
+    blend = get_policy().verification
     combined_score = (
-        round(0.6 * report.confidence_score + 0.4 * verdict.score, 1)
+        round(
+            blend.judge_deterministic_weight * report.confidence_score
+            + blend.judge_model_weight * verdict.score,
+            1,
+        )
         if judge_available
         else report.confidence_score
     )

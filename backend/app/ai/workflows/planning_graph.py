@@ -15,7 +15,9 @@ from app.ai.agents.document_qa import DocumentQAAgent
 from app.ai.agents.memory_summarizer import MemorySummarizerAgent
 from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.llms.base import BaseLLMClient
+from app.ai.policy import get_policy
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
+from app.ai.semantic.prototype_matcher import PrototypeMatcher
 from app.ai.verification import apply_answers, verify_draft
 from app.ai.workflows.events import (
     child_config,
@@ -37,7 +39,7 @@ from app.observability.ai_metrics import HITL_INTERRUPTS
 logger = logging.getLogger(__name__)
 
 QA_COLLECTION_NAME = "document_qa"
-QA_RESULT_LIMIT = 4
+QA_RESULT_LIMIT = get_policy().memory.qa_result_limit
 
 STEP_LABELS = {
     "classification": "Evrak Analizi",
@@ -92,17 +94,17 @@ def _dependency_failed(
 #: Turns kept verbatim in the prompt sent to chat/document_qa on every turn.
 #: ~6 exchanges is enough for pronoun/ellipsis resolution ("evet, hazırla"
 #: after "taslak ister misiniz?") without growing that prompt without bound.
-HISTORY_WINDOW = 12
+HISTORY_WINDOW = get_policy().memory.history_window
 
 #: Raw turns retained in state before consolidation must have folded them
 #: into history_summary. Comfortably larger than HISTORY_WINDOW so
 #: consolidate_memory_node always has the overflow available when it runs
 #: (it runs once per turn, after HISTORY_WINDOW turns are already appended).
-HISTORY_RAW_CAP = 40
+HISTORY_RAW_CAP = get_policy().memory.history_raw_cap
 
 #: Only bother calling the model once there's a worth-while batch to fold in,
 #: not for every single turn's 1-2-entry dribble past the window.
-CONSOLIDATION_BATCH_SIZE = 4
+CONSOLIDATION_BATCH_SIZE = get_policy().memory.consolidation_batch_size
 
 
 def _append_history(
@@ -331,6 +333,19 @@ def create_planning_graph(
     # vector.
     qa_sparse_encoder = SparseBM25Encoder()
 
+    # Layer 2 of the intent ladder. Built once per graph, and only when there is
+    # an embeddings client to build it with -- without one the ladder simply
+    # skips the rung, exactly as it behaved before the layer existed. The
+    # matcher disables itself on a stale or missing vector file too, so a
+    # deployment that never ran scripts/build_prototypes.py degrades rather
+    # than fails.
+    prototype_matcher: PrototypeMatcher | None = None
+    if embeddings_client is not None:
+        candidate = PrototypeMatcher(
+            embeddings_client, model_name=settings.OLLAMA_EMBEDDING_MODEL
+        )
+        prototype_matcher = candidate if candidate.available else None
+
     async def planning_node(
         state: PlanningState, config: RunnableConfig
     ) -> dict[str, Any]:
@@ -344,6 +359,7 @@ def create_planning_graph(
             state.get("document_id"),
             intent_client,
             previous_intent=state.get("plan_intent"),
+            matcher=prototype_matcher,
         )
         logger.info(
             "Plan: %s (intent=%s, source=%s)",
