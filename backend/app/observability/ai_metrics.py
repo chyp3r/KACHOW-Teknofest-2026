@@ -85,6 +85,19 @@ EXTRACTION = Counter(
     ["extractor", "outcome"],
 )
 
+#: The deterministic draft gate's own behaviour, which was previously invisible:
+#: DRAFT_SCORE records the number it produced but nothing recorded *how*. The
+#: `method` label is the escalation ladder in `draft_verifier._support_for`
+#: (exact -> canonical -> token_overlap -> none), so a rise in `none` for one
+#: kind localises a groundedness regression to a single claim type, and the
+#: `canonical` share measures how much work type-aware normalisation is doing.
+#: Both labels are closed sets -- no free text, which would blow up cardinality.
+CLAIM_MATCH = Counter(
+    "kachow_claim_match_total",
+    "Draft claims checked against source material, by claim kind and match method.",
+    ["kind", "method"],
+)
+
 
 def init_ai_metrics() -> None:
     """Force this module's import so its collectors register with Prometheus.
