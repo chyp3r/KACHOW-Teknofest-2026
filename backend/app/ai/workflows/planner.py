@@ -1,28 +1,63 @@
 """Intent resolution for the master workflow.
 
-The system has four fixed flows and the choice between them is a lookup, not a
-reasoning task. It used to be made by a full structured LLM call against the
-orchestrator prompt, which cost a round trip plus a Pydantic retry loop on the
-critical path -- and was unreliable enough to need sixty lines of defensive
-parsing (``handle_nested_hallucinations``) to patch up its output shape.
+The choice between the system's four flows used to be a full structured LLM call
+against an orchestrator prompt, which cost a round trip plus a Pydantic retry
+loop on the critical path. That was replaced by an ordered keyword cascade:
+check draft phrases, then analyze phrases, then greetings, and return on the
+first hit.
 
-This module decides deterministically from the message and the presence of a
-document. Only genuinely ambiguous messages fall through to a model, and that
-call is a single label from the fast tier rather than a nested JSON object.
+The cascade removed the model call but made the *order* the decision, and that
+is not fixable by reordering. Measured on ``evaluation/datasets/intents.jsonl``
+it scored 0.00 on two whole categories:
+
+* ``inversion`` -- with draft checked first, "Resmi yazı ne demek?" matched
+  "resmi yazi" and started a three-step drafting pipeline. Reordering only moves
+  the failure: with analyze first, "analiz sonrası taslak hazırla" resolves to
+  analysis.
+* ``precedence`` -- the greeting branch was gated on ``document_id is None``, so
+  "Merhaba" with a document attached fell past every branch and escalated to the
+  model, and "İyi akşamlar, yarın devam ederiz" after a draft turn matched the
+  continuation rule on "devam" and produced a draft.
+
+This module now scores a message against a declarative evidence table
+(:mod:`app.ai.workflows.intent_rules`) and decides on the **margin** between the
+top two intents rather than on which rule fired first. Evidence accumulates
+instead of short-circuiting, so a contested message stays visibly contested --
+which is what lets it resolve to a compound plan or escalate, instead of being
+resolved by table order. Still no model call, still sub-millisecond.
+
+Only genuinely balanced or evidence-free messages fall through to a model, and
+that call remains a single label from the fast tier.
 """
 
 import logging
-import re
-import unicodedata
 from typing import Literal, NamedTuple, Optional
 
 from pydantic import BaseModel, Field
 
 from app.ai.llms.base import BaseLLMClient
+from app.ai.workflows.intent_rules import Intent
+from app.ai.workflows.intent_scorer import (
+    COMPOUND_FLOOR,
+    DECISIVE_MARGIN,
+    PRESENCE_FLOOR,
+    IntentScores,
+    normalize,
+    score_intents,
+)
 
 logger = logging.getLogger(__name__)
 
-Intent = Literal["draft", "analyze", "document_qa", "chat"]
+__all__ = [
+    "Intent",
+    "IntentOutput",
+    "PLAN_BY_INTENT",
+    "PlanDecision",
+    "classify_intent_with_model",
+    "normalize",
+    "resolve_plan",
+    "resolve_plan_deterministic",
+]
 
 #: Step sequences per intent.
 #:
@@ -45,152 +80,52 @@ REASONING_BY_INTENT: dict[str, str] = {
     "chat": "Evrak işlemi gerektirmeyen genel bir mesaj tespit edildi: sohbet akışı çalıştırılacak.",
 }
 
-DRAFT_KEYWORDS = (
-    "taslak",
-    "yazi yaz",
-    "yazi hazirla",
-    "yazi olustur",
-    "cevap yaz",
-    "cevap hazirla",
-    "cevabi hazirla",
-    "cevap olustur",
-    "ust yazi",
-    "resmi yazi",
-    "yaziyi hazirla",
-    "bilgilendirme metni",
-    "dilekceye cevap",
-    "yanit yaz",
-    "yanit hazirla",
-    "kaleme al",
-    "metni yaz",
-    "yazisma hazirla",
+#: Canonical execution order, used to merge two intents' step lists without
+#: letting the merge invent an ordering of its own.
+STEP_ORDER: tuple[str, ...] = (
+    "classification",
+    "rag",
+    "draft",
+    "routing",
+    "document_qa",
+    "chat",
 )
 
-ANALYZE_KEYWORDS = (
-    "analiz et",
-    "incele",
-    "siniflandir",
-    "turunu belirle",
-    "eksik alan",
-    "eksik bilgi",
-    "uygunluk",
-    "ozetle",
-    "ozet cikar",
-    "degerlendir",
-    "kontrol et",
-    "mevzuata uygun",
-)
-
-#: Openers that are unambiguously conversational regardless of context.
-CHAT_KEYWORDS = (
-    "merhaba",
-    "selam",
-    "gunaydin",
-    "iyi gunler",
-    "iyi aksamlar",
-    "tesekkur",
-    "sagol",
-    "nasilsin",
-    "kimsin",
-    "ne yapabilirsin",
-    "neler yapabilirsin",
-    "yardim",
-    "nasil calisir",
-    "gorusuruz",
-    "hosca kal",
-)
-
-#: A short affirmative reply to "taslak hazırlayayım mı?" or "analiz edeyim
-#: mi?" continues whatever the previous turn's intent was, rather than
-#: falling through to the "short message -> chat" default. Without this, "evet,
-#: hazırla" after a draft offer resolved to plain conversation.
-CONTINUATION_KEYWORDS = (
-    "evet",
-    "olur",
-    "tamam",
-    "onayliyorum",
-    "devam et",
-    "devam",
-    "hazirla",
-    "yap",
-    "lutfen",
-)
-
-#: Only these intents make sense to silently continue; a bare "evet" after a
-#: chat/document_qa turn has no unambiguous follow-up action.
-_CONTINUABLE_INTENTS = frozenset({"draft", "analyze"})
-
-QUESTION_MARKERS = (
-    "mi",
-    "mu",
-    "mü",
-    "mı",
-    "ne ",
-    "neden",
-    "nasil",
-    "kim",
-    "kac",
-    "hangi",
-    "nerede",
-    "ne zaman",
-    "var mi",
-    "kimden",
-    "kime",
-)
-
-#: Phrases that make a message about *this conversation's own history* rather
-#: than a document's content or a fresh topic. Firing this must send the
-#: message to `chat` (unrestricted history access) regardless of whether a
-#: document happens to be attached -- a document being attached must never
-#: turn a question about the conversation itself into a document question.
-MEMORY_RECALL_MARKERS = (
-    "az once",
-    "biraz once",
-    "az evvel",
-    "demistim",
-    "dedim mi",
-    "demis miydim",
-    "soylemis miydim",
-    "sormus muydum",
-    "sordum mu",
-    "hatirliyor musun",
-    "hatirliyor musunuz",
-    "hatirla",
-    "onceki mesaj",
-    "onceki mesajimda",
-    "onceki sorumda",
-    "yukarida ne dedim",
-    "yukarida ne yazdim",
-    "bu konusmada",
-    "bu sohbette",
-    "sana ne sordum",
-    "sana ne demistim",
-    "en son ne sordum",
-    "en son sana ne",
-    "konusma gecmisi",
-    "gecmis mesajlarda",
-    "ilk mesajimda",
-    "daha once ne sordum",
-    "daha once sordugum",
-    "daha once konustuk",
-    "daha once bahsettim",
-)
-
-_TURKISH_MAP = str.maketrans(
-    {
-        "ç": "c", "Ç": "c", "ğ": "g", "Ğ": "g", "ı": "i", "İ": "i",
-        "ö": "o", "Ö": "o", "ş": "s", "Ş": "s", "ü": "u", "Ü": "u",
-    }
-)
+#: The only pair worth running as one plan. ``draft`` already begins with
+#: ``classification``, so "incele ve cevap yaz" is a single pipeline rather than
+#: two. Every other contested pair is a genuine ambiguity and escalates instead
+#: -- merging ``chat`` into ``draft`` would answer conversationally *and* start
+#: a drafting run, which is not what either reading of the message asked for.
+COMPOUND_PAIR = frozenset({"draft", "analyze"})
 
 
 class PlanDecision(NamedTuple):
-    """The resolved execution plan for one user message."""
+    """The resolved execution plan for one user message.
+
+    Attributes:
+        steps: The sub-workflows to run, in order.
+        intent: The resolved intent.
+        reasoning: Turkish rationale shown to the user.
+        source: Which mechanism decided. ``scored`` for a decisive margin,
+            ``compound`` for a merged plan, ``continuation``/``empty`` for the
+            two special cases, ``model``/``context_default`` when the
+            deterministic layer abstained.
+        confidence: The decision's own confidence in [0, 1], derived from the
+            margin. Lets a caller threshold on it rather than treating every
+            deterministic answer as equally certain.
+        evidence: Ids of the rules that fired. Recorded so a production
+            decision can be explained after the fact -- the previous resolver
+            reported only which branch it took, never which phrase matched.
+        alternatives: Runner-up intents with their scores, highest first.
+    """
 
     steps: list[str]
     intent: Intent
     reasoning: str
     source: str
+    confidence: float = 1.0
+    evidence: tuple[str, ...] = ()
+    alternatives: tuple[tuple[str, float], ...] = ()
 
 
 class IntentOutput(BaseModel):
@@ -206,138 +141,110 @@ class IntentOutput(BaseModel):
     )
 
 
-def normalize(text: str) -> str:
-    """Fold Turkish text to lowercase ASCII for keyword matching.
+def _merge_steps(intents: frozenset[str]) -> list[str]:
+    """Union two intents' step lists, keeping canonical execution order.
 
     Args:
-        text: Raw user text.
+        intents: The intents to merge.
 
     Returns:
-        Lowercase ASCII with punctuation collapsed to single spaces.
+        The merged step list.
     """
-    folded = (text or "").translate(_TURKISH_MAP)
-    folded = unicodedata.normalize("NFKD", folded)
-    ascii_text = folded.encode("ascii", "ignore").decode("ascii").lower()
-    return re.sub(r"[^a-z0-9]+", " ", ascii_text).strip()
+    merged = {step for intent in intents for step in PLAN_BY_INTENT[intent]}
+    return [step for step in STEP_ORDER if step in merged]
 
 
-def _contains_any(haystack: str, needles: tuple[str, ...]) -> bool:
-    """Report whether any needle appears in the normalized haystack."""
-    return any(needle in haystack for needle in needles)
-
-
-def _looks_like_question(raw: str, normalized: str) -> bool:
-    """Heuristically decide whether the message asks something.
-
-    Args:
-        raw: The original message, for punctuation.
-        normalized: The folded message, for token checks.
-
-    Returns:
-        True when the message reads as a question.
-    """
-    if "?" in raw:
-        return True
-    return _contains_any(f" {normalized} ", tuple(f" {m.strip()} " for m in QUESTION_MARKERS))
-
-
-def _is_memory_recall_question(normalized: str) -> bool:
-    """Heuristically decide whether the message asks about earlier turns in
-    *this* conversation, rather than a document or a fresh topic.
-
-    Args:
-        normalized: The folded message, for token checks.
-
-    Returns:
-        True when the message reads as a memory-recall question.
-    """
-    return _contains_any(
-        f" {normalized} ", tuple(f" {m.strip()} " for m in MEMORY_RECALL_MARKERS)
+def _decision(
+    intent: str, scores: IntentScores, source: str, reasoning_suffix: str = ""
+) -> PlanDecision:
+    """Build a decision for a single resolved intent."""
+    return PlanDecision(
+        steps=list(PLAN_BY_INTENT[intent]),
+        intent=intent,  # type: ignore[arg-type]
+        reasoning=REASONING_BY_INTENT[intent] + reasoning_suffix,
+        source=source,
+        confidence=round(scores.confidence, 3),
+        evidence=tuple(scores.evidence),
+        alternatives=tuple(scores.ranked[1:3]),
     )
 
 
 def resolve_plan_deterministic(
     message: str, document_id: Optional[str], previous_intent: Optional[str] = None
 ) -> Optional[PlanDecision]:
-    """Resolve the plan without a model, when the message allows it.
-
-    Precedence is deliberate: an explicit drafting request wins over everything,
-    because "bu belgeye cevap yazısı hazırla" is both a document reference and a
-    drafting request and the drafting flow is the superset.
+    """Resolve the plan without a model, when the evidence allows it.
 
     Args:
         message: The user's message.
         document_id: Storage path of an attached document, when present.
         previous_intent: The intent resolved for this thread's previous turn,
             when known. Lets a short affirmative ("evet, hazırla") continue a
-            draft/analyze offer instead of falling through to plain chat.
+            draft/analyze offer instead of being read as conversational filler.
 
     Returns:
-        A decision, or None when the message is ambiguous.
+        A decision, or None when the evidence is too weak or too evenly split
+        to commit -- which is the signal to escalate, not a failure.
     """
-    normalized = normalize(message)
+    scores = score_intents(message, document_id, previous_intent)
+    ranked = scores.ranked
 
-    if not normalized:
+    if not ranked:
+        logger.info("Intent abstained: no rule fired.")
+        return None
+
+    top_intent, top_score = ranked[0]
+
+    # Nothing scored highly enough to be a candidate at all. Without this floor
+    # a lone weak hint would read as a confident decision purely because
+    # nothing contested it.
+    if top_score < PRESENCE_FLOOR:
+        logger.info("Intent abstained: top score %.2f below presence floor.", top_score)
+        return None
+
+    # Compound is checked before the margin, not after it. "Uygunluk denetimi
+    # yap, sonra cevabı kaleme al" carries explicit evidence for both readings
+    # but scores them unevenly, so a margin test would resolve it to analysis
+    # alone and silently drop the drafting half of the request. When both
+    # intents are independently well-attested, the message asked for both --
+    # how lopsided the scores happen to be is not the question.
+    present = {
+        intent: score for intent, score in ranked if score >= COMPOUND_FLOOR
+    }
+    if COMPOUND_PAIR.issubset(present):
         return PlanDecision(
-            list(PLAN_BY_INTENT["chat"]), "chat", REASONING_BY_INTENT["chat"], "empty"
+            steps=_merge_steps(COMPOUND_PAIR),
+            intent="draft",
+            reasoning=(
+                REASONING_BY_INTENT["draft"]
+                + " (hem inceleme hem taslak istendiği tespit edildi)"
+            ),
+            source="compound",
+            confidence=round(scores.confidence, 3),
+            evidence=tuple(scores.evidence),
+            alternatives=tuple(scores.ranked[1:3]),
         )
 
-    if _contains_any(normalized, DRAFT_KEYWORDS):
-        return PlanDecision(
-            list(PLAN_BY_INTENT["draft"]), "draft", REASONING_BY_INTENT["draft"], "keyword"
-        )
+    if scores.margin >= DECISIVE_MARGIN:
+        if "chat.empty_message" in scores.evidence:
+            return _decision(top_intent, scores, "empty")
+        if f"{top_intent}.continuation" in scores.evidence:
+            return _decision(
+                top_intent, scores, "continuation", " (önceki isteğin devamı)"
+            )
+        return _decision(top_intent, scores, "scored")
 
-    if _contains_any(normalized, ANALYZE_KEYWORDS):
-        return PlanDecision(
-            list(PLAN_BY_INTENT["analyze"]),
-            "analyze",
-            REASONING_BY_INTENT["analyze"],
-            "keyword",
-        )
-
-    if (
-        previous_intent in _CONTINUABLE_INTENTS
-        and len(normalized.split()) <= 6
-        and _contains_any(normalized, CONTINUATION_KEYWORDS)
-    ):
-        return PlanDecision(
-            list(PLAN_BY_INTENT[previous_intent]),
-            previous_intent,  # type: ignore[arg-type]
-            REASONING_BY_INTENT[previous_intent] + " (önceki isteğin devamı)",
-            "continuation",
-        )
-
-    # A question about the conversation itself must never be treated as a
-    # document question just because a document happens to be attached --
-    # unconditional on document_id, unlike the document-question branch below.
-    if _is_memory_recall_question(normalized):
-        return PlanDecision(
-            list(PLAN_BY_INTENT["chat"]),
-            "chat",
-            REASONING_BY_INTENT["chat"] + " (konuşmanın kendisine dair bir soru tespit edildi)",
-            "memory_recall",
-        )
-
-    # A greeting with no document attached needs no further thought.
-    if document_id is None and _contains_any(normalized, CHAT_KEYWORDS):
-        return PlanDecision(
-            list(PLAN_BY_INTENT["chat"]), "chat", REASONING_BY_INTENT["chat"], "keyword"
-        )
-
-    if document_id and _looks_like_question(message, normalized):
-        return PlanDecision(
-            list(PLAN_BY_INTENT["document_qa"]),
-            "document_qa",
-            REASONING_BY_INTENT["document_qa"],
-            "document_question",
-        )
-
-    # No document and nothing document-shaped in the message: conversation.
-    if document_id is None and len(normalized.split()) <= 4:
-        return PlanDecision(
-            list(PLAN_BY_INTENT["chat"]), "chat", REASONING_BY_INTENT["chat"], "short_message"
-        )
-
+    # Two readings, evenly matched, and not the one pair that composes. This is
+    # the honest escalation case: the evidence really is balanced, so guessing
+    # would be worse than paying for a single fast-tier label.
+    runner_up_intent, runner_up_score = ranked[1]
+    logger.info(
+        "Intent abstained: %s (%.2f) vs %s (%.2f), margin %.2f.",
+        top_intent,
+        top_score,
+        runner_up_intent,
+        runner_up_score,
+        scores.margin,
+    )
     return None
 
 
