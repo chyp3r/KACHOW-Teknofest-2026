@@ -20,7 +20,9 @@ but unpopulated rather than instrumented with fabricated numbers.
 
 import logging
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Histogram, Info
+
+from app.ai.policy import POLICY_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +99,16 @@ CLAIM_MATCH = Counter(
     "Draft claims checked against source material, by claim kind and match method.",
     ["kind", "method"],
 )
+
+#: The parameter set the deterministic decisions above were produced under.
+#: Without it a shift in DRAFT_SCORE or CLAIM_MATCH is ambiguous between "the
+#: traffic changed" and "we moved a threshold" -- and those call for opposite
+#: responses. An Info rather than a label so it costs no cardinality.
+POLICY_INFO = Info(
+    "kachow_decision_policy",
+    "Active version of the deterministic decision layer's parameter set.",
+)
+POLICY_INFO.info({"version": POLICY_VERSION})
 
 
 def init_ai_metrics() -> None:

@@ -2,15 +2,16 @@
   "meta": {
     "drafts": {
       "dataset": "drafts",
-      "started_at": "2026-08-03T09:59:37",
-      "total_ms": 4.47
+      "started_at": "2026-08-03T10:24:09",
+      "total_ms": 4.488
     },
     "intents": {
       "dataset": "intents",
-      "started_at": "2026-08-03T09:59:37",
-      "total_ms": 1.662
+      "started_at": "2026-08-03T10:24:09",
+      "total_ms": 1.63
     }
   },
+  "policy_version": "1.0.0",
   "suites": {
     "drafts": {
       "accuracy": 1.0,

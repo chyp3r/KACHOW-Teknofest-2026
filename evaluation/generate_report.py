@@ -23,6 +23,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Optional
 
+from app.ai.policy import POLICY_VERSION
 from evaluation.harness import draft_suite, intent_suite
 from evaluation.harness.runner import REPO_ROOT, EvalRun
 from evaluation.metrics import (
@@ -292,6 +293,8 @@ def build_report(
         "> Bu rapor `make eval` ile üretilir ve **hiç LLM çağrısı içermez**.",
         "> Ölçülen, üretim kodundaki deterministik karar fonksiyonlarının kendisidir.",
         "",
+        f"Policy sürümü: `{POLICY_VERSION}`",
+        "",
     ]
 
     for suite in SUITES:
@@ -363,6 +366,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
 
     payload = {
+        # Stamped so a report can be attributed to the parameter set that
+        # produced it; comparing two runs across a policy bump is comparing
+        # two different systems.
+        "policy_version": POLICY_VERSION,
         "suites": summaries,
         "meta": {
             suite: {
