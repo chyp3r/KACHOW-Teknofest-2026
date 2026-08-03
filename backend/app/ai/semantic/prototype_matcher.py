@@ -6,7 +6,7 @@ Only messages the lexical layer abstained on reach it.
 
 Why this is worth a layer at all
 --------------------------------
-One ``embed_query`` on a short message costs roughly 50-150 ms against a model
+One ``embed_query`` on a short message costs ~21 ms at p50 and ~29 ms at p95, measured against a model
 that is already resident and warm -- ``HybridRetriever`` calls the same service
 on every legislation search. A single fast-tier label costs 1-3 s once the JSON
 schema, Pydantic validation and a possible retry are counted. So a paraphrase
@@ -39,14 +39,20 @@ from typing import Optional, Sequence
 
 from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.policy import POLICY_VERSION, get_policy
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["SemanticMatch", "PrototypeMatcher", "PROTOTYPE_DIR"]
 
-#: Where ``scripts/build_prototypes.py`` writes its output. Resolved from this
-#: file so a bare ``python -m`` invocation and the container agree.
-PROTOTYPE_DIR = Path(__file__).resolve().parents[3].parent / "datasets" / "prototypes"
+#: Where ``scripts/build_prototypes.py`` writes its output.
+#:
+#: Relative to the working directory, matching ``MEVZUAT_CORPUS_DIR``. Deriving
+#: it from ``__file__`` instead looked tidier and was wrong: in the container the
+#: package root *is* the working directory, so walking up past it landed on `/`
+#: and the vectors were written outside every mount, silently discarded when the
+#: container exited.
+PROTOTYPE_DIR = Path(settings.PROTOTYPE_DIR)
 
 
 @dataclass(frozen=True)
