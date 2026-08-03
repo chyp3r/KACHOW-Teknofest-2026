@@ -3,6 +3,13 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 
+## [1.33.0] - 2026-08-03
+### Değiştirildi
+- **Adım Yürütücüsü: Konumdan Hazır-Kümeye** (AP-5 PR-2, davranış-nötr): `execute_step_node`'un `current_step_idx` tabanlı dizi indekslemesi kaldırıldı. Yeni `backend/app/ai/workflows/step_graph.py` -- `StepSpec`, `STEP_SPECS` (6 adımı kapsayan bildirimsel katalog, eskiden `draft`/`routing` için 2 girişli olan `_STEP_DEPENDENCIES`'in genelleştirilmiş hâli), `ready_steps()`, `all_steps_settled()`. Bir adım artık sırasıyla değil, bağımlılıkları (herhangi bir sonuçla) tamamlanmış olduğu için çalışıyor.
+  - `current_step_idx` alanı kalmaya devam ediyor ama artık adım seçmiyor -- yalnızca `human_gate_node`'un interrupt-id hash'i ve ilerleme log satırı için bir sayaç. Yeni `_last_ran_step` alanı, `route_after_step`'in "taslak az önce mi çalıştı" kontrolünü `plan_steps[idx-1]` indekslemesi yerine doğrudan isimle yapmasını sağlıyor.
+  - `asyncio.gather` tabanlı bir çoklu-hazır yol yazıldı ve sentetik bir `parallel_safe` spec çiftiyle test edildi (`test_step_graph.py`) -- ama bugünkü `PLAN_BY_INTENT`'in ürettiği hiçbir plan iki adımı aynı anda hazır hâle getirmiyor (hepsi doğrusal zincir), yani bu yol **üretimde hiç tetiklenmiyor**. Dürüstçe not: bu bir mimari temel, ölçülebilir bir hız kazancı değil (AP-4'ün "ölçülen katkı" disipliniyle aynı).
+  - **Doğrulama:** `make eval` main'in mevcut haliyle birebir aynı (`intents` macro F1 0.9559, `drafts` accuracy 1.0000); `docker compose run --rm backend pytest -q` 813 test geçiyor (804 + 9 yeni); `test_hitl_flow.py`, `test_planner.py`, `test_event_contract.py` özellikle koşuldu.
+
 ## [1.32.0] - 2026-08-03
 ### Değiştirildi
 - **Plan Yürütücüsü: Dispatch Tablosu + `StepStatus` Enum'u** (AP-5 PR-1/3, davranış-nötr): `planning_graph.py`'nin `execute_step_node`'undaki altı dallı `if/elif` zinciri, her adımın kendi `async` fonksiyonuna taşındığı bir `STEP_RUNNERS: dict[str, Callable]` dispatch tablosuna çevrildi. Bu, adım yürütmeyi bir bağımlılık grafiğine (AP-5 PR-2) oturtmanın önkoşuluydu -- dallanmış bir `if` zincirinin üzerine bağımlılık çözümlemesi kurulamaz.
