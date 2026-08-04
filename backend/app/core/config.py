@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     #: whatever storage_path they're given.
     REQUIRE_AUTH: bool = False
 
+    #: Persist each planning-graph run's decision trail to Postgres (see
+    #: app.observability.run_recorder). On by default in every real
+    #: deployment; tests flip it off globally (see conftest.py's
+    #: `_disable_run_recording` autouse fixture) so the hundreds of unit
+    #: tests that exercise the graph for unrelated reasons don't each also
+    #: attempt a real database write.
+    RUN_RECORDING_ENABLED: bool = True
+
     # Ollama Configuration
     # Note: When running inside Docker, set OLLAMA_BASE_URL to http://host.docker.internal:11434
     OLLAMA_BASE_URL: str = "http://localhost:11434"
