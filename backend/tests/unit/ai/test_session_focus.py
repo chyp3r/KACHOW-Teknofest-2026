@@ -107,7 +107,7 @@ def test_a_completed_draft_becomes_the_first_version():
     assert update["draft_history"] == (version,)
 
 
-def test_a_second_settled_draft_is_recorded_as_a_revise_not_a_fresh_draft():
+def test_a_settled_draft_from_the_revise_step_is_recorded_as_a_revise():
     first = DraftVersion(
         version=1, text="v1", correspondence_type="cover_letter",
         confidence_score=70.0, created_from="draft",
@@ -117,7 +117,7 @@ def test_a_second_settled_draft_is_recorded_as_a_revise_not_a_fresh_draft():
     update = compute_focus_update(
         focus,
         document_id=None,
-        plan_intent="draft",
+        plan_intent="revise",
         input_text="Daha resmi yap.",
         draft_result={
             "status": "COMPLETED",
@@ -131,6 +131,55 @@ def test_a_second_settled_draft_is_recorded_as_a_revise_not_a_fresh_draft():
     assert version.version == 2
     assert version.created_from == "revise"
     assert update["draft_history"] == (first, version)
+
+
+def test_a_second_unrelated_draft_request_is_not_mislabeled_as_a_revise():
+    """The version's created_from is keyed off which step produced it, not
+    inferred from "a draft already existed" -- a fresh, unrelated draft
+    request in a later turn is still a "draft", not a "revise" of the first."""
+    first = DraftVersion(
+        version=1, text="v1", correspondence_type="cover_letter",
+        confidence_score=70.0, created_from="draft",
+    )
+    focus = SessionFocus(active_draft=first, draft_history=(first,))
+
+    update = compute_focus_update(
+        focus,
+        document_id=None,
+        plan_intent="draft",
+        input_text="Şimdi de başka bir konuda taslak hazırla.",
+        draft_result={
+            "status": "COMPLETED",
+            "draft": "v2",
+            "correspondence_type": "cover_letter",
+            "combined_score": 90.0,
+        },
+    )
+
+    assert update["active_draft"].created_from == "draft"
+
+
+def test_the_draft_version_carries_its_grounding_forward():
+    update = compute_focus_update(
+        SessionFocus(),
+        document_id=None,
+        plan_intent="draft",
+        input_text="Cevap yazısı hazırla.",
+        draft_result={
+            "status": "COMPLETED",
+            "draft": "...",
+            "correspondence_type": "cover_letter",
+            "combined_score": 80.0,
+            "classification": {"document_type": "official_letter"},
+            "context": "[MEVZUAT] ...",
+            "source_document": "Sayı: E-1, ...",
+        },
+    )
+
+    version = update["active_draft"]
+    assert version.classification == {"document_type": "official_letter"}
+    assert version.context == "[MEVZUAT] ..."
+    assert version.source_document == "Sayı: E-1, ..."
 
 
 def test_a_revise_requested_or_rejected_draft_does_not_become_a_version():

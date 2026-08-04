@@ -30,8 +30,8 @@ _VERSIONABLE_DRAFT_STATUSES = frozenset(
 
 #: Intents whose message is worth folding into the session's objective.
 #: A greeting or a document question isn't part of "what the user wants
-#: built", only a draft/analyze request is.
-_OBJECTIVE_INTENTS = frozenset({"draft", "analyze"})
+#: built"; a draft/analyze/revise request is.
+_OBJECTIVE_INTENTS = frozenset({"draft", "analyze", "revise"})
 
 #: `objective`'s upper bound. A handful of short turns' worth -- enough for
 #: "taslak hazırla" + "kime" + "Valiliğe'ye" to all still be present, not so
@@ -51,6 +51,16 @@ class DraftVersion:
             written under.
         confidence_score: The verifier's combined score at this version.
         created_from: How this version came to exist.
+        classification: The document analysis this version was grounded in.
+            Carried forward so a later `revise` turn can rebuild the same
+            grounding brief without re-running classification -- revise
+            never re-classifies (see `app.ai.workflows.revise`).
+        context: The verified legislation excerpts this version was grounded
+            in, for the same reason.
+        source_document: The incoming document text this version responds
+            to, for the same reason -- without it, a revise turn's
+            groundedness check has strictly less material to match claims
+            against than the original draft's did.
     """
 
     version: int
@@ -58,6 +68,9 @@ class DraftVersion:
     correspondence_type: str
     confidence_score: float
     created_from: Literal["draft", "revise", "human_fill"]
+    classification: dict[str, Any] = dataclasses.field(default_factory=dict)
+    context: str = ""
+    source_document: str = ""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -156,7 +169,11 @@ def compute_focus_update(
 
     draft_status = (draft_result or {}).get("status")
     if draft_status in _VERSIONABLE_DRAFT_STATUSES:
-        created_from = "revise" if focus.active_draft is not None else "draft"
+        # Keyed off which step actually produced this turn's result, not
+        # inferred from "a draft already existed" -- the latter mislabeled
+        # any second, entirely unrelated draft request in a later turn as a
+        # "revise" of the first.
+        created_from = "revise" if plan_intent == "revise" else "draft"
         version = DraftVersion(
             version=len(focus.draft_history) + 1,
             text=draft_result.get("draft", ""),
@@ -167,6 +184,9 @@ def compute_focus_update(
                 or 0.0
             ),
             created_from=created_from,
+            classification=draft_result.get("classification") or {},
+            context=draft_result.get("context") or "",
+            source_document=draft_result.get("source_document") or "",
         )
         update["active_draft"] = version
         update["draft_history"] = (*focus.draft_history, version)
