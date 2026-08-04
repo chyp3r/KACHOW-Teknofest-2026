@@ -138,6 +138,7 @@ def compute_focus_update(
     plan_intent: Optional[str],
     input_text: str,
     draft_result: dict[str, Any],
+    assist_result: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Derive this turn's partial ``SessionFocus`` update.
 
@@ -152,12 +153,20 @@ def compute_focus_update(
         input_text: The user's message this turn.
         draft_result: This turn's settled ``draft_result``, if the plan
             included a draft step. Empty when it didn't.
+        assist_result: This turn's settled ``assist_result``, if the plan
+            included an assist step. Carries ``last_referenced_anchor`` when
+            a document tool read a specific page this turn (see
+            ``app.ai.tools.document_tools``).
 
     Returns:
         A partial update for the ``focus`` channel (see ``merge_focus``).
         Empty when nothing changed.
     """
     update: dict[str, Any] = {}
+
+    anchor = (assist_result or {}).get("last_referenced_anchor")
+    if anchor:
+        update["last_referenced_anchor"] = anchor
 
     if document_id:
         update["active_document_id"] = document_id

@@ -45,7 +45,12 @@ def test_no_tools_are_built_without_a_document_or_a_legislation_retriever():
 def test_document_tools_are_built_only_when_a_document_is_attached():
     tools = build_assistant_tools(**_kwargs(document_id="uploads/doc.pdf"))
     names = {tool.name for tool in tools}
-    assert names == {"search_document", "get_document_details", "get_document_text"}
+    assert names == {
+        "search_document",
+        "get_document_details",
+        "get_document_outline",
+        "get_document_section",
+    }
 
 
 def test_legislation_tool_is_available_without_a_document_when_rag_graph_is_configured():
@@ -94,6 +99,34 @@ async def test_search_document_handler_is_scoped_to_the_attached_document_id():
 
 
 @pytest.mark.asyncio
+async def test_search_document_cites_the_hit_page_when_present():
+    vector_store = AsyncMock()
+    vector_store.hybrid_search.return_value = [
+        {"text": "üçüncü sayfadan bir parça", "metadata": {"page": 3}}
+    ]
+    embeddings_client = AsyncMock()
+    embeddings_client.embed_query.return_value = [0.1]
+
+    class _StubSparseEncoder:
+        def encode_query(self, query):
+            return [], []
+
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/doc.pdf",
+            vector_store=vector_store,
+            embeddings_client=embeddings_client,
+            qa_sparse_encoder=_StubSparseEncoder(),
+        )
+    )
+    search = next(tool for tool in tools if tool.name == "search_document")
+
+    result = await search.handler(query="ne diyor")
+
+    assert result == "[s. 3] üçüncü sayfadan bir parça"
+
+
+@pytest.mark.asyncio
 async def test_search_document_falls_back_to_cached_text_when_search_finds_nothing():
     vector_store = AsyncMock()
     vector_store.hybrid_search.return_value = []
@@ -118,6 +151,56 @@ async def test_search_document_falls_back_to_cached_text_when_search_finds_nothi
     result = await search.handler(query="herhangi bir soru")
 
     assert result == "belgenin tam metni burada"
+
+
+@pytest.mark.asyncio
+async def test_get_document_outline_lists_every_page():
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/doc.pdf",
+            cached_document={"pages": ["Sayı: 1\nBirinci sayfa", "İkinci sayfa metni"]},
+        )
+    )
+    outline = next(tool for tool in tools if tool.name == "get_document_outline")
+
+    result = await outline.handler()
+
+    assert "s.1: Sayı: 1" in result
+    assert "s.2: İkinci sayfa metni" in result
+
+
+@pytest.mark.asyncio
+async def test_get_document_section_reads_the_requested_page_and_records_the_anchor():
+    referenced: list[str] = []
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/doc.pdf",
+            cached_document={"pages": ["birinci sayfa", "ikinci sayfa"]},
+            on_anchor_referenced=referenced.append,
+        )
+    )
+    section = next(tool for tool in tools if tool.name == "get_document_section")
+
+    result = await section.handler(page=2)
+
+    assert "ikinci sayfa" in result
+    assert result.startswith("[s. 2]")
+    assert referenced == ["[s. 2]"]
+
+
+@pytest.mark.asyncio
+async def test_get_document_section_rejects_an_out_of_range_page():
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/doc.pdf",
+            cached_document={"pages": ["tek sayfa"]},
+        )
+    )
+    section = next(tool for tool in tools if tool.name == "get_document_section")
+
+    result = await section.handler(page=5)
+
+    assert "yok" in result
 
 
 class _NoArgs(BaseModel):
