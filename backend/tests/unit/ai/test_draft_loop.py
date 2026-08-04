@@ -66,6 +66,18 @@ async def _one_chunk(text: str):
     yield text
 
 
+def _mock_llm_client() -> MagicMock:
+    """A ``BaseLLMClient`` double whose ``count_tokens`` behaves like a real
+    one. writer_node calls it for real on the success path (LLM_TOKENS
+    metric wiring) -- an unconfigured ``MagicMock(spec=...)`` returns
+    another MagicMock from it, and ``Counter.inc()`` rejects a non-numeric
+    amount, which would otherwise turn every successful test run into a
+    writer_node exception."""
+    client = MagicMock(spec=BaseLLMClient)
+    client.count_tokens = MagicMock(return_value=1)
+    return client
+
+
 @pytest.fixture(autouse=True)
 def _disable_judge(monkeypatch):
     """Isolates the reflexion loop's routing from the judge call: these tests
@@ -76,7 +88,7 @@ def _disable_judge(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_missing_structure_triggers_exactly_one_revision_then_completes():
-    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+    graph = create_draft_graph(_mock_llm_client())
 
     with (
         patch.object(WriterAgent, "stream") as mock_writer,
@@ -100,7 +112,7 @@ async def test_a_placeholder_short_circuits_to_needs_input_after_one_writer_call
     """An explicit [...] placeholder means the writer already told the system
     it doesn't know the value -- retrying produces the same gap or a guess,
     so this must go straight to a human question, never through revise."""
-    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+    graph = create_draft_graph(_mock_llm_client())
 
     with (
         patch.object(WriterAgent, "stream") as mock_writer,
@@ -120,7 +132,7 @@ async def test_a_placeholder_short_circuits_to_needs_input_after_one_writer_call
 
 @pytest.mark.asyncio
 async def test_attempts_stop_at_the_cap_even_when_still_revisable():
-    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+    graph = create_draft_graph(_mock_llm_client())
 
     with (
         patch.object(WriterAgent, "stream") as mock_writer,
@@ -139,7 +151,7 @@ async def test_attempts_stop_at_the_cap_even_when_still_revisable():
 
 @pytest.mark.asyncio
 async def test_a_clean_first_draft_never_reaches_the_reviser():
-    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+    graph = create_draft_graph(_mock_llm_client())
 
     with (
         patch.object(WriterAgent, "stream") as mock_writer,
@@ -156,7 +168,7 @@ async def test_a_clean_first_draft_never_reaches_the_reviser():
 
 @pytest.mark.asyncio
 async def test_writer_exception_ends_the_run_without_reaching_verify():
-    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+    graph = create_draft_graph(_mock_llm_client())
 
     async def _raise(**kwargs):
         raise RuntimeError("model unavailable")
@@ -175,7 +187,7 @@ async def test_writer_exception_ends_the_run_without_reaching_verify():
 
 @pytest.mark.asyncio
 async def test_missing_source_document_fails_before_any_generation_call():
-    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+    graph = create_draft_graph(_mock_llm_client())
     state = {**BASE_STATE, "source_document": ""}
 
     with patch.object(WriterAgent, "stream") as mock_writer:
@@ -207,7 +219,7 @@ def test_resolve_free_text_client_uses_fast_tier_only_for_the_fast_level():
 @pytest.mark.asyncio
 async def test_fast_level_stops_after_one_attempt_and_skips_the_judge():
     graph = create_draft_graph(
-        MagicMock(spec=BaseLLMClient), MagicMock(spec=BaseLLMClient)
+        _mock_llm_client(), _mock_llm_client()
     )
     state = {**BASE_STATE, "reasoning_level": "fast"}
 
@@ -239,7 +251,7 @@ async def test_deep_level_allows_a_third_attempt_and_forces_the_judge_on(monkeyp
     monkeypatch.setattr(settings, "DRAFT_JUDGE_ENABLED", False)
 
     graph = create_draft_graph(
-        MagicMock(spec=BaseLLMClient), MagicMock(spec=BaseLLMClient)
+        _mock_llm_client(), _mock_llm_client()
     )
     state = {**BASE_STATE, "reasoning_level": "deep"}
 
@@ -291,7 +303,7 @@ async def test_a_writer_that_exceeds_its_budget_fails_the_draft_rather_than_the_
     monkeypatch.setattr(
         "app.ai.workflows.draft_graph.node_budget", lambda node, level: 0.05
     )
-    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+    graph = create_draft_graph(_mock_llm_client())
 
     with patch.object(WriterAgent, "stream") as mock_writer:
         mock_writer.side_effect = _never_finishes
@@ -313,7 +325,7 @@ async def test_a_writer_timeout_reports_a_readable_reason(monkeypatch):
     monkeypatch.setattr(
         "app.ai.workflows.draft_graph.node_budget", lambda node, level: 0.05
     )
-    graph = create_draft_graph(MagicMock(spec=BaseLLMClient))
+    graph = create_draft_graph(_mock_llm_client())
 
     with patch.object(WriterAgent, "stream") as mock_writer:
         mock_writer.side_effect = _never_finishes

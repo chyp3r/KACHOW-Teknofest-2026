@@ -19,7 +19,14 @@ class DummySchema(BaseModel):
 
 @pytest.fixture
 def mock_llm_client():
-    return MagicMock()
+    client = MagicMock()
+    # A bare MagicMock's un-configured methods return more MagicMocks, not
+    # ints -- count_tokens is called for real (LLM_TOKENS metric wiring) on
+    # every successful run()/run_structured(), so it needs a real int here
+    # the same way generate()/generate_structured() need their return values
+    # configured per-test.
+    client.count_tokens = MagicMock(return_value=1)
+    return client
 
 
 def test_base_agent_initialization(mock_llm_client):

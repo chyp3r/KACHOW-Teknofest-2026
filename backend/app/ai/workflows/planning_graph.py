@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 from typing import Annotated, Any, Awaitable, Callable, Optional, TypedDict
 
 from langchain_core.runnables import RunnableConfig
@@ -37,7 +38,7 @@ from app.core.config import settings
 from app.core.enums.reasoning_level import ReasoningLevel
 from app.core.enums.step_status import StepStatus
 from app.infrastructure.vectorstore.base import BaseVectorStore
-from app.observability.ai_metrics import HITL_INTERRUPTS
+from app.observability.ai_metrics import HITL_INTERRUPTS, NODE_DURATION
 
 logger = logging.getLogger(__name__)
 
@@ -683,6 +684,7 @@ def create_planning_graph(
             config, step, label, STEP_MESSAGES.get(step, f"{label} yürütülüyor...")
         )
 
+        started = time.perf_counter()
         try:
             runner = STEP_RUNNERS.get(step)
             if runner is not None:
@@ -708,6 +710,13 @@ def create_planning_graph(
             await emit_node_error(
                 config, step, label, f"{label} sırasında bir hata oluştu.", detail=str(exc)
             )
+
+        step_status = updates.get(f"{step}_result", {}).get("status")
+        NODE_DURATION.labels(
+            graph="planning",
+            node=step,
+            status="failed" if step_status == StepStatus.FAILED else "completed",
+        ).observe(time.perf_counter() - started)
 
         # The sub-graphs emit their own node_end events with richer payloads;
         # only announce completion here for steps that have none, and only

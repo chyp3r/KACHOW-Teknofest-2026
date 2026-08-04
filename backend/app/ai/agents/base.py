@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from app.ai.llms.base import BaseLLMClient
 from app.ai.prompts.manager import render_placeholders
-from app.observability.ai_metrics import LLM_DURATION, STRUCT_RETRIES
+from app.observability.ai_metrics import LLM_DURATION, LLM_TOKENS, STRUCT_RETRIES
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +99,23 @@ class BaseAgent(ABC):
 
         return prepared
 
+    def _record_tokens(self, prepared: List[Dict[str, str]], output: str) -> None:
+        """Increment ``LLM_TOKENS`` for one completed call.
+
+        Args:
+            prepared: The exact message list sent to the provider (the
+                largest the prompt gets this call -- what a context-overflow
+                risk needs sizing against).
+            output: The generated text.
+        """
+        prompt_text = "\n".join(msg.get("content", "") for msg in prepared)
+        LLM_TOKENS.labels(agent=self.name, kind="prompt").inc(
+            self.llm_client.count_tokens(prompt_text)
+        )
+        LLM_TOKENS.labels(agent=self.name, kind="completion").inc(
+            self.llm_client.count_tokens(output)
+        )
+
     async def run(
         self,
         messages: Union[str, List[Dict[str, str]]],
@@ -136,6 +153,7 @@ class BaseAgent(ABC):
             for validator in self.validators:
                 validator(response)
 
+            self._record_tokens(prepared, response)
             logger.info(
                 "Agent [%s] generated %d chars in %.2fs",
                 self.name,
@@ -214,6 +232,7 @@ class BaseAgent(ABC):
                 for validator in self.validators:
                     validator(result.model_dump_json())
 
+                self._record_tokens(attempt_messages, result.model_dump_json())
                 logger.info(
                     "Agent [%s] structured %s ok on attempt %d/%d in %.2fs",
                     self.name,

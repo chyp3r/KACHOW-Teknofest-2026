@@ -34,7 +34,7 @@ from app.ai.workflows.events import (
 from app.ai.reasoning_levels import ReasoningLevelPreset, get_reasoning_level_preset
 from app.core.config import settings
 from app.core.enums.reasoning_level import ReasoningLevel
-from app.observability.ai_metrics import DRAFT_REVISIONS, DRAFT_SCORE
+from app.observability.ai_metrics import DRAFT_REVISIONS, DRAFT_SCORE, LLM_TOKENS
 
 logger = logging.getLogger(__name__)
 
@@ -398,6 +398,13 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
             # Fails closed: an apparent injection stops the run for human
             # review rather than being fed into an automatic revision pass.
             assert_no_prompt_leak(draft)
+
+            LLM_TOKENS.labels(agent=agent.name, kind="prompt").inc(
+                client.count_tokens(prompt)
+            )
+            LLM_TOKENS.labels(agent=agent.name, kind="completion").inc(
+                client.count_tokens(draft)
+            )
 
             return {"draft": draft, "attempts": attempt_number, "status": "IN_PROGRESS"}
         except TimeoutError:
