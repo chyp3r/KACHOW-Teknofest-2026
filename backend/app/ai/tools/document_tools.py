@@ -10,11 +10,13 @@ tools; the model never sees them to call in the first place.
 
 import json
 import logging
-from typing import Any, Literal, Optional
+from typing import Any, Callable, Optional
 
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
+from app.ai.documents.anchors import format_anchor
+from app.ai.documents.outline import build_outline, format_outline
 from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.ai.tools.registry import ToolSpec
@@ -25,9 +27,8 @@ logger = logging.getLogger(__name__)
 
 QA_COLLECTION_NAME = "document_qa"
 
-#: Extracted-text slice size. Matches the fallback the retrieval-based path
-#: already used (see the pre-merge ``_run_document_qa``) -- large enough for a
-#: short official document, bounded so it doesn't blow the prompt budget.
+#: Fallback slice size when vector search returns nothing at all and there is
+#: no other way to answer. Bounded so it doesn't blow the prompt budget.
 TEXT_SLICE_CHARS = 8000
 
 
@@ -42,13 +43,15 @@ class GetDocumentDetailsArgs(BaseModel):
     to the one attached document."""
 
 
-class GetDocumentTextArgs(BaseModel):
-    """Arguments for the ``get_document_text`` tool."""
+class GetDocumentOutlineArgs(BaseModel):
+    """``get_document_outline`` takes no arguments; it lists every page of
+    the one attached document."""
 
-    part: Literal["start", "end"] = Field(
-        default="start",
-        description="Belge metninin başı mı sonu mu okunacak.",
-    )
+
+class GetDocumentSectionArgs(BaseModel):
+    """Arguments for the ``get_document_section`` tool."""
+
+    page: int = Field(description="Okunacak sayfa numarası (1'den başlar).")
 
 
 class SearchLegislationArgs(BaseModel):
@@ -67,13 +70,15 @@ def build_assistant_tools(
     qa_result_limit: int,
     rag_graph: Any,
     config: Optional[RunnableConfig],
+    on_anchor_referenced: Optional[Callable[[str], None]] = None,
 ) -> list[ToolSpec]:
     """Build the tool set available to the assistant agent for one turn.
 
     Args:
         document_id: Storage path of the attached document, or None.
-        cached_document: The document's cached analysis/extracted text, when
-            ``document_id`` is set (see ``planning_graph._load_cached_document``).
+        cached_document: The document's cached analysis/extracted text/pages,
+            when ``document_id`` is set (see
+            ``planning_graph._load_cached_document``).
         vector_store: Vector store backing document retrieval.
         embeddings_client: Embeddings client backing document retrieval.
         qa_sparse_encoder: Unfit sparse encoder, same one the pre-merge
@@ -83,6 +88,9 @@ def build_assistant_tools(
         config: The assist step's runnable config, forwarded to the RAG
             sub-graph via ``child_config`` so its own progress events (and any
             tracing callbacks) still reach the SSE stream.
+        on_anchor_referenced: Called with a page anchor (e.g. ``"[s. 3]"``)
+            whenever ``get_document_section`` reads a page, so the caller can
+            carry it into ``SessionFocus.last_referenced_anchor``.
 
     Returns:
         Document-scoped tools only when a document is attached; legislation
@@ -91,6 +99,13 @@ def build_assistant_tools(
     tools: list[ToolSpec] = []
 
     if document_id:
+
+        def _pages() -> list[str]:
+            pages = cached_document.get("pages")
+            if pages:
+                return pages
+            text = cached_document.get("extracted_text")
+            return [text] if text else []
 
         async def _search_document(query: str) -> str:
             if not (vector_store and embeddings_client):
@@ -107,7 +122,12 @@ def build_assistant_tools(
                     limit=qa_result_limit,
                     filter_dict={"storage_path": document_id},
                 )
-                passages = [hit["text"] for hit in hits if hit.get("text")]
+                for hit in hits:
+                    text = hit.get("text")
+                    if not text:
+                        continue
+                    page = (hit.get("metadata") or {}).get("page")
+                    passages.append(f"{format_anchor(page)} {text}" if page else text)
             except Exception:
                 logger.exception("Assistant document search failed")
 
@@ -140,13 +160,22 @@ def build_assistant_tools(
                 )
             return "\n\n".join(parts)
 
-        async def _get_document_text(part: str = "start") -> str:
-            text = cached_document.get("extracted_text") or ""
-            if not text:
+        async def _get_document_outline() -> str:
+            pages = _pages()
+            if not pages:
                 return "Belge metni mevcut değil."
-            if part == "end":
-                return text[-TEXT_SLICE_CHARS:]
-            return text[:TEXT_SLICE_CHARS]
+            return format_outline(build_outline(pages))
+
+        async def _get_document_section(page: int) -> str:
+            pages = _pages()
+            if not pages:
+                return "Belge metni mevcut değil."
+            if page < 1 or page > len(pages):
+                return f"Belgede {page}. sayfa yok. Belge {len(pages)} sayfadan oluşuyor."
+            anchor = format_anchor(page)
+            if on_anchor_referenced:
+                on_anchor_referenced(anchor)
+            return f"{anchor}\n\n{pages[page - 1]}"
 
         tools.extend(
             [
@@ -155,7 +184,7 @@ def build_assistant_tools(
                     description=(
                         "Yüklenmiş belgede belirli bir soru veya konuyla ilgili "
                         "içerik ara. Belgenin belirli bir kısmı hakkında soru "
-                        "sorulduğunda kullan."
+                        "sorulduğunda kullan. Sonuçlar [s. N] ile sayfa atfı taşır."
                     ),
                     args_schema=SearchDocumentArgs,
                     handler=_search_document,
@@ -171,14 +200,26 @@ def build_assistant_tools(
                     handler=_get_document_details,
                 ),
                 ToolSpec(
-                    name="get_document_text",
+                    name="get_document_outline",
                     description=(
-                        "Belgenin ham metninin başını veya sonunu okur. Arama "
-                        "sonuç vermediğinde veya belgenin tam metni gerektiğinde "
-                        "kullan."
+                        "Belgenin sayfa listesini ve her sayfanın ilk satırını "
+                        "getirir. Belgenin genel yapısını görmek veya hangi "
+                        "sayfada ne olduğunu bulmak için search_document sonuç "
+                        "vermeden önce ya da 'kaç sayfa' gibi sorularda kullan."
                     ),
-                    args_schema=GetDocumentTextArgs,
-                    handler=_get_document_text,
+                    args_schema=GetDocumentOutlineArgs,
+                    handler=_get_document_outline,
+                ),
+                ToolSpec(
+                    name="get_document_section",
+                    description=(
+                        "Belgenin belirli bir sayfasının tam metnini okur. "
+                        "Kullanıcı belirli bir sayfayı işaret ettiğinde (örn. "
+                        "'3. sayfayı açıkla') veya get_document_outline ile "
+                        "ilgili sayfayı belirledikten sonra kullan."
+                    ),
+                    args_schema=GetDocumentSectionArgs,
+                    handler=_get_document_section,
                 ),
             ]
         )

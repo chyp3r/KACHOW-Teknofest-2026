@@ -613,6 +613,11 @@ def create_planning_graph(
                 len(history),
             )
 
+        referenced_anchor: dict[str, str] = {}
+
+        def _record_referenced_anchor(anchor: str) -> None:
+            referenced_anchor["anchor"] = anchor
+
         tools = build_assistant_tools(
             document_id=document_id,
             cached_document=cached,
@@ -622,6 +627,7 @@ def create_planning_graph(
             qa_result_limit=QA_RESULT_LIMIT,
             rag_graph=rag_graph,
             config=config,
+            on_anchor_referenced=_record_referenced_anchor,
         )
 
         chunks: list[str] = []
@@ -641,11 +647,14 @@ def create_planning_graph(
                     chunks.append(chunk)
                     await emit_token(config, "assist", chunk)
             reply = "".join(chunks).strip()
-            return {
+            result = {
                 "reply": reply,
                 "status": StepStatus.COMPLETED,
                 "history": [{"role": "assistant", "content": reply}],
             }
+            if referenced_anchor.get("anchor"):
+                result["last_referenced_anchor"] = referenced_anchor["anchor"]
+            return result
         except asyncio.TimeoutError:
             logger.warning("Assist step timed out")
             return {
@@ -673,6 +682,7 @@ def create_planning_graph(
             plan_intent=state.get("plan_intent"),
             input_text=state.get("input_text", ""),
             draft_result=state.get("draft_result") or {},
+            assist_result=state.get("assist_result") or {},
         )
         return {"focus": update} if update else {}
 
