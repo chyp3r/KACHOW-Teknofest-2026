@@ -62,6 +62,19 @@ async def test_recursive_chunker():
 
 
 @pytest.mark.asyncio
+async def test_recursive_chunker_tags_each_chunk_with_its_source_offset():
+    """start_index is what lets a chunk be mapped back to a page number via
+    PageMap (see app.ai.documents.anchors) -- without it every chunk's
+    metadata is empty and document search can't cite a page."""
+    chunker = RecursiveChunker(chunk_size=15, chunk_overlap=2)
+    text = "This is a long sentence for recursive chunking."
+    docs = await chunker.split_text(text)
+
+    assert all("start_index" in doc.metadata for doc in docs)
+    assert text[docs[1].metadata["start_index"]:].startswith(docs[1].page_content)
+
+
+@pytest.mark.asyncio
 async def test_semantic_chunker():
     mock_client = MagicMock()
     # Sentence 1 and 2 will be close; sentence 3 will be far away (semantically different)
