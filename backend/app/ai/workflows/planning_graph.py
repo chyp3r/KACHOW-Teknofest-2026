@@ -16,6 +16,7 @@ from app.ai.agents.memory_summarizer import MemorySummarizerAgent
 from app.ai.context import ContextBlock, ContextBuilder, TokenBudget, select_history_window
 from app.ai.context.compress import truncate_with_marker
 from app.ai.embeddings.models import BaseEmbeddingsClient
+from app.ai.session.focus import SessionFocus, compute_focus_update, merge_focus
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
@@ -198,6 +199,14 @@ class PlanningState(TypedDict, total=False):
     #: consolidation only summarizes the newly-overflowed delta each turn
     #: instead of re-summarizing the whole backlog.
     history_summarized_through: int
+    #: Task-level state (active draft + its version history, the session's
+    #: accumulated objective, and -- once later phases exist to populate
+    #: them -- a pending clarification and the last-referenced document
+    #: anchor). The one PlanningState channel `planning_node` does NOT
+    #: reset every turn: everything else here answers "what happened this
+    #: turn", this answers "what are we working on across turns". Updated
+    #: by `focus_node`, never by `planning_node`. See `app.ai.session.focus`.
+    focus: Annotated[SessionFocus, merge_focus]
 
 
 def _requested_correspondence_type(classification: dict[str, Any]) -> str | None:
@@ -623,6 +632,26 @@ def create_planning_graph(
             logger.exception("Assist step failed")
             return {"reply": f"Yanıt üretilemedi: {exc}", "status": StepStatus.FAILED}
 
+    async def focus_node(state: PlanningState, config: RunnableConfig) -> dict[str, Any]:
+        """Update the session's persistent focus from this turn's settled results.
+
+        Runs once per turn, after the executor loop (and human_gate, if it
+        ran) finish -- the same timing as consolidate_memory_node and for
+        the same reason: it must see the turn's final, settled draft_result,
+        not a mid-reflexion-loop snapshot. A separate node rather than folded
+        into consolidate_memory_node, which stays focused on its own single
+        concern (see its docstring).
+        """
+        focus = state.get("focus") or SessionFocus()
+        update = compute_focus_update(
+            focus,
+            document_id=state.get("document_id"),
+            plan_intent=state.get("plan_intent"),
+            input_text=state.get("input_text", ""),
+            draft_result=state.get("draft_result") or {},
+        )
+        return {"focus": update} if update else {}
+
     async def consolidate_memory_node(
         state: PlanningState, config: RunnableConfig
     ) -> dict[str, Any]:
@@ -1023,6 +1052,7 @@ def create_planning_graph(
     builder.add_node("planning", planning_node)
     builder.add_node("executor", execute_step_node)
     builder.add_node("human_gate", human_gate_node)
+    builder.add_node("focus", focus_node)
     builder.add_node("consolidate_memory", consolidate_memory_node)
 
     builder.add_edge(START, "planning")
@@ -1030,13 +1060,14 @@ def create_planning_graph(
     builder.add_conditional_edges(
         "executor",
         route_after_step,
-        {"continue": "executor", "human_gate": "human_gate", "end": "consolidate_memory"},
+        {"continue": "executor", "human_gate": "human_gate", "end": "focus"},
     )
     builder.add_conditional_edges(
         "human_gate",
         route_after_gate,
-        {"human_gate": "human_gate", "continue": "executor", "end": "consolidate_memory"},
+        {"human_gate": "human_gate", "continue": "executor", "end": "focus"},
     )
+    builder.add_edge("focus", "consolidate_memory")
     builder.add_edge("consolidate_memory", END)
 
     return builder.compile(checkpointer=checkpointer)
