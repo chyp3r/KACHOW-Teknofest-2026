@@ -185,16 +185,16 @@ class BudgetPolicy:
     node_seconds: Mapping[str, float] = field(
         default_factory=lambda: MappingProxyType(
             {
-                "analyze": 90.0,
-                "retrieve_mevzuat": 15.0,
-                "suggest_mevzuat": 45.0,
-                "route": 30.0,
-                "writer": 120.0,
-                "assist": 45.0,
+                "analyze": 140.0,
+                "retrieve_mevzuat": 25.0,
+                "suggest_mevzuat": 70.0,
+                "route": 45.0,
+                "writer": 180.0,
+                "assist": 70.0,
             }
         )
     )
-    workflow_ceiling_seconds: float = 300.0
+    workflow_ceiling_seconds: float = 480.0
 
 
 @dataclass(frozen=True)
