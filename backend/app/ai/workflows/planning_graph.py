@@ -5,6 +5,7 @@ import logging
 import os
 import time
 from typing import Annotated, Any, Awaitable, Callable, Optional, TypedDict
+from uuid import uuid4
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.errors import GraphInterrupt
@@ -20,6 +21,7 @@ from app.ai.session.focus import SessionFocus, compute_focus_update, merge_focus
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
+from app.ai.response.builder import build_response
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.ai.semantic.prototype_matcher import PrototypeMatcher
 from app.ai.tools.document_tools import build_assistant_tools
@@ -43,6 +45,7 @@ from app.core.enums.reasoning_level import ReasoningLevel
 from app.core.enums.step_status import StepStatus
 from app.infrastructure.vectorstore.base import BaseVectorStore
 from app.observability.ai_metrics import HITL_INTERRUPTS, NODE_DURATION
+from app.observability.run_recorder import end_run, record_step, start_run
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +172,18 @@ class PlanningState(TypedDict, total=False):
 
     input_text: str
     document_id: str | None
+    #: The authenticated caller, when REQUIRE_AUTH is on (see
+    #: ChatService._invoke). None in the open demo/dev path. Read only by
+    #: the run-recording hooks in this module -- not otherwise part of any
+    #: routing or context-building decision.
+    user_id: str | None
+    #: This turn's audit-trail id (see app.observability.run_recorder).
+    #: Generated fresh in planning_node each turn, like plan_steps -- but
+    #: survives a human-in-the-loop pause/resume via the checkpointer
+    #: (resuming re-enters the graph at human_gate, not planning_node, so
+    #: the *same* run_id is what lets end_run() close out the run it
+    #: actually started with).
+    run_id: str
     #: Speed-vs-quality tier for this run ("fast"/"balanced"/"deep"); read by
     #: draft_graph via _run_draft. Absent resolves to "balanced" downstream.
     reasoning_level: str
@@ -423,7 +438,25 @@ def create_planning_graph(
             },
         )
 
+        run_id = uuid4().hex
+        thread_id = (config.get("configurable") or {}).get("thread_id", "")
+        await start_run(
+            run_id=run_id,
+            thread_id=thread_id,
+            user_id=state.get("user_id"),
+            document_id=state.get("document_id"),
+            input_text=state["input_text"],
+            intent=decision.intent,
+            plan_steps=decision.steps,
+            source=decision.source,
+            confidence=decision.confidence,
+            evidence=decision.evidence,
+            alternatives=decision.alternatives,
+            clarification=decision.clarification,
+        )
+
         return {
+            "run_id": run_id,
             "plan_steps": decision.steps,
             "plan_intent": decision.intent,
             "current_step_idx": 0,
@@ -646,12 +679,14 @@ def create_planning_graph(
                 ):
                     chunks.append(chunk)
                     await emit_token(config, "assist", chunk)
-            reply = "".join(chunks).strip()
+            reply, flagged = build_response("".join(chunks).strip())
             result = {
                 "reply": reply,
                 "status": StepStatus.COMPLETED,
                 "history": [{"role": "assistant", "content": reply}],
             }
+            if flagged:
+                result["flagged"] = True
             if referenced_anchor.get("anchor"):
                 result["last_referenced_anchor"] = referenced_anchor["anchor"]
             return result
@@ -696,7 +731,18 @@ def create_planning_graph(
         A separate terminal node rather than folded into planning_node, whose
         docstring commits it to staying sub-millisecond (deterministic, no LLM
         call); this node's LLM call is conditional and only ever runs here.
+
+        Also the run-recording audit trail's closing hook (see
+        app.observability.run_recorder.end_run): the true last node before
+        END (a paused human-in-the-loop run never reaches this node at all --
+        its run stays "running" until a resume eventually does).
         """
+        final_output = state.get("final_output") or {}
+        await end_run(
+            run_id=state.get("run_id", ""),
+            status=str(final_output.get("status", "unknown")).lower(),
+        )
+
         pending, boundary = _pending_consolidation(
             state.get("history") or [],
             state.get("history_summarized_through", 0),
@@ -921,11 +967,18 @@ def create_planning_graph(
             )
 
         step_status = updates.get(_result_key(step), {}).get("status")
+        step_duration = time.perf_counter() - started
+        step_outcome = "failed" if step_status == StepStatus.FAILED else "completed"
         NODE_DURATION.labels(
-            graph="planning",
-            node=step,
-            status="failed" if step_status == StepStatus.FAILED else "completed",
-        ).observe(time.perf_counter() - started)
+            graph="planning", node=step, status=step_outcome
+        ).observe(step_duration)
+        await record_step(
+            run_id=state.get("run_id", ""),
+            step=step,
+            status=step_outcome,
+            duration_ms=step_duration * 1000,
+            error=updates.get(_result_key(step), {}).get("error"),
+        )
 
         # The sub-graphs emit their own node_end events with richer payloads;
         # only announce completion here for steps that have none, and only

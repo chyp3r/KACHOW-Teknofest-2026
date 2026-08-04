@@ -56,7 +56,7 @@ class ChatService:
         """
         thread_id = self._thread_id(request.session_id, user_id)
         config = self._trace_config(thread_id)
-        state = await self._invoke(request, config=config)
+        state = await self._invoke(request, config=config, user_id=user_id)
         return await self._response_from_state(state, config, thread_id)
 
     async def handle_message_stream(
@@ -88,7 +88,7 @@ class ChatService:
                 config = self._trace_config(thread_id)
                 config.setdefault("configurable", {})["status_queue"] = queue
 
-                state = await self._invoke(request, config=config)
+                state = await self._invoke(request, config=config, user_id=user_id)
                 await self._enqueue_terminal_event(queue, state, config, thread_id)
             except asyncio.CancelledError:
                 raise
@@ -285,13 +285,21 @@ class ChatService:
         return {"status": "interrupted", "interrupt": interrupt_payload}
 
     async def _invoke(
-        self, request: ChatMessageRequest, config: dict[str, Any]
+        self,
+        request: ChatMessageRequest,
+        config: dict[str, Any],
+        user_id: Optional[str] = None,
     ) -> dict[str, Any]:
         """Run the planning graph under a timeout.
 
         Args:
             request: The chat request.
             config: The LangGraph runnable config.
+            user_id: The authenticated caller's id, when known -- carried
+                into the graph's own state (not just the thread_id prefix)
+                so the run-recording audit trail (see
+                app.observability.run_recorder) can attribute a run to a
+                user without parsing it back out of thread_id.
 
         Returns:
             The final (or paused) workflow state.
@@ -323,6 +331,7 @@ class ChatService:
                         "input_text": request.message,
                         "document_id": request.document_id,
                         "reasoning_level": request.reasoning_level.value,
+                        "user_id": user_id,
                     },
                     config=config,
                 ),

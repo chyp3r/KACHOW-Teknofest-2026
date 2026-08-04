@@ -1,0 +1,50 @@
+name: Backend Tests
+
+# The actual regression gate is the pytest suite below (see
+# evaluation/generate_report.py's own docstring: "Regressions are gated by
+# tests/unit/ai/, not by this report"). The eval suites run alongside it as
+# an always-green, informational artifact -- exactly the role the Makefile's
+# `eval`/`make eval` target already gives them locally; this workflow does
+# not change that contract, it just runs both in CI instead of only by hand.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Build the backend image
+        run: docker compose build backend
+
+      # Mirrors `make test` exactly -- db/redis/qdrant come up automatically
+      # via the backend service's depends_on. No Ollama model is needed: the
+      # suite mocks every LLM/embeddings client (see tests/conftest.py).
+      - name: Run the backend test suite
+        run: docker compose run --rm backend pytest -q
+
+      # Mirrors `make eval` exactly -- deterministic, no LLM calls, no
+      # dependant services (--no-deps). Always exits 0 by design; failures
+      # here would indicate the command itself broke, not a score
+      # regression, which the step above already gates.
+      - name: Run the deterministic evaluation suites
+        if: always()
+        run: docker compose run --rm --no-deps backend python -m evaluation.generate_report --suite all
+
+      - name: Upload the evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-report
+          path: evaluation/reports/
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

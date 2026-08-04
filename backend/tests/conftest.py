@@ -187,6 +187,24 @@ def no_checkpointer(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _disable_run_recording(monkeypatch):
+    """Turn off app.observability.run_recorder's DB writes for every test.
+
+    Most tests that exercise the planning graph (the large majority of
+    tests/unit/ai and tests/integration) have nothing to do with run
+    recording -- without this, each one would also attempt a real Postgres
+    write per plan step, which is slow, noisy (unawaited-coroutine warnings
+    once a test's own event loop closes before an in-flight write settles),
+    and untested by tests that never asked for it. Mirrors `no_checkpointer`
+    above: real infra off by default, opted back into explicitly by the
+    handful of tests in test_run_recorder.py that actually test this.
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "RUN_RECORDING_ENABLED", False)
+
+
+@pytest.fixture(autouse=True)
 def _reset_redis_cache_between_tests():
     """Drop the process-wide Redis client reference after every test.
 
