@@ -31,12 +31,13 @@ that call remains a single label from the fast tier.
 """
 
 import logging
-from typing import TYPE_CHECKING, Literal, NamedTuple, Optional
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Optional
 
 from pydantic import BaseModel, Field
 
 from app.ai.llms.base import BaseLLMClient
-from app.ai.workflows.intent_rules import Intent
+from app.ai.session.focus import SessionFocus
+from app.ai.workflows.intent_rules import CONTINUATION_SURFACES, Intent
 from app.ai.workflows.intent_scorer import (
     COMPOUND_FLOOR,
     DECISIVE_MARGIN,
@@ -75,26 +76,59 @@ __all__ = [
 #: and reaches for document retrieval itself when the question needs it, rather
 #: than the router having to decide in advance whether an answer needs the
 #: document. See ``app.ai.workflows.planning_graph``'s ``_run_assist``.
+#: ``revise`` is deliberately its own single-step plan, not a variant of
+#: ``draft``: it never re-runs classification and never re-retrieves
+#: legislation, only the one LLM call that rewrites the targeted part of the
+#: already-active draft (see ``app.ai.workflows.revise``). ``clarify`` costs
+#: nothing at all -- it renders a question from ``PlanDecision.clarification``
+#: and ends the turn there.
 PLAN_BY_INTENT: dict[str, list[str]] = {
     "draft": ["classification", "draft", "routing"],
     "analyze": ["classification"],
     "assist": ["assist"],
+    "revise": ["revise"],
+    "clarify": ["clarify"],
 }
 
 REASONING_BY_INTENT: dict[str, str] = {
     "draft": "Resmî yazı talebi tespit edildi: evrak analizi, taslak üretimi ve birim yönlendirmesi çalıştırılacak.",
     "analyze": "Evrak analizi talebi tespit edildi: sınıflandırma ve uygunluk denetimi çalıştırılacak.",
     "assist": "Genel bir soru veya belge hakkında bir soru tespit edildi: asistan yanıtı hazırlanacak.",
+    "revise": "Mevcut taslakta bir revizyon talebi tespit edildi: hedefli düzeltme çalıştırılacak.",
+    "clarify": "İstek belirsiz olduğu için kullanıcıya açıklayıcı bir soru soruldu.",
 }
 
 #: Canonical execution order, used to merge two intents' step lists without
-#: letting the merge invent an ordering of its own.
+#: letting the merge invent an ordering of its own. ``clarify`` is absent on
+#: purpose: it never appears in a compound plan (see ``COMPOUND_PAIR``).
 STEP_ORDER: tuple[str, ...] = (
     "classification",
     "draft",
+    "revise",
     "routing",
     "assist",
 )
+
+#: Intents expensive enough that a wrong guess costs real LLM calls and
+#: wall-clock time (a full draft run, or a targeted rewrite) rather than a
+#: single conversational reply -- see ``resolve_plan``'s clarify-vs-guess
+#: decision.
+_EXPENSIVE_INTENTS = frozenset({"draft", "revise"})
+
+#: Turkish description of each intent, used to phrase a clarifying question
+#: in terms a user recognizes rather than an internal name like "revise".
+_CLARIFY_LABELS: dict[str, str] = {
+    "draft": "bir taslak hazırlama isteği",
+    "revise": "mevcut taslakta bir revizyon isteği",
+    "analyze": "bir evrak analizi isteği",
+    "assist": "genel bir soru veya sohbet",
+}
+
+#: A bare confirmation to a clarifying question selects its leading option --
+#: the same short-affirmative vocabulary the continuation rule already uses
+#: for confirming a *decisive* turn, reused here for confirming an
+#: *undecided* one.
+_AFFIRMATIVE_SURFACES = CONTINUATION_SURFACES
 
 #: The only pair worth running as one plan. ``draft`` already begins with
 #: ``classification``, so "incele ve cevap yaz" is a single pipeline rather than
@@ -123,6 +157,11 @@ class PlanDecision(NamedTuple):
             decision can be explained after the fact -- the previous resolver
             reported only which branch it took, never which phrase matched.
         alternatives: Runner-up intents with their scores, highest first.
+        clarification: Set only when ``intent == "clarify"``: the question
+            and its options (``[{"intent", "label"}, ...]``), written into
+            ``SessionFocus.pending_clarification`` so the next turn's reply
+            can be resolved against the same options instead of re-scoring
+            from nothing (see ``_try_resolve_pending_clarification``).
     """
 
     steps: list[str]
@@ -132,6 +171,7 @@ class PlanDecision(NamedTuple):
     confidence: float = 1.0
     evidence: tuple[str, ...] = ()
     alternatives: tuple[tuple[str, float], ...] = ()
+    clarification: Optional[dict[str, Any]] = None
 
 
 class IntentOutput(BaseModel):
@@ -175,7 +215,10 @@ def _decision(
 
 
 def resolve_plan_deterministic(
-    message: str, document_id: Optional[str], previous_intent: Optional[str] = None
+    message: str,
+    document_id: Optional[str],
+    previous_intent: Optional[str] = None,
+    has_active_draft: bool = False,
 ) -> Optional[PlanDecision]:
     """Resolve the plan without a model, when the evidence allows it.
 
@@ -184,13 +227,16 @@ def resolve_plan_deterministic(
         document_id: Storage path of an attached document, when present.
         previous_intent: The intent resolved for this thread's previous turn,
             when known. Lets a short affirmative ("evet, hazırla") continue a
-            draft/analyze offer instead of being read as conversational filler.
+            draft/analyze/revise offer instead of being read as conversational
+            filler.
+        has_active_draft: Whether ``SessionFocus.active_draft`` is set --
+            gates ``revise``'s rules (see ``score_intents``).
 
     Returns:
         A decision, or None when the evidence is too weak or too evenly split
         to commit -- which is the signal to escalate, not a failure.
     """
-    scores = score_intents(message, document_id, previous_intent)
+    scores = score_intents(message, document_id, previous_intent, has_active_draft)
     ranked = scores.ranked
 
     if not ranked:
@@ -253,6 +299,107 @@ def resolve_plan_deterministic(
     return None
 
 
+def _build_clarify_decision(scores: IntentScores) -> PlanDecision:
+    """Build a deterministic, LLM-free clarifying question from contested scores.
+
+    Called when neither the lexical nor the semantic rung was decisive and
+    the leading (non-decisive) candidate is expensive enough that guessing
+    wrong is worse than asking -- see ``resolve_plan``.
+
+    Args:
+        scores: The scoring outcome that was too close to call.
+
+    Returns:
+        A ``clarify`` decision carrying the question and its options in
+        ``clarification``.
+    """
+    top_two = list(scores.ranked[:2])
+    if len(top_two) == 1:
+        # Only one candidate ever cleared the presence floor, but nothing
+        # contested it decisively enough either -- pair it with `assist` so
+        # the question still offers a real alternative, not a confirmation
+        # of a foregone conclusion.
+        top_two.append(("assist", 0.0))
+
+    options = [
+        {"intent": intent, "label": _CLARIFY_LABELS.get(intent, intent)}
+        for intent, _ in top_two
+    ]
+    question = (
+        f"Bu isteğinizi {options[0]['label']} olarak mı, yoksa "
+        f"{options[1]['label']} olarak mı değerlendirmemi istersiniz?"
+    )
+
+    return PlanDecision(
+        steps=list(PLAN_BY_INTENT["clarify"]),
+        intent="clarify",
+        reasoning=REASONING_BY_INTENT["clarify"],
+        source="clarify",
+        confidence=round(scores.confidence, 3),
+        evidence=tuple(scores.evidence),
+        alternatives=tuple(top_two),
+        clarification={"question": question, "options": options},
+    )
+
+
+def _try_resolve_pending_clarification(
+    message: str, pending: Optional[dict[str, Any]]
+) -> Optional[PlanDecision]:
+    """Resolve a reply against an open clarifying question, if it answers it.
+
+    Checked before the normal ladder runs at all: an explicit answer to
+    "taslak mı, revizyon mu?" must not be re-scored from nothing, where a
+    short reply could easily fall below the presence floor on its own.
+
+    Args:
+        message: The user's new message.
+        pending: ``SessionFocus.pending_clarification``, or ``None``/empty
+            when there is nothing open.
+
+    Returns:
+        A decision for whichever option the reply selected, or ``None`` when
+        the message doesn't clearly answer the question -- the caller then
+        falls through to the normal ladder, and the stale clarification is
+        superseded rather than forced onto an unrelated new message.
+    """
+    if not pending:
+        return None
+    options = pending.get("options") or []
+    if not options:
+        return None
+
+    normalized = normalize(message)
+    words = normalized.split()
+
+    selected: Optional[str] = None
+    if len(words) <= 4 and any(
+        f" {surface} " in f" {normalized} " for surface in _AFFIRMATIVE_SURFACES
+    ):
+        selected = options[0]["intent"]
+    else:
+        for option in options:
+            label = option.get("label") or ""
+            candidate_intent = option.get("intent") or ""
+            if (label and normalize(label) in normalized) or (
+                candidate_intent and normalize(candidate_intent) in normalized
+            ):
+                selected = candidate_intent
+                break
+
+    if not selected or selected not in PLAN_BY_INTENT:
+        return None
+
+    return PlanDecision(
+        steps=list(PLAN_BY_INTENT[selected]),
+        intent=selected,  # type: ignore[arg-type]
+        reasoning=REASONING_BY_INTENT[selected]
+        + " (açıklayıcı soruya verilen yanıtla çözüldü)",
+        source="clarification_resolved",
+        confidence=1.0,
+        evidence=("clarification.resolved",),
+    )
+
+
 async def classify_intent_with_model(
     llm_client: BaseLLMClient, message: str, document_id: Optional[str]
 ) -> Intent:
@@ -313,29 +460,49 @@ async def resolve_plan(
     llm_client: Optional[BaseLLMClient] = None,
     previous_intent: Optional[str] = None,
     matcher: Optional["PrototypeMatcher"] = None,
+    focus: Optional[SessionFocus] = None,
 ) -> PlanDecision:
     """Resolve the execution plan for a user message.
 
-    Three rungs, cheapest first. The lexical layer answers almost everything at
-    no cost; what it abstains on is a paraphrase it has no surface for, or a
-    genuinely unclear message. The semantic layer separates those two at roughly
-    a twentieth of what the model rung costs, and the model rung remains for
-    what is actually unclear.
+    Cheapest first. The lexical layer answers almost everything at no cost;
+    the semantic layer separates a real paraphrase from a genuinely unclear
+    message at roughly a twentieth of what a model call costs. What's left
+    once both abstain no longer escalates to the model by default: a cheap
+    candidate (``assist``) is guessed, an expensive one (``draft``/``revise``)
+    is asked about instead of risked, and the model rung is now reserved for
+    the case neither rung produced any signal for at all.
 
     Args:
         message: The user's message.
         document_id: Storage path of an attached document, when present.
-        llm_client: Fast-tier client for the ambiguous case. When omitted, an
-            ambiguous message resolves by context instead of by model.
+        llm_client: Fast-tier client for the genuinely signal-free case. When
+            omitted, that case resolves by context instead of by model.
         previous_intent: The intent resolved for this thread's previous turn,
             when known -- enables the short-affirmative continuation rule.
         matcher: Prototype matcher for the semantic rung. Omitted or unavailable
             means the ladder simply skips it, exactly as before it existed.
+        focus: The session's persistent focus. Supplies whether a draft is
+            active (gates ``revise``) and any open clarifying question
+            (checked first, before the ladder runs at all).
 
     Returns:
         The execution plan and the rationale shown to the user.
     """
-    decided = resolve_plan_deterministic(message, document_id, previous_intent)
+    if focus is not None and focus.pending_clarification:
+        resolved = _try_resolve_pending_clarification(
+            message, focus.pending_clarification
+        )
+        if resolved is not None:
+            logger.info(
+                "Plan resolved via pending clarification: intent=%s", resolved.intent
+            )
+            return resolved
+
+    has_active_draft = bool(focus and focus.active_draft is not None)
+
+    decided = resolve_plan_deterministic(
+        message, document_id, previous_intent, has_active_draft
+    )
     if decided is not None:
         logger.info(
             "Plan resolved deterministically (%s): %s", decided.source, decided.steps
@@ -362,20 +529,37 @@ async def resolve_plan(
         if match is not None:
             logger.info(
                 "Semantic match not decisive (%s, similarity=%.3f, gap=%.3f); "
-                "escalating to the model.",
+                "checking whether it's worth a clarifying question before the model.",
                 match.label,
                 match.similarity,
                 match.runner_up_gap,
             )
 
-    if llm_client is None:
-        intent: Intent = "assist"
-        source = "context_default"
-    else:
-        intent = await classify_intent_with_model(llm_client, message, document_id)
-        source = "model"
+    # Neither rung was decisive. Re-scoring here (rather than threading the
+    # scores `resolve_plan_deterministic` already discarded on abstain) keeps
+    # that function's own contract simple; the recomputation is pure
+    # arithmetic over a small table, not worth the coupling to avoid.
+    scores = score_intents(message, document_id, previous_intent, has_active_draft)
+    candidate = scores.ranked[0][0] if scores.ranked else None
 
-    logger.info("Plan resolved via %s: intent=%s", source, intent)
-    return PlanDecision(
-        list(PLAN_BY_INTENT[intent]), intent, REASONING_BY_INTENT[intent], source
-    )
+    if candidate is None:
+        if llm_client is None:
+            intent: Intent = "assist"
+            source = "context_default"
+        else:
+            intent = await classify_intent_with_model(llm_client, message, document_id)
+            source = "model"
+        logger.info("Plan resolved via %s: intent=%s", source, intent)
+        return PlanDecision(
+            list(PLAN_BY_INTENT[intent]), intent, REASONING_BY_INTENT[intent], source
+        )
+
+    if candidate in _EXPENSIVE_INTENTS:
+        logger.info(
+            "Contested candidate '%s' is expensive to guess wrong; asking instead.",
+            candidate,
+        )
+        return _build_clarify_decision(scores)
+
+    logger.info("Contested candidate '%s' is cheap; guessing rather than asking.", candidate)
+    return _decision(candidate, scores, "guessed_cheap")

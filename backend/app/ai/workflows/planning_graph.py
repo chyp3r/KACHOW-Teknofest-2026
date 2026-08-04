@@ -36,6 +36,7 @@ from app.ai.workflows.events import (
     emit_token,
 )
 from app.ai.workflows.planner import resolve_plan
+from app.ai.workflows.revise import run_revise
 from app.ai.workflows.step_graph import STEP_SPECS, StepSpec, all_steps_settled, ready_steps
 from app.core.config import settings
 from app.core.enums.reasoning_level import ReasoningLevel
@@ -52,6 +53,8 @@ STEP_LABELS = {
     "draft": "Taslak Oluşturma",
     "routing": "Birim Yönlendirme",
     "assist": "Asistan",
+    "revise": "Taslak Revizyonu",
+    "clarify": "Açıklayıcı Soru",
 }
 
 STEP_MESSAGES = {
@@ -59,6 +62,8 @@ STEP_MESSAGES = {
     "draft": "Resmî cevap taslağı hazırlanıyor...",
     "routing": "Cevap taslağının iletileceği birim analiz ediliyor...",
     "assist": "Asistan yanıtı hazırlanıyor...",
+    "revise": "Taslak talebe göre güncelleniyor...",
+    "clarify": "İsteğinizi netleştirmek için bir soru hazırlanıyor...",
 }
 
 def _dependency_failed(
@@ -183,6 +188,17 @@ class PlanningState(TypedDict, total=False):
     draft_result: dict[str, Any]
     routing_result: dict[str, Any]
     assist_result: dict[str, Any]
+    #: revise/clarify write their real payload into draft_result/assist_result
+    #: respectively (see _result_key) so downstream code -- human_gate,
+    #: routing, focus_node's versioning, the "reply" the user sees -- treats
+    #: them uniformly with draft/assist. These two exist only so the
+    #: scheduler (step_graph.ready_steps/all_steps_settled, which keys
+    #: readiness on `state[f"{step}_result"]` for every step generically)
+    #: has something to see -- an update key LangGraph's TypedDict schema
+    #: doesn't declare is silently dropped, not stored, which without this
+    #: field left both steps looking permanently unsettled and looping.
+    revise_result: dict[str, Any]
+    clarify_result: dict[str, Any]
     final_output: dict[str, Any]
     #: Persists across separate ainvoke() calls on the same checkpointer
     #: thread_id (see ChatService._thread_id) -- this is the whole memory
@@ -387,6 +403,7 @@ def create_planning_graph(
             intent_client,
             previous_intent=state.get("plan_intent"),
             matcher=prototype_matcher,
+            focus=state.get("focus") or SessionFocus(),
         )
         logger.info(
             "Plan: %s (intent=%s, source=%s)",
@@ -416,8 +433,15 @@ def create_planning_graph(
             "draft_result": {},
             "routing_result": {},
             "assist_result": {},
+            "revise_result": {},
+            "clarify_result": {},
             "final_output": {},
             "history": [{"role": "user", "content": state["input_text"]}],
+            # Always written, even to None: a decision of any other kind
+            # supersedes and clears a stale open question rather than
+            # leaving it to linger once it's no longer what the next reply
+            # is actually answering.
+            "focus": {"pending_clarification": decision.clarification},
         }
 
     async def _run_classification(
@@ -714,6 +738,63 @@ def create_planning_graph(
         if assist_result.get("history"):
             updates["history"] = assist_result["history"]
 
+    async def _step_revise(
+        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
+    ) -> None:
+        focus = state.get("focus") or SessionFocus()
+        active_draft = focus.active_draft
+        if active_draft is None:
+            # Not reachable through the router today -- revise's own rules
+            # only score with an active draft present (see intent_rules.py)
+            # -- but a resumed or hand-crafted state could still land here.
+            result = {
+                "status": StepStatus.FAILED,
+                "error": "Revize edilecek aktif bir taslak bulunamadı.",
+                "draft": "",
+            }
+            updates["draft_result"] = result
+            # `ready_steps`/`all_steps_settled` (step_graph.py) key readiness
+            # on `state[f"{step}_result"]` generically -- "revise" writes its
+            # real payload into `draft_result` instead (see `_result_key`
+            # below), so it also needs this thin same-status marker or the
+            # scheduler never sees the step as having run and the executor
+            # loops on it forever.
+            updates["revise_result"] = {"status": result["status"]}
+            return
+
+        result = await run_revise(
+            active_draft=active_draft,
+            instructions=state["input_text"],
+            correspondence_type=active_draft.correspondence_type,
+            llm_client=llm_client,
+            fast_llm_client=fast_llm_client,
+            reasoning_level=state.get("reasoning_level", ReasoningLevel.BALANCED.value),
+            config=config,
+            emit_token_fn=emit_token,
+        )
+        updates["draft_result"] = result
+        updates["revise_result"] = {"status": result["status"]}
+        # "revise" is in `_execute_one_step`'s completion-skip set (its
+        # result lives under draft_result, not revise_result -- see
+        # `_result_key`), so unlike assist/routing it must announce its own
+        # completion here rather than relying on the generic fallback.
+        if result.get("status") != StepStatus.FAILED:
+            await emit_node_end(
+                config, "revise", "Taslak Revizyonu", "Taslak revizyonu tamamlandı.", result
+            )
+
+    async def _step_clarify(
+        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
+    ) -> None:
+        focus = state.get("focus") or SessionFocus()
+        pending = focus.pending_clarification or {}
+        question = pending.get("question") or "Bu isteğinizi biraz açar mısınız?"
+        updates["assist_result"] = {"reply": question, "status": StepStatus.COMPLETED}
+        # Same reason as _step_revise's marker: the scheduler keys readiness
+        # on `clarify_result`, not on the `assist_result` key this step's
+        # actual payload lives in.
+        updates["clarify_result"] = {"status": StepStatus.COMPLETED}
+
     #: One entry per dispatchable step name. Each runner reads whatever it
     #: needs from `state`/`classification` and writes its result(s) directly
     #: into `updates` -- the same contract the old `if/elif` chain's branches
@@ -727,7 +808,39 @@ def create_planning_graph(
         "draft": _step_draft,
         "routing": _step_routing,
         "assist": _step_assist,
+        "revise": _step_revise,
+        "clarify": _step_clarify,
     }
+
+    def _result_key(step: str) -> str:
+        """The `updates` key a step's own result lives under.
+
+        `f"{step}_result"` for every step except the two that deliberately
+        write into an existing key instead of a new one of their own: revise
+        updates `draft_result` (so human_gate/routing/focus_node's
+        versioning treat a revision exactly like a fresh draft, see
+        `app.ai.workflows.revise`), and clarify updates `assist_result` (its
+        question is surfaced through the same "reply" plumbing as an
+        ordinary conversational answer).
+        """
+        return {"revise": "draft_result", "clarify": "assist_result"}.get(
+            step, f"{step}_result"
+        )
+
+    def _mark_step_result(updates: dict[str, Any], step: str, payload: dict[str, Any]) -> None:
+        """Record a generic (skipped/failed) outcome for `step`.
+
+        Always writes `f"{step}_result"`: `ready_steps`/`all_steps_settled`
+        (step_graph.py) key readiness on that name for every step uniformly,
+        regardless of where a *successful* run's richer payload ends up (see
+        `_result_key`) -- a step whose runner never got to write its own
+        marker (raised before doing so, or was skipped outright) must still
+        settle here, or the executor loops on it forever.
+        """
+        updates[f"{step}_result"] = payload
+        payload_key = _result_key(step)
+        if payload_key != f"{step}_result":
+            updates.setdefault(payload_key, payload)
 
     async def _execute_one_step(
         state: PlanningState, config: RunnableConfig, step: str
@@ -763,7 +876,7 @@ def create_planning_graph(
             )
             logger.warning("Skipping plan step '%s': %s", step, reason)
             await emit_node_skipped(config, step, label, reason)
-            updates[f"{step}_result"] = {"status": StepStatus.SKIPPED, "reason": reason}
+            _mark_step_result(updates, step, {"status": StepStatus.SKIPPED, "reason": reason})
             return updates
 
         await emit_node_start(
@@ -792,12 +905,12 @@ def create_planning_graph(
             raise
         except Exception as exc:
             logger.exception("Plan step '%s' failed", step)
-            updates[f"{step}_result"] = {"status": StepStatus.FAILED, "error": str(exc)}
+            _mark_step_result(updates, step, {"status": StepStatus.FAILED, "error": str(exc)})
             await emit_node_error(
                 config, step, label, f"{label} sırasında bir hata oluştu.", detail=str(exc)
             )
 
-        step_status = updates.get(f"{step}_result", {}).get("status")
+        step_status = updates.get(_result_key(step), {}).get("status")
         NODE_DURATION.labels(
             graph="planning",
             node=step,
@@ -807,13 +920,13 @@ def create_planning_graph(
         # The sub-graphs emit their own node_end events with richer payloads;
         # only announce completion here for steps that have none, and only
         # when the step didn't already report itself via emit_node_error above.
-        if step in {"classification", "draft", "routing"}:
+        if step in {"classification", "draft", "routing", "revise"}:
             pass
-        elif updates.get(f"{step}_result", {}).get("status") == StepStatus.FAILED:
+        elif updates.get(_result_key(step), {}).get("status") == StepStatus.FAILED:
             pass
         else:
             await emit_node_end(
-                config, step, label, f"{label} tamamlandı.", updates.get(f"{step}_result", {})
+                config, step, label, f"{label} tamamlandı.", updates.get(_result_key(step), {})
             )
 
         return updates
@@ -1026,7 +1139,7 @@ def create_planning_graph(
     def route_after_step(state: PlanningState) -> str:
         steps = state.get("plan_steps") or []
 
-        if has_checkpointer and state.get("_last_ran_step") == "draft":
+        if has_checkpointer and state.get("_last_ran_step") in {"draft", "revise"}:
             draft_result = state.get("draft_result") or {}
             draft_status = draft_result.get("status")
             if draft_status == StepStatus.NEEDS_INPUT:

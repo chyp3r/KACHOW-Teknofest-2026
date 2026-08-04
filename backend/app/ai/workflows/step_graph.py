@@ -48,6 +48,11 @@ STEP_SPECS: dict[str, StepSpec] = {
     "draft": StepSpec(name="draft", depends_on=("classification",)),
     "routing": StepSpec(name="routing", depends_on=("draft",)),
     "assist": StepSpec(name="assist"),
+    #: No dependency on "classification": revise operates on
+    #: SessionFocus.active_draft, never re-classifies. See app.ai.workflows.revise.
+    "revise": StepSpec(name="revise"),
+    #: Deterministic, LLM-free -- see planner._build_clarify_decision.
+    "clarify": StepSpec(name="clarify"),
 }
 
 
