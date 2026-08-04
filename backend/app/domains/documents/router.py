@@ -1,19 +1,24 @@
-import asyncio
-import json
-import os
+from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 from app.ai.workflows.correspondence import CORRESPONDENCE_TYPE_LABELS
-from app.api.dependency import get_document_analysis_service, get_draft_service, require_auth_if_enabled
+from app.api.dependency import (
+    get_document_analysis_service,
+    get_document_repository,
+    get_draft_service,
+    require_auth_if_enabled,
+)
+from app.api.exceptions.authorization import AuthorizationException
 from app.api.exceptions.validation import ValidationException
 from app.api.rate_limit import rate_limit
 from app.api.responses import SuccessResponse
-from app.core.config import settings
 from app.core.constants import MAX_FILE_SIZE_BYTES
 from app.domains.documents.service import DocumentService
 from app.domains.documents.draft_service import DraftService
+from app.domains.documents.repository import DocumentRepository
 from app.domains.documents.schema.document_schema import DraftRequestSchema
+from app.domains.users.model.user_model import UserModel
 from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 from app.shared.validator.storage_path_validator import validate_storage_path
 
@@ -69,6 +74,7 @@ async def analyze_document(
     http_request: Request,
     file: UploadFile = File(..., description="Analiz edilecek evrak dosyası."),
     service: DocumentService = Depends(get_document_analysis_service),
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
     _: None = Depends(rate_limit(max_requests=10, window_seconds=60, key_prefix="documents:analyze")),
 ):
     """Perform the first review (ön inceleme) of an incoming official document.
@@ -82,6 +88,9 @@ async def analyze_document(
             before the body is read at all.
         file: The uploaded document.
         service: Injected document analysis service.
+        current_user: The authenticated caller, when ``REQUIRE_AUTH`` is on --
+            registered as the document's owner so later reads can be
+            restricted to it. ``None`` in the open demo/dev path.
 
     Returns:
         The analysis result inside the unified success envelope.
@@ -99,6 +108,7 @@ async def analyze_document(
         file_name=file.filename or "evrak",
         content=content,
         content_type=file.content_type,
+        owner_id=current_user.id if current_user else None,
     )
     # mode="json" is required: the response envelope is serialised with json.dumps,
     # which cannot handle nested Pydantic models or enum members.
@@ -120,36 +130,42 @@ async def generate_draft(
 
 
 @router.get("", response_model=None)
-async def list_documents(pagination: PaginationParam = Depends()):
+async def list_documents(
+    pagination: PaginationParam = Depends(),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+):
     """List uploaded documents with their summary metadata, newest first.
 
     Args:
         pagination: Page/size query parameters.
+        document_repository: Ownership/listing registry.
+        current_user: The authenticated caller, when ``REQUIRE_AUTH`` is on --
+            the list is restricted to documents it owns. ``None`` in the open
+            demo/dev path lists every document, matching today's behaviour.
 
     Returns:
         A paginated envelope over the 7-field library projection (see
         ``GET /documents/{storage_path}`` for the full analysis).
     """
-    metadata_file = os.path.join(settings.LOCAL_STORAGE_DIR, "uploads_metadata.json")
+    owner_id = current_user.id if current_user else None
+    documents = await document_repository.list_for_owner(
+        owner_id, skip=pagination.offset, limit=pagination.limit
+    )
+    total = await document_repository.count_for_owner(owner_id)
 
-    def _read() -> list[dict]:
-        if not os.path.exists(metadata_file):
-            return []
-        with open(metadata_file, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    try:
-        # json.load on a synchronous file handle blocks the event loop for
-        # every list call; the library grows without bound as documents are
-        # uploaded, so this was not a one-time cost.
-        data = await asyncio.to_thread(_read)
-    except Exception:
-        data = []
-
-    data.sort(key=lambda item: item.get("upload_time", ""), reverse=True)
-
-    total = len(data)
-    page_items = data[pagination.offset : pagination.offset + pagination.limit]
+    page_items = [
+        {
+            "file_name": document.file_name,
+            "storage_path": document.id,
+            "upload_time": document.created_at.isoformat(),
+            "document_type": document.document_type,
+            "document_type_label": document.document_type_label,
+            "compliance_status": document.compliance_status,
+            "summary": document.summary,
+        }
+        for document in documents
+    ]
     pages = (total + pagination.size - 1) // pagination.size if pagination.size else 0
 
     return SuccessResponse(
@@ -183,6 +199,8 @@ async def list_correspondence_types():
 async def get_document_analysis(
     storage_path: str,
     service: DocumentService = Depends(get_document_analysis_service),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
 ):
     """Return a previously computed analysis in full.
 
@@ -196,6 +214,11 @@ async def get_document_analysis(
         storage_path: The document's storage key (as returned by
             ``POST /documents/analyze``).
         service: Injected document analysis service.
+        document_repository: Ownership registry, checked before returning
+            content when a real user is attached to the request.
+        current_user: The authenticated caller, when ``REQUIRE_AUTH`` is on.
+            ``None`` in the open demo/dev path skips the ownership check
+            entirely, matching today's behaviour.
 
     Returns:
         The full analysis inside the unified success envelope.
@@ -203,11 +226,18 @@ async def get_document_analysis(
     Raises:
         HTTPException: 400 if storage_path is malformed, 404 if no analysis
             is cached for it.
+        AuthorizationException: 403 if the document belongs to a different
+            user than the one making the request.
     """
     try:
         validate_storage_path(storage_path)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if current_user is not None and not await document_repository.is_owned_by(
+        storage_path, current_user.id
+    ):
+        raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
 
     result = await service.get_cached_analysis(storage_path)
     if result is None:

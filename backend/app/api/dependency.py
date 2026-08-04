@@ -23,6 +23,7 @@ from app.infrastructure.storage import get_storage_client
 from app.infrastructure.vectorstore import get_vector_store
 from app.domains.documents.service import DocumentService
 from app.domains.documents.draft_service import DraftService
+from app.domains.documents.repository import DocumentRepository
 from app.domains.chat.chat_service import ChatService
 from app.domains.users.model.user_model import UserModel
 from app.domains.users.repository import UserRepository
@@ -146,13 +147,20 @@ async def get_document_analysis_graph(
     return _document_analysis_graph
 
 
+def get_document_repository(db: AsyncSession = Depends(get_db)) -> DocumentRepository:
+    """Provide the document ownership/listing registry repository."""
+    return DocumentRepository(db)
+
+
 def get_document_analysis_service(
     analysis_graph: Any = Depends(get_document_analysis_graph),
+    document_repository: DocumentRepository = Depends(get_document_repository),
 ) -> DocumentService:
     """Provide the document analysis service with its collaborators injected.
 
     Args:
         analysis_graph: The compiled analysis workflow.
+        document_repository: Ownership/listing registry.
 
     Returns:
         A ready-to-use `DocumentService`.
@@ -163,6 +171,7 @@ def get_document_analysis_service(
         analysis_graph=analysis_graph,
         embedding_service=EmbeddingService(embeddings_client=get_embeddings_client()),
         vector_store=get_vector_store(),
+        document_repository=document_repository,
     )
 
 # ---------------------------------------------------------------------------

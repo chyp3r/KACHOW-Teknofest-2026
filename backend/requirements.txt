@@ -26,6 +26,7 @@ langfuse==4.14.2
 mcp==1.29.0
 fastmcp==3.4.5
 bcrypt==5.0.0
+PyJWT==2.13.0
 email-validator==2.3.0
 python-multipart==0.0.32
 opendataloader-pdf==2.5.0

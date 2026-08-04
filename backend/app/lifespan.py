@@ -85,6 +85,28 @@ async def _startup() -> None:
             logger.warning("A startup warm-up step failed: %s", result)
 
 
+def _require_auth_in_production() -> None:
+    """Refuse to boot a production deployment with auth left open.
+
+    /chat and /documents hold a local model busy for tens of seconds per
+    request and read whatever storage_path/session_id they're given (see
+    settings.REQUIRE_AUTH's docstring) -- open by default so the competition
+    demo works without a login flow, but a real "production" deployment left
+    that way is the IDOR this phase exists to close. Refusing to boot is
+    deliberate: REQUIRE_AUTH is trivial to flip and a log line is easy to
+    miss, but a process that never started is not.
+
+    Raises:
+        RuntimeError: If `ENVIRONMENT == "production"` and `REQUIRE_AUTH` is
+            not enabled.
+    """
+    if settings.ENVIRONMENT == "production" and not settings.REQUIRE_AUTH:
+        raise RuntimeError(
+            "REQUIRE_AUTH must be enabled when ENVIRONMENT=production -- "
+            "set REQUIRE_AUTH=true or run with ENVIRONMENT=development/staging."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage application startup and shutdown.
@@ -96,6 +118,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         Control to the running application.
     """
     logger.info("Starting %s (%s)...", settings.PROJECT_NAME, settings.ENVIRONMENT)
+
+    _require_auth_in_production()
 
     # Registers the event bus's listeners as a side effect of import (the
     # @subscribe decorator runs at module load time). Without this import

@@ -1,17 +1,43 @@
 import json
 import logging
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from app.api.dependency import get_chat_service, require_auth_if_enabled
+from app.api.dependency import get_chat_service, get_document_repository, require_auth_if_enabled
+from app.api.exceptions.authorization import AuthorizationException
 from app.api.rate_limit import rate_limit
 from app.api.responses import SuccessResponse
 from app.domains.chat.chat_service import ChatService
 from app.domains.chat.schema.chat_schema import ChatMessageRequest, ChatResumeRequest
+from app.domains.documents.repository import DocumentRepository
+from app.domains.users.model.user_model import UserModel
 
 logger = logging.getLogger(__name__)
+
+
+async def _verify_document_ownership(
+    document_id: Optional[str],
+    current_user: Optional[UserModel],
+    document_repository: DocumentRepository,
+) -> None:
+    """Refuse a chat turn that attaches a document the caller doesn't own.
+
+    A document being attached only changes which tools the assistant can
+    call (see app.ai.tools.document_tools's module docstring) -- nothing
+    upstream of that previously checked whether the caller was allowed to
+    attach it in the first place. ``current_user=None`` (``REQUIRE_AUTH``
+    disabled) skips the check entirely, matching the open demo/dev path.
+
+    Raises:
+        AuthorizationException: If the document is registered to a
+            different owner than ``current_user``.
+    """
+    if not document_id or current_user is None:
+        return
+    if not await document_repository.is_owned_by(document_id, current_user.id):
+        raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
 
 # See require_auth_if_enabled / settings.REQUIRE_AUTH: a no-op by default so
 # the demo works without the frontend implementing a login flow.
@@ -105,6 +131,8 @@ def _sse_response(
 async def send_chat_message(
     request: ChatMessageRequest,
     service: ChatService = Depends(get_chat_service),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
 ):
     """Orchestrate a chat interaction and return the completed result.
 
@@ -113,7 +141,10 @@ async def send_chat_message(
     May also return an ``INTERRUPTED`` status when the run paused at the
     human-in-the-loop gate; resume it via ``POST /chat/resume``.
     """
-    result = await service.handle_message(request)
+    await _verify_document_ownership(request.document_id, current_user, document_repository)
+    result = await service.handle_message(
+        request, user_id=current_user.id if current_user else None
+    )
     return SuccessResponse(data=make_serializable(result.model_dump()))
 
 
@@ -122,6 +153,8 @@ async def stream_chat_message(
     request: ChatMessageRequest,
     http_request: Request,
     service: ChatService = Depends(get_chat_service),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
     _: None = Depends(rate_limit(max_requests=20, window_seconds=60, key_prefix="chat:stream")),
 ):
     """Orchestrate a chat interaction and stream progress events over SSE.
@@ -134,7 +167,12 @@ async def stream_chat_message(
     human-in-the-loop gate, an ``interrupt`` event carrying what the human
     needs to answer.
     """
-    return _sse_response(service.handle_message_stream(request), http_request)
+    # Checked before entering the SSE response, not inside the generator, so
+    # a denied request gets a normal 403 instead of a stream that opens and
+    # then immediately reports a generic error.
+    await _verify_document_ownership(request.document_id, current_user, document_repository)
+    user_id = current_user.id if current_user else None
+    return _sse_response(service.handle_message_stream(request, user_id=user_id), http_request)
 
 
 @router.post("/resume", response_model=None)
@@ -142,6 +180,7 @@ async def resume_chat_stream(
     request: ChatResumeRequest,
     http_request: Request,
     service: ChatService = Depends(get_chat_service),
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
     _: None = Depends(rate_limit(max_requests=30, window_seconds=60, key_prefix="chat:resume")),
 ):
     """Resume a run paused at the human-in-the-loop gate, streaming over SSE.
@@ -150,8 +189,10 @@ async def resume_chat_stream(
     without regenerating it. ``action="approve"|"revise"|"reject"`` resolves a
     draft that needed a human's sign-off before unit routing.
     """
+    user_id = current_user.id if current_user else None
+    ChatService._verify_thread_ownership(request.session_id, user_id)
     return _sse_response(
-        service.resume_stream(request.session_id, request), http_request
+        service.resume_stream(request.session_id, request, user_id=user_id), http_request
     )
 
 
@@ -159,9 +200,12 @@ async def resume_chat_stream(
 async def resume_chat_sync(
     request: ChatResumeRequest,
     service: ChatService = Depends(get_chat_service),
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
 ):
     """Resume a paused run and return the completed (or re-paused) result."""
-    result = await service.resume(request.session_id, request)
+    result = await service.resume(
+        request.session_id, request, user_id=current_user.id if current_user else None
+    )
     return SuccessResponse(data=make_serializable(result.model_dump()))
 
 
@@ -169,6 +213,7 @@ async def resume_chat_sync(
 async def get_session_state(
     session_id: str,
     service: ChatService = Depends(get_chat_service),
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
 ):
     """Report whether a session is idle, running, or paused on an interrupt.
 
@@ -178,5 +223,7 @@ async def get_session_state(
     """
     if not session_id:
         raise HTTPException(status_code=422, detail="session_id is required.")
-    state = await service.get_session_state(session_id)
+    state = await service.get_session_state(
+        session_id, user_id=current_user.id if current_user else None
+    )
     return SuccessResponse(data=state)
