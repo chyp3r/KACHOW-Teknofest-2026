@@ -160,3 +160,59 @@ async def test_chat_service_threads_the_requested_reasoning_level_into_the_graph
 
     graph_input = mock_planning_graph.ainvoke.call_args.args[0]
     assert graph_input["reasoning_level"] == "fast"
+
+
+# ==========================================
+# Ownership (Faz 5): thread_id <-> user_id
+# ==========================================
+def test_thread_id_is_unchanged_for_an_anonymous_caller():
+    """The REQUIRE_AUTH=False demo/dev path keeps today's behaviour exactly."""
+    assert ChatService._thread_id("abc", user_id=None) == "abc"
+
+
+def test_thread_id_embeds_the_authenticated_user():
+    assert ChatService._thread_id("abc", user_id="user-1") == "user-1:abc"
+
+
+def test_thread_id_generates_a_session_id_when_authenticated_and_none_given():
+    thread_id = ChatService._thread_id(None, user_id="user-1")
+    assert thread_id.startswith("user-1:")
+
+
+def test_owns_thread_is_always_true_when_unauthenticated():
+    assert ChatService._owns_thread("user-2:some-session", user_id=None) is True
+
+
+def test_owns_thread_true_for_the_thread_s_own_user():
+    assert ChatService._owns_thread("user-1:abc", user_id="user-1") is True
+
+
+def test_owns_thread_false_for_a_different_user():
+    """The core IDOR check: user B must not be able to resume/inspect a
+    thread that was created under user A's id."""
+    assert ChatService._owns_thread("user-1:abc", user_id="user-2") is False
+
+
+@pytest.mark.asyncio
+async def test_resume_refuses_a_thread_belonging_to_a_different_user(
+    chat_service, mock_planning_graph
+):
+    from app.api.exceptions.authorization import AuthorizationException
+    from app.domains.chat.schema.chat_schema import ChatResumeRequest
+
+    request = ChatResumeRequest(session_id="user-1:abc", action="approve")
+
+    with pytest.raises(AuthorizationException):
+        await chat_service.resume("user-1:abc", request, user_id="user-2")
+
+    mock_planning_graph.ainvoke.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_session_state_refuses_a_thread_belonging_to_a_different_user(
+    chat_service,
+):
+    from app.api.exceptions.authorization import AuthorizationException
+
+    with pytest.raises(AuthorizationException):
+        await chat_service.get_session_state("user-1:abc", user_id="user-2")

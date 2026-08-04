@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from app.ai.reasoning_levels import get_reasoning_level_preset
 from app.api.exceptions.ai_error import AIException
+from app.api.exceptions.authorization import AuthorizationException
 from app.core.constants import AI_WORKFLOW_TIMEOUT_SECONDS
 from app.domains.chat.schema.chat_schema import (
     ChatMessageRequest,
@@ -34,11 +35,18 @@ class ChatService:
         """
         self.planning_graph = planning_graph
 
-    async def handle_message(self, request: ChatMessageRequest) -> ChatMessageResponse:
+    async def handle_message(
+        self, request: ChatMessageRequest, user_id: Optional[str] = None
+    ) -> ChatMessageResponse:
         """Process a user message and return the completed (or paused) result.
 
         Args:
             request: The chat request.
+            user_id: The authenticated caller's id, when ``REQUIRE_AUTH`` is
+                on -- folded into the thread_id so one user cannot address
+                another's thread by guessing/reusing its session_id. ``None``
+                in the open demo/dev path, unchanged from before this
+                existed.
 
         Returns:
             The orchestrated response.
@@ -46,13 +54,13 @@ class ChatService:
         Raises:
             AIException: If the workflow fails or exceeds its timeout.
         """
-        thread_id = self._thread_id(request.session_id)
+        thread_id = self._thread_id(request.session_id, user_id)
         config = self._trace_config(thread_id)
         state = await self._invoke(request, config=config)
         return await self._response_from_state(state, config, thread_id)
 
     async def handle_message_stream(
-        self, request: ChatMessageRequest
+        self, request: ChatMessageRequest, user_id: Optional[str] = None
     ) -> AsyncIterator[dict[str, Any]]:
         """Process a user message, yielding progress events as they happen.
 
@@ -63,13 +71,14 @@ class ChatService:
 
         Args:
             request: The chat request.
+            user_id: See :meth:`handle_message`.
 
         Yields:
             Progress and result events. The first event is always ``session``,
             carrying the resolved ``thread_id`` -- generated server-side when
             the caller didn't supply one -- so the client can resume later.
         """
-        thread_id = self._thread_id(request.session_id)
+        thread_id = self._thread_id(request.session_id, user_id)
         yield {"event": "session", "thread_id": thread_id}
 
         queue: asyncio.Queue = asyncio.Queue()
@@ -113,12 +122,22 @@ class ChatService:
             # let teardown of a cancelled task raise out of the generator.
             await asyncio.gather(task, return_exceptions=True)
 
-    async def resume(self, session_id: str, request: ChatResumeRequest) -> ChatMessageResponse:
+    async def resume(
+        self,
+        session_id: str,
+        request: ChatResumeRequest,
+        user_id: Optional[str] = None,
+    ) -> ChatMessageResponse:
         """Resume a run paused at the human-in-the-loop gate and await its result.
 
         Args:
             session_id: The thread_id the paused run is waiting on.
             request: The human's answer/decision.
+            user_id: The authenticated caller's id, when ``REQUIRE_AUTH`` is
+                on. Must match the user_id the thread was created under (see
+                :meth:`_thread_id`), or the resume is refused -- otherwise an
+                authenticated caller could resume another user's paused run
+                simply by knowing/guessing its session_id.
 
         Returns:
             The orchestrated response, completed or paused again (e.g. when
@@ -126,9 +145,12 @@ class ChatService:
 
         Raises:
             AIException: If resuming fails or exceeds its timeout.
+            AuthorizationException: If ``session_id`` belongs to a different
+                user than ``user_id``.
         """
         from langgraph.types import Command
 
+        self._verify_thread_ownership(session_id, user_id)
         HITL_RESUMES.labels(action=request.action).inc()
         config = self._trace_config(session_id)
         # No explicit escalation on this resume -> preset resolves to
@@ -158,7 +180,10 @@ class ChatService:
         return await self._response_from_state(state, config, session_id)
 
     async def resume_stream(
-        self, session_id: str, request: ChatResumeRequest
+        self,
+        session_id: str,
+        request: ChatResumeRequest,
+        user_id: Optional[str] = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Resume a paused run, yielding progress events as they happen.
 
@@ -169,12 +194,18 @@ class ChatService:
         Args:
             session_id: The thread_id the paused run is waiting on.
             request: The human's answer/decision.
+            user_id: See :meth:`resume`.
 
         Yields:
             Progress and result events.
+
+        Raises:
+            AuthorizationException: If ``session_id`` belongs to a different
+                user than ``user_id``.
         """
         from langgraph.types import Command
 
+        self._verify_thread_ownership(session_id, user_id)
         HITL_RESUMES.labels(action=request.action).inc()
         timeout = ORCHESTRATION_TIMEOUT_SECONDS * get_reasoning_level_preset(
             request.reasoning_level
@@ -219,18 +250,26 @@ class ChatService:
                 task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
-    async def get_session_state(self, session_id: str) -> dict[str, Any]:
+    async def get_session_state(
+        self, session_id: str, user_id: Optional[str] = None
+    ) -> dict[str, Any]:
         """Report whether a session is idle, running, or paused on an interrupt.
 
         Args:
             session_id: The thread_id to inspect.
+            user_id: See :meth:`resume`.
 
         Returns:
             ``{"status": "interrupted", "interrupt": {...}}`` when paused,
             ``{"status": "idle", "interrupt": None}`` otherwise (including
             when no checkpointer is configured, in which case a session can
             never be found paused).
+
+        Raises:
+            AuthorizationException: If ``session_id`` belongs to a different
+                user than ``user_id``.
         """
+        self._verify_thread_ownership(session_id, user_id)
         config = self._trace_config(session_id)
         try:
             snapshot = await self.planning_graph.aget_state(config)
@@ -399,16 +438,50 @@ class ChatService:
         }
 
     @staticmethod
-    def _thread_id(session_id: Optional[str]) -> str:
+    def _thread_id(session_id: Optional[str], user_id: Optional[str] = None) -> str:
         """Resolve the checkpointer thread_id for a request.
+
+        Before ``user_id`` existed, the thread_id *was* the client-supplied
+        ``session_id`` -- any caller who knew or reused another caller's
+        session_id could resume/read that thread. Folding the authenticated
+        user's id into the prefix makes that structurally impossible once
+        ``REQUIRE_AUTH`` is on: no session_id an attacker can pick or guess
+        starts with a user_id they don't have.
 
         Args:
             session_id: The client-supplied session id, if any.
+            user_id: The authenticated caller's id, when ``REQUIRE_AUTH`` is
+                on. ``None`` in the open demo/dev path, which keeps today's
+                behaviour unchanged.
 
         Returns:
-            ``session_id`` unchanged, or a fresh server-generated id.
+            ``f"{user_id}:{session_id}"`` when authenticated, otherwise
+            ``session_id`` unchanged or a fresh server-generated id.
         """
+        if user_id:
+            return f"{user_id}:{session_id or uuid4()}"
         return session_id or f"anon:{uuid4()}"
+
+    @staticmethod
+    def _owns_thread(thread_id: str, user_id: Optional[str]) -> bool:
+        """Whether an authenticated caller may resume/inspect ``thread_id``.
+
+        ``user_id=None`` (``REQUIRE_AUTH`` disabled) is always allowed --
+        unauthenticated mode has no concept of "someone else's thread" to
+        guard against, matching the open demo/dev behaviour everywhere else
+        in this phase. An authenticated caller may only touch threads
+        carrying its own user_id prefix, the one :meth:`_thread_id` itself
+        stamped on when the thread was first created.
+        """
+        if user_id is None:
+            return True
+        return thread_id.startswith(f"{user_id}:")
+
+    @classmethod
+    def _verify_thread_ownership(cls, thread_id: str, user_id: Optional[str]) -> None:
+        """Raise if ``user_id`` is not allowed to resume/inspect ``thread_id``."""
+        if not cls._owns_thread(thread_id, user_id):
+            raise AuthorizationException(message="Bu oturuma erişim izniniz yok.")
 
     @staticmethod
     def _select_reply(final_output: dict[str, Any]) -> str:
