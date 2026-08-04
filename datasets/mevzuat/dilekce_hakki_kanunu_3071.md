@@ -1,40 +1,11 @@
-# 3071 sayılı Dilekçe Hakkının Kullanılmasına Dair Kanun
+# Dilekçe Hakkının Kullanılmasına Dair Kanun
 
-Kaynak: mevzuat.gov.tr. Aşağıda, gelen dilekçelerin zorunlu unsurlarının
-denetlenmesinde esas alınan hükümlere yer verilmiştir.
+> Kaynak: mevzuat.gov.tr (bedesten.adalet.gov.tr üzerinden)
+> Mevzuat no: 3071 (KANUN)
+> mevzuat_id: 104809
+> Çekilme tarihi: 2026-08-05
+> Korpustaki gerekçesi: Dilekçelerde ad, imza ve adres zorunluluğu (m.4).
+>
+> Bu dosya `scripts/fetch_mevzuat_corpus.py` ile üretilmiştir; elle düzenlemeyin.
 
-## Amaç (MADDE 1)
-
-Bu Kanunun amacı, Türk vatandaşlarının ve Türkiye'de ikamet eden yabancıların
-kendileriyle veya kamu ile ilgili dilek ve şikâyetleri hakkında, Türkiye Büyük Millet
-Meclisine ve yetkili makamlara yazı ile başvurma haklarının kullanılma biçimini
-düzenlemektir.
-
-## Dilekçe hakkı (MADDE 3)
-
-Türk vatandaşları kendileriyle veya kamu ile ilgili dilek ve şikâyetleri hakkında,
-Türkiye Büyük Millet Meclisine ve yetkili makamlara yazı ile başvurma hakkına
-sahiptir.
-
-## Dilekçede bulunması zorunlu şartlar (MADDE 4)
-
-Türkiye Büyük Millet Meclisine veya yetkili makamlara verilen veya gönderilen
-dilekçelerde, dilekçe sahibinin adı-soyadı ve imzası ile iş veya ikametgâh adresinin
-bulunması gerekir.
-
-Bu üç unsur (ad-soyad, imza, iş veya ikametgâh adresi) dilekçenin işleme
-alınabilmesi için zorunludur. Eksik olması hâlinde dilekçe usulüne uygun kabul
-edilmez.
-
-## Gönderilen makamın görevi (MADDE 5)
-
-Yetkili makamlara gönderilen dilekçelerde, konuyla ilgili olmayan makamlara
-gönderilen dilekçeler ilgili makama gönderilir ve dilekçe sahibine bilgi verilir.
-
-## Dilekçenin incelenmesi ve sonucun bildirilmesi (MADDE 7)
-
-Türk vatandaşlarının ve Türkiye'de ikamet eden yabancıların kendileri ve kamu ile
-ilgili dilek ve şikâyetleri konusunda yetkili makamlara yaptıkları başvuruların
-sonucu veya yapılmakta olan işlemin safahatı hakkında dilekçe sahiplerine en geç
-otuz gün içinde gerekçeli olarak cevap verilir. İşlem safahatının duyurulması
-hâlinde alınan sonuç ayrıca bildirilir.
+DİLEKÇE HAKKININ KULLANILMASINA DAİR KANUN Kanun Numarası : 3071 Kabul Tarihi : 1/11/1984 Yayımlandığı Resmî Gazete : Tarih : 10/11/1984 Sayı : 18571 Yayımlandığı Düstur : Tertip : 5 Cilt : 24 Sayfa : 64 Amaç: Madde 1 – (Değişik: 2/1/2003-4778/23 md.) Bu Kanunun amacı, Türk vatandaşlarının ve Türkiye’de ikamet eden yabancıların kendileriyle veya kamu ile ilgili dilek ve şikâyetleri hakkında, Türkiye Büyük Millet Meclisine ve yetkili makamlara yazı ile başvurma haklarının kullanılma biçimini düzenlemektir. Kapsam: Madde 2 – (Değişik: 2/1/2003-4778/24 md.) Bu Kanun, Türk vatandaşları ve Türkiye’de ikamet eden yabancılar tarafından Türkiye Büyük Millet Meclisi ile idarî makamlara yapılan dilek ve şikâyetler hakkındaki başvuruları kapsar. Dilekçe hakkı: Madde 3 – Türk vatandaşları kendileriyle veya kamu ile ilgili dilek ve şikayetleri hakkında, Türkiye Büyük Millet Meclisine ve yetkili makamlara yazı ile başvurma hakkına sahiptirler. (Ek: 2/1/2003-4778/25 md.)Türkiye’de ikamet eden yabancılar karşılıklılık esası gözetilmek ve dilekçelerinin Türkçe yazılması kaydıyla bu haktan yararlanabilirler. Dilekçede bulunması zorunlu şartlar: Madde 4 – (Değişik: 2/1/2003-4778/26 md.) Türkiye Büyük Millet Meclisine veya yetkili makamlara verilen veya gönderilen dilekçelerde, dilekçe sahibinin adı-soyadı ve imzası ile iş veya ikametgâh adresinin bulunması gerekir. Gönderilen makamda hata: Madde 5 – Dilekçe, konusuyla ilgili olmayan bir idari makama verilmesi durumunda, bu makam tarafından yetkili idari makama gönderilir ve ayrıca dilekçe sahibine de bilgi verilir. İncelenemeyecek dilekçeler: Madde 6 – Türkiye Büyük Millet Meclisine veya yetkili makamlara verilen veya gönderilen dilekçelerden; a) Belli bir konuyu ihtiva etmeyenler, b) Yargı mercilerinin görevine giren konularla ilgili olanlar, c) 4 üncü maddede gösterilen şartlardan herhangi birini taşımayanlar, İncelenemezler. Dilekçenin incelenmesi ve sonucunun bildirilmesi: Madde 7 – (Değişik: 2/1/2003-4778/27 md.) Türk vatandaşlarının ve Türkiye’de ikamet eden yabancıların kendileri ve kamu ile ilgili dilek ve şikâyetleri konusunda yetkili makamlara yaptıkları başvuruların sonucu veya yapılmakta olan işlemin safahatı hakkında dilekçe sahiplerine en geç otuz gün içinde gerekçeli olarak cevap verilir. İşlem safahatının duyurulması halinde alınan sonuç ayrıca bildirilir. Türkiye Büyük Millet Meclisine yapılan başvuruların incelenmesi: Madde 8 – (Değişik: 2/1/2003-4778/28 md.) Türkiye Büyük Millet Meclisine gönderilen dilekçelerin, Dilekçe Komisyonunda incelenmesi ve karara bağlanması altmış gün içinde sonuçlandırılır. İlgili kamu kurum veya kuruluşları Türkiye Büyük Millet Meclisi Dilekçe Komisyonunca gönderilen dilekçeleri otuz gün içinde cevaplandırır. İnceleme ve karara bağlamanın esas ve usulleri Türkiye Büyük Millet Meclisi İçtüzüğünde gösterilir. (Ek fıkra: 1/12/2011-6253/41 md.) Dilekçe Komisyonu, görevleri ile ilgili olarak, kamu kurum ve kuruluşları, kamu kurumu niteliğindeki meslek kuruluşları ile özel kuruluşlardan her türlü bilgi ve belgeyi almak, ilgilileri çağırıp bilgi almak, idari denetimin yapılmasını istemek, bilirkişi görevlendirmek ve yerinde inceleme yapmak yetkisine sahiptir. Bu yetkinin kullanılması durumunda kamu kurum ve kuruluşları ile kamu personeli, talep edilen bilgi ve belgeyi vermek, idari denetimi yapmak ve yerinde inceleme için gerekli tedbirleri almakla yükümlüdür. Kaldırılan hüküm: Madde 9 – 26 Aralık 1962 tarih ve 140 sayılı Türk Vatandaşlarının Türkiye Büyük Millet Meclisine Dilekçe ile Başvurmaları ve Dilekçelerin İncelenmesi ile Karara Bağlanmasının Düzenlenmesine Dair Kanun yürürlükten kaldırılmıştır. Geçici Madde 1 – (3071 sayılı Kanunun kendi numarasız geçici maddesi olup teselsül için numaralandırılmıştır.) Türkiye Büyük Millet Meclisi İçtüzüğünde gerekli değişiklikler yapılıncaya kadar, 140 sayılı Türk Vatandaşlarının Türkiye Büyük Millet Meclisine Dilekçe ile Başvurmaları ve Dilekçelerin İncelenmesi ile Karara Bağlanmasının Düzenlenmesine Dair Kanunun Dilekçe Komisyonunun çalışma esas ve usullerine ilişkin hükümlerinin uygulanmasına devam olunur. Yürürlük: Madde 10 – Bu Kanun yayımı tarihinde yürürlüğe girer. Yürütme: Madde 11 – Bu Kanun hükümlerini Türkiye Büyük Millet Meclisi Başkanı ile Bakanlar Kurulu yürütür. 3071 SAYILI KANUNA EK VE DEĞİŞİKLİK GETİREN MEVZUATIN YÜRÜRLÜĞE GİRİŞ TARİHİNİ GÖSTERİR LİSTE Değiştiren Kanun No. 3071 Sayılı Kanunun Değişen Maddeleri Yürürlüğe Giriş Tarihi 4778 1 11/1/2003 6253 8 18/12/2011
