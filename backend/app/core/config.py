@@ -75,7 +75,7 @@ class Settings(BaseSettings):
 
     #: Hard ceiling on the judge call so one slow generation cannot blow the
     #: ~90s draft latency budget.
-    DRAFT_JUDGE_TIMEOUT_SECONDS: float = 20.0
+    DRAFT_JUDGE_TIMEOUT_SECONDS: float = 30.0
 
     # Embedding Configuration
     EMBEDDING_PROVIDER: str = "ollama"
