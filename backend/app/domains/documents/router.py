@@ -120,15 +120,53 @@ async def generate_draft(
 
 
 @router.get("", response_model=None)
-async def list_documents(pagination: PaginationParam = Depends()):
+async def list_documents(
+    pagination: PaginationParam = Depends(),
+    service: DocumentService = Depends(get_document_analysis_service),
+):
     """List uploaded documents with their summary metadata, newest first.
+
+    Reads from PostgreSQL, where paging and ordering are done in SQL. Falls back
+    to the local metadata file when the database is unconfigured or unreachable,
+    which keeps a bare `uvicorn app.main:app` with no compose stack working.
+
+    Args:
+        pagination: Page/size query parameters.
+        service: Injected document analysis service.
+
+    Returns:
+        A paginated envelope over the 7-field library projection (see
+        ``GET /documents/{storage_path}`` for the full analysis).
+    """
+    stored = await service.list_stored_documents(
+        offset=pagination.offset, limit=pagination.limit
+    )
+    if stored is not None:
+        page_items, total = stored
+    else:
+        page_items, total = await _list_from_local_cache(pagination)
+
+    pages = (total + pagination.size - 1) // pagination.size if pagination.size else 0
+
+    return SuccessResponse(
+        data=PaginatedResponse(
+            items=page_items,
+            total=total,
+            page=pagination.page,
+            size=pagination.size,
+            pages=pages,
+        ).model_dump()
+    )
+
+
+async def _list_from_local_cache(pagination: PaginationParam) -> tuple[list[dict], int]:
+    """Read the library projection from the local metadata file.
 
     Args:
         pagination: Page/size query parameters.
 
     Returns:
-        A paginated envelope over the 7-field library projection (see
-        ``GET /documents/{storage_path}`` for the full analysis).
+        The requested page and the unpaginated total.
     """
     metadata_file = os.path.join(settings.LOCAL_STORAGE_DIR, "uploads_metadata.json")
 
@@ -147,20 +185,7 @@ async def list_documents(pagination: PaginationParam = Depends()):
         data = []
 
     data.sort(key=lambda item: item.get("upload_time", ""), reverse=True)
-
-    total = len(data)
-    page_items = data[pagination.offset : pagination.offset + pagination.limit]
-    pages = (total + pagination.size - 1) // pagination.size if pagination.size else 0
-
-    return SuccessResponse(
-        data=PaginatedResponse(
-            items=page_items,
-            total=total,
-            page=pagination.page,
-            size=pagination.size,
-            pages=pages,
-        ).model_dump()
-    )
+    return data[pagination.offset : pagination.offset + pagination.limit], len(data)
 
 
 @router.get("/correspondence-types", response_model=None)
@@ -209,7 +234,11 @@ async def get_document_analysis(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    result = await service.get_cached_analysis(storage_path)
+    # Database first, local cache second: the row is authoritative and survives
+    # a container restart, but the file keeps this working without PostgreSQL.
+    result = await service.get_stored_analysis(storage_path)
+    if result is None:
+        result = await service.get_cached_analysis(storage_path)
     if result is None:
         raise HTTPException(status_code=404, detail="Bu evrak için bir analiz bulunamadı.")
 

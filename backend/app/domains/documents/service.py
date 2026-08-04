@@ -15,7 +15,10 @@ from app.core.constants import (
     MAX_FILE_SIZE_BYTES,
 )
 from app.core.enums.compliance_status import ComplianceStatus
+from app.core.enums.document_status import DocumentStatus
 from app.core.enums.document_type import DocumentType
+from app.domains.documents.model.document_model import DocumentModel
+from app.domains.documents.repository import DocumentRepository
 from app.domains.documents.schema.document_schema import (
     DocumentAnalysisResponseSchema,
     ExtractionInfoSchema,
@@ -66,6 +69,7 @@ class DocumentService:
         analysis_graph: Any,
         embedding_service: Optional[EmbeddingService] = None,
         vector_store: Optional[BaseVectorStore] = None,
+        repository: Optional[DocumentRepository] = None,
     ) -> None:
         """Initialise the service with injected collaborators.
 
@@ -73,12 +77,18 @@ class DocumentService:
             storage: Storage backend for the raw uploaded document.
             extractor: Text extraction chain.
             analysis_graph: Compiled document analysis workflow.
+            embedding_service: Optional chunk-and-embed service for document Q&A.
+            vector_store: Optional vector store backing document Q&A.
+            repository: Optional database persistence for the analysis. When it is
+                absent or unreachable the local JSON files still carry the result,
+                so analysis never depends on PostgreSQL being up.
         """
         self.storage = storage
         self.extractor = extractor
         self.analysis_graph = analysis_graph
         self.embedding_service = embedding_service
         self.vector_store = vector_store
+        self.repository = repository
 
     async def analyze_document(
         self,
@@ -146,9 +156,19 @@ class DocumentService:
 
         state = await self._run_analysis(extracted.text, extracted.used_ocr)
         response = self._assemble(file_name, storage_path, extracted, state, scrubbed_markers)
+        await self._persist(
+            file_name=file_name,
+            storage_path=storage_path,
+            content_type=content_type,
+            extracted_text=extracted.text,
+            response=response,
+        )
+        # Kept alongside the database write, not replaced by it: these files are
+        # what the library falls back to when PostgreSQL is unavailable, which is
+        # the default for a bare `uvicorn app.main:app` with no compose stack.
         await self._save_document_metadata(file_name, storage_path, response)
         await self._save_document_analysis_cache(storage_path, extracted.text, response)
-        
+
         await self._index_for_qa(storage_path, extracted.text)
 
         await self._publish(
@@ -459,6 +479,181 @@ class DocumentService:
             logger.exception(
                 "Failed to publish event %s", getattr(event, "event_type", "?")
             )
+
+    async def _persist(
+        self,
+        *,
+        file_name: str,
+        storage_path: str,
+        content_type: Optional[str],
+        extracted_text: str,
+        response: DocumentAnalysisResponseSchema,
+        user_id: Optional[str] = None,
+    ) -> bool:
+        """Write the completed analysis to PostgreSQL.
+
+        Failures are logged and swallowed. The analysis itself already succeeded,
+        and the local JSON files written next to this call still carry the result,
+        so a database outage costs durability rather than the request.
+
+        Args:
+            file_name: Original file name.
+            storage_path: Storage reference, also the record's primary key.
+            content_type: Declared MIME type of the upload.
+            extracted_text: Text the analysis ran on.
+            response: The assembled first-review result.
+            user_id: Uploading user, when known.
+
+        Returns:
+            True when the row was written.
+        """
+        if self.repository is None:
+            return False
+
+        try:
+            await self.repository.upsert(
+                DocumentModel(
+                    storage_path=storage_path,
+                    user_id=user_id,
+                    file_name=file_name,
+                    content_type=content_type,
+                    extractor=response.extraction.extractor,
+                    used_ocr=response.extraction.used_ocr,
+                    page_count=response.extraction.page_count,
+                    char_count=response.extraction.char_count,
+                    document_type=response.document_type.value,
+                    document_type_label=response.document_type_label,
+                    summary=response.summary,
+                    fields=response.fields.model_dump(mode="json"),
+                    missing_fields=[
+                        item.model_dump(mode="json") for item in response.missing_fields
+                    ],
+                    mevzuat_references=[
+                        item.model_dump(mode="json")
+                        for item in response.mevzuat_references
+                    ],
+                    scrubbed_markers=list(response.extraction.scrubbed_markers),
+                    compliance_status=response.compliance_status.value,
+                    extracted_text=extracted_text,
+                    status=DocumentStatus.COMPLETED.value,
+                )
+            )
+            return True
+        except Exception:
+            logger.exception(
+                "Failed to persist the analysis of %s; the local cache still has it.",
+                storage_path,
+            )
+            return False
+
+    async def get_stored_analysis(
+        self, storage_path: str
+    ) -> Optional[DocumentAnalysisResponseSchema]:
+        """Read an analysis back from the database.
+
+        Args:
+            storage_path: The document's storage key.
+
+        Returns:
+            The stored analysis, or None when the database has no row for it or is
+            unreachable -- in both cases the caller falls back to the local cache.
+        """
+        if self.repository is None:
+            return None
+        try:
+            record = await self.repository.get_by_storage_path(storage_path)
+        except Exception:
+            logger.exception("Failed to read the analysis of %s.", storage_path)
+            return None
+        return self._record_to_response(record) if record else None
+
+    async def list_stored_documents(
+        self,
+        *,
+        offset: int = 0,
+        limit: int = 20,
+        document_type: Optional[str] = None,
+        compliance_status: Optional[str] = None,
+    ) -> Optional[tuple[list[dict[str, Any]], int]]:
+        """List stored analyses as the library projection, newest first.
+
+        Args:
+            offset: Number of records to skip.
+            limit: Maximum number of records to return.
+            document_type: Restrict to one document type.
+            compliance_status: Restrict to one compliance status.
+
+        Returns:
+            The page and the unpaginated total, or None when the database is not
+            configured or unreachable, so the caller can fall back to the local
+            metadata file.
+        """
+        if self.repository is None:
+            return None
+        try:
+            records, total = await self.repository.get_page(
+                offset=offset,
+                limit=limit,
+                document_type=document_type,
+                compliance_status=compliance_status,
+            )
+        except Exception:
+            logger.exception("Failed to list stored analyses.")
+            return None
+
+        # Same seven keys the local metadata file produced, so the frontend's
+        # library view keeps working unchanged when the source switches.
+        return [
+            {
+                "file_name": record.file_name,
+                "storage_path": record.storage_path,
+                "upload_time": (
+                    record.created_at.isoformat() if record.created_at else ""
+                ),
+                "document_type": record.document_type,
+                "document_type_label": record.document_type_label,
+                "compliance_status": record.compliance_status,
+                "summary": record.summary,
+            }
+            for record in records
+        ], total
+
+    @staticmethod
+    def _record_to_response(
+        record: DocumentModel,
+    ) -> DocumentAnalysisResponseSchema:
+        """Rebuild the API response from a stored row.
+
+        Args:
+            record: The stored analysis.
+
+        Returns:
+            The same shape `analyze_document` returns.
+        """
+        return DocumentAnalysisResponseSchema(
+            file_name=record.file_name,
+            storage_path=record.storage_path,
+            analysis_id=record.storage_path,
+            extraction=ExtractionInfoSchema(
+                extractor=record.extractor,
+                page_count=record.page_count,
+                char_count=record.char_count,
+                used_ocr=record.used_ocr,
+                scrubbed_markers=list(record.scrubbed_markers or []),
+            ),
+            document_type=DocumentType(record.document_type),
+            document_type_label=record.document_type_label,
+            summary=record.summary,
+            fields=EvrakField(**(record.fields or {})),
+            missing_fields=[
+                MissingField(**item) for item in record.missing_fields or []
+            ],
+            compliance_status=ComplianceStatus(record.compliance_status),
+            mevzuat_references=[
+                MevzuatReferenceSchema(**item)
+                for item in record.mevzuat_references or []
+            ],
+        )
 
     async def _save_document_metadata(
         self,

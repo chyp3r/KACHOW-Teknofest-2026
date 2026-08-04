@@ -10,6 +10,7 @@ from app.infrastructure.database.base import Base
 
 # Every ORM model must be imported here, or Base.metadata is empty and
 # `alembic revision --autogenerate` produces an empty migration.
+from app.domains.documents.model.document_model import DocumentModel  # noqa: F401
 from app.domains.users.model.invited_email import InvitedEmailModel  # noqa: F401
 from app.domains.users.model.user_model import UserModel  # noqa: F401
 

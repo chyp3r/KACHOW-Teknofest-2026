@@ -21,6 +21,7 @@ from app.infrastructure.database.session import get_db
 from app.infrastructure.extractors import get_document_extractor
 from app.infrastructure.storage import get_storage_client
 from app.infrastructure.vectorstore import get_vector_store
+from app.domains.documents.repository import DocumentRepository
 from app.domains.documents.service import DocumentService
 from app.domains.documents.draft_service import DraftService
 from app.domains.chat.chat_service import ChatService
@@ -148,11 +149,13 @@ async def get_document_analysis_graph(
 
 def get_document_analysis_service(
     analysis_graph: Any = Depends(get_document_analysis_graph),
+    db: AsyncSession = Depends(get_db),
 ) -> DocumentService:
     """Provide the document analysis service with its collaborators injected.
 
     Args:
         analysis_graph: The compiled analysis workflow.
+        db: Per-request session backing the document repository.
 
     Returns:
         A ready-to-use `DocumentService`.
@@ -163,6 +166,7 @@ def get_document_analysis_service(
         analysis_graph=analysis_graph,
         embedding_service=EmbeddingService(embeddings_client=get_embeddings_client()),
         vector_store=get_vector_store(),
+        repository=DocumentRepository(db),
     )
 
 # ---------------------------------------------------------------------------
