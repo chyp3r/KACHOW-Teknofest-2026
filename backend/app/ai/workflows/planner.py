@@ -91,7 +91,6 @@ REASONING_BY_INTENT: dict[str, str] = {
 #: letting the merge invent an ordering of its own.
 STEP_ORDER: tuple[str, ...] = (
     "classification",
-    "rag",
     "draft",
     "routing",
     "assist",
@@ -272,7 +271,7 @@ async def classify_intent_with_model(
     agent = BaseAgent(
         llm_client=llm_client,
         name="IntentClassifier",
-        description="Classifies a user message into one of four workflow intents.",
+        description="Classifies a user message into one of three workflow intents.",
         system_prompt=(
             "Kullanıcı mesajını üç niyetten birine ata. Yalnızca yapılandırılmış "
             "JSON döndür, açıklama yazma.\n"

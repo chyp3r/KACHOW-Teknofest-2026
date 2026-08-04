@@ -2,6 +2,16 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import AsyncIterator, List, Dict, Any, Optional
 
+#: Characters per token, calibrated for Turkish. Agglutinative morphology
+#: splits into more subword tokens per character than English (~4 chars/tok),
+#: so a borrowed English ratio would systematically undercount here. Not an
+#: exact provider count -- Ollama does not expose a tokenize endpoint for
+#: arbitrary models -- but a real, consistent measurement, used everywhere
+#: text needs sizing against ``settings.OLLAMA_NUM_CTX`` instead of the
+#: char-count/turn-count heuristics that previously gave no visibility into
+#: whether a prompt was close to overflowing the model's context window.
+CHARS_PER_TOKEN_TR = 2.8
+
 
 @dataclass
 class ToolCallResponse:
@@ -107,6 +117,27 @@ class BaseLLMClient(ABC):
             The model's text (if any) and any tool calls it requested.
         """
         pass
+
+    def count_tokens(self, text: str) -> int:
+        """Estimate how many tokens ``text`` costs against the context window.
+
+        A character-ratio estimate (see ``CHARS_PER_TOKEN_TR``), not an exact
+        provider count. Good enough to catch a prompt approaching
+        ``settings.OLLAMA_NUM_CTX`` before Ollama silently truncates it from
+        the beginning -- which previously had no visibility at all, only
+        char-count and turn-count proxies. A provider with a real tokenizer
+        may override this with an exact count.
+
+        Args:
+            text: The text to size.
+
+        Returns:
+            Estimated token count. 0 for empty/whitespace-only text.
+        """
+        stripped = text.strip() if text else ""
+        if not stripped:
+            return 0
+        return max(1, round(len(stripped) / CHARS_PER_TOKEN_TR))
 
     def _format_prompt(
         self, prompt: str, system_prompt: Optional[str] = None

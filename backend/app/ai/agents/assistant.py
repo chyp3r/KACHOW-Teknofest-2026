@@ -7,6 +7,7 @@ from app.ai.agents.base import BaseAgent
 from app.ai.llms.base import BaseLLMClient
 from app.ai.prompts.manager import PromptManager, get_prompt_manager
 from app.ai.tools.registry import ToolSpec, to_langchain_tool
+from app.observability.ai_metrics import LLM_TOKENS
 
 logger = logging.getLogger(__name__)
 
@@ -145,5 +146,18 @@ class AssistantAgent(BaseAgent):
         # Final answer streamed with no tools bound: guarantees this call
         # produces text rather than yet another tool request, regardless of
         # how many rounds the loop above ran.
+        final_chunks: list[str] = []
         async for chunk in self.llm_client.stream(messages=messages, temperature=0.2):
+            final_chunks.append(chunk)
             yield chunk
+
+        # Measured against `messages` as it stands right before the final
+        # call -- the largest the prompt gets this turn (tool turns already
+        # folded in), which is exactly the context-overflow risk moment.
+        prompt_text = "\n".join(msg.get("content", "") or "" for msg in messages)
+        LLM_TOKENS.labels(agent=self.name, kind="prompt").inc(
+            self.llm_client.count_tokens(prompt_text)
+        )
+        LLM_TOKENS.labels(agent=self.name, kind="completion").inc(
+            self.llm_client.count_tokens("".join(final_chunks))
+        )

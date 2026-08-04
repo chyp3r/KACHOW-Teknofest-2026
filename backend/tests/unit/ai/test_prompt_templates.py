@@ -23,11 +23,23 @@ TEMPLATES_DIR = pathlib.Path(__file__).resolve().parents[3] / "app" / "ai" / "pr
 
 
 def _referencing_agent_modules(template_name: str) -> list[str]:
-    """Find every agent module whose source calls get_template(template_name)."""
+    """Find every agent module that binds `template_name`.
+
+    Two binding shapes: a direct `get_template("name")` call (assistant,
+    writer, reviser, memory_summarizer), or -- for a `TemplateAgent`
+    subclass, which loads its template via `self.TEMPLATE_NAME` in the
+    shared base class instead of an inline literal -- a
+    `TEMPLATE_NAME = "name"` class attribute (classifier, compliance,
+    router, judge; see template_agent.py).
+    """
     matches = []
     for path in AGENTS_DIR.glob("*.py"):
+        if path.name == "template_agent.py":
+            continue
         source = path.read_text(encoding="utf-8")
         if f'get_template("{template_name}")' in source:
+            matches.append(path.name)
+        elif f'TEMPLATE_NAME = "{template_name}"' in source:
             matches.append(path.name)
     return matches
 
@@ -74,7 +86,8 @@ def test_supplying_every_declared_placeholder_leaves_no_braces_unrendered(name):
 def test_no_agent_module_references_a_template_outside_the_contract():
     """A brand-new orphaned template (the original bug this test guards
     against) would show up here even before anyone adds it to
-    TEMPLATE_CONTRACTS, since this scans get_template() call sites directly."""
+    TEMPLATE_CONTRACTS, since this scans get_template() call sites and
+    TemplateAgent subclasses' TEMPLATE_NAME bindings directly."""
     referenced_names: set[str] = set()
     for path in AGENTS_DIR.glob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -88,5 +101,15 @@ def test_no_agent_module_references_a_template_outside_the_contract():
                 and isinstance(node.args[0].value, str)
             ):
                 referenced_names.add(node.args[0].value)
+            elif (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "TEMPLATE_NAME"
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+                and node.value.value
+            ):
+                referenced_names.add(node.value.value)
 
     assert referenced_names == set(TEMPLATE_CONTRACTS)

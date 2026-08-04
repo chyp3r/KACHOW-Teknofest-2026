@@ -6,6 +6,7 @@ from app.ai.agents.judge import JudgeAgent
 from app.ai.agents.memory_summarizer import MemorySummarizerAgent
 from app.ai.agents.reviser import ReviserAgent
 from app.ai.agents.router import RouterAgent
+from app.ai.agents.template_agent import TemplateAgent
 from app.ai.agents.writer import WriterAgent
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     "MemorySummarizerAgent",
     "ReviserAgent",
     "RouterAgent",
+    "TemplateAgent",
     "WriterAgent",
 ]
