@@ -339,3 +339,71 @@ async def test_index_for_qa_tags_each_chunk_with_its_page_number():
 
     stored_chunks = vector_store.upsert_documents.call_args.args[1]
     assert stored_chunks[0].metadata["page"] == 2
+
+
+# ==========================================
+# Ownership (Faz 5)
+# ==========================================
+@pytest.mark.asyncio
+async def test_analyze_registers_the_document_with_its_owner():
+    document_repository = AsyncMock()
+    service, _, _, _ = _build_service()
+    service.document_repository = document_repository
+
+    await service.analyze_document(
+        file_name="evrak.pdf",
+        content=PDF_BYTES,
+        content_type="application/pdf",
+        owner_id="user-1",
+    )
+
+    document_repository.create.assert_awaited_once()
+    registered = document_repository.create.await_args.args[0]
+    assert registered.owner_id == "user-1"
+    assert registered.id == "uploads/abc.pdf"
+    assert registered.file_name == "evrak.pdf"
+
+
+@pytest.mark.asyncio
+async def test_analyze_registers_the_document_ownerless_when_unauthenticated():
+    """The REQUIRE_AUTH=False demo/dev path: no owner_id, visible to everyone."""
+    document_repository = AsyncMock()
+    service, _, _, _ = _build_service()
+    service.document_repository = document_repository
+
+    await service.analyze_document(
+        file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
+    )
+
+    registered = document_repository.create.await_args.args[0]
+    assert registered.owner_id is None
+
+
+@pytest.mark.asyncio
+async def test_analyze_survives_a_registration_failure():
+    """Registration is a secondary side effect (like the event bus publish
+    above) -- a broken repository must not fail document intake."""
+    document_repository = AsyncMock()
+    document_repository.create.side_effect = Exception("db exploded")
+    service, _, _, _ = _build_service()
+    service.document_repository = document_repository
+
+    result = await service.analyze_document(
+        file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
+    )
+
+    assert result.document_type is DocumentType.OFFICIAL_LETTER
+
+
+@pytest.mark.asyncio
+async def test_analyze_skips_registration_without_a_repository():
+    """No repository injected (most other tests in this file) -- analysis
+    must still succeed exactly as before this phase."""
+    service, _, _, _ = _build_service()
+    assert service.document_repository is None
+
+    result = await service.analyze_document(
+        file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
+    )
+
+    assert result.document_type is DocumentType.OFFICIAL_LETTER

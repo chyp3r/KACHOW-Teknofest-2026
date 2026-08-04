@@ -7,6 +7,8 @@ from uuid import uuid4
 from app.ai.compliance.evrak_field import EvrakField, MissingField
 from app.ai.documents.anchors import build_page_map
 from app.ai.guardrails.injection import scrub_extracted_text
+from app.domains.documents.model.document_model import DocumentModel
+from app.domains.documents.repository import DocumentRepository
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
 from app.core.constants import (
@@ -40,13 +42,6 @@ logger = logging.getLogger(__name__)
 UPLOAD_PATH_PREFIX = "uploads"
 MIN_ANALYSABLE_CHAR_COUNT = 20
 
-#: DocumentService is constructed fresh per request (see
-#: api/dependency.py::get_document_analysis_service), so an instance-level
-#: lock would not serialise anything -- two concurrent uploads would each get
-#: their own lock and still race on uploads_metadata.json's read-modify-write.
-#: Module-level makes it actually shared across the process.
-_METADATA_WRITE_LOCK = asyncio.Lock()
-
 #: Q&A index settings. Must stay in sync with the retrieval side in
 #: planning_graph's document_qa step.
 QA_COLLECTION_NAME = "document_qa"
@@ -67,6 +62,7 @@ class DocumentService:
         analysis_graph: Any,
         embedding_service: Optional[EmbeddingService] = None,
         vector_store: Optional[BaseVectorStore] = None,
+        document_repository: Optional[DocumentRepository] = None,
     ) -> None:
         """Initialise the service with injected collaborators.
 
@@ -74,12 +70,19 @@ class DocumentService:
             storage: Storage backend for the raw uploaded document.
             extractor: Text extraction chain.
             analysis_graph: Compiled document analysis workflow.
+            document_repository: Ownership/listing registry (see
+                `DocumentModel`). Optional so callers that only exercise
+                extraction/analysis (most unit tests) don't need a database --
+                when absent, a document is analysed exactly as before but
+                never registered, which also means it never appears in
+                `GET /documents` or passes an ownership check.
         """
         self.storage = storage
         self.extractor = extractor
         self.analysis_graph = analysis_graph
         self.embedding_service = embedding_service
         self.vector_store = vector_store
+        self.document_repository = document_repository
 
     async def analyze_document(
         self,
@@ -87,6 +90,7 @@ class DocumentService:
         file_name: str,
         content: bytes,
         content_type: Optional[str] = None,
+        owner_id: Optional[str] = None,
     ) -> DocumentAnalysisResponseSchema:
         """Store, extract and analyse an incoming official document.
 
@@ -94,6 +98,10 @@ class DocumentService:
             file_name: Original name of the uploaded file.
             content: Raw file bytes.
             content_type: Declared MIME type, when the client supplied one.
+            owner_id: The authenticated caller's id, when
+                `settings.REQUIRE_AUTH` is enabled. `None` in the open
+                demo/dev path -- the document is registered ownerless and
+                stays visible to everyone, matching today's behaviour.
 
         Returns:
             The full first-review result.
@@ -158,7 +166,7 @@ class DocumentService:
 
         state = await self._run_analysis(extracted.text, extracted.used_ocr)
         response = self._assemble(file_name, storage_path, extracted, state, scrubbed_markers)
-        await self._save_document_metadata(file_name, storage_path, response)
+        await self._register_document(file_name, storage_path, owner_id, response)
         await self._save_document_analysis_cache(
             storage_path, extracted.text, extracted.pages, response
         )
@@ -486,50 +494,36 @@ class DocumentService:
                 "Failed to publish event %s", getattr(event, "event_type", "?")
             )
 
-    async def _save_document_metadata(
+    async def _register_document(
         self,
         file_name: str,
         storage_path: str,
+        owner_id: Optional[str],
         response: DocumentAnalysisResponseSchema,
     ) -> None:
-        """Save analyzed document metadata to local json file."""
-        import json
-        from datetime import datetime
-        from app.core.config import settings
+        """Register the document's ownership + listing metadata in Postgres.
 
-        metadata_file = os.path.join(settings.LOCAL_STORAGE_DIR, "uploads_metadata.json")
-
-        def _write():
-            metadata = []
-            if os.path.exists(metadata_file):
-                try:
-                    with open(metadata_file, "r", encoding="utf-8") as f:
-                        metadata = json.load(f)
-                except Exception:
-                    logger.error("Failed to read uploads metadata file, resetting it")
-            
-            # Check if storage_path already exists to avoid duplicates
-            metadata = [m for m in metadata if m.get("storage_path") != storage_path]
-
-            metadata.append({
-                "file_name": file_name,
-                "storage_path": storage_path,
-                "upload_time": datetime.utcnow().isoformat(),
-                "document_type": response.document_type.value,
-                "document_type_label": response.document_type_label,
-                "compliance_status": response.compliance_status.value,
-                "summary": response.summary,
-            })
-
-            os.makedirs(os.path.dirname(metadata_file), exist_ok=True)
-            with open(metadata_file, "w", encoding="utf-8") as f:
-                json.dump(metadata, f, ensure_ascii=False, indent=2)
-
+        Replaces the old uploads_metadata.json file (which had no concept of
+        an owner at all -- see DocumentModel's docstring). A no-op when this
+        service was built without a repository (most unit tests), same as
+        before when the JSON write was best-effort and non-fatal.
+        """
+        if self.document_repository is None:
+            return
         try:
-            async with _METADATA_WRITE_LOCK:
-                await asyncio.to_thread(_write)
-        except Exception as e:
-            logger.error(f"Failed to save document metadata: {e}")
+            await self.document_repository.create(
+                DocumentModel(
+                    id=storage_path,
+                    owner_id=owner_id,
+                    file_name=file_name,
+                    document_type=response.document_type.value,
+                    document_type_label=response.document_type_label,
+                    compliance_status=response.compliance_status.value,
+                    summary=response.summary,
+                )
+            )
+        except Exception:
+            logger.exception("Failed to register document %s", storage_path)
 
     async def _save_document_analysis_cache(
         self,
