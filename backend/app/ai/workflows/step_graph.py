@@ -35,14 +35,16 @@ class StepSpec:
     parallel_safe: bool = False
 
 
-#: One entry per name `STEP_RUNNERS` can dispatch. `rag` is declared for
-#: consistency even though no `PLAN_BY_INTENT` combination uses it today
-#: (classification's own sub-graph already retrieves legislation) -- it is
-#: still a legitimate dispatch target in `planning_graph.py` and a future
-#: plan may reintroduce it.
+#: One entry per name `STEP_RUNNERS` can dispatch, and per name any
+#: `PLAN_BY_INTENT` combination can actually produce. A standalone `rag` step
+#: used to be declared here too, but no plan ever included it -- the
+#: classification sub-graph already retrieves legislation for the document,
+#: and the `assist` step's `search_legislation` tool covers the rest -- so it
+#: was dead weight kept "for consistency" that never dispatched. Removed
+#: rather than left in: an unreachable `STEP_SPECS` entry is exactly the kind
+#: of state that silently drifts from what `PLAN_BY_INTENT` can produce.
 STEP_SPECS: dict[str, StepSpec] = {
     "classification": StepSpec(name="classification"),
-    "rag": StepSpec(name="rag", depends_on=("classification",)),
     "draft": StepSpec(name="draft", depends_on=("classification",)),
     "routing": StepSpec(name="routing", depends_on=("draft",)),
     "assist": StepSpec(name="assist"),

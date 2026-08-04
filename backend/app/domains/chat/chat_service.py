@@ -452,9 +452,6 @@ class ChatService:
                 f"**Özet:** {classification['summary']}"
             )
 
-        if (final_output.get("rag") or {}).get("context"):
-            return "Mevzuattan ilgili bilgiler bulundu, ancak taslak oluşturulamadı."
-
         return DEFAULT_REPLY
 
     @staticmethod

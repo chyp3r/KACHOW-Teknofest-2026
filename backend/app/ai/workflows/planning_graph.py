@@ -46,7 +46,6 @@ QA_RESULT_LIMIT = get_policy().memory.qa_result_limit
 
 STEP_LABELS = {
     "classification": "Evrak Analizi",
-    "rag": "Mevzuat Tarama",
     "draft": "Taslak Oluşturma",
     "routing": "Birim Yönlendirme",
     "assist": "Asistan",
@@ -54,7 +53,6 @@ STEP_LABELS = {
 
 STEP_MESSAGES = {
     "classification": "Belge sınıflandırılıyor ve üst veriler çıkarılıyor...",
-    "rag": "Mevzuat veri tabanında ilgili maddeler taranıyor...",
     "draft": "Resmî cevap taslağı hazırlanıyor...",
     "routing": "Cevap taslağının iletileceği birim analiz ediliyor...",
     "assist": "Asistan yanıtı hazırlanıyor...",
@@ -172,7 +170,6 @@ class PlanningState(TypedDict, total=False):
     _last_ran_step: Optional[str]
     cached_document: dict[str, Any]
     classification_result: dict[str, Any]
-    rag_result: dict[str, Any]
     draft_result: dict[str, Any]
     routing_result: dict[str, Any]
     assist_result: dict[str, Any]
@@ -394,7 +391,6 @@ def create_planning_graph(
             "_last_ran_step": None,
             "cached_document": _load_cached_document(state.get("document_id")),
             "classification_result": {},
-            "rag_result": {},
             "draft_result": {},
             "routing_result": {},
             "assist_result": {},
@@ -469,9 +465,7 @@ def create_planning_graph(
         cached = state.get("cached_document") or {}
         source_document = cached.get("extracted_text") or state["input_text"]
 
-        context = state.get("rag_result", {}).get("context") or _mevzuat_context(
-            classification
-        )
+        context = _mevzuat_context(classification)
 
         return await draft_graph.ainvoke(
             {
@@ -589,15 +583,6 @@ def create_planning_graph(
     ) -> None:
         updates["classification_result"] = await _run_classification(state, config)
 
-    async def _step_rag(
-        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
-    ) -> None:
-        query = classification.get("summary") or state["input_text"]
-        updates["rag_result"] = await rag_graph.ainvoke(
-            {"original_query": query, "attempts": 0},
-            config=child_config(config),
-        )
-
     async def _step_draft(
         state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
     ) -> None:
@@ -637,7 +622,6 @@ def create_planning_graph(
         str, Callable[[PlanningState, RunnableConfig, dict[str, Any], dict[str, Any]], Awaitable[None]]
     ] = {
         "classification": _step_classification,
-        "rag": _step_rag,
         "draft": _step_draft,
         "routing": _step_routing,
         "assist": _step_assist,
@@ -809,7 +793,6 @@ def create_planning_graph(
         return {
             "status": final_status,
             "classification": _pick("classification_result"),
-            "rag": _pick("rag_result"),
             "draft": draft_result,
             "routing": _pick("routing_result"),
             "assist": _pick("assist_result"),
