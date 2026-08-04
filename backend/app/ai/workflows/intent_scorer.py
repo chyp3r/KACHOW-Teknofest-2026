@@ -114,9 +114,16 @@ def normalize(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", ascii_text).strip()
 
 
-def _fires(rule: EvidenceRule, normalized: str, has_document: bool) -> bool:
+def _fires(
+    rule: EvidenceRule, normalized: str, has_document: bool, has_active_draft: bool
+) -> bool:
     """Report whether a rule applies to this message."""
     if rule.requires_document is not None and rule.requires_document is not has_document:
+        return False
+    if (
+        rule.requires_active_draft is not None
+        and rule.requires_active_draft is not has_active_draft
+    ):
         return False
     return any(surface in normalized for surface in rule.surfaces)
 
@@ -130,7 +137,10 @@ def _looks_like_question(raw: str, normalized: str) -> bool:
 
 
 def score_intents(
-    message: str, document_id: Optional[str], previous_intent: Optional[str] = None
+    message: str,
+    document_id: Optional[str],
+    previous_intent: Optional[str] = None,
+    has_active_draft: bool = False,
 ) -> IntentScores:
     """Accumulate evidence for every intent.
 
@@ -138,6 +148,9 @@ def score_intents(
         message: The user's message.
         document_id: Storage path of an attached document, when present.
         previous_intent: The intent resolved for the previous turn, when known.
+        has_active_draft: Whether `SessionFocus.active_draft` is set --
+            gates `revise`'s rules the same way `document_id` gates a
+            document-only rule (see `EvidenceRule.requires_active_draft`).
 
     Returns:
         The accumulated scores and the ids of every rule that fired.
@@ -153,7 +166,7 @@ def score_intents(
 
     definitional = False
     for rule in ALL_RULES:
-        if not _fires(rule, normalized, has_document):
+        if not _fires(rule, normalized, has_document, has_active_draft):
             continue
         result.scores[rule.intent] = result.scores.get(rule.intent, 0.0) + rule.weight
         result.evidence.append(rule.id)

@@ -28,7 +28,7 @@ not use it.
 from dataclasses import dataclass
 from typing import Literal, Optional
 
-Intent = Literal["draft", "analyze", "assist"]
+Intent = Literal["draft", "analyze", "assist", "revise"]
 
 RuleKind = Literal["phrase", "structural"]
 
@@ -48,6 +48,10 @@ class EvidenceRule:
             attached; when False only without one; when None the document state
             is irrelevant. Used sparingly -- a gate here is what broke the
             greeting path.
+        requires_active_draft: Same mechanism as `requires_document`, gating
+            on `SessionFocus.active_draft` instead. Only `revise` uses it --
+            "kısalt", scored alone, is too generic to mean anything without a
+            draft already open to shorten.
     """
 
     id: str
@@ -56,6 +60,7 @@ class EvidenceRule:
     surfaces: tuple[str, ...] = ()
     kind: RuleKind = "phrase"
     requires_document: Optional[bool] = None
+    requires_active_draft: Optional[bool] = None
 
 
 #: An unambiguous imperative: the user is asking for the thing, not about it.
@@ -101,6 +106,30 @@ DRAFT_RULES: tuple[EvidenceRule, ...] = (
             "taslak", "ust yazi", "resmi yazi", "bilgilendirme metni",
             "cevap yazisi", "tebligat metni", "muzekkere", "tezkere", "mukabele",
         ),
+    ),
+)
+
+#: Gated on an active draft (see `EvidenceRule.requires_active_draft`): scored
+#: only when `SessionFocus.active_draft is not None`, which is what lets
+#: short, otherwise-generic phrases like "kısalt" or "daha resmi yap" count as
+#: strong evidence without colliding with anything else -- there is nothing
+#: else they could plausibly mean once a draft is already open.
+REVISE_RULES: tuple[EvidenceRule, ...] = (
+    EvidenceRule(
+        id="revise.explicit_request",
+        intent="revise",
+        weight=WEIGHT_EXPLICIT,
+        surfaces=(
+            "revize et", "taslagi revize et", "revizyon yap", "tekrar duzenle",
+            "yeniden yaz", "tekrar yaz", "taslagi guncelle", "taslagi degistir",
+            "metni degistir", "duzeltir misin", "tekrar duzenler misin",
+            "daha resmi yap", "daha resmi olsun", "daha samimi yap",
+            "daha kisa yap", "kisalt", "uzat", "sadelestir",
+            "tonunu degistir", "uslubunu degistir", "bu kismi degistir",
+            "su kismi degistir", "paragrafi degistir", "cumleyi degistir",
+            "kapanisi degistir", "imzayi degistir", "konuyu degistir",
+        ),
+        requires_active_draft=True,
     ),
 )
 
@@ -248,6 +277,7 @@ MEMORY_RECALL_RULES: tuple[EvidenceRule, ...] = (
 #: and so is not in this table.
 ALL_RULES: tuple[EvidenceRule, ...] = (
     *DRAFT_RULES,
+    *REVISE_RULES,
     *ANALYZE_RULES,
     *ASSIST_RULES,
     *MEMORY_RECALL_RULES,
@@ -262,7 +292,7 @@ CONTINUATION_SURFACES: tuple[str, ...] = (
 
 #: Only these intents make sense to silently continue; a bare "evet" after a
 #: chat or document_qa turn has no unambiguous follow-up action.
-CONTINUABLE_INTENTS = frozenset({"draft", "analyze"})
+CONTINUABLE_INTENTS = frozenset({"draft", "analyze", "revise"})
 
 #: Question markers, used as a shape hint rather than a routing decision.
 #: Bare "ne" is deliberately absent: "ne gerekiyorsa onu uygula" is an
