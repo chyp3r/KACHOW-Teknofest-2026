@@ -2,7 +2,11 @@ fastapi==0.141.1
 uvicorn==0.52.0
 pydantic==2.13.4
 pydantic-settings==2.14.2
-sqlalchemy==2.0.51
+# The [asyncio] extra pulls in greenlet, which SQLAlchemy's async layer requires
+# at runtime. Without it every request touching get_db fails with "the greenlet
+# library is required to use this function" -- invisible in the unit suite, which
+# mocks the session, and fatal for the first request that reaches PostgreSQL.
+sqlalchemy[asyncio]==2.0.51
 alembic==1.18.5
 asyncpg==0.31.0
 python-dotenv==1.2.2
