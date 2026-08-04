@@ -13,6 +13,8 @@ from langgraph.types import interrupt
 
 from app.ai.agents.assistant import AssistantAgent
 from app.ai.agents.memory_summarizer import MemorySummarizerAgent
+from app.ai.context import ContextBlock, ContextBuilder, TokenBudget, select_history_window
+from app.ai.context.compress import truncate_with_marker
 from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
@@ -99,6 +101,13 @@ HISTORY_WINDOW = get_policy().memory.history_window
 #: consolidate_memory_node always has the overflow available when it runs
 #: (it runs once per turn, after HISTORY_WINDOW turns are already appended).
 HISTORY_RAW_CAP = get_policy().memory.history_raw_cap
+
+#: Tokens set aside for the assist step's own answer when budgeting its
+#: prompt against settings.OLLAMA_NUM_CTX -- a typical conversational reply
+#: is well under this; generous on purpose since underestimating here would
+#: starve the prompt side for no benefit (the model just stops generating
+#: early, the context window doesn't get any bigger).
+ASSIST_COMPLETION_RESERVE_TOKENS = 1024
 
 #: Only bother calling the model once there's a worth-while batch to fold in,
 #: not for every single turn's 1-2-entry dribble past the window.
@@ -327,6 +336,10 @@ def create_planning_graph(
     """
     has_checkpointer = checkpointer is not None
     assistant_agent = AssistantAgent(llm_client)
+    # Sized against llm_client.count_tokens -- the same client the assist
+    # step's real generation call goes through, so the budget enforced here
+    # matches what the provider actually sees.
+    context_builder = ContextBuilder(llm_client)
     intent_client = fast_llm_client or llm_client
     # Reuses the fast tier already resolved for intent classification -- a
     # short consolidation pass doesn't warrant a third model in the mix.
@@ -506,6 +519,66 @@ def create_planning_graph(
                 f"Bir belge yüklü. Özet: {analysis.get('summary') or 'Özet mevcut değil.'}\n"
                 "Detay veya belge içeriği gerekiyorsa ilgili aracı çağır."
             )
+        history_summary_text = (
+            state.get("history_summary")
+            or "(Bu konuşmada henüz özetlenecek eski mesaj yok.)"
+        )
+
+        # Everything outside the two blocks below is fixed for this call --
+        # the system prompt template and the user's own message -- so it is
+        # reserved alongside the completion budget rather than modeled as a
+        # block of its own.
+        fixed_cost = llm_client.count_tokens(
+            assistant_agent.system_prompt
+        ) + llm_client.count_tokens(state["input_text"])
+        context_budget = TokenBudget(
+            total=settings.OLLAMA_NUM_CTX,
+            reserved_for_completion=ASSIST_COMPLETION_RESERVE_TOKENS + fixed_cost,
+        )
+
+        async def _render_document_context() -> str:
+            return document_context
+
+        async def _render_history_summary() -> str:
+            return history_summary_text
+
+        assembled = await context_builder.build(
+            [
+                ContextBlock(
+                    id="history_summary",
+                    priority=10,
+                    render=_render_history_summary,
+                    compressor=truncate_with_marker,
+                    required=True,
+                ),
+                ContextBlock(
+                    id="document_context",
+                    priority=20,
+                    render=_render_document_context,
+                    compressor=truncate_with_marker,
+                    required=True,
+                ),
+            ],
+            context_budget,
+        )
+
+        remaining_for_history = context_budget.available - assembled.total_tokens
+        history = select_history_window(
+            _prior_turns(state, HISTORY_RAW_CAP),
+            remaining_for_history,
+            llm_client.count_tokens,
+            min_turns=2,
+            max_turns=HISTORY_WINDOW,
+        )
+        if assembled.dropped or assembled.compressed or len(history) < len(
+            _prior_turns(state, HISTORY_WINDOW)
+        ):
+            logger.info(
+                "Assist context budget: dropped=%s compressed=%s history_turns=%d",
+                assembled.dropped,
+                assembled.compressed,
+                len(history),
+            )
 
         tools = build_assistant_tools(
             document_id=document_id,
@@ -525,9 +598,9 @@ def create_planning_graph(
             ):
                 async for chunk in assistant_agent.run_stream(
                     query=state["input_text"],
-                    history=_prior_turns(state, HISTORY_WINDOW),
-                    history_summary=state.get("history_summary"),
-                    document_context=document_context,
+                    history=history,
+                    history_summary=assembled.get("history_summary"),
+                    document_context=assembled.get("document_context"),
                     tools=tools,
                     config=config,
                     node="assist",
