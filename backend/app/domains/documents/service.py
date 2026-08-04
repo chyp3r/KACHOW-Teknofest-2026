@@ -5,6 +5,7 @@ from typing import Any, Optional
 from uuid import uuid4
 
 from app.ai.compliance.evrak_field import EvrakField, MissingField
+from app.ai.documents.anchors import build_page_map
 from app.ai.guardrails.injection import scrub_extracted_text
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
@@ -124,9 +125,20 @@ class DocumentService:
             ) from exc
 
         # A submitted document is attacker-controlled input from the prompt's
-        # perspective. Scrub before the char_count gate runs, so the gate
-        # measures what analysis actually sees, not the pre-scrub text.
-        extracted.text, scrubbed_markers = scrub_extracted_text(extracted.text)
+        # perspective. Scrub per page, not the already-joined text -- a page
+        # read directly via get_document_section must carry the same
+        # guarantee as the joined text every other path sees. Re-joining the
+        # scrubbed pages (rather than re-scrubbing the join) keeps char
+        # offsets consistent with what PageMap/chunking later compute from
+        # these same pages.
+        scrubbed_pages: list[str] = []
+        scrubbed_markers: list[str] = []
+        for page_text in extracted.pages or [extracted.text]:
+            cleaned, markers = scrub_extracted_text(page_text)
+            scrubbed_pages.append(cleaned)
+            scrubbed_markers.extend(markers)
+        extracted.pages = scrubbed_pages
+        extracted.text = "\n\n".join(scrubbed_pages)
         if scrubbed_markers:
             logger.warning(
                 "Scrubbed possible prompt injection from %s: %s", storage_path, scrubbed_markers
@@ -147,9 +159,11 @@ class DocumentService:
         state = await self._run_analysis(extracted.text, extracted.used_ocr)
         response = self._assemble(file_name, storage_path, extracted, state, scrubbed_markers)
         await self._save_document_metadata(file_name, storage_path, response)
-        await self._save_document_analysis_cache(storage_path, extracted.text, response)
-        
-        await self._index_for_qa(storage_path, extracted.text)
+        await self._save_document_analysis_cache(
+            storage_path, extracted.text, extracted.pages, response
+        )
+
+        await self._index_for_qa(storage_path, extracted.text, extracted.pages)
 
         await self._publish(
             DocumentAnalyzedEvent(
@@ -163,7 +177,9 @@ class DocumentService:
         )
         return response
 
-    async def _index_for_qa(self, storage_path: str, text: str) -> None:
+    async def _index_for_qa(
+        self, storage_path: str, text: str, pages: Optional[list[str]] = None
+    ) -> None:
         """Chunk, embed and index the document so Document Q&A can find it.
 
         The collection dimension is probed from a real embedding rather than
@@ -177,11 +193,16 @@ class DocumentService:
         one and is tagged with ``storage_path`` in its payload -- the same
         identifier the document-scoped query side filters on -- so retrieval
         can run Qdrant's native hybrid (dense + sparse) search restricted to
-        this one document instead of a plain dense-only lookup.
+        this one document instead of a plain dense-only lookup. It is also
+        tagged with ``page`` (via ``PageMap`` + the chunker's
+        ``start_index``), so a search hit can be cited by page instead of
+        being an anonymous passage.
 
         Args:
             storage_path: Storage reference, used as the document identifier.
             text: Full extracted document text.
+            pages: Per-page extracted text, in document order, used to map
+                each chunk's offset in ``text`` to a page number.
         """
         if not self.embedding_service or not self.vector_store:
             return
@@ -195,6 +216,8 @@ class DocumentService:
                 logger.warning("Document %s produced no chunks to index.", storage_path)
                 return
 
+            page_map = build_page_map(pages or [text])
+
             # Unfit on purpose: its sparse indices are CRC32 hashes of tokens,
             # not corpus-fitted ids, so no shared vocabulary is needed across
             # documents. Document-side encoding only uses avg_doc_len (falls
@@ -205,6 +228,9 @@ class DocumentService:
             encoder = SparseBM25Encoder()
             for chunk in chunks:
                 chunk.metadata["storage_path"] = storage_path
+                start_index = chunk.metadata.get("start_index")
+                if start_index is not None:
+                    chunk.metadata["page"] = page_map.page_for_offset(start_index)
                 indices, values = encoder.encode_document(chunk.text)
                 chunk.sparse_vector = {"indices": indices, "values": values}
 
@@ -509,9 +535,17 @@ class DocumentService:
         self,
         storage_path: str,
         extracted_text: str,
+        pages: list[str],
         response: DocumentAnalysisResponseSchema,
     ) -> None:
-        """Save full document analysis and extracted text to a local cache JSON file."""
+        """Save full document analysis, extracted text and per-page text to a
+        local cache JSON file.
+
+        ``pages`` backs the ``get_document_outline``/``get_document_section``
+        tools (see ``app.ai.tools.document_tools``) -- without it, a page
+        request would have nothing to index into once the analysis workflow
+        has already returned.
+        """
         import json
         from app.core.config import settings
 
@@ -520,6 +554,7 @@ class DocumentService:
         def _write():
             cache_data = {
                 "extracted_text": extracted_text,
+                "pages": pages,
                 "analysis": response.model_dump(mode="json")
             }
             os.makedirs(os.path.dirname(cache_file), exist_ok=True)
