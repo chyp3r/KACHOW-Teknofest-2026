@@ -8,20 +8,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Mandatory:** every meaningful change (code, template, schema, architecture) must be recorded in [CHANGELOG.md](CHANGELOG.md) under a version heading, in Turkish, using the existing `### Eklendi` / `### Değişti` sections.
 
-## Repository state (important)
+## Repository state
 
-Most of the tree is scaffolding. **Large numbers of `.py` files exist but are empty placeholders** — check before assuming a module has content.
+The tree is substantially built out. Backend, frontend, auth, migrations, observability and both competition tasks have real implementations; the remaining empty files are a handful of `__init__.py` plus `app/mcp/registry.py` and `app/domains/routing/`.
 
-Implemented today:
-- `backend/app/ai/**` — the bulk of the real code (agents, workflows, retrieval, embeddings, memory, prompts, LLM clients)
-- `backend/app/api/{exceptions,middleware,responses}/`, `api/router.py`, `api/v1/health.py`
-- `backend/app/core/` (config, enums, constants, permissions; `security.py` is a deliberate NotImplementedError skeleton)
-- `backend/app/infrastructure/` (Redis cache, async SQLAlchemy session, Qdrant store, local/S3 storage, Ollama/vLLM providers)
-- `backend/tests/unit/{ai,api,core,infrastructure}/`
+Landmarks worth knowing before changing anything:
 
-Empty placeholders (do not assume they work): all of `backend/app/domains/**`, `app/mcp/**`, `app/events/**`, `app/workers/**`, `app/observability/**`, `app/api/dependencies.py`, every `api/v1/*.py` except `health.py`, `app/lifespan.py`, `backend/pyproject.toml`, the root `Makefile`, `alembic/env.py` (no `alembic.ini` — migrations are not wired), and **the entire `frontend/`** (`package.json`, `vite.config.ts`, `App.tsx` are all 0 bytes).
+- **`backend/app/ai/**`** is the bulk of the code — agents, LangGraph workflows, retrieval, embeddings, prompts, guardrails, the decision policy layer, and the evaluation harness.
+- **Auth is live.** `get_current_user` / `require_roles` in `app/api/dependency.py`, JWT in `core/security.py`, `SECRET_KEY` present in `Settings`. `require_auth_if_enabled` gates the document router.
+- **Schema exists only through Alembic.** Nothing calls `create_all`. `0001_baseline` covers `users` / `invited_emails`; `0002_documents_analysis_table` adds `documents`. LangGraph's checkpoint tables are *not* in Alembic — `AsyncPostgresSaver.setup()` creates them at startup and `env.py` excludes them from autogenerate.
+- **`app/lifespan.py` warms models and graphs at boot** and opens the Postgres checkpointer. Every step is best-effort so the API boots with Ollama or Postgres down.
+- The document analysis graph runs **classification and field extraction as a single merged model call** (`_build_merged_output_model`), with a two-tier degradation ladder behind it. Do not re-split them.
 
-Two consequences worth knowing: `api/router.py` currently registers only the health router, and `core/security.py` reads `settings.SECRET_KEY`, which does not exist in `Settings` yet — whoever activates auth must add it to `app/core/config.py`.
+Two traps that cost real time:
+
+- Local `pytest` leaves **7 API tests failing** — they need Redis. `make test` (`docker compose run --rm backend pytest -q`) is the real gate. `tests/unit/evaluation/` additionally needs the repo root on `PYTHONPATH`, so it only collects inside the container.
+- Documents persist to PostgreSQL **and** to local JSON files, with the JSON path as the fallback when the database is unreachable. Changing one without the other makes the library view disagree with itself.
 
 ## Commands
 
@@ -53,22 +55,22 @@ persists anything:
 make migrate
 ```
 
-Tests — run from `backend/` and invoke pytest **as a module**, so `backend/` lands on `sys.path` (there is no `conftest.py`, `pytest.ini`, or populated `pyproject.toml`, and the tests import `app.*`):
+Tests — **the real gate runs in Docker**, because seven API tests need Redis and `tests/unit/evaluation/` needs the repo root on `PYTHONPATH`:
 
 ```bash
-python -m pytest tests/unit -v
+make test
+```
+
+Locally (from `backend/`; `pyproject.toml` sets `pythonpath = ["."]` and `asyncio_mode = "auto"`, and `tests/conftest.py` provides `FakeLLMClient` — prefer it over hand-rolled mocks). Expect the 7 Redis-dependent failures:
+
+```bash
+python -m pytest tests/unit --ignore=tests/unit/evaluation -q
 ```
 
 Single test:
 
 ```bash
-python -m pytest tests/unit/ai/test_workflows.py::test_classification_graph -v
-```
-
-Inside the container (app code and tests are bind-mounted, `PYTHONPATH=/workspace`):
-
-```bash
-docker compose exec backend python -m pytest tests/unit -v
+python -m pytest tests/unit/ai/test_workflows.py -q
 ```
 
 Live Ollama smoke test (needs Ollama running with `qwen3.5:9b` pulled):
@@ -83,7 +85,7 @@ python scripts/test_ai_core.py
 
 Strict one-way layering (`docs/development/backend-standards.md`): **Router → Service → Repository → Infrastructure → Database**. Routers are HTTP-only (no SQL, no AI calls, no business logic); services hold business logic but never build responses or write ORM queries; repositories only access data. Dependencies are injected, never constructed inline.
 
-Features live in `app/domains/<domain>/` with a fixed five-file shape: `models.py` (SQLAlchemy), `schemas.py` (Pydantic request/response), `repository.py`, `service.py`, `router.py`. Add to an existing domain rather than creating a new one. Suggested ceilings: router ≤300 lines, service ≤500, repository ≤300.
+Features live in `app/domains/<domain>/` as `service.py`, `repository.py`, `router.py` plus `model/<name>_model.py` and `schema/<name>_schema.py` **directories** (singular-noun modules inside singular folders, matching the `core/enums/user_role.py` pattern — not the plural `models.py` / `schemas.py` the older docs describe). Add to an existing domain rather than creating a new one. Suggested ceilings: router ≤300 lines, service ≤500, repository ≤300.
 
 The backend must not contain prompts, workflow orchestration, tool selection, or MCP calls — those belong to `app/ai/`. Conversely `app/ai/` must not contain HTTP endpoints, ORM usage, or direct DB access.
 
@@ -100,14 +102,16 @@ All configuration flows through the `settings` singleton in `app/core/config.py`
 `docs/architecture/ai.md` is the detailed reference. Structure:
 
 - **`llms/`** — `BaseLLMClient` ABC (`generate`, `stream`, `generate_structured`) with a `get_llm_client(provider=...)` factory; implementations live in `infrastructure/providers/` (Ollama, vLLM). Code depends on the ABC, never a concrete provider.
-- **`agents/`** — `BaseAgent` plus 10 specialists (Orchestrator, NER, Classifier, Metadata, Writer, Editor, Verifier, Router, Reflection, Evaluator). Each specialist is a thin subclass whose only job is to load its system prompt via `PromptManager` and declare name/description. `BaseAgent.run_structured()` validates against a Pydantic model and, on failure, appends the validation error to the message list and retries — that self-correction loop is why agents return typed objects rather than parsed strings.
+- **`agents/`** — `BaseAgent`, a `TemplateAgent` base that removes the boilerplate subclass, and the specialists that remain after the dedupe: `assistant`, `classifier`, `compliance`, `judge`, `memory_summarizer`, `reviser`, `router`, `writer`. Each loads its system prompt via `PromptManager` and declares name/description. `BaseAgent.run_structured()` validates against a Pydantic model and, on failure, appends the validation error to the message list and retries — that self-correction loop is why agents return typed objects rather than parsed strings.
 - **`prompts/`** — prompt text lives in `prompts/templates/*.md` (Turkish), never inline in Python. `PromptManager.render()` substitutes `{{variable}}` (double braces, deliberately, so JSON schema examples with single braces survive). Templates are cached in memory on first read.
-- **`workflows/`** — five LangGraph subgraphs plus a master graph, each exposed as a `create_*_graph(...)` factory returning a compiled graph, with state as a `TypedDict`: `classification_graph` (Classify→NER→Metadata), `rag_graph` (Rewrite→Retrieve→Verify, looping back to rewrite with verifier feedback, max 2 attempts), `draft_graph` (Writer→Editor→Reflection→Evaluator), `routing_graph` (department vs. `HumanApproval` by confidence score), `system_graph` (background cache/cleanup/logging). `planning_graph` is the supervisor: `OrchestratorAgent` produces an ordered `PlanOutput` of step names and the executor node loops through them, invoking subgraphs and threading results forward (classification summary → RAG query → draft context → routing input). Every node catches its own exceptions and returns a safe fallback state rather than raising.
+- **`workflows/`** — LangGraph subgraphs exposed as `create_*_graph(...)` factories returning compiled graphs, with state as a `TypedDict`: `document_analysis_graph` (merged classify+extract → compliance → retrieve → suggest), `rag_graph`, `draft_graph`, `routing_graph`. `planning_graph` is the supervisor, driven by a readiness engine over a step DAG (`step_graph.py`) and a dispatch table rather than an index or an if/elif chain; `planner.py` resolves intent to a plan (`draft` / `analyze` / `assist`) using the rule and prototype layers in `app/ai/policy/`. Every node catches its own exceptions and returns a safe fallback state rather than raising; `resilience.py` supplies the retry and timeout decorators.
 - **`retrieval/`** — `HybridRetriever` runs `DenseRetriever` (Qdrant) and `BM25Retriever` in parallel via `asyncio.gather`, over-fetches (`max(limit*2, 10)`), merges with `reciprocal_rank_fusion` (k=60), then truncates. `LLMReranker` is available as an extra stage.
 - **`embeddings/`** — `EmbeddingService` composes a `BaseChunker` strategy (character, recursive, semantic, agentic) with a `BaseEmbeddingsClient` and returns `EmbeddedChunk` (text + vector + metadata), the unit `QdrantStore` consumes.
-- **`memory/`** — `ConversationWindowMemory` (short-term), `SummaryMemory`, `VectorMemory` (semantic/episodic), all behind `BaseMemory`.
+- **`tools/`** — `ToolSpec` / `build_assistant_tools`. The assistant's document tools are bound by closure to one `document_id` per request, so cross-document access is structurally impossible rather than merely disallowed; when there is no document they are not bound at all.
+- **`policy/`** — the decision layer's parameters as one typed policy, plus semantic prototypes. `POLICY_VERSION` gates cached vectors: bump it and stale prototype files are ignored, which means `scripts/build_prototypes.py` must be re-run.
+- **`compliance/`** — the deterministic core of Görev 1. `parse_labelled_fields` reads the regulation-prescribed header with regexes and `merge_parsed_over_model` makes the parser authoritative **in both directions** for `AUTHORITATIVE_FIELD`: where it found nothing, the model's value is discarded, because a model that fills a prescribed-but-absent field hides the very omission the pipeline exists to report.
 
-Everything is `async`. Adding a new agent means: template in `prompts/templates/`, subclass in `agents/`, export in `agents/__init__.py`. Adding a workflow means a new `*_graph.py` with a `create_*_graph` factory, exported from `workflows/__init__.py`, and a mocked unit test — tests patch `Agent.run_structured` and pass `MagicMock(spec=BaseLLMClient)`; never hit a live model in a test.
+Everything is `async`. Adding a new agent means: template in `prompts/templates/`, subclass in `agents/`, export in `agents/__init__.py`. Adding a workflow means a new `*_graph.py` with a `create_*_graph` factory, exported from `workflows/__init__.py`, and a mocked unit test — prefer `FakeLLMClient` from `tests/conftest.py`; never hit a live model in a test.
 
 ## Conventions
 

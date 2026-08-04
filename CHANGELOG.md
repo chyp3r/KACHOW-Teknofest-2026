@@ -3,6 +3,22 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 
+## [1.35.0] - 2026-08-04
+### Eklendi
+- **Evrak Analizi PostgreSQL'e Kalıcılaştırıldı**: Tamamlanan ön inceleme sonucu artık veritabanına yazılıyor; `uploads_metadata.json` ve belge başına `_analysis.json` dosyaları tek yazma kilidinden ibaretti, sorgu yüzeyi yoktu ve kalıcı olmayan bir volume ile konteyner yeniden başlatıldığında kayboluyordu.
+  - `DocumentModel` gerçek bir SQLAlchemy modeline dönüştürüldü. Birincil anahtar **`storage_path`**: `DocumentAnalysisResponseSchema` zaten `analysis_id = storage_path` atıyor ve `GET /documents/{storage_path}` belgeleri bununla adresliyor, ikinci bir kimlik yalnızca eşleme yükü getirirdi. `fields` / `missing_fields` / `mevzuat_references` / `scrubbed_markers` `JSON` sütunlarında saklanır; kayıtlar bütün hâlde okunuyor, alan bazında sorgulanmıyor.
+  - `DocumentRepository`: `upsert` (yeniden analiz normal bir işlem, bu yüzden insert değil), `get_by_storage_path`, `get_page` (sayfa ve toplam birlikte; toplamı SQL'de saymak kütüphaneyi ölçmek için tüm satırları yüklemekten kurtarır). `UserRepository` ile aynı disiplin: `flush` var, `commit` yok — işlem sınırı `get_db`'ye aittir.
+  - `GET /documents` ve `GET /documents/{storage_path}` artık veritabanından okuyor; sayfalama ve sıralama SQL'de yapılıyor. Yanıt sözleşmesi **aynı** kaldı (kütüphane görünümünün okuduğu yedi anahtar birebir korunur), bir test bunu kilitliyor.
+  - **Kademeli düşüş**: veritabanı yapılandırılmamış veya erişilemezse yazma sessizce yerel JSON dosyalarına düşer ve okuma yolları yerel önbelleğe geri döner. Analiz hiçbir zaman PostgreSQL'in ayakta olmasına bağlı değildir — compose yığını olmadan çalışan bir `uvicorn app.main:app` bozulmaz.
+  - Alembic `0002_documents_analysis_table`: `documents` tablosunu 0001 taban göçünün üzerine ekler; `alembic/env.py` modeli içe aktarır (aksi hâlde autogenerate boş göç üretir).
+
+### Düzeltildi
+- **`greenlet` Bağımlılığı Eksikti**: `requirements.txt` yalın `sqlalchemy` bildiriyordu; SQLAlchemy'nin asenkron katmanı çalışma zamanında `greenlet` gerektirir ve paket hiçbir ortamda kurulu değildi. `get_db` kullanan **her istek** `ValueError: the greenlet library is required to use this function` ile başarısız oluyordu — birim testleri oturumu taklit ettiği için tamamen görünmezdi. `sqlalchemy[asyncio]==2.0.51` olarak düzeltildi.
+- **Genelge/Resmî Yazı Ayrımı**: Sınıflandırma isteminde `circular` yalnızca "genelge" etiketiyle geçiyor, `official_letter` ise tam bir ölçüt paragrafı ve "kurumlar arası yazışmaların varsayılan türüdür" ifadesiyle tanımlanıyordu; bir genelge yapısal olarak resmî yazı olduğu için model varsayılana düşüyordu. Artık dağıtımlı muhatap (`DAĞITIM YERLERİNE`) ve genel düzenleme dili ayırt edici ölçüt olarak verilir, `directive` de kendi ölçütünü alır. `qwen3.5:9b` ile sentetik küme üzerinde tür doğruluğu **11/12 → 12/12**, üç tekrarda kararlı (36/36); eksik alan eşleşmesi %75,0 → **%91,7**.
+
+### Not
+- OCRTurk kıyaslama kümesi lisans dosyası taşımadığı için depoya hiçbir zaman eklenmedi; `.gitignore`'a `ocrturk/` ve `datasets/ocrturk/` girdileri eklenerek yanlışlıkla eklenmesi engellendi. `scripts/evaluate_ocr_benchmark.py` kümeyi harici bir kopyadan okur.
+
 ## [1.34.0] - 2026-08-03
 ### Değiştirildi
 - **`chat` ve `document_qa` Tek `assist` Adımında Birleştirildi, Gerçek Tool-Calling Döngüsü Eklendi**: Router'ın "bu mesaj sohbet mi, belge sorusu mu" kararını önceden vermek zorunda olması yanlış katmanda alınan bir karardı -- bu, cevabın belgeye ihtiyaç duyup duymadığını bilmeden önce verilen bir tahmindi. `intent_rules.py`/`intent_scorer.py` bu ayrımı kurtarmak için `document_qa.request_softener_counter` ve `document_qa.memory_recall_counter` gibi salt iki intent'i birbirinden ayırmaya yarayan telafi kuralları taşıyordu; `evaluation/reports/all-latest.md`'deki heldout hatalarının çoğu (`held_03/06/07/16`) tam olarak bu iki sınıf arasındaki kaymalardı.
