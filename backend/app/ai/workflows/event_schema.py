@@ -67,6 +67,16 @@ class TokenEvent(BaseModel):
     seq: Optional[int] = None
 
 
+class ToolCallEvent(BaseModel):
+    """The assistant agent invoked a tool for this turn (see ``app.ai.tools``)."""
+
+    event: Literal["tool_call"] = "tool_call"
+    node: str
+    tool: str
+    args: dict[str, Any] = Field(default_factory=dict)
+    seq: Optional[int] = None
+
+
 class PartialResultEvent(BaseModel):
     event: Literal["partial_result"] = "partial_result"
     key: str
@@ -116,6 +126,7 @@ WORKFLOW_EVENT_NAMES: frozenset[str] = frozenset(
         "node_error",
         "node_skipped",
         "token",
+        "tool_call",
         "partial_result",
         "planning_completed",
         "interrupt",
@@ -131,6 +142,7 @@ __all__ = [
     "NodeErrorEvent",
     "NodeSkippedEvent",
     "TokenEvent",
+    "ToolCallEvent",
     "PartialResultEvent",
     "PlanningCompletedEvent",
     "InterruptEvent",

@@ -31,7 +31,7 @@ async def test_chat_service_plain_chat(chat_service, mock_planning_graph):
     mock_planning_graph.ainvoke.return_value = {
         "final_output": {
             "status": "COMPLETED",
-            "chat": {"reply": "Merhaba, size nasıl yardımcı olabilirim?"}
+            "assist": {"reply": "Merhaba, size nasıl yardımcı olabilirim?"}
         }
     }
 
@@ -50,7 +50,7 @@ async def test_chat_service_document_qa(chat_service, mock_planning_graph):
     mock_planning_graph.ainvoke.return_value = {
         "final_output": {
             "status": "COMPLETED",
-            "document_qa": {"reply": "Belge kuralları anlatıyor."}
+            "assist": {"reply": "Belge kuralları anlatıyor."}
         }
     }
 
@@ -85,7 +85,7 @@ async def test_chat_service_reports_interrupt_without_a_checkpointer_configured(
     paused', not bubble up and fail the whole request."""
     mock_planning_graph.aget_state.side_effect = Exception("no checkpointer configured")
     mock_planning_graph.ainvoke.return_value = {
-        "final_output": {"status": "COMPLETED", "chat": {"reply": "Tamamdır."}}
+        "final_output": {"status": "COMPLETED", "assist": {"reply": "Tamamdır."}}
     }
     request = ChatMessageRequest(message="Selam")
 
@@ -153,7 +153,7 @@ async def test_chat_service_threads_the_requested_reasoning_level_into_the_graph
     request = ChatMessageRequest(message="Bana hızlı bir taslak yaz", reasoning_level="fast")
 
     mock_planning_graph.ainvoke.return_value = {
-        "final_output": {"status": "COMPLETED", "chat": {"reply": "Tamam."}}
+        "final_output": {"status": "COMPLETED", "assist": {"reply": "Tamam."}}
     }
 
     await chat_service.handle_message(request)

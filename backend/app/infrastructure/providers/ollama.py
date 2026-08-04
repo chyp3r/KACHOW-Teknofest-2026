@@ -3,10 +3,16 @@ import time
 from collections.abc import AsyncIterator
 from typing import Any
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_ollama import ChatOllama
 
-from app.ai.llms.base import BaseLLMClient
+from app.ai.llms.base import BaseLLMClient, ToolCallResponse
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -119,8 +125,17 @@ class OllamaClient(BaseLLMClient):
             self._client_cache[cache_key] = client
         return client
 
-    def _convert_messages(self, messages: list[dict[str, str]]) -> list[BaseMessage]:
-        """Convert standard message dicts to LangChain Message objects."""
+    def _convert_messages(self, messages: list[dict[str, Any]]) -> list[BaseMessage]:
+        """Convert standard message dicts to LangChain Message objects.
+
+        Two roles beyond the original three exist to round-trip a tool-calling
+        loop (see :meth:`generate_with_tools`): an ``assistant`` message may
+        carry a ``tool_calls`` key (the model's own previous turn requesting
+        one or more tools), and a ``tool`` message carries that turn's result
+        (``tool_call_id``, ``name``, ``content``). Both are plain JSON-safe
+        dicts rather than raw LangChain objects so the caller's message list
+        stays serializable (useful for SSE debug logging) between loop turns.
+        """
         lc_messages: list[BaseMessage] = []
         for msg in messages:
             role = msg.get("role", "user").lower()
@@ -130,7 +145,19 @@ class OllamaClient(BaseLLMClient):
             elif role == "user":
                 lc_messages.append(HumanMessage(content=content))
             elif role in ("assistant", "ai"):
-                lc_messages.append(AIMessage(content=content))
+                tool_calls = msg.get("tool_calls")
+                if tool_calls:
+                    lc_messages.append(AIMessage(content=content, tool_calls=tool_calls))
+                else:
+                    lc_messages.append(AIMessage(content=content))
+            elif role == "tool":
+                lc_messages.append(
+                    ToolMessage(
+                        content=content,
+                        tool_call_id=msg.get("tool_call_id", ""),
+                        name=msg.get("name"),
+                    )
+                )
             else:
                 logger.warning(
                     "Unknown message role: %s, defaulting to HumanMessage", role
@@ -242,6 +269,54 @@ class OllamaClient(BaseLLMClient):
             time.perf_counter() - started,
         )
         return result
+
+    async def generate_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[Any],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        **kwargs: Any,
+    ) -> ToolCallResponse:
+        """Generate one turn of a tool-calling exchange via ``bind_tools``.
+
+        Uses the same native tool-calling path ``generate_structured`` pins via
+        ``method="function_calling"`` -- verified directly against the Ollama
+        API to be honoured exactly on custom-renderer models (e.g. qwen3.5)
+        where ``format=<schema>`` is a silent no-op. Thinking mode is forced
+        off for the same reason it is there: reasoning tokens would precede
+        the tool-call payload and can consume the generation budget before it.
+        """
+        temp = temperature if temperature is not None else self.temperature
+        kwargs.setdefault("reasoning", False)
+        client = self._build_client(temp, max_tokens, **kwargs)
+        lc_messages = self._convert_messages(messages)
+
+        started = time.perf_counter()
+        try:
+            bound = client.bind_tools(tools)
+            response = await bound.ainvoke(lc_messages)
+        except Exception:
+            logger.exception("Error generating tool-call response from Ollama")
+            raise
+
+        logger.info(
+            "Ollama generate_with_tools model=%s tool_calls=%d took=%.2fs",
+            self.model_name,
+            len(response.tool_calls or []),
+            time.perf_counter() - started,
+        )
+        return ToolCallResponse(
+            content=str(response.content or ""),
+            tool_calls=[
+                {
+                    "id": call.get("id") or "",
+                    "name": call.get("name", ""),
+                    "args": call.get("args") or {},
+                }
+                for call in (response.tool_calls or [])
+            ],
+        )
 
     async def warm_up(self) -> bool:
         """Load the model into memory so the first real request is not cold.

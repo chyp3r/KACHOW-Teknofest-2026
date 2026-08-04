@@ -1,5 +1,22 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import AsyncIterator, List, Dict, Any, Optional
+
+
+@dataclass
+class ToolCallResponse:
+    """One non-streaming turn of a tool-calling exchange.
+
+    Attributes:
+        content: Text the model produced alongside (or instead of) tool calls.
+            Some providers emit a short remark even when they also request a
+            tool; most emit only tool calls with empty content.
+        tool_calls: Requested calls, each ``{"id", "name", "args"}``. Empty
+            means the model chose to answer directly instead of calling a tool.
+    """
+
+    content: str = ""
+    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class BaseLLMClient(ABC):
@@ -56,6 +73,38 @@ class BaseLLMClient(ABC):
             response_model: Pydantic model class to validate the output against
             temperature: Sampling temperature
             **kwargs: Extra provider-specific parameters
+        """
+        pass
+
+    @abstractmethod
+    async def generate_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Any],
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        **kwargs: Any
+    ) -> ToolCallResponse:
+        """Generate one turn of a tool-calling exchange.
+
+        Non-streaming: a tool call has to be inspected and executed before
+        anything downstream can be shown to the user, so there is nothing
+        useful to stream on a turn that might just be a tool request.
+
+        Args:
+            messages: Message dicts. Beyond the usual ``system``/``user``/
+                ``assistant`` roles, a caller resuming a tool loop may include
+                an ``assistant`` message carrying a ``tool_calls`` key (the
+                model's own previous turn) and ``tool`` messages carrying
+                ``tool_call_id``/``name``/``content`` (that turn's results).
+            tools: Tool schemas in this provider's native bindable form (e.g.
+                LangChain ``BaseTool`` instances for a LangChain-backed client).
+            temperature: Sampling temperature.
+            max_tokens: Maximum tokens to generate.
+            **kwargs: Extra provider-specific parameters.
+
+        Returns:
+            The model's text (if any) and any tool calls it requested.
         """
         pass
 

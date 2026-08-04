@@ -1,18 +1,22 @@
 """Guards the scoring mechanics that make the old cascade's failures fixable.
 
 The cascade this replaced returned on the first keyword hit, which made table
-order the decision. Three properties fix that, and each is easy to lose to a
+order the decision. Two properties fix that, and each is easy to lose to a
 well-meaning simplification:
 
 * **Evidence accumulates.** Two intents in one message must both score, so the
   margin between them stays visible instead of one short-circuiting the other.
-* **Counter-signals invalidate, they do not merely outweigh.** A definitional
-  question and a memory-recall question each remove evidence that is not
-  applicable, rather than piling weight on the other side. Turning either into
-  a plain weight reintroduces a failure the repo already fixed once.
-* **Order inside the scorer matters.** The memory-recall counter runs after
-  every document_qa signal has accumulated; moving it earlier silently stops it
-  cancelling the question hint.
+* **A counter-signal invalidates, it does not merely outweigh.** A definitional
+  question removes evidence that is not applicable (the domain noun it
+  contains), rather than piling weight on the other side. Turning it into a
+  plain weight reintroduces a failure the repo already fixed once.
+
+`chat` and `document_qa` used to be two separate intents here, each with its
+own score bucket, and two of the counter-signals below (a memory-recall
+question, a politely-phrased request) existed only to arbitrate which of the
+two a message should win. Both are now the same `assist` bucket, so evidence
+for either reading simply accumulates instead of competing -- see the tests
+each counter's removal replaced.
 """
 
 import pytest
@@ -33,11 +37,11 @@ def test_normalize_folds_turkish_characters_and_punctuation():
     assert normalize(None) == ""
 
 
-def test_an_empty_message_scores_chat_decisively():
+def test_an_empty_message_scores_assist_decisively():
     scores = score_intents("   ", None)
 
-    assert scores.ranked[0][0] == "chat"
-    assert "chat.empty_message" in scores.evidence
+    assert scores.ranked[0][0] == "assist"
+    assert "assist.empty_message" in scores.evidence
 
 
 def test_evidence_accumulates_instead_of_short_circuiting():
@@ -52,7 +56,7 @@ def test_a_definitional_question_cancels_the_domain_noun_it_contains():
     """"Üst yazı ne demek?" mentions drafting; it does not request it."""
     scores = score_intents("Üst yazı ne demek?", None)
 
-    assert scores.ranked[0][0] == "chat"
+    assert scores.ranked[0][0] == "assist"
     assert "draft.definitional_counter" in scores.evidence
     assert scores.scores.get("draft", 0.0) < PRESENCE_FLOOR
 
@@ -62,19 +66,25 @@ def test_a_definitional_counter_outweighs_an_explicit_phrase_plus_a_noun():
     be sized for that coincidence, not just for the noun alone."""
     scores = score_intents("Taslak oluşturma süreci sistemde nasıl işliyor?", None)
 
-    assert scores.ranked[0][0] == "chat"
+    assert scores.ranked[0][0] == "assist"
     assert scores.margin >= DECISIVE_MARGIN
 
 
-def test_memory_recall_invalidates_document_evidence_rather_than_outweighing_it():
+def test_memory_recall_and_document_evidence_both_accumulate_into_assist():
+    """Before the `chat`/`document_qa` merge, a memory-recall question had to
+    *invalidate* the document-question evidence it also carried, or the two
+    competing buckets could pick the wrong one. Now both readings feed the
+    same `assist` bucket, so they simply add up -- no invalidation needed."""
     scores = score_intents("Bu belgede kaç madde vardı, hatırlıyor musun?", DOCUMENT)
 
-    assert "document_qa.memory_recall_counter" in scores.evidence
-    assert scores.ranked[0][0] == "chat"
+    assert "assist.memory_recall" in scores.evidence
+    assert "assist.about_the_document" in scores.evidence
+    assert scores.ranked[0][0] == "assist"
 
 
 def test_an_explicit_drafting_request_still_beats_memory_recall():
-    """The counter must not be a blanket "recall always wins" rule."""
+    """A recall phrase is not a blanket "recall always wins" rule -- an
+    explicit drafting request in the same message must still win outright."""
     scores = score_intents(
         "Az önce taslak hazırlamanı istemiştim, şimdi hazırla", DOCUMENT
     )
@@ -89,8 +99,8 @@ def test_a_greeting_resolves_the_same_way_with_and_without_a_document():
     without = score_intents("Merhaba", None)
     with_document = score_intents("Merhaba", DOCUMENT)
 
-    assert without.ranked[0][0] == "chat"
-    assert with_document.ranked[0][0] == "chat"
+    assert without.ranked[0][0] == "assist"
+    assert with_document.ranked[0][0] == "assist"
 
 
 def test_a_farewell_is_not_read_as_consent_to_continue():
@@ -99,7 +109,7 @@ def test_a_farewell_is_not_read_as_consent_to_continue():
     scores = score_intents("İyi akşamlar, yarın devam ederiz.", DOCUMENT, "draft")
 
     assert "draft.continuation" not in scores.evidence
-    assert scores.ranked[0][0] == "chat"
+    assert scores.ranked[0][0] == "assist"
 
 
 def test_a_short_affirmative_does_not_double_count_its_own_brevity():
@@ -108,7 +118,7 @@ def test_a_short_affirmative_does_not_double_count_its_own_brevity():
     scores = score_intents("evet, hazırla", None, "draft")
 
     assert "draft.continuation" in scores.evidence
-    assert "chat.short_message" not in scores.evidence
+    assert "assist.short_message" not in scores.evidence
     assert scores.margin >= DECISIVE_MARGIN
 
 
@@ -120,7 +130,7 @@ def test_continuation_is_bounded_by_message_length():
     assert "draft.continuation" not in scores.evidence
 
 
-@pytest.mark.parametrize("previous_intent", ["chat", "document_qa", None])
+@pytest.mark.parametrize("previous_intent", ["assist", None])
 def test_continuation_only_applies_to_continuable_previous_intents(previous_intent):
     scores = score_intents("evet", None, previous_intent)
 
@@ -150,25 +160,23 @@ def test_every_decision_reports_the_rules_that_produced_it():
     assert all(isinstance(rule_id, str) and "." in rule_id for rule_id in scores.evidence)
 
 
-def test_a_request_softener_does_not_win_document_qa_on_its_own():
-    """"Bunun cevabını sen yazar mısın?" carries no document phrase; the
-    question mark alone used to be enough for `document_qa` to clear both the
-    presence floor and the decisive margin unopposed. A politely-phrased
-    request is not a content lookup, so this must abstain, not answer wrong."""
+def test_a_request_softener_resolves_to_assist_now_that_chat_and_document_qa_are_merged():
+    """"Bunun cevabını sen yazar mısın?" carries no document phrase, only the
+    structural question-with-a-document hint. Before the merge this needed a
+    counter-signal to stop it winning the narrow, retrieval-only `document_qa`
+    outright; now that reading and a plain conversational one are the same
+    `assist` intent, resolving here confidently is the right outcome -- the
+    assistant agent itself decides whether a tool call is warranted."""
     scores = score_intents("Bunun cevabını sen yazar mısın?", DOCUMENT)
 
-    assert "document_qa.request_softener_counter" in scores.evidence
-    assert scores.scores.get("document_qa", 0.0) < PRESENCE_FLOOR
+    assert scores.ranked[0][0] == "assist"
+    assert scores.scores["assist"] >= PRESENCE_FLOOR
 
 
-def test_a_request_softener_does_not_override_a_real_content_question():
-    """The softener counter is gated on the absence of `about_the_document`:
-    unlike memory recall, a softener is only a grammatical mood, and "Bu
-    belgede ne yazdığını söyler misin?" is still a genuine document question."""
+def test_a_softener_does_not_prevent_a_real_content_question_from_resolving():
     scores = score_intents("Bu belgede ne yazdığını söyler misin?", DOCUMENT)
 
-    assert "document_qa.request_softener_counter" not in scores.evidence
-    assert scores.ranked[0][0] == "document_qa"
+    assert scores.ranked[0][0] == "assist"
 
 
 def test_a_definitional_softener_does_not_capture_a_document_specific_question():
@@ -177,15 +185,15 @@ def test_a_definitional_softener_does_not_capture_a_document_specific_question()
     about a general concept, even though it uses the same softener."""
     scores = score_intents("Şu belgeye bir göz atıp durumu anlatır mısın?", DOCUMENT)
 
-    assert "chat.definitional_question" not in scores.evidence
+    assert "assist.definitional_question" not in scores.evidence
 
 
-def test_a_genuine_definitional_question_still_resolves_to_chat():
+def test_a_genuine_definitional_question_still_resolves_to_assist():
     """The removed bare softener phrases were redundant for every existing
     case: "ne demek" alone still carries the inversion category."""
     scores = score_intents("Resmi yazı ne demek, kısaca anlatır mısın?", None)
 
-    assert scores.ranked[0][0] == "chat"
+    assert scores.ranked[0][0] == "assist"
     assert "draft.definitional_counter" in scores.evidence
 
 
@@ -203,5 +211,5 @@ def test_evvelki_is_recognised_as_a_memory_recall_synonym():
     the document's contents."""
     scores = score_intents("Bir evvelki turda bana ne iletmiştin?", DOCUMENT)
 
-    assert "chat.memory_recall" in scores.evidence
-    assert scores.ranked[0][0] == "chat"
+    assert "assist.memory_recall" in scores.evidence
+    assert scores.ranked[0][0] == "assist"

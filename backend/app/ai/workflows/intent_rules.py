@@ -28,7 +28,7 @@ not use it.
 from dataclasses import dataclass
 from typing import Literal, Optional
 
-Intent = Literal["draft", "analyze", "document_qa", "chat"]
+Intent = Literal["draft", "analyze", "assist"]
 
 RuleKind = Literal["phrase", "structural"]
 
@@ -126,10 +126,22 @@ ANALYZE_RULES: tuple[EvidenceRule, ...] = (
     ),
 )
 
-CHAT_RULES: tuple[EvidenceRule, ...] = (
+#: `chat` and `document_qa` used to be two separate intents, each with its own
+#: score bucket, and a chunk of this module's history is rules that exist only
+#: to arbitrate between them: a memory-recall question must beat a document
+#: question, a politely-phrased request must not be read as a content lookup.
+#: Both now resolve to the same `assist` bucket (a single agent that answers
+#: conversationally and reaches for retrieval tools itself when it needs to),
+#: so that arbitration has nothing left to arbitrate -- evidence for either
+#: reading simply accumulates in the same score instead of competing. Only the
+#: two rules below that were pure tie-breakers (`document_qa.request_softener_
+#: counter`, `document_qa.memory_recall_counter` in the pre-merge version) were
+#: dropped; every rule that contributed genuine positive evidence survives,
+#: renamed onto `assist`.
+ASSIST_RULES: tuple[EvidenceRule, ...] = (
     EvidenceRule(
-        id="chat.greeting",
-        intent="chat",
+        id="assist.greeting",
+        intent="assist",
         weight=WEIGHT_EXPLICIT,
         surfaces=(
             "merhaba", "selam", "gunaydin", "iyi gunler", "iyi aksamlar",
@@ -137,8 +149,8 @@ CHAT_RULES: tuple[EvidenceRule, ...] = (
         ),
     ),
     EvidenceRule(
-        id="chat.courtesy",
-        intent="chat",
+        id="assist.courtesy",
+        intent="assist",
         weight=WEIGHT_EXPLICIT,
         surfaces=(
             "tesekkur", "tesekkurler", "sagol", "sag ol", "eyvallah",
@@ -146,8 +158,8 @@ CHAT_RULES: tuple[EvidenceRule, ...] = (
         ),
     ),
     EvidenceRule(
-        id="chat.about_the_assistant",
-        intent="chat",
+        id="assist.about_the_assistant",
+        intent="assist",
         weight=WEIGHT_EXPLICIT,
         surfaces=(
             "nasilsin", "kimsin", "sen kimsin", "ne yapabilirsin",
@@ -158,19 +170,20 @@ CHAT_RULES: tuple[EvidenceRule, ...] = (
     #: The counter-signal that makes `inversion` solvable. These phrases mark a
     #: message as being *about* a concept rather than a request to produce one:
     #: "ne demek", "fark nedir", "hangi durumlarda kullanilir". They subtract
-    #: from whichever domain noun fired, so "Üst yazı ne demek?" lands on chat
-    #: without the draft phrases needing to be weakened for every other case.
+    #: from whichever domain noun fired, so "Üst yazı ne demek?" lands on
+    #: `assist` without the draft phrases needing to be weakened for every
+    #: other case.
     #:
     #: Bare "açıklar mısın" / "anlatır mısın" used to be listed here too, on the
     #: assumption that asking for an explanation is always about a concept. It
     #: is not: "Şu belgeye bakıp durumu anlatır mısın?" asks the same thing
     #: about a specific attached document, which is an analysis request, not a
-    #: definitional one. Removed -- every existing `chat` case that used either
+    #: definitional one. Removed -- every existing case that used either
     #: phrase also carries its own definitional marker ("ne demek", "nasıl
     #: çalışır") and still resolves correctly without it.
     EvidenceRule(
-        id="chat.definitional_question",
-        intent="chat",
+        id="assist.definitional_question",
+        intent="assist",
         weight=WEIGHT_EXPLICIT,
         surfaces=(
             # Bare "nedir" is deliberately absent: "Evrakın konusu nedir?" is a
@@ -181,17 +194,32 @@ CHAT_RULES: tuple[EvidenceRule, ...] = (
             "ornegi nedir",
         ),
     ),
+    #: Only meaningful when a document is attached; asking what a document
+    #: says is not a plausible reading of a message with nothing to read.
+    #: Possessives ("belgenin", "evrakın") are deliberately absent: they are
+    #: just as common in analysis requests ("Belgenin hangi kategoriye
+    #: girdiğini tespit et") and let this rule outscore analyze there.
+    EvidenceRule(
+        id="assist.about_the_document",
+        intent="assist",
+        weight=WEIGHT_DOMAIN,
+        surfaces=(
+            "bu belgede", "belgede", "evrakta", "bu evrak", "bu yazi",
+            "belgeyi kim", "talep edilen", "yazi kime", "belgede gizlilik",
+        ),
+        requires_document=True,
+    ),
 )
 
 #: Phrases that make a message about *this conversation's own history*. Kept as
-#: its own tier because a recall question must reach `chat` (unrestricted
+#: its own tier because a recall question must reach `assist` (unrestricted
 #: history access) whatever else the message contains -- a document being
 #: attached must never turn a question about the conversation into a question
 #: about the document.
 MEMORY_RECALL_RULES: tuple[EvidenceRule, ...] = (
     EvidenceRule(
-        id="chat.memory_recall",
-        intent="chat",
+        id="assist.memory_recall",
+        intent="assist",
         weight=WEIGHT_EXPLICIT,
         surfaces=(
             "az once", "biraz once", "az evvel", "biraz evvel", "demin",
@@ -213,30 +241,16 @@ MEMORY_RECALL_RULES: tuple[EvidenceRule, ...] = (
     ),
 )
 
-#: Only meaningful when a document is attached; asking what a document says is
-#: not a plausible reading of a message with nothing to read.
-DOCUMENT_QA_RULES: tuple[EvidenceRule, ...] = (
-    EvidenceRule(
-        id="document_qa.about_the_document",
-        intent="document_qa",
-        weight=WEIGHT_DOMAIN,
-        # Possessives ("belgenin", "evrakın") are deliberately absent: they are
-        # just as common in analysis requests ("Belgenin hangi kategoriye
-        # girdiğini tespit et") and let document_qa outscore analyze there.
-        surfaces=(
-            "bu belgede", "belgede", "evrakta", "bu evrak", "bu yazi",
-            "belgeyi kim", "talep edilen", "yazi kime", "belgede gizlilik",
-        ),
-        requires_document=True,
-    ),
-)
-
+#: A message that both looks like a question and has a document attached is
+#: evidence for `assist` even when it matches no lexical surface above (e.g.
+#: "Evrakın konusu nedir?") -- see `intent_scorer.score_intents`'s structural
+#: `assist.question_with_document` rule, which is not a lexical surface rule
+#: and so is not in this table.
 ALL_RULES: tuple[EvidenceRule, ...] = (
     *DRAFT_RULES,
     *ANALYZE_RULES,
-    *CHAT_RULES,
+    *ASSIST_RULES,
     *MEMORY_RECALL_RULES,
-    *DOCUMENT_QA_RULES,
 )
 
 #: A short affirmative continues whatever the previous turn was about.

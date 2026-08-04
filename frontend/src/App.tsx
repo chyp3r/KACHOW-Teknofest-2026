@@ -209,6 +209,10 @@ export default function App() {
     const [nodeStatus, setNodeStatus] = useState<Record<string, 'todo' | 'running' | 'completed' | 'failed' | 'skipped'>>({});
     const [nodeResults, setNodeResults] = useState<Record<string, any>>({});
     const [nodeMeta, setNodeMeta] = useState<Record<string, any>>({});
+    // Tool calls the assistant agent made this turn (search_document,
+    // get_document_details, get_document_text, search_legislation) -- see the
+    // 'tool_call' SSE event. Shown in the assist node's detail panel.
+    const [toolCalls, setToolCalls] = useState<Array<{ tool: string; args: any; time: string }>>([]);
     const [currentLogs, setCurrentLogs] = useState<Array<{ time: string; text: string }>>([]);
     const [selectedDetailNode, setSelectedDetailNode] = useState<string | null>(null);
 
@@ -247,8 +251,7 @@ export default function App() {
         { id: 'judge', label: 'Kalite Yargıcı', short: 'YARGIÇ', kind: 'llm', x: 160, y: 328, status: 'todo' },
         { id: 'human_gate', label: 'İnsan Onayı', short: 'ONAY', kind: 'io', x: 110, y: 396, status: 'todo' },
         { id: 'routing', label: 'Birim Sevki', short: 'SEVK', kind: 'llm', x: 240, y: 396, status: 'todo' },
-        { id: 'document_qa', label: 'Belge S-C', short: 'SORU', kind: 'llm', x: 380, y: 130, status: 'todo' },
-        { id: 'chat', label: 'Sohbet', short: 'SOHBET', kind: 'llm', x: 400, y: 210, status: 'todo' },
+        { id: 'assist', label: 'Asistan', short: 'ASİSTAN', kind: 'llm', x: 400, y: 170, status: 'todo' },
     ];
 
     // `parallel` marks the analysis fan-out, `back` marks the revision loop --
@@ -257,8 +260,7 @@ export default function App() {
     // `edge.parallel`/`edge.back` on the elements that omit them.
     const graphEdges: Array<{ from: string; to: string; parallel?: boolean; back?: boolean }> = [
         { from: 'planning', to: 'classification' },
-        { from: 'planning', to: 'document_qa' },
-        { from: 'planning', to: 'chat' },
+        { from: 'planning', to: 'assist' },
         { from: 'classification', to: 'compliance', parallel: true },
         { from: 'classification', to: 'rag', parallel: true },
         { from: 'compliance', to: 'draft' },
@@ -437,6 +439,7 @@ export default function App() {
         setNodeStatus({});
         setNodeResults({});
         setNodeMeta({});
+        setToolCalls([]);
         currentLogsRef.current = [];
         setCurrentLogs([]);
         setSelectedDetailNode(null);
@@ -631,6 +634,18 @@ export default function App() {
             // backend sends deltas, not cumulative snapshots.
             case 'token':
                 setStreamingText(prev => prev + (event.text || ''));
+                break;
+
+            // The assistant agent called a tool (search_document,
+            // get_document_details, get_document_text, search_legislation)
+            // before answering -- see app.ai.agents.assistant.run_stream.
+            case 'tool_call':
+                setToolCalls(prev => [...prev, {
+                    tool: event.tool,
+                    args: event.args || {},
+                    time: new Date().toLocaleTimeString(),
+                }]);
+                appendLog(`Araç çağrıldı: ${event.tool}`);
                 break;
 
             // Intermediate output the backend can already show -- the
@@ -1295,8 +1310,7 @@ export default function App() {
                                         {selectedDetailNode === 'revise' && 'Revizyon Hazırlığı'}
                                         {selectedDetailNode === 'human_gate' && 'İnsan Onayı / Eksik Bilgi'}
                                         {selectedDetailNode === 'routing' && 'Birim Sevk Detayları'}
-                                        {selectedDetailNode === 'document_qa' && 'Belge Soru-Cevap Detayları'}
-                                        {selectedDetailNode === 'chat' && 'Sohbet Detayları'}
+                                        {selectedDetailNode === 'assist' && 'Asistan Detayları'}
                                     </div>
                                     <span className={`status-badge ${nodeStatus[selectedDetailNode] || 'todo'}`}>
                                         {nodeStatus[selectedDetailNode] === 'running' ? 'Çalışıyor' :
@@ -1541,24 +1555,28 @@ export default function App() {
                                             </div>
                                         )}
 
-                                        {selectedDetailNode === 'document_qa' && (
+                                        {selectedDetailNode === 'assist' && (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                                 <div className="details-grid">
                                                     <div className="details-label">Durum:</div>
-                                                    <div className="details-value">{nodeResults.document_qa.status || 'Tamamlandı'}</div>
+                                                    <div className="details-value">{nodeResults.assist.status || 'Tamamlandı'}</div>
                                                 </div>
+                                                {toolCalls.length > 0 && (
+                                                    <>
+                                                        <div className="details-label">Kullanılan Araçlar:</div>
+                                                        <div className="draft-box" style={{ fontFamily: 'var(--font-sans)', fontSize: '11px' }}>
+                                                            {toolCalls.map((call, idx) => (
+                                                                <div key={idx}>
+                                                                    [{call.time}] {call.tool}
+                                                                    {Object.keys(call.args).length > 0 ? `(${JSON.stringify(call.args)})` : '()'}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </>
+                                                )}
                                                 <div className="details-label">Cevap:</div>
                                                 <div className="draft-box" style={{ fontFamily: 'var(--font-sans)' }}>
-                                                    {nodeResults.document_qa.reply || 'Cevap bulunamadı.'}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {selectedDetailNode === 'chat' && (
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                                <div className="details-label">Sohbet Cevabı:</div>
-                                                <div className="draft-box" style={{ fontFamily: 'var(--font-sans)' }}>
-                                                    {nodeResults.chat.reply || 'Yanıt yok.'}
+                                                    {nodeResults.assist.reply || 'Cevap bulunamadı.'}
                                                 </div>
                                             </div>
                                         )}
@@ -1577,8 +1595,7 @@ export default function App() {
                                             {selectedDetailNode === 'revise' && 'Revizyon Hazırlığı: Doğrulama ve yargıç tarafından tespit edilen kusurları numaralı bir listeye dönüştürür; LLM çağrısı içermez. Ardından Revizyon Ajanı yalnızca listelenen kusurları düzeltir.'}
                                             {selectedDetailNode === 'human_gate' && 'İnsan Onayı Kapısı: Taslak eksik bilgi içeriyorsa veya güven skoru düşükse akışı durdurur ve bir insandan girdi/onay bekler. LangGraph checkpointer sayesinde bu bekleme kalıcıdır.'}
                                             {selectedDetailNode === 'routing' && 'Birim Sevki: Hazırlanan taslağın hangi alt birime sevk edileceğini gerekçesiyle belirler. Güven skoru düşükse doğrudan insan onayına yönlendirir.'}
-                                            {selectedDetailNode === 'document_qa' && 'Belge Soru-Cevap: İndekslenmiş evrak metni üzerinde kullanıcının chate yazdığı soruların doğrudan cevabını arar.'}
-                                            {selectedDetailNode === 'chat' && 'Genel Sohbet: Herhangi bir belge seçili olmadığında genel soruları yanıtlar.'}
+                                            {selectedDetailNode === 'assist' && 'Asistan: Kullanıcıyla sohbet eder ve gerektiğinde (belge içeriği veya mevzuat hakkında bir soru olduğunda) kendi kararıyla ilgili aracı çağırarak yanıtını zenginleştirir.'}
                                         </p>
                                         {nodeStatus[selectedDetailNode] === 'running' && (
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f59e0b' }}>

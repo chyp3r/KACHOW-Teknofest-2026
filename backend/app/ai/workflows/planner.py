@@ -69,18 +69,22 @@ __all__ = [
 #: puts it in ``mevzuat_documents``; running the RAG graph afterwards repeated
 #: the same retrieval behind an extra query-rewrite LLM call and threw the first
 #: result away.
+#:
+#: ``chat`` and ``document_qa`` used to be two separate plans here. They are
+#: now one: ``assist`` is a single tool-using agent that answers conversationally
+#: and reaches for document retrieval itself when the question needs it, rather
+#: than the router having to decide in advance whether an answer needs the
+#: document. See ``app.ai.workflows.planning_graph``'s ``_run_assist``.
 PLAN_BY_INTENT: dict[str, list[str]] = {
     "draft": ["classification", "draft", "routing"],
     "analyze": ["classification"],
-    "document_qa": ["document_qa"],
-    "chat": ["chat"],
+    "assist": ["assist"],
 }
 
 REASONING_BY_INTENT: dict[str, str] = {
     "draft": "Resmî yazı talebi tespit edildi: evrak analizi, taslak üretimi ve birim yönlendirmesi çalıştırılacak.",
     "analyze": "Evrak analizi talebi tespit edildi: sınıflandırma ve uygunluk denetimi çalıştırılacak.",
-    "document_qa": "Yüklü bir belge hakkında soru tespit edildi: belge soru-cevap akışı çalıştırılacak.",
-    "chat": "Evrak işlemi gerektirmeyen genel bir mesaj tespit edildi: sohbet akışı çalıştırılacak.",
+    "assist": "Genel bir soru veya belge hakkında bir soru tespit edildi: asistan yanıtı hazırlanacak.",
 }
 
 #: Canonical execution order, used to merge two intents' step lists without
@@ -90,15 +94,15 @@ STEP_ORDER: tuple[str, ...] = (
     "rag",
     "draft",
     "routing",
-    "document_qa",
-    "chat",
+    "assist",
 )
 
 #: The only pair worth running as one plan. ``draft`` already begins with
 #: ``classification``, so "incele ve cevap yaz" is a single pipeline rather than
 #: two. Every other contested pair is a genuine ambiguity and escalates instead
-#: -- merging ``chat`` into ``draft`` would answer conversationally *and* start
-#: a drafting run, which is not what either reading of the message asked for.
+#: -- merging ``assist`` into ``draft`` would answer conversationally *and*
+#: start a drafting run, which is not what either reading of the message asked
+#: for.
 COMPOUND_PAIR = frozenset({"draft", "analyze"})
 
 
@@ -134,12 +138,11 @@ class PlanDecision(NamedTuple):
 class IntentOutput(BaseModel):
     """Single-label intent classification, used only for ambiguous messages."""
 
-    intent: Literal["draft", "analyze", "document_qa", "chat"] = Field(
+    intent: Literal["draft", "analyze", "assist"] = Field(
         description=(
             "Kullanıcının niyeti. draft: resmi yazı/taslak hazırlanması isteniyor. "
             "analyze: evrakın analiz edilmesi isteniyor. "
-            "document_qa: yüklü belge hakkında soru soruluyor. "
-            "chat: genel sohbet."
+            "assist: genel sohbet veya yüklü bir belge hakkında soru soruluyor."
         )
     )
 
@@ -228,7 +231,7 @@ def resolve_plan_deterministic(
         )
 
     if scores.margin >= DECISIVE_MARGIN:
-        if "chat.empty_message" in scores.evidence:
+        if "assist.empty_message" in scores.evidence:
             return _decision(top_intent, scores, "empty")
         if f"{top_intent}.continuation" in scores.evidence:
             return _decision(
@@ -271,13 +274,13 @@ async def classify_intent_with_model(
         name="IntentClassifier",
         description="Classifies a user message into one of four workflow intents.",
         system_prompt=(
-            "Kullanıcı mesajını dört niyetten birine ata. Yalnızca yapılandırılmış "
+            "Kullanıcı mesajını üç niyetten birine ata. Yalnızca yapılandırılmış "
             "JSON döndür, açıklama yazma.\n"
             "- draft: resmî yazı, cevap yazısı, üst yazı veya taslak hazırlanması isteniyor.\n"
             "- analyze: bir evrakın analiz edilmesi, sınıflandırılması veya eksiklerinin "
             "bulunması isteniyor.\n"
-            "- document_qa: yüklü bir belgenin içeriği hakkında soru soruluyor.\n"
-            "- chat: yukarıdakilerin hiçbiri; genel sohbet veya sistem hakkında soru."
+            "- assist: yukarıdakilerin hiçbiri; genel sohbet, sistem hakkında soru veya "
+            "yüklü bir belgenin içeriği hakkında soru."
         ),
     )
 
@@ -297,11 +300,12 @@ async def classify_intent_with_model(
         return result.intent
     except Exception:
         logger.warning("Intent classification failed; falling back by context.")
-        # Safe default: the cheapest flow that can still answer. With a document
-        # attached that is Q&A; without one it is conversation. Never the full
-        # four-step pipeline, which is what the old fallback chose and which
-        # turned every planner hiccup into the slowest possible response.
-        return "document_qa" if document_id else "chat"
+        # Safe default: the cheapest flow that can still answer, whether or not
+        # a document is attached -- assist reaches for retrieval itself when it
+        # needs to. Never the full three-step drafting pipeline, which is what
+        # the old fallback chose and which turned every planner hiccup into the
+        # slowest possible response.
+        return "assist"
 
 
 async def resolve_plan(
@@ -366,7 +370,7 @@ async def resolve_plan(
             )
 
     if llm_client is None:
-        intent: Intent = "document_qa" if document_id else "chat"
+        intent: Intent = "assist"
         source = "context_default"
     else:
         intent = await classify_intent_with_model(llm_client, message, document_id)

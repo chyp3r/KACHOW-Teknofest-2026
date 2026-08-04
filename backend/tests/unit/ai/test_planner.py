@@ -1,6 +1,6 @@
 """Unit tests for the deterministic intent planner.
 
-The choice between the system's four flows is scored, not looked up: a message
+The choice between the system's three flows is scored, not looked up: a message
 is weighed against a declarative evidence table and the decision is the margin
 between the top two intents. Only genuinely balanced or evidence-free messages
 fall through to a single-label model call.
@@ -10,6 +10,13 @@ vocabulary changed with the rewrite -- "keyword"/"short_message"/"memory_recall"
 named branches of an ordered cascade that no longer exists. What has not
 changed, and is what these tests actually guard, is the resolved intent and its
 step list for every case the cascade got right.
+
+`chat` and `document_qa` are one intent here, `assist`: the router used to have
+to decide in advance whether a message needed retrieval, which is exactly the
+decision a chunk of `intent_rules.py`/`intent_scorer.py` existed to arbitrate.
+The assistant agent now makes that call itself, per-turn, via a tool loop -- so
+every case below that used to split on "does this need the document" resolves
+to the same intent regardless.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -34,9 +41,9 @@ def test_normalize_tolerates_none_and_empty():
     assert normalize(None) == ""
 
 
-def test_empty_message_resolves_to_chat():
+def test_empty_message_resolves_to_assist():
     decision = resolve_plan_deterministic("   ", None)
-    assert decision.intent == "chat"
+    assert decision.intent == "assist"
     assert decision.source == "empty"
 
 
@@ -75,10 +82,10 @@ def test_short_affirmative_continues_the_previous_continuable_intent(previous_in
 
 
 def test_continuation_does_not_apply_to_non_continuable_previous_intents():
-    """A bare 'evet' after a chat/document_qa turn has no unambiguous
-    follow-up action -- it falls through to the plain short-message default
-    instead of silently continuing those flows."""
-    decision = resolve_plan_deterministic("evet", None, "chat")
+    """A bare 'evet' after an assist turn has no unambiguous follow-up
+    action -- it falls through to the plain short-message default instead of
+    silently continuing that flow."""
+    decision = resolve_plan_deterministic("evet", None, "assist")
     assert decision.source != "continuation"
     assert decision.source == "scored"
 
@@ -97,21 +104,21 @@ def test_continuation_requires_a_continuation_keyword():
     assert decision.source == "scored"
 
 
-def test_chat_keywords_without_a_document_resolve_to_chat():
+def test_chat_keywords_without_a_document_resolve_to_assist():
     decision = resolve_plan_deterministic("Merhaba, nasılsın?", None)
-    assert decision.intent == "chat"
+    assert decision.intent == "assist"
 
 
-def test_question_with_a_document_resolves_to_document_qa():
+def test_question_with_a_document_resolves_to_assist():
     decision = resolve_plan_deterministic("Bu belgede kimin imzası var?", "uploads/doc.pdf")
-    assert decision.intent == "document_qa"
+    assert decision.intent == "assist"
 
 
-def test_a_question_word_without_a_question_mark_still_triggers_document_qa():
+def test_a_question_word_without_a_question_mark_still_triggers_assist():
     """_looks_like_question also matches on marker words (mi/ne/kim/...), not
     only on a literal '?', so a question phrased without one is still caught."""
     decision = resolve_plan_deterministic("Bu evrak hangi birime ait", "uploads/doc.pdf")
-    assert decision.intent == "document_qa"
+    assert decision.intent == "assist"
 
 
 @pytest.mark.parametrize(
@@ -124,28 +131,29 @@ def test_a_question_word_without_a_question_mark_still_triggers_document_qa():
         "Sana daha önce ne demiştim?",
     ],
 )
-def test_memory_recall_question_resolves_to_chat_even_with_a_document(message):
+def test_memory_recall_question_resolves_to_assist_even_with_a_document(message):
     decision = resolve_plan_deterministic(message, "uploads/doc.pdf")
-    assert decision.intent == "chat"
+    assert decision.intent == "assist"
     assert decision.source == "scored"
 
 
-def test_memory_recall_question_resolves_to_chat_without_a_document():
+def test_memory_recall_question_resolves_to_assist_without_a_document():
     decision = resolve_plan_deterministic(
         "Bu konuşmada daha önce hangi konuyu konuştuk, hatırlıyor musun?", None
     )
-    assert decision.intent == "chat"
+    assert decision.intent == "assist"
     assert decision.source == "scored"
 
 
 def test_memory_recall_wins_even_when_the_message_also_looks_like_a_document_question():
     """A message that is both document-shaped ('bu belgede...') and
-    memory-shaped ('hatırlıyor musun') must resolve to chat, not
-    document_qa."""
+    memory-shaped ('hatırlıyor musun') still resolves to assist -- before the
+    chat/document_qa merge both readings had to be reconciled onto the same
+    intent by a dedicated counter-signal; now they simply accumulate."""
     decision = resolve_plan_deterministic(
         "Bu belgede kaç madde vardı, hatırlıyor musun?", "uploads/doc.pdf"
     )
-    assert decision.intent == "chat"
+    assert decision.intent == "assist"
 
 
 def test_memory_recall_does_not_override_draft_keyword_precedence():
@@ -155,9 +163,9 @@ def test_memory_recall_does_not_override_draft_keyword_precedence():
     assert decision.intent == "draft"
 
 
-def test_short_message_without_a_document_resolves_to_chat():
+def test_short_message_without_a_document_resolves_to_assist():
     decision = resolve_plan_deterministic("tamam güzel", None)
-    assert decision.intent == "chat"
+    assert decision.intent == "assist"
     assert decision.source == "scored"
 
 
@@ -187,16 +195,18 @@ async def test_classify_intent_with_model_returns_the_structured_label(fake_fast
 
 @pytest.mark.asyncio
 async def test_classify_intent_with_model_degrades_safely_on_failure(fake_fast_llm):
-    """Never falls back to the full four-step pipeline -- that turns every
-    planner hiccup into the slowest possible response."""
+    """Never falls back to the full three-step drafting pipeline -- that turns
+    every planner hiccup into the slowest possible response. Document or not,
+    the cheapest flow that can still answer is the same one now: assist reaches
+    for retrieval itself when it needs to."""
     fake_fast_llm.generate_structured_side_effect = [Exception("model unavailable")]
 
     intent_with_doc = await classify_intent_with_model(fake_fast_llm, "x", "uploads/doc.pdf")
-    assert intent_with_doc == "document_qa"
+    assert intent_with_doc == "assist"
 
     fake_fast_llm.generate_structured_side_effect = [Exception("model unavailable")]
     intent_without_doc = await classify_intent_with_model(fake_fast_llm, "x", None)
-    assert intent_without_doc == "chat"
+    assert intent_without_doc == "assist"
 
 
 @pytest.mark.asyncio
@@ -215,7 +225,7 @@ async def test_resolve_plan_without_a_client_uses_the_context_default_for_ambigu
         llm_client=None,
     )
 
-    assert decision.intent == "document_qa"
+    assert decision.intent == "assist"
     assert decision.source == "context_default"
 
 
@@ -231,8 +241,8 @@ def test_a_question_about_drafting_does_not_start_a_drafting_run():
     object, so a definition question ran classification -> draft -> routing."""
     decision = resolve_plan_deterministic("Resmi yazı ne demek, kısaca anlatır mısın?", None)
 
-    assert decision.intent == "chat"
-    assert decision.steps == PLAN_BY_INTENT["chat"]
+    assert decision.intent == "assist"
+    assert decision.steps == PLAN_BY_INTENT["assist"]
 
 
 def test_a_greeting_still_resolves_when_a_document_is_attached():
@@ -240,7 +250,7 @@ def test_a_greeting_still_resolves_when_a_document_is_attached():
     `document_id is None`, so this fell through every branch and escalated."""
     decision = resolve_plan_deterministic("Merhaba", "uploads/doc.pdf")
 
-    assert decision.intent == "chat"
+    assert decision.intent == "assist"
 
 
 def test_a_farewell_after_a_draft_turn_does_not_produce_a_draft():
@@ -248,7 +258,7 @@ def test_a_farewell_after_a_draft_turn_does_not_produce_a_draft():
         "İyi akşamlar, yarın devam ederiz.", "uploads/doc.pdf", "draft"
     )
 
-    assert decision.intent == "chat"
+    assert decision.intent == "assist"
 
 
 def test_a_compound_request_runs_one_pipeline_covering_both_readings():
@@ -272,12 +282,12 @@ def test_compound_merging_keeps_canonical_step_order():
 
 
 def test_only_draft_and_analyze_compose_into_one_plan():
-    """Merging `chat` into `draft` would answer conversationally *and* start a
-    drafting run, which is not what either reading asked for."""
+    """Merging `assist` into `draft` would answer conversationally *and* start
+    a drafting run, which is not what either reading asked for."""
     decision = resolve_plan_deterministic("Merhaba", "uploads/doc.pdf")
 
     assert decision.source != "compound"
-    assert decision.steps == PLAN_BY_INTENT["chat"]
+    assert decision.steps == PLAN_BY_INTENT["assist"]
 
 
 def test_an_underspecified_command_escalates_rather_than_guessing():
@@ -327,7 +337,7 @@ class _StubMatcher:
 async def test_the_semantic_rung_is_skipped_when_the_lexical_layer_decides():
     """The fast path must stay free: a message the rules resolve never pays for
     an embedding."""
-    matcher = _StubMatcher(_StubMatch("chat", decisive=True))
+    matcher = _StubMatcher(_StubMatch("assist", decisive=True))
 
     decision = await resolve_plan(
         "Bu evraka bir cevap yazısı hazırla.", "uploads/doc.pdf", matcher=matcher
@@ -361,14 +371,14 @@ async def test_a_non_decisive_semantic_match_falls_through_to_the_model():
 
     with patch(
         "app.ai.workflows.planner.classify_intent_with_model",
-        new=AsyncMock(return_value="chat"),
+        new=AsyncMock(return_value="assist"),
     ) as classify:
         decision = await resolve_plan(
             "Gereğini yap.", "uploads/doc.pdf", llm_client=MagicMock(), matcher=matcher
         )
 
     assert decision.source == "model"
-    assert decision.intent == "chat"
+    assert decision.intent == "assist"
     classify.assert_awaited_once()
 
 
@@ -378,7 +388,7 @@ async def test_an_unavailable_matcher_leaves_the_ladder_as_it_was():
     like the two-rung ladder that existed before this layer."""
     with patch(
         "app.ai.workflows.planner.classify_intent_with_model",
-        new=AsyncMock(return_value="chat"),
+        new=AsyncMock(return_value="assist"),
     ):
         without = await resolve_plan(
             "Gereğini yap.", "uploads/doc.pdf", llm_client=MagicMock()
@@ -401,7 +411,7 @@ async def test_a_semantic_label_outside_the_known_intents_is_ignored():
 
     with patch(
         "app.ai.workflows.planner.classify_intent_with_model",
-        new=AsyncMock(return_value="chat"),
+        new=AsyncMock(return_value="assist"),
     ):
         decision = await resolve_plan(
             "Gereğini yap.", "uploads/doc.pdf", llm_client=MagicMock(), matcher=matcher

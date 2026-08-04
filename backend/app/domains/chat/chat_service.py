@@ -420,13 +420,9 @@ class ChatService:
         Returns:
             The reply text.
         """
-        document_qa = final_output.get("document_qa") or {}
-        if document_qa.get("reply"):
-            return document_qa["reply"]
-
-        chat = final_output.get("chat") or {}
-        if chat.get("reply"):
-            return chat["reply"]
+        assist = final_output.get("assist") or {}
+        if assist.get("reply"):
+            return assist["reply"]
 
         draft = final_output.get("draft") or {}
         if draft.get("draft"):

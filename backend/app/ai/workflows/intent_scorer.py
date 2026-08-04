@@ -9,8 +9,8 @@ That single choice is what makes the failures the baseline measured fixable:
   whichever rule the old cascade happened to check first.
 * A message carrying a domain noun plus a definitional counter-signal
   ("Üst yazı ne demek?") produces a *negative* contribution to draft and a
-  positive one to chat, so it resolves to chat without weakening the drafting
-  phrases that every genuine request depends on.
+  positive one to assist, so it resolves to assist without weakening the
+  drafting phrases that every genuine request depends on.
 
 Everything here is arithmetic over a table -- no model call, sub-millisecond,
 and reproducible. Where the previous resolver escalated every message it could
@@ -147,8 +147,8 @@ def score_intents(
     result = IntentScores()
 
     if not normalized:
-        result.scores["chat"] = 10.0
-        result.evidence.append("chat.empty_message")
+        result.scores["assist"] = 10.0
+        result.evidence.append("assist.empty_message")
         return result
 
     definitional = False
@@ -157,7 +157,7 @@ def score_intents(
             continue
         result.scores[rule.intent] = result.scores.get(rule.intent, 0.0) + rule.weight
         result.evidence.append(rule.id)
-        if rule.id == "chat.definitional_question":
+        if rule.id == "assist.definitional_question":
             definitional = True
 
     # A definitional question is *about* a concept, so the domain noun that
@@ -180,7 +180,7 @@ def score_intents(
     # and reading it as consent produced a whole drafting run on the old
     # resolver. A sign-off is the one place "devam" means the opposite of
     # "continue now".
-    signing_off = {"chat.greeting", "chat.courtesy"}.intersection(result.evidence)
+    signing_off = {"assist.greeting", "assist.courtesy"}.intersection(result.evidence)
     if (
         previous_intent in CONTINUABLE_INTENTS
         and not signing_off
@@ -192,18 +192,27 @@ def score_intents(
         )
         result.evidence.append(f"{previous_intent}.continuation")
 
-    # A question with a document attached leans toward document Q&A -- a hint,
-    # not a gate. The old resolver made this a branch, which is why "Sen neler
+    # A question with a document attached leans toward `assist` -- a hint, not
+    # a gate. The old resolver made this a branch, which is why "Sen neler
     # yapabilirsin?" with a document attached became a document question.
     #
     # Weighted at DOMAIN rather than HINT so it clears the presence floor on its
     # own: "Evrakın konusu nedir?" carries no other document phrase, and a hint
     # too weak to be a candidate would send every such question to the model.
+    #
+    # Before `chat` and `document_qa` merged into one `assist` bucket, this
+    # rule's positive signal for document_qa had to be defended against two
+    # counter-signals below (a memory-recall question, a politely-phrased
+    # request) that argued the message was really `chat`. Both readings now
+    # land on the same intent, so there is nothing left to arbitrate -- the
+    # softener and memory-recall counters that used to run here are gone, not
+    # renamed, because their sole purpose was resolving a tension this merge
+    # eliminated.
     if has_document and _looks_like_question(message, normalized):
-        result.scores["document_qa"] = (
-            result.scores.get("document_qa", 0.0) + WEIGHT_DOMAIN
+        result.scores["assist"] = (
+            result.scores.get("assist", 0.0) + WEIGHT_DOMAIN
         )
-        result.evidence.append("document_qa.question_with_document")
+        result.evidence.append("assist.question_with_document")
 
     # A very short message with nothing attached is conversational filler --
     # unless it is a continuation, in which case brevity is the *same* evidence
@@ -212,46 +221,7 @@ def score_intents(
     # enough to escalate a message whose meaning is not in doubt.
     continued = f"{previous_intent}.continuation" in result.evidence
     if not has_document and not continued and len(words) <= 4:
-        result.scores["chat"] = result.scores.get("chat", 0.0) + WEIGHT_HINT * 2
-        result.evidence.append("chat.short_message")
-
-    # A yes/no request softener ("yazar mısın", "söyler misin") marks a message
-    # as an action asked politely, not a content lookup -- unlike "var mı",
-    # which genuinely asks whether something exists in the document. "Bunun
-    # cevabını sen yazar mısın?" carries no document phrase at all, yet used to
-    # win document_qa outright because the structural question hint clears the
-    # presence floor on its own.
-    #
-    # Gated on the absence of `document_qa.about_the_document`, unlike the
-    # memory-recall counter below: recall is a topic signal and always wins,
-    # but a softener is only a grammatical mood and must not override real
-    # content evidence -- "Bu belgede ne yazdığını söyler misin?" is still a
-    # genuine document question and should stay one.
-    softener_surfaces = (" misin ", " musun ", " misiniz ", " musunuz ")
-    padded_message = f" {normalized} "
-    has_softener = any(surface in padded_message for surface in softener_surfaces)
-    if (
-        has_softener
-        and "document_qa" in result.scores
-        and "document_qa.about_the_document" not in result.evidence
-    ):
-        result.scores["document_qa"] += WEIGHT_COUNTER
-        result.evidence.append("document_qa.request_softener_counter")
-
-    # Applied last, after every document_qa signal has been accumulated: a
-    # question about *this conversation* is not a question about the document,
-    # so document phrases in it are not evidence -- they are the subject the
-    # user is recalling.
-    #
-    # Invalidating document_qa rather than outscoring it is what makes two rules
-    # the repo already relies on compatible. Memory recall must beat document_qa
-    # ("Bu belgede kaç madde vardı, hatırlıyor musun?"), while an explicit
-    # drafting request must still beat memory recall ("Az önce taslak
-    # hazırlamanı istemiştim, şimdi hazırla"). No single weight for the recall
-    # rule satisfies both -- one needs it above 4.4, the other below 3.4 --
-    # but removing the invalid evidence satisfies both at once.
-    if "chat.memory_recall" in result.evidence and "document_qa" in result.scores:
-        result.scores["document_qa"] += WEIGHT_COUNTER
-        result.evidence.append("document_qa.memory_recall_counter")
+        result.scores["assist"] = result.scores.get("assist", 0.0) + WEIGHT_HINT * 2
+        result.evidence.append("assist.short_message")
 
     return result
