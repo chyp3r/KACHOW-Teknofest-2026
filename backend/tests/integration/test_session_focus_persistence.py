@@ -79,19 +79,23 @@ async def test_the_objective_accumulates_and_the_active_draft_survives_across_tu
     assert focus_after_first.active_draft.created_from == "draft"
 
     await graph.ainvoke(
-        {"input_text": "İkinci bir taslak talebi daha ekle.", "document_id": None}, config=config
+        {"input_text": "Şimdi de başka bir evraka taslak hazırla.", "document_id": None},
+        config=config,
     )
     snapshot_after_second = await graph.aget_state(config)
     focus_after_second = snapshot_after_second.values["focus"]
 
     # Accumulated, not replaced -- both turns' contributions are present.
     assert "Bu evraka cevap yazısı hazırla." in focus_after_second.objective
-    assert "İkinci bir taslak talebi daha ekle." in focus_after_second.objective
+    assert "Şimdi de başka bir evraka taslak hazırla." in focus_after_second.objective
 
-    # A second settled draft becomes version 2, recorded as a revise, and
-    # the first version is still in the history rather than overwritten.
+    # A second settled draft becomes version 2 -- keyed off which step
+    # produced it (draft, again, both times here), not inferred from "a
+    # draft already existed" -- and the first version is still in the
+    # history rather than overwritten. See test_revise_flow.py for the
+    # actual revise step's own versioning.
     assert focus_after_second.active_draft.version == 2
-    assert focus_after_second.active_draft.created_from == "revise"
+    assert focus_after_second.active_draft.created_from == "draft"
     assert len(focus_after_second.draft_history) == 2
     assert focus_after_second.draft_history[0].version == 1
 
