@@ -18,7 +18,31 @@ from app.infrastructure.extractors.base import (
 )
 from app.infrastructure.storage.base import BaseStorage
 
-PDF_BYTES = b"%PDF-1.7" + b"x" * 500
+#: A real, minimally valid PDF (one blank page) -- not just bytes starting
+#: with "%PDF". `app.ai.guardrails.file_integrity` (Faz 1) opens uploads with
+#: pypdfium2/Pillow to check they actually parse as their claimed type, so a
+#: fixture with the right magic bytes but no real structure would now be
+#: rejected before analysis ever ran. Generated once via
+#: `pypdfium2.PdfDocument.new()` + `.save()`.
+PDF_BYTES = (
+    b"%PDF-1.7\r\n%\xa1\xb3\xc5\xd7\r\n1 0 obj\r\n<</Pages 2 0 R /Type/Catalog>>\r\n"
+    b"endobj\r\n2 0 obj\r\n<</Count 1/Kids[ 4 0 R ]/Type/Pages>>\r\nendobj\r\n"
+    b"3 0 obj\r\n<</CreationDate(D:20260805100924+00'00')/Creator(PDFium)>>\r\n"
+    b"endobj\r\n4 0 obj\r\n<</MediaBox[ 0 0 200 200]/Parent 2 0 R /Resources"
+    b"<<>>/Rotate 0/Type/Page>>\r\nendobj\r\nxref\r\n0 5\r\n0000000000 65535 f\r\n"
+    b"0000000017 00000 n\r\n0000000066 00000 n\r\n0000000122 00000 n\r\n"
+    b"0000000199 00000 n\r\ntrailer\r\n<<\r\n/Root 1 0 R\r\n/Info 3 0 R\r\n"
+    b"/Size 5/ID[<D5D2D6972A5C2FE28B08F59A22694073><D5D2D6972A5C2FE28B08F59A22694073>]"
+    b">>\r\nstartxref\r\n292\r\n%%EOF\r\n"
+)
+
+#: A real, minimally valid 10x10 PNG -- same reasoning as PDF_BYTES above.
+#: Generated once via `PIL.Image.new(...).save(buf, format="PNG")`.
+PNG_BYTES = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\n\x00\x00\x00\n\x08\x02"
+    b"\x00\x00\x00\x02PX\xea\x00\x00\x00\x15IDATx\x9cc\xfc\xff\xff?\x03n\xc0"
+    b"\x84Gn\x04K\x03\x00\xa5\xe3\x03\x11}\x92\xa6j\x00\x00\x00\x00IEND\xaeB`\x82"
+)
 
 GRAPH_STATE = {
     "document_type": DocumentType.OFFICIAL_LETTER.value,
@@ -117,7 +141,7 @@ async def test_analyze_propagates_ocr_flag_into_the_workflow():
     service, _, _, graph = _build_service(extracted=extracted)
 
     result = await service.analyze_document(
-        file_name="evrak.png", content=b"\x89PNG" + b"x" * 500, content_type="image/png"
+        file_name="evrak.png", content=PNG_BYTES, content_type="image/png"
     )
 
     assert result.extraction.used_ocr is True
