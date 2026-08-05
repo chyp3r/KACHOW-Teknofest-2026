@@ -1,7 +1,8 @@
+import hashlib
 import logging
 import os
 import re
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -92,23 +93,15 @@ class PromptManager:
         self.templates_dir = templates_dir or os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "templates"
         )
-        self._cache: Dict[str, str] = {}
+        #: name -> (content, version). ``version`` is a short content hash,
+        #: not a mtime -- deterministic across machines/checkouts, and
+        #: identical for byte-identical templates, which is what
+        #: ``GuardrailEventModel.prompt_template_version`` actually wants to
+        #: know ("which revision produced this decision").
+        self._cache: Dict[str, Tuple[str, str]] = {}
         logger.info("Initialized PromptManager with templates_dir: %s", self.templates_dir)
 
-    def get_template(self, name: str) -> str:
-        """Read a prompt template from disk, or return the cached copy.
-
-        Args:
-            name: Template name, with or without the ``.md`` extension.
-
-        Returns:
-            The template text.
-
-        Raises:
-            FileNotFoundError: If no such template exists.
-        """
-        base_name = name if name.endswith(".md") else f"{name}.md"
-
+    def _load(self, base_name: str) -> Tuple[str, str]:
         cached = self._cache.get(base_name)
         if cached is not None:
             return cached
@@ -126,9 +119,44 @@ class PromptManager:
             logger.exception("Failed to read prompt template '%s'", base_name)
             raise
 
-        self._cache[base_name] = content
-        logger.debug("Loaded and cached prompt template: %s", base_name)
+        version = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
+        self._cache[base_name] = (content, version)
+        logger.debug("Loaded and cached prompt template: %s (version %s)", base_name, version)
+        return content, version
+
+    def get_template(self, name: str) -> str:
+        """Read a prompt template from disk, or return the cached copy.
+
+        Args:
+            name: Template name, with or without the ``.md`` extension.
+
+        Returns:
+            The template text.
+
+        Raises:
+            FileNotFoundError: If no such template exists.
+        """
+        base_name = name if name.endswith(".md") else f"{name}.md"
+        content, _ = self._load(base_name)
         return content
+
+    def get_template_version(self, name: str) -> str:
+        """Return the loaded template's content-hash version.
+
+        Args:
+            name: Template name, with or without the ``.md`` extension.
+
+        Returns:
+            A short, deterministic hash of the template's current content --
+            what ``GuardrailEventModel.prompt_template_version`` records
+            alongside a guardrail decision.
+
+        Raises:
+            FileNotFoundError: If no such template exists.
+        """
+        base_name = name if name.endswith(".md") else f"{name}.md"
+        _, version = self._load(base_name)
+        return version
 
     def render(self, name: str, *, strict: bool = False, **kwargs: Any) -> str:
         """Load a template and substitute its ``{{variable}}`` placeholders.

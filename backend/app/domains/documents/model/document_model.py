@@ -1,8 +1,9 @@
 from typing import Optional
 
-from sqlalchemy import String
+from sqlalchemy import Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.enums.sensitivity_level import SensitivityLevel
 from app.infrastructure.database.base import Base
 from app.infrastructure.database.models import TimestampMixin
 
@@ -39,3 +40,15 @@ class DocumentModel(Base, TimestampMixin):
     document_type_label: Mapped[str] = mapped_column(String, nullable=False, default="")
     compliance_status: Mapped[str] = mapped_column(String, nullable=False, default="")
     summary: Mapped[str] = mapped_column(String, nullable=False, default="")
+    #: The document's assessed confidentiality grade (``app.ai.guardrails.
+    #: sensitivity.assess``), stored as the ``SensitivityLevel`` string so
+    #: listing/retrieval can filter without re-reading the analysis cache.
+    #: Defaults to ``UNMARKED``, not ``TASNIF_DISI`` -- the same "an absent
+    #: grade is not the same fact as a stated one" reasoning `EvrakField.
+    #: gizlilik_derecesi` already documents.
+    sensitivity_level: Mapped[str] = mapped_column(
+        String, nullable=False, default=SensitivityLevel.UNMARKED.value
+    )
+    #: True when the document scan found at least one PII pattern match
+    #: (TCKN, IBAN, phone, address) regardless of confidentiality grade.
+    pii_flagged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

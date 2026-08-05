@@ -8,7 +8,40 @@ from app.core.enums.compliance_status import ComplianceStatus
 from app.core.enums.correspondence_type import CorrespondenceType
 from app.core.enums.document_type import DocumentType
 from app.core.enums.reasoning_level import ReasoningLevel
+from app.core.enums.sensitivity_level import SensitivityLevel
 from app.shared.validator.storage_path_validator import validate_storage_path
+
+
+class PiiFindingSchema(BaseModel):
+    """One PII pattern match, surfaced without the raw sensitive value.
+
+    ``preview`` is always the redacted form (see ``app.ai.guardrails.pii.
+    PiiFinding``) -- this schema crosses the API boundary, so the same rule
+    that keeps a raw TCKN/IBAN out of logs and the audit trail applies here.
+    """
+
+    kind: str = Field(description="Bulgu türü (örn. 'tckn', 'iban', 'telefon', 'adres').")
+    preview: str = Field(description="Maskelenmiş önizleme; ham değer asla döndürülmez.")
+
+
+class GuardrailAssessmentSchema(BaseModel):
+    """Input-side guardrail outcome for one document (see
+    ``app.ai.guardrails.sensitivity.assess``)."""
+
+    sensitivity_level: SensitivityLevel = Field(
+        default=SensitivityLevel.UNMARKED,
+        description="Belgeden çıkarılan veya varsayılan gizlilik derecesi.",
+    )
+    pii_findings: List[PiiFindingSchema] = Field(
+        default_factory=list, description="Tespit edilen kişisel veri bulguları."
+    )
+    requires_human_review: bool = Field(
+        default=False,
+        description="Gizlilik derecesi veya bulgular nedeniyle insan onayı gerekip gerekmediği.",
+    )
+    reasons: List[str] = Field(
+        default_factory=list, description="Değerlendirmeyi açıklayan kısa gerekçeler."
+    )
 
 
 class ExtractionInfoSchema(BaseModel):
@@ -58,6 +91,10 @@ class DocumentAnalysisResponseSchema(BaseModel):
     compliance_status: ComplianceStatus = Field(description="Uygunluk durumu.")
     mevzuat_references: List[MevzuatReferenceSchema] = Field(
         default_factory=list, description="İlgili mevzuat önerileri."
+    )
+    guardrail: GuardrailAssessmentSchema = Field(
+        default_factory=GuardrailAssessmentSchema,
+        description="Girdi guardrail değerlendirmesi (gizlilik derecesi, PII bulguları).",
     )
 
 

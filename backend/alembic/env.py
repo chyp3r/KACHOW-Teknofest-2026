@@ -14,6 +14,7 @@ from app.domains.users.model.invited_email import InvitedEmailModel  # noqa: F40
 from app.domains.users.model.user_model import UserModel  # noqa: F401
 from app.domains.documents.model.document_model import DocumentModel  # noqa: F401
 from app.observability.model.run_model import RunModel, RunStepModel  # noqa: F401
+from app.observability.model.guardrail_model import GuardrailEventModel  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
