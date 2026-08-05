@@ -25,11 +25,28 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
+class NodeBudgetExceeded(Exception):
+    """A node ran past its own time budget.
+
+    Deliberately *not* a `TimeoutError`, and deliberately absent from
+    `TRANSIENT_ERRORS`. The two look alike and mean opposite things: a
+    `TimeoutError` from httpx is a connection that hung and is worth another
+    attempt, while this one says the work itself is too slow for the budget --
+    and on a local model that will almost always be true a second time.
+
+    Retrying it was actively harmful. `suggest_mevzuat` normally finishes in
+    28-34s against a 70s budget; when it occasionally ran long, LangGraph
+    retried the node, spent another 70s, and then failed the whole request. A
+    marginal slowdown became a 166s wait ending in a 502, where doing nothing
+    would have cost 71s and still had a usable answer.
+    """
+
+
 #: Transient failures worth a second attempt: a hung/dropped connection to
 #: Ollama or Qdrant, not a validation error or a schema mismatch (those are
 #: handled by BaseAgent.run_structured's own correction loop, not by retrying
-#: the whole node).
-TRANSIENT_ERRORS = (TimeoutError, ConnectionError, httpx.HTTPError, httpx.TimeoutException)
+#: the whole node), and not budget exhaustion (see NodeBudgetExceeded).
+TRANSIENT_ERRORS = (ConnectionError, httpx.HTTPError, httpx.TimeoutException)
 
 #: For LLM-backed nodes that do not stream tokens to the UI. Retrying a node
 #: that already emitted tokens (the draft writer) would replay the whole
@@ -97,7 +114,15 @@ def node_timeout(
         @functools.wraps(func)
         async def _wrapped(*args: Any, **kwargs: Any) -> T:
             budget = node_budget(node, _reasoning_level_of(args))
-            return await asyncio.wait_for(func(*args, **kwargs), timeout=budget)
+            try:
+                return await asyncio.wait_for(func(*args, **kwargs), timeout=budget)
+            except (asyncio.TimeoutError, TimeoutError) as exc:
+                # Re-raised as a distinct type so the retry policy leaves it
+                # alone. A node that overran its budget will overrun it again;
+                # the caller's own degradation path is the useful response.
+                raise NodeBudgetExceeded(
+                    f"Node '{node}' exceeded its {budget:.0f}s budget."
+                ) from exc
 
         return _wrapped
 

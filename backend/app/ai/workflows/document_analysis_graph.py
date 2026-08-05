@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from copy import deepcopy
 from typing import Any, Optional, TypedDict
@@ -25,6 +26,7 @@ from app.ai.guardrails.llm_nuance import judge_input_sensitivity
 from app.ai.guardrails.sensitivity import SensitivityAssessment
 from app.ai.guardrails.sensitivity import assess as assess_sensitivity
 from app.ai.llms.base import BaseLLMClient
+from app.ai.policy.budget import node_budget
 from app.ai.retrieval.hybrid import HybridRetriever
 from app.ai.workflows.events import emit_node_end, emit_node_error, emit_node_start, emit_partial
 from app.ai.workflows.resilience import (
@@ -47,6 +49,12 @@ MEVZUAT_RESULT_LIMIT = 3
 
 #: The merged classify+extract call emits a nested object with a dozen fields.
 ANALYSIS_MAX_TOKENS = 1536
+
+#: Share of the suggest_mevzuat budget the model call may use, leaving the rest
+#: for the node's own degradation path. Without this the node's timeout fires
+#: outside its try/except -- where its fallback cannot reach it -- and the whole
+#: analysis fails over the optional half of requirement 5.
+SUGGESTION_BUDGET_SHARE = 0.85
 
 
 class DocumentAnalysisState(TypedDict, total=False):
@@ -616,10 +624,18 @@ def create_document_analysis_graph(
             "adı üretme."
         )
         try:
-            res: MevzuatSuggestionOutput = await compliance_agent.run_structured(
-                messages=prompt,
-                response_model=MevzuatSuggestionOutput,
-                temperature=0.0,
+            # Bounded *inside* the node, below the node's own budget, so an
+            # overrun lands in the degradation path below instead of escaping to
+            # node_timeout. Explaining the excerpts is the optional half of
+            # requirement 5 -- the citations are already retrieved and correct --
+            # so a slow model should cost the explanation, never the analysis.
+            res: MevzuatSuggestionOutput = await asyncio.wait_for(
+                compliance_agent.run_structured(
+                    messages=prompt,
+                    response_model=MevzuatSuggestionOutput,
+                    temperature=0.0,
+                ),
+                timeout=node_budget("suggest_mevzuat") * SUGGESTION_BUDGET_SHARE,
             )
             suggestions = [item.model_dump() for item in res.suggestions]
         except TRANSIENT_ERRORS:
