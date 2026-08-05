@@ -9,6 +9,8 @@ from app.api.dependency import get_chat_service, get_document_repository, requir
 from app.api.exceptions.authorization import AuthorizationException
 from app.api.rate_limit import rate_limit
 from app.api.responses import SuccessResponse
+from app.core.enums.sensitivity_level import SensitivityLevel
+from app.core.permissions.role_checker import assert_clearance, bypasses_ownership, clearance_for
 from app.domains.chat.chat_service import ChatService
 from app.domains.chat.schema.chat_schema import ChatMessageRequest, ChatResumeRequest
 from app.domains.documents.repository import DocumentRepository
@@ -17,27 +19,46 @@ from app.domains.users.model.user_model import UserModel
 logger = logging.getLogger(__name__)
 
 
-async def _verify_document_ownership(
+async def _verify_document_access(
     document_id: Optional[str],
     current_user: Optional[UserModel],
     document_repository: DocumentRepository,
 ) -> None:
-    """Refuse a chat turn that attaches a document the caller doesn't own.
+    """Refuse a chat turn that attaches a document the caller doesn't own or
+    isn't cleared for.
 
     A document being attached only changes which tools the assistant can
     call (see app.ai.tools.document_tools's module docstring) -- nothing
     upstream of that previously checked whether the caller was allowed to
     attach it in the first place. ``current_user=None`` (``REQUIRE_AUTH``
-    disabled) skips the check entirely, matching the open demo/dev path.
+    disabled) skips both checks entirely, matching the open demo/dev path.
+    ADMIN/MANAGER skip only the ownership half (see ``bypasses_ownership``)
+    -- they see every document company-wide, but clearance still applies
+    (though it never actually binds for them: see ``clearance_for``).
+
+    This is the coarse, turn-level gate (may this caller even attach this
+    document at all); ``document_tools.py``'s own deny-at-retrieval check is
+    the finer-grained one underneath it, since a single turn's tools can
+    also touch legislation search and other content this gate never sees.
 
     Raises:
         AuthorizationException: If the document is registered to a
-            different owner than ``current_user``.
+            different owner than ``current_user`` (and it isn't an
+            ADMIN/MANAGER), or ``current_user``'s clearance doesn't cover
+            the document's confidentiality level.
     """
     if not document_id or current_user is None:
         return
-    if not await document_repository.is_owned_by(document_id, current_user.id):
+    document = await document_repository.get_by_id(document_id)
+    if document is None:
         raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+    if document.owner_id != current_user.id and not bypasses_ownership(current_user):
+        raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+    try:
+        document_level = SensitivityLevel(document.sensitivity_level)
+    except ValueError:
+        document_level = SensitivityLevel.UNMARKED
+    assert_clearance(current_user, document_level)
 
 # See require_auth_if_enabled / settings.REQUIRE_AUTH: a no-op by default so
 # the demo works without the frontend implementing a login flow.
@@ -141,9 +162,12 @@ async def send_chat_message(
     May also return an ``INTERRUPTED`` status when the run paused at the
     human-in-the-loop gate; resume it via ``POST /chat/resume``.
     """
-    await _verify_document_ownership(request.document_id, current_user, document_repository)
+    await _verify_document_access(request.document_id, current_user, document_repository)
+    clearance = clearance_for(current_user)
     result = await service.handle_message(
-        request, user_id=current_user.id if current_user else None
+        request,
+        user_id=current_user.id if current_user else None,
+        requester_clearance=clearance.value if clearance else None,
     )
     return SuccessResponse(data=make_serializable(result.model_dump()))
 
@@ -170,9 +194,15 @@ async def stream_chat_message(
     # Checked before entering the SSE response, not inside the generator, so
     # a denied request gets a normal 403 instead of a stream that opens and
     # then immediately reports a generic error.
-    await _verify_document_ownership(request.document_id, current_user, document_repository)
+    await _verify_document_access(request.document_id, current_user, document_repository)
     user_id = current_user.id if current_user else None
-    return _sse_response(service.handle_message_stream(request, user_id=user_id), http_request)
+    clearance = clearance_for(current_user)
+    return _sse_response(
+        service.handle_message_stream(
+            request, user_id=user_id, requester_clearance=clearance.value if clearance else None
+        ),
+        http_request,
+    )
 
 
 @router.post("/resume", response_model=None)

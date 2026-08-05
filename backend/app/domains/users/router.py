@@ -93,8 +93,10 @@ async def update_user(
 
     # Restrict field updates for non-admins
     if not is_admin:
-        if schema.role is not None or schema.is_active is not None:
-            raise AuthorizationException(message="Only administrators can update role or account status.")
+        if schema.role is not None or schema.is_active is not None or schema.clearance_level is not None:
+            raise AuthorizationException(
+                message="Only administrators can update role, account status, or clearance level."
+            )
 
     repository = UserRepository(db)
     service = UserService(repository)

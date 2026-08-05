@@ -36,7 +36,10 @@ class ChatService:
         self.planning_graph = planning_graph
 
     async def handle_message(
-        self, request: ChatMessageRequest, user_id: Optional[str] = None
+        self,
+        request: ChatMessageRequest,
+        user_id: Optional[str] = None,
+        requester_clearance: Optional[str] = None,
     ) -> ChatMessageResponse:
         """Process a user message and return the completed (or paused) result.
 
@@ -47,6 +50,10 @@ class ChatService:
                 another's thread by guessing/reusing its session_id. ``None``
                 in the open demo/dev path, unchanged from before this
                 existed.
+            requester_clearance: The authenticated caller's resolved
+                ``SensitivityLevel.value`` (see
+                ``app.core.permissions.role_checker.clearance_for``), when
+                known. ``None`` in the open demo/dev path.
 
         Returns:
             The orchestrated response.
@@ -56,11 +63,16 @@ class ChatService:
         """
         thread_id = self._thread_id(request.session_id, user_id)
         config = self._trace_config(thread_id)
-        state = await self._invoke(request, config=config, user_id=user_id)
+        state = await self._invoke(
+            request, config=config, user_id=user_id, requester_clearance=requester_clearance
+        )
         return await self._response_from_state(state, config, thread_id)
 
     async def handle_message_stream(
-        self, request: ChatMessageRequest, user_id: Optional[str] = None
+        self,
+        request: ChatMessageRequest,
+        user_id: Optional[str] = None,
+        requester_clearance: Optional[str] = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Process a user message, yielding progress events as they happen.
 
@@ -72,6 +84,7 @@ class ChatService:
         Args:
             request: The chat request.
             user_id: See :meth:`handle_message`.
+            requester_clearance: See :meth:`handle_message`.
 
         Yields:
             Progress and result events. The first event is always ``session``,
@@ -88,7 +101,12 @@ class ChatService:
                 config = self._trace_config(thread_id)
                 config.setdefault("configurable", {})["status_queue"] = queue
 
-                state = await self._invoke(request, config=config, user_id=user_id)
+                state = await self._invoke(
+                    request,
+                    config=config,
+                    user_id=user_id,
+                    requester_clearance=requester_clearance,
+                )
                 await self._enqueue_terminal_event(queue, state, config, thread_id)
             except asyncio.CancelledError:
                 raise
@@ -289,6 +307,7 @@ class ChatService:
         request: ChatMessageRequest,
         config: dict[str, Any],
         user_id: Optional[str] = None,
+        requester_clearance: Optional[str] = None,
     ) -> dict[str, Any]:
         """Run the planning graph under a timeout.
 
@@ -300,6 +319,12 @@ class ChatService:
                 so the run-recording audit trail (see
                 app.observability.run_recorder) can attribute a run to a
                 user without parsing it back out of thread_id.
+            requester_clearance: The authenticated caller's resolved
+                clearance, carried into the graph state the same way --
+                read by _run_assist to gate document tool calls and the
+                output guardrail. Set once here; persists across a later
+                human-in-the-loop resume via the checkpointer, same as
+                user_id/document_id.
 
         Returns:
             The final (or paused) workflow state.
@@ -332,6 +357,7 @@ class ChatService:
                         "document_id": request.document_id,
                         "reasoning_level": request.reasoning_level.value,
                         "user_id": user_id,
+                        "requester_clearance": requester_clearance,
                     },
                     config=config,
                 ),

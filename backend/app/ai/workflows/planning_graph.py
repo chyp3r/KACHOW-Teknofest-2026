@@ -20,7 +20,7 @@ from app.ai.context.compress import truncate_with_marker
 from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.guardrails.llm_nuance import judge_output_leakage
 from app.ai.guardrails.output_gate import classify_reason_kind, evaluate_response
-from app.ai.guardrails.sensitivity import assessment_from_analysis
+from app.ai.guardrails.sensitivity import SensitivityAssessment, assessment_from_analysis
 from app.ai.session.focus import SessionFocus, compute_focus_update, merge_focus
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
@@ -45,6 +45,7 @@ from app.ai.workflows.revise import run_revise
 from app.ai.workflows.step_graph import STEP_SPECS, StepSpec, all_steps_settled, ready_steps
 from app.core.config import settings
 from app.core.enums.reasoning_level import ReasoningLevel
+from app.core.enums.sensitivity_level import SensitivityLevel
 from app.core.enums.step_status import StepStatus
 from app.infrastructure.vectorstore.base import BaseVectorStore
 from app.observability import guardrail_recorder
@@ -177,10 +178,20 @@ class PlanningState(TypedDict, total=False):
     input_text: str
     document_id: str | None
     #: The authenticated caller, when REQUIRE_AUTH is on (see
-    #: ChatService._invoke). None in the open demo/dev path. Read only by
-    #: the run-recording hooks in this module -- not otherwise part of any
-    #: routing or context-building decision.
+    #: ChatService._invoke). None in the open demo/dev path. Read by the
+    #: run-recording hooks in this module and, alongside
+    #: requester_clearance below, by _run_assist's tool/output-gate wiring.
     user_id: str | None
+    #: The authenticated caller's resolved SensitivityLevel (see
+    #: app.core.permissions.role_checker.clearance_for), as its string
+    #: value -- graph state must stay JSON-serialisable, same reason
+    #: reasoning_level is stored as .value rather than the enum itself.
+    #: None in the open demo/dev path (REQUIRE_AUTH off); _run_assist and
+    #: build_assistant_tools both treat that as "skip the clearance check"
+    #: per their own docstrings, not "clears nothing" -- output_gate.py's
+    #: own requester_clearance handling is the one place None still means
+    #: fail-secure.
+    requester_clearance: str | None
     #: This turn's audit-trail id (see app.observability.run_recorder).
     #: Generated fresh in planning_node each turn, like plan_steps -- but
     #: survives a human-in-the-loop pause/resume via the checkpointer
@@ -332,6 +343,56 @@ def _prior_turns(state: PlanningState, limit: int) -> list[dict[str, str]]:
     history = state.get("history") or []
     prior = history[:-1] if history else []
     return prior[-limit:] if limit > 0 else []
+
+
+#: Turkish labels for SensitivityLevel, for the prompt-facing note only --
+#: the enum's own .value (e.g. "cok_gizli") is what every deterministic
+#: check compares against, this is purely what the model reads.
+_SENSITIVITY_LABELS: dict[SensitivityLevel, str] = {
+    SensitivityLevel.UNMARKED: "İşaretlenmemiş",
+    SensitivityLevel.TASNIF_DISI: "Tasnif Dışı",
+    SensitivityLevel.HIZMETE_OZEL: "Hizmete Özel",
+    SensitivityLevel.OZEL: "Özel",
+    SensitivityLevel.GIZLI: "Gizli",
+    SensitivityLevel.COK_GIZLI: "Çok Gizli",
+}
+
+
+def _build_security_boundary_note(
+    sensitivity: Optional[SensitivityAssessment],
+    requester_clearance: Optional[SensitivityLevel],
+) -> str:
+    """Compose the Turkish note rendered into the assistant's system prompt.
+
+    A secondary, prompt-level layer only (see ``assistant.md``'s own
+    disclaimer to that effect) -- ``document_tools.py``'s deny-at-retrieval
+    check and ``output_gate.py`` are what actually enforce the boundary;
+    this exists to catch a paraphrase-around-the-facts case neither of those
+    regex/pattern-based checks can see, the same reasoning behind the
+    guardrail judge (``app.ai.guardrails.llm_nuance``).
+
+    Args:
+        sensitivity: This turn's attached document's assessment, or None
+            when no document is attached.
+        requester_clearance: The requester's resolved clearance, or None
+            when unknown (unauthenticated / REQUIRE_AUTH off).
+
+    Returns:
+        The note text. Never empty -- always states what's actually known,
+        even when that's "nothing."
+    """
+    clearance_label = (
+        _SENSITIVITY_LABELS.get(requester_clearance, requester_clearance.value)
+        if requester_clearance is not None
+        else "bilinmiyor (kimlik doğrulaması yok)"
+    )
+    parts = [f"Bu oturumdaki istek sahibinin yetki seviyesi: {clearance_label}."]
+
+    if sensitivity is not None:
+        document_label = _SENSITIVITY_LABELS.get(sensitivity.level, sensitivity.level.value)
+        parts.append(f"Bu turda ekli belgenin gizlilik derecesi: {document_label}.")
+
+    return " ".join(parts)
 
 
 def create_planning_graph(
@@ -590,6 +651,10 @@ def create_planning_graph(
         # document means there is nothing to leak, an UNMARKED document
         # means there is a source that was checked and cleared.
         sensitivity = assessment_from_analysis(analysis) if document_id else None
+        requester_clearance_raw = state.get("requester_clearance")
+        requester_clearance = (
+            SensitivityLevel(requester_clearance_raw) if requester_clearance_raw else None
+        )
         # Gizli/Çok Gizli per the resolved policy (`GuardrailPolicy.
         # sensitivity_block_levels`, read via `requires_review` rather than
         # a level comparison hardcoded here) -- buffer the whole reply and
@@ -685,6 +750,7 @@ def create_planning_graph(
             config=config,
             on_anchor_referenced=_record_referenced_anchor,
             on_tool_result=_record_tool_result,
+            requester_clearance=requester_clearance,
         )
 
         chunks: list[str] = []
@@ -697,6 +763,9 @@ def create_planning_graph(
                     history=history,
                     history_summary=assembled.get("history_summary"),
                     document_context=assembled.get("document_context"),
+                    security_boundary=_build_security_boundary_note(
+                        sensitivity, requester_clearance
+                    ),
                     tools=tools,
                     config=config,
                     node="assist",
@@ -729,11 +798,12 @@ def create_planning_graph(
                 raw_reply,
                 source_materials=source_materials,
                 sensitivity=sensitivity,
-                # No authenticated requester exists yet in this open demo
-                # path -- always treated as "unknown clearance", the fail-
-                # secure default `evaluate_response` documents. Wired to a
-                # real value once the RBAC phase adds an authenticated user.
-                requester_clearance=None,
+                # Resolved above from state["requester_clearance"] (see
+                # ChatService._invoke / chat/router.py). Still None in the
+                # open demo/dev path (REQUIRE_AUTH off) -- evaluate_response
+                # keeps treating that as "unknown clearance", fail-secure,
+                # per its own docstring.
+                requester_clearance=requester_clearance,
                 judge_verdict=judge_verdict,
             )
             reply = verdict.text

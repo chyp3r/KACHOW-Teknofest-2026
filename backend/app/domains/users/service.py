@@ -106,6 +106,9 @@ class UserService:
         if "role" in update_dict and update_dict["role"] is not None:
             update_dict["role"] = update_dict["role"].value
 
+        if "clearance_level" in update_dict and update_dict["clearance_level"] is not None:
+            update_dict["clearance_level"] = update_dict["clearance_level"].value
+
         return await self.repository.update(user, update_dict)
 
     async def change_password(self, user_id: str, schema: PasswordChangeRequest) -> None:

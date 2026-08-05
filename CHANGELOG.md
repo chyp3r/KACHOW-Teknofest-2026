@@ -3,6 +3,14 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 
+## [1.38.0] - 2026-08-05
+### Değiştirildi
+- **Guardrail Sistemi -- Faz 4: Uçtan Uca Yetkilendirme (RBAC)**: Gizlilik seviyesi kontrolü artık yalnızca giriş/çıkış guardrail'lerinde değil, **erişimin her katmanında** uygulanıyor -- rol modeli sadeleştirildi, her kullanıcının kendi yetki seviyesi var ve bu seviye içerik modele ulaşmadan önce Qdrant sorgusunun kendisinde uygulanıyor.
+  - **Rol modeli değişti**: kullanılmayan `AUDITOR` rolü kaldırıldı. `MANAGER` (şirket yöneticisi) artık `ADMIN` ile birebir aynı tam erişime sahip -- ikisi de her gizlilik derecesini görebilir **ve** sahiplik sınırlamasını (`bypasses_ownership`) aşarak şirket genelindeki her evraka erişebilir, yalnızca kendi yüklediklerine değil. `EMPLOYEE` rolünün tavanı artık role göre sabit değil: her kullanıcının kendi `clearance_level` alanı var (`users` tablosuna eklendi, varsayılan **Hizmete Özel**), böylece iki çalışan farklı yetki seviyesinde olabilir. `clearance_level` yalnızca yöneticiler tarafından değiştirilebilir (`PATCH /users/{id}`); kendi kendine yükseltmeyi önlemek için kayıt sırasında ayarlanamaz.
+  - **Erişim reddi artık getirim anında (deny-at-retrieval)**: `document_tools.py`'deki evrak araçları (`search_document`, `get_document_details`, `get_document_outline/section`), çağıranın yetkisi evrakın gizlilik derecesini karşılamıyorsa içeriği modele hiç göstermeden reddediyor. `QdrantStore`'un filtre oluşturucusu artık eşitlik dışında **aralık koşulunu** da destekliyor (`sensitivity_rank: {"lte": ...}`), böylece yetkisiz bir parça vektör aramasından **hiç dönmüyor** -- getirim sonrası filtrelemeye güvenmek yerine sorgunun kendisi sınırlı.
+  - **İstem düzeyinde ikinci katman**: Asistan'ın sistem istemine oturumun yetki sınırını özetleyen bir `security_boundary` notu ekleniyor (deterministik kontrolün *yerine* değil, onun üstüne -- model kuralı çiğnese bile Qdrant filtresi ve araç reddi zaten devrede).
+  - **`REQUIRE_AUTH` artık varsayılan olarak `True`.** Önceden kimliksiz her istek kabul ediliyordu; artık kimlik doğrulama gerçek bir zorunluluk. **Bilinen kırılma**: frontend'de hiçbir JWT/oturum akışı yok (`Authorization`/`Bearer`/`login` frontend kod tabanında hiç geçmiyor), dolayısıyla bu değişiklik frontend'i kimlik doğrulaması yapmadan **kırıyor**. Bilinçli bir karar: frontend düzeltmesi Faz 5 (Gözlemlenebilirlik) tamamlandıktan sonra ayrı bir çalışma olarak ele alınacak.
+
 ## [1.37.0] - 2026-08-05
 ### Düzeltildi
 - **Hız Sınırlayıcı Artık Açık Tarafa Düşüyor**: `rate_limit()` Redis'e hiçbir hata yakalama olmadan gidiyordu; bağlantı hatası doğrudan bağımlılıktan çıkıp **500**'e dönüşüyordu. Hız sınırlama bir *koruma* mekanizmasıdır, doğruluk gereksinimi değil: sayaç erişilemezse isteğin sınırı aşıp aşmadığını bilemeyiz, güvenli cevap isteği servis etmektir.

@@ -435,6 +435,138 @@ async def test_search_legislation_reports_nothing_when_no_context_is_found():
     assert reported == []
 
 
+# ==========================================
+# Deny-at-retrieval clearance gating (Faz 4 -- RBAC)
+# ==========================================
+_GIZLI_DOC = {
+    "pages": ["tek sayfa"],
+    "extracted_text": "tek sayfa",
+    "analysis": {"summary": "özet", "guardrail": {"sensitivity_level": "gizli"}},
+}
+
+
+@pytest.mark.asyncio
+async def test_document_tools_refuse_when_clearance_is_insufficient():
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/gizli.pdf",
+            cached_document=_GIZLI_DOC,
+            requester_clearance=SensitivityLevel.OZEL,
+        )
+    )
+    outline = next(tool for tool in tools if tool.name == "get_document_outline")
+    details = next(tool for tool in tools if tool.name == "get_document_details")
+    section = next(tool for tool in tools if tool.name == "get_document_section")
+
+    assert "yeterli yetkiniz yok" in await outline.handler()
+    assert "yeterli yetkiniz yok" in await details.handler()
+    assert "yeterli yetkiniz yok" in await section.handler(page=1)
+
+
+@pytest.mark.asyncio
+async def test_search_document_refuses_when_clearance_is_insufficient():
+    vector_store = AsyncMock()
+    embeddings_client = AsyncMock()
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/gizli.pdf",
+            cached_document=_GIZLI_DOC,
+            vector_store=vector_store,
+            embeddings_client=embeddings_client,
+            requester_clearance=SensitivityLevel.OZEL,
+        )
+    )
+    search = next(tool for tool in tools if tool.name == "search_document")
+
+    result = await search.handler(query="ne diyor")
+
+    assert "yeterli yetkiniz yok" in result
+    # Never even reaches Qdrant -- deny-at-retrieval, not filter-and-hope.
+    vector_store.hybrid_search.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_document_tools_proceed_when_clearance_is_sufficient():
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/gizli.pdf",
+            cached_document=_GIZLI_DOC,
+            requester_clearance=SensitivityLevel.COK_GIZLI,
+        )
+    )
+    outline = next(tool for tool in tools if tool.name == "get_document_outline")
+
+    result = await outline.handler()
+
+    assert "yeterli yetkiniz yok" not in result
+
+
+@pytest.mark.asyncio
+async def test_document_tools_proceed_on_exact_clearance_match():
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/gizli.pdf",
+            cached_document=_GIZLI_DOC,
+            requester_clearance=SensitivityLevel.GIZLI,
+        )
+    )
+    outline = next(tool for tool in tools if tool.name == "get_document_outline")
+
+    result = await outline.handler()
+
+    assert "yeterli yetkiniz yok" not in result
+
+
+@pytest.mark.asyncio
+async def test_document_tools_skip_the_check_when_clearance_is_unknown():
+    """requester_clearance=None means REQUIRE_AUTH is off -- the documented
+    fully-open local-dev escape hatch, same convention the ownership check
+    already uses. Must not silently refuse every document interaction."""
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/gizli.pdf",
+            cached_document=_GIZLI_DOC,
+            requester_clearance=None,
+        )
+    )
+    outline = next(tool for tool in tools if tool.name == "get_document_outline")
+
+    result = await outline.handler()
+
+    assert "yeterli yetkiniz yok" not in result
+
+
+@pytest.mark.asyncio
+async def test_search_document_includes_the_clearance_rank_in_the_qdrant_filter():
+    vector_store = AsyncMock()
+    vector_store.hybrid_search.return_value = [{"text": "bulunan parça"}]
+    embeddings_client = AsyncMock()
+    embeddings_client.embed_query.return_value = [0.1]
+
+    class _StubSparseEncoder:
+        def encode_query(self, query):
+            return [], []
+
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/unmarked.pdf",
+            vector_store=vector_store,
+            embeddings_client=embeddings_client,
+            qa_sparse_encoder=_StubSparseEncoder(),
+            requester_clearance=SensitivityLevel.OZEL,
+        )
+    )
+    search = next(tool for tool in tools if tool.name == "search_document")
+
+    await search.handler(query="ne diyor")
+
+    call_kwargs = vector_store.hybrid_search.call_args.kwargs
+    assert call_kwargs["filter_dict"] == {
+        "storage_path": "uploads/unmarked.pdf",
+        "sensitivity_rank": {"lte": SensitivityLevel.OZEL.rank},
+    }
+
+
 @pytest.mark.asyncio
 async def test_an_unknown_tool_name_does_not_crash_the_loop(fake_llm):
     fake_llm.generate_with_tools_side_effect = [

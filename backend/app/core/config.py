@@ -22,14 +22,19 @@ class Settings(BaseSettings):
     #: the competition brief explicitly asks for.
     HITL_APPROVAL_GATE_ENABLED: bool = True
 
-    #: /documents/* and /chat/* are unauthenticated by default so the
-    #: competition demo works without the frontend implementing a login flow
-    #: first. A full JWT + Redis-blacklist stack already exists for /auth and
-    #: /users; flip this once the frontend sends an Authorization header, or
-    #: for any deployment reachable outside a trusted demo network -- these
-    #: routes hold a local model busy for tens of seconds per request and read
-    #: whatever storage_path they're given.
-    REQUIRE_AUTH: bool = False
+    #: On by default: /documents/* and /chat/* require a JWT bearer token,
+    #: and the RBAC guardrail layer (app.core.permissions.role_checker,
+    #: app.ai.guardrails.output_gate, document_tools.py's deny-at-retrieval
+    #: check) only has a real requester to enforce clearance against when
+    #: this is on. Set to False for local/offline demos with no frontend
+    #: login flow -- REQUIRE_AUTH=False is a genuine "fully open" dev mode:
+    #: ownership and clearance checks skip entirely rather than denying
+    #: everything (see _verify_document_access / build_assistant_tools'
+    #: own docstrings for the precise "None means skip" convention this
+    #: relies on), so local testing isn't blocked, but nothing in that mode
+    #: is protected -- never point it at a network reachable outside a
+    #: trusted demo/dev environment.
+    REQUIRE_AUTH: bool = True
 
     #: Persist each planning-graph run's decision trail to Postgres (see
     #: app.observability.run_recorder). On by default in every real
