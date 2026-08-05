@@ -37,6 +37,35 @@ DOCUMENT_TYPE_LABELS: dict[DocumentType, str] = {
     DocumentType.OTHER: "Diğer",
 }
 
+#: Vocabulary steering legislation retrieval, per document type.
+#:
+#: Separate from `REQUIRED_FIELD_RULES` on purpose, because the two answer
+#: different questions. The rule table answers *compliance* -- which absences make
+#: this document incomplete -- so its citations are the ones a missing field is
+#: reported against. This map answers *relevance*: which legislation a reader of
+#: this document would want quoted. A leave request is governed by 657 for its
+#: substance, but a missing 657 provision does not make the request incomplete, so
+#: 657 belongs here and not there.
+#:
+#: These terms are appended to the retrieval query because the BM25 half of the
+#: hybrid retriever matches literal tokens, and the corpus now holds seven laws
+#: rather than one. A single fixed suffix used to work when the only real target
+#: was the correspondence regulation; measured over the expanded corpus it put the
+#: regulation's vocabulary into every query and pulled leave requests and petitions
+#: away from the laws that actually govern them.
+DOCUMENT_TYPE_QUERY_TERMS: dict[DocumentType, str] = {
+    DocumentType.OFFICIAL_LETTER: "resmî yazışma usul esas sayı tarih konu ilgi imza",
+    DocumentType.CIRCULAR: "resmî yazışma usul esas dağıtım sayı tarih konu imza",
+    DocumentType.DIRECTIVE: "resmî yazışma usul esas talimat sayı tarih konu imza",
+    DocumentType.MINUTES: "resmî yazışma usul esas tutanak tarih konu imza",
+    DocumentType.REPORT: "resmî yazışma usul esas rapor tarih konu imza",
+    DocumentType.PETITION: "dilekçe hakkı ad soyad imza adres başvuru",
+    DocumentType.COMPLAINT: "dilekçe hakkı şikayet ad soyad imza adres başvuru",
+    DocumentType.INFORMATION_REQUEST: "bilgi edinme hakkı başvuru usulü süre",
+    DocumentType.LEAVE_REQUEST: "devlet memuru izin yıllık izin mazeret izni",
+    DocumentType.OTHER: "resmî yazışma usul esas sayı tarih konu imza",
+}
+
 
 class FieldRule(BaseModel):
     """A single required-or-advisory field requirement for a document type."""

@@ -402,6 +402,25 @@ Bu yaklaşım;
 * genişletilebilirliği sağlar
 * araç bağımlılığını azaltır
 
+## Mevcut durum
+
+`app/mcp/` katmanı (stdio `MCPClient` + `MCPManager`) çalışır durumdadır ancak
+**çalışma zamanında kayıtlı bir sunucu yoktur**; `registry.py` boştur.
+
+Bugün MCP'nin tek gerçek kullanımı geliştirme zamanındadır:
+`scripts/fetch_mevzuat_corpus.py`, aynı `MCPClient` üzerinden
+[`mevzuat-mcp`](https://github.com/saidsurucu/mevzuat-mcp) (MIT) sunucusuna
+bağlanıp mevzuat.gov.tr'den tam metin çeker ve `datasets/mevzuat/` altına yazar.
+
+Sunucu **backend imajına dahil değildir**: bağımlılık ağacı `playwright`
+sabitler ve tarayıcı ikilisi çeker. Bu nedenle korpus üretimi izole bir sanal
+ortamda, elle çalıştırılır; analiz hattı yalnızca commit'lenmiş yerel dosyaları
+okur ve ağa hiç ihtiyaç duymaz. Bu, evrak analizinin çevrimdışı ve tekrar
+üretilebilir kalmasını sağlar.
+
+Korpusa yazılan her dosya `mevzuat_id`, kaynak ve çekilme tarihini taşır;
+böylece üretilen her atıf resmî metne kadar izlenebilir.
+
 ---
 
 # Retrieval

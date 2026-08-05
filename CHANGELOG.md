@@ -3,6 +3,26 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 
+## [1.35.0] - 2026-08-05
+### Eklendi
+- **Mevzuat Korpusu Resmî Kaynaktan Üretiliyor**: `scripts/fetch_mevzuat_corpus.py`, [`mevzuat-mcp`](https://github.com/saidsurucu/mevzuat-mcp) (MIT) sunucusu üzerinden mevzuat.gov.tr'den tam metin çekip `datasets/mevzuat/` altına yazar. Korpus **3 belge / 44 parçadan 7 belge / 880 parçaya** çıktı.
+  - Eklenen mevzuat: **657** Devlet Memurları Kanunu (izin talepleri), **6698** KVKK (evraktan TCKN ve adres çıkarıyoruz, buna atıf yapan hiçbir şey yoktu), **7201** Tebligat Kanunu, **5070** Elektronik İmza Kanunu.
+  - Mevcut üç belge de yeniden çekildi: elle aktarılmış hâlleri eksikti — Resmî Yazışmalar Yönetmeliği'nin **39 maddesinden 18'i** vardı, 4982'nin 33 maddesinden 6'sı. Artık tam metinler duruyor.
+  - Her dosya `mevzuat_id`, kaynak, çekilme tarihi ve korpustaki gerekçesini taşıyan bir künye ile yazılır; bir atıf her zaman resmî metne kadar izlenebilir.
+  - **Çalışma zamanı değişmedi.** Sunucunun bağımlılık ağacı `playwright` sabitliyor ve tarayıcı ikilisi çekiyor; bu nedenle backend imajına **girmiyor**. Betik geliştirme zamanında, izole bir sanal ortamdan çalışır. Analiz hattı yerel dosyaları okumaya ve ağsız çalışmaya devam eder.
+  - `--check` kipi farkları yazmadan raporlar. Kullanın: elle aktarılmış bir dosyaya güvenmeden önce ne değiştiğini görmek, altı yeni dosyanın aynı ardışık düzene bağlanmasından ucuzdur.
+
+### Değiştirildi
+- **Mevzuat Sorgusu Belge Türüne Göre Kuruluyor**: `_build_mevzuat_query` her sorguya sabit bir `"zorunlu unsurlar sayı tarih konu ilgi imza gizlilik derecesi"` eki koyuyordu. Korpusta tek gerçekçi hedef Resmî Yazışmalar Yönetmeliği olduğu sürece bu zararsızdı; yedi mevzuatla birlikte bir yanlılığa dönüştü. Ölçüm (örnek türler üzerinde, beklenen mevzuatın ilk 3 sonuçta bulunması):
+  - sabit ek ile **4/6** — izin talebi KVKK'ya, dilekçe 657'ye kayıyordu
+  - ek tamamen kaldırılınca **3/6** — bu sefer yönetmelik kendi belge türlerini kaybediyordu
+  - türe özgü terimlerle (`DOCUMENT_TYPE_QUERY_TERMS`) **6/6**
+- **`DOCUMENT_TYPE_QUERY_TERMS` kural tablosundan ayrı tutuldu.** İkisi farklı sorulara yanıt verir: `REQUIRED_FIELD_RULES` *uygunluğu* yanıtlar (hangi eksiklik belgeyi eksik kılar) ve atıfları eksik alan raporunda görünür; bu eşleme *ilgililiği* yanıtlar (bu belgeyi okuyan biri hangi mevzuatı görmek ister). 657 bir izin talebinin esasını düzenler ama eksik bir 657 hükmü talebi eksik kılmaz — bu yüzden geri getirimi yönlendirir, kural atfı olmaz. Bir test bu ayrımı kilitler.
+
+### Not
+- `evrak_08` (izin talebi) artık **Devlet Memurları Kanunu Madde 103**'e atıf veriyor; önceden yalnızca Resmî Yazışmalar Yönetmeliği'ne veriyordu. Eksik alan tespiti ve atıfları değişmedi: deterministik çekirdek bu işten etkilenmez.
+- `yargi-mcp` (mahkeme kararları) kapsam dışı bırakıldı: içtihat, Görev 1'in altı yeteneğinden biri değil. Taslak üretimi (Görev 2) veya asistan için değerlendirilebilir.
+
 ## [1.34.0] - 2026-08-03
 ### Değiştirildi
 - **`chat` ve `document_qa` Tek `assist` Adımında Birleştirildi, Gerçek Tool-Calling Döngüsü Eklendi**: Router'ın "bu mesaj sohbet mi, belge sorusu mu" kararını önceden vermek zorunda olması yanlış katmanda alınan bir karardı -- bu, cevabın belgeye ihtiyaç duyup duymadığını bilmeden önce verilen bir tahmindi. `intent_rules.py`/`intent_scorer.py` bu ayrımı kurtarmak için `document_qa.request_softener_counter` ve `document_qa.memory_recall_counter` gibi salt iki intent'i birbirinden ayırmaya yarayan telafi kuralları taşıyordu; `evaluation/reports/all-latest.md`'deki heldout hatalarının çoğu (`held_03/06/07/16`) tam olarak bu iki sınıf arasındaki kaymalardı.

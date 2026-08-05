@@ -11,6 +11,7 @@ from app.ai.agents.classifier import ClassifierAgent
 from app.ai.agents.compliance import ComplianceAgent
 from app.ai.compliance import (
     DOCUMENT_TYPE_LABELS,
+    DOCUMENT_TYPE_QUERY_TERMS,
     EvrakField,
     check_required_fields,
     detect_structural_signal,
@@ -186,9 +187,17 @@ def _ocr_warning(is_ocr_text: bool) -> str:
 def _build_mevzuat_query(state: DocumentAnalysisState) -> str:
     """Compose the legislation search query deterministically.
 
-    Built from the document-type label and the subject rather than from a model
-    rewrite: those labels are literal tokens in the regulation, which is what the
-    BM25 half of the hybrid retriever matches best.
+    Built from the document-type label, the subject and the type's own legislation
+    vocabulary rather than from a model rewrite: those are literal tokens in the
+    corpus, which is what the BM25 half of the hybrid retriever matches best.
+
+    The vocabulary is per type (`DOCUMENT_TYPE_QUERY_TERMS`) rather than one fixed
+    string. The fixed version was written when the corpus held a single realistic
+    target, the correspondence regulation, so its terms were harmless in every
+    query. Against the expanded corpus they became a bias: measured over the sample
+    types, the fixed suffix pulled leave requests to the data-protection law and
+    petitions to the civil-service law, while dropping it instead cost the
+    regulation its own document types. Per-type terms are what recovers both.
 
     Deliberately does not depend on the compliance report, so retrieval and
     compliance checking can run as independent branches.
@@ -206,7 +215,12 @@ def _build_mevzuat_query(state: DocumentAnalysisState) -> str:
     if konu:
         parts.append(str(konu))
 
-    parts.append("zorunlu unsurlar sayı tarih konu ilgi imza gizlilik derecesi")
+    try:
+        document_type = DocumentType(state.get("document_type", DocumentType.OTHER.value))
+    except ValueError:
+        document_type = DocumentType.OTHER
+    parts.append(DOCUMENT_TYPE_QUERY_TERMS[document_type])
+
     return " ".join(parts).strip()
 
 

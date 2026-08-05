@@ -69,23 +69,46 @@ def test_trim_preserves_head_and_tail_of_long_documents():
 
 
 def test_mevzuat_query_is_built_deterministically_from_labels():
-    """BM25 matches literal regulation tokens, so the type label and konu
-    drive the query, plus a fixed suffix of mandatory-element vocabulary
-    ("sayı tarih konu ilgi imza gizlilik derecesi") that gives the sparse
-    retriever literal regulation terms regardless of which fields are
-    actually missing."""
+    """BM25 matches literal tokens, so the type label and konu drive the query
+    plus the vocabulary of the legislation governing that type."""
     state = {
+        "document_type": DocumentType.OFFICIAL_LETTER.value,
         "document_type_label": "Resmî Yazı",
-        "fields": {"konu": "İzin Talebi"},
-        "missing_fields": [{"label": "Sayı"}, {"label": "İlgi"}],
+        "fields": {"konu": "Personel Eğitimi"},
     }
     query = _build_mevzuat_query(state)
 
     assert "Resmî Yazı" in query
-    assert "İzin Talebi" in query
-    assert "sayı" in query
-    assert "ilgi" in query
+    assert "Personel Eğitimi" in query
+    assert "resmî yazışma" in query
     assert _build_mevzuat_query(state) == query
+
+
+def test_mevzuat_query_terms_follow_the_document_type():
+    """One fixed suffix was correct when the corpus held a single realistic
+    target. Against seven laws it biased every query toward the correspondence
+    regulation and pulled leave requests away from the law that governs them."""
+    leave = _build_mevzuat_query(
+        {
+            "document_type": DocumentType.LEAVE_REQUEST.value,
+            "document_type_label": "İzin Talebi",
+        }
+    )
+    letter = _build_mevzuat_query(
+        {
+            "document_type": DocumentType.OFFICIAL_LETTER.value,
+            "document_type_label": "Resmî Yazı",
+        }
+    )
+
+    assert "izin" in leave
+    assert "resmî yazışma" not in leave
+    assert "resmî yazışma" in letter
+
+
+def test_mevzuat_query_falls_back_on_an_unknown_document_type():
+    query = _build_mevzuat_query({"document_type": "uydurma", "document_type_label": "X"})
+    assert query.strip()
 
 
 def test_mevzuat_query_tolerates_empty_state():

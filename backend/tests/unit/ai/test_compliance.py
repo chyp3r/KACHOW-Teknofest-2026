@@ -12,6 +12,7 @@ import pytest
 from app.ai.compliance import (
     BLANK_VALUE_MARKER,
     DOCUMENT_TYPE_LABELS,
+    DOCUMENT_TYPE_QUERY_TERMS,
     REQUIRED_FIELD_RULES,
     SEVERITY_ADVISORY,
     SEVERITY_REQUIRED,
@@ -48,6 +49,25 @@ def test_every_document_type_has_rules():
 def test_every_document_type_has_a_turkish_label():
     for document_type in DocumentType:
         assert DOCUMENT_TYPE_LABELS.get(document_type)
+
+
+def test_every_document_type_has_retrieval_terms():
+    """A type with no terms would fall back to a bare label and, against a corpus
+    of seven laws, retrieve whichever one happens to share its vocabulary."""
+    for document_type in DocumentType:
+        assert DOCUMENT_TYPE_QUERY_TERMS.get(document_type), document_type
+
+
+def test_retrieval_terms_are_separate_from_compliance_citations():
+    """The two answer different questions and must not be conflated: 657 governs a
+    leave request's substance, but a missing 657 provision does not make the
+    request incomplete, so it steers retrieval without becoming a rule citation."""
+    leave_terms = DOCUMENT_TYPE_QUERY_TERMS[DocumentType.LEAVE_REQUEST]
+    leave_citations = " ".join(
+        rule.mevzuat for rule in REQUIRED_FIELD_RULES[DocumentType.LEAVE_REQUEST]
+    )
+    assert "izin" in leave_terms
+    assert "657" not in leave_citations
 
 
 def test_every_rule_key_matches_an_evrak_field():

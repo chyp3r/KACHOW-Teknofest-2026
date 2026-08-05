@@ -9,6 +9,7 @@ from app.ai.compliance.field_parser import (
 from app.ai.compliance.field_rule import (
     BLANK_VALUE_MARKER,
     DOCUMENT_TYPE_LABELS,
+    DOCUMENT_TYPE_QUERY_TERMS,
     REQUIRED_FIELD_RULES,
     SEVERITY_ADVISORY,
     SEVERITY_REQUIRED,
@@ -25,6 +26,7 @@ __all__ = [
     "BLANK_VALUE_MARKER",
     "ComplianceReport",
     "DOCUMENT_TYPE_LABELS",
+    "DOCUMENT_TYPE_QUERY_TERMS",
     "EvrakField",
     "FieldRule",
     "MissingField",
