@@ -20,6 +20,8 @@ from app.ai.compliance import (
     merge_parsed_over_model,
     parse_labelled_fields,
 )
+from app.ai.guardrails.sensitivity import SensitivityAssessment
+from app.ai.guardrails.sensitivity import assess as assess_sensitivity
 from app.ai.llms.base import BaseLLMClient
 from app.ai.retrieval.hybrid import HybridRetriever
 from app.ai.workflows.events import emit_node_end, emit_node_error, emit_node_start, emit_partial
@@ -31,6 +33,7 @@ from app.ai.workflows.resilience import (
 )
 from app.core.enums.compliance_status import ComplianceStatus
 from app.core.enums.document_type import DocumentType
+from app.core.enums.sensitivity_level import SensitivityLevel
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +62,7 @@ class DocumentAnalysisState(TypedDict, total=False):
     mevzuat_documents: list[Document]
     mevzuat_suggestions: list[dict[str, Any]]
     entities: list[str]
+    sensitivity_assessment: dict[str, Any]
 
 
 #: Type and summary only. Used as the fallback when the merged schema fails.
@@ -251,11 +255,18 @@ def create_document_analysis_graph(
     Flow::
 
         START -> analyze -+-> check_compliance -+-> suggest_mevzuat -> END
-                          \\-> retrieve_mevzuat -/
+                          |-> retrieve_mevzuat -/
+                          \\-> scan_sensitivity -----------------------> END
 
     Compliance checking is pure computation and legislation retrieval is network
     I/O, so they run as concurrent branches. They write disjoint state keys,
     which is what makes the fan-out safe without custom reducers.
+    Sensitivity scanning is also pure computation (deterministic PII/marking
+    detection, no LLM call) and writes its own disjoint key
+    (``sensitivity_assessment``); it fans straight to END rather than into
+    ``suggest_mevzuat`` because nothing downstream in this sub-graph needs to
+    block on it, and LangGraph merges every branch's output into the same
+    final state regardless of which edge reaches END.
 
     Args:
         llm_client: The LLM used for document analysis.
@@ -456,6 +467,32 @@ def create_document_analysis_graph(
         await emit_partial(config, "compliance", update)
         return update
 
+    @node_timeout("scan_sensitivity")
+    async def scan_sensitivity_node(
+        state: DocumentAnalysisState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Assess confidentiality marking and PII exposure. No LLM call.
+
+        Independent branch off ``analyze`` (see the flow diagram above):
+        nothing downstream in this sub-graph needs to block on it, so it
+        fans straight to END rather than merging into ``suggest_mevzuat``'s
+        fan-in. ``DocumentService`` reads ``sensitivity_assessment`` off the
+        final merged state alongside every other branch's output.
+        """
+        logger.info("Running Sensitivity Scan Node...")
+        try:
+            fields = EvrakField(**(state.get("fields") or {}))
+            assessment = assess_sensitivity(fields=fields, text=state.get("input_text", ""))
+        except Exception:
+            logger.exception("Sensitivity Scan Node failed")
+            assessment = SensitivityAssessment(
+                level=SensitivityLevel.UNMARKED, requires_review=False
+            )
+
+        update = {"sensitivity_assessment": assessment.model_dump(mode="json")}
+        await emit_partial(config, "sensitivity", update)
+        return update
+
     @node_timeout("retrieve_mevzuat")
     async def retrieve_mevzuat_node(
         state: DocumentAnalysisState, config: RunnableConfig
@@ -590,14 +627,19 @@ def create_document_analysis_graph(
     builder.add_node("check_compliance", check_compliance_node)
     builder.add_node("retrieve_mevzuat", retrieve_mevzuat_node, retry_policy=IO_RETRY)
     builder.add_node("suggest_mevzuat", suggest_mevzuat_node, retry_policy=LLM_RETRY)
+    builder.add_node("scan_sensitivity", scan_sensitivity_node)
 
     builder.add_edge(START, "analyze")
-    # Fan out: compliance is CPU-bound, retrieval is network-bound.
+    # Fan out: compliance is CPU-bound, retrieval is network-bound, sensitivity
+    # scanning is CPU-bound and independent of both.
     builder.add_edge("analyze", "check_compliance")
     builder.add_edge("analyze", "retrieve_mevzuat")
+    builder.add_edge("analyze", "scan_sensitivity")
     # Fan in: LangGraph waits for both branches before running this node.
     builder.add_edge("check_compliance", "suggest_mevzuat")
     builder.add_edge("retrieve_mevzuat", "suggest_mevzuat")
     builder.add_edge("suggest_mevzuat", END)
+    # Independent branch -- its own path straight to END.
+    builder.add_edge("scan_sensitivity", END)
 
     return builder.compile()

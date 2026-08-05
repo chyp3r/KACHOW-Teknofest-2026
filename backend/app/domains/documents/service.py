@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from app.ai.compliance.evrak_field import EvrakField, MissingField
 from app.ai.documents.anchors import build_page_map
+from app.ai.guardrails.file_integrity import check_file_integrity
 from app.ai.guardrails.injection import scrub_extracted_text
 from app.domains.documents.model.document_model import DocumentModel
 from app.domains.documents.repository import DocumentRepository
@@ -19,10 +20,13 @@ from app.core.constants import (
 )
 from app.core.enums.compliance_status import ComplianceStatus
 from app.core.enums.document_type import DocumentType
+from app.core.enums.sensitivity_level import SensitivityLevel
 from app.domains.documents.schema.document_schema import (
     DocumentAnalysisResponseSchema,
     ExtractionInfoSchema,
+    GuardrailAssessmentSchema,
     MevzuatReferenceSchema,
+    PiiFindingSchema,
 )
 from app.events.event import DocumentAnalyzedEvent, DocumentUploadedEvent
 from app.events.event_bus import event_bus
@@ -35,6 +39,7 @@ from app.ai.embeddings.service import EmbeddingService
 from app.ai.embeddings.chunking.recursive import RecursiveChunker
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.infrastructure.vectorstore.base import BaseVectorStore
+from app.observability import guardrail_recorder
 from app.shared.validator.file_validator import validate_file_extension
 
 logger = logging.getLogger(__name__)
@@ -110,7 +115,7 @@ class DocumentService:
             ValidationException: If the upload is rejected or yields no text.
             AIException: If the analysis workflow fails or times out.
         """
-        self._validate_upload(file_name, content, content_type)
+        await self._validate_upload(file_name, content, content_type)
 
         storage_path = await self._store(file_name, content)
         await self._publish(
@@ -171,7 +176,13 @@ class DocumentService:
             storage_path, extracted.text, extracted.pages, response
         )
 
-        await self._index_for_qa(storage_path, extracted.text, extracted.pages)
+        await self._index_for_qa(
+            storage_path,
+            extracted.text,
+            extracted.pages,
+            sensitivity_level=response.guardrail.sensitivity_level,
+        )
+        await self._record_sensitivity_assessment(storage_path, owner_id, response)
 
         await self._publish(
             DocumentAnalyzedEvent(
@@ -186,7 +197,11 @@ class DocumentService:
         return response
 
     async def _index_for_qa(
-        self, storage_path: str, text: str, pages: Optional[list[str]] = None
+        self,
+        storage_path: str,
+        text: str,
+        pages: Optional[list[str]] = None,
+        sensitivity_level: SensitivityLevel = SensitivityLevel.UNMARKED,
     ) -> None:
         """Chunk, embed and index the document so Document Q&A can find it.
 
@@ -211,6 +226,14 @@ class DocumentService:
             text: Full extracted document text.
             pages: Per-page extracted text, in document order, used to map
                 each chunk's offset in ``text`` to a page number.
+            sensitivity_level: The document-level assessment from
+                ``app.ai.guardrails.sensitivity.assess``, stamped onto every
+                chunk as both the string level (display/logging) and its
+                numeric ``rank`` (what a Qdrant range filter can actually
+                compare against -- wired up in the RBAC phase). Document
+                granularity for now; re-assessing per chunk is a later
+                refinement, not required to make retrieval-time filtering
+                possible.
         """
         if not self.embedding_service or not self.vector_store:
             return
@@ -236,6 +259,8 @@ class DocumentService:
             encoder = SparseBM25Encoder()
             for chunk in chunks:
                 chunk.metadata["storage_path"] = storage_path
+                chunk.metadata["sensitivity_level"] = sensitivity_level.value
+                chunk.metadata["sensitivity_rank"] = sensitivity_level.rank
                 start_index = chunk.metadata.get("start_index")
                 if start_index is not None:
                     chunk.metadata["page"] = page_map.page_for_offset(start_index)
@@ -316,10 +341,11 @@ class DocumentService:
         logger.info("Detected Q&A embedding dimension: %d", _qa_vector_size)
         return _qa_vector_size
 
-    def _validate_upload(
+    async def _validate_upload(
         self, file_name: str, content: bytes, content_type: Optional[str]
     ) -> None:
-        """Reject uploads that are empty, oversized or of an unsupported type.
+        """Reject uploads that are empty, oversized, of an unsupported type,
+        or whose bytes don't actually match what they claim to be.
 
         Args:
             file_name: Original file name.
@@ -352,6 +378,24 @@ class DocumentService:
                     "allowed_types": ALLOWED_FILE_TYPES,
                     "allowed_extensions": ALLOWED_DOCUMENT_EXTENSIONS,
                 },
+            )
+
+        # Extension and Content-Type are both strings the uploader controls;
+        # neither says anything about the actual bytes. This is the
+        # deterministic hard-block tier: a mismatched signature or an
+        # archive that would decompress into something absurd is rejected
+        # outright, before storage or extraction ever touch the content.
+        integrity = check_file_integrity(content, file_name=file_name, content_type=content_type)
+        if not integrity.ok:
+            await guardrail_recorder.record_event(
+                stage="input",
+                kind="magic_byte",
+                decision="blocked",
+                reasons=[integrity.reason],
+            )
+            raise ValidationException(
+                message="Dosya içeriği doğrulanamadı.",
+                details={"reason": integrity.reason, "file_name": file_name},
             )
 
     async def _store(self, file_name: str, content: bytes) -> str:
@@ -455,6 +499,23 @@ class DocumentService:
         except ValueError:
             compliance_status = ComplianceStatus.INCOMPLETE
 
+        raw_assessment = state.get("sensitivity_assessment") or {}
+        try:
+            sensitivity_level = SensitivityLevel(
+                raw_assessment.get("level", SensitivityLevel.UNMARKED.value)
+            )
+        except ValueError:
+            sensitivity_level = SensitivityLevel.UNMARKED
+        guardrail = GuardrailAssessmentSchema(
+            sensitivity_level=sensitivity_level,
+            pii_findings=[
+                PiiFindingSchema(kind=item.get("kind", ""), preview=item.get("preview", ""))
+                for item in raw_assessment.get("pii_findings") or []
+            ],
+            requires_human_review=bool(raw_assessment.get("requires_review", False)),
+            reasons=list(raw_assessment.get("reasons") or []),
+        )
+
         return DocumentAnalysisResponseSchema(
             file_name=file_name,
             storage_path=storage_path,
@@ -478,6 +539,7 @@ class DocumentService:
                 MevzuatReferenceSchema(**item)
                 for item in state.get("mevzuat_suggestions") or []
             ],
+            guardrail=guardrail,
         )
 
     @staticmethod
@@ -520,10 +582,44 @@ class DocumentService:
                     document_type_label=response.document_type_label,
                     compliance_status=response.compliance_status.value,
                     summary=response.summary,
+                    sensitivity_level=response.guardrail.sensitivity_level.value,
+                    pii_flagged=bool(response.guardrail.pii_findings),
                 )
             )
         except Exception:
             logger.exception("Failed to register document %s", storage_path)
+
+    @staticmethod
+    async def _record_sensitivity_assessment(
+        storage_path: str,
+        owner_id: Optional[str],
+        response: DocumentAnalysisResponseSchema,
+    ) -> None:
+        """Record the input-side guardrail audit event for one upload.
+
+        A separate call from the ``magic_byte`` block recorded in
+        ``_validate_upload`` -- that one fires on outright rejection before
+        a ``storage_path`` even exists; this one fires on every successfully
+        analysed document, whatever its assessment turned out to be, so the
+        audit trail has one row per upload rather than only the rejections.
+        """
+        guardrail = response.guardrail
+        if guardrail.requires_human_review:
+            decision = "needs_review"
+        elif guardrail.pii_findings:
+            decision = "flagged"
+        else:
+            decision = "passed"
+
+        await guardrail_recorder.record_event(
+            stage="input",
+            kind="sensitivity",
+            decision=decision,
+            document_id=storage_path,
+            requester_user_id=owner_id,
+            reasons=guardrail.reasons,
+            related_document_ids=[storage_path],
+        )
 
     async def _save_document_analysis_cache(
         self,

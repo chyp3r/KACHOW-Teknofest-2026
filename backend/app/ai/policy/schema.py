@@ -195,6 +195,7 @@ class BudgetPolicy:
                 "route": 45.0,
                 "writer": 180.0,
                 "assist": 70.0,
+                "scan_sensitivity": 15.0,
             }
         )
     )
