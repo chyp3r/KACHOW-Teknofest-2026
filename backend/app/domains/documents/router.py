@@ -14,6 +14,7 @@ from app.api.exceptions.validation import ValidationException
 from app.api.rate_limit import rate_limit
 from app.api.responses import SuccessResponse
 from app.core.constants import MAX_FILE_SIZE_BYTES
+from app.core.enums.sensitivity_level import SensitivityLevel
 from app.core.permissions.role_checker import assert_clearance, bypasses_ownership
 from app.domains.documents.service import DocumentService
 from app.domains.documents.draft_service import DraftService
@@ -120,12 +121,39 @@ async def analyze_document(
 async def generate_draft(
     request: DraftRequestSchema,
     service: DraftService = Depends(get_draft_service),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
 ):
     """Generate an official draft and department routing suggestion (Task 2).
 
     Uses the output from the first review (Görev 1) to determine the correct
     correspondence type, draft the text, and route it to the appropriate department.
+
+    ``DraftService`` reads the source document straight from storage by
+    ``storage_path`` -- unlike ``GET /documents/{storage_path}``, it has no
+    ownership/clearance concept of its own, so that check belongs here, at
+    the router boundary, before the raw file content ever reaches the
+    drafting graph. ``current_user=None`` (``REQUIRE_AUTH`` disabled) skips
+    it entirely, matching every other route in this router.
+
+    Raises:
+        AuthorizationException: If the document belongs to a different
+            owner than ``current_user`` (and it isn't an ADMIN/MANAGER), or
+            ``current_user``'s clearance doesn't cover the document's
+            confidentiality level.
     """
+    if current_user is not None:
+        document = await document_repository.get_by_id(request.storage_path)
+        if document is None:
+            raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+        if document.owner_id != current_user.id and not bypasses_ownership(current_user):
+            raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+        try:
+            document_level = SensitivityLevel(document.sensitivity_level)
+        except ValueError:
+            document_level = SensitivityLevel.UNMARKED
+        assert_clearance(current_user, document_level)
+
     result = await service.generate_draft_and_route(request)
     return SuccessResponse(data=result.model_dump(mode="json"))
 
