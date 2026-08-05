@@ -11,12 +11,15 @@ Usage example:
         ...
 """
 
+import logging
 import time
 from typing import Callable
 from fastapi import Depends, Request
 
 from app.infrastructure.cache import get_cache
 from app.api.exceptions.rate_limit import RateLimitException
+
+logger = logging.getLogger(__name__)
 
 
 def rate_limit(
@@ -45,17 +48,37 @@ def rate_limit(
         now = int(time.time())
         window_start = now - window_seconds
 
-        await cache.connect()
-        pipe = cache.client.pipeline()
-        # Remove counts outside the current window
-        pipe.zremrangebyscore(redis_key, "-inf", window_start)
-        # Add current request timestamp
-        pipe.zadd(redis_key, {str(now): now})
-        # Count requests in window
-        pipe.zcard(redis_key)
-        # Reset TTL so key expires after inactivity
-        pipe.expire(redis_key, window_seconds)
-        results = await pipe.execute()
+        # Fail open, not closed. Rate limiting is a protection mechanism, not a
+        # correctness requirement: if the counter is unreachable we cannot know
+        # whether this request is over the limit, and the safe answer is to serve
+        # it. Failing closed meant a Redis restart returned 500 from /auth/login,
+        # /auth/refresh, /chat/stream, /chat/resume and /documents/analyze -- an
+        # unavailable cache locked every user out of the system.
+        #
+        # The tradeoff is real and worst for auth:login, whose 5/60s limit is a
+        # brute-force defence. It is still the right side to fail on. An attacker
+        # cannot cause this branch (they would have to take Redis down first, and
+        # if they can do that the limiter is not the exposure), whereas an
+        # operator restarting Redis triggers it every time.
+        try:
+            await cache.connect()
+            pipe = cache.client.pipeline()
+            # Remove counts outside the current window
+            pipe.zremrangebyscore(redis_key, "-inf", window_start)
+            # Add current request timestamp
+            pipe.zadd(redis_key, {str(now): now})
+            # Count requests in window
+            pipe.zcard(redis_key)
+            # Reset TTL so key expires after inactivity
+            pipe.expire(redis_key, window_seconds)
+            results = await pipe.execute()
+        except Exception:
+            logger.warning(
+                "Rate limit store unavailable; allowing '%s' through unmetered.",
+                key_prefix,
+                exc_info=True,
+            )
+            return
 
         request_count = results[2]
         if request_count > max_requests:
