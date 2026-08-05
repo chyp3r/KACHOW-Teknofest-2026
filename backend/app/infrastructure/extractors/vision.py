@@ -26,9 +26,20 @@ except ImportError:  # pragma: no cover
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "tif", "tiff", "bmp", "gif", "webp"}
 PDF_EXTENSIONS = {"pdf"}
 PDF_POINTS_PER_INCH = 72
-DEFAULT_PROMPT = (
-    "Bu belgedeki tüm metni olduğu gibi, satır yapısını koruyarak çıkar."
-)
+#: Transcription instruction, in English on purpose.
+#:
+#: This used to be the Turkish "Bu belgedeki tüm metni olduğu gibi, satır yapısını
+#: koruyarak çıkar." Asking a model to read Turkish in Turkish looks obviously
+#: right and measured as the worst option for every model tried, including the one
+#: shipped at the time: glm-ocr went from NED 0.164 to 0.145 purely by dropping the
+#: Turkish wording, and deepseek-ocr went from a total failure (NED 1.000, empty
+#: output) to its best result. The instruction language is not the transcription
+#: language -- these models follow English instructions far more reliably, and the
+#: text they transcribe is unaffected by the language they were asked in.
+#:
+#: Changing this and `settings.OLLAMA_VISION_MODEL` are coupled: deepseek-ocr
+#: returns nothing at all under the old Turkish prompt.
+DEFAULT_PROMPT = "Extract all text from this document exactly as it appears."
 #: Generous enough for a full page of Turkish official correspondence. Left unset,
 #: Ollama truncates the transcription part-way through a field value.
 DEFAULT_NUM_PREDICT = 4096
@@ -43,12 +54,35 @@ class OllamaVisionExtractor(BaseDocumentExtractor):
     project's corpus, Tesseract is both more accurate and roughly seventy times
     faster on clean 300 DPI renders. On degraded scans -- skewed, blurred,
     low-contrast, JPEG-compressed, the way a photocopied or photographed evrak
-    actually arrives -- Tesseract's character accuracy collapses to about 44% and
-    it recovers none of the header fields, while this model holds at about 97% and
-    recovers all of them.
+    actually arrives -- Tesseract collapses, recovering **1 of 62** header fields
+    across the sample corpus where this model recovers 58.
 
     So the chain keeps Tesseract first for speed and escalates here only when the
     result fails the readability check.
+
+    On model choice (see `scripts/evaluate_ocr_fields.py`): candidates are judged
+    on how many prescribed fields survive, not on how well the text reads, and the
+    two disagree sharply. Over 12 degraded evrak carrying 62 labelled fields:
+
+    ==========================  ==========  ==========  ============
+    model                       found       exact       OCRTurk tokF1
+    ==========================  ==========  ==========  ============
+    tesseract                   1/62        0/62        0.411
+    glm-ocr                     59/62       35/62       0.676
+    deepseek-ocr (current)      58/62       48/62       0.846
+    frob/unlimited-ocr:q8_0     0/62        0/62        0.708
+    ==========================  ==========  ==========  ============
+
+    `frob/unlimited-ocr` is why the field metric exists. It out-scores glm-ocr on
+    text fidelity and recovers **zero** fields -- it reads the Turkish accurately
+    but reformats the page, and a header the parser cannot find is reported as
+    missing information. Text metrics cannot see that failure.
+
+    glm-ocr and deepseek-ocr find the same fields (59 vs 58, trading wins and
+    losses document by document -- noise at this sample size). They differ on
+    whether the *value* is right, and there deepseek-ocr is decisively ahead:
+    48 exact against 35. Same missing-field accuracy, far fewer wrong values, and
+    faster.
     """
 
     name = "ollama_vision"
