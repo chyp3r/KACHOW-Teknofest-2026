@@ -88,6 +88,19 @@ class Settings(BaseSettings):
     #: ~90s draft latency budget.
     DRAFT_JUDGE_TIMEOUT_SECONDS: float = 30.0
 
+    #: Escape hatch for the guardrail nuance layer's LLM judge (fast tier) --
+    #: same role as DRAFT_JUDGE_ENABLED, for the input sensitivity/output
+    #: leakage judgements the deterministic pattern layer can't see. The
+    #: deterministic guardrail checks (PII regex, gizlilik_derecesi mapping,
+    #: groundedness) still run either way; this only degrades to
+    #: deterministic-only, never removes a check.
+    GUARDRAIL_JUDGE_ENABLED: bool = True
+
+    #: Hard ceiling on the guardrail judge call. Fails open (deterministic-
+    #: only) on timeout rather than blocking the request -- see
+    #: app.ai.guardrails.llm_nuance's module docstring.
+    GUARDRAIL_JUDGE_TIMEOUT_SECONDS: float = 15.0
+
     # Embedding Configuration
     EMBEDDING_PROVIDER: str = "ollama"
     OLLAMA_EMBEDDING_MODEL: str = "nomic-embed-text:latest"

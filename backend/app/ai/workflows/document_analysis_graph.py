@@ -20,6 +20,8 @@ from app.ai.compliance import (
     merge_parsed_over_model,
     parse_labelled_fields,
 )
+from app.ai.agents.guardrail_judge import GuardrailJudgeAgent
+from app.ai.guardrails.llm_nuance import judge_input_sensitivity
 from app.ai.guardrails.sensitivity import SensitivityAssessment
 from app.ai.guardrails.sensitivity import assess as assess_sensitivity
 from app.ai.llms.base import BaseLLMClient
@@ -286,6 +288,9 @@ def create_document_analysis_graph(
     classifier_agent = ClassifierAgent(llm_client)
     compliance_agent = ComplianceAgent(reasoning_llm_client or llm_client)
     fallback_classifier_agent = ClassifierAgent(fast_llm_client) if fast_llm_client else None
+    # Fast tier, same reasoning as fallback_classifier_agent -- a label-sized
+    # verdict, not document text, so the quality tier buys nothing here.
+    guardrail_judge_agent = GuardrailJudgeAgent(fast_llm_client or llm_client)
 
     @node_timeout("analyze")
     async def analyze_node(
@@ -471,7 +476,9 @@ def create_document_analysis_graph(
     async def scan_sensitivity_node(
         state: DocumentAnalysisState, config: RunnableConfig
     ) -> dict[str, Any]:
-        """Assess confidentiality marking and PII exposure. No LLM call.
+        """Assess confidentiality marking and PII exposure, then ask the
+        nuance judge whether the document reads as sensitive in meaning
+        even where no pattern matched.
 
         Independent branch off ``analyze`` (see the flow diagram above):
         nothing downstream in this sub-graph needs to block on it, so it
@@ -480,14 +487,32 @@ def create_document_analysis_graph(
         final merged state alongside every other branch's output.
         """
         logger.info("Running Sensitivity Scan Node...")
+        input_text = state.get("input_text", "")
         try:
             fields = EvrakField(**(state.get("fields") or {}))
-            assessment = assess_sensitivity(fields=fields, text=state.get("input_text", ""))
+            assessment = assess_sensitivity(fields=fields, text=input_text)
         except Exception:
             logger.exception("Sensitivity Scan Node failed")
             assessment = SensitivityAssessment(
                 level=SensitivityLevel.UNMARKED, requires_review=False
             )
+
+        if not assessment.requires_review:
+            # Only worth asking when the deterministic layer didn't already
+            # flag the document -- this is specifically the "no pattern
+            # matched but it reads as sensitive" case; a document already
+            # routed to review gains nothing from a second opinion here.
+            judge_verdict = await judge_input_sensitivity(guardrail_judge_agent, text=input_text)
+            if judge_verdict is not None and judge_verdict.sensitive and judge_verdict.confidence >= 0.5:
+                assessment = assessment.model_copy(
+                    update={
+                        "requires_review": True,
+                        "reasons": [
+                            *assessment.reasons,
+                            f"llm-judge anlam bazlı hassasiyet: {judge_verdict.reason}",
+                        ],
+                    }
+                )
 
         update = {"sensitivity_assessment": assessment.model_dump(mode="json")}
         await emit_partial(config, "sensitivity", update)

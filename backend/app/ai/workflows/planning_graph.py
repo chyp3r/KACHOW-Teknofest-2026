@@ -13,10 +13,12 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
 from app.ai.agents.assistant import AssistantAgent
+from app.ai.agents.guardrail_judge import GuardrailJudgeAgent
 from app.ai.agents.memory_summarizer import MemorySummarizerAgent
 from app.ai.context import ContextBlock, ContextBuilder, TokenBudget, select_history_window
 from app.ai.context.compress import truncate_with_marker
 from app.ai.embeddings.models import BaseEmbeddingsClient
+from app.ai.guardrails.llm_nuance import judge_output_leakage
 from app.ai.guardrails.output_gate import classify_reason_kind, evaluate_response
 from app.ai.guardrails.sensitivity import assessment_from_analysis
 from app.ai.session.focus import SessionFocus, compute_focus_update, merge_focus
@@ -386,6 +388,9 @@ def create_planning_graph(
     # Reuses the fast tier already resolved for intent classification -- a
     # short consolidation pass doesn't warrant a third model in the mix.
     memory_summarizer_agent = MemorySummarizerAgent(intent_client)
+    # Fast tier, same as the draft path's JudgeAgent: emits a label-sized
+    # verdict, not reply text, so the quality tier buys nothing here.
+    guardrail_judge_agent = GuardrailJudgeAgent(intent_client)
     # Unfit on purpose, same as the indexing side (documents/service.py):
     # its sparse indices are corpus-independent CRC32 hashes, and query-side
     # IDF weights default to a uniform 1.0 without a fitted vocabulary, which
@@ -709,6 +714,17 @@ def create_planning_graph(
                 )
                 if part
             )
+            # Only worth asking when a document is attached -- with no
+            # source there is nothing for "does this leak the source's
+            # meaning" to mean, and the call would just cost latency.
+            judge_verdict = None
+            if sensitivity is not None:
+                judge_verdict = await judge_output_leakage(
+                    guardrail_judge_agent,
+                    reply=raw_reply,
+                    source_summary=analysis.get("summary", ""),
+                )
+
             verdict = evaluate_response(
                 raw_reply,
                 source_materials=source_materials,
@@ -718,6 +734,7 @@ def create_planning_graph(
                 # secure default `evaluate_response` documents. Wired to a
                 # real value once the RBAC phase adds an authenticated user.
                 requester_clearance=None,
+                judge_verdict=judge_verdict,
             )
             reply = verdict.text
             flagged = verdict.action != "pass"
