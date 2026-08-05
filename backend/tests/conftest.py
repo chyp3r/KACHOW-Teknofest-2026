@@ -187,6 +187,26 @@ def no_checkpointer(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _default_require_auth_off(monkeypatch):
+    """Default settings.REQUIRE_AUTH to False for every test.
+
+    REQUIRE_AUTH now defaults to True in the application itself (Faz 4 RBAC
+    -- production must not silently run unauthenticated). Most existing API
+    tests predate that and exercise endpoint logic through the TestClient
+    with no Authorization header and no dependency override for
+    get_current_user/require_auth_if_enabled -- under the new default those
+    would 401 before ever reaching the handler under test. Mirrors
+    `_disable_run_recording` immediately below: real/new behaviour off by
+    default, opted back into explicitly by the handful of tests
+    (test_lifespan.py, and any test that overrides get_current_user itself)
+    that actually test the authenticated path.
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "REQUIRE_AUTH", False)
+
+
+@pytest.fixture(autouse=True)
 def _disable_run_recording(monkeypatch):
     """Turn off app.observability.run_recorder's DB writes for every test.
 

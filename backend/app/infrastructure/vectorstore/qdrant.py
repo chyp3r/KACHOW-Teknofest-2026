@@ -15,6 +15,47 @@ logger = logging.getLogger(__name__)
 #: names a vector the collection lacks.
 SPARSE_VECTOR_NAME = "text-sparse"
 
+#: Range-condition operator keys a ``filter_dict`` value may use instead of a
+#: plain scalar (exact match) -- e.g. ``{"sensitivity_rank": {"lte": 3}}``
+#: restricts a search to chunks whose payload field is at or below 3. Named
+#: after Qdrant's own ``models.Range`` fields, passed straight through.
+_RANGE_OPERATORS = frozenset({"lt", "lte", "gt", "gte"})
+
+
+def _build_qdrant_filter(filter_dict: Optional[Dict[str, Any]]) -> Optional[models.Filter]:
+    """Translate this module's ``filter_dict`` convention into a Qdrant filter.
+
+    A value is either a scalar (exact match, the original and still most
+    common case -- ``{"storage_path": "uploads/x.pdf"}``) or a dict of range
+    operators (``{"sensitivity_rank": {"lte": 3}}``), used to restrict a
+    search by an ordered numeric payload field -- e.g. RBAC clearance
+    filtering, where a chunk above the requester's rank must never be
+    returned from the vector search at all, not merely filtered out
+    downstream after the model has already seen it.
+
+    Args:
+        filter_dict: This module's filter convention, or None/empty for no
+            filter.
+
+    Returns:
+        The equivalent Qdrant filter, or None when ``filter_dict`` is empty.
+    """
+    if not filter_dict:
+        return None
+
+    must_conditions = []
+    for key, val in filter_dict.items():
+        if isinstance(val, dict):
+            range_kwargs = {op: bound for op, bound in val.items() if op in _RANGE_OPERATORS}
+            must_conditions.append(
+                models.FieldCondition(key=key, range=models.Range(**range_kwargs))
+            )
+        else:
+            must_conditions.append(
+                models.FieldCondition(key=key, match=models.MatchValue(value=val))
+            )
+    return models.Filter(must=must_conditions)
+
 
 class QdrantStore(BaseVectorStore):
     """Qdrant client implementation of BaseVectorStore for vector storage and search."""
@@ -235,17 +276,7 @@ class QdrantStore(BaseVectorStore):
             # `query_points()`. Because this method swallows exceptions and returns
             # an empty list, calling the removed API made every dense lookup return
             # no hits silently, degrading hybrid retrieval to sparse-only.
-            qdrant_filter = None
-            if filter_dict:
-                must_conditions = []
-                for key, val in filter_dict.items():
-                    must_conditions.append(
-                        models.FieldCondition(
-                            key=key,
-                            match=models.MatchValue(value=val),
-                        )
-                    )
-                qdrant_filter = models.Filter(must=must_conditions)
+            qdrant_filter = _build_qdrant_filter(filter_dict)
 
             response = await self.client.query_points(
                 collection_name=collection_name,
@@ -281,17 +312,7 @@ class QdrantStore(BaseVectorStore):
     ) -> List[Dict[str, Any]]:
         """Perform native hybrid search using Qdrant Prefetch API and RRF fusion."""
         try:
-            qdrant_filter = None
-            if filter_dict:
-                must_conditions = []
-                for key, val in filter_dict.items():
-                    must_conditions.append(
-                        models.FieldCondition(
-                            key=key,
-                            match=models.MatchValue(value=val),
-                        )
-                    )
-                qdrant_filter = models.Filter(must=must_conditions)
+            qdrant_filter = _build_qdrant_filter(filter_dict)
 
             # Define prefetch queries for dense and sparse
             dense_prefetch = models.Prefetch(

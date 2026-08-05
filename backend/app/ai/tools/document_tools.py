@@ -89,6 +89,14 @@ class SearchLegislationArgs(BaseModel):
     query: str = Field(description="Mevzuat veritabanında aranacak konu veya soru.")
 
 
+#: Returned by every document-scoped tool instead of the real passage when
+#: the requester's clearance doesn't cover the document's confidentiality
+#: level -- deny-at-retrieval, the cheapest and most robust point to stop a
+#: leak (the content never reaches the model's context at all, so it can't
+#: be paraphrased around ``output_gate.py``'s downstream checks).
+_CLEARANCE_REFUSAL = "Bu belgenin içeriğini görüntülemek için yeterli yetkiniz yok."
+
+
 def build_assistant_tools(
     *,
     document_id: Optional[str],
@@ -101,6 +109,7 @@ def build_assistant_tools(
     config: Optional[RunnableConfig],
     on_anchor_referenced: Optional[Callable[[str], None]] = None,
     on_tool_result: Optional[Callable[[ToolResult], None]] = None,
+    requester_clearance: Optional[SensitivityLevel] = None,
 ) -> list[ToolSpec]:
     """Build the tool set available to the assistant agent for one turn.
 
@@ -127,6 +136,18 @@ def build_assistant_tools(
             check groundedness/leakage against -- see ``ToolResult``'s
             docstring for why this is a side-channel rather than a change to
             what handlers return to the model.
+        requester_clearance: The authenticated caller's resolved clearance
+            (see ``app.core.permissions.role_checker.clearance_for``).
+            ``None`` skips the check entirely -- same convention
+            ``chat/router.py``'s ownership check already uses for "no
+            authenticated user" (``settings.REQUIRE_AUTH`` off), so the
+            documented local-dev escape hatch stays genuinely open rather
+            than silently refusing every document tool call. This is
+            narrower than ``output_gate.py``'s own ``requester_clearance``
+            handling, which stays fail-secure on ``None`` for the rarer
+            PII/semantic-leak block -- deny-at-retrieval here is a coarser,
+            much more frequently hit gate, and the two are independent
+            layers of the same defense, not required to agree on every edge.
 
     Returns:
         Document-scoped tools only when a document is attached; legislation
@@ -142,6 +163,9 @@ def build_assistant_tools(
         document_sensitivity = assessment_from_analysis(
             cached_document.get("analysis") or {}
         ).level
+        clearance_ok = (
+            requester_clearance is None or requester_clearance >= document_sensitivity
+        )
 
         def _pages() -> list[str]:
             pages = cached_document.get("pages")
@@ -151,19 +175,32 @@ def build_assistant_tools(
             return [text] if text else []
 
         async def _search_document(query: str) -> str:
+            if not clearance_ok:
+                return _CLEARANCE_REFUSAL
             if not (vector_store and embeddings_client):
                 return "Belge arama şu anda kullanılamıyor."
             passages: list[str] = []
             try:
                 query_vector = await embeddings_client.embed_query(query)
                 sparse_indices, sparse_values = qa_sparse_encoder.encode_query(query)
+                # Defense-in-depth alongside the clearance_ok gate above: every
+                # chunk of this document was tagged with the same
+                # document-level rank (see DocumentService._index_for_qa), so
+                # this is currently redundant with that whole-document check
+                # for this single-document-scoped tool -- but it costs
+                # nothing here and is what actually protects a future
+                # cross-document search tool from ever letting Qdrant return
+                # an over-classified chunk in the first place.
+                search_filter: dict[str, Any] = {"storage_path": document_id}
+                if requester_clearance is not None:
+                    search_filter["sensitivity_rank"] = {"lte": requester_clearance.rank}
                 hits = await vector_store.hybrid_search(
                     collection_name=QA_COLLECTION_NAME,
                     query_vector=query_vector,
                     sparse_indices=sparse_indices,
                     sparse_values=sparse_values,
                     limit=qa_result_limit,
-                    filter_dict={"storage_path": document_id},
+                    filter_dict=search_filter,
                 )
                 for hit in hits:
                     text = hit.get("text")
@@ -194,6 +231,8 @@ def build_assistant_tools(
             return text
 
         async def _get_document_details() -> str:
+            if not clearance_ok:
+                return _CLEARANCE_REFUSAL
             analysis = cached_document.get("analysis") or {}
             if not analysis:
                 return "Belge analiz bilgisi mevcut değil."
@@ -226,6 +265,8 @@ def build_assistant_tools(
             return text
 
         async def _get_document_outline() -> str:
+            if not clearance_ok:
+                return _CLEARANCE_REFUSAL
             pages = _pages()
             if not pages:
                 return "Belge metni mevcut değil."
@@ -241,6 +282,8 @@ def build_assistant_tools(
             return text
 
         async def _get_document_section(page: int) -> str:
+            if not clearance_ok:
+                return _CLEARANCE_REFUSAL
             pages = _pages()
             if not pages:
                 return "Belge metni mevcut değil."

@@ -14,6 +14,7 @@ from app.api.exceptions.validation import ValidationException
 from app.api.rate_limit import rate_limit
 from app.api.responses import SuccessResponse
 from app.core.constants import MAX_FILE_SIZE_BYTES
+from app.core.permissions.role_checker import assert_clearance, bypasses_ownership
 from app.domains.documents.service import DocumentService
 from app.domains.documents.draft_service import DraftService
 from app.domains.documents.repository import DocumentRepository
@@ -141,14 +142,19 @@ async def list_documents(
         pagination: Page/size query parameters.
         document_repository: Ownership/listing registry.
         current_user: The authenticated caller, when ``REQUIRE_AUTH`` is on --
-            the list is restricted to documents it owns. ``None`` in the open
-            demo/dev path lists every document, matching today's behaviour.
+            the list is restricted to documents it owns, unless it is an
+            ADMIN/MANAGER (see ``bypasses_ownership``), who see every
+            document company-wide the same as the open demo/dev path.
+            ``None`` (``REQUIRE_AUTH`` off) also lists every document,
+            matching today's behaviour.
 
     Returns:
         A paginated envelope over the 7-field library projection (see
         ``GET /documents/{storage_path}`` for the full analysis).
     """
-    owner_id = current_user.id if current_user else None
+    owner_id = (
+        current_user.id if current_user and not bypasses_ownership(current_user) else None
+    )
     documents = await document_repository.list_for_owner(
         owner_id, skip=pagination.offset, limit=pagination.limit
     )
@@ -227,20 +233,26 @@ async def get_document_analysis(
         HTTPException: 400 if storage_path is malformed, 404 if no analysis
             is cached for it.
         AuthorizationException: 403 if the document belongs to a different
-            user than the one making the request.
+            user than the one making the request, or the requester's
+            clearance doesn't cover the document's confidentiality level.
     """
     try:
         validate_storage_path(storage_path)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    if current_user is not None and not await document_repository.is_owned_by(
-        storage_path, current_user.id
+    if (
+        current_user is not None
+        and not bypasses_ownership(current_user)
+        and not await document_repository.is_owned_by(storage_path, current_user.id)
     ):
         raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
 
     result = await service.get_cached_analysis(storage_path)
     if result is None:
         raise HTTPException(status_code=404, detail="Bu evrak için bir analiz bulunamadı.")
+
+    if current_user is not None:
+        assert_clearance(current_user, result.guardrail.sensitivity_level)
 
     return SuccessResponse(data=result.model_dump(mode="json"))

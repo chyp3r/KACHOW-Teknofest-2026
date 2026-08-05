@@ -58,6 +58,7 @@ class AssistantAgent(BaseAgent):
         history: list[dict[str, str]],
         history_summary: Optional[str] = None,
         document_context: Optional[str] = None,
+        security_boundary: Optional[str] = None,
         tools: list[ToolSpec],
         config: Optional[RunnableConfig] = None,
         node: str = "assist",
@@ -73,6 +74,14 @@ class AssistantAgent(BaseAgent):
                 one is attached even before it calls a tool. The tools
                 themselves supply the depth; this is only enough to decide
                 whether to reach for them.
+            security_boundary: A short Turkish note describing the
+                requester's clearance and the attached document's
+                confidentiality level (see
+                ``app.ai.workflows.planning_graph._build_security_boundary_note``).
+                A secondary, prompt-level layer only -- the deterministic
+                checks (``document_tools.py``'s deny-at-retrieval,
+                ``output_gate.py``) are what actually enforce the boundary;
+                this exists to catch the paraphrase case a regex can't see.
             tools: Tools bindable for this turn. Empty when nothing is
                 attached (no document, no legislation retriever) -- the loop
                 is then skipped entirely and this behaves like a plain chat.
@@ -96,6 +105,8 @@ class AssistantAgent(BaseAgent):
             or "(Bu konuşmada henüz özetlenecek eski mesaj yok.)",
             "document_context": document_context
             or "(Bu turda yüklenmiş bir belge yok.)",
+            "security_boundary": security_boundary
+            or "Bu oturum için bilinen bir yetki kısıtlaması yok.",
         }
         messages = self._prepare_messages(
             [*history, {"role": "user", "content": query}], context=context

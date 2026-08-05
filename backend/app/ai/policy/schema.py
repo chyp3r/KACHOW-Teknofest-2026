@@ -236,7 +236,14 @@ class GuardrailPolicy:
             ``UserRole`` may read. Every ``UserRole`` member must have an
             entry -- an omitted role is not "no access", it is a role
             ``require_clearance`` cannot evaluate at all, which is a bug, not
-            a restrictive default.
+            a restrictive default. ADMIN and MANAGER both map to the ceiling
+            (a company manager is trusted with full access, same as an
+            admin); EMPLOYEE's entry here is only the *default* a new
+            employee starts at (``UserModel.clearance_level``'s own column
+            default matches it) -- ``app.core.permissions.role_checker.
+            clearance_for`` reads that per-user field for an EMPLOYEE
+            rather than this map entry, since two employees can
+            legitimately need different access.
     """
 
     sensitivity_block_levels: tuple[SensitivityLevel, ...] = (
@@ -250,9 +257,8 @@ class GuardrailPolicy:
         default_factory=lambda: MappingProxyType(
             {
                 UserRole.ADMIN: SensitivityLevel.COK_GIZLI,
-                UserRole.MANAGER: SensitivityLevel.GIZLI,
-                UserRole.AUDITOR: SensitivityLevel.GIZLI,
-                UserRole.EMPLOYEE: SensitivityLevel.OZEL,
+                UserRole.MANAGER: SensitivityLevel.COK_GIZLI,
+                UserRole.EMPLOYEE: SensitivityLevel.HIZMETE_OZEL,
             }
         )
     )
