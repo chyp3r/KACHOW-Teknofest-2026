@@ -32,6 +32,7 @@ from app.ai.verification import apply_answers, verify_draft
 from app.ai.workflows.events import (
     child_config,
     emit,
+    emit_guardrail_event,
     emit_interrupt,
     emit_node_end,
     emit_node_error,
@@ -816,15 +817,24 @@ def create_planning_graph(
                 await emit_token(config, "assist", reply)
 
             if flagged:
+                guardrail_kind = classify_reason_kind(verdict.reasons)
+                guardrail_decision = "blocked" if verdict.action == "block" else "redacted"
                 await guardrail_recorder.record_event(
                     stage="output",
-                    kind=classify_reason_kind(verdict.reasons),
-                    decision="blocked" if verdict.action == "block" else "redacted",
+                    kind=guardrail_kind,
+                    decision=guardrail_decision,
                     reasons=verdict.reasons,
                     run_id=state.get("run_id"),
                     document_id=document_id,
                     requester_user_id=state.get("user_id"),
                     related_document_ids=[document_id] if document_id else [],
+                )
+                await emit_guardrail_event(
+                    config,
+                    stage="output",
+                    kind=guardrail_kind,
+                    decision=guardrail_decision,
+                    reasons=verdict.reasons,
                 )
 
             result = {

@@ -277,6 +277,45 @@ async def emit_tool_call(
     )
 
 
+async def emit_guardrail_event(
+    config: Optional[RunnableConfig],
+    *,
+    stage: str,
+    kind: str,
+    decision: str,
+    reasons: Optional[list[str]] = None,
+) -> None:
+    """Publish a guardrail decision so the frontend can badge it live.
+
+    Only called for a decision that actually did something -- flagged,
+    blocked, redacted, needs_review -- never a routine "passed", which has
+    nothing for the UI to show. The node emitting this already runs inside
+    a graph invocation carrying the Langfuse callback (see
+    ``build_trace_config``), so the decision lands in that trace without any
+    extra plumbing here; ``GuardrailEventModel``
+    (``app.observability.guardrail_recorder``) remains the durable audit
+    record, this is only the live/UI side.
+
+    Args:
+        config: The node's runnable config.
+        stage: "input" or "output".
+        kind: See ``guardrail_recorder.record_event``.
+        decision: "flagged" | "blocked" | "redacted" | "needs_review".
+        reasons: Short human-readable reasons -- never the raw sensitive
+            value that triggered the decision.
+    """
+    await emit(
+        config,
+        {
+            "event": "guardrail",
+            "stage": stage,
+            "kind": kind,
+            "decision": decision,
+            "reasons": list(reasons or []),
+        },
+    )
+
+
 async def emit_partial(
     config: Optional[RunnableConfig], key: str, value: Any
 ) -> None:
