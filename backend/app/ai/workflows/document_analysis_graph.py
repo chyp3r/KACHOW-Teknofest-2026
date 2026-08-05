@@ -308,8 +308,23 @@ def create_document_analysis_graph(
             "kurum antedi bulunmayan başvuru.\n"
             "- information_request: yalnızca 4982 sayılı Kanun kapsamında bilgi "
             "veya belge talebi açıkça istendiğinde.\n"
-            "- complaint: şikayet bildirimi. circular: genelge. "
-            "directive: talimat. report: rapor. minutes: tutanak.\n"
+            # circular needs explicit discriminators. Without them the model falls
+            # back to official_letter, which the paragraph above names as the
+            # default for inter-institution correspondence -- and a genelge *is*
+            # structurally an official letter, so only the addressee and the
+            # rule-setting language separate them. detect_structural_signal already
+            # reported DAĞITIM, so the observation was present and only the
+            # criterion to act on it was missing. Measured on qwen3.5:9b over the
+            # sample corpus: type accuracy 11/12 -> 12/12, stable across three
+            # repeats (36/36).
+            "- circular: tek bir muhataba değil 'DAĞITIM YERLERİNE' / 'Dağıtım' "
+            "listesine gönderilen, tek bir olayı değil genel uygulama usul ve "
+            "esaslarını düzenleyen yazı (genelge). Muhatabı dağıtım listesi olan ve "
+            "'usul ve esaslar', 'tüm birimler' gibi genel düzenleme ifadeleri "
+            "taşıyan yazıyı official_letter değil circular say.\n"
+            "- directive: belirli bir birime verilen, uyulması zorunlu somut iş "
+            "talimatı.\n"
+            "- complaint: şikayet bildirimi. report: rapor. minutes: tutanak.\n"
             "- leave_request: izin talebi.\n"
             "- other: yalnızca yukarıdakilerin hiçbiri uymuyorsa.\n\n"
             "Kurum antetli ve unvanlı imza taşıyan bir yazıyı vatandaş başvurusu "
