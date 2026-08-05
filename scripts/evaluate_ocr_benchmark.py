@@ -42,6 +42,7 @@ from collections import Counter
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "backend"))
 
+from app.ai.compliance import parse_labelled_fields  # noqa: E402
 from app.infrastructure.extractors import (  # noqa: E402
     OllamaVisionExtractor,
     OpenDataLoaderExtractor,
@@ -168,7 +169,46 @@ def load_corpus(corpus_dir: str, limit: int | None):
     return items
 
 
-async def run(mode: str, items) -> None:
+def recovered_fields(text: str) -> int:
+    """Count the prescribed header fields a transcription still yields.
+
+    The metric that actually decides an OCR engine for this project. Character
+    similarity measures how a transcription reads; this measures whether the
+    pipeline can still *use* it, because `parse_labelled_fields` is what feeds
+    the compliance check. A transcription that scores well on NED but loses the
+    "Sayı:" side-heading is worthless downstream, and a rougher one that keeps
+    every heading is not.
+
+    On the first degraded run this separated the engines where the text metrics
+    did not: Tesseract recovered 0 of 29 fields while the vision model recovered
+    all 29, on output whose NED differed by far less than that suggests.
+
+    Args:
+        text: An engine's transcription.
+
+    Returns:
+        How many labelled fields the deterministic parser found.
+    """
+    try:
+        return len(parse_labelled_fields(text))
+    except Exception:  # noqa: BLE001 - a parser failure is zero fields, not a crash
+        return 0
+
+
+#: Prompt used for every vision model in a comparison run.
+#:
+#: Deliberately one prompt for all of them, and deliberately not the extractor's
+#: Turkish default. Measured on a degraded page, the instruction moves the score
+#: further than the model choice does: glm-ocr goes from NED 0.164 to 0.145 just
+#: by switching off the Turkish wording, and deepseek-ocr goes from a total
+#: failure (NED 1.000) to its best result (tokF1 0.869). Holding it constant is
+#: what makes the remaining difference attributable to the model.
+COMPARISON_PROMPT = "Extract all text from this document exactly as it appears."
+
+
+async def run(
+    mode: str, items, vision_models: list[str], vision_prompt: str
+) -> None:
     if mode == "text":
         engines = [
             ("opendataloader", OpenDataLoaderExtractor()),
@@ -176,22 +216,43 @@ async def run(mode: str, items) -> None:
         ]
         mime = "application/pdf"
     else:
-        engines = [("tesseract", TesseractExtractor()), ("glm-ocr", OllamaVisionExtractor())]
+        # Tesseract stays in every run as the cheap baseline; the vision models
+        # are whatever was asked for, so a new candidate is compared against the
+        # incumbent in the *same* session rather than against a number recorded
+        # on another day with another Ollama build.
+        engines = [("tesseract", TesseractExtractor())]
+        engines += [
+            (model, OllamaVisionExtractor(model=model, prompt=vision_prompt))
+            for model in vision_models
+        ]
         mime = "image/png"
 
-    scores = {name: {"ned": [], "tr": [], "f1": [], "sec": 0.0} for name, _ in engines}
-    print("=" * 84)
+    scores = {
+        name: {"ned": [], "tr": [], "f1": [], "fields": 0, "sec": 0.0}
+        for name, _ in engines
+    }
+    truth_fields = 0
+    print("=" * 96)
     print(f"  OCRTurk — mod: {mode} — {len(items)} gerçek Türkçe belge")
-    print("=" * 84)
+    if mode != "text":
+        print(f"  görsel modeller: {', '.join(vision_models) or '(yok)'}")
+        print(f"  ortak istem   : {vision_prompt!r}")
+    print("=" * 96)
 
     for index, (name, pdf, ground_truth) in enumerate(items):
         if mode == "text":
             payload = pdf
         else:
+            # Rasterised and degraded once per document, then handed to every
+            # engine: the degradation is seeded per index, so re-deriving it per
+            # engine would still be identical -- but doing it once makes that
+            # guarantee structural rather than incidental.
             image = rasterise(pdf)
             if mode == "ocr-degraded":
                 image = degrade(image, seed=index)
             payload = to_png(image)
+
+        truth_fields += recovered_fields(ground_truth)
 
         for engine_name, engine in engines:
             started = time.time()
@@ -204,19 +265,26 @@ async def run(mode: str, items) -> None:
             scores[engine_name]["ned"].append(ned(ground_truth, text))
             scores[engine_name]["tr"].append(turkish_char_similarity(ground_truth, text))
             scores[engine_name]["f1"].append(token_f1(ground_truth, text))
+            scores[engine_name]["fields"] += recovered_fields(text)
 
-    print(f"{'motor':16s} {'NED↓':>8s} {'TRchar↑':>9s} {'tokF1↑':>8s} {'süre':>8s}")
-    print("-" * 84)
+    print(
+        f"{'motor':24s} {'NED↓':>8s} {'TRchar↑':>9s} {'tokF1↑':>8s} "
+        f"{'alan↑':>10s} {'süre':>9s}"
+    )
+    print("-" * 96)
     for engine_name, _ in engines:
         s = scores[engine_name]
         n = len(s["ned"])
         print(
-            f"{engine_name:16s} {sum(s['ned'])/n:8.3f} {sum(s['tr'])/n:9.3f} "
-            f"{sum(s['f1'])/n:8.3f} {s['sec']:7.0f}s"
+            f"{engine_name:24s} {sum(s['ned'])/n:8.3f} {sum(s['tr'])/n:9.3f} "
+            f"{sum(s['f1'])/n:8.3f} {s['fields']:6d}/{truth_fields:<3d} {s['sec']:8.0f}s"
         )
     print(
         "\nNED ve TRchar sıra duyarlıdır; çok sütunlu sayfada doğru okunmuş bir metin "
         "farklı sırada olduğu için düşük puan alabilir. tokF1 ile birlikte okuyun."
+        "\n'alan' sütunu, çıkarılan metinden deterministik ayrıştırıcının kurtarabildiği "
+        "etiketli alan sayısıdır (payda: aynı ayrıştırıcının referans metinden "
+        "bulduğu alan sayısı). Uygunluk denetimini besleyen ölçüt budur."
     )
 
 
@@ -230,9 +298,31 @@ def main() -> int:
         help="text: born-digital çıkarım; ocr: rasterize; ocr-degraded: fotokopi benzeri.",
     )
     parser.add_argument("--limit", type=int, default=None, help="Belge sayısını sınırla.")
+    parser.add_argument(
+        "--vision-models",
+        nargs="+",
+        default=["glm-ocr:latest"],
+        help=(
+            "Karşılaştırılacak Ollama görsel model etiketleri "
+            "(örn. glm-ocr:latest frob/unlimited-ocr:q8_0 deepseek-ocr). "
+            "Yalnızca ocr/ocr-degraded modlarında kullanılır."
+        ),
+    )
+    parser.add_argument(
+        "--vision-prompt",
+        default=COMPARISON_PROMPT,
+        help="Tüm görsel modellere verilen ortak istem (karşılaştırmayı adil tutar).",
+    )
     args = parser.parse_args()
 
-    asyncio.run(run(args.mode, load_corpus(args.corpus, args.limit)))
+    asyncio.run(
+        run(
+            args.mode,
+            load_corpus(args.corpus, args.limit),
+            args.vision_models,
+            args.vision_prompt,
+        )
+    )
     return 0
 
 

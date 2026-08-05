@@ -44,8 +44,11 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen3.5:9b"
     OLLAMA_TEMPERATURE: float = 0.7
-    # Vision-language model used to OCR degraded scans (see extractors/vision.py).
-    OLLAMA_VISION_MODEL: str = "glm-ocr:latest"
+    # Vision-language model used to OCR degraded scans (see extractors/vision.py
+    # for the measurements behind this choice). Coupled to that module's
+    # DEFAULT_PROMPT: deepseek-ocr returns nothing under the previous Turkish
+    # prompt, so the two must move together.
+    OLLAMA_VISION_MODEL: str = "deepseek-ocr"
     OLLAMA_REASONING: bool = False
 
     #: Generation budget. The previous value of 1024 truncated official drafts

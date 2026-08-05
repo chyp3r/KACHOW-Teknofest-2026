@@ -3,6 +3,31 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 
+## [1.36.0] - 2026-08-05
+### Değiştirildi
+- **Bozulmuş Tarama OCR'ı `deepseek-ocr`'a Geçti** ve **istem artık Türkçe değil.** İkisi birbirine bağlı: `deepseek-ocr` eski Türkçe istemle hiçbir şey döndürmüyor.
+  - **İstem dili çeviri dili değildir.** Türkçe bir belgeyi Türkçe istemle okutmak bariz doğru görünüyordu ve denenen **her model için en kötü seçenek** çıktı — o sırada gönderdiğimiz model dahil. `glm-ocr` yalnızca Türkçe ifadeyi bırakmakla NED 0,164 → 0,145'e geliyor; `deepseek-ocr` ise tam başarısızlıktan (NED 1,000, boş çıktı) en iyi sonucuna geçiyor.
+  - **Model seçimi metin sadakatine göre değil, alan kurtarmaya göre yapıldı** — ve ikisi çelişiyor. 12 bozulmuş evrak, 62 etiketli alan:
+
+    | motor | bulunan | birebir | OCRTurk tokF1 |
+    |---|---|---|---|
+    | tesseract | 1/62 | 0/62 | 0,411 |
+    | glm-ocr (önceki) | 59/62 | 35/62 | 0,676 |
+    | **deepseek-ocr** | 58/62 | **48/62** | **0,846** |
+    | frob/unlimited-ocr:q8_0 | **0/62** | 0/62 | 0,708 |
+
+  - `glm-ocr` ile `deepseek-ocr` aynı alanları buluyor (59'a 62 — belge belge kazanıp kaybediyorlar, bu örneklem boyutunda gürültü). Fark **değerin doğruluğunda**: 48'e 35. Aynı eksik alan doğruluğu, üçte bir daha az yanlış değer, daha iyi metin sadakati ve daha hızlı (OCRTurk kümesinde 142 sn'ye 195 sn).
+
+### Eklendi
+- **`scripts/evaluate_ocr_fields.py`**: bozulmuş evrak taramalarında **alan kurtarma** ölçer — çıkarılan metni uygunluk denetiminin kullandığı `parse_labelled_fields`'tan geçirip kaç etiketli alanın hayatta kaldığını sayar.
+  - Bu ölçüt neden var: `frob/unlimited-ocr:q8_0` metin sadakatinde `glm-ocr`'ı geçiyor ve **sıfır** alan kurtarıyor. Türkçeyi doğru okuyor ama sayfayı yeniden biçimlendiriyor; ayrıştırıcının bulamadığı bir başlık ise **eksik bilgi** olarak raporlanır. Yani her bozulmuş yüklemeyi yanlış bir uygunluk uyarısına çevirirdi — elimizdeki tüm metin ölçütlerinde daha iyi görünürken.
+  - Referans, JSON etiketi değil kaynak metnin ayrıştırmasıdır: soru "OCR temiz okumaya göre neyi kaybediyor", dolayısıyla referans da OCR çıktısıyla aynı ayrıştırıcıdan gelmelidir.
+- **`scripts/evaluate_ocr_benchmark.py` genişletildi**: `--vision-models` ile istenen model listesi karşılaştırılabiliyor (Tesseract her koşuda ucuz taban olarak kalıyor, böylece aday başka bir gün başka bir Ollama sürümüyle kaydedilmiş bir sayıyla değil, **aynı oturumda** mevcut modelle karşılaştırılıyor); `--vision-prompt` ile tüm modellere aynı istem veriliyor.
+
+### Not
+- Değerlendirmeye [`baidu/Unlimited-OCR`](https://github.com/baidu/Unlimited-OCR) önerisiyle başlandı (MIT, OmniDocBench v1.5 %93,23, DeepSeek-OCR'a göre +6,22). Yayımlanmış sonuçları güçlü ve makalesi **yalnızca İngilizce** belgeler üzerinde değerlendirme yapıyor; Türkçe evrak üzerinde bu yoldan kullanılamaz durumda. **Ölçülmüş olumsuz sonuç** olarak kaydediliyor — sınanmamış bir varsayım olarak değil.
+- Alan kurtarma OCRTurk üzerinde ölçülemez: o küme tez, dergi ve rapor içerir, evrak değil; `Sayı:`/`Konu:` yan başlıkları hiç bulunmaz, dolayısıyla referans metinde de ayrıştırıcının bulacağı bir şey yoktur. Bu nedenle ölçüm `datasets/sample/` üzerinde yapılır.
+
 ## [1.35.0] - 2026-08-05
 ### Eklendi
 - **Mevzuat Korpusu Resmî Kaynaktan Üretiliyor**: `scripts/fetch_mevzuat_corpus.py`, [`mevzuat-mcp`](https://github.com/saidsurucu/mevzuat-mcp) (MIT) sunucusu üzerinden mevzuat.gov.tr'den tam metin çekip `datasets/mevzuat/` altına yazar. Korpus **3 belge / 44 parçadan 7 belge / 880 parçaya** çıktı.
