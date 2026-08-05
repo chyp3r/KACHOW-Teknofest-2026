@@ -13,6 +13,7 @@ mistaken for a change in the traffic.
 
 from app.ai.policy.schema import (
     BudgetPolicy,
+    GuardrailPolicy,
     IntentPolicy,
     MemoryPolicy,
     Policy,
@@ -23,7 +24,7 @@ from app.ai.policy.schema import (
 
 #: Semantic version of the parameter set. Bump on any value change:
 #: patch for a threshold, minor for a new parameter, major for a removed one.
-POLICY_VERSION = "1.3.0"
+POLICY_VERSION = "1.4.0"
 
 _POLICY = Policy(version=POLICY_VERSION)
 
@@ -44,6 +45,7 @@ def get_policy() -> Policy:
 
 __all__ = [
     "BudgetPolicy",
+    "GuardrailPolicy",
     "IntentPolicy",
     "MemoryPolicy",
     "POLICY_VERSION",

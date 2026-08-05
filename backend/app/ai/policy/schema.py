@@ -25,8 +25,12 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Mapping
 
+from app.core.enums.sensitivity_level import SensitivityLevel
+from app.core.enums.user_role import UserRole
+
 __all__ = [
     "BudgetPolicy",
+    "GuardrailPolicy",
     "IntentPolicy",
     "MemoryPolicy",
     "Policy",
@@ -198,6 +202,56 @@ class BudgetPolicy:
 
 
 @dataclass(frozen=True)
+class GuardrailPolicy:
+    """Thresholds and role mapping for the input/output guardrail layer.
+
+    Attributes:
+        sensitivity_block_levels: ``gizlilik_derecesi`` grades that force a
+            document (or a draft built from it) to ``NEEDS_HUMAN_APPROVAL``
+            instead of proceeding automatically -- the same routing a
+            low-confidence draft already gets, not a separate mechanism.
+        output_groundedness_threshold: Minimum share of an assist reply's
+            extracted claims that must trace back to retrieved source
+            material before ``output_gate`` lets it pass unredacted. Same
+            concept as ``VerificationPolicy.min_automated_confidence``, scaled
+            to a share rather than a 0-100 score because the assist path has
+            no draft-quality score to reuse.
+        pii_confidence_floor: Below this confidence a PII pattern match is
+            treated as noise (logged, not flagged) rather than a finding --
+            keeps an incidental 11-digit number from tripping TCKN handling
+            on every partial match.
+        judge_echo_overlap_threshold: Reuses
+            ``VerificationPolicy.judge_echo_overlap_threshold``'s concept for
+            the guardrail judge: above this token-overlap share with the
+            content it was asked to judge, a verdict is an echo, not a
+            judgement, and is discarded.
+        role_clearance_map: The maximum ``SensitivityLevel`` each
+            ``UserRole`` may read. Every ``UserRole`` member must have an
+            entry -- an omitted role is not "no access", it is a role
+            ``require_clearance`` cannot evaluate at all, which is a bug, not
+            a restrictive default.
+    """
+
+    sensitivity_block_levels: tuple[SensitivityLevel, ...] = (
+        SensitivityLevel.GIZLI,
+        SensitivityLevel.COK_GIZLI,
+    )
+    output_groundedness_threshold: float = 0.75
+    pii_confidence_floor: float = 0.6
+    judge_echo_overlap_threshold: float = 0.40
+    role_clearance_map: Mapping[UserRole, SensitivityLevel] = field(
+        default_factory=lambda: MappingProxyType(
+            {
+                UserRole.ADMIN: SensitivityLevel.COK_GIZLI,
+                UserRole.MANAGER: SensitivityLevel.GIZLI,
+                UserRole.AUDITOR: SensitivityLevel.GIZLI,
+                UserRole.EMPLOYEE: SensitivityLevel.OZEL,
+            }
+        )
+    )
+
+
+@dataclass(frozen=True)
 class Policy:
     """The complete parameter surface of the deterministic decision layer."""
 
@@ -208,6 +262,7 @@ class Policy:
     memory: MemoryPolicy = field(default_factory=MemoryPolicy)
     semantic: SemanticPolicy = field(default_factory=SemanticPolicy)
     budget: BudgetPolicy = field(default_factory=BudgetPolicy)
+    guardrail: GuardrailPolicy = field(default_factory=GuardrailPolicy)
 
     def check_invariants(self) -> None:
         """Assert the relationships between parameters that must always hold.
@@ -274,3 +329,19 @@ class Policy:
 
         if routing.human_approval_unit not in routing.units:
             raise ValueError("routing.human_approval_unit must be one of routing.units")
+
+        guardrail = self.guardrail
+        for name, value in (
+            ("guardrail.output_groundedness_threshold", guardrail.output_groundedness_threshold),
+            ("guardrail.pii_confidence_floor", guardrail.pii_confidence_floor),
+            ("guardrail.judge_echo_overlap_threshold", guardrail.judge_echo_overlap_threshold),
+        ):
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be a share in [0, 1]")
+
+        missing_roles = set(UserRole) - set(guardrail.role_clearance_map)
+        if missing_roles:
+            raise ValueError(
+                "guardrail.role_clearance_map is missing entries for: "
+                f"{sorted(role.value for role in missing_roles)}"
+            )
