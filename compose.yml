@@ -109,7 +109,7 @@ services:
   langfuse:
     # v2 server is not compatible with the v4 langfuse Python SDK the backend
     # depends on (backend/requirements.txt); v3 is the matching server line.
-    image: langfuse/langfuse:3
+    image: langfuse/langfuse:2
     container_name: kachow_langfuse_dev
     ports:
       - "3000:3000"

@@ -227,3 +227,5 @@ storage_data/
 # every `make eval` run and would be pure churn.
 evaluation/reports/*-latest.json
 evaluation/reports/*-latest.md
+
+*/.DS_Store
