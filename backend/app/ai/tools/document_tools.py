@@ -18,9 +18,11 @@ from pydantic import BaseModel, Field
 from app.ai.documents.anchors import format_anchor
 from app.ai.documents.outline import build_outline, format_outline
 from app.ai.embeddings.models import BaseEmbeddingsClient
+from app.ai.guardrails.sensitivity import assessment_from_analysis
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.ai.tools.registry import ToolSpec
 from app.ai.workflows.events import child_config
+from app.core.enums.sensitivity_level import SensitivityLevel
 from app.infrastructure.vectorstore.base import BaseVectorStore
 
 logger = logging.getLogger(__name__)
@@ -30,6 +32,33 @@ QA_COLLECTION_NAME = "document_qa"
 #: Fallback slice size when vector search returns nothing at all and there is
 #: no other way to answer. Bounded so it doesn't blow the prompt budget.
 TEXT_SLICE_CHARS = 8000
+
+
+class ToolResult(BaseModel):
+    """What a tool actually returned, for the output gate rather than the model.
+
+    The model only ever sees the plain string a handler returns (LangChain's
+    tool-call contract needs a string, and changing that is out of scope
+    here) -- this is a parallel, structured record of the same call, reported
+    through ``on_tool_result`` the same way ``on_anchor_referenced`` already
+    reports page references. ``app.ai.guardrails.output_gate.evaluate_response``
+    uses ``text``/``source_ids`` as this turn's groundedness sources and
+    ``sensitivity_level`` to know whether a leaked PII span traces back to a
+    confidentiality-marked document.
+    """
+
+    tool: str = Field(description="The tool name that produced this result.")
+    text: str = Field(description="The same text returned to the model.")
+    citations: list[str] = Field(
+        default_factory=list, description="Page anchors referenced (e.g. '[s. 3]')."
+    )
+    source_ids: list[str] = Field(
+        default_factory=list, description="Document/legislation identifiers this result drew on."
+    )
+    sensitivity_level: SensitivityLevel = Field(default=SensitivityLevel.UNMARKED)
+    confidence: float = Field(
+        default=1.0, description="1.0 for a real retrieval hit, lower for a degraded fallback path."
+    )
 
 
 class SearchDocumentArgs(BaseModel):
@@ -71,6 +100,7 @@ def build_assistant_tools(
     rag_graph: Any,
     config: Optional[RunnableConfig],
     on_anchor_referenced: Optional[Callable[[str], None]] = None,
+    on_tool_result: Optional[Callable[[ToolResult], None]] = None,
 ) -> list[ToolSpec]:
     """Build the tool set available to the assistant agent for one turn.
 
@@ -91,6 +121,12 @@ def build_assistant_tools(
         on_anchor_referenced: Called with a page anchor (e.g. ``"[s. 3]"``)
             whenever ``get_document_section`` reads a page, so the caller can
             carry it into ``SessionFocus.last_referenced_anchor``.
+        on_tool_result: Called with a ``ToolResult`` after every tool call
+            that returns real content, so the caller can accumulate this
+            turn's actual sources for ``output_gate.evaluate_response`` to
+            check groundedness/leakage against -- see ``ToolResult``'s
+            docstring for why this is a side-channel rather than a change to
+            what handlers return to the model.
 
     Returns:
         Document-scoped tools only when a document is attached; legislation
@@ -98,7 +134,14 @@ def build_assistant_tools(
     """
     tools: list[ToolSpec] = []
 
+    def _report(result: ToolResult) -> None:
+        if on_tool_result:
+            on_tool_result(result)
+
     if document_id:
+        document_sensitivity = assessment_from_analysis(
+            cached_document.get("analysis") or {}
+        ).level
 
         def _pages() -> list[str]:
             pages = cached_document.get("pages")
@@ -131,11 +174,24 @@ def build_assistant_tools(
             except Exception:
                 logger.exception("Assistant document search failed")
 
+            confidence = 1.0
             if not passages and cached_document.get("extracted_text"):
                 passages = [cached_document["extracted_text"][:TEXT_SLICE_CHARS]]
+                confidence = 0.5
             if not passages:
                 return "Belgede bu soruyla ilgili bir içerik bulunamadı."
-            return "\n\n---\n\n".join(passages)
+
+            text = "\n\n---\n\n".join(passages)
+            _report(
+                ToolResult(
+                    tool="search_document",
+                    text=text,
+                    source_ids=[document_id],
+                    sensitivity_level=document_sensitivity,
+                    confidence=confidence,
+                )
+            )
+            return text
 
         async def _get_document_details() -> str:
             analysis = cached_document.get("analysis") or {}
@@ -158,13 +214,31 @@ def build_assistant_tools(
                 parts.append(
                     "Eksik alanlar: " + ", ".join(analysis["missing_fields"])
                 )
-            return "\n\n".join(parts)
+            text = "\n\n".join(parts)
+            _report(
+                ToolResult(
+                    tool="get_document_details",
+                    text=text,
+                    source_ids=[document_id],
+                    sensitivity_level=document_sensitivity,
+                )
+            )
+            return text
 
         async def _get_document_outline() -> str:
             pages = _pages()
             if not pages:
                 return "Belge metni mevcut değil."
-            return format_outline(build_outline(pages))
+            text = format_outline(build_outline(pages))
+            _report(
+                ToolResult(
+                    tool="get_document_outline",
+                    text=text,
+                    source_ids=[document_id],
+                    sensitivity_level=document_sensitivity,
+                )
+            )
+            return text
 
         async def _get_document_section(page: int) -> str:
             pages = _pages()
@@ -175,7 +249,17 @@ def build_assistant_tools(
             anchor = format_anchor(page)
             if on_anchor_referenced:
                 on_anchor_referenced(anchor)
-            return f"{anchor}\n\n{pages[page - 1]}"
+            text = f"{anchor}\n\n{pages[page - 1]}"
+            _report(
+                ToolResult(
+                    tool="get_document_section",
+                    text=text,
+                    citations=[anchor],
+                    source_ids=[document_id],
+                    sensitivity_level=document_sensitivity,
+                )
+            )
+            return text
 
         tools.extend(
             [
@@ -236,7 +320,13 @@ def build_assistant_tools(
             except Exception:
                 logger.exception("Assistant legislation search failed")
                 context = ""
-            return context or "İlgili bir mevzuat maddesi bulunamadı."
+            if not context:
+                return "İlgili bir mevzuat maddesi bulunamadı."
+            # Legislation is public reference material by nature, never a
+            # confidentiality-marked source -- always UNMARKED regardless of
+            # whether a document happens to be attached this turn.
+            _report(ToolResult(tool="search_legislation", text=context))
+            return context
 
         tools.append(
             ToolSpec(

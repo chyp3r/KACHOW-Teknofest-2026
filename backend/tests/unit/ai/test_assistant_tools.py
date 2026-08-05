@@ -17,9 +17,11 @@ from app.ai.agents.assistant import MAX_TOOL_TURNS, AssistantAgent
 from app.ai.llms.base import ToolCallResponse
 from app.ai.tools.document_tools import (
     GetDocumentDetailsArgs,
+    ToolResult,
     build_assistant_tools,
 )
 from app.ai.tools.registry import ToolSpec
+from app.core.enums.sensitivity_level import SensitivityLevel
 
 
 def _kwargs(**overrides):
@@ -281,6 +283,156 @@ async def test_assistant_stops_after_max_tool_turns_and_still_answers(fake_llm):
     assert "".join(chunks) == "nihayetinde cevap"
     assert len(fake_llm.generate_with_tools_calls) == MAX_TOOL_TURNS
     assert handler.await_count == MAX_TOOL_TURNS
+
+
+# ==========================================
+# ToolResult reporting (Faz 2 -- output gate sources)
+# ==========================================
+@pytest.mark.asyncio
+async def test_search_document_reports_a_tool_result_with_the_document_as_source():
+    vector_store = AsyncMock()
+    vector_store.hybrid_search.return_value = [{"text": "bulunan parça"}]
+    embeddings_client = AsyncMock()
+    embeddings_client.embed_query.return_value = [0.1]
+
+    class _StubSparseEncoder:
+        def encode_query(self, query):
+            return [], []
+
+    reported: list[ToolResult] = []
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/doc.pdf",
+            vector_store=vector_store,
+            embeddings_client=embeddings_client,
+            qa_sparse_encoder=_StubSparseEncoder(),
+            on_tool_result=reported.append,
+        )
+    )
+    search = next(tool for tool in tools if tool.name == "search_document")
+
+    await search.handler(query="ne diyor")
+
+    assert len(reported) == 1
+    assert reported[0].tool == "search_document"
+    assert reported[0].text == "bulunan parça"
+    assert reported[0].source_ids == ["uploads/doc.pdf"]
+    assert reported[0].confidence == 1.0
+
+
+@pytest.mark.asyncio
+async def test_search_document_fallback_path_reports_lower_confidence():
+    vector_store = AsyncMock()
+    vector_store.hybrid_search.return_value = []
+    embeddings_client = AsyncMock()
+    embeddings_client.embed_query.return_value = [0.1]
+
+    class _StubSparseEncoder:
+        def encode_query(self, query):
+            return [], []
+
+    reported: list[ToolResult] = []
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/doc.pdf",
+            cached_document={"extracted_text": "belgenin tam metni burada"},
+            vector_store=vector_store,
+            embeddings_client=embeddings_client,
+            qa_sparse_encoder=_StubSparseEncoder(),
+            on_tool_result=reported.append,
+        )
+    )
+    search = next(tool for tool in tools if tool.name == "search_document")
+
+    await search.handler(query="herhangi bir soru")
+
+    assert reported[0].confidence < 1.0
+
+
+@pytest.mark.asyncio
+async def test_tool_result_carries_the_documents_sensitivity_level():
+    """The output gate needs to know a tool result traces back to a
+    confidentiality-marked source without re-deriving it itself."""
+    reported: list[ToolResult] = []
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/gizli.pdf",
+            cached_document={
+                "pages": ["tek sayfa"],
+                "analysis": {"guardrail": {"sensitivity_level": "gizli"}},
+            },
+            on_tool_result=reported.append,
+        )
+    )
+    outline = next(tool for tool in tools if tool.name == "get_document_outline")
+
+    await outline.handler()
+
+    assert reported[0].sensitivity_level is SensitivityLevel.GIZLI
+
+
+@pytest.mark.asyncio
+async def test_get_document_section_reports_its_page_anchor_as_a_citation():
+    reported: list[ToolResult] = []
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/doc.pdf",
+            cached_document={"pages": ["birinci sayfa", "ikinci sayfa"]},
+            on_tool_result=reported.append,
+        )
+    )
+    section = next(tool for tool in tools if tool.name == "get_document_section")
+
+    await section.handler(page=2)
+
+    assert reported[0].citations == ["[s. 2]"]
+
+
+@pytest.mark.asyncio
+async def test_get_document_section_does_not_report_a_result_for_an_out_of_range_page():
+    reported: list[ToolResult] = []
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/doc.pdf",
+            cached_document={"pages": ["tek sayfa"]},
+            on_tool_result=reported.append,
+        )
+    )
+    section = next(tool for tool in tools if tool.name == "get_document_section")
+
+    await section.handler(page=5)
+
+    assert reported == []
+
+
+@pytest.mark.asyncio
+async def test_search_legislation_reports_a_tool_result_with_no_document_source():
+    rag_graph = AsyncMock()
+    rag_graph.ainvoke.return_value = {"context": "ilgili mevzuat metni"}
+    reported: list[ToolResult] = []
+
+    tools = build_assistant_tools(**_kwargs(rag_graph=rag_graph, on_tool_result=reported.append))
+    search = next(tool for tool in tools if tool.name == "search_legislation")
+
+    await search.handler(query="izin hakkı")
+
+    assert reported[0].tool == "search_legislation"
+    assert reported[0].source_ids == []
+    assert reported[0].sensitivity_level is SensitivityLevel.UNMARKED
+
+
+@pytest.mark.asyncio
+async def test_search_legislation_reports_nothing_when_no_context_is_found():
+    rag_graph = AsyncMock()
+    rag_graph.ainvoke.return_value = {"context": ""}
+    reported: list[ToolResult] = []
+
+    tools = build_assistant_tools(**_kwargs(rag_graph=rag_graph, on_tool_result=reported.append))
+    search = next(tool for tool in tools if tool.name == "search_legislation")
+
+    await search.handler(query="alakasız")
+
+    assert reported == []
 
 
 @pytest.mark.asyncio

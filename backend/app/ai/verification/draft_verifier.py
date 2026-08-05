@@ -439,6 +439,33 @@ def verify_draft(
     )
 
 
+def check_groundedness(text: str, *, source_materials: str) -> list[UnsupportedClaim]:
+    """Find claims in arbitrary text that ``source_materials`` doesn't support.
+
+    Thin public wrapper around the same claim-extraction/matching pipeline
+    ``verify_draft`` uses internally (fold the sources, index their
+    canonical forms, strip placeholders, walk the claim patterns), for a
+    caller that wants groundedness checking alone, without ``verify_draft``'s
+    draft-specific structural scoring (closing-formula/imza-block checks that
+    don't apply to a conversational reply). Currently used by
+    ``app.ai.guardrails.output_gate`` to check assist replies against
+    whatever tool results and cached document text backed this turn --
+    reused, not reimplemented, so there is exactly one tuned set of claim
+    patterns in the codebase.
+
+    Args:
+        text: The text to audit (e.g. a generated assist reply).
+        source_materials: Trusted material the text should be grounded in.
+
+    Returns:
+        Every concrete claim in ``text`` with no basis in ``source_materials``.
+    """
+    haystack = _fold(source_materials)
+    canonical_index = _build_canonical_index(source_materials)
+    auditable = _strip_placeholders(text)
+    return _collect_claims(auditable, haystack, canonical_index)
+
+
 def _flatten_classification(classification: dict[str, Any]) -> str:
     """Render analysis output as plain text for grounding comparisons.
 

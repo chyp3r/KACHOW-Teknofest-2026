@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.ai.guardrails.pii import find_pii
+from app.ai.guardrails.pii import find_pii, redact_pii
 
 #: A real checksum-valid TCKN (not a live person's -- generated from the
 #: algorithm itself, the same way the module validates one).
@@ -115,3 +115,37 @@ def test_empty_text_finds_nothing():
 def test_clean_official_text_finds_nothing():
     text = "T.C.\nÖRNEK BAKANLIĞI\nSayı: E-123\nKonu: İzin Talebi\nSaygılarımla."
     assert find_pii(text) == []
+
+
+# ==========================================
+# redact_pii
+# ==========================================
+def test_redact_pii_masks_a_tckn_in_place():
+    text = f"Kimlik No: {VALID_TCKN} olan kişi başvurmuştur."
+    redacted, findings = redact_pii(text)
+    assert VALID_TCKN not in redacted
+    assert findings and findings[0].kind == "tckn"
+    assert "olan kişi başvurmuştur." in redacted
+
+
+def test_redact_pii_masks_multiple_findings_without_corrupting_the_text():
+    text = f"TCKN: {VALID_TCKN} IBAN: {VALID_IBAN} sonu."
+    redacted, findings = redact_pii(text)
+    assert VALID_TCKN not in redacted
+    assert VALID_IBAN not in redacted
+    assert redacted.endswith("sonu.")
+    assert {f.kind for f in findings} == {"tckn", "iban"}
+
+
+def test_redact_pii_leaves_clean_text_untouched():
+    text = "Sayın Makam, bilgilerinize arz ederim."
+    redacted, findings = redact_pii(text)
+    assert redacted == text
+    assert findings == []
+
+
+def test_redact_pii_respects_the_confidence_floor():
+    text = "Sırada 0532 123 45 67 var."
+    redacted, findings = redact_pii(text, confidence_floor=0.99)
+    assert redacted == text
+    assert findings == []

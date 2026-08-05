@@ -2,6 +2,7 @@ from app.ai.verification.draft_verifier import (
     MIN_AUTOMATED_CONFIDENCE_SCORE,
     UnsupportedClaim,
     VerificationReport,
+    check_groundedness,
     verify_draft,
 )
 from app.ai.verification.llm_judge import (
@@ -18,6 +19,7 @@ __all__ = [
     "MIN_AUTOMATED_CONFIDENCE_SCORE",
     "UnsupportedClaim",
     "VerificationReport",
+    "check_groundedness",
     "verify_draft",
     "CombinedVerdict",
     "DraftJudgeVerdict",
