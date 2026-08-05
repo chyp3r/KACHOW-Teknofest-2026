@@ -43,6 +43,14 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   - **İstem düzeyinde ikinci katman**: Asistan'ın sistem istemine oturumun yetki sınırını özetleyen bir `security_boundary` notu ekleniyor (deterministik kontrolün *yerine* değil, onun üstüne -- model kuralı çiğnese bile Qdrant filtresi ve araç reddi zaten devrede).
   - **`REQUIRE_AUTH` artık varsayılan olarak `True`.** Önceden kimliksiz her istek kabul ediliyordu; artık kimlik doğrulama gerçek bir zorunluluk. **Bilinen kırılma**: frontend'de hiçbir JWT/oturum akışı yok (`Authorization`/`Bearer`/`login` frontend kod tabanında hiç geçmiyor), dolayısıyla bu değişiklik frontend'i kimlik doğrulaması yapmadan **kırıyor**. Bilinçli bir karar: frontend düzeltmesi Faz 5 (Gözlemlenebilirlik) tamamlandıktan sonra ayrı bir çalışma olarak ele alınacak.
 
+## [1.39.0] - 2026-08-05
+### Düzeltildi
+- **Bütçesini Aşan Düğümler Artık Yeniden Denenmiyor**: Uçtan uca demo sırasında bulundu — aynı belge yüklemesi 58 sn'de 200, ardından 166 sn'de **502**, ardından 55 sn'de 200 döndürüyordu. Sebep yavaş model değildi.
+  - `node_timeout` yalın bir `TimeoutError` fırlatıyordu ve `TRANSIENT_ERRORS` içinde `TimeoutError` vardı; dolayısıyla yalnızca bütçesini aşan bir düğüm, kopmuş bir bağlantı gibi görünüp **yeniden deneniyordu**. `suggest_mevzuat` 70 sn'lik bütçeye karşı normalde 28-34 sn sürüyor; ara sıra uzadığında LangGraph ikinci bir denemeye 70 sn daha harcayıp tüm isteği düşürüyordu. Marjinal bir yavaşlama, **alıntılar zaten doğru biçimde getirilmişken**, 5. gereksinimin *isteğe bağlı* yarısı uğruna 166 sn süren bir 502'ye dönüşüyordu.
+  - Bütçe aşımı artık `NodeBudgetExceeded` fırlatır: bilinçli olarak `TimeoutError` değildir ve bilinçli olarak `TRANSIENT_ERRORS` içinde yer almaz. İkisi birbirine benzer ve zıt şeyler söyler — asılı kalmış bir bağlantı ikinci denemeye değer, bütçesine sığmayan iş ikinci denemede de sığmaz.
+  - `suggest_mevzuat` ayrıca kendi model çağrısını düğüm bütçesinin altında sınırlar. `node_timeout` tüm düğümü sardığı için zaman aşımı `try/except` **dışında** tetikleniyor ve düğümün mevcut düşüş yolu (ham alıntılara geri dönme) hiçbir zaman devreye giremiyordu. Artık aşım, üretilen açıklamaya mal olur; analize değil.
+  - **Ölçüm** (aynı belge, arka arkaya dört yükleme): 4/4 HTTP 200 (önceden 1/3), en kötü durum 166 sn + 502 yerine 85 sn, sıfır zaman-aşımı-yeniden-deneme olayı ve deterministik çekirdek (tür, uygunluk durumu, eksik alanlar) dört koşuda da bayt bayt aynı.
+
 ## [1.38.0] - 2026-08-05
 ### Eklendi
 - **Asistan İçin Canlı Mevzuat Sorgusu (MCP, varsayılan kapalı)**: `app/mcp/registry.py` dolduruldu — boş duran bu dosya, `docs/architecture/ai.md`'nin "AI yalnızca MCP istemcisini kullanır" ifadesiyle çelişen tek yerdi. `MEVZUAT_MCP_ENABLED` açıkken [`mevzuat-mcp`](https://github.com/saidsurucu/mevzuat-mcp) (MIT) sunucusu `mcp_manager`'a kaydedilir ve asistana `search_legislation_live` aracı eklenir.
