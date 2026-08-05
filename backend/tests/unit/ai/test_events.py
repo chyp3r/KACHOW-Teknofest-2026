@@ -6,6 +6,7 @@ import pytest
 
 from app.ai.workflows.events import (
     child_config,
+    emit_guardrail_event,
     emit_interrupt,
     emit_node_end,
     emit_node_error,
@@ -109,6 +110,40 @@ async def test_emit_interrupt_carries_kind_id_and_payload():
     assert event["kind"] == "missing_information"
     assert event["interrupt_id"] == "abc123"
     assert event["payload"] == {"questions": [{"key": "muhatap"}]}
+
+
+@pytest.mark.asyncio
+async def test_emit_guardrail_event_carries_stage_kind_decision_and_reasons():
+    queue: asyncio.Queue = asyncio.Queue()
+    config = _config(queue)
+
+    await emit_guardrail_event(
+        config, stage="output", kind="leakage", decision="redacted",
+        reasons=["Kaynak evrakta desteklenmeyen iddia."],
+    )
+
+    event = queue.get_nowait()
+    assert event["event"] == "guardrail"
+    assert event["stage"] == "output"
+    assert event["kind"] == "leakage"
+    assert event["decision"] == "redacted"
+    assert event["reasons"] == ["Kaynak evrakta desteklenmeyen iddia."]
+
+
+@pytest.mark.asyncio
+async def test_emit_guardrail_event_defaults_reasons_to_an_empty_list():
+    queue: asyncio.Queue = asyncio.Queue()
+    config = _config(queue)
+
+    await emit_guardrail_event(config, stage="input", kind="pii", decision="flagged")
+
+    assert queue.get_nowait()["reasons"] == []
+
+
+@pytest.mark.asyncio
+async def test_emit_guardrail_event_is_a_no_op_without_a_queue():
+    await emit_guardrail_event(None, stage="input", kind="pii", decision="flagged")
+    await emit_guardrail_event({}, stage="input", kind="pii", decision="flagged")
 
 
 @pytest.mark.asyncio

@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from app.core.config import settings
 from app.infrastructure.database.session import AsyncSessionLocal
+from app.observability.ai_metrics import GUARDRAIL_DECISIONS
 from app.observability.model.guardrail_model import GuardrailEventModel
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,11 @@ async def record_event(
             template revision produced this decision, when an LLM-judge
             layer (Phase 3) was involved.
     """
+    # Unconditional, unlike the DB write below: a Prometheus counter is
+    # metrics, not an audit record, and should stay live even when a
+    # deployment turns RUN_RECORDING_ENABLED off to skip the DB write.
+    GUARDRAIL_DECISIONS.labels(stage=stage, kind=kind, decision=decision).inc()
+
     if not settings.RUN_RECORDING_ENABLED:
         return
     try:

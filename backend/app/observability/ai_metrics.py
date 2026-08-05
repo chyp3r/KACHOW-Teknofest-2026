@@ -74,6 +74,19 @@ GUARDRAIL_JUDGE_FAILURES = Counter(
     ["reason"],
 )
 
+#: The guardrail system's overall decision surface -- every stage (input at
+#: upload, output at response time) and every kind (pii, sensitivity,
+#: injection, magic_byte, archive_bomb, groundedness, leakage, llm_judge),
+#: not just the judge layer's own failures (GUARDRAIL_JUDGE_FAILURES above).
+#: Incremented from a single choke point (app.observability.guardrail_recorder
+#: .record_event) rather than at each of its three call sites, so this stays
+#: accurate as new guardrail checks are added without a matching metrics edit.
+GUARDRAIL_DECISIONS = Counter(
+    "kachow_guardrail_decisions_total",
+    "Guardrail decisions made, by stage, kind, and outcome.",
+    ["stage", "kind", "decision"],
+)
+
 HITL_INTERRUPTS = Counter(
     "kachow_hitl_interrupts_total",
     "Human-in-the-loop interrupts raised, by kind.",

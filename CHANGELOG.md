@@ -3,6 +3,13 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 
+## [1.39.0] - 2026-08-05
+### Eklendi
+- **Guardrail Sistemi -- Faz 5: Gözlemlenebilirlik**: Faz 0-4'te kurulan karar mekanizması artık kendi metriğini ve canlı olay akışını üretiyor -- önceden bir guardrail kararının (engellendi mi, düzenlendi mi, incelemeye mi düştü) tek görünürlüğü `GuardrailEventModel` tablosuna yazılan denetim satırıydı.
+  - **`kachow_guardrail_decisions_total`** (Prometheus sayacı, `stage`/`kind`/`decision` etiketleriyle): `guardrail_recorder.record_event()`'in tek çağrı noktasına eklendi, üç mevcut çağıran (`documents/service.py` içindeki `magic_byte` reddi ve her yüklemedeki `sensitivity` değerlendirmesi, `planning_graph.py`'nin çıktı kapısı) otomatik olarak sayılıyor -- yeni bir guardrail kontrolü eklendiğinde ayrıca bir metrik güncellemesi gerekmiyor. Sayaç, `RUN_RECORDING_ENABLED` kapalıyken bile artıyor: bu bir metrik, denetim kaydı değil.
+  - **`emit_guardrail_event`** (`app.ai.workflows.events`): sohbet SSE akışına yeni bir `guardrail` olayı ekliyor, yalnızca gerçek bir etkisi olan kararlarda (flagged/blocked/redacted) tetikleniyor -- rutin bir "passed" sonucunun arayüzde gösterecek bir şeyi yok. `planning_graph.py`'nin çıktı kapısına bağlandı; bu, SSE kuyruğuna erişimi olan tek çağrı noktası (evrak yükleme uç noktasının kendi akışı yok, dolayısıyla oradaki kararlar yalnızca sayaçtan ve denetim tablosundan geçiyor).
+  - Canlı doğrulama: `/metrics` üzerinde bir evrak yüklemesinden sonra `kachow_guardrail_decisions_total{decision="needs_review",kind="sensitivity",stage="input"}` görünüyor.
+
 ## [1.38.0] - 2026-08-05
 ### Değiştirildi
 - **Guardrail Sistemi -- Faz 4: Uçtan Uca Yetkilendirme (RBAC)**: Gizlilik seviyesi kontrolü artık yalnızca giriş/çıkış guardrail'lerinde değil, **erişimin her katmanında** uygulanıyor -- rol modeli sadeleştirildi, her kullanıcının kendi yetki seviyesi var ve bu seviye içerik modele ulaşmadan önce Qdrant sorgusunun kendisinde uygulanıyor.
