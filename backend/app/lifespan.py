@@ -127,6 +127,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # all -- the bus was write-only.
     import app.events.subscribers  # noqa: F401
 
+    # External MCP servers, if any are configured. A no-op by default: the
+    # legislation server is off unless MEVZUAT_MCP_ENABLED is set, and nothing
+    # here contacts it -- registration only records how to launch it, so a
+    # missing or unreachable server costs nothing until a tool is actually
+    # called.
+    from app.mcp.registry import register_servers
+
+    register_servers()
+
     # Deliberately outside _startup()'s WARMUP_TIMEOUT_SECONDS budget: the
     # planning graph's compilation (inside _warm_up_graphs) needs the
     # checkpointer already open, and a slow Postgres must not silently steal

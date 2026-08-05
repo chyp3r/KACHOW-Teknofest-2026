@@ -20,6 +20,7 @@ from app.ai.documents.outline import build_outline, format_outline
 from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.guardrails.sensitivity import assessment_from_analysis
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
+from app.ai.tools.mevzuat_tools import build_live_legislation_tools
 from app.ai.tools.registry import ToolSpec
 from app.ai.workflows.events import child_config
 from app.core.enums.sensitivity_level import SensitivityLevel
@@ -383,5 +384,11 @@ def build_assistant_tools(
                 handler=_search_legislation,
             )
         )
+
+    # Appended after the corpus tool on purpose: the model picks from an ordered
+    # list, and the offline path should be the default. This adds nothing when
+    # MEVZUAT_MCP_ENABLED is off, so the model is never offered a tool that
+    # cannot run.
+    tools.extend(build_live_legislation_tools())
 
     return tools

@@ -43,6 +43,16 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   - **İstem düzeyinde ikinci katman**: Asistan'ın sistem istemine oturumun yetki sınırını özetleyen bir `security_boundary` notu ekleniyor (deterministik kontrolün *yerine* değil, onun üstüne -- model kuralı çiğnese bile Qdrant filtresi ve araç reddi zaten devrede).
   - **`REQUIRE_AUTH` artık varsayılan olarak `True`.** Önceden kimliksiz her istek kabul ediliyordu; artık kimlik doğrulama gerçek bir zorunluluk. **Bilinen kırılma**: frontend'de hiçbir JWT/oturum akışı yok (`Authorization`/`Bearer`/`login` frontend kod tabanında hiç geçmiyor), dolayısıyla bu değişiklik frontend'i kimlik doğrulaması yapmadan **kırıyor**. Bilinçli bir karar: frontend düzeltmesi Faz 5 (Gözlemlenebilirlik) tamamlandıktan sonra ayrı bir çalışma olarak ele alınacak.
 
+## [1.38.0] - 2026-08-05
+### Eklendi
+- **Asistan İçin Canlı Mevzuat Sorgusu (MCP, varsayılan kapalı)**: `app/mcp/registry.py` dolduruldu — boş duran bu dosya, `docs/architecture/ai.md`'nin "AI yalnızca MCP istemcisini kullanır" ifadesiyle çelişen tek yerdi. `MEVZUAT_MCP_ENABLED` açıkken [`mevzuat-mcp`](https://github.com/saidsurucu/mevzuat-mcp) (MIT) sunucusu `mcp_manager`'a kaydedilir ve asistana `search_legislation_live` aracı eklenir.
+  - **Yalnızca ekler.** Uygunluk kararına hiç dokunmaz: `check_required_fields` sabit madde numaraları üzerinde küme farkıdır ve analiz hattı bu modülü hiç çağırmaz. Aynı evrakın her çalıştırmada bayt bayt aynı çıktıyı vermesini sağlayan özellik korunur.
+  - **İkinci sırada.** Yerel korpus aracı (`search_legislation`) önce kayıtlıdır; model varsayılan olarak çevrimdışı yola uzanır, bu bir yükseltmedir.
+  - **Hata da bir cevaptır.** Erişilemeyen sunucu, zaman aşımı, boş içerik — hepsi yerel aracın döndürdüğü "bulunamadı" ifadesini döndürür, asla istisna fırlatmaz. Üçüncü taraf bir devlet sitesi yüzünden sohbet turu 500 vermez. Bayrak kapalıyken araç modele **hiç sunulmaz**, yani çalıştırılamayacak bir araç önerilmez.
+  - **Mülga mevzuat ayıklanır.** `657` araması, gerçek Devlet Memurları Kanunu'nun (`mevzuat_id=102924`) **üstünde** "DEVLET MEMURLARI KANUNUNUN YÜRÜRLÜKTEN KALDIRILMIŞ HÜKÜMLERİ" kaydını (`335559`) döndürüyor — ikisi de meşru biçimde 657 numaralı, biri yürürlükten kalkmış. İlk sonucu almak, yürürlükten kalkmış metni yürürlükteki kanun gibi alıntılamak olurdu; bu, projenin önlemek için var olduğu uydurma atıf hatasının ta kendisidir. Sayısal sorgular ayrıca `mevzuat_tur=KANUN` ile süzülür.
+  - Uzun kanunlar kısaltılır: 657 yarım milyon karakteri aşar, sınırsız bırakılsa bağlam penceresini taşırırdı.
+  - Sunucu backend imajına **dahil değildir** (bağımlılık ağacı `playwright` sabitler); komut ve argümanlar yapılandırmada tutulur, böylece yerel süreçten yardımcı konteynere geçiş kod değişikliği değildir.
+
 ## [1.37.0] - 2026-08-05
 ### Düzeltildi
 - **Hız Sınırlayıcı Artık Açık Tarafa Düşüyor**: `rate_limit()` Redis'e hiçbir hata yakalama olmadan gidiyordu; bağlantı hatası doğrudan bağımlılıktan çıkıp **500**'e dönüşüyordu. Hız sınırlama bir *koruma* mekanizmasıdır, doğruluk gereksinimi değil: sayaç erişilemezse isteğin sınırı aşıp aşmadığını bilemeyiz, güvenli cevap isteği servis etmektir.
