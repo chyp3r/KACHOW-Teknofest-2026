@@ -56,6 +56,26 @@ ANALYSIS_MAX_TOKENS = 1536
 #: analysis fails over the optional half of requirement 5.
 SUGGESTION_BUDGET_SHARE = 0.85
 
+#: Generation cap for the suggestion node. Its output is a handful of one-sentence
+#: justifications, so the 1024-token default buys the model room it does not use
+#: -- but 384 is too tight against real retrieved excerpts and was measured
+#: costing more than it saves: qwen3.5:9b truncated mid-JSON, failed to parse,
+#: retried, failed again, and the run fell through to the raw-citation fallback
+#: after 2x the model's own generation time. That failure only showed up end to
+#: end, not in the isolated call that first picked 384 -- worth remembering
+#: before trusting an isolated timing again.
+#:
+#: 512 was measured against six document/missing-field combinations, two
+#: repeats each: 6/6 succeeded on the first attempt, no retries. Confirmed
+#: through the live endpoint against a single verified server process: three
+#: consecutive uploads of the same document at 49-51s each (was 65-85s
+#: uncapped), the ComplianceAgent call itself down to ~25s from ~35s, and the
+#: deterministic core (type, compliance status, missing fields) identical
+#: across all three. Lowering MEVZUAT_RESULT_LIMIT was measured too and
+#: rejected: it saves ~2s and *changes* the answer, which is not the same kind
+#: of win as a cap that reproduces the uncapped text.
+SUGGESTION_MAX_TOKENS = 512
+
 
 class DocumentAnalysisState(TypedDict, total=False):
     """LangGraph state for the incoming-document (evrak) analysis workflow."""
@@ -634,6 +654,7 @@ def create_document_analysis_graph(
                     messages=prompt,
                     response_model=MevzuatSuggestionOutput,
                     temperature=0.0,
+                    max_tokens=SUGGESTION_MAX_TOKENS,
                 ),
                 timeout=node_budget("suggest_mevzuat") * SUGGESTION_BUDGET_SHARE,
             )

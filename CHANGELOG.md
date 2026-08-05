@@ -43,6 +43,13 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   - **İstem düzeyinde ikinci katman**: Asistan'ın sistem istemine oturumun yetki sınırını özetleyen bir `security_boundary` notu ekleniyor (deterministik kontrolün *yerine* değil, onun üstüne -- model kuralı çiğnese bile Qdrant filtresi ve araç reddi zaten devrede).
   - **`REQUIRE_AUTH` artık varsayılan olarak `True`.** Önceden kimliksiz her istek kabul ediliyordu; artık kimlik doğrulama gerçek bir zorunluluk. **Bilinen kırılma**: frontend'de hiçbir JWT/oturum akışı yok (`Authorization`/`Bearer`/`login` frontend kod tabanında hiç geçmiyor), dolayısıyla bu değişiklik frontend'i kimlik doğrulaması yapmadan **kırıyor**. Bilinçli bir karar: frontend düzeltmesi Faz 5 (Gözlemlenebilirlik) tamamlandıktan sonra ayrı bir çalışma olarak ele alınacak.
 
+## [1.40.0] - 2026-08-06
+### Değiştirildi
+- **Mevzuat Önerisi Düğümü Hızlandırıldı**: `suggest_mevzuat` artık üretim belirteç sayısını 512 ile sınırlıyor (varsayılan 1024). Çıktısı birkaç tek cümlelik gerekçeden ibaret olduğu için varsayılan yalnızca modele kullanmadığı alan veriyordu.
+  - **İlk denenen 384 değeri gerçek alıntılara karşı yetersiz çıktı ve kazandırdığından fazlasına mal oldu**: `qwen3.5:9b` JSON'u yarıda kesip ayrıştırma hatası veriyor, yeniden deneniyor, tekrar başarısız oluyor ve model kendi üretim süresinin iki katı harcandıktan sonra ham alıntı geri dönüşüne düşülüyordu. Bu başarısızlık yalnızca uçtan uca ortaya çıktı, 384'ü ilk seçen izole çağrıda değil.
+  - **512 değeri altı belge/eksik-alan kombinasyonunda, ikişer tekrarla ölçüldü**: 6/6 ilk denemede başarılı, hiç yeniden deneme yok. Doğrulanmış tek bir sunucu süreci üzerinden canlı uçla da doğrulandı: aynı belgenin arka arkaya üç yüklemesi **49-51 sn** (önceden sınırsızken 65-85 sn), `ComplianceAgent` çağrısının kendisi ~35 sn'den ~25 sn'ye indi, deterministik çekirdek (tür, uygunluk durumu, eksik alanlar) üç koşuda da aynı.
+  - `MEVZUAT_RESULT_LIMIT` düşürülmesi de ölçüldü ve reddedildi: ~2 sn kazandırıyor ama **cevabı değiştiriyor** — sınırsız metni birebir üreten bir sınırla aynı türden bir kazanım değil.
+
 ## [1.39.0] - 2026-08-05
 ### Düzeltildi
 - **Bütçesini Aşan Düğümler Artık Yeniden Denenmiyor**: Uçtan uca demo sırasında bulundu — aynı belge yüklemesi 58 sn'de 200, ardından 166 sn'de **502**, ardından 55 sn'de 200 döndürüyordu. Sebep yavaş model değildi.
