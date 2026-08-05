@@ -10,6 +10,8 @@ from app.ai.agents.judge import JudgeAgent
 from app.ai.agents.reviser import ReviserAgent
 from app.ai.agents.writer import WriterAgent
 from app.ai.guardrails.injection import assert_no_prompt_leak
+from app.ai.guardrails.pii import find_pii
+from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
 from app.ai.llms.base import BaseLLMClient
 from app.ai.verification import (
@@ -78,6 +80,7 @@ class DraftState(TypedDict, total=False):
     judge: dict[str, Any]
     judge_available: bool
     repair_items: list[dict[str, Any]]
+    pii_findings: list[dict[str, Any]]
     missing_information: list[dict[str, Any]]
     attempt_history: list[dict[str, Any]]
     status: str
@@ -535,6 +538,18 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
             DRAFT_SCORE.labels(source="judge").observe(verdict.score)
         DRAFT_SCORE.labels(source="combined").observe(combined.combined_score)
 
+        # Personal data (TCKN/IBAN/phone/address) surfacing in a generated
+        # draft is grounds for review the same way an unresolved
+        # correspondence type is: a resmi yazışma that echoes an applicant's
+        # kimlik no or address needs a human's eyes before it goes out, not a
+        # second automatic revision attempt (the draft path's revision loop
+        # fixes groundedness/quality defects, not confidentiality ones).
+        pii_findings = [
+            finding
+            for finding in find_pii(draft_text)
+            if finding.confidence >= get_policy().guardrail.pii_confidence_floor
+        ]
+
         # An unresolved correspondence type or a draft with no verified
         # legislative context means the system guessed, which is itself
         # grounds for review -- and a second generation cannot fix either, so
@@ -543,6 +558,7 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
             combined.requires_human_approval
             or state.get("correspondence_type_source") == "fallback"
             or not state.get("context")
+            or bool(pii_findings)
         )
 
         history_entry = {
@@ -561,12 +577,21 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
         else:
             status = "COMPLETED"
 
+        evaluation_notes = combined.notes
+        if pii_findings:
+            kinds = ", ".join(sorted({finding.kind for finding in pii_findings}))
+            evaluation_notes = (
+                f"{evaluation_notes} Taslakta {len(pii_findings)} adet kişisel veri "
+                f"bulgusu tespit edildi ({kinds}); insan onayı gerekiyor."
+            )
+
         update = {
             "confidence_score": combined.combined_score,
             "combined_score": combined.combined_score,
             "requires_human_approval": requires_approval,
             "requires_revision": combined.requires_revision,
-            "evaluation_notes": combined.notes,
+            "evaluation_notes": evaluation_notes,
+            "pii_findings": [finding.model_dump() for finding in pii_findings],
             "verification": report.model_dump(),
             "judge": verdict.model_dump() if verdict is not None else {},
             "judge_available": combined.judge_available,

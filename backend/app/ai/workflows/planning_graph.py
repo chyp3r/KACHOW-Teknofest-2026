@@ -17,14 +17,15 @@ from app.ai.agents.memory_summarizer import MemorySummarizerAgent
 from app.ai.context import ContextBlock, ContextBuilder, TokenBudget, select_history_window
 from app.ai.context.compress import truncate_with_marker
 from app.ai.embeddings.models import BaseEmbeddingsClient
+from app.ai.guardrails.output_gate import classify_reason_kind, evaluate_response
+from app.ai.guardrails.sensitivity import assessment_from_analysis
 from app.ai.session.focus import SessionFocus, compute_focus_update, merge_focus
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
-from app.ai.response.builder import build_response
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.ai.semantic.prototype_matcher import PrototypeMatcher
-from app.ai.tools.document_tools import build_assistant_tools
+from app.ai.tools.document_tools import ToolResult, build_assistant_tools
 from app.ai.verification import apply_answers, verify_draft
 from app.ai.workflows.events import (
     child_config,
@@ -44,6 +45,7 @@ from app.core.config import settings
 from app.core.enums.reasoning_level import ReasoningLevel
 from app.core.enums.step_status import StepStatus
 from app.infrastructure.vectorstore.base import BaseVectorStore
+from app.observability import guardrail_recorder
 from app.observability.ai_metrics import HITL_INTERRUPTS, NODE_DURATION
 from app.observability.run_recorder import end_run, record_step, start_run
 
@@ -578,6 +580,17 @@ def create_planning_graph(
         document_id = state.get("document_id")
         cached = state.get("cached_document") or {}
         analysis = classification or cached.get("analysis") or {}
+        # None (not an UNMARKED assessment) when no document is attached --
+        # `output_gate.evaluate_response` treats the two differently: no
+        # document means there is nothing to leak, an UNMARKED document
+        # means there is a source that was checked and cleared.
+        sensitivity = assessment_from_analysis(analysis) if document_id else None
+        # Gizli/Çok Gizli per the resolved policy (`GuardrailPolicy.
+        # sensitivity_block_levels`, read via `requires_review` rather than
+        # a level comparison hardcoded here) -- buffer the whole reply and
+        # gate it before showing anything, instead of the ordinary
+        # token-by-token stream a post-hoc gate can't actually stop in time.
+        buffer_streaming = bool(sensitivity and sensitivity.requires_review)
 
         document_context = "(Bu turda yüklenmiş bir belge yok.)"
         if document_id:
@@ -651,6 +664,11 @@ def create_planning_graph(
         def _record_referenced_anchor(anchor: str) -> None:
             referenced_anchor["anchor"] = anchor
 
+        tool_outputs: list[ToolResult] = []
+
+        def _record_tool_result(result: ToolResult) -> None:
+            tool_outputs.append(result)
+
         tools = build_assistant_tools(
             document_id=document_id,
             cached_document=cached,
@@ -661,6 +679,7 @@ def create_planning_graph(
             rag_graph=rag_graph,
             config=config,
             on_anchor_referenced=_record_referenced_anchor,
+            on_tool_result=_record_tool_result,
         )
 
         chunks: list[str] = []
@@ -678,8 +697,49 @@ def create_planning_graph(
                     node="assist",
                 ):
                     chunks.append(chunk)
-                    await emit_token(config, "assist", chunk)
-            reply, flagged = build_response("".join(chunks).strip())
+                    if not buffer_streaming:
+                        await emit_token(config, "assist", chunk)
+
+            raw_reply = "".join(chunks).strip()
+            source_materials = "\n\n".join(
+                part
+                for part in (
+                    cached.get("extracted_text", ""),
+                    *(tool_output.text for tool_output in tool_outputs),
+                )
+                if part
+            )
+            verdict = evaluate_response(
+                raw_reply,
+                source_materials=source_materials,
+                sensitivity=sensitivity,
+                # No authenticated requester exists yet in this open demo
+                # path -- always treated as "unknown clearance", the fail-
+                # secure default `evaluate_response` documents. Wired to a
+                # real value once the RBAC phase adds an authenticated user.
+                requester_clearance=None,
+            )
+            reply = verdict.text
+            flagged = verdict.action != "pass"
+
+            if buffer_streaming:
+                # Token-by-token streaming was withheld above specifically
+                # so this could be the gate's decision, not the model's raw
+                # output -- emit it once, now that the check has actually run.
+                await emit_token(config, "assist", reply)
+
+            if flagged:
+                await guardrail_recorder.record_event(
+                    stage="output",
+                    kind=classify_reason_kind(verdict.reasons),
+                    decision="blocked" if verdict.action == "block" else "redacted",
+                    reasons=verdict.reasons,
+                    run_id=state.get("run_id"),
+                    document_id=document_id,
+                    requester_user_id=state.get("user_id"),
+                    related_document_ids=[document_id] if document_id else [],
+                )
+
             result = {
                 "reply": reply,
                 "status": StepStatus.COMPLETED,

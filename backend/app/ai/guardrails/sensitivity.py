@@ -8,7 +8,7 @@ deterministic verdict.
 """
 
 import unicodedata
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from pydantic import BaseModel, Field
 
@@ -113,6 +113,54 @@ def assess(
     return SensitivityAssessment(
         level=level,
         pii_findings=findings,
+        requires_review=requires_review,
+        reasons=reasons,
+    )
+
+
+def assessment_from_analysis(analysis: dict[str, Any]) -> SensitivityAssessment:
+    """Reconstruct a ``SensitivityAssessment`` from a classification dict.
+
+    Two different shapes reach this function depending on which path
+    ``planning_graph._run_classification`` took this turn: a live
+    ``document_analysis_graph`` invocation carries the assessment under
+    ``sensitivity_assessment`` with this module's own field names (``level``,
+    ``requires_review``), while the cached path returns an assembled
+    ``DocumentAnalysisResponseSchema`` dump, which carries the same
+    information under ``guardrail`` with the API-facing schema's field names
+    (``sensitivity_level``, ``requires_human_review``) -- see
+    ``GuardrailAssessmentSchema`` in ``app.domains.documents.schema.
+    document_schema``. Both are read here so callers (``_run_assist``,
+    ``output_gate.evaluate_response``) don't have to know which path produced
+    the dict they're holding.
+
+    Args:
+        analysis: A classification/analysis dict, in either shape above.
+
+    Returns:
+        The reconstructed assessment. Missing or unrecognised data degrades
+        to an all-clear ``UNMARKED`` assessment rather than raising -- a
+        malformed or absent assessment must never itself become the reason a
+        response is blocked.
+    """
+    raw = analysis.get("guardrail") or analysis.get("sensitivity_assessment") or {}
+
+    level_raw = raw.get("sensitivity_level", raw.get("level", SensitivityLevel.UNMARKED.value))
+    try:
+        level = SensitivityLevel(level_raw)
+    except ValueError:
+        level = SensitivityLevel.UNMARKED
+
+    pii_findings = [
+        PiiFinding(**item) if isinstance(item, dict) else item
+        for item in raw.get("pii_findings") or []
+    ]
+    requires_review = bool(raw.get("requires_human_review", raw.get("requires_review", False)))
+    reasons = list(raw.get("reasons") or [])
+
+    return SensitivityAssessment(
+        level=level,
+        pii_findings=pii_findings,
         requires_review=requires_review,
         reasons=reasons,
     )

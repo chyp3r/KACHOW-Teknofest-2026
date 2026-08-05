@@ -56,12 +56,18 @@ class PiiFinding(BaseModel):
     ``confidence`` lets callers apply ``GuardrailPolicy.pii_confidence_floor``
     to separate a real finding from pattern noise (see
     ``app.ai.guardrails.sensitivity.assess``) -- it is never itself sensitive,
-    so it is safe to log or persist alongside the finding.
+    so it is safe to log or persist alongside the finding. Defaults to 1.0
+    rather than being required: a finding reconstructed from an already-
+    filtered, already-serialized assessment (see
+    ``app.ai.guardrails.sensitivity.assessment_from_analysis``, which reads
+    back the API-facing ``GuardrailAssessmentSchema.pii_findings`` shape that
+    never carried a confidence field to begin with) has no original
+    confidence to report and shouldn't need to fake one.
     """
 
     kind: str = Field(description="'tckn' | 'iban' | 'telefon' | 'adres'.")
     preview: str = Field(description="Maskelenmiş önizleme; ham değer taşımaz.")
-    confidence: float = Field(description="0-1 arası güven skoru.")
+    confidence: float = Field(default=1.0, description="0-1 arası güven skoru.")
 
 
 def _mask(value: str, *, keep_start: int = 2, keep_end: int = 2) -> str:
@@ -132,58 +138,88 @@ def _iban_checksum_valid(iban: str) -> bool:
     return int(numeric) % 97 == 1
 
 
-def _find_tckn(text: str) -> list[PiiFinding]:
-    findings = []
+#: A match plus where it sits in the source text. Positions exist only to
+#: make :func:`redact_pii` possible (replace the exact span, not a
+#: string-search-and-hope) -- :func:`find_pii` throws them away, since
+#: nothing outside this module has ever needed a raw offset into text that
+#: itself must not be retained.
+_PositionedFinding = tuple[int, int, PiiFinding]
+
+
+def _find_tckn_positioned(text: str) -> list[_PositionedFinding]:
+    results: list[_PositionedFinding] = []
     for match in _TCKN_PATTERN.finditer(text):
         digits = match.group(0)
         if _tckn_checksum_valid(digits):
-            findings.append(
-                PiiFinding(kind="tckn", preview=_mask(digits), confidence=0.95)
+            results.append(
+                (match.start(), match.end(), PiiFinding(kind="tckn", preview=_mask(digits), confidence=0.95))
             )
-    return findings
+    return results
 
 
-def _find_iban(text: str) -> list[PiiFinding]:
-    findings = []
+def _find_iban_positioned(text: str) -> list[_PositionedFinding]:
+    results: list[_PositionedFinding] = []
     for match in _IBAN_PATTERN.finditer(text):
         raw = match.group(0)
         normalized = raw.replace(" ", "").upper()
         if _iban_checksum_valid(normalized):
-            findings.append(
-                PiiFinding(kind="iban", preview=_mask(raw, keep_start=4, keep_end=2), confidence=0.95)
+            results.append(
+                (
+                    match.start(),
+                    match.end(),
+                    PiiFinding(kind="iban", preview=_mask(raw, keep_start=4, keep_end=2), confidence=0.95),
+                )
             )
-    return findings
+    return results
 
 
-def _find_phone(text: str) -> list[PiiFinding]:
-    findings = []
+def _find_phone_positioned(text: str) -> list[_PositionedFinding]:
+    results: list[_PositionedFinding] = []
     for match in _PHONE_PATTERN.finditer(text):
         start = max(0, match.start() - 20)
         nearby = text[start : match.start()]
         confidence = 0.85 if _PHONE_CONTEXT.search(nearby) else 0.55
-        findings.append(
-            PiiFinding(kind="telefon", preview=_mask(match.group(0)), confidence=confidence)
-        )
-    return findings
-
-
-def _find_address(text: str) -> list[PiiFinding]:
-    findings = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        hits = len(_ADDRESS_KEYWORDS.findall(stripped))
-        if hits >= _ADDRESS_MIN_KEYWORD_HITS:
-            confidence = min(0.5 + 0.1 * hits, 0.9)
-            findings.append(
-                PiiFinding(
-                    kind="adres",
-                    preview=_mask(stripped, keep_start=6, keep_end=0).rstrip("*") + "…",
-                    confidence=confidence,
-                )
+        results.append(
+            (
+                match.start(),
+                match.end(),
+                PiiFinding(kind="telefon", preview=_mask(match.group(0)), confidence=confidence),
             )
-    return findings
+        )
+    return results
+
+
+def _find_address_positioned(text: str) -> list[_PositionedFinding]:
+    results: list[_PositionedFinding] = []
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped:
+            hits = len(_ADDRESS_KEYWORDS.findall(stripped))
+            if hits >= _ADDRESS_MIN_KEYWORD_HITS:
+                # `line.index(stripped)` recovers exactly how much leading
+                # whitespace `.strip()` removed, so the span lines up with
+                # the original text even though matching ran on the
+                # stripped copy.
+                local_start = line.index(stripped)
+                start = offset + local_start
+                end = start + len(stripped)
+                confidence = min(0.5 + 0.1 * hits, 0.9)
+                preview = _mask(stripped, keep_start=6, keep_end=0).rstrip("*") + "…"
+                results.append((start, end, PiiFinding(kind="adres", preview=preview, confidence=confidence)))
+        offset += len(line)
+    return results
+
+
+def _find_all_positioned(text: str) -> list[_PositionedFinding]:
+    if not text:
+        return []
+    return [
+        *_find_tckn_positioned(text),
+        *_find_iban_positioned(text),
+        *_find_phone_positioned(text),
+        *_find_address_positioned(text),
+    ]
 
 
 def find_pii(text: str) -> list[PiiFinding]:
@@ -201,11 +237,37 @@ def find_pii(text: str) -> list[PiiFinding]:
     Returns:
         Every pattern match found, each with only a masked preview.
     """
-    if not text:
-        return []
-    return [
-        *_find_tckn(text),
-        *_find_iban(text),
-        *_find_phone(text),
-        *_find_address(text),
-    ]
+    return [finding for _start, _end, finding in _find_all_positioned(text)]
+
+
+def redact_pii(text: str, *, confidence_floor: float = 0.0) -> tuple[str, list[PiiFinding]]:
+    """Replace every PII span in ``text`` with its own masked preview.
+
+    Used by ``app.ai.guardrails.output_gate`` to redact a generated reply
+    in place rather than blocking it outright: unlike a document upload
+    (which either has PII or doesn't), a reply's PII spans need to actually
+    be removed from the text the user sees, not just reported alongside it.
+
+    Args:
+        text: Text to redact.
+        confidence_floor: Findings below this confidence are left in place,
+            same threshold role as ``GuardrailPolicy.pii_confidence_floor``
+            elsewhere.
+
+    Returns:
+        The redacted text (unchanged when nothing cleared the floor), and
+        the findings that were actually redacted.
+    """
+    matches = [m for m in _find_all_positioned(text) if m[2].confidence >= confidence_floor]
+    if not matches:
+        return text, []
+
+    # Replace from the highest start offset down, so replacing one span
+    # (which can change the text's length) never invalidates the still-
+    # unprocessed offsets, all of which sit earlier in the string.
+    redacted = text
+    for start, end, finding in sorted(matches, key=lambda m: m[0], reverse=True):
+        redacted = redacted[:start] + finding.preview + redacted[end:]
+
+    findings = [finding for _start, _end, finding in matches]
+    return redacted, findings
