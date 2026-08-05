@@ -38,6 +38,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 from app.ai.guardrails.injection import GuardrailViolation, assert_no_prompt_leak
+from app.ai.guardrails.llm_nuance import GuardrailJudgeVerdict
 from app.ai.guardrails.pii import redact_pii
 from app.ai.guardrails.sensitivity import SensitivityAssessment
 from app.ai.policy import GuardrailPolicy, get_policy
@@ -89,6 +90,7 @@ def evaluate_response(
     sensitivity: Optional[SensitivityAssessment] = None,
     requester_clearance: Optional[SensitivityLevel] = None,
     policy: Optional[GuardrailPolicy] = None,
+    judge_verdict: Optional[GuardrailJudgeVerdict] = None,
 ) -> GateVerdict:
     """Validate and finalise a generated reply before it reaches the user.
 
@@ -112,6 +114,14 @@ def evaluate_response(
             fail open.
         policy: Guardrail policy to gate against. Defaults to the process
             policy.
+        judge_verdict: The guardrail nuance layer's opinion on this reply
+            (see ``app.ai.guardrails.llm_nuance.judge_output_leakage``),
+            already computed by the caller -- this function does no I/O of
+            its own, same separation ``draft_graph.verify_node`` keeps
+            between ``verify_draft`` (sync) and ``judge_draft`` (async).
+            ``None`` when the judge is disabled, degraded, or wasn't asked
+            (no document attached, so there's nothing to judge leakage
+            against).
 
     Returns:
         The gate's verdict: ``pass`` (reply unchanged), ``redact`` (reply
@@ -145,28 +155,52 @@ def evaluate_response(
     # it carries a confidentiality marking.
     if sensitivity is not None:
         _preview, pii_findings = redact_pii(reply, confidence_floor=active_policy.pii_confidence_floor)
-        if pii_findings:
+        # The judge catches what no pattern matches: a reply that discloses
+        # a source's meaning without ever emitting a literal PII string.
+        # Only trusted when the judge is confident -- a low-confidence
+        # "maybe sensitive" should not carry the same weight as a checksum-
+        # validated TCKN match.
+        semantic_leak = bool(judge_verdict and judge_verdict.sensitive and judge_verdict.confidence >= 0.5)
+
+        if pii_findings or semantic_leak:
             cleared = requester_clearance is not None and requester_clearance >= sensitivity.level
             if sensitivity.requires_review and not cleared:
                 logger.warning(
-                    "Reply blocked: %d PII finding(s) against a %s-marked source with "
-                    "insufficient/unknown requester clearance.",
+                    "Reply blocked: %d PII finding(s), semantic_leak=%s against a "
+                    "%s-marked source with insufficient/unknown requester clearance.",
                     len(pii_findings),
+                    semantic_leak,
                     sensitivity.level.value,
+                )
+                block_reason = (
+                    "yetkisiz kişisel veri sızıntısı tespit edildi"
+                    if pii_findings
+                    else f"yetkisiz anlam bazlı sızıntı tespit edildi (llm-judge: {judge_verdict.reason})"
                 )
                 return GateVerdict(
                     action="block",
                     text=FALLBACK_REPLY,
-                    reasons=reasons + ["yetkisiz kişisel veri sızıntısı tespit edildi"],
+                    reasons=reasons + [block_reason],
                 )
 
-            # Not confidentiality-marked, or the requester is cleared for
-            # it -- still mask the PII itself as defense-in-depth. Applied
-            # to `redacted` (not the original `reply`), so a groundedness
-            # redaction above and a PII mask here both land in the same
-            # output instead of one silently discarding the other.
-            redacted, _findings = redact_pii(redacted, confidence_floor=active_policy.pii_confidence_floor)
-            reasons.append(f"{len(pii_findings)} pii bulgusu maskelendi")
+            if pii_findings:
+                # Not confidentiality-marked, or the requester is cleared
+                # for it -- still mask the PII itself as defense-in-depth.
+                # Applied to `redacted` (not the original `reply`), so a
+                # groundedness redaction above and a PII mask here both
+                # land in the same output instead of one silently
+                # discarding the other.
+                redacted, _findings = redact_pii(redacted, confidence_floor=active_policy.pii_confidence_floor)
+                reasons.append(f"{len(pii_findings)} pii bulgusu maskelendi")
+            elif semantic_leak:
+                # No specific span to mask -- the judge flagged the reply's
+                # meaning as a whole, not a locatable string, so there is
+                # nothing narrower to redact than the full reply.
+                redacted = (
+                    "Bu yanıt, kaynağın ifşa etmemesi gereken bir bilgiyi "
+                    "içerebileceği için kısaltıldı."
+                )
+                reasons.append(f"llm-judge anlam bazlı hassasiyet: {judge_verdict.reason}")
 
     if redacted != reply:
         return GateVerdict(action="redact", text=redacted, reasons=reasons)
@@ -186,14 +220,17 @@ def classify_reason_kind(reasons: list[str]) -> str:
         reasons: A verdict's ``reasons`` list.
 
     Returns:
-        One of ``"leakage"``, ``"pii"``, ``"groundedness"``, ``"injection"``,
-        or the generic ``"output_gate"`` when nothing more specific matched.
+        One of ``"leakage"``, ``"pii"``, ``"llm_judge"``, ``"groundedness"``,
+        ``"injection"``, or the generic ``"output_gate"`` when nothing more
+        specific matched.
     """
     joined = " ".join(reasons)
     if "yetkisiz" in joined:
         return "leakage"
     if "pii" in joined:
         return "pii"
+    if "llm-judge" in joined:
+        return "llm_judge"
     if "doğrulanamayan" in joined:
         return "groundedness"
     if "prompt_leak" in joined or "injection" in joined:

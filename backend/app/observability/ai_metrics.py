@@ -63,6 +63,17 @@ JUDGE_FAILURES = Counter(
     ["reason"],
 )
 
+#: Same role as JUDGE_FAILURES, kept separate rather than an added label:
+#: the guardrail judge (app.ai.guardrails.llm_nuance) degrading means "this
+#: decision fell back to the deterministic-only verdict," a security-relevant
+#: event worth its own signal rather than being folded into draft-quality
+#: judge failures.
+GUARDRAIL_JUDGE_FAILURES = Counter(
+    "kachow_guardrail_judge_failures_total",
+    "Guardrail nuance-layer LLM judge calls that degraded to deterministic-only.",
+    ["reason"],
+)
+
 HITL_INTERRUPTS = Counter(
     "kachow_hitl_interrupts_total",
     "Human-in-the-loop interrupts raised, by kind.",

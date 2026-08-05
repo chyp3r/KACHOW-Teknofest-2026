@@ -6,6 +6,7 @@ import pytest
 from langchain_core.documents import Document
 
 from app.ai.compliance import EvrakField
+from app.ai.guardrails.llm_nuance import GuardrailJudgeVerdict
 from app.ai.llms.base import BaseLLMClient
 from app.ai.retrieval.hybrid import HybridRetriever
 from app.ai.workflows.document_analysis_graph import (
@@ -359,3 +360,91 @@ async def test_parsed_values_override_model_guesses(mock_classify):
 
     assert result["fields"]["sayi"] == "E-123-456"
     assert result["fields"]["konu"] == "Yıllık İzin Talebi"
+
+
+# ==========================================
+# Sensitivity scan + guardrail judge escalation (Faz 1 + Faz 3)
+# ==========================================
+@pytest.mark.asyncio
+@patch("app.ai.agents.guardrail_judge.GuardrailJudgeAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_a_deterministically_unflagged_document_is_not_escalated_by_a_calm_judge(
+    mock_classify, mock_judge
+):
+    mock_classify.return_value = _merged(DocumentType.OFFICIAL_LETTER, "x")
+    mock_judge.return_value = GuardrailJudgeVerdict(
+        sensitive=False, confidence=0.95, reason="Sıradan yazışma."
+    )
+
+    graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
+    result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    assert result["sensitivity_assessment"]["requires_review"] is False
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.guardrail_judge.GuardrailJudgeAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_the_judge_escalates_a_document_with_no_pattern_match(mock_classify, mock_judge):
+    """The whole point of the nuance layer: a document with no gizlilik
+    marking and no PII pattern match can still require review if the judge
+    reads it as sensitive in meaning."""
+    mock_classify.return_value = _merged(DocumentType.OFFICIAL_LETTER, "x")
+    mock_judge.return_value = GuardrailJudgeVerdict(
+        sensitive=True, confidence=0.9, reason="İzin talebinde tıbbi tanı detayı geçiyor."
+    )
+
+    graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
+    result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    assert result["sensitivity_assessment"]["requires_review"] is True
+    assert any(
+        "llm-judge" in reason for reason in result["sensitivity_assessment"]["reasons"]
+    )
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.guardrail_judge.GuardrailJudgeAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_a_low_confidence_judge_verdict_does_not_escalate(mock_classify, mock_judge):
+    mock_classify.return_value = _merged(DocumentType.OFFICIAL_LETTER, "x")
+    mock_judge.return_value = GuardrailJudgeVerdict(
+        sensitive=True, confidence=0.2, reason="Belirsiz bir izlenim."
+    )
+
+    graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
+    result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    assert result["sensitivity_assessment"]["requires_review"] is False
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.guardrail_judge.GuardrailJudgeAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_an_already_flagged_document_does_not_consult_the_judge(mock_classify, mock_judge):
+    """A gizlilik-marked document is already routed to review -- asking the
+    judge for a second opinion buys nothing and only costs latency."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "x", gizlilik_derecesi="Gizli"
+    )
+
+    graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
+    result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    assert result["sensitivity_assessment"]["requires_review"] is True
+    mock_judge.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.guardrail_judge.GuardrailJudgeAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_a_degraded_judge_call_leaves_the_deterministic_result_untouched(
+    mock_classify, mock_judge
+):
+    mock_classify.return_value = _merged(DocumentType.OFFICIAL_LETTER, "x")
+    mock_judge.side_effect = Exception("provider unavailable")
+
+    graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
+    result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    assert result["sensitivity_assessment"]["requires_review"] is False

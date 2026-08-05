@@ -195,7 +195,13 @@ class BudgetPolicy:
                 "route": 45.0,
                 "writer": 180.0,
                 "assist": 70.0,
-                "scan_sensitivity": 15.0,
+                # Must comfortably exceed GUARDRAIL_JUDGE_TIMEOUT_SECONDS
+                # (15.0s default): the node-level timeout has to lose the
+                # race to the judge call's own internal timeout, or the
+                # whole node gets cancelled mid-judge instead of the judge
+                # gracefully degrading to None and the node finishing on the
+                # deterministic result alone.
+                "scan_sensitivity": 25.0,
             }
         )
     )

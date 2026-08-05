@@ -1,5 +1,6 @@
 """Unit tests for the output-side guardrail gate."""
 
+from app.ai.guardrails.llm_nuance import GuardrailJudgeVerdict
 from app.ai.guardrails.output_gate import FALLBACK_REPLY, classify_reason_kind, evaluate_response
 from app.ai.guardrails.sensitivity import SensitivityAssessment
 from app.core.enums.sensitivity_level import SensitivityLevel
@@ -7,6 +8,12 @@ from app.core.enums.sensitivity_level import SensitivityLevel
 
 def _sensitivity(level: SensitivityLevel, requires_review: bool) -> SensitivityAssessment:
     return SensitivityAssessment(level=level, requires_review=requires_review)
+
+
+def _judge_verdict(**overrides) -> GuardrailJudgeVerdict:
+    fields = dict(sensitive=True, confidence=0.9, reason="Yanıt, kaynağın kimliğini dolaylı ifşa ediyor.")
+    fields.update(overrides)
+    return GuardrailJudgeVerdict(**fields)
 
 
 # ==========================================
@@ -126,6 +133,81 @@ def test_a_document_with_no_pii_in_the_reply_is_unaffected_by_sensitivity():
         requester_clearance=None,
     )
     assert verdict.action == "pass"
+
+
+# ==========================================
+# LLM-judge nuance layer (Faz 3): semantic leakage with no literal PII
+# ==========================================
+def test_a_confident_semantic_leak_from_a_gizli_source_is_blocked():
+    reply = "Başvuranın ciddi bir sağlık sorunu olduğu belgeden anlaşılıyor."
+    verdict = evaluate_response(
+        reply,
+        sensitivity=_sensitivity(SensitivityLevel.GIZLI, requires_review=True),
+        requester_clearance=None,
+        judge_verdict=_judge_verdict(sensitive=True, confidence=0.9),
+    )
+    assert verdict.action == "block"
+    assert verdict.text == FALLBACK_REPLY
+    assert any("llm-judge" in reason for reason in verdict.reasons)
+
+
+def test_a_low_confidence_judge_verdict_does_not_block():
+    reply = "Başvuranın ciddi bir sağlık sorunu olduğu belgeden anlaşılıyor."
+    verdict = evaluate_response(
+        reply,
+        sensitivity=_sensitivity(SensitivityLevel.GIZLI, requires_review=True),
+        requester_clearance=None,
+        judge_verdict=_judge_verdict(sensitive=True, confidence=0.2),
+    )
+    assert verdict.action == "pass"
+
+
+def test_judge_says_not_sensitive_does_not_block():
+    reply = "Belgeniz üç sayfadan oluşuyor."
+    verdict = evaluate_response(
+        reply,
+        sensitivity=_sensitivity(SensitivityLevel.GIZLI, requires_review=True),
+        requester_clearance=None,
+        judge_verdict=_judge_verdict(sensitive=False, confidence=0.95),
+    )
+    assert verdict.action == "pass"
+
+
+def test_a_semantic_leak_from_an_unmarked_document_is_redacted_not_blocked():
+    reply = "Başvuranın ciddi bir sağlık sorunu olduğu belgeden anlaşılıyor."
+    verdict = evaluate_response(
+        reply,
+        sensitivity=_sensitivity(SensitivityLevel.UNMARKED, requires_review=False),
+        judge_verdict=_judge_verdict(sensitive=True, confidence=0.9),
+    )
+    assert verdict.action == "redact"
+    assert verdict.text != reply
+    assert "llm-judge" in "".join(verdict.reasons)
+
+
+def test_a_cleared_requester_is_not_blocked_by_a_semantic_leak_verdict():
+    reply = "Başvuranın ciddi bir sağlık sorunu olduğu belgeden anlaşılıyor."
+    verdict = evaluate_response(
+        reply,
+        sensitivity=_sensitivity(SensitivityLevel.GIZLI, requires_review=True),
+        requester_clearance=SensitivityLevel.COK_GIZLI,
+        judge_verdict=_judge_verdict(sensitive=True, confidence=0.9),
+    )
+    assert verdict.action != "block"
+
+
+def test_no_judge_verdict_is_the_same_as_a_calm_one():
+    verdict = evaluate_response(
+        "Belgeniz üç sayfadan oluşuyor.",
+        sensitivity=_sensitivity(SensitivityLevel.GIZLI, requires_review=True),
+        requester_clearance=None,
+        judge_verdict=None,
+    )
+    assert verdict.action == "pass"
+
+
+def test_classify_reason_kind_picks_llm_judge_for_a_semantic_leak_redaction():
+    assert classify_reason_kind(["llm-judge anlam bazlı hassasiyet: bir gerekçe"]) == "llm_judge"
 
 
 # ==========================================
