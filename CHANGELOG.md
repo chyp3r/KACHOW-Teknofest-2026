@@ -3,6 +3,15 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 
+## [1.37.0] - 2026-08-05
+### Düzeltildi
+- **Hız Sınırlayıcı Artık Açık Tarafa Düşüyor**: `rate_limit()` Redis'e hiçbir hata yakalama olmadan gidiyordu; bağlantı hatası doğrudan bağımlılıktan çıkıp **500**'e dönüşüyordu. Hız sınırlama bir *koruma* mekanizmasıdır, doğruluk gereksinimi değil: sayaç erişilemezse isteğin sınırı aşıp aşmadığını bilemeyiz, güvenli cevap isteği servis etmektir.
+  - Kapalı tarafa düşmek, bir Redis yeniden başlatmasının `/auth/login`, `/auth/refresh`, `/chat/stream`, `/chat/resume` ve `/documents/analyze` uçlarından 500 döndürmesi demekti — **erişilemeyen bir önbellek tüm kullanıcıları sistemden kilitliyordu, giriş dahil.**
+  - Ödünleşim gerçek ve en çok `auth:login` için geçerli (5/60 sn sınırı kaba kuvvet savunmasıdır). Yine de düşülecek doğru taraf budur: bir saldırgan bu dala önce Redis'i düşürmeden ulaşamaz — ki bunu yapabiliyorsa açık zaten sınırlayıcı değildir — buna karşılık Redis'i yeniden başlatan bir operatör bunu **her seferinde** tetikler.
+  - **Makefile'ın "yedi API testi Redis olmadan başarısız olur" notu bu hatanın kendisiydi**, bir ortam gereksinimi değil. Paket artık Redis erişilebilirken de, `REDIS_URL` ölü bir porta bakarken de **920/920** geçiyor.
+- **`greenlet` Bağımlılığı Açıkça Bildirildi**: SQLAlchemy'nin asenkron katmanı çalışma zamanında `greenlet` gerektirir, ancak bunu yalnızca `platform_machine` ∈ {aarch64, x86_64, amd64, win32} için otomatik bildirir. Apple Silicon `arm64` raporlar — bu listede yok — dolayısıyla yerel macOS kurulumunda `greenlet` gelmiyor ve `get_db`'ye uğrayan her istek `ValueError: the greenlet library is required to use this function` ile ölüyor. Linux konteynerleri işaretçiyi karşıladığı için CI hiç görmedi; birim testleri oturumu taklit ettiği için onlar da görmedi. `sqlalchemy[asyncio]` ile bağımlılık her platformda açık hâle getirildi.
+- **Genelge/Resmî Yazı Ayrımı**: Sınıflandırma isteminde `circular` yalnızca dört kelimeyle geçiyor (`"circular: genelge."`), `official_letter` ise tam bir ölçüt paragrafı ve "kurumlar arası yazışmaların varsayılan türüdür" ifadesiyle tanımlanıyordu. Bir genelge yapısal olarak resmî yazı olduğu için model, belirtilen varsayılanı geçersiz kılacak hiçbir ölçüt olmadan hep onu seçiyordu. Ayırt edici işaretler dağıtımlı muhatap ve genel düzenleme dilidir; `detect_structural_signal` `DAĞITIM`'ı zaten tespit edip raporluyordu, eksik olan yalnızca ona göre karar verecek ölçüttü. `qwen3.5:9b` ile sentetik küme üzerinde tür doğruluğu **11/12 → 12/12**, üç tekrarda kararlı (36/36).
+
 ## [1.36.0] - 2026-08-05
 ### Değiştirildi
 - **Bozulmuş Tarama OCR'ı `deepseek-ocr`'a Geçti** ve **istem artık Türkçe değil.** İkisi birbirine bağlı: `deepseek-ocr` eski Türkçe istemle hiçbir şey döndürmüyor.

@@ -12,10 +12,12 @@ down:
 logs:
 	docker compose logs -f
 
-# Redis is required, not optional: rate_limit() sits in front of the document
-# endpoints, so without it seven API tests fail with a connection error that
-# looks exactly like a product defect. --no-deps here cost several hours of
-# misattributing those failures to a library version drift.
+# Runs with the compose services up. Redis used to be load-bearing here: seven
+# API tests failed without it, because rate_limit() sits in front of the document
+# endpoints and turned a cache outage into a 500. That was the limiter failing
+# closed, not a test-environment requirement -- it now fails open, and the suite
+# passes with Redis reachable or unreachable alike. Postgres and Qdrant are still
+# genuinely needed by the integration tests.
 test:
 	docker compose run --rm backend pytest -q
 

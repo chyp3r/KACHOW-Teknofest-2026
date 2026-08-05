@@ -2,7 +2,14 @@ fastapi==0.141.1
 uvicorn==0.52.0
 pydantic==2.13.4
 pydantic-settings==2.14.2
-sqlalchemy==2.0.51
+# The [asyncio] extra pulls in greenlet, which SQLAlchemy's async layer needs at
+# runtime. SQLAlchemy declares it automatically only for platform_machine in
+# {aarch64, x86_64, amd64, win32} -- Apple Silicon reports arm64, which is not in
+# that list, so a local macOS install gets no greenlet and every request touching
+# get_db dies with "the greenlet library is required to use this function".
+# Linux containers are unaffected, which is why CI never saw it; the unit suite
+# mocks the session, so it never saw it either.
+sqlalchemy[asyncio]==2.0.51
 alembic==1.18.5
 asyncpg==0.31.0
 python-dotenv==1.2.2
