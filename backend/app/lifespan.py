@@ -135,6 +135,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     await init_checkpointer()
 
+    # Best-effort, like every other step here: a seeding failure must not
+    # prevent the API from booting. Placed after the checkpointer (so the
+    # database is known-reachable) and outside _startup()'s warm-up budget,
+    # same reasoning as init_checkpointer() itself.
+    from app.domains.users.seeder import seed_default_users
+
+    await seed_default_users()
+
     await _startup()
     logger.info("Startup complete; accepting requests.")
     try:
