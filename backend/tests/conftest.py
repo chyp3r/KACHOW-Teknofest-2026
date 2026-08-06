@@ -250,6 +250,19 @@ def _disable_draft_history_recording(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _disable_default_user_seeding(monkeypatch):
+    """Turn off app.domains.users.seeder's DB writes for every test.
+
+    Same reasoning as `_disable_run_recording` above: a test that exercises
+    the full app lifespan (rather than the seeder's own unit tests, which
+    re-enable this explicitly) has nothing to do with account bootstrapping.
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "SEED_DEFAULT_USERS", False)
+
+
+@pytest.fixture(autouse=True)
 def _reset_redis_cache_between_tests():
     """Drop the process-wide Redis client reference after every test.
 

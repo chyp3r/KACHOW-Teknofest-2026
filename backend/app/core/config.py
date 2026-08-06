@@ -54,6 +54,21 @@ class Settings(BaseSettings):
     #: test-disabled convention as RUN_RECORDING_ENABLED.
     DRAFT_HISTORY_ENABLED: bool = True
 
+    #: Create one ADMIN, one MANAGER and one EMPLOYEE account on startup if
+    #: they don't already exist (see app.domains.users.seeder). Idempotent
+    #: and best-effort like RUN_RECORDING_ENABLED; tests disable it globally
+    #: (conftest.py's `_disable_default_user_seeding`) so a full-lifespan
+    #: test doesn't also attempt real database writes. The passwords below
+    #: are development/demo defaults -- override every SEED_* value for any
+    #: deployment reachable outside a trusted demo environment.
+    SEED_DEFAULT_USERS: bool = True
+    SEED_ADMIN_EMAIL: str = "admin@kachow.local"
+    SEED_ADMIN_PASSWORD: str = "Admin123!"
+    SEED_MANAGER_EMAIL: str = "manager@kachow.local"
+    SEED_MANAGER_PASSWORD: str = "Manager123!"
+    SEED_EMPLOYEE_EMAIL: str = "employee@kachow.local"
+    SEED_EMPLOYEE_PASSWORD: str = "Employee123!"
+
     # Ollama Configuration
     # Note: When running inside Docker, set OLLAMA_BASE_URL to http://host.docker.internal:11434
     OLLAMA_BASE_URL: str = "http://localhost:11434"
