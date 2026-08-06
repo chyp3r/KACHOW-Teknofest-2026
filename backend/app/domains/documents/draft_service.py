@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from app.ai.guardrails.injection import scrub_extracted_text
 from app.ai.reasoning_levels import get_reasoning_level_preset
@@ -8,6 +8,7 @@ from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
 from app.core.constants import AI_WORKFLOW_TIMEOUT_SECONDS
 from app.domains.documents.schema.document_schema import DraftRequestSchema, DraftResponseSchema
+from app.domains.drafts import draft_recorder
 from app.infrastructure.extractors.base import BaseDocumentExtractor, DocumentExtractionError
 from app.infrastructure.storage.base import BaseStorage
 
@@ -28,8 +29,18 @@ class DraftService:
         self.draft_graph = draft_graph
         self.routing_graph = routing_graph
 
-    async def generate_draft_and_route(self, request: DraftRequestSchema) -> DraftResponseSchema:
-        """Execute the drafting and routing workflows sequentially."""
+    async def generate_draft_and_route(
+        self, request: DraftRequestSchema, user_id: Optional[str] = None
+    ) -> DraftResponseSchema:
+        """Execute the drafting and routing workflows sequentially.
+
+        Args:
+            request: The drafting request.
+            user_id: The authenticated caller's id, when known -- attached
+                to the persisted draft version (see
+                ``app.domains.drafts.draft_recorder``). ``None`` in the open
+                demo/dev path.
+        """
         
         # 1. Fetch raw document and extract text
         try:
@@ -131,8 +142,27 @@ class DraftService:
         # routing a demonstrably incomplete draft to a department is worse
         # than not routing it at all.
         if missing_information:
+            draft_id = await draft_recorder.record_draft(
+                user_id=user_id,
+                session_id=None,
+                document_id=request.storage_path,
+                content=draft_content,
+                correspondence_type=(
+                    request.correspondence_type.value if request.correspondence_type else None
+                ),
+                destination="",
+                status=draft_state.get("status"),
+                confidence_score=confidence,
+                requires_human_approval=common_fields["requires_human_approval"],
+                attempts=common_fields["attempts"],
+                verification=common_fields["verification"],
+                judge=common_fields["judge"],
+                missing_information=missing_information,
+                instructions=request.instructions,
+            )
             return DraftResponseSchema(
                 **common_fields,
+                draft_id=draft_id or "",
                 destination="",
                 justification="Taslak eksik bilgi içeriyor; birim yönlendirmesi yapılmadı.",
             )
@@ -161,9 +191,29 @@ class DraftService:
                 details={"reason": str(e)},
             ) from e
 
+        destination = routing_state.get("final_destination", "HumanApproval")
+        draft_id = await draft_recorder.record_draft(
+            user_id=user_id,
+            session_id=None,
+            document_id=request.storage_path,
+            content=draft_content,
+            correspondence_type=(
+                request.correspondence_type.value if request.correspondence_type else None
+            ),
+            destination=destination,
+            status=draft_state.get("status"),
+            confidence_score=confidence,
+            requires_human_approval=common_fields["requires_human_approval"],
+            attempts=common_fields["attempts"],
+            verification=common_fields["verification"],
+            judge=common_fields["judge"],
+            missing_information=missing_information,
+            instructions=request.instructions,
+        )
         return DraftResponseSchema(
             **common_fields,
-            destination=routing_state.get("final_destination", "HumanApproval"),
+            draft_id=draft_id or "",
+            destination=destination,
             justification=routing_state.get("justification", "Yönlendirme kararı alınamadı."),
         )
 

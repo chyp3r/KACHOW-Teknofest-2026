@@ -154,7 +154,9 @@ async def generate_draft(
             document_level = SensitivityLevel.UNMARKED
         assert_clearance(current_user, document_level)
 
-    result = await service.generate_draft_and_route(request)
+    result = await service.generate_draft_and_route(
+        request, user_id=current_user.id if current_user else None
+    )
     return SuccessResponse(data=result.model_dump(mode="json"))
 
 
