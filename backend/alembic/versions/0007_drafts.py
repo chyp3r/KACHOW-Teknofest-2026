@@ -9,15 +9,14 @@ revision never overwrites its parent, it appends a new row chained via
 parent_draft_id, so `session_id` + `version` reconstructs the full edit
 history.
 
-NOTE: this migration's down_revision is 0005, the same parent as 0006
-(chat_sessions/chat_messages) -- the two were developed on independent
-branches with no dependency between them. If both land on main, `alembic
-heads` will show two heads (0006 and 0007) until a merge revision
-(`alembic merge -m "merge chat history and drafts heads" 0006 0007`) is
-created to unify them.
+This was developed on a branch independent of 0006
+(chat_sessions/chat_messages) with no dependency between them, originally
+chained onto 0005 as a sibling head to 0006. Rebased onto 0006 as a normal
+linear step once 0006 landed on main first, avoiding the two-heads/merge-
+revision situation entirely.
 
 Revision ID: 0007
-Revises: 0005
+Revises: 0006
 Create Date: 2026-08-06
 
 """
@@ -28,7 +27,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "0007"
-down_revision: Union[str, None] = "0005"
+down_revision: Union[str, None] = "0006"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

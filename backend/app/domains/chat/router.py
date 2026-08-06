@@ -5,16 +5,24 @@ from typing import Any, AsyncIterator, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from app.api.dependency import get_chat_service, get_document_repository, require_auth_if_enabled
+from app.api.dependency import (
+    get_chat_message_repository,
+    get_chat_service,
+    get_chat_session_repository,
+    get_document_repository,
+    require_auth_if_enabled,
+)
 from app.api.exceptions.authorization import AuthorizationException
 from app.api.rate_limit import rate_limit
 from app.api.responses import SuccessResponse
 from app.core.enums.sensitivity_level import SensitivityLevel
 from app.core.permissions.role_checker import assert_clearance, bypasses_ownership, clearance_for
 from app.domains.chat.chat_service import ChatService
+from app.domains.chat.repository import ChatMessageRepository, ChatSessionRepository
 from app.domains.chat.schema.chat_schema import ChatMessageRequest, ChatResumeRequest
 from app.domains.documents.repository import DocumentRepository
 from app.domains.users.model.user_model import UserModel
+from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 
 logger = logging.getLogger(__name__)
 
@@ -237,6 +245,83 @@ async def resume_chat_sync(
         request.session_id, request, user_id=current_user.id if current_user else None
     )
     return SuccessResponse(data=make_serializable(result.model_dump()))
+
+
+def _paginated(items: list, total: int, pagination: PaginationParam) -> PaginatedResponse:
+    pages = (total + pagination.size - 1) // pagination.size if pagination.size else 0
+    return PaginatedResponse(
+        items=items, total=total, page=pagination.page, size=pagination.size, pages=pages
+    )
+
+
+@router.get("/sessions", response_model=None)
+async def list_chat_sessions(
+    pagination: PaginationParam = Depends(),
+    session_repository: ChatSessionRepository = Depends(get_chat_session_repository),
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+):
+    """List the caller's chat sessions, most recently active first.
+
+    ``user_id=None`` (``REQUIRE_AUTH`` off, or an ADMIN/MANAGER -- see
+    ``bypasses_ownership``) lists every session, matching
+    ``GET /documents``'s convention.
+    """
+    user_id = (
+        current_user.id if current_user and not bypasses_ownership(current_user) else None
+    )
+    sessions = await session_repository.list_for_user(
+        user_id, skip=pagination.offset, limit=pagination.limit
+    )
+    total = await session_repository.count_for_user(user_id)
+    page_items = [
+        {
+            "session_id": session.id,
+            "title": session.title,
+            "document_id": session.document_id,
+            "created_at": session.created_at.isoformat(),
+            "updated_at": session.updated_at.isoformat(),
+        }
+        for session in sessions
+    ]
+    return SuccessResponse(data=_paginated(page_items, total, pagination))
+
+
+@router.get("/sessions/{session_id}/messages", response_model=None)
+async def list_chat_session_messages(
+    session_id: str,
+    pagination: PaginationParam = Depends(),
+    message_repository: ChatMessageRepository = Depends(get_chat_message_repository),
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+):
+    """List a session's messages in conversation order (oldest first).
+
+    Ownership reuses ``ChatService._verify_thread_ownership`` -- the same
+    ``user_id:`` prefix check that already gates ``/chat/resume`` from
+    touching another user's thread.
+
+    Raises:
+        AuthorizationException: If ``session_id`` belongs to a different
+            user than ``current_user``.
+    """
+    ChatService._verify_thread_ownership(
+        session_id, current_user.id if current_user else None
+    )
+    messages = await message_repository.list_for_session(
+        session_id, skip=pagination.offset, limit=pagination.limit
+    )
+    total = await message_repository.count_for_session(session_id)
+    page_items = [
+        {
+            "id": message.id,
+            "role": message.role,
+            "content": message.content,
+            "workflow_status": message.workflow_status,
+            "details": message.details,
+            "created_at": message.created_at.isoformat(),
+        }
+        for message in messages
+    ]
+    return SuccessResponse(data=_paginated(page_items, total, pagination))
 
 
 @router.get("/sessions/{session_id}/state", response_model=None)

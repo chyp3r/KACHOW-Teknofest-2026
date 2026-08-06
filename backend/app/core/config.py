@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     #: attempt a real database write.
     RUN_RECORDING_ENABLED: bool = True
 
+    #: Persist each chat turn (user message + assistant reply) to
+    #: chat_sessions/chat_messages (see app.domains.chat.chat_recorder). Same
+    #: best-effort, test-disabled convention as RUN_RECORDING_ENABLED.
+    CHAT_HISTORY_ENABLED: bool = True
+
     #: Persist each generated/revised draft to the `drafts` version chain
     #: (see app.domains.drafts.draft_recorder). Same best-effort,
     #: test-disabled convention as RUN_RECORDING_ENABLED.
