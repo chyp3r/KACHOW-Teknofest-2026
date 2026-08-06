@@ -1,10 +1,13 @@
-export type UserRole = "admin" | "manager" | "employee" | "auditor";
+import type { SensitivityLevel } from "./security";
+
+export type UserRole = "admin" | "manager" | "employee";
 
 export interface User {
   id: string;
   username: string;
   email: string;
   role: UserRole;
+  clearance_level: SensitivityLevel;
   is_active: boolean;
   is_deleted: boolean;
 }

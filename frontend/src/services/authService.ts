@@ -9,20 +9,25 @@ import type { TokenPair, User } from "../types/users";
 export const authService = {
   me: () => apiRequest<User>("/api/v1/users/me"),
   async login(username: string, password: string): Promise<User> {
+    clearTokens();
     const tokens = await apiRequest<TokenPair>("/api/v1/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
-    });
+    }, { authenticated: false, retryOnUnauthorized: false });
     storeTokens(tokens.access_token, tokens.refresh_token);
     return apiRequest<User>("/api/v1/users/me");
   },
   async logout(): Promise<void> {
     const refreshToken = getRefreshToken();
+    if (!refreshToken) {
+      clearTokens();
+      return;
+    }
     try {
       await apiRequest<null>("/api/v1/auth/logout", {
         method: "POST",
         body: JSON.stringify({ refresh_token: refreshToken }),
-      });
+      }, { retryOnUnauthorized: false });
     } finally {
       clearTokens();
     }

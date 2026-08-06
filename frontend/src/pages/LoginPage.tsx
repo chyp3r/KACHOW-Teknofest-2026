@@ -25,8 +25,8 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
   return (
     <div className="page page-scroll">
       <PageHeader
-        title="Yönetici oturumu"
-        description="Yönetim paneline erişmek için mevcut KACHOW hesabınızla oturum açın."
+        title="KACHOW oturumu"
+        description="Evrak ve karar destek çalışma alanına erişmek için hesabınızla oturum açın."
       />
       <div className="login-wrap">
         <form
@@ -37,7 +37,6 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
             <LockKeyhole size={22} />
           </span>
           <h2>Oturum aç</h2>
-          <p>Yetki, backend tarafından hesabınızın rolüne göre doğrulanır.</p>
           <div className="form-stack">
             <label>
               Kullanıcı adı veya e-posta

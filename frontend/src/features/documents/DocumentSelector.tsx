@@ -17,9 +17,11 @@ export function DocumentSelector({
       {selected ? (
         <div className="selected-document">
           <FileText size={16} />
-          <span>
-            <small>Seçili evrak</small>
-            <strong>{selected.file_name}</strong>
+          <span className="selected-document-copy">
+            <small className="selected-document-label">Seçili evrak</small>
+            <strong className="selected-document-title" title={selected.file_name}>
+              {selected.file_name}
+            </strong>
           </span>
           <button
             type="button"

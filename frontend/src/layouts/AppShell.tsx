@@ -105,7 +105,8 @@ export function AppShell({
         <nav className="sidebar-nav">
           <span className="nav-caption">Çalışma Alanı</span>
           {NAV_ITEMS.filter(
-            (item) => !item.admin || user?.role === "admin",
+            (item) =>
+              !item.admin || user?.role === "admin" || user?.role === "manager",
           ).map(({ route: itemRoute, label, icon: Icon }) => {
             if (itemRoute === "/documents") {
               return (
@@ -122,7 +123,9 @@ export function AppShell({
                     <Icon size={18} />
                     <span>{label}</span>
                     <ChevronDown
-                      className="nav-chevron"
+                      className={`nav-chevron ${
+                        documentLibraryOpen ? "is-open" : ""
+                      }`}
                       size={15}
                       aria-hidden="true"
                     />
@@ -186,7 +189,7 @@ export function AppShell({
           ) : (
             <button className="login-link" onClick={() => go("/login")}>
               <LogIn size={17} />
-              Yönetici oturumu aç
+              Oturum aç
             </button>
           )}
         </div>

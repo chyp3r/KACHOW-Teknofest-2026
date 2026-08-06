@@ -1,7 +1,10 @@
 export interface ApiEnvelope<T> {
+  success?: boolean;
   data: T;
-  error?: { message?: string };
+  error?: { code?: string; message?: string; details?: unknown } | null;
   message?: string;
+  detail?: unknown;
+  meta?: Record<string, unknown>;
 }
 
 export interface PaginatedResponse<T> {

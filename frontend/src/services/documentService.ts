@@ -21,7 +21,8 @@ export const documentService = {
     return apiRequest("/api/v1/documents/analyze", { method: "POST", body });
   },
   getAnalysis(storagePath: string): Promise<DocumentAnalysis> {
-    return apiRequest(`/api/v1/documents/${encodeURIComponent(storagePath)}`);
+    const safePath = storagePath.split("/").map(encodeURIComponent).join("/");
+    return apiRequest(`/api/v1/documents/${safePath}`);
   },
   correspondenceTypes(): Promise<CorrespondenceType[]> {
     return apiRequest("/api/v1/documents/correspondence-types");

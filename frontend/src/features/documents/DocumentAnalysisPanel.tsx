@@ -1,6 +1,7 @@
-import { AlertTriangle, FileSearch } from "lucide-react";
+import { AlertTriangle, FileSearch, ShieldAlert } from "lucide-react";
 import { StatusBadge } from "../../components/StatusBadge";
 import type { DocumentAnalysis, EvrakFields } from "../../types/documents";
+import { SENSITIVITY_LABELS } from "../../types/security";
 
 const LABELS: Record<keyof EvrakFields, string> = {
   sayi: "Sayı",
@@ -68,6 +69,43 @@ export function DocumentAnalysisPanel({
               : "Olası talimat enjeksiyonu işaretleri metinden temizlendi."}
           </span>
         </div>
+      )}
+      {analysis.guardrail && (
+        <details open>
+          <summary>Bilgi güvenliği</summary>
+          <div className="guardrail-summary">
+            <StatusBadge
+              tone={
+                analysis.guardrail.requires_human_review ? "danger" : "info"
+              }
+            >
+              {SENSITIVITY_LABELS[analysis.guardrail.sensitivity_level]}
+            </StatusBadge>
+            {analysis.guardrail.requires_human_review && (
+              <div className="notice danger">
+                <ShieldAlert size={17} />
+                <span>Bu evrak insan incelemesi gerektiriyor.</span>
+              </div>
+            )}
+            {analysis.guardrail.reasons.length > 0 && (
+              <ul className="detail-list">
+                {analysis.guardrail.reasons.map((reason, index) => (
+                  <li key={`${reason}-${index}`}>{reason}</li>
+                ))}
+              </ul>
+            )}
+            {analysis.guardrail.pii_findings.length > 0 && (
+              <ul className="detail-list pii-findings">
+                {analysis.guardrail.pii_findings.map((finding, index) => (
+                  <li key={`${finding.kind}-${index}`}>
+                    <strong>{finding.kind.toLocaleUpperCase("tr-TR")}</strong>
+                    <span>{finding.preview}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </details>
       )}
       <details open>
         <summary>Üst veri alanları</summary>

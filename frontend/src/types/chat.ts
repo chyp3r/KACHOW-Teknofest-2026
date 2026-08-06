@@ -36,6 +36,20 @@ export interface InterruptState {
 interface EventBase {
   seq?: number;
 }
+
+export interface ToolCallEvent {
+  node: string;
+  tool: string;
+  args: Record<string, unknown>;
+}
+
+export interface GuardrailEvent {
+  stage: "input" | "output";
+  kind: string;
+  decision: "flagged" | "blocked" | "redacted" | "needs_review";
+  reasons: string[];
+}
+
 export type WorkflowEvent =
   | (EventBase & { event: "session"; thread_id: string })
   | (EventBase & {
@@ -78,7 +92,10 @@ export type WorkflowEvent =
       plan_steps: string[];
       intent: string;
       reasoning: string;
+      reasoning_level?: ReasoningLevel;
     })
+  | (EventBase & { event: "tool_call" } & ToolCallEvent)
+  | (EventBase & { event: "guardrail" } & GuardrailEvent)
   | (EventBase & {
       event: "interrupt";
       kind: InterruptState["kind"];
@@ -106,4 +123,9 @@ export interface ResumeRequest {
   answers: Record<string, string>;
   instructions: string;
   reasoning_level?: ReasoningLevel;
+}
+
+export interface SessionState {
+  status: "idle" | "running" | "interrupted";
+  interrupt: (InterruptState["payload"] & { kind?: InterruptState["kind"] }) | null;
 }

@@ -3,7 +3,12 @@ import { PageHeader } from "../components/PageHeader";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { InterruptPanel } from "../features/chat/InterruptPanel";
 import { MessageList } from "../features/chat/MessageList";
-import type { ChatMessage, InterruptState, WorkflowLog } from "../types/chat";
+import type {
+  ChatMessage,
+  GuardrailEvent,
+  InterruptState,
+  WorkflowLog,
+} from "../types/chat";
 import type { DocumentMetadata, ReasoningLevel } from "../types/documents";
 
 export function ChatsPage({
@@ -13,6 +18,7 @@ export function ChatsPage({
   streamingText,
   loading,
   logs,
+  guardrailEvents,
   interrupt,
   workflowOpen,
   onSelectDocument,
@@ -28,6 +34,7 @@ export function ChatsPage({
   streamingText: string;
   loading: boolean;
   logs: WorkflowLog[];
+  guardrailEvents: GuardrailEvent[];
   interrupt: InterruptState | null;
   workflowOpen: boolean;
   onSelectDocument: (document: DocumentMetadata) => void;
@@ -67,6 +74,18 @@ export function ChatsPage({
         }
       />
       <div className="chat-workspace">
+        {guardrailEvents.map((guardrail, index) => (
+          <div
+            className={`notice ${
+              guardrail.decision === "blocked" ? "danger" : "warning"
+            }`}
+            role="status"
+            key={`${guardrail.stage}-${guardrail.kind}-${index}`}
+          >
+            <strong>Güvenlik kontrolü: {guardrail.decision}</strong>
+            <span>{guardrail.reasons.join(" · ")}</span>
+          </div>
+        ))}
         {interrupt && (
           <InterruptPanel
             interrupt={interrupt}

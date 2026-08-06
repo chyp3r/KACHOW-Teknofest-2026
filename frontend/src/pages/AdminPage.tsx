@@ -6,13 +6,16 @@ import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { useAuth } from "../hooks/useAuth";
 import { userService } from "../services/userService";
+import {
+  SENSITIVITY_LABELS,
+  type SensitivityLevel,
+} from "../types/security";
 import type { User, UserRole } from "../types/users";
 
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Yönetici",
   manager: "Yönetici yardımcısı",
   employee: "Çalışan",
-  auditor: "Denetçi",
 };
 
 export function AdminPage({ onLogin }: { onLogin: () => void }) {
@@ -26,6 +29,9 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<User | null>(null);
   const [busy, setBusy] = useState(false);
+  const canView = user?.role === "admin" || user?.role === "manager";
+  const canManage = user?.role === "admin";
+
   const load = async () => {
     setLoading(true);
     setError(null);
@@ -39,10 +45,12 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
       setLoading(false);
     }
   };
+
   useEffect(() => {
-    if (user?.role === "admin") void load();
+    if (canView) void load();
     else setLoading(false);
-  }, [user]);
+  }, [canView]);
+
   const filtered = useMemo(
     () =>
       users.filter((item) =>
@@ -52,6 +60,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
       ),
     [query, users],
   );
+
   const invite = async () => {
     setBusy(true);
     setError(null);
@@ -67,11 +76,18 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
       setBusy(false);
     }
   };
+
   const update = async (
     target: User,
-    changes: { role?: UserRole; is_active?: boolean },
+    changes: {
+      role?: UserRole;
+      is_active?: boolean;
+      clearance_level?: SensitivityLevel;
+    },
   ) => {
+    if (!canManage) return;
     setBusy(true);
+    setError(null);
     try {
       const updated = await userService.update(target.id, changes);
       setUsers((items) =>
@@ -86,8 +102,9 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
       setBusy(false);
     }
   };
+
   const remove = async () => {
-    if (!removeTarget) return;
+    if (!removeTarget || !canManage) return;
     setBusy(true);
     try {
       await userService.removeAccess(removeTarget.id);
@@ -104,37 +121,36 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
   };
 
   if (sessionLoading)
-    return (
-      <div className="page centered-state">Oturum bilgisi doğrulanıyor…</div>
-    );
+    return <div className="page centered-state">Oturum doğrulanıyor…</div>;
   if (!user)
     return (
       <div className="page centered-state">
         <EmptyState
           icon={ShieldAlert}
-          title="Yönetici oturumu gerekli"
-          description="Bu sayfayı görüntülemek için yönetici hesabıyla oturum açın."
+          title="Oturum gerekli"
+          description="Bu sayfayı görüntülemek için oturum açın."
         />
         <button className="button button-primary" onClick={onLogin}>
           Oturum aç
         </button>
       </div>
     );
-  if (user.role !== "admin")
+  if (!canView)
     return (
       <div className="page centered-state">
         <EmptyState
           icon={ShieldAlert}
           title="Bu alan için yetkiniz yok"
-          description="Yönetim paneli yalnızca yönetici rolündeki kullanıcılar tarafından görüntülenebilir."
+          description="Kullanıcı yönetimi yalnızca yönetici ve manager rollerine açıktır."
         />
       </div>
     );
+
   return (
     <div className="page page-scroll">
       <PageHeader
         title="Yönetim Paneli"
-        description="Kullanıcı rollerini ve uygulama erişimini mevcut backend yetkileriyle yönetin."
+        description="Kullanıcı rollerini, erişimi ve gizlilik yetkilerini backend kurallarıyla yönetin."
       />
       {error && (
         <div className="notice danger" role="alert">
@@ -149,9 +165,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
             Yeni kullanıcı erişimi
           </span>
           <h2>E-posta adresini yetkilendir</h2>
-          <p>
-            Kullanıcı bu davetten sonra mevcut kayıt akışını tamamlayabilir.
-          </p>
+          <p>Kullanıcı davetten sonra kayıt akışını tamamlayabilir.</p>
         </div>
         <div className="invite-form">
           <input
@@ -205,7 +219,8 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
                 <tr>
                   <th>Kullanıcı</th>
                   <th>Rol</th>
-                  <th>Erişim durumu</th>
+                  <th>Gizlilik yetkisi</th>
+                  <th>Durum</th>
                   <th>İşlemler</th>
                 </tr>
               </thead>
@@ -219,7 +234,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
                     <td>
                       <select
                         value={item.role}
-                        disabled={busy || item.id === user.id}
+                        disabled={!canManage || busy || item.id === user.id}
                         aria-label={`${item.username} rolü`}
                         onChange={(event) =>
                           void update(item, {
@@ -232,6 +247,27 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
                             {label}
                           </option>
                         ))}
+                      </select>
+                    </td>
+                    <td>
+                      <select
+                        value={item.clearance_level}
+                        disabled={!canManage || busy || item.role !== "employee"}
+                        aria-label={`${item.username} gizlilik yetkisi`}
+                        onChange={(event) =>
+                          void update(item, {
+                            clearance_level: event.target
+                              .value as SensitivityLevel,
+                          })
+                        }
+                      >
+                        {Object.entries(SENSITIVITY_LABELS).map(
+                          ([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ),
+                        )}
                       </select>
                     </td>
                     <td>
@@ -248,24 +284,28 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
                       </StatusBadge>
                     </td>
                     <td>
-                      <div className="table-actions">
-                        <button
-                          className="button button-quiet"
-                          disabled={busy || item.id === user.id}
-                          onClick={() =>
-                            void update(item, { is_active: !item.is_active })
-                          }
-                        >
-                          {item.is_active ? "Devre dışı bırak" : "Etkinleştir"}
-                        </button>
-                        <button
-                          className="button button-quiet danger-text"
-                          disabled={busy || item.id === user.id}
-                          onClick={() => setRemoveTarget(item)}
-                        >
-                          Erişimi kaldır
-                        </button>
-                      </div>
+                      {canManage ? (
+                        <div className="table-actions">
+                          <button
+                            className="button button-quiet"
+                            disabled={busy || item.id === user.id}
+                            onClick={() =>
+                              void update(item, { is_active: !item.is_active })
+                            }
+                          >
+                            {item.is_active ? "Devre dışı bırak" : "Etkinleştir"}
+                          </button>
+                          <button
+                            className="button button-quiet danger-text"
+                            disabled={busy || item.id === user.id}
+                            onClick={() => setRemoveTarget(item)}
+                          >
+                            Erişimi kaldır
+                          </button>
+                        </div>
+                      ) : (
+                        <small>Yalnızca admin değiştirebilir</small>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -277,7 +317,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
       <ConfirmationDialog
         open={Boolean(removeTarget)}
         title="Erişimi kaldır"
-        description={`${removeTarget?.email ?? "Bu kullanıcı"} artık sisteme erişemeyecek. Bu işlem kullanıcı kaydını pasif olarak siler.`}
+        description={`${removeTarget?.email ?? "Bu kullanıcı"} artık sisteme erişemeyecek.`}
         confirmLabel="Erişimi kaldır"
         busy={busy}
         onCancel={() => setRemoveTarget(null)}

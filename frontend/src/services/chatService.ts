@@ -1,50 +1,79 @@
-import { authorizedHeaders } from "./apiClient";
-import type { ChatRequest, ResumeRequest, WorkflowEvent } from "../types/chat";
+import { apiErrorFromResponse, apiFetch, apiRequest } from "./apiClient";
+import type {
+  ChatRequest,
+  ResumeRequest,
+  SessionState,
+  WorkflowEvent,
+} from "../types/chat";
 
-async function consumeStream(
+export async function consumeSseStream(
   response: Response,
   onEvent: (event: WorkflowEvent) => void,
 ): Promise<void> {
-  if (!response.ok) throw new Error("Sohbet akışı başlatılamadı.");
+  if (!response.ok) throw await apiErrorFromResponse(response);
   const reader = response.body?.getReader();
   if (!reader) throw new Error("Sunucu akış yanıtı göndermedi.");
+
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
+  let lastSequence = 0;
+
+  const consumeBlock = (block: string) => {
+    const raw = block
+      .split("\n")
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trimStart())
+      .join("\n")
+      .trim();
+    if (!raw || raw === "[DONE]") return;
+    const event = JSON.parse(raw) as WorkflowEvent;
+    if (event.seq !== undefined) {
+      if (event.seq <= lastSequence) return;
+      lastSequence = event.seq;
+    }
+    onEvent(event);
+  };
+
   let streamEnded = false;
   while (!streamEnded) {
     const { value, done } = await reader.read();
-    if (done) {
-      streamEnded = true;
-      continue;
-    }
-    buffer += decoder.decode(value, { stream: true });
+    buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
     const blocks = buffer.split("\n\n");
     buffer = blocks.pop() ?? "";
-    for (const block of blocks) {
-      if (!block.startsWith("data: ")) continue;
-      const raw = block.slice(6).trim();
-      if (!raw || raw === "[DONE]") continue;
-      onEvent(JSON.parse(raw) as WorkflowEvent);
-    }
+    blocks.forEach(consumeBlock);
+    if (done) streamEnded = true;
   }
+  if (buffer.trim()) consumeBlock(buffer);
 }
 
 async function stream(
   path: string,
   body: ChatRequest | ResumeRequest,
   onEvent: (event: WorkflowEvent) => void,
-) {
-  const response = await fetch(path, {
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await apiFetch(path, {
     method: "POST",
-    headers: authorizedHeaders({ "Content-Type": "application/json" }),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
-  return consumeStream(response, onEvent);
+  await consumeSseStream(response, onEvent);
 }
 
 export const chatService = {
-  send: (request: ChatRequest, onEvent: (event: WorkflowEvent) => void) =>
-    stream("/api/v1/chat/stream", request, onEvent),
-  resume: (request: ResumeRequest, onEvent: (event: WorkflowEvent) => void) =>
-    stream("/api/v1/chat/resume", request, onEvent),
+  send: (
+    request: ChatRequest,
+    onEvent: (event: WorkflowEvent) => void,
+    signal?: AbortSignal,
+  ) => stream("/api/v1/chat/stream", request, onEvent, signal),
+  resume: (
+    request: ResumeRequest,
+    onEvent: (event: WorkflowEvent) => void,
+    signal?: AbortSignal,
+  ) => stream("/api/v1/chat/resume", request, onEvent, signal),
+  state: (threadId: string) =>
+    apiRequest<SessionState>(
+      `/api/v1/chat/sessions/${encodeURIComponent(threadId)}/state`,
+    ),
 };

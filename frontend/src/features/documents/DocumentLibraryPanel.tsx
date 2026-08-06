@@ -99,7 +99,7 @@ export function DocumentLibraryPanel({
                       <FileText size={15} />
                     </span>
                     <span className="quick-document-copy">
-                      <strong>{document.file_name}</strong>
+                      <strong title={document.file_name}>{document.file_name}</strong>
                       <small>
                         {document.document_type_label || document.document_type}
                       </small>

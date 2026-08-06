@@ -1,8 +1,10 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { chatService } from "../services/chatService";
 import type {
   ChatMessage,
+  GuardrailEvent,
   InterruptState,
+  ToolCallEvent,
   WorkflowEvent,
   WorkflowLog,
   WorkflowNodeStatus,
@@ -11,11 +13,51 @@ import type { DocumentMetadata, ReasoningLevel } from "../types/documents";
 
 type NodeResults = Record<string, Record<string, unknown>>;
 
-export function useChatWorkflow(selectedDocument: DocumentMetadata | null) {
+interface StoredSession {
+  clientSessionId: string;
+  threadId: string | null;
+}
+
+function createClientSessionId(): string {
+  return `web:${crypto.randomUUID()}`;
+}
+
+function sessionStorageKey(userId: string): string {
+  return `kachow.chat.session.${userId}`;
+}
+
+function loadSession(userId: string): StoredSession {
+  try {
+    const value = localStorage.getItem(sessionStorageKey(userId));
+    if (value) {
+      const parsed = JSON.parse(value) as Partial<StoredSession>;
+      if (typeof parsed.clientSessionId === "string") {
+        return {
+          clientSessionId: parsed.clientSessionId,
+          threadId: typeof parsed.threadId === "string" ? parsed.threadId : null,
+        };
+      }
+    }
+  } catch {
+    // Storage can be unavailable in private browsing; a memory-only session is fine.
+  }
+  return { clientSessionId: createClientSessionId(), threadId: null };
+}
+
+export function useChatWorkflow(
+  selectedDocument: DocumentMetadata | null,
+  userId: string,
+) {
+  const [initialSession] = useState<StoredSession>(() => loadSession(userId));
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [clientSessionId, setClientSessionId] = useState(
+    initialSession.clientSessionId,
+  );
+  const [threadId, setThreadId] = useState<string | null>(
+    initialSession.threadId,
+  );
   const [pendingInterrupt, setPendingInterrupt] =
     useState<InterruptState | null>(null);
   const [nodeStatus, setNodeStatus] = useState<
@@ -25,8 +67,53 @@ export function useChatWorkflow(selectedDocument: DocumentMetadata | null) {
   const [nodeMeta, setNodeMeta] = useState<NodeResults>({});
   const [planSteps, setPlanSteps] = useState<string[]>([]);
   const [logs, setLogs] = useState<WorkflowLog[]>([]);
+  const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([]);
+  const [guardrailEvents, setGuardrailEvents] = useState<GuardrailEvent[]>([]);
   const logsRef = useRef<WorkflowLog[]>([]);
   const seenInterrupts = useRef(new Set<string>());
+  const activeRequest = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        sessionStorageKey(userId),
+        JSON.stringify({ clientSessionId, threadId }),
+      );
+    } catch {
+      // Continue with an in-memory session when persistent storage is unavailable.
+    }
+  }, [clientSessionId, threadId, userId]);
+
+  useEffect(() => {
+    if (!threadId) return;
+    let active = true;
+    chatService
+      .state(threadId)
+      .then((state) => {
+        if (!active || state.status !== "interrupted" || !state.interrupt) return;
+        const { kind: recoveredKind, ...payload } = state.interrupt;
+        const kind =
+          recoveredKind ??
+          ((payload.questions?.length ?? 0) > 0
+            ? "missing_information"
+            : "draft_approval");
+        const recoveredId = `recovered:${threadId}`;
+        seenInterrupts.current.add(recoveredId);
+        setPendingInterrupt({ kind, interruptId: recoveredId, payload });
+        setNodeStatus((previous) => ({ ...previous, human_gate: "running" }));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [threadId]);
+
+  useEffect(
+    () => () => {
+      activeRequest.current?.abort();
+    },
+    [],
+  );
 
   const appendLog = useCallback((text: string) => {
     const next = [
@@ -43,6 +130,8 @@ export function useChatWorkflow(selectedDocument: DocumentMetadata | null) {
     setNodeResults({});
     setNodeMeta({});
     setPlanSteps([]);
+    setToolCalls([]);
+    setGuardrailEvents([]);
     logsRef.current = [];
     setLogs([]);
   }, []);
@@ -51,7 +140,7 @@ export function useChatWorkflow(selectedDocument: DocumentMetadata | null) {
     (event: WorkflowEvent) => {
       switch (event.event) {
         case "session":
-          setSessionId(event.thread_id);
+          setThreadId(event.thread_id);
           break;
         case "node_start":
           setNodeStatus((previous) => ({
@@ -122,6 +211,25 @@ export function useChatWorkflow(selectedDocument: DocumentMetadata | null) {
             [event.key]: { ...(previous[event.key] ?? {}), ...event.value },
           }));
           break;
+        case "tool_call":
+          setToolCalls((previous) => [
+            ...previous,
+            { node: event.node, tool: event.tool, args: event.args },
+          ]);
+          appendLog(`Araç çağrıldı: ${event.tool}.`);
+          break;
+        case "guardrail":
+          setGuardrailEvents((previous) => [
+            ...previous,
+            {
+              stage: event.stage,
+              kind: event.kind,
+              decision: event.decision,
+              reasons: event.reasons,
+            },
+          ]);
+          appendLog(`Güvenlik kontrolü: ${event.decision}.`);
+          break;
         case "interrupt":
           if (seenInterrupts.current.has(event.interrupt_id)) break;
           seenInterrupts.current.add(event.interrupt_id);
@@ -139,6 +247,7 @@ export function useChatWorkflow(selectedDocument: DocumentMetadata | null) {
           break;
         case "final_result":
           setStreamingText("");
+          setPendingInterrupt(null);
           setMessages((previous) => [
             ...previous,
             {
@@ -181,19 +290,23 @@ export function useChatWorkflow(selectedDocument: DocumentMetadata | null) {
         ...previous,
         { sender: "user", text: text.trim() },
       ]);
+      const controller = new AbortController();
+      activeRequest.current = controller;
       try {
         await chatService.send(
           {
             message: text.trim(),
-            session_id: sessionId,
+            session_id: clientSessionId,
             document_id: useDocument
               ? (selectedDocument?.storage_path ?? null)
               : null,
             reasoning_level: reasoningLevel,
           },
           handleEvent,
+          controller.signal,
         );
       } catch (caught) {
+        if (caught instanceof DOMException && caught.name === "AbortError") return;
         setMessages((previous) => [
           ...previous,
           {
@@ -206,10 +319,11 @@ export function useChatWorkflow(selectedDocument: DocumentMetadata | null) {
           },
         ]);
       } finally {
+        if (activeRequest.current === controller) activeRequest.current = null;
         setLoading(false);
       }
     },
-    [handleEvent, loading, resetFlow, selectedDocument, sessionId],
+    [clientSessionId, handleEvent, loading, resetFlow, selectedDocument],
   );
 
   const resume = useCallback(
@@ -218,16 +332,21 @@ export function useChatWorkflow(selectedDocument: DocumentMetadata | null) {
       answers: Record<string, string>,
       instructions: string,
     ) => {
-      if (!sessionId || !pendingInterrupt) return;
+      if (!threadId || !pendingInterrupt || loading) return;
       setLoading(true);
       resetFlow();
+      const controller = new AbortController();
+      activeRequest.current = controller;
       try {
         setPendingInterrupt(null);
         await chatService.resume(
-          { session_id: sessionId, action, answers, instructions },
+          { session_id: threadId, action, answers, instructions },
           handleEvent,
+          controller.signal,
         );
       } catch (caught) {
+        if (caught instanceof DOMException && caught.name === "AbortError") return;
+        setPendingInterrupt(pendingInterrupt);
         setMessages((previous) => [
           ...previous,
           {
@@ -240,15 +359,18 @@ export function useChatWorkflow(selectedDocument: DocumentMetadata | null) {
           },
         ]);
       } finally {
+        if (activeRequest.current === controller) activeRequest.current = null;
         setLoading(false);
       }
     },
-    [handleEvent, pendingInterrupt, resetFlow, sessionId],
+    [handleEvent, loading, pendingInterrupt, resetFlow, threadId],
   );
 
   const newChat = useCallback(() => {
+    activeRequest.current?.abort();
     setMessages([]);
-    setSessionId(null);
+    setClientSessionId(createClientSessionId());
+    setThreadId(null);
     setPendingInterrupt(null);
     seenInterrupts.current.clear();
     resetFlow();
@@ -276,6 +398,8 @@ export function useChatWorkflow(selectedDocument: DocumentMetadata | null) {
     nodeMeta,
     planSteps,
     logs,
+    toolCalls,
+    guardrailEvents,
     send,
     resume,
     newChat,

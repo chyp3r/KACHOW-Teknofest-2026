@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
+import { DraftHistory } from "../features/drafts/DraftHistory";
+import type { DraftHistoryEntry } from "../hooks/useDraftHistory";
 import { documentService } from "../services/documentService";
 import type {
   CorrespondenceType,
@@ -24,15 +26,19 @@ export function DraftsPage({
   selected,
   analysis,
   draft,
+  history,
   onSelect,
   onDraftCreated,
+  onHistorySelect,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
   analysis: DocumentAnalysis | null;
   draft: DraftResult | null;
+  history: DraftHistoryEntry[];
   onSelect: (document: DocumentMetadata) => void;
   onDraftCreated: (draft: DraftResult) => void;
+  onHistorySelect: (entry: DraftHistoryEntry) => void;
 }) {
   const [types, setTypes] = useState(FALLBACK_TYPES);
   const [type, setType] = useState("");
@@ -87,6 +93,11 @@ export function DraftsPage({
       <PageHeader
         title="Taslaklar"
         description="Seçili evrakın analizinden resmî yazı taslağı oluşturun ve sonucu inceleyin."
+      />
+      <DraftHistory
+        entries={history}
+        activeDraft={draft}
+        onSelect={onHistorySelect}
       />
       <div className="drafts-layout">
         <section className="surface draft-form">
@@ -210,7 +221,7 @@ export function DraftsPage({
             <EmptyState
               icon={FilePenLine}
               title="Henüz taslak oluşturulmadı"
-              description="Bir kaynak evrak seçip formu tamamlayın. Backend taslak geçmişi sunmadığı için yalnızca bu oturumda üretilen son taslak gösterilir."
+              description="Bir kaynak evrak seçip formu tamamlayın veya geçmişten bir taslak açın."
             />
           )}
         </section>

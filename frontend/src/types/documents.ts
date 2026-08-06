@@ -51,6 +51,15 @@ export interface DocumentAnalysis extends DocumentMetadata {
   fields: EvrakFields;
   missing_fields: MissingFieldItem[];
   mevzuat_references: MevzuatReference[];
+  guardrail: {
+    sensitivity_level: SensitivityLevel;
+    pii_findings: Array<{
+      kind: string;
+      preview: string;
+    }>;
+    requires_human_review: boolean;
+    reasons: string[];
+  };
 }
 
 export type ReasoningLevel = "fast" | "balanced" | "deep";
@@ -95,3 +104,4 @@ export interface DraftRequest {
   correspondence_type: string | null;
   reasoning_level: ReasoningLevel;
 }
+import type { SensitivityLevel } from "./security";

@@ -1,141 +1,225 @@
-import {
-  AlertCircle,
-  Check,
-  ChevronRight,
-  Circle,
-  Clock3,
-  GitBranch,
-  X,
-  XCircle,
-} from "lucide-react";
-import { useMemo, useState } from "react";
-import type { WorkflowNodeStatus } from "../../types/chat";
+import { AlertCircle, Clock3, GitBranch, X } from "lucide-react";
+import { useMemo, useState, type KeyboardEvent } from "react";
+import type {
+  GuardrailEvent,
+  ToolCallEvent,
+  WorkflowNodeStatus,
+} from "../../types/chat";
 
-interface Stage {
+interface GraphNode {
   id: string;
-  title: string;
+  label: string;
+  short: string;
+  kind: "llm" | "rule" | "io";
+  x: number;
+  y: number;
   description: string;
-  nodes: string[];
 }
-const STAGES: Stage[] = [
+
+interface GraphEdge {
+  from: string;
+  to: string;
+  parallel?: boolean;
+  back?: boolean;
+}
+
+const NODES: GraphNode[] = [
   {
     id: "planning",
-    title: "Yönlendirme",
-    description: "İsteğin izlenecek işlem yolu belirlenir.",
-    nodes: ["planning"],
+    label: "Yönlendirici",
+    short: "ROTA",
+    kind: "rule",
+    x: 280,
+    y: 50,
+    description: "İsteği deterministik kurallarla uygun işlem yoluna yönlendirir.",
   },
   {
-    id: "analysis",
-    title: "Evrak Analizi",
-    description: "Evrak türü ve üst veri alanları çıkarılır.",
-    nodes: ["classification"],
+    id: "classification",
+    label: "Evrak Analizi",
+    short: "ANALİZ",
+    kind: "llm",
+    x: 160,
+    y: 145,
+    description: "Evrak türünü ve zorunlu üst veri alanlarını çıkarır.",
   },
   {
     id: "compliance",
-    title: "Uygunluk ve Mevzuat Kontrolü",
-    description: "Eksik alanlar ve ilgili mevzuat birlikte değerlendirilir.",
-    nodes: ["compliance", "rag"],
+    label: "Uygunluk",
+    short: "KURAL",
+    kind: "rule",
+    x: 90,
+    y: 240,
+    description: "Belge türüne göre zorunlu alanları deterministik olarak denetler.",
+  },
+  {
+    id: "rag",
+    label: "Mevzuat",
+    short: "RAG",
+    kind: "io",
+    x: 230,
+    y: 240,
+    description: "İlgili mevzuatı hibrit aramayla getirir ve kanıt bağlamını kurar.",
   },
   {
     id: "draft",
-    title: "Taslak Oluşturma",
-    description: "Resmî yazı taslağı hazırlanır ve gerektiğinde revize edilir.",
-    nodes: ["draft", "revise"],
+    label: "Taslak",
+    short: "YAZAR",
+    kind: "llm",
+    x: 220,
+    y: 335,
+    description: "Belge ve mevzuat bağlamından resmî yazı taslağı oluşturur.",
   },
   {
-    id: "quality",
-    title: "Doğrulama ve Kalite Kontrolü",
-    description: "Kaynak doğrulaması ile anlatım kalitesi değerlendirilir.",
-    nodes: ["verify", "judge"],
+    id: "revise",
+    label: "Revizyon",
+    short: "REVİZE",
+    kind: "rule",
+    x: 75,
+    y: 335,
+    description: "Doğrulama ve kalite bulgularını düzeltme listesine dönüştürür.",
   },
   {
-    id: "approval",
-    title: "İnsan Onayı",
-    description: "Gerekli olduğunda kullanıcı girdisi veya onay beklenir.",
-    nodes: ["human_gate"],
+    id: "verify",
+    label: "Doğrulama",
+    short: "KANIT",
+    kind: "rule",
+    x: 145,
+    y: 430,
+    description: "Taslağın iddialarını kaynak evrak ve mevzuata karşı denetler.",
+  },
+  {
+    id: "judge",
+    label: "Kalite Yargıcı",
+    short: "YARGIÇ",
+    kind: "llm",
+    x: 290,
+    y: 430,
+    description: "Talebe uygunluk, resmî üslup ve muhatap tutarlılığını değerlendirir.",
+  },
+  {
+    id: "human_gate",
+    label: "İnsan Onayı",
+    short: "ONAY",
+    kind: "io",
+    x: 220,
+    y: 525,
+    description: "Eksik bilgi veya onay gerektiğinde akışı güvenli biçimde durdurur.",
   },
   {
     id: "routing",
-    title: "Birim Sevki",
-    description: "Evrak için hedef birim önerisi oluşturulur.",
-    nodes: ["routing"],
+    label: "Birim Sevki",
+    short: "SEVK",
+    kind: "llm",
+    x: 400,
+    y: 525,
+    description: "Tamamlanan taslak için hedef birimi gerekçesiyle önerir.",
+  },
+  {
+    id: "assist",
+    label: "Asistan",
+    short: "ASİST",
+    kind: "llm",
+    x: 440,
+    y: 210,
+    description: "Belge ve mevzuat araçlarını kullanarak kaynaklı sohbet yanıtı hazırlar.",
   },
 ];
 
-function stageStatus(
-  stage: Stage,
-  statuses: Record<string, WorkflowNodeStatus>,
-): WorkflowNodeStatus {
-  const values = stage.nodes.map((node) => statuses[node]).filter(Boolean);
-  if (values.includes("failed")) return "failed";
-  if (values.includes("running")) return "running";
-  if (values.some((value) => value === "completed")) return "completed";
-  if (values.length && values.every((value) => value === "skipped"))
-    return "skipped";
-  return "todo";
-}
+const EDGES: GraphEdge[] = [
+  { from: "planning", to: "classification" },
+  { from: "planning", to: "assist" },
+  { from: "classification", to: "compliance", parallel: true },
+  { from: "classification", to: "rag", parallel: true },
+  { from: "compliance", to: "draft" },
+  { from: "rag", to: "draft" },
+  { from: "draft", to: "verify" },
+  { from: "draft", to: "judge" },
+  { from: "verify", to: "human_gate" },
+  { from: "judge", to: "human_gate" },
+  { from: "human_gate", to: "routing" },
+  { from: "verify", to: "revise", back: true },
+  { from: "revise", to: "draft", back: true },
+];
 
 const STATUS_LABELS: Record<WorkflowNodeStatus, string> = {
   todo: "Bekliyor",
-  running: "İşleniyor",
+  running: "Çalışıyor",
   completed: "Tamamlandı",
   failed: "Hata",
-  skipped: "Bu akışta yok",
+  skipped: "Atlandı",
 };
-const STATUS_ICONS = {
-  todo: Circle,
-  running: Clock3,
-  completed: Check,
-  failed: XCircle,
-  skipped: ChevronRight,
+
+const NODE_STROKES: Record<GraphNode["kind"], string> = {
+  rule: "var(--workflow-rule)",
+  io: "var(--workflow-io)",
+  llm: "var(--workflow-llm)",
 };
+
+const STATUS_STROKES: Partial<Record<WorkflowNodeStatus, string>> = {
+  running: "var(--status-running)",
+  completed: "var(--status-completed)",
+  failed: "var(--status-failed)",
+  skipped: "var(--status-skipped)",
+};
+
+function statusTone(status: WorkflowNodeStatus): string {
+  if (status === "completed") return "success";
+  if (status === "failed") return "danger";
+  if (status === "running") return "info";
+  return "neutral";
+}
 
 export function DecisionFlow({
   statuses,
   results,
   meta,
   planSteps,
+  toolCalls = [],
+  guardrailEvents = [],
   onClose,
 }: {
   statuses: Record<string, WorkflowNodeStatus>;
   results: Record<string, Record<string, unknown>>;
   meta: Record<string, Record<string, unknown>>;
   planSteps: string[];
+  toolCalls?: ToolCallEvent[];
+  guardrailEvents?: GuardrailEvent[];
   onClose?: () => void;
 }) {
-  const stages = useMemo(
-    () =>
-      STAGES.map((stage) => ({
-        ...stage,
-        status: stageStatus(stage, statuses),
-      })),
-    [statuses],
-  );
-  const [selectedId, setSelectedId] = useState(STAGES[0].id);
-  const selected = stages.find((stage) => stage.id === selectedId) ?? stages[0];
-  const technicalData = selected.nodes.reduce<Record<string, unknown>>(
-    (data, node) => ({
-      ...data,
-      [node]: {
-        status: statuses[node] ?? "todo",
-        result: results[node],
-        meta: meta[node],
-      },
+  const [selectedId, setSelectedId] = useState("planning");
+  const selected = NODES.find((node) => node.id === selectedId) ?? NODES[0];
+  const selectedStatus = statuses[selected.id] ?? "todo";
+  const selectedData = useMemo(
+    () => ({
+      status: selectedStatus,
+      result: results[selected.id],
+      meta: meta[selected.id],
     }),
-    {},
+    [meta, results, selected.id, selectedStatus],
   );
-  const branch = statuses.document_qa || statuses.chat;
+  const planLabels = planSteps.map(
+    (step) => NODES.find((node) => node.id === step)?.label ?? step,
+  );
+
+  const selectWithKeyboard = (
+    event: KeyboardEvent<SVGGElement>,
+    nodeId: string,
+  ) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    setSelectedId(nodeId);
+  };
 
   return (
-    <aside className="workflow-panel" aria-label="Karar akışı">
+    <aside className="workflow-panel workflow-graph-panel" aria-label="Karar akışı">
       <header>
         <div>
           <span className="eyebrow">
             <GitBranch size={14} />
-            İşlem süreci
+            Canlı plan
           </span>
           <h2>Karar Akışı</h2>
-          <p>İşlemin hangi aşamada olduğunu takip edin.</p>
+          <p>Planı, paralel adımları ve revizyon döngüsünü canlı izleyin.</p>
         </div>
         {onClose && (
           <button
@@ -147,69 +231,147 @@ export function DecisionFlow({
           </button>
         )}
       </header>
+
       <div className="workflow-content">
-        <ol className="decision-stepper">
-          {stages.map((stage, index) => {
-            const Icon = STATUS_ICONS[stage.status];
-            return (
-              <li key={stage.id} className={`step-${stage.status}`}>
-                <button
-                  onClick={() => setSelectedId(stage.id)}
-                  aria-current={selected.id === stage.id ? "step" : undefined}
+        <div className="workflow-plan-summary">
+          <span>Seçilen plan</span>
+          <strong>
+            {planLabels.length > 0
+              ? planLabels.join(" → ")
+              : "Mesaj gönderildiğinde plan burada görünecek."}
+          </strong>
+        </div>
+
+        <div className="graph-container decision-graph-container">
+          <svg
+            width="100%"
+            viewBox="0 0 560 580"
+            preserveAspectRatio="xMidYMid meet"
+            role="img"
+            aria-label="Karar akışı düğüm grafiği"
+          >
+            {EDGES.map((edge) => {
+              const from = NODES.find((node) => node.id === edge.from);
+              const to = NODES.find((node) => node.id === edge.to);
+              if (!from || !to) return null;
+              const status = statuses[edge.to] ?? "todo";
+              if (edge.back && status === "skipped") return null;
+              return (
+                <line
+                  key={`${edge.from}-${edge.to}`}
+                  x1={from.x}
+                  y1={from.y}
+                  x2={to.x}
+                  y2={to.y}
+                  className={`link-line ${status}`}
+                  strokeDasharray={edge.parallel || edge.back ? "5 4" : undefined}
+                  opacity={edge.back ? 0.65 : undefined}
+                />
+              );
+            })}
+
+            {NODES.map((node) => {
+              const status = statuses[node.id] ?? "todo";
+              const stroke = STATUS_STROKES[status] ?? NODE_STROKES[node.kind];
+              const nodeMeta = meta[node.id];
+              const attempt =
+                typeof nodeMeta?.attempt === "number" && nodeMeta.attempt > 1
+                  ? ` #${nodeMeta.attempt}`
+                  : "";
+              return (
+                <g
+                  key={node.id}
+                  className={`node ${status} ${selected.id === node.id ? "is-selected" : ""}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${node.label}: ${STATUS_LABELS[status]}`}
+                  onClick={() => setSelectedId(node.id)}
+                  onKeyDown={(event) => selectWithKeyboard(event, node.id)}
                 >
-                  <span className="step-marker">
-                    <Icon size={15} />
-                  </span>
+                  <circle
+                    cx={node.x}
+                    cy={node.y}
+                    r={25}
+                    style={{
+                      stroke,
+                      strokeWidth: selected.id === node.id ? 4 : 2.5,
+                    }}
+                  />
+                  <text x={node.x} y={node.y + 3} className="node-short">
+                    {node.short}
+                  </text>
+                  <text x={node.x} y={node.y + 41} className="node-label">
+                    {node.label}{attempt}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+
+        <div className="workflow-legend" aria-label="Düğüm türleri">
+          <span className="legend-rule">Deterministik</span>
+          <span className="legend-llm">Model</span>
+          <span className="legend-io">Araç / insan</span>
+        </div>
+
+        {(toolCalls.length > 0 || guardrailEvents.length > 0) && (
+          <div className="workflow-signal-grid">
+            {toolCalls.length > 0 && (
+              <div className="subprocess">
+                <GitBranch size={16} />
+                <div>
+                  <strong>{toolCalls.length} araç çağrısı</strong>
+                  <span>{toolCalls.map((call) => call.tool).join(" · ")}</span>
+                </div>
+              </div>
+            )}
+            {guardrailEvents.length > 0 && (
+              <div className="subprocess guardrail-process">
+                <AlertCircle size={16} />
+                <div>
+                  <strong>Güvenlik kararı</strong>
                   <span>
-                    <small>{index + 1}. aşama</small>
-                    <strong>{stage.title}</strong>
-                    <em>{STATUS_LABELS[stage.status]}</em>
+                    {guardrailEvents.map((event) => event.decision).join(" · ")}
                   </span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-        {branch && (
-          <div className="subprocess">
-            <GitBranch size={16} />
-            <div>
-              <strong>
-                {statuses.document_qa ? "Belge Soru-Cevap" : "Genel Sohbet"}
-              </strong>
-              <span>Ana karar sürecinden bağımsız kısa işlem</span>
-            </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
-        <section className="step-details">
+
+        <section className="step-details graph-step-details">
           <div className="section-heading">
             <div>
-              <h3>{selected.title}</h3>
+              <h3>{selected.label}</h3>
               <p>{selected.description}</p>
             </div>
-            <span
-              className={`status-badge status-${selected.status === "completed" ? "success" : selected.status === "failed" ? "danger" : selected.status === "running" ? "info" : "neutral"}`}
-            >
-              {STATUS_LABELS[selected.status]}
+            <span className={`status-badge status-${statusTone(selectedStatus)}`}>
+              {STATUS_LABELS[selectedStatus]}
             </span>
           </div>
-          {selected.status === "failed" && (
+          {selectedStatus === "failed" && (
             <p className="notice danger">
               <AlertCircle size={16} />
-              Bu aşamada hata oluştu. Teknik ayrıntıları kontrol edin.
+              Bu adımda hata oluştu. Teknik ayrıntıyı aşağıdan inceleyin.
             </p>
           )}
-          {selected.id === "approval" && selected.status === "running" && (
+          {selected.id === "human_gate" && selectedStatus === "running" && (
             <p className="notice warning">
               <Clock3 size={16} />
-              Devam etmek için sohbet alanındaki kullanıcı işlemi bekleniyor.
+              Sohbet alanında kullanıcı yanıtı veya onayı bekleniyor.
             </p>
           )}
           <details>
-            <summary>Teknik Detaylar</summary>
+            <summary>Teknik detaylar</summary>
             <pre>
               {JSON.stringify(
-                { plan_steps: planSteps, nodes: technicalData },
+                {
+                  plan_steps: planSteps,
+                  node: selectedData,
+                  tools: toolCalls.filter((call) => call.node === selected.id),
+                  guardrails: guardrailEvents,
+                },
                 null,
                 2,
               )}
