@@ -8,6 +8,7 @@ from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.authorization import AuthorizationException
 from app.core.constants import AI_WORKFLOW_TIMEOUT_SECONDS
 from app.domains.chat import chat_recorder
+from app.domains.drafts import draft_recorder
 from app.domains.chat.schema.chat_schema import (
     ChatMessageRequest,
     ChatMessageResponse,
@@ -67,7 +68,9 @@ class ChatService:
         state = await self._invoke(
             request, config=config, user_id=user_id, requester_clearance=requester_clearance
         )
-        response = await self._response_from_state(state, config, thread_id)
+        response = await self._response_from_state(
+            state, config, thread_id, user_id=user_id, document_id=request.document_id
+        )
         await chat_recorder.record_turn(
             thread_id=thread_id,
             user_id=user_id,
@@ -119,7 +122,12 @@ class ChatService:
                     requester_clearance=requester_clearance,
                 )
                 reply, workflow_status, details = await self._enqueue_terminal_event(
-                    queue, state, config, thread_id
+                    queue,
+                    state,
+                    config,
+                    thread_id,
+                    user_id=user_id,
+                    document_id=request.document_id,
                 )
                 await chat_recorder.record_turn(
                     thread_id=thread_id,
@@ -217,7 +225,9 @@ class ChatService:
                 details={"reason": str(exc)},
             ) from exc
 
-        response = await self._response_from_state(state, config, session_id)
+        response = await self._response_from_state(
+            state, config, session_id, user_id=user_id, document_id=None
+        )
         await chat_recorder.record_turn(
             thread_id=session_id,
             user_id=user_id,
@@ -274,7 +284,7 @@ class ChatService:
                     timeout=timeout,
                 )
                 reply, workflow_status, details = await self._enqueue_terminal_event(
-                    queue, state, config, session_id
+                    queue, state, config, session_id, user_id=user_id, document_id=None
                 )
                 await chat_recorder.record_turn(
                     thread_id=session_id,
@@ -426,6 +436,8 @@ class ChatService:
         state: dict[str, Any],
         config: dict[str, Any],
         thread_id: str,
+        user_id: Optional[str] = None,
+        document_id: Optional[str] = None,
     ) -> tuple[str, str, dict[str, Any]]:
         """Push the run's closing event: ``final_result``, or nothing if paused.
 
@@ -441,6 +453,10 @@ class ChatService:
             state: The state ``ainvoke``/resume returned.
             config: The config used for that call, reused to check pause state.
             thread_id: The session's thread_id, for logging only.
+            user_id: See :meth:`handle_message`; forwarded to
+                :meth:`_maybe_record_draft`.
+            document_id: The document attached to this turn, if any;
+                forwarded to :meth:`_maybe_record_draft`.
 
         Returns:
             ``(reply, workflow_status, details)`` for this turn -- the same
@@ -466,10 +482,16 @@ class ChatService:
                 "details": final_output,
             }
         )
+        await self._maybe_record_draft(final_output, thread_id, user_id, document_id)
         return reply, workflow_status, final_output
 
     async def _response_from_state(
-        self, state: dict[str, Any], config: dict[str, Any], thread_id: str
+        self,
+        state: dict[str, Any],
+        config: dict[str, Any],
+        thread_id: str,
+        user_id: Optional[str] = None,
+        document_id: Optional[str] = None,
     ) -> ChatMessageResponse:
         """Build the non-streaming response, accounting for a paused run."""
         if await self._is_paused(config):
@@ -483,11 +505,48 @@ class ChatService:
             )
 
         final_output = state.get("final_output", {}) or {}
+        await self._maybe_record_draft(final_output, thread_id, user_id, document_id)
         return ChatMessageResponse(
             reply=self._select_reply(final_output),
             workflow_status=final_output.get("status", "FAILED"),
             session_id=thread_id,
             details=final_output,
+        )
+
+    @staticmethod
+    async def _maybe_record_draft(
+        final_output: dict[str, Any],
+        thread_id: str,
+        user_id: Optional[str],
+        document_id: Optional[str],
+    ) -> None:
+        """Persist a draft this turn produced or revised, if any.
+
+        ``final_output["draft"]`` is ``PlanningState.draft_result`` -- the
+        same shape ``app.domains.documents.draft_service.DraftService``
+        builds ``DraftResponseSchema`` from for the direct-API path. A no-op
+        when this turn's step wasn't drafting/revising (``draft_result`` is
+        then ``{}``, so ``.get("draft")`` is falsy).
+        """
+        draft = final_output.get("draft") or {}
+        content = draft.get("draft")
+        if not content:
+            return
+        routing = final_output.get("routing") or {}
+        await draft_recorder.record_draft(
+            user_id=user_id,
+            session_id=thread_id,
+            document_id=document_id,
+            content=content,
+            correspondence_type=draft.get("correspondence_type"),
+            destination=routing.get("final_destination"),
+            status=draft.get("status"),
+            confidence_score=draft.get("confidence_score"),
+            requires_human_approval=draft.get("requires_human_approval"),
+            attempts=draft.get("attempts"),
+            verification=draft.get("verification"),
+            judge=draft.get("judge"),
+            missing_information=draft.get("missing_information"),
         )
 
     async def _is_paused(self, config: dict[str, Any]) -> bool:

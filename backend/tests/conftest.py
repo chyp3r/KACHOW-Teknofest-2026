@@ -237,6 +237,19 @@ def _disable_chat_history_recording(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _disable_draft_history_recording(monkeypatch):
+    """Turn off app.domains.drafts.draft_recorder's DB writes for every test.
+
+    Same reasoning as `_disable_run_recording` immediately above: most tests
+    that exercise draft generation have nothing to do with history
+    persistence.
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "DRAFT_HISTORY_ENABLED", False)
+
+
+@pytest.fixture(autouse=True)
 def _reset_redis_cache_between_tests():
     """Drop the process-wide Redis client reference after every test.
 

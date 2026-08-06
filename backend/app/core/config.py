@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     #: best-effort, test-disabled convention as RUN_RECORDING_ENABLED.
     CHAT_HISTORY_ENABLED: bool = True
 
+    #: Persist each generated/revised draft to the `drafts` version chain
+    #: (see app.domains.drafts.draft_recorder). Same best-effort,
+    #: test-disabled convention as RUN_RECORDING_ENABLED.
+    DRAFT_HISTORY_ENABLED: bool = True
+
     # Ollama Configuration
     # Note: When running inside Docker, set OLLAMA_BASE_URL to http://host.docker.internal:11434
     OLLAMA_BASE_URL: str = "http://localhost:11434"

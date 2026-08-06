@@ -24,6 +24,8 @@ from app.infrastructure.vectorstore import get_vector_store
 from app.domains.documents.service import DocumentService
 from app.domains.documents.draft_service import DraftService
 from app.domains.documents.repository import DocumentRepository
+from app.domains.drafts.repository import DraftRepository
+from app.domains.drafts.service import DraftService as DraftHistoryService
 from app.domains.chat.chat_service import ChatService
 from app.domains.chat.repository import ChatMessageRepository, ChatSessionRepository
 from app.domains.users.model.user_model import UserModel
@@ -229,6 +231,29 @@ def get_draft_service(
         draft_graph=draft_graph,
         routing_graph=routing_graph,
     )
+
+
+def get_draft_repository(db: AsyncSession = Depends(get_db)) -> DraftRepository:
+    """Provide the draft version-chain repository (see `DraftModel`).
+
+    Read-only DI path -- writes go through `app.domains.drafts.
+    draft_recorder`'s own self-contained session (see that module's
+    docstring for why).
+    """
+    return DraftRepository(db)
+
+
+def get_draft_history_service(
+    draft_repository: DraftRepository = Depends(get_draft_repository),
+) -> DraftHistoryService:
+    """Provide the read-side drafts service backing `GET /drafts`.
+
+    Named distinctly from `get_draft_service`/`DraftService` above (the
+    documents domain's drafting *generation* service) to avoid colliding
+    with it -- both legitimately are "the draft service" for their own
+    domain.
+    """
+    return DraftHistoryService(draft_repository)
 
 # ---------------------------------------------------------------------------
 # Chat & Orchestration (Görev 3)
