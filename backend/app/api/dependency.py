@@ -25,6 +25,7 @@ from app.domains.documents.service import DocumentService
 from app.domains.documents.draft_service import DraftService
 from app.domains.documents.repository import DocumentRepository
 from app.domains.chat.chat_service import ChatService
+from app.domains.chat.repository import ChatMessageRepository, ChatSessionRepository
 from app.domains.users.model.user_model import UserModel
 from app.domains.users.repository import UserRepository
 from app.domains.users.service import UserService
@@ -150,6 +151,16 @@ async def get_document_analysis_graph(
 def get_document_repository(db: AsyncSession = Depends(get_db)) -> DocumentRepository:
     """Provide the document ownership/listing registry repository."""
     return DocumentRepository(db)
+
+
+def get_chat_session_repository(db: AsyncSession = Depends(get_db)) -> ChatSessionRepository:
+    """Provide the chat session listing repository."""
+    return ChatSessionRepository(db)
+
+
+def get_chat_message_repository(db: AsyncSession = Depends(get_db)) -> ChatMessageRepository:
+    """Provide the chat message log repository."""
+    return ChatMessageRepository(db)
 
 
 def get_document_analysis_service(
