@@ -649,6 +649,18 @@ def create_document_analysis_graph(
             # node_timeout. Explaining the excerpts is the optional half of
             # requirement 5 -- the citations are already retrieved and correct --
             # so a slow model should cost the explanation, never the analysis.
+            #
+            # The reasoning level is read from `state` here for the same reason
+            # the outer @node_timeout reads it via _reasoning_level_of: the two
+            # budgets must scale together. DocumentAnalysisState carries no
+            # reasoning_level field today, so both currently resolve to the same
+            # balanced default -- but they resolved to it independently, by two
+            # separately-written call sites that happened to agree rather than
+            # being structurally tied. Had a future reasoning_level field been
+            # added to this state without updating this line too, a fast run
+            # (0.6x outer) would make this inner bound (0.85x) exceed its own
+            # node_timeout, and suggest_mevzuat's degradation path -- the whole
+            # reason this inner bound exists -- would become unreachable again.
             res: MevzuatSuggestionOutput = await asyncio.wait_for(
                 compliance_agent.run_structured(
                     messages=prompt,
@@ -656,7 +668,8 @@ def create_document_analysis_graph(
                     temperature=0.0,
                     max_tokens=SUGGESTION_MAX_TOKENS,
                 ),
-                timeout=node_budget("suggest_mevzuat") * SUGGESTION_BUDGET_SHARE,
+                timeout=node_budget("suggest_mevzuat", state.get("reasoning_level"))
+                * SUGGESTION_BUDGET_SHARE,
             )
             suggestions = [item.model_dump() for item in res.suggestions]
         except TRANSIENT_ERRORS:

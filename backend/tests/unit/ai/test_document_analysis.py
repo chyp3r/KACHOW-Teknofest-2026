@@ -227,6 +227,47 @@ async def test_graph_suggests_mevzuat_from_retrieved_excerpts(mock_classify, moc
 
 
 @pytest.mark.asyncio
+@patch("app.ai.workflows.document_analysis_graph.node_budget")
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_suggestion_inner_budget_reads_reasoning_level_from_state_explicitly(
+    mock_classify, mock_suggest, mock_node_budget
+):
+    """suggest_mevzuat_node's inner asyncio.wait_for bound and the outer
+    @node_timeout decorator must resolve a budget for the same node from the
+    same state, or a fast run makes the inner bound (0.85x) exceed the outer
+    node_timeout (0.6x) and the degradation path below becomes unreachable.
+    Before the fix, the inner call site was `node_budget("suggest_mevzuat")`
+    -- the level argument omitted outright rather than read from state -- so
+    the two call sites agreed only by coincidence. DocumentAnalysisState
+    carries no reasoning_level field yet: LangGraph builds its channels from
+    the state schema and drops any input key the schema doesn't declare, so
+    state.get("reasoning_level") reads None today regardless of what
+    ainvoke() is given. What this locks in is that the call site explicitly
+    performs that lookup and passes it through -- two positional args, not
+    one -- so the day the field is added, the two stay coupled by
+    construction instead of by luck.
+    """
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "x", **COMPLETE_FIELDS.model_dump()
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(suggestions=[])
+    mock_node_budget.return_value = 42.0
+
+    retriever = AsyncMock(spec=HybridRetriever)
+    retriever.retrieve.return_value = [
+        Document(page_content="MADDE 11-", metadata={"mevzuat": "RYUEHY"})
+    ]
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=retriever
+    )
+    await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    mock_node_budget.assert_called_once_with("suggest_mevzuat", None)
+
+
+@pytest.mark.asyncio
 @patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
 @patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
 async def test_graph_degrades_to_raw_citations_when_suggestion_fails(mock_classify, mock_suggest):
