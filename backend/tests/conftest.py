@@ -225,6 +225,18 @@ def _disable_run_recording(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _disable_chat_history_recording(monkeypatch):
+    """Turn off app.domains.chat.chat_recorder's DB writes for every test.
+
+    Same reasoning as `_disable_run_recording` immediately above: most tests
+    that exercise ChatService have nothing to do with history persistence.
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "CHAT_HISTORY_ENABLED", False)
+
+
+@pytest.fixture(autouse=True)
 def _reset_redis_cache_between_tests():
     """Drop the process-wide Redis client reference after every test.
 

@@ -7,6 +7,7 @@ from app.ai.reasoning_levels import get_reasoning_level_preset
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.authorization import AuthorizationException
 from app.core.constants import AI_WORKFLOW_TIMEOUT_SECONDS
+from app.domains.chat import chat_recorder
 from app.domains.chat.schema.chat_schema import (
     ChatMessageRequest,
     ChatMessageResponse,
@@ -66,7 +67,17 @@ class ChatService:
         state = await self._invoke(
             request, config=config, user_id=user_id, requester_clearance=requester_clearance
         )
-        return await self._response_from_state(state, config, thread_id)
+        response = await self._response_from_state(state, config, thread_id)
+        await chat_recorder.record_turn(
+            thread_id=thread_id,
+            user_id=user_id,
+            document_id=request.document_id,
+            user_message=request.message,
+            reply=response.reply,
+            workflow_status=response.workflow_status,
+            details=response.details,
+        )
+        return response
 
     async def handle_message_stream(
         self,
@@ -107,7 +118,18 @@ class ChatService:
                     user_id=user_id,
                     requester_clearance=requester_clearance,
                 )
-                await self._enqueue_terminal_event(queue, state, config, thread_id)
+                reply, workflow_status, details = await self._enqueue_terminal_event(
+                    queue, state, config, thread_id
+                )
+                await chat_recorder.record_turn(
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    document_id=request.document_id,
+                    user_message=request.message,
+                    reply=reply,
+                    workflow_status=workflow_status,
+                    details=details,
+                )
             except asyncio.CancelledError:
                 raise
             except AIException as exc:
@@ -195,7 +217,17 @@ class ChatService:
                 details={"reason": str(exc)},
             ) from exc
 
-        return await self._response_from_state(state, config, session_id)
+        response = await self._response_from_state(state, config, session_id)
+        await chat_recorder.record_turn(
+            thread_id=session_id,
+            user_id=user_id,
+            document_id=None,
+            user_message=self._resume_summary(request),
+            reply=response.reply,
+            workflow_status=response.workflow_status,
+            details=response.details,
+        )
+        return response
 
     async def resume_stream(
         self,
@@ -241,7 +273,18 @@ class ChatService:
                     ),
                     timeout=timeout,
                 )
-                await self._enqueue_terminal_event(queue, state, config, session_id)
+                reply, workflow_status, details = await self._enqueue_terminal_event(
+                    queue, state, config, session_id
+                )
+                await chat_recorder.record_turn(
+                    thread_id=session_id,
+                    user_id=user_id,
+                    document_id=None,
+                    user_message=self._resume_summary(request),
+                    reply=reply,
+                    workflow_status=workflow_status,
+                    details=details,
+                )
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -383,7 +426,7 @@ class ChatService:
         state: dict[str, Any],
         config: dict[str, Any],
         thread_id: str,
-    ) -> None:
+    ) -> tuple[str, str, dict[str, Any]]:
         """Push the run's closing event: ``final_result``, or nothing if paused.
 
         A paused run already pushed its own ``interrupt`` event from inside
@@ -398,20 +441,32 @@ class ChatService:
             state: The state ``ainvoke``/resume returned.
             config: The config used for that call, reused to check pause state.
             thread_id: The session's thread_id, for logging only.
+
+        Returns:
+            ``(reply, workflow_status, details)`` for this turn -- the same
+            values pushed (or that would have been pushed) as the SSE event,
+            handed back so the caller can persist the turn without
+            re-deriving them (and without re-checking pause state a second
+            time).
         """
         if await self._is_paused(config):
             logger.info("Session %s paused at a human-in-the-loop gate.", thread_id)
-            return
+            snapshot = await self.planning_graph.aget_state(config)
+            interrupt_payload = self._extract_interrupt(snapshot) or {}
+            return INTERRUPTED_REPLY, "INTERRUPTED", {"interrupt": interrupt_payload}
 
         final_output = state.get("final_output", {}) or {}
+        reply = self._select_reply(final_output)
+        workflow_status = final_output.get("status", "FAILED")
         await queue.put(
             {
                 "event": "final_result",
-                "reply": self._select_reply(final_output),
-                "workflow_status": final_output.get("status", "FAILED"),
+                "reply": reply,
+                "workflow_status": workflow_status,
                 "details": final_output,
             }
         )
+        return reply, workflow_status, final_output
 
     async def _response_from_state(
         self, state: dict[str, Any], config: dict[str, Any], thread_id: str
@@ -471,6 +526,20 @@ class ChatService:
                 request.reasoning_level.value if request.reasoning_level else None
             ),
         }
+
+    @staticmethod
+    def _resume_summary(request: ChatResumeRequest) -> str:
+        """A human-readable stand-in for the user's turn on a HITL resume.
+
+        ``ChatResumeRequest`` carries structured answers/an action, not free
+        text like ``ChatMessageRequest.message`` -- this renders it into
+        something a chat history view can show in place of a message bubble.
+        """
+        if request.action == "answer" and request.answers:
+            return "; ".join(f"{key}: {value}" for key, value in request.answers.items())
+        if request.instructions:
+            return f"{request.action}: {request.instructions}"
+        return request.action
 
     @staticmethod
     def _thread_id(session_id: Optional[str], user_id: Optional[str] = None) -> str:
