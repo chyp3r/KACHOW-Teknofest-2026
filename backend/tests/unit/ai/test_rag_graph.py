@@ -12,7 +12,25 @@ import pytest
 from langchain_core.documents import Document
 
 from app.ai.retrieval.hybrid import HybridRetriever
-from app.ai.workflows.rag_graph import DOMAIN_EXPANSION, build_search_query, create_rag_graph
+from app.ai.workflows.rag_graph import (
+    DOMAIN_EXPANSION,
+    TURKISH_STOPWORDS,
+    _turkish_lower,
+    build_search_query,
+    create_rag_graph,
+)
+
+
+def test_turkish_lower_folds_the_dotted_capital_i_python_gets_wrong():
+    assert _turkish_lower("İçin") == "için"
+    assert _turkish_lower("İLE") == "ile"
+    assert _turkish_lower("İçin") in TURKISH_STOPWORDS
+
+
+def test_turkish_lower_leaves_plain_ascii_untouched():
+    """The fix is scoped to the one codepoint Python's .lower() gets wrong --
+    not a general Turkish-locale casing change."""
+    assert _turkish_lower("IZIN") == "izin"
 
 
 def test_build_search_query_is_deterministic():
@@ -26,6 +44,22 @@ def test_build_search_query_strips_stopwords():
     assert "icin" not in query.lower()
     # A content word from the same sentence must survive.
     assert "başvurmalıyım" in query or "evrak" in query
+
+
+def test_build_search_query_strips_capitalised_stopwords_too():
+    """Regression: `token.lower()` maps 'İ' (U+0130, dotted capital I) to a
+    two-codepoint 'i' + combining dot (U+0307), which never equals the plain
+    single-codepoint 'için' the stopword set is written with -- so a query
+    capitalising the word (sentence-initial, as in real usage) let it survive
+    filtering and consume one of the 12-term budget as a content word BM25
+    would then score on."""
+    query = build_search_query("İzin talebi İçin hangi belgeler gerekli?")
+    terms = query.split()[:-len(DOMAIN_EXPANSION.split())]
+    assert "İçin" not in terms
+    assert "için" not in terms
+    # A genuine content word from the same sentence, unaffected by the fix,
+    # must still survive -- this isn't a test of over-aggressive filtering.
+    assert "İzin" in terms
 
 
 def test_build_search_query_falls_back_to_raw_terms_when_everything_is_a_stopword():
