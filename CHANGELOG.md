@@ -2,6 +2,31 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [1.40.0] - 2026-08-06
+### Değiştirildi
+- **Frontend güncel backend sözleşmesine taşındı**: Eski monolitik `App.tsx` yerine mevcut `services`/`hooks`/`pages`/`providers` yapısı gerçek uygulama girişi yapıldı; auth zorunluluğu, korumalı sayfalar ve merkezi API istemcisi devreye alındı.
+- **JWT yenileme ve oturum sonlandırma tamamlandı**: Normal JSON ve POST-SSE çağrıları Bearer token taşıyor; 401 sonrasında eşzamanlı istekleri tek refresh çağrısında birleştiren bir retry akışı ve refresh başarısızlığında güvenli logout eklendi.
+- **Chat checkpoint sözleşmesi düzeltildi**: Frontend üretimli `clientSessionId` ile backend'in kullanıcı prefix'li `threadId` değeri ayrıldı; resume/state çağrıları tam thread kimliğini, yeni mesajlar ham client kimliğini kullanıyor. Sayfa yenilemesinden sonra bekleyen HITL interrupt state endpoint'inden geri yükleniyor.
+- **Guardrail ve RBAC arayüzü eklendi**: Belge analizinde gizlilik derecesi, maskelenmiş PII bulguları ve insan incelemesi uyarısı; chat akışında `tool_call`/`guardrail` SSE olayları; yönetim ekranında üç güncel rol ve employee `clearance_level` kontrolü gösteriliyor. Manager liste/davet yetkisini korurken admin-only değişiklik kontrolleri kapalı kalıyor.
+- **Frontend görünümü modüler sayfalara uyarlandı**: Responsive uygulama kabuğu, belge kütüphanesi, taslak, chat, karar akışı, login ve yönetim sayfaları ortak tema sistemi altında birleştirildi.
+- **Yerel demo girişi eklendi**: Docker development profili, backend'in mevcut `REQUIRE_AUTH=False` açık demo moduyla frontend'in development-only oturum bypass'ını birlikte etkinleştiriyor; production build'lerde bypass devreye giremiyor.
+- **Uygulama kabuğunun masaüstü grid yerleşimi düzeltildi**: Genel ikon butonu kuralının gizli mobil menü butonunu yeniden gösterip sidebar ve ana içeriği farklı grid satırlarına itmesi engellendi.
+- **Sidebar evrak kütüphanesi kompaktlaştırıldı**: Yükleme alanı, hata bildirimi, arama ve boş durum bileşenleri dar panel genişliğine özel ölçülendirildi; yatay taşma ve gereksiz uzun kartlar kaldırıldı.
+- **Sidebar ve tipografi hiyerarşisi yeniden dengelendi**: Masaüstü sidebar genişliği 320 piksele sabitlendi, açılan evrak kütüphanesi yalnızca kendi navigasyon alanında kayıyor, footer yerinde kalıyor ve chevron açık/kapalı durumunu dönüşümle gösteriyor. Başlık, gövde ve Markdown metinleri için okunabilir tipografi ölçeği geri getirildi.
+- **Evrak listesi iyimser güncelleniyor**: Başarılı analiz sonucu yeniden listeleme isteğine bağlı kalmadan anında kütüphaneye ekleniyor ve kullanıcıya özel yerel cache'e yazılıyor; liste endpoint'i geçici olarak erişilemese de yüklenen evrak kaybolmuyor.
+- **Frontend taslak geçmişi eklendi**: Backend ayrı bir taslak listeleme endpoint'i sunmadığı için kullanıcının bu tarayıcıda oluşturduğu son 20 taslak, kaynak evrak ve oluşturulma zamanıyla yerel olarak saklanıp Taslaklar sayfasında seçilebilir kartlar halinde gösteriliyor.
+- **Eski topolojik karar akışı geri getirildi**: Dikey aşama listesi yerine yönlendirici, paralel uygunluk/mevzuat dalları, taslak-revizyon döngüsü, doğrulama/yargıç, insan onayı, sevk ve asistan kolunu aynı SVG grafiğinde gösteren düzen yeniden kullanılıyor. Yeni SSE node durumları, araç çağrıları ve guardrail kararları bu eski görsel hiyerarşiye bağlandı.
+- **Sidebar evrak tipografisi sıkılaştırıldı**: Kayıtlı evrak satırlarının başlık/alt bilgi ölçeği küçültüldü, uzun adlar ellipsis ile sınırlandırıldı; yükleme başarı mesajına ikon/metin aralığı ve seçili evrak alanına ayrı etiket-başlık blokları eklendi.
+- **Karar grafiği renk ve hareket sistemi sabitlendi**: Düğüm türleri (`deterministik`, `model`, `araç/insan`) ve çalışma durumları (`çalışıyor`, `tamamlandı`, `hata`, `atlandı`) merkezi CSS renk değişkenlerine bağlandı. Aktif düğüm animasyonu konum değiştirmeden kendi merkezi etrafında yalnızca `scale` uyguluyor.
+- **Karar grafiği tema uyumlu hâle getirildi**: Canvas, düğüm dolgusu ve grafik metinleri sabit koyu renklerden çıkarılıp tema değişkenlerine bağlandı; açık temada açık zemin, koyu temada koyu zemin kullanılıyor.
+- **Revizyon düğümü grafik sınırına alındı**: Düğümün stroke ve aktif glow efektinin SVG viewBox dışına kesilmesini engellemek için yatay konumu güvenli iç boşluğa taşındı.
+- **Karar grafiği koordinatları birlikte yeniden dengelendi**: Yalnızca revizyon düğümünü kaydırmak yerine yönlendirici, analiz, paralel uygunluk/mevzuat, taslak-revizyon, doğrulama/yargıç, insan onayı, sevk ve asistan düğümlerinin tamamı ortak bir grid üzerinde hizalandı.
+- **Karar grafiğinin nefes alanı genişletildi**: Sağ panel 520 piksele, SVG çalışma alanı `560×580` ölçüsüne çıkarıldı; ana akış katmanları ve paralel dallar arasındaki yatay/dikey aralıklar birlikte büyütüldü.
+
+### Test
+- API Authorization/refresh, parçalı SSE ve event dedup, client session/thread ayrımı, interrupt recovery ve belge guardrail gösterimi için frontend testleri eklendi.
+- Alpine frontend imajında Rollup'un Linux x64 musl native paketi, npm'in platforma özgü optional dependency lockfile hatasına karşı seçilen Rollup sürümüyle açıkça kuruluyor.
+
 
 ## [1.39.0] - 2026-08-05
 ### Eklendi

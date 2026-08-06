@@ -5,8 +5,13 @@ WORKDIR /workspace
 # Copy dependencies manifest
 COPY frontend/package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install the locked dependency tree first. npm can omit Rollup's platform
+# package from cross-platform lockfiles (npm/cli#4828), so install the native
+# Alpine x64 binary explicitly at the exact Rollup version selected above.
+RUN npm ci \
+    && ROLLUP_VERSION="$(node -p "require('rollup/package.json').version")" \
+    && npm install --no-save --package-lock=false \
+        "@rollup/rollup-linux-x64-musl@${ROLLUP_VERSION}"
 
 # Copy application files
 COPY frontend/ ./
