@@ -198,8 +198,9 @@ Yeni Agent veya Workflow aşağıdaki metriklerle değerlendirilmelidir.
 
 ### Deterministik Karar Katmanı Koşumu
 
-LLM olmayan karar fonksiyonları (`resolve_plan_deterministic`, `verify_draft`)
-`evaluation/` altındaki koşumla ölçülür. Ayrıntı: `evaluation/README.md`.
+LLM çağrısı yapmayan karar fonksiyonları (`resolve_plan` -- lexical + semantik füzyon,
+model hariç -- `verify_draft`) `evaluation/` altındaki koşumla ölçülür.
+Ayrıntı: `evaluation/README.md`.
 
 ```bash
 make eval           # tüm suite'ler -> evaluation/reports/all-latest.{json,md}

@@ -44,9 +44,12 @@ Two things do not go through fusion at all, on purpose:
 """
 
 import logging
+import time
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Optional
 
 from pydantic import BaseModel, Field
+
+from app.observability.ai_metrics import ROUTER_STAGE_DURATION
 
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
@@ -500,7 +503,9 @@ async def resolve_plan(
             return resolved
 
     has_active_draft = bool(focus and focus.active_draft is not None)
+    _lexical_start = time.perf_counter()
     lexical = score_intents(message, document_id, previous_intent, has_active_draft)
+    ROUTER_STAGE_DURATION.labels(stage="lexical").observe(time.perf_counter() - _lexical_start)
 
     compound = _try_compound(lexical)
     if compound is not None:
@@ -530,7 +535,11 @@ async def resolve_plan(
     source = "fused"
 
     if top_probability < policy.tau_high and matcher is not None:
+        _semantic_start = time.perf_counter()
         semantic = await matcher.label_similarities(message, "intent")
+        ROUTER_STAGE_DURATION.labels(stage="semantic").observe(
+            time.perf_counter() - _semantic_start
+        )
         if semantic:
             probs, ranked = _fuse(semantic)
             top_intent, top_probability = ranked[0]

@@ -139,6 +139,42 @@ ROUTER_SEMANTIC_AVAILABLE = Gauge(
     "Whether the intent ladder's semantic prototype layer loaded successfully (1) or disabled itself (0).",
 )
 
+#: Every router decision, by resolved intent and by the mechanism that
+#: produced it (``fused``/``fused_semantic``/``compound``/
+#: ``clarification_resolved``/``model``/``model_failed``/``clarify`` -- see
+#: ``app.ai.workflows.planner.PlanDecision.source``). This is the number that
+#: was previously invisible outside of a `run_recorder` DB row: how often
+#: production actually asks a clarifying question, and which rung is doing
+#: the deciding.
+ROUTER_DECISIONS = Counter(
+    "kachow_router_decisions_total",
+    "Router decisions, by resolved intent and by the mechanism that produced them.",
+    ["intent", "source"],
+)
+
+#: Distribution of `PlanDecision.confidence`, by source. Comparable across
+#: every source since the fusion rewrite gave them a single calibrated scale
+#: (see `PlanDecision.confidence`'s docstring) -- before that, three
+#: incompatible scales landing in the same histogram would have been
+#: meaningless.
+ROUTER_CONFIDENCE = Histogram(
+    "kachow_router_confidence",
+    "Router decision confidence in [0, 1], by source.",
+    ["source"],
+    buckets=(0.0, 0.2, 0.35, 0.5, 0.55, 0.7, 0.85, 0.95, 1.0),
+)
+
+#: Wall-clock cost of each stage `resolve_plan` can pay for, so the semantic
+#: rung coming back online (see `ROUTER_SEMANTIC_AVAILABLE`) has a number
+#: attached to the latency it adds, and the (currently empty on the gold set,
+#: see `evaluation/harness/intent_suite.py::run_with_model`) model band's
+#: real-traffic cost is visible once it does fire.
+ROUTER_STAGE_DURATION = Histogram(
+    "kachow_router_stage_duration_seconds",
+    "Wall-clock duration of one router decision stage.",
+    ["stage"],
+)
+
 #: The parameter set the deterministic decisions above were produced under.
 #: Without it a shift in DRAFT_SCORE or CLAIM_MATCH is ambiguous between "the
 #: traffic changed" and "we moved a threshold" -- and those call for opposite

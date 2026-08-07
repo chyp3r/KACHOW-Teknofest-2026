@@ -124,7 +124,17 @@ async def test_an_ambiguous_expensive_followup_asks_instead_of_guessing(fake_llm
         {"input_text": "Bu evraka cevap yazısı hazırla.", "document_id": None}, config=config
     )
 
-    result = await graph.ainvoke({"input_text": "Kısalt.", "document_id": None}, config=config)
+    # Not "Kısalt." -- that phrase is now exactly the case the fusion rewrite
+    # fixed (an unambiguous revise imperative that used to score a losing
+    # margin against the generic short-message hint and fall through to a
+    # question it never should have asked; see test_revise_clarify_routing.py
+    # for that regression pinned directly). This message carries no lexical
+    # revise/draft/analyze surface at all, so it stays genuinely contested
+    # even under fusion.
+    result = await graph.ainvoke(
+        {"input_text": "Yazdığın metni bir kez daha ele alır mısın?", "document_id": None},
+        config=config,
+    )
 
     # No second draft/revise generation happened -- the system asked instead.
     assert draft_graph.ainvoke.await_count == 1

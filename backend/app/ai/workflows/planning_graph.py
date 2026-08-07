@@ -53,6 +53,8 @@ from app.observability import guardrail_recorder
 from app.observability.ai_metrics import (
     HITL_INTERRUPTS,
     NODE_DURATION,
+    ROUTER_CONFIDENCE,
+    ROUTER_DECISIONS,
     ROUTER_SEMANTIC_AVAILABLE,
 )
 from app.observability.run_recorder import end_run, record_step, start_run
@@ -511,6 +513,8 @@ def create_planning_graph(
             decision.intent,
             decision.source,
         )
+        ROUTER_DECISIONS.labels(intent=decision.intent, source=decision.source).inc()
+        ROUTER_CONFIDENCE.labels(source=decision.source).observe(decision.confidence)
 
         await emit(
             config,
@@ -520,6 +524,9 @@ def create_planning_graph(
                 "intent": decision.intent,
                 "reasoning": decision.reasoning,
                 "reasoning_level": state.get("reasoning_level", ReasoningLevel.BALANCED.value),
+                "source": decision.source,
+                "confidence": decision.confidence,
+                "alternatives": list(decision.alternatives),
             },
         )
 
