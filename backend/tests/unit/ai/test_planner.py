@@ -95,13 +95,15 @@ async def test_short_affirmative_continues_the_previous_continuable_intent(previ
 @pytest.mark.asyncio
 async def test_continuation_does_not_apply_to_non_continuable_previous_intents():
     """A bare 'evet' after an assist turn has no unambiguous follow-up
-    action, and no other evidence of its own either -- `assist.short_message`
-    is the *only* thing that can fire, which the weak-evidence gate (see
-    `_has_only_weak_evidence`) refuses to commit on its own. With no model
-    client to break the tie, that means asking rather than silently guessing
-    assist purely because the message happened to be short."""
+    action -- it resolves on its own (short-message) merits instead of
+    silently continuing that flow. `assist.short_message` is exempt from the
+    weak-evidence gate (see `_WEAK_EVIDENCE_IDS`): with no draft open and
+    nothing else attached, there is no competing reading left for a short
+    message to have wrongly outscored -- unlike a short *revise* instruction
+    with a draft open, which the gate exists to protect (short_message can't
+    even fire in that case; see `intent_scorer.score_intents`)."""
     decision = await resolve_plan("evet", None, previous_intent="assist")
-    assert decision.intent == "clarify"
+    assert decision.intent == "assist"
 
 
 @pytest.mark.asyncio

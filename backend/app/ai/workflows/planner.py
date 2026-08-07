@@ -156,15 +156,25 @@ _AFFIRMATIVE_SURFACES = CONTINUATION_SURFACES
 COMPOUND_PAIR = frozenset({"draft", "analyze"})
 
 #: Evidence ids that are structural fillers, not intent-specific signal --
-#: "the message is short" or "a question landed while a document happens to
-#: be attached" describes the message's shape, not what it asked for. See
-#: `intent_scorer.score_intents`'s `assist.short_message` and
-#: `assist.question_with_document` rules. A fused decision whose winning
-#: intent is backed *only* by ids in this set (once ``requires_active_draft``
-#: rules are also live, a genuine four-word revise instruction like "giriş
-#: kısmını yumuşat" scores on its own surface, not on brevity) is escalated
-#: to the model instead of committed -- see `_has_only_weak_evidence`.
-_WEAK_EVIDENCE_IDS = frozenset({"assist.short_message", "assist.question_with_document"})
+#: "a question landed while a document happens to be attached" describes the
+#: message's shape, not what it asked for, and says nothing about whether a
+#: *different* intent (e.g. `revise`, if a draft is also open) was the real
+#: one being asked about. See `intent_scorer.score_intents`'s
+#: `assist.question_with_document` rule. A fused decision whose winning
+#: intent is backed *only* by ids in this set is escalated to the model
+#: instead of committed outright -- see `_has_only_weak_evidence`.
+#:
+#: `assist.short_message` is deliberately absent: it already can't fire
+#: while a draft is open (`intent_scorer.score_intents` gates it on
+#: `not has_active_draft`, which is the one case where its brevity used to
+#: outscore a genuine short revise instruction like "giriş kısmını
+#: yumuşat"). With no draft open and nothing else attached, a short message
+#: backed only by its own brevity -- a bare "Evet" after a non-continuable
+#: turn, say -- has no competing reading left to lose to, so there is
+#: nothing left for this gate to protect against; escalating it anyway would
+#: just turn an unambiguous "nothing else applies" default into an
+#: unnecessary question.
+_WEAK_EVIDENCE_IDS = frozenset({"assist.question_with_document"})
 
 #: Confidence reported for a model-broken tie and for the safe default used
 #: when the model call itself fails. Not the fusion layer's own
@@ -263,12 +273,22 @@ def _merge_steps(intents: frozenset[str]) -> list[str]:
     return [step for step in STEP_ORDER if step in merged]
 
 
-def _has_only_weak_evidence(intent: str, lexical: IntentScores) -> bool:
+def _has_only_weak_evidence(intent: str, lexical: IntentScores, has_active_draft: bool) -> bool:
     """Whether ``intent``'s win rests on nothing but structural filler.
 
     Args:
         intent: The fusion layer's winning intent.
         lexical: The message's lexical evidence.
+        has_active_draft: Whether a draft is open this turn. The only reason
+            ``assist.question_with_document`` is worth distrusting is that it
+            might be drowning out a `revise` reading of the same message
+            ("Bu daha iyi mi görünüyor?" with both a document *and* an open
+            draft) -- without a draft open there is nothing else the message
+            could plausibly mean, so a bare document-question win is exempted
+            outright rather than sent on an escalation round trip with
+            nothing to resolve. Same reasoning `intent_scorer.score_intents`
+            already applies to `assist.short_message` by gating it on
+            ``not has_active_draft`` at the rule level instead.
 
     Returns:
         True when every lexical rule that fired *for this intent* is in
@@ -276,6 +296,8 @@ def _has_only_weak_evidence(intent: str, lexical: IntentScores) -> bool:
         meaning the win came from the semantic layer or the fusion model's
         prior alone, weaker still than a filler rule.
     """
+    if intent == "assist" and not has_active_draft:
+        return False
     strong = [
         rule_id
         for rule_id in lexical.evidence
@@ -673,7 +695,7 @@ async def resolve_plan(
     # the embedding similarity *is* the real signal a filler rule is a stand-in
     # for elsewhere, and second-guessing it here would just be a slower way of
     # ignoring the semantic layer's own vote.
-    weak = source == "fused" and _has_only_weak_evidence(top_intent, lexical)
+    weak = source == "fused" and _has_only_weak_evidence(top_intent, lexical, has_active_draft)
     if top_probability >= policy.tau_high and not weak:
         logger.info(
             "Plan resolved via %s: intent=%s p=%.3f", source, top_intent, top_probability
