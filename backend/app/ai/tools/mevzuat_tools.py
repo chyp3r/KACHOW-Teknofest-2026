@@ -23,14 +23,13 @@ Three properties, all deliberate:
 
 import asyncio
 import logging
-import re
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
 from app.ai.tools.registry import ToolSpec
 from app.core.config import settings
 from app.mcp.manager import mcp_manager
+from app.mcp.mevzuat_client import fetch_mevzuat_text, pick_document_id, resolve_and_fetch, text_of
 from app.mcp.registry import MEVZUAT_SERVER, is_registered
 
 logger = logging.getLogger(__name__)
@@ -53,60 +52,6 @@ class SearchLiveLegislationArgs(BaseModel):
     )
 
 
-#: Result-line markers for legislation that is no longer in force. The repealed
-#: companion to a law carries the *same* number as the law itself, so number
-#: matching alone does not separate them.
-_REPEALED_MARKERS = ("Mülga", "MÜLGA", "YÜRÜRLÜKTEN KALDIRILMIŞ")
-
-
-def _pick_document_id(search_output: str) -> Optional[str]:
-    """Choose the best result's document id from a search response.
-
-    The server returns Markdown-ish lines like
-    ``- [657] DEVLET MEMURLARI KANUNU (Kanunlar) | mevzuatId: 102924``.
-
-    Taking the first `mevzuatId` is wrong, and quietly so. Searching for 657
-    returns "DEVLET MEMURLARI KANUNUNUN YÜRÜRLÜKTEN KALDIRILMIŞ HÜKÜMLERİ"
-    (mevzuat_id 335559) *above* the actual Devlet Memurları Kanunu (102924) --
-    both legitimately numbered 657, one of them repealed. Quoting repealed text
-    as current law is exactly the failure this project exists to avoid, so
-    repealed entries are skipped and only fall back to if nothing else matched.
-
-    Args:
-        search_output: Raw text of a `search_mevzuat` response.
-
-    Returns:
-        The chosen document id, or None when the response has no results.
-    """
-    fallback: Optional[str] = None
-    for line in search_output.splitlines():
-        match = re.search(r"mevzuatId:\s*(\d+)", line)
-        if not match:
-            continue
-        if any(marker in line for marker in _REPEALED_MARKERS):
-            fallback = fallback or match.group(1)
-            continue
-        return match.group(1)
-    return fallback
-
-
-def _text_of(result: object) -> str:
-    """Read the text payload out of an MCP tool result.
-
-    Args:
-        result: Whatever `MCPManager.call_tool` returned.
-
-    Returns:
-        The first text content block, or an empty string.
-    """
-    content = getattr(result, "content", None) or []
-    for block in content:
-        text = getattr(block, "text", None)
-        if text:
-            return text
-    return ""
-
-
 async def _lookup(query: str) -> str:
     """Resolve a legislation name or number to its official text.
 
@@ -121,46 +66,28 @@ async def _lookup(query: str) -> str:
     # law 7417, a 2022 act *amending* 657, at the top while 657 itself does not
     # appear at all. Same trap `scripts/fetch_mevzuat_corpus.py` documents.
     stripped = query.strip()
-    document_id: Optional[str] = None
     if stripped.isdigit():
-        # KANUN-filtered first: without a type filter, 657 returns its
-        # repealed-provisions companion first, and this filter drops that
-        # entry entirely rather than relying on _pick_document_id's fallback.
-        # But this tool's own description promises "kanun veya yönetmeliğin"
-        # and tells the model a numeric query is the reliable one -- so a
-        # numbered yönetmelik, tüzük or KHK must not dead-end here just
-        # because the first attempt only asked for KANUN. Retry unfiltered
-        # (still number-matched) before giving up; _pick_document_id's
-        # repealed-marker check is generic, not KANUN-specific, so it still
-        # protects this second attempt.
-        filtered = await mcp_manager.call_tool(
-            MEVZUAT_SERVER,
-            "search_mevzuat",
-            {"mevzuat_no": stripped, "mevzuat_tur": "KANUN", "page_size": 5},
-        )
-        document_id = _pick_document_id(_text_of(filtered))
-        if document_id is None:
-            unfiltered = await mcp_manager.call_tool(
-                MEVZUAT_SERVER,
-                "search_mevzuat",
-                {"mevzuat_no": stripped, "page_size": 5},
-            )
-            document_id = _pick_document_id(_text_of(unfiltered))
+        # KANUN first (cheaper, and what excludes 657's repealed companion
+        # outright), retrying unfiltered before giving up -- this tool's own
+        # description promises "kanun veya yönetmeliğin" and tells the model a
+        # numeric query is the reliable one, so a numbered yönetmelik, tüzük or
+        # KHK must not dead-end here just because the first attempt only asked
+        # for KANUN. resolve_and_fetch and the retriever in
+        # app.ai.retrieval.mcp_mevzuat share this exact resolution logic.
+        resolved = await resolve_and_fetch(stripped, "KANUN")
     else:
         by_name = await mcp_manager.call_tool(
             MEVZUAT_SERVER, "search_mevzuat", {"mevzuat_adi": stripped, "page_size": 5}
         )
-        document_id = _pick_document_id(_text_of(by_name))
+        document_id = pick_document_id(text_of(by_name))
+        resolved = None
+        if document_id is not None:
+            text = await fetch_mevzuat_text(document_id)
+            resolved = (document_id, text) if text else None
 
-    if document_id is None:
+    if resolved is None:
         return NOT_FOUND
-
-    content = await mcp_manager.call_tool(
-        MEVZUAT_SERVER, "get_mevzuat_content", {"mevzuat_id": document_id}
-    )
-    text = _text_of(content).strip()
-    if not text:
-        return NOT_FOUND
+    document_id, text = resolved
 
     if len(text) > EXCERPT_CHAR_LIMIT:
         text = text[:EXCERPT_CHAR_LIMIT] + "\n\n[... metin kısaltıldı ...]"
