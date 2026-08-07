@@ -404,19 +404,43 @@ Bu yaklaşım;
 
 ## Mevcut durum
 
-`app/mcp/` katmanı (stdio `MCPClient` + `MCPManager`) çalışır durumdadır ancak
-**çalışma zamanında kayıtlı bir sunucu yoktur**; `registry.py` boştur.
+`app/mcp/` katmanı iki yerde kullanılır; ikisi de aynı sunucuya bağlanır:
+[`mevzuat-mcp`](https://github.com/saidsurucu/mevzuat-mcp) (MIT), mevzuat.gov.tr
+ve bedesten.adalet.gov.tr üzerinden sorgu yapar.
 
-Bugün MCP'nin tek gerçek kullanımı geliştirme zamanındadır:
-`scripts/fetch_mevzuat_corpus.py`, aynı `MCPClient` üzerinden
-[`mevzuat-mcp`](https://github.com/saidsurucu/mevzuat-mcp) (MIT) sunucusuna
-bağlanıp mevzuat.gov.tr'den tam metin çeker ve `datasets/mevzuat/` altına yazar.
+**1. Geliştirme zamanı — korpus üretimi.** `scripts/fetch_mevzuat_corpus.py`
+tam metinleri çekip `datasets/mevzuat/` altına yazar. Puanlanan gereksinimlerin
+dayandığı yol budur ve tamamen çevrimdışıdır.
+
+**2. Çalışma zamanı — asistan aracı (varsayılan kapalı).** `registry.py`,
+`MEVZUAT_MCP_ENABLED` açıksa sunucuyu `mcp_manager`'a kaydeder ve asistana
+`search_legislation_live` aracı eklenir. Üç kural:
+
+* **Yalnızca ekler.** Uygunluk kararına hiç dokunmaz. `check_required_fields`
+  sabit madde numaraları üzerinde küme farkıdır ve analiz hattı bu modülü hiç
+  çağırmaz — aynı evrakın her çalıştırmada bayt bayt aynı çıktıyı vermesini
+  sağlayan şey budur.
+* **İkinci sırada.** Yerel korpus aracı (`search_legislation`) önce kayıtlıdır;
+  bu, korpusun kapsamadığı sorular için bir yükseltmedir.
+* **Hata da bir cevaptır.** Erişilemeyen bir devlet sitesi, yerel aracın
+  döndürdüğü "bulunamadı" ifadesinin aynısını döndürür; asla istisna fırlatmaz.
+  Üçüncü taraf bir site yüzünden sohbet turu 500 vermez.
+
+Mülga mevzuat ayıklanır: 657 aramasında "DEVLET MEMURLARI KANUNUNUN YÜRÜRLÜKTEN
+KALDIRILMIŞ HÜKÜMLERİ" kaydı aynı numarayı taşır ve gerçek kanunun **üstünde**
+döner. Yürürlükten kalkmış metni yürürlükteki kanun gibi alıntılamak, bu projenin
+önlemek için var olduğu uydurma atıf hatasının ta kendisidir.
 
 Sunucu **backend imajına dahil değildir**: bağımlılık ağacı `playwright`
-sabitler ve tarayıcı ikilisi çeker. Bu nedenle korpus üretimi izole bir sanal
-ortamda, elle çalıştırılır; analiz hattı yalnızca commit'lenmiş yerel dosyaları
-okur ve ağa hiç ihtiyaç duymaz. Bu, evrak analizinin çevrimdışı ve tekrar
-üretilebilir kalmasını sağlar.
+sabitler ve tarayıcı ikilisi çeker. Bu nedenle hem korpus üretimi hem de
+`MEVZUAT_MCP_ENABLED=true` kullanımı, kurulu bir kopyaya işaret eden
+`MEVZUAT_MCP_COMMAND` gerektirir (yerelde izole bir sanal ortam, ileride bir
+yardımcı konteyner). Komut ve argümanlar yapılandırmada tutulur, kodda değil —
+böylece bu geçiş kod değişikliği değil ayar değişikliğidir.
+
+Analiz hattı her hâlükârda yalnızca commit'lenmiş yerel dosyaları okur ve ağa hiç
+ihtiyaç duymaz. Bu, evrak analizinin çevrimdışı ve tekrar üretilebilir kalmasını
+sağlar.
 
 Korpusa yazılan her dosya `mevzuat_id`, kaynak ve çekilme tarihini taşır;
 böylece üretilen her atıf resmî metne kadar izlenebilir.

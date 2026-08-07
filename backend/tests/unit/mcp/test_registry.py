@@ -1,0 +1,181 @@
+"""Unit tests for MCP server registration and the live legislation tool.
+
+Two properties matter more than the happy path:
+
+* off by default -- the analysis pipeline must stay offline and reproducible, and
+  a tool the model cannot run must never appear in its tool list;
+* every failure degrades to "not found" -- a third-party government site being
+  slow or down must not turn a chat turn into a 500.
+"""
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from app.ai.tools.mevzuat_tools import (
+    NOT_FOUND,
+    _pick_document_id,
+    build_live_legislation_tools,
+)
+from app.mcp.manager import mcp_manager
+from app.mcp.registry import MEVZUAT_SERVER, is_registered, register_servers
+
+SEARCH_657 = (
+    "Results: 3 total (page 1)\n"
+    "- [657] DEVLET MEMURLARI KANUNUNUN YÜRÜRLÜKTEN KALDIRILMIŞ HÜKÜMLERİ "
+    "(Mülga Mevzuat) | mevzuatId: 335559\n"
+    "- [657] DEVLET MEMURLARI KANUNU (Kanunlar) | mevzuatId: 102924\n"
+)
+
+
+@pytest.fixture(autouse=True)
+def _clean_registry():
+    """Keep the process-wide manager from leaking between tests."""
+    mcp_manager.clients.clear()
+    yield
+    mcp_manager.clients.clear()
+
+
+def _result(text: str) -> MagicMock:
+    block = MagicMock()
+    block.text = text
+    result = MagicMock()
+    result.content = [block]
+    return result
+
+
+# ==========================================
+# Registration
+# ==========================================
+def test_no_server_is_registered_by_default():
+    """Off unless explicitly enabled: the committed corpus answers every scored
+    requirement with no network, and that property is worth defending."""
+    with patch("app.mcp.registry.settings.MEVZUAT_MCP_ENABLED", False):
+        assert register_servers() == []
+        assert is_registered(MEVZUAT_SERVER) is False
+
+
+def test_enabling_the_flag_registers_the_server():
+    with patch("app.mcp.registry.settings.MEVZUAT_MCP_ENABLED", True):
+        assert register_servers() == [MEVZUAT_SERVER]
+        assert is_registered(MEVZUAT_SERVER) is True
+
+
+def test_registration_is_idempotent():
+    """Called from startup and from test fixtures alike; must not accumulate."""
+    with patch("app.mcp.registry.settings.MEVZUAT_MCP_ENABLED", True):
+        register_servers()
+        register_servers()
+        assert len(mcp_manager.clients) == 1
+
+
+# ==========================================
+# Tool exposure
+# ==========================================
+def test_no_tool_is_offered_when_the_server_is_absent():
+    """The model must never be handed a tool whose call would fail."""
+    assert build_live_legislation_tools() == []
+
+
+def test_the_tool_appears_once_the_server_is_registered():
+    with patch("app.mcp.registry.settings.MEVZUAT_MCP_ENABLED", True):
+        register_servers()
+    tools = build_live_legislation_tools()
+    assert [tool.name for tool in tools] == ["search_legislation_live"]
+
+
+# ==========================================
+# Repealed-legislation guard
+# ==========================================
+def test_repealed_legislation_is_not_preferred():
+    """657's repealed-provisions companion carries the same number and sorts
+    above the law itself. Quoting it as current law would be a fabricated
+    citation of exactly the kind this project exists to avoid."""
+    assert _pick_document_id(SEARCH_657) == "102924"
+
+
+def test_repealed_result_is_still_better_than_nothing():
+    only_repealed = (
+        "- [657] ... YÜRÜRLÜKTEN KALDIRILMIŞ HÜKÜMLERİ (Mülga Mevzuat) "
+        "| mevzuatId: 335559\n"
+    )
+    assert _pick_document_id(only_repealed) == "335559"
+
+
+def test_no_results_yields_no_id():
+    assert _pick_document_id("Results: 0 total") is None
+
+
+# ==========================================
+# Degradation
+# ==========================================
+@pytest.mark.asyncio
+async def test_a_numeric_query_is_type_filtered():
+    """Without the filter the repealed companion is returned first."""
+    with patch("app.mcp.registry.settings.MEVZUAT_MCP_ENABLED", True):
+        register_servers()
+    handler = build_live_legislation_tools()[0].handler
+
+    call = AsyncMock(side_effect=[_result(SEARCH_657), _result("METİN")])
+    with patch.object(mcp_manager, "call_tool", call):
+        await handler("657")
+
+    search_arguments = call.await_args_list[0].args[2]
+    assert search_arguments["mevzuat_no"] == "657"
+    assert search_arguments["mevzuat_tur"] == "KANUN"
+
+
+@pytest.mark.asyncio
+async def test_an_unreachable_server_reads_as_not_found():
+    """A government site being down is a missing result, not a broken chat."""
+    with patch("app.mcp.registry.settings.MEVZUAT_MCP_ENABLED", True):
+        register_servers()
+    handler = build_live_legislation_tools()[0].handler
+
+    with patch.object(
+        mcp_manager, "call_tool", AsyncMock(side_effect=ConnectionError("refused"))
+    ):
+        assert await handler("657") == NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_a_slow_server_is_cut_off_rather_than_stalling_the_turn():
+    import asyncio
+
+    with patch("app.mcp.registry.settings.MEVZUAT_MCP_ENABLED", True):
+        register_servers()
+    handler = build_live_legislation_tools()[0].handler
+
+    async def _hang(*_args, **_kwargs):
+        await asyncio.sleep(30)
+
+    with patch("app.ai.tools.mevzuat_tools.settings.MEVZUAT_MCP_TIMEOUT_SECONDS", 0.05):
+        with patch.object(mcp_manager, "call_tool", _hang):
+            assert await handler("657") == NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_an_empty_document_reads_as_not_found():
+    with patch("app.mcp.registry.settings.MEVZUAT_MCP_ENABLED", True):
+        register_servers()
+    handler = build_live_legislation_tools()[0].handler
+
+    call = AsyncMock(side_effect=[_result(SEARCH_657), _result("   ")])
+    with patch.object(mcp_manager, "call_tool", call):
+        assert await handler("657") == NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_a_long_law_is_truncated_before_reaching_the_model():
+    """657 runs to roughly half a million characters; unbounded it would blow
+    the context window."""
+    with patch("app.mcp.registry.settings.MEVZUAT_MCP_ENABLED", True):
+        register_servers()
+    handler = build_live_legislation_tools()[0].handler
+
+    call = AsyncMock(side_effect=[_result(SEARCH_657), _result("x" * 500_000)])
+    with patch.object(mcp_manager, "call_tool", call):
+        answer = await handler("657")
+
+    assert len(answer) < 10_000
+    assert "kısaltıldı" in answer

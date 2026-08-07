@@ -164,6 +164,25 @@ class Settings(BaseSettings):
     MEVZUAT_CORPUS_DIR: str = "./datasets/mevzuat"
     MEVZUAT_COLLECTION_NAME: str = "mevzuat"
 
+    # Live legislation lookup over MCP (github.com/saidsurucu/mevzuat-mcp, MIT),
+    # querying mevzuat.gov.tr directly. Off by default and deliberately so: the
+    # committed corpus under MEVZUAT_CORPUS_DIR answers every scored requirement
+    # with no network at all, and evrak analysis staying offline and byte-
+    # reproducible is worth more than live coverage. This only ever *adds* an
+    # assistant tool; it never gates a compliance decision.
+    #
+    # The server is not in the backend image -- its dependency tree pins
+    # playwright and pulls a browser binary -- so enabling this needs the command
+    # below to point at an installed copy (an isolated venv locally, or a sidecar
+    # container). Command and args live here rather than in code so that swap is
+    # configuration.
+    MEVZUAT_MCP_ENABLED: bool = False
+    MEVZUAT_MCP_COMMAND: str = "mevzuat-mcp"
+    MEVZUAT_MCP_ARGS: list[str] = []
+    #: Cap on one lookup. The government site publishes no rate limit and the
+    #: assistant must not stall a chat turn waiting on it.
+    MEVZUAT_MCP_TIMEOUT_SECONDS: float = 25.0
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore"
     )

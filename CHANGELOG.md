@@ -2,6 +2,31 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [1.43.0] - 2026-08-06
+### Değiştirildi
+- **Mevzuat Önerisi Düğümü Hızlandırıldı**: `suggest_mevzuat` artık üretim belirteç sayısını 512 ile sınırlıyor (varsayılan 1024). Çıktısı birkaç tek cümlelik gerekçeden ibaret olduğu için varsayılan yalnızca modele kullanmadığı alan veriyordu.
+  - **İlk denenen 384 değeri gerçek alıntılara karşı yetersiz çıktı ve kazandırdığından fazlasına mal oldu**: `qwen3.5:9b` JSON'u yarıda kesip ayrıştırma hatası veriyor, yeniden deneniyor, tekrar başarısız oluyor ve model kendi üretim süresinin iki katı harcandıktan sonra ham alıntı geri dönüşüne düşülüyordu. Bu başarısızlık yalnızca uçtan uca ortaya çıktı, 384'ü ilk seçen izole çağrıda değil.
+  - **512 değeri altı belge/eksik-alan kombinasyonunda, ikişer tekrarla ölçüldü**: 6/6 ilk denemede başarılı, hiç yeniden deneme yok. Doğrulanmış tek bir sunucu süreci üzerinden canlı uçla da doğrulandı: aynı belgenin arka arkaya üç yüklemesi **49-51 sn** (önceden sınırsızken 65-85 sn), `ComplianceAgent` çağrısının kendisi ~35 sn'den ~25 sn'ye indi, deterministik çekirdek (tür, uygunluk durumu, eksik alanlar) üç koşuda da aynı.
+  - `MEVZUAT_RESULT_LIMIT` düşürülmesi de ölçüldü ve reddedildi: ~2 sn kazandırıyor ama **cevabı değiştiriyor** — sınırsız metni birebir üreten bir sınırla aynı türden bir kazanım değil.
+
+## [1.42.0] - 2026-08-05
+### Düzeltildi
+- **Bütçesini Aşan Düğümler Artık Yeniden Denenmiyor**: Uçtan uca demo sırasında bulundu — aynı belge yüklemesi 58 sn'de 200, ardından 166 sn'de **502**, ardından 55 sn'de 200 döndürüyordu. Sebep yavaş model değildi.
+  - `node_timeout` yalın bir `TimeoutError` fırlatıyordu ve `TRANSIENT_ERRORS` içinde `TimeoutError` vardı; dolayısıyla yalnızca bütçesini aşan bir düğüm, kopmuş bir bağlantı gibi görünüp **yeniden deneniyordu**. `suggest_mevzuat` 70 sn'lik bütçeye karşı normalde 28-34 sn sürüyor; ara sıra uzadığında LangGraph ikinci bir denemeye 70 sn daha harcayıp tüm isteği düşürüyordu. Marjinal bir yavaşlama, **alıntılar zaten doğru biçimde getirilmişken**, 5. gereksinimin *isteğe bağlı* yarısı uğruna 166 sn süren bir 502'ye dönüşüyordu.
+  - Bütçe aşımı artık `NodeBudgetExceeded` fırlatır: bilinçli olarak `TimeoutError` değildir ve bilinçli olarak `TRANSIENT_ERRORS` içinde yer almaz. İkisi birbirine benzer ve zıt şeyler söyler — asılı kalmış bir bağlantı ikinci denemeye değer, bütçesine sığmayan iş ikinci denemede de sığmaz.
+  - `suggest_mevzuat` ayrıca kendi model çağrısını düğüm bütçesinin altında sınırlar. `node_timeout` tüm düğümü sardığı için zaman aşımı `try/except` **dışında** tetikleniyor ve düğümün mevcut düşüş yolu (ham alıntılara geri dönme) hiçbir zaman devreye giremiyordu. Artık aşım, üretilen açıklamaya mal olur; analize değil.
+  - **Ölçüm** (aynı belge, arka arkaya dört yükleme): 4/4 HTTP 200 (önceden 1/3), en kötü durum 166 sn + 502 yerine 85 sn, sıfır zaman-aşımı-yeniden-deneme olayı ve deterministik çekirdek (tür, uygunluk durumu, eksik alanlar) dört koşuda da bayt bayt aynı.
+
+## [1.41.0] - 2026-08-05
+### Eklendi
+- **Asistan İçin Canlı Mevzuat Sorgusu (MCP, varsayılan kapalı)**: `app/mcp/registry.py` dolduruldu — boş duran bu dosya, `docs/architecture/ai.md`'nin "AI yalnızca MCP istemcisini kullanır" ifadesiyle çelişen tek yerdi. `MEVZUAT_MCP_ENABLED` açıkken [`mevzuat-mcp`](https://github.com/saidsurucu/mevzuat-mcp) (MIT) sunucusu `mcp_manager`'a kaydedilir ve asistana `search_legislation_live` aracı eklenir.
+  - **Yalnızca ekler.** Uygunluk kararına hiç dokunmaz: `check_required_fields` sabit madde numaraları üzerinde küme farkıdır ve analiz hattı bu modülü hiç çağırmaz. Aynı evrakın her çalıştırmada bayt bayt aynı çıktıyı vermesini sağlayan özellik korunur.
+  - **İkinci sırada.** Yerel korpus aracı (`search_legislation`) önce kayıtlıdır; model varsayılan olarak çevrimdışı yola uzanır, bu bir yükseltmedir.
+  - **Hata da bir cevaptır.** Erişilemeyen sunucu, zaman aşımı, boş içerik — hepsi yerel aracın döndürdüğü "bulunamadı" ifadesini döndürür, asla istisna fırlatmaz. Üçüncü taraf bir devlet sitesi yüzünden sohbet turu 500 vermez. Bayrak kapalıyken araç modele **hiç sunulmaz**, yani çalıştırılamayacak bir araç önerilmez.
+  - **Mülga mevzuat ayıklanır.** `657` araması, gerçek Devlet Memurları Kanunu'nun (`mevzuat_id=102924`) **üstünde** "DEVLET MEMURLARI KANUNUNUN YÜRÜRLÜKTEN KALDIRILMIŞ HÜKÜMLERİ" kaydını (`335559`) döndürüyor — ikisi de meşru biçimde 657 numaralı, biri yürürlükten kalkmış. İlk sonucu almak, yürürlükten kalkmış metni yürürlükteki kanun gibi alıntılamak olurdu; bu, projenin önlemek için var olduğu uydurma atıf hatasının ta kendisidir. Sayısal sorgular ayrıca `mevzuat_tur=KANUN` ile süzülür.
+  - Uzun kanunlar kısaltılır: 657 yarım milyon karakteri aşar, sınırsız bırakılsa bağlam penceresini taşırırdı.
+  - Sunucu backend imajına **dahil değildir** (bağımlılık ağacı `playwright` sabitler); komut ve argümanlar yapılandırmada tutulur, böylece yerel süreçten yardımcı konteynere geçiş kod değişikliği değildir.
+
 ## [1.40.0] - 2026-08-06
 ### Değiştirildi
 - **Frontend güncel backend sözleşmesine taşındı**: Eski monolitik `App.tsx` yerine mevcut `services`/`hooks`/`pages`/`providers` yapısı gerçek uygulama girişi yapıldı; auth zorunluluğu, korumalı sayfalar ve merkezi API istemcisi devreye alındı.
@@ -26,7 +51,6 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 ### Test
 - API Authorization/refresh, parçalı SSE ve event dedup, client session/thread ayrımı, interrupt recovery ve belge guardrail gösterimi için frontend testleri eklendi.
 - Alpine frontend imajında Rollup'un Linux x64 musl native paketi, npm'in platforma özgü optional dependency lockfile hatasına karşı seçilen Rollup sürümüyle açıkça kuruluyor.
-
 
 ## [1.39.0] - 2026-08-05
 ### Eklendi
