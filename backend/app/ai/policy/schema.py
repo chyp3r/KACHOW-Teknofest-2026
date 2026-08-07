@@ -124,12 +124,23 @@ class IntentPolicy:
             confidence in [0, 1] (``IntentScores.confidence``).
         tau_high: Minimum fused probability for the router to commit to an
             intent outright. Below it the ladder does not guess.
-        tau_low: Below this fused probability there is no point asking a
-            model either -- the evidence is too thin to be worth a round
-            trip, so the ladder goes straight to a clarifying question.
-            Between ``tau_low`` and ``tau_high`` is the band a fast-tier
-            model call is reserved for (see
-            ``app.ai.workflows.planner.classify_intent_with_model``).
+        tau_low: Below this fused probability the fusion signal alone is too
+            thin to *report* as a committed decision, but it no longer gates
+            the model call -- a fast-tier model is asked whenever one is
+            available (see ``app.ai.workflows.planner.resolve_plan``), since
+            a low fused probability is exactly the case a model call is
+            useful for, not a reason to skip it. ``tau_low`` still bounds
+            when a clarifying question is asked instead of trusting the
+            model's own ``unclear`` verdict: only when the fused evidence is
+            this thin *and* the model couldn't separate the top two options
+            either (see ``clarify_margin``).
+        clarify_margin: Minimum lead the top fused intent must hold over the
+            runner-up for the model's ``unclear`` verdict to be honored as a
+            genuine tie rather than overridden with the fused top intent. A
+            model saying "I'm not sure" about a message the fusion layer
+            already leads clearly on (lexical evidence just happened to fall
+            under ``tau_high``) should not turn into an unnecessary question
+            -- only a genuine photo finish should.
     """
 
     presence_floor: float = 1.4
@@ -138,6 +149,7 @@ class IntentPolicy:
     confidence_scale: float = 4.0
     tau_high: float = 0.55
     tau_low: float = 0.35
+    clarify_margin: float = 0.08
 
 
 @dataclass(frozen=True)
@@ -357,6 +369,9 @@ class Policy:
                 "intent.tau_low must stay below intent.tau_high -- otherwise the "
                 "model-call band between them is empty or inverted"
             )
+
+        if not 0.0 <= self.intent.clarify_margin <= 1.0:
+            raise ValueError("intent.clarify_margin must be a probability gap in [0, 1]")
 
         if self.memory.history_raw_cap <= self.memory.history_window:
             raise ValueError(

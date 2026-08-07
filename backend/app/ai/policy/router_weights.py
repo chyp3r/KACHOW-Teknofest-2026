@@ -5,7 +5,7 @@ GENERATED FILE -- do not hand-edit. Produced by ``scripts/fit_router.py`` from
 result) after changing the training-relevant slice of the gold set, the
 feature set in ``app.ai.workflows.router_features``, or ``POLICY_VERSION``.
 
-Fitted 2026-08-07T14:31:16Z against 120 training rows (see
+Fitted 2026-08-07T16:15:48Z against 127 training rows (see
 ``scripts/fit_router.py``'s module docstring for which gold-set categories
 are excluded and why). 5-fold cross-validation accuracy at fit time:
 1.0000 -- the number to compare a refit against, not training
@@ -69,7 +69,7 @@ class RouterWeights:
 
 
 ROUTER_WEIGHTS = RouterWeights(
-    version='1.5.0',
+    version='1.6.0',
     feature_names=(
     "lex_draft",
     "lex_analyze",
@@ -90,92 +90,92 @@ ROUTER_WEIGHTS = RouterWeights(
     ),
     bias=MappingProxyType(
         {
-        "draft": 0.203618,
-        "analyze": -0.035068,
-        "assist": -0.107022,
-        "revise": -0.061528
+        "draft": 0.246508,
+        "analyze": -0.018133,
+        "assist": 0.095662,
+        "revise": -0.324036
         }
     ),
     coefficients=MappingProxyType(
         {
         "draft": MappingProxyType(
         {
-            "lex_draft": 1.176749,
-            "lex_analyze": -0.418767,
-            "lex_assist": -0.291662,
-            "lex_revise": -0.238095,
-            "lex_margin": -0.095981,
-            "sem_draft": 0.041812,
-            "sem_analyze": -0.008605,
-            "sem_assist": 0.026042,
-            "sem_revise": 0.014373,
-            "has_document": -0.041010,
-            "has_active_draft": -0.078874,
-            "is_question": -0.159160,
-            "word_count_norm": 0.007593,
-            "prev_draft": -0.035735,
-            "prev_analyze": -0.009700,
-            "prev_revise": 0.000000,
+            "lex_draft": 1.180990,
+            "lex_analyze": -0.404125,
+            "lex_assist": -0.206318,
+            "lex_revise": -0.252834,
+            "lex_margin": -0.184379,
+            "sem_draft": 0.043872,
+            "sem_analyze": -0.004412,
+            "sem_assist": 0.027352,
+            "sem_revise": 0.016614,
+            "has_document": -0.013866,
+            "has_active_draft": -0.101298,
+            "is_question": -0.150363,
+            "word_count_norm": 0.011664,
+            "prev_draft": -0.031832,
+            "prev_analyze": -0.009236,
+            "prev_revise": -0.008644,
         }
     ),
         "analyze": MappingProxyType(
         {
-            "lex_draft": -0.215766,
-            "lex_analyze": 1.151899,
-            "lex_assist": -0.409788,
-            "lex_revise": -0.202710,
-            "lex_margin": -0.086097,
-            "sem_draft": 0.013719,
-            "sem_analyze": 0.015059,
-            "sem_assist": 0.000730,
-            "sem_revise": 0.003222,
-            "has_document": 0.239464,
-            "has_active_draft": -0.067036,
-            "is_question": -0.030394,
-            "word_count_norm": 0.055540,
-            "prev_draft": 0.079627,
-            "prev_analyze": 0.039477,
-            "prev_revise": 0.000000,
+            "lex_draft": -0.206212,
+            "lex_analyze": 1.162825,
+            "lex_assist": -0.310744,
+            "lex_revise": -0.233554,
+            "lex_margin": -0.159593,
+            "sem_draft": 0.012550,
+            "sem_analyze": 0.015986,
+            "sem_assist": 0.000374,
+            "sem_revise": 0.002354,
+            "has_document": 0.252996,
+            "has_active_draft": -0.088572,
+            "is_question": -0.024697,
+            "word_count_norm": 0.055261,
+            "prev_draft": 0.073548,
+            "prev_analyze": 0.042215,
+            "prev_revise": -0.005195,
         }
     ),
         "assist": MappingProxyType(
         {
-            "lex_draft": -0.696821,
-            "lex_analyze": -0.526266,
-            "lex_assist": 0.783824,
-            "lex_revise": -0.610233,
-            "lex_margin": 0.431085,
-            "sem_draft": -0.028750,
-            "sem_analyze": 0.013309,
-            "sem_assist": -0.001854,
-            "sem_revise": -0.027827,
-            "has_document": -0.058576,
-            "has_active_draft": -0.201297,
-            "is_question": 0.204606,
-            "word_count_norm": -0.065943,
-            "prev_draft": -0.016312,
-            "prev_analyze": -0.022327,
-            "prev_revise": 0.000000,
+            "lex_draft": -0.697434,
+            "lex_analyze": -0.513257,
+            "lex_assist": 0.935369,
+            "lex_revise": -0.458592,
+            "lex_margin": 0.233606,
+            "sem_draft": -0.024886,
+            "sem_analyze": 0.020669,
+            "sem_assist": 0.000084,
+            "sem_revise": -0.018139,
+            "has_document": -0.071652,
+            "has_active_draft": -0.098863,
+            "is_question": 0.179620,
+            "word_count_norm": -0.064209,
+            "prev_draft": -0.003903,
+            "prev_analyze": -0.017382,
+            "prev_revise": 0.022093,
         }
     ),
         "revise": MappingProxyType(
         {
-            "lex_draft": -0.264163,
-            "lex_analyze": -0.206866,
-            "lex_assist": -0.082374,
-            "lex_revise": 1.051038,
-            "lex_margin": -0.249007,
-            "sem_draft": -0.026780,
-            "sem_analyze": -0.019763,
-            "sem_assist": -0.024918,
-            "sem_revise": 0.010232,
-            "has_document": -0.139878,
-            "has_active_draft": 0.347206,
-            "is_question": -0.015052,
-            "word_count_norm": 0.002809,
-            "prev_draft": -0.027580,
-            "prev_analyze": -0.007450,
-            "prev_revise": 0.000000,
+            "lex_draft": -0.277344,
+            "lex_analyze": -0.245443,
+            "lex_assist": -0.418307,
+            "lex_revise": 0.944979,
+            "lex_margin": 0.110366,
+            "sem_draft": -0.031536,
+            "sem_analyze": -0.032243,
+            "sem_assist": -0.027810,
+            "sem_revise": -0.000829,
+            "has_document": -0.167479,
+            "has_active_draft": 0.288733,
+            "is_question": -0.004560,
+            "word_count_norm": -0.002715,
+            "prev_draft": -0.037813,
+            "prev_analyze": -0.015596,
+            "prev_revise": -0.008254,
         }
     )
         }

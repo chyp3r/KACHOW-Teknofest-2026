@@ -3,9 +3,11 @@
 `revise` is gated on an active draft the same way a document-only rule is
 gated on an attached document (`EvidenceRule.requires_active_draft`). Once
 the fused probability is computed, `resolve_plan` bands on it: a winner at or
-above `tau_high` commits outright, the band down to `tau_low` breaks the tie
-with a fast-tier model call when one is available, and anything below that
-asks the user instead -- see `resolve_plan`'s docstring.
+above `tau_high`, backed by more than a structural filler, commits outright;
+otherwise a fast-tier model call breaks the tie whenever one is available,
+regardless of how low the fused probability is; only with no client at all
+does `tau_low` still gate a direct question to the user -- see
+`resolve_plan`'s docstring.
 
 The band tests below patch `router_fusion.predict_proba` to fixed
 distributions rather than relying on the real fitted `ROUTER_WEIGHTS` --
@@ -117,7 +119,10 @@ async def test_a_contested_probability_without_a_model_client_asks_instead():
 
 
 @pytest.mark.asyncio
-async def test_a_probability_below_tau_low_asks_even_with_a_model_client_available():
+async def test_a_probability_below_tau_low_still_asks_the_model_when_one_is_available():
+    """A flat, uninformative distribution is exactly the case a model call is
+    for -- `tau_low` no longer skips it. Only the no-client path (see
+    `test_...` below, if one exists for that) still asks the user directly."""
     classify = AsyncMock(return_value="assist")
     flat = {name: 0.25 for name in ("draft", "analyze", "assist", "revise")}
     with patch("app.ai.workflows.planner.predict_proba", return_value=flat), patch(
@@ -125,8 +130,21 @@ async def test_a_probability_below_tau_low_asks_even_with_a_model_client_availab
     ):
         decision = await resolve_plan("Bunu hallet.", "doc-1", llm_client=MagicMock())
 
+    assert decision.source == "model"
+    assert decision.intent == "assist"
+    classify.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_a_probability_below_tau_low_asks_directly_with_no_model_client():
+    """The one remaining path `tau_low` still gates: no client at all means
+    there is nothing to ask, so a flat distribution falls to a clarifying
+    question exactly as it always did."""
+    flat = {name: 0.25 for name in ("draft", "analyze", "assist", "revise")}
+    with patch("app.ai.workflows.planner.predict_proba", return_value=flat):
+        decision = await resolve_plan("Bunu hallet.", "doc-1", llm_client=None)
+
     assert decision.source == "clarify"
-    classify.assert_not_awaited()
 
 
 @pytest.mark.asyncio
