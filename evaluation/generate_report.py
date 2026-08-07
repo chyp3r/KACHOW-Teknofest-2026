@@ -113,11 +113,15 @@ def _draft_summary(run: EvalRun) -> dict[str, Any]:
     }
 
 
-def _run_suite(name: str) -> tuple[EvalRun, dict[str, Any]]:
+def _run_suite(name: str, *, with_model: bool = False) -> tuple[EvalRun, dict[str, Any]]:
     """Run one suite and score it.
 
     Args:
         name: ``"intents"`` or ``"drafts"``.
+        with_model: Only meaningful for ``"intents"`` -- wires a real
+            fast-tier model into the model band instead of the default fully
+            offline run (see ``intent_suite.run_with_model``). Ignored for
+            ``"drafts"``, which has no model band to begin with.
 
     Returns:
         The run and its summary.
@@ -126,7 +130,7 @@ def _run_suite(name: str) -> tuple[EvalRun, dict[str, Any]]:
         ValueError: For an unknown suite name.
     """
     if name == "intents":
-        run = intent_suite.run()
+        run = intent_suite.run_with_model() if with_model else intent_suite.run()
         return run, _intent_summary(run)
     if name == "drafts":
         run = draft_suite.run()
@@ -367,6 +371,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="A previous report's .json to compare the headline metrics against.",
     )
     parser.add_argument("--out", type=Path, default=REPORT_DIR)
+    parser.add_argument(
+        "--with-model",
+        action="store_true",
+        help=(
+            "Intents suite only: wire a real fast-tier model into the "
+            "contested band instead of running fully offline. Makes live "
+            "Ollama calls -- see `make eval-llm`."
+        ),
+    )
     args = parser.parse_args(argv)
 
     selected = SUITES if args.suite == "all" else (args.suite,)
@@ -374,7 +387,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     runs: dict[str, EvalRun] = {}
     summaries: dict[str, dict[str, Any]] = {}
     for suite in selected:
-        run, summary = _run_suite(suite)
+        run, summary = _run_suite(suite, with_model=args.with_model)
         runs[suite] = run
         summaries[suite] = summary
 

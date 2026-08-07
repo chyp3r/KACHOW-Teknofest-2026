@@ -29,6 +29,12 @@ make eval
 # Değişiklik öncesi referans noktası
 make eval-baseline
 
+# Opsiyonel: yalnızca intents suite'i, fusion'ın tartışmalı bıraktığı
+# vakalarda gerçek fast-tier modeli çağırır. Varsayılan `make eval`in bir
+# parçası DEĞİL -- gerçek Ollama çağrısı yaptığı için daha yavaş ve
+# tekrarlanabilirliği garanti değil.
+make eval-llm
+
 # Karşılaştırmalı koşu
 docker compose run --rm --no-deps backend \
   python -m evaluation.generate_report --suite all --label after-scoring \

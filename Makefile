@@ -1,4 +1,4 @@
-.PHONY: setup-db bootstrap up down logs test eval eval-baseline
+.PHONY: setup-db bootstrap up down logs test eval eval-baseline eval-llm
 
 setup-db:
 	docker compose exec db psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'langfuse'" | grep -q 1 || docker compose exec db psql -U postgres -c "CREATE DATABASE langfuse"
@@ -64,3 +64,13 @@ eval:
 # Compare with: make eval ARGS="--baseline evaluation/reports/all-baseline.json"
 eval-baseline:
 	docker compose run --rm --no-deps backend python -m evaluation.generate_report --suite all --label baseline
+
+# Opt-in, not part of `make eval`: makes real Ollama calls for every intent
+# case the fusion layer leaves contested (see evaluation/harness/
+# intent_suite.py::run_with_model), so it is slower and its model-sourced
+# decisions are not perfectly reproducible run to run the way the rest of the
+# suite is. --no-deps is still correct here -- Ollama is reached over
+# host.docker.internal regardless of which compose services are up, the same
+# way the backend service's own OLLAMA_BASE_URL is wired.
+eval-llm:
+	docker compose run --rm --no-deps backend python -m evaluation.generate_report --suite intents --with-model --label with-model

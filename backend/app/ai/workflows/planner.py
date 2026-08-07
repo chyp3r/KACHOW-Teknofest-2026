@@ -136,6 +136,18 @@ _AFFIRMATIVE_SURFACES = CONTINUATION_SURFACES
 #: for.
 COMPOUND_PAIR = frozenset({"draft", "analyze"})
 
+#: Confidence reported for a model-broken tie and for the safe default used
+#: when the model call itself fails. Not the fusion layer's own
+#: `top_probability` (that number is fusion's uncertainty, the exact thing
+#: that made this a tie in the first place -- reporting it back out as the
+#: *model's* confidence would be circular) and not measured against real
+#: model output either, since that needs a live Ollama call the default,
+#: fully offline `make eval` deliberately never makes (see
+#: `evaluation.harness.intent_suite`'s module docstring). `make eval-llm`
+#: (`evaluation/harness/intent_suite.py::run_with_model`) is the optional,
+#: opt-in measurement this constant should eventually be replaced with.
+_MODEL_CONFIDENCE = 0.75
+
 
 class PlanDecision(NamedTuple):
     """The resolved execution plan for one user message.
@@ -179,13 +191,24 @@ class PlanDecision(NamedTuple):
 
 
 class IntentOutput(BaseModel):
-    """Single-label intent classification, used only for genuinely contested messages."""
+    """Single-label intent classification, used only for genuinely contested messages.
 
-    intent: Literal["draft", "analyze", "assist"] = Field(
+    Five labels, not four: ``unclear`` is a real, first-class answer, not an
+    error path. Before this the model had only ``draft``/``analyze``/``assist``
+    to choose from -- asked about a message the fusion layer already found
+    contested, it had no way to say "I'm not sure either" and had to force a
+    guess into one of three boxes, one of which (``revise``) it couldn't even
+    name.
+    """
+
+    intent: Literal["draft", "analyze", "assist", "revise", "unclear"] = Field(
         description=(
             "Kullanıcının niyeti. draft: resmi yazı/taslak hazırlanması isteniyor. "
             "analyze: evrakın analiz edilmesi isteniyor. "
-            "assist: yukarıdakilerin hiçbiri; genel sohbet veya yüklü bir belge hakkında soru."
+            "revise: mevcut (aktif) taslakta bir değişiklik isteniyor. "
+            "assist: yukarıdakilerin hiçbiri; genel sohbet veya yüklü bir belge hakkında soru. "
+            "unclear: bunlardan hangisi olduğu senin için de belirsizse, tahmin etme -- "
+            "bunu seç."
         )
     )
 
@@ -361,40 +384,68 @@ def _try_resolve_pending_clarification(
 
 
 async def classify_intent_with_model(
-    llm_client: BaseLLMClient, message: str, document_id: Optional[str]
-) -> Intent:
+    llm_client: BaseLLMClient,
+    message: str,
+    document_id: Optional[str],
+    focus: Optional[SessionFocus] = None,
+    previous_intent: Optional[str] = None,
+) -> str:
     """Break a fusion tie with a one-label model call.
 
     Args:
         llm_client: Fast-tier LLM client.
         message: The user's message.
         document_id: Storage path of an attached document, when present.
+        focus: The session's persistent focus, when known -- supplies whether
+            a draft is already open and what kind, the context a bare label
+            call otherwise has no way to see (the fusion layer sees it too,
+            as ``has_active_draft``, but this prompt has to spell it out in
+            words instead of a feature value).
+        previous_intent: The intent resolved for the previous turn, when
+            known.
 
     Returns:
-        The classified intent, defaulting to a safe value on failure.
+        One of ``PLAN_BY_INTENT``'s keys, or ``"unclear"``/``"model_failed"``
+        -- two distinct non-intents the caller must handle before treating the
+        result as a plan: ``"unclear"`` is the model's own considered
+        judgement that it doesn't know either (see ``IntentOutput``);
+        ``"model_failed"`` means the call itself broke (timeout, malformed
+        output, retries exhausted) and never produced a judgement at all.
+        Conflating the two would hide a real outage behind the same label a
+        model's honest uncertainty produces.
     """
     from app.ai.agents.base import BaseAgent
 
     agent = BaseAgent(
         llm_client=llm_client,
         name="IntentClassifier",
-        description="Classifies a user message into one of three workflow intents.",
+        description="Classifies a user message into one of five workflow intents.",
         system_prompt=(
-            "Kullanıcı mesajını üç niyetten birine ata. Yalnızca yapılandırılmış "
+            "Kullanıcı mesajını beş niyetten birine ata. Yalnızca yapılandırılmış "
             "JSON döndür, açıklama yazma.\n"
             "- draft: resmî yazı, cevap yazısı, üst yazı veya taslak hazırlanması isteniyor.\n"
             "- analyze: bir evrakın analiz edilmesi, sınıflandırılması veya eksiklerinin "
             "bulunması isteniyor.\n"
+            "- revise: aşağıda 'açık bir taslak var' diye belirtilmişse, o taslakta bir "
+            "değişiklik isteniyor.\n"
             "- assist: yukarıdakilerin hiçbiri; genel sohbet, sistem hakkında soru veya "
-            "yüklü bir belgenin içeriği hakkında soru."
+            "yüklü bir belgenin içeriği hakkında soru.\n"
+            "- unclear: yukarıdakilerden hangisi olduğundan emin değilsen, tahmin etme."
         ),
     )
 
-    prompt = (
-        f'Mesaj: "{message}"\n'
-        f"Sisteme yüklü bir belge var mı: {'evet' if document_id else 'hayır'}\n\n"
-        "Bu mesajın niyetini belirle."
-    )
+    active_draft = focus.active_draft if focus else None
+    context_lines = [
+        f'Mesaj: "{message}"',
+        f"Sisteme yüklü bir belge var mı: {'evet' if document_id else 'hayır'}",
+        (
+            f"Açık bir taslak var, türü: {active_draft.correspondence_type}"
+            if active_draft is not None
+            else "Açık (üzerinde çalışılan) bir taslak yok"
+        ),
+        f"Önceki turun niyeti: {previous_intent or 'yok'}",
+    ]
+    prompt = "\n".join(context_lines) + "\n\nBu mesajın niyetini belirle."
 
     try:
         result: IntentOutput = await agent.run_structured(
@@ -405,13 +456,8 @@ async def classify_intent_with_model(
         )
         return result.intent
     except Exception:
-        logger.warning("Intent classification failed; falling back by context.")
-        # Safe default: the cheapest flow that can still answer, whether or not
-        # a document is attached -- assist reaches for retrieval itself when it
-        # needs to. Never the full three-step drafting pipeline, which is what
-        # the old fallback chose and which turned every planner hiccup into the
-        # slowest possible response.
-        return "assist"
+        logger.warning("Intent classification failed.")
+        return "model_failed"
 
 
 async def resolve_plan(
@@ -497,18 +543,42 @@ async def resolve_plan(
         return _fused_decision(top_intent, probs, ranked, lexical, source)
 
     if top_probability >= policy.tau_low and llm_client is not None:
-        intent = await classify_intent_with_model(llm_client, message, document_id)
+        result = await classify_intent_with_model(
+            llm_client, message, document_id, focus=focus, previous_intent=previous_intent
+        )
+
+        if result == "model_failed":
+            logger.warning(
+                "Fused probability %.3f contested; model call failed, defaulting to assist.",
+                top_probability,
+            )
+            return PlanDecision(
+                steps=list(PLAN_BY_INTENT["assist"]),
+                intent="assist",
+                reasoning=REASONING_BY_INTENT["assist"],
+                source="model_failed",
+                confidence=_MODEL_CONFIDENCE,
+                evidence=tuple(lexical.evidence),
+            )
+
+        if result == "unclear" or result not in PLAN_BY_INTENT:
+            logger.info(
+                "Fused probability %.3f contested; model was unclear too. Asking instead.",
+                top_probability,
+            )
+            return _build_clarify_decision(ranked)
+
         logger.info(
             "Fused probability %.3f contested; model broke the tie: intent=%s",
             top_probability,
-            intent,
+            result,
         )
         return PlanDecision(
-            steps=list(PLAN_BY_INTENT[intent]),
-            intent=intent,
-            reasoning=REASONING_BY_INTENT[intent],
+            steps=list(PLAN_BY_INTENT[result]),
+            intent=result,  # type: ignore[arg-type]
+            reasoning=REASONING_BY_INTENT[result],
             source="model",
-            confidence=round(top_probability, 3),
+            confidence=_MODEL_CONFIDENCE,
             evidence=tuple(lexical.evidence),
         )
 

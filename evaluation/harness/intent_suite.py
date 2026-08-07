@@ -108,14 +108,19 @@ def _focus_from_payload(payload: dict[str, Any]) -> SessionFocus:
     )
 
 
-def decide(case: EvalCase) -> dict[str, Any]:
-    """Run one gold-set case through the full (non-model) intent ladder.
+def decide(case: EvalCase, llm_client: Optional[Any] = None) -> dict[str, Any]:
+    """Run one gold-set case through the intent decision.
 
     Args:
         case: The gold-set case.
+        llm_client: Fast-tier client for the model band. ``None`` (the
+            default, and always what ``decide`` is bound to for ``make
+            eval``) keeps this fully offline -- a contested case that would
+            have called the model instead resolves straight to ``clarify``.
+            Only ``run_with_model``/``make eval-llm`` passes a real one.
 
     Returns:
-        The observation dict: resolved intent, plan steps, the ladder's own
+        The observation dict: resolved intent, plan steps, the decision's own
         ``source`` label, and whether it abstained. ``resolve_plan`` never
         actually abstains (it always returns a decision, ``clarify`` included)
         -- ``abstained`` is kept in the observation shape for
@@ -128,7 +133,7 @@ def decide(case: EvalCase) -> dict[str, Any]:
         resolve_plan(
             case.payload.get("message", ""),
             document_id,
-            llm_client=None,
+            llm_client=llm_client,
             previous_intent=case.payload.get("previous_intent"),
             matcher=_MATCHER,
             focus=focus,
@@ -145,12 +150,36 @@ def decide(case: EvalCase) -> dict[str, Any]:
 
 
 def run() -> EvalRun:
-    """Run the whole intent gold set.
+    """Run the whole intent gold set, fully offline (`make eval`).
 
     Returns:
         The completed run.
     """
     return run_cases(SUITE, DATASET, load_cases(DATASET), decide)
+
+
+def run_with_model() -> EvalRun:
+    """Run the whole intent gold set with a real fast-tier model wired in.
+
+    Opt-in (`make eval-llm`), never part of the default `make eval` gate --
+    this makes real Ollama calls for every case the fusion layer leaves
+    contested, so the run is slower and its model-sourced decisions are not
+    perfectly reproducible between runs the way the rest of the suite is
+    (see ``evaluation/README.md``'s "neden LLM-as-judge değil"). It exists to
+    produce one number the offline suite structurally cannot: how often the
+    model rung itself (not the fallback around it) gets a contested case
+    right, for calibrating ``app.ai.workflows.planner._MODEL_CONFIDENCE``
+    against measurement instead of a placeholder.
+
+    Returns:
+        The completed run.
+    """
+    from app.ai.llms import get_fast_llm_client
+
+    llm_client = get_fast_llm_client()
+    return run_cases(
+        SUITE, DATASET, load_cases(DATASET), lambda case: decide(case, llm_client)
+    )
 
 
 def to_predictions(run_result: EvalRun) -> list[Prediction]:

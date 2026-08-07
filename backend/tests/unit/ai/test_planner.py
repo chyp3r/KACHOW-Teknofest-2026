@@ -227,6 +227,32 @@ async def test_a_genuinely_underspecified_command_does_not_pay_for_a_model_call_
     classify.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_the_model_saying_unclear_still_asks_the_user():
+    contested = {"draft": (_TAU_LOW + _TAU_HIGH) / 2, "analyze": 0.2, "assist": 0.15, "revise": 0.15}
+    classify = AsyncMock(return_value="unclear")
+    with patch("app.ai.workflows.planner.predict_proba", return_value=contested), patch(
+        "app.ai.workflows.planner.classify_intent_with_model", new=classify
+    ):
+        decision = await resolve_plan("belirsiz bir mesaj", "uploads/doc.pdf", llm_client=MagicMock())
+
+    assert decision.source == "clarify"
+    classify.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_a_failed_model_call_defaults_to_assist_but_is_labelled_distinctly():
+    contested = {"draft": (_TAU_LOW + _TAU_HIGH) / 2, "analyze": 0.2, "assist": 0.15, "revise": 0.15}
+    classify = AsyncMock(return_value="model_failed")
+    with patch("app.ai.workflows.planner.predict_proba", return_value=contested), patch(
+        "app.ai.workflows.planner.classify_intent_with_model", new=classify
+    ):
+        decision = await resolve_plan("belirsiz bir mesaj", "uploads/doc.pdf", llm_client=MagicMock())
+
+    assert decision.intent == "assist"
+    assert decision.source == "model_failed"
+
+
 # ===========================================================================
 # Model fallback (classify_intent_with_model itself)
 # ===========================================================================
@@ -240,10 +266,32 @@ async def test_classify_intent_with_model_returns_the_structured_label(fake_fast
 
 
 @pytest.mark.asyncio
-async def test_classify_intent_with_model_degrades_safely_on_failure(fake_fast_llm):
+async def test_classify_intent_with_model_can_return_revise(fake_fast_llm):
+    """`revise` used to be unreachable from the model rung entirely --
+    `IntentOutput` only ever declared three labels."""
+    from app.ai.workflows.planner import IntentOutput
+
+    fake_fast_llm.generate_structured_return = IntentOutput(intent="revise")
+    intent = await classify_intent_with_model(fake_fast_llm, "kısalt", None)
+    assert intent == "revise"
+
+
+@pytest.mark.asyncio
+async def test_classify_intent_with_model_can_admit_uncertainty(fake_fast_llm):
+    from app.ai.workflows.planner import IntentOutput
+
+    fake_fast_llm.generate_structured_return = IntentOutput(intent="unclear")
+    intent = await classify_intent_with_model(fake_fast_llm, "belirsiz bir mesaj", None)
+    assert intent == "unclear"
+
+
+@pytest.mark.asyncio
+async def test_classify_intent_with_model_reports_a_failed_call_distinctly(fake_fast_llm):
+    """A broken call and an honest 'unclear' verdict must not collapse into
+    the same signal -- one is an outage, the other is a real answer."""
     fake_fast_llm.generate_structured_side_effect = [Exception("model unavailable")]
     intent = await classify_intent_with_model(fake_fast_llm, "x", "uploads/doc.pdf")
-    assert intent == "assist"
+    assert intent == "model_failed"
 
 
 # ===========================================================================
