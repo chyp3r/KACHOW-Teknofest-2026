@@ -90,12 +90,12 @@ DRAFT_RULES: tuple[EvidenceRule, ...] = (
             "cevap yaz", "cevap hazirla", "cevabi hazirla", "cevap olustur",
             "cevap yazisi olustur", "cevabini yaz", "cevabini hazirla",
             "yanit yaz", "yanit hazirla", "yanitini hazirla",
-            "kaleme al", "metni yaz", "metni olustur", "metni duzenle",
+            "kaleme al", "metni yaz", "metni olustur",
             "metni uret", "metnini uret", "yazisma hazirla", "yazisma kurgula",
             "dilekceye cevap", "yaziya dok", "kaleme alinmasini",
-            "duzenlemeni", "kurgular misin", "tanzim et", "mukabelede bulun",
+            "kurgular misin", "tanzim et", "mukabelede bulun",
             "mukabele metni", "mukabele hazirla", "bildirim yapacak bir yazisma",
-            "yazi cikar", "cevabi duzenle", "cevabini duzenle", "cevabi yaz",
+            "yazi cikar", "cevabi yaz",
         ),
     ),
     EvidenceRule(
@@ -106,6 +106,20 @@ DRAFT_RULES: tuple[EvidenceRule, ...] = (
             "taslak", "ust yazi", "resmi yazi", "bilgilendirme metni",
             "cevap yazisi", "tebligat metni", "muzekkere", "tezkere", "mukabele",
         ),
+    ),
+    #: "metni düzenle"/"cevabı düzenle" mean *arrange/edit* the text, which
+    #: reads as a fresh drafting request only when nothing is open yet to
+    #: edit. Split out of `draft.explicit_request` and gated so it stops
+    #: firing once a draft exists -- `revise.arrange_request` below is its
+    #: mirror image. Without the split, "Az önce yazdığın metni düzenler
+    #: misin?" (a revision request) scored this rule at full weight and the
+    #: message resolved to a fresh `draft` instead of `revise`.
+    EvidenceRule(
+        id="draft.arrange_request",
+        intent="draft",
+        weight=WEIGHT_EXPLICIT,
+        surfaces=("metni duzenle", "duzenlemeni", "cevabi duzenle", "cevabini duzenle"),
+        requires_active_draft=False,
     ),
 )
 
@@ -124,11 +138,38 @@ REVISE_RULES: tuple[EvidenceRule, ...] = (
             "yeniden yaz", "tekrar yaz", "taslagi guncelle", "taslagi degistir",
             "metni degistir", "duzeltir misin", "tekrar duzenler misin",
             "daha resmi yap", "daha resmi olsun", "daha samimi yap",
-            "daha kisa yap", "kisalt", "uzat", "sadelestir",
+            "daha kisa yap", "kisa tut", "kisalt", "uzat", "sadelestir",
             "tonunu degistir", "uslubunu degistir", "bu kismi degistir",
             "su kismi degistir", "paragrafi degistir", "cumleyi degistir",
             "kapanisi degistir", "imzayi degistir", "konuyu degistir",
+            # "az önce yazdığın X" collides with assist.memory_recall's "az
+            # once" (which means "what did we talk about", not "the thing
+            # you just produced") -- these longer, more specific phrases
+            # co-fire alongside it and are weighted to win the sum outright,
+            # rather than trying to make "az once" itself context-aware.
+            "yazdigin metni", "yazdigin taslagi", "yazdigin yaziyi",
+            "yazdigin cevabi", "az once yazdigin", "biraz once yazdigin",
         ),
+        requires_active_draft=True,
+    ),
+    #: Mirror of `draft.arrange_request` -- same surfaces, opposite gate.
+    #: "Metni düzenler misin?" with a draft already open means edit *that*
+    #: draft, not author a new one.
+    EvidenceRule(
+        id="revise.arrange_request",
+        intent="revise",
+        weight=WEIGHT_EXPLICIT,
+        surfaces=("metni duzenle", "duzenlemeni", "cevabi duzenle", "cevabini duzenle"),
+        requires_active_draft=True,
+    ),
+    #: Mirror of `analyze.review_request` (below) -- "gözden geçir" reads as
+    #: "review/revise the draft" once one is open, not "analyze the
+    #: document". Same surface, opposite gate.
+    EvidenceRule(
+        id="revise.review_request",
+        intent="revise",
+        weight=WEIGHT_EXPLICIT,
+        surfaces=("gozden gecir",),
         requires_active_draft=True,
     ),
 )
@@ -141,7 +182,7 @@ ANALYZE_RULES: tuple[EvidenceRule, ...] = (
         surfaces=(
             "analiz et", "incele", "inceleyip", "siniflandir", "turunu belirle",
             "ozetle", "ozet cikar", "degerlendir", "kontrol et", "denetle",
-            "gozden gecir", "irdele", "tespit et", "tespit etmeni",
+            "irdele", "tespit et", "tespit etmeni",
             "uygunlugunu", "uygunluk denetimi", "mevzuata uygun", "kurallara uy",
             "eksik alan", "eksik bilgi", "eksiklikleri", "bir bak",
             "olup olmadigina", "hangi kategoriye", "bulgularini raporla",
@@ -152,6 +193,17 @@ ANALYZE_RULES: tuple[EvidenceRule, ...] = (
         intent="analyze",
         weight=WEIGHT_DOMAIN,
         surfaces=("uygunluk", "evrak analizi", "belge analizi"),
+    ),
+    #: "gözden geçir" ("review/look over") is ambiguous between "analyze this
+    #: document" and "revise this draft" -- see `revise.review_request`'s
+    #: mirror. Split out and gated so it only argues for `analyze` when
+    #: there's nothing open to revise instead.
+    EvidenceRule(
+        id="analyze.review_request",
+        intent="analyze",
+        weight=WEIGHT_EXPLICIT,
+        surfaces=("gozden gecir",),
+        requires_active_draft=False,
     ),
 )
 

@@ -128,11 +128,18 @@ async def test_an_ambiguous_expensive_followup_asks_instead_of_guessing(fake_llm
     # fixed (an unambiguous revise imperative that used to score a losing
     # margin against the generic short-message hint and fall through to a
     # question it never should have asked; see test_revise_clarify_routing.py
-    # for that regression pinned directly). This message carries no lexical
-    # revise/draft/analyze surface at all, so it stays genuinely contested
-    # even under fusion.
+    # for that regression pinned directly). "Yazdığın metni ele alır mısın?"
+    # doesn't work here either anymore, for the same reason: "yazdığın metni"
+    # was added as its own revise surface after a live report of exactly this
+    # phrasing wrongly resolving to draft/clarify (see intent_rules.py's
+    # `revise.explicit_request`). Also avoid any of CONTINUATION_SURFACES
+    # ("yap", "tamam", ...) in a <=6-word message here -- the previous turn's
+    # intent was "draft", so a short message ending in one of those words
+    # continues it outright instead of staying contested. This message
+    # carries no lexical revise/draft/analyze surface and no continuation
+    # word, so it stays genuinely contested even under fusion.
     result = await graph.ainvoke(
-        {"input_text": "Yazdığın metni bir kez daha ele alır mısın?", "document_id": None},
+        {"input_text": "Bunu biraz farklı ele alalım.", "document_id": None},
         config=config,
     )
 
