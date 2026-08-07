@@ -125,6 +125,10 @@ HISTORY_WINDOW = get_policy().memory.history_window
 #: (it runs once per turn, after HISTORY_WINDOW turns are already appended).
 HISTORY_RAW_CAP = get_policy().memory.history_raw_cap
 
+#: `plan_evidence` ids that mark a turn as plain small talk -- see
+#: `_run_assist`'s `is_small_talk_turn`.
+_SMALL_TALK_EVIDENCE = frozenset({"assist.greeting", "assist.courtesy", "assist.farewell"})
+
 #: Tokens set aside for the assist step's own answer when budgeting its
 #: prompt against settings.OLLAMA_NUM_CTX -- a typical conversational reply
 #: is well under this; generous on purpose since underestimating here would
@@ -213,6 +217,14 @@ class PlanningState(TypedDict, total=False):
     reasoning_level: str
     plan_steps: list[str]
     plan_intent: str
+    #: Ids of the lexical rules that fired for this turn's decision (see
+    #: `PlanDecision.evidence`). Turn-scoped, like `plan_intent` itself --
+    #: reset every turn in `planning_node`. `_run_assist` reads it to tell a
+    #: message that resolved to `assist` *because* it looked like a greeting
+    #: or a farewell apart from one that landed there for any other reason
+    #: (a genuine question, an out-of-scope request), which needs its full
+    #: conversational context and must not be treated the same way.
+    plan_evidence: tuple[str, ...]
     #: Monotonic turn counter, no longer used to index into `plan_steps`
     #: (see `ready_steps`/`all_steps_settled` in `step_graph.py`) -- kept
     #: only as an ingredient of `human_gate_node`'s interrupt-id hash and
@@ -352,6 +364,70 @@ def _prior_turns(state: PlanningState, limit: int) -> list[dict[str, str]]:
     history = state.get("history") or []
     prior = history[:-1] if history else []
     return prior[-limit:] if limit > 0 else []
+
+
+def _summarize_step_outcome(
+    plan_intent: Optional[str],
+    draft_result: dict[str, Any],
+    assist_result: dict[str, Any],
+    classification_result: dict[str, Any],
+) -> Optional[str]:
+    """One short, honest sentence recording what a non-assist step did.
+
+    ``_run_assist`` appends its own reply to ``history`` already. Every other
+    step -- draft, revise, analyze, clarify -- settles a result the user sees
+    in ``final_output`` but that never reaches ``history`` or
+    ``history_summary``. A later turn that only has the summary to go on then
+    sees nothing but the *user's own request text* ("bu taslağı kısalt") with
+    no record of what actually happened to it -- and nothing to contradict a
+    plausible-sounding but false claim that it succeeded. This closes that
+    gap with a status marker, not the full draft text (already retained in
+    ``SessionFocus.draft_history`` for anything that needs the real content).
+
+    Args:
+        plan_intent: This turn's resolved intent.
+        draft_result: This turn's settled ``draft_result``.
+        assist_result: This turn's settled ``assist_result`` (carries
+            ``clarify``'s question -- see ``_step_clarify``).
+        classification_result: This turn's settled ``classification_result``.
+
+    Returns:
+        A short assistant-role note, or None for ``assist`` (already
+        self-recorded) and for an intent with nothing settled yet.
+    """
+    if plan_intent in (None, "assist"):
+        return None
+
+    if plan_intent in ("draft", "revise"):
+        status = draft_result.get("status")
+        label = "Taslak" if plan_intent == "draft" else "Taslak revizyonu"
+        if status in (
+            StepStatus.COMPLETED,
+            StepStatus.NEEDS_HUMAN_APPROVAL,
+            StepStatus.APPROVED,
+        ):
+            return f"[Sistem notu] {label} başarıyla hazırlandı (durum: {status})."
+        if status == StepStatus.NEEDS_INPUT:
+            return f"[Sistem notu] {label} için kullanıcıdan ek bilgi istendi, henüz tamamlanmadı."
+        if status == StepStatus.FAILED:
+            error = draft_result.get("error") or "bilinmeyen bir hata"
+            return f"[Sistem notu] {label} başarısız oldu: {error}"
+        if status == StepStatus.REJECTED:
+            return f"[Sistem notu] {label} reddedildi."
+        return None
+
+    if plan_intent == "analyze":
+        doc_type = classification_result.get("correspondence_type") or classification_result.get(
+            "type"
+        )
+        suffix = f" (tür: {doc_type})" if doc_type else ""
+        return f"[Sistem notu] Evrak analiz edildi{suffix}."
+
+    if plan_intent == "clarify":
+        question = assist_result.get("reply")
+        return f'[Sistem notu] Kullanıcıya açıklayıcı bir soru soruldu: "{question}"' if question else None
+
+    return None
 
 
 #: Turkish labels for SensitivityLevel, for the prompt-facing note only --
@@ -558,6 +634,7 @@ def create_planning_graph(
             "run_id": run_id,
             "plan_steps": decision.steps,
             "plan_intent": decision.intent,
+            "plan_evidence": decision.evidence,
             "current_step_idx": 0,
             "_last_ran_step": None,
             "cached_document": _load_cached_document(state.get("document_id")),
@@ -699,9 +776,27 @@ def create_planning_graph(
                 f"Bir belge yüklü. Özet: {analysis.get('summary') or 'Özet mevcut değil.'}\n"
                 "Detay veya belge içeriği gerekiyorsa ilgili aracı çağır."
             )
+
+        # A message that resolved to `assist` *because* it's plain small talk
+        # (a greeting, a courtesy, a sign-off) and nothing else -- not one
+        # that merely landed on assist for some other reason, like a genuine
+        # question or an out-of-scope request, both of which still need full
+        # conversational grounding to answer well. Withholding the rolling
+        # summary and the verbatim window here is what stops a bare "selam"
+        # from reading prior revise turns and describing them back to the
+        # user as if they were relevant to answering it.
+        plan_evidence = state.get("plan_evidence") or ()
+        is_small_talk_turn = bool(
+            _SMALL_TALK_EVIDENCE.intersection(plan_evidence)
+        ) and len(state.get("input_text", "").split()) <= 4
+
         history_summary_text = (
-            state.get("history_summary")
-            or "(Bu konuşmada henüz özetlenecek eski mesaj yok.)"
+            "(Bu tur küçük bir sohbet ifadesi -- geçmiş özeti bu yanıt için gerekli değil.)"
+            if is_small_talk_turn
+            else (
+                state.get("history_summary")
+                or "(Bu konuşmada henüz özetlenecek eski mesaj yok.)"
+            )
         )
 
         # Everything outside the two blocks below is fixed for this call --
@@ -747,7 +842,7 @@ def create_planning_graph(
             _prior_turns(state, HISTORY_RAW_CAP),
             remaining_for_history,
             llm_client.count_tokens,
-            min_turns=2,
+            min_turns=0 if is_small_talk_turn else 2,
             max_turns=HISTORY_WINDOW,
         )
         if assembled.dropped or assembled.compressed or len(history) < len(
@@ -896,6 +991,13 @@ def create_planning_graph(
         not a mid-reflexion-loop snapshot. A separate node rather than folded
         into consolidate_memory_node, which stays focused on its own single
         concern (see its docstring).
+
+        Also records a short outcome note into ``history`` for whichever step
+        actually ran (see ``_summarize_step_outcome``) -- ``focus`` and
+        ``history`` are both "what actually happened this turn" bookkeeping,
+        and runs before ``consolidate_memory_node`` specifically so a note
+        landing right at the edge of the verbatim window still gets folded
+        into the summary the same turn it was produced.
         """
         focus = state.get("focus") or SessionFocus()
         input_text = state.get("input_text", "")
@@ -912,7 +1014,16 @@ def create_planning_graph(
             assist_result=state.get("assist_result") or {},
             reset_requested=reset_requested,
         )
-        return {"focus": update} if update else {}
+        result: dict[str, Any] = {"focus": update} if update else {}
+        outcome_note = _summarize_step_outcome(
+            state.get("plan_intent"),
+            state.get("draft_result") or {},
+            state.get("assist_result") or {},
+            state.get("classification_result") or {},
+        )
+        if outcome_note:
+            result["history"] = [{"role": "assistant", "content": outcome_note}]
+        return result
 
     async def consolidate_memory_node(
         state: PlanningState, config: RunnableConfig

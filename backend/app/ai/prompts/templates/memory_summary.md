@@ -8,6 +8,7 @@ Görevin, bir konuşmanın önceki özetini ve pencerenin dışına yeni çıkan
 2. Selamlaşma, teşekkür gibi günlük konuşma kalıplarını atla.
 3. Markdown biçimlendirme kullanma, düz metin döndür.
 4. Önceki özetle çelişen yeni bilgi varsa, en güncel bilgiyi esas al.
+5. Bir isteğin sonucunu özetlerken gerçekleşen durumu koru: bir revizyon/taslak/analiz talebi başarısız olduysa, reddedildiyse, iptal edildiyse veya onay bekliyorsa bunu "yapıldı"/"tamamlandı" gibi ifade etme -- gerçekleşmemiş bir işlemi başarılıymış gibi özetlemek, sonraki bir turda asistanın yapılmamış bir işi yapılmış gibi anlatmasına yol açar.
 
 ## Önceki Özet
 
