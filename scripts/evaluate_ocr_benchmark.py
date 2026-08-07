@@ -113,11 +113,25 @@ def token_f1(reference: str, hypothesis: str) -> float:
     return 2 * precision * recall / (precision + recall)
 
 
-def rasterise(pdf_bytes: bytes):
+def rasterise(pdf_bytes: bytes) -> list:
+    """Rasterise every page of a PDF at RENDER_DPI.
+
+    Every page, not just the first: tesseract.py and vision.py both OCR a
+    document page by page and concatenate the result, so a benchmark payload
+    with only one page never exercises that loop regardless of how many
+    pages the source PDF actually has, and any timing measured against it
+    says nothing about a real multi-page scan.
+
+    Args:
+        pdf_bytes: Raw PDF bytes.
+
+    Returns:
+        One rendered PIL image per page, in document order.
+    """
     pdfium = _require("pypdfium2")
     document = pdfium.PdfDocument(pdf_bytes)
     try:
-        return document[0].render(scale=RENDER_DPI / 72).to_pil()
+        return [page.render(scale=RENDER_DPI / 72).to_pil() for page in document]
     finally:
         document.close()
 
@@ -144,6 +158,30 @@ def degrade(image, seed: int):
 def to_png(image) -> bytes:
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def pages_to_pdf(images: list) -> bytes:
+    """Reassemble rasterised (optionally degraded) pages into one PDF.
+
+    Needed only for the degraded mode: degradation is a pixel-space
+    transform, so it has to run on rendered images, but every extractor's
+    own extract() takes a whole document -- a PDF or a single image, never a
+    list of pre-rendered pages -- so the degraded pages are packed back into
+    one PDF before being handed to an engine. That engine then rasterises it
+    again internally, exactly as it would a real degraded scan; the only
+    cost of the double rasterisation is paid once here in the benchmark, not
+    in the numbers being measured for the engine itself.
+
+    Args:
+        images: Per-page PIL images, in document order.
+
+    Returns:
+        A single multi-page PDF's bytes.
+    """
+    buffer = io.BytesIO()
+    first, rest = images[0].convert("RGB"), [img.convert("RGB") for img in images[1:]]
+    first.save(buffer, format="PDF", save_all=True, append_images=rest)
     return buffer.getvalue()
 
 
@@ -225,7 +263,10 @@ async def run(
             (model, OllamaVisionExtractor(model=model, prompt=vision_prompt))
             for model in vision_models
         ]
-        mime = "image/png"
+        # PDF, not a pre-rendered PNG: each engine rasterises internally (the
+        # same multi-page loop it runs in production), which is what makes
+        # the timing below mean anything about a real multi-page document.
+        mime = "application/pdf"
 
     scores = {
         name: {"ned": [], "tr": [], "f1": [], "fields": 0, "sec": 0.0}
@@ -240,17 +281,19 @@ async def run(
     print("=" * 96)
 
     for index, (name, pdf, ground_truth) in enumerate(items):
-        if mode == "text":
-            payload = pdf
+        if mode == "ocr-degraded":
+            # Degradation is a pixel-space transform, so it has to run on
+            # rendered pages -- rasterised and degraded once per document,
+            # then packed back into one PDF and handed to every engine, so
+            # the degradation (seeded per index) is identical across engines
+            # by construction rather than by re-deriving it per engine.
+            pages = [degrade(page, seed=index) for page in rasterise(pdf)]
+            payload = pages_to_pdf(pages)
         else:
-            # Rasterised and degraded once per document, then handed to every
-            # engine: the degradation is seeded per index, so re-deriving it per
-            # engine would still be identical -- but doing it once makes that
-            # guarantee structural rather than incidental.
-            image = rasterise(pdf)
-            if mode == "ocr-degraded":
-                image = degrade(image, seed=index)
-            payload = to_png(image)
+            # "text" mode wants the PDF as-is; "ocr" mode also just wants the
+            # PDF -- each engine rasterises every page itself, the same loop
+            # it runs in production, so there is nothing to prepare here.
+            payload = pdf
 
         truth_fields += recovered_fields(ground_truth)
 
