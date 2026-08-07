@@ -2,6 +2,12 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [1.44.0] - 2026-08-07
+### Düzeltildi
+- **11 Hata Giderildi**: bkz. PR #133 için ayrıntılı açıklama. Kısaca: hız sınırlayıcının ZSET üye çakışması yüzünden hiç sınırlamaması (kaba kuvvet savunması etkisizdi), `X-Forwarded-For`'un koşulsuz güvenilmesi, `get_document_details`'in gerçek analizlerin çoğunda çökmesi, `search_document`'ın vektör deposu kesintisiyle "sonuç yok"u ayırt etmeden aynı yedek metne düşmesi, Türkçe katlamanın `ı`'yı NFKD'de sessizce silmesi (kurum adı iki kez uydurma sayılıyordu), `MEVZUAT_MCP_ARGS`'ın pydantic-settings'in JSON-önce-doğrulama sırasıyla açılışta çökmesi, numaralı yönetmelik aramalarının KANUN filtresiyle hep NOT_FOUND dönmesi, logout'un blacklist yazma hatasını yutup 200 dönmesi, ve Türkçe büyük-I'nin stopword filtresinden kaçması.
+  - Her hata için, düzeltme öncesi kodda başarısız olduğu `git stash`/`pop` ile doğrulanmış bir regresyon testi var.
+  - `suggest_mevzuat`'ın iç bütçesi artık dış `node_timeout`'un okuduğu aynı `state.get("reasoning_level")`'ı okuyor -- bugün her ikisi de aynı varsayılana rastlantıyla düşüyor, ama artık yapı gereği bağlı.
+
 ## [1.43.0] - 2026-08-06
 ### Değiştirildi
 - **Mevzuat Önerisi Düğümü Hızlandırıldı**: `suggest_mevzuat` artık üretim belirteç sayısını 512 ile sınırlıyor (varsayılan 1024). Çıktısı birkaç tek cümlelik gerekçeden ibaret olduğu için varsayılan yalnızca modele kullanmadığı alan veriyordu.
