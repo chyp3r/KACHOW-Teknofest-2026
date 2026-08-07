@@ -149,6 +149,14 @@ REVISE_RULES: tuple[EvidenceRule, ...] = (
             # rather than trying to make "az once" itself context-aware.
             "yazdigin metni", "yazdigin taslagi", "yazdigin yaziyi",
             "yazdigin cevabi", "az once yazdigin", "biraz once yazdigin",
+            # Targeted edits an open draft's own surfaces (an addition, a
+            # tone change, a section-specific complaint) rather than a
+            # generic verb -- previously unattested, so a four-word instance
+            # of any of these ("giriş kısmını yumuşat") had nothing but
+            # `assist.short_message`'s brevity hint to score against, and
+            # brevity alone routinely outscored an unscored revise reading.
+            "sonuna ekle", "sonuna bir", "imza blogu", "sert geldi",
+            "yumusat", "resmilestir", "farkli ele al", "biraz farkli ele",
         ),
         requires_active_draft=True,
     ),
@@ -236,6 +244,22 @@ ASSIST_RULES: tuple[EvidenceRule, ...] = (
         surfaces=(
             "tesekkur", "tesekkurler", "sagol", "sag ol", "eyvallah",
             "cok iyi oldu", "yardimci oldun",
+        ),
+    ),
+    #: A sign-off, not a continuation -- "yarın devam ederiz" contains
+    #: "devam" (a `CONTINUATION_SURFACES` entry) but means the opposite of
+    #: consenting to continue now. Distinct from `assist.greeting`/
+    #: `assist.courtesy` because those are about *this* turn's own content;
+    #: this one exists specifically to be checked by the continuation rule's
+    #: `signing_off` guard in `intent_scorer.score_intents`.
+    EvidenceRule(
+        id="assist.farewell",
+        intent="assist",
+        weight=WEIGHT_EXPLICIT,
+        surfaces=(
+            "yarin devam", "sonra devam ederiz", "sonra bakariz",
+            "simdilik bu kadar", "yarin bakariz", "simdilik yeterli",
+            "gorusmek uzere", "bu kadar yeterli",
         ),
     ),
     EvidenceRule(
@@ -336,10 +360,15 @@ ALL_RULES: tuple[EvidenceRule, ...] = (
 )
 
 #: A short affirmative continues whatever the previous turn was about.
+#: "peki" is deliberately absent: it opens as many questions ("peki sence bu
+#: yeterli mi") as it does confirmations, and unlike the others here is not
+#: itself a plausible one-word reply on its own -- it needs what follows it
+#: to mean anything, which `score_intents`'s `looks_like_question` guard
+#: already checks for separately rather than this table trying to.
 CONTINUATION_SURFACES: tuple[str, ...] = (
     "evet", "olur", "tamam", "tamamdir", "onayliyorum", "onaylıyorum",
     "devam", "devam et", "devam edebilirsin", "hazirla", "yap", "lutfen",
-    "peki", "elbette",
+    "elbette",
 )
 
 #: Only these intents make sense to silently continue; a bare "evet" after a

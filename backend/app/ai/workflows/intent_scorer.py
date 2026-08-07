@@ -215,16 +215,25 @@ def score_intents(
     # A short affirmative continues the previous turn's intent. Bounded by
     # length so "evet, ama önce şunu incele" is scored on its content instead.
     #
-    # Suppressed when the message is a greeting or a courtesy: "İyi akşamlar,
-    # yarın devam ederiz" after a draft turn contains "devam" but is a farewell,
-    # and reading it as consent produced a whole drafting run on the old
-    # resolver. A sign-off is the one place "devam" means the opposite of
-    # "continue now".
-    signing_off = {"assist.greeting", "assist.courtesy"}.intersection(result.evidence)
+    # Suppressed when the message is a greeting, a courtesy, or a farewell:
+    # "İyi akşamlar, yarın devam ederiz" after a draft turn contains "devam"
+    # but is a sign-off, and reading it as consent produced a whole drafting
+    # run on the old resolver. A sign-off is the one place "devam" means the
+    # opposite of "continue now".
+    #
+    # Also suppressed when the message is itself a question: "Peki sence bu
+    # yeterli mi" after a draft turn contains "peki" (a continuation surface)
+    # but is asking the assistant's opinion, not confirming the next action --
+    # scoring it as draft continuation ran a whole second drafting pipeline
+    # off a question the user expected a conversational answer to.
+    signing_off = {"assist.greeting", "assist.courtesy", "assist.farewell"}.intersection(
+        result.evidence
+    )
     if (
         previous_intent in CONTINUABLE_INTENTS
         and not signing_off
         and len(words) <= 6
+        and not looks_like_question(message, normalized)
         and any(f" {surface} " in f" {normalized} " for surface in CONTINUATION_SURFACES)
     ):
         result.scores[previous_intent] = (
@@ -259,8 +268,16 @@ def score_intents(
     # counted twice. "evet, hazırla" is short precisely because it is an
     # affirmative, and letting both signals fire left the two scores close
     # enough to escalate a message whose meaning is not in doubt.
+    #
+    # Also withheld while a draft is open: with nothing else attached, a short
+    # message is ordinarily filler, but with an active draft it is the single
+    # most common shape a targeted revision instruction takes ("giriş kısmını
+    # yumuşat" is four words). Padding `assist` here let that brevity alone
+    # outscore `revise`'s own explicit rules; `REVISE_RULES` already gates on
+    # `requires_active_draft`, so there is nothing left for this hint to
+    # arbitrate once a draft is open.
     continued = f"{previous_intent}.continuation" in result.evidence
-    if not has_document and not continued and len(words) <= 4:
+    if not has_document and not has_active_draft and not continued and len(words) <= 4:
         result.scores["assist"] = result.scores.get("assist", 0.0) + WEIGHT_HINT * 2
         result.evidence.append("assist.short_message")
 
