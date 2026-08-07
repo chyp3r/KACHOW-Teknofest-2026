@@ -2,18 +2,19 @@
   "meta": {
     "drafts": {
       "dataset": "drafts",
-      "started_at": "2026-08-03T09:11:49",
-      "total_ms": 2.203
+      "started_at": "2026-08-07T09:55:47",
+      "total_ms": 4.625
     },
     "intents": {
       "dataset": "intents",
-      "started_at": "2026-08-03T09:11:49",
-      "total_ms": 0.791
+      "started_at": "2026-08-07T09:55:47",
+      "total_ms": 47.662
     }
   },
+  "policy_version": "1.4.0",
   "suites": {
     "drafts": {
-      "accuracy": 0.9,
+      "accuracy": 1.0,
       "by_category": {
         "grounded": {
           "accuracy": 1.0,
@@ -34,10 +35,10 @@
           "false_positive": 0
         },
         "paraphrased_grounded": {
-          "accuracy": 0.6,
+          "accuracy": 1.0,
           "cases": 10,
           "false_negative": 0,
-          "false_positive": 4
+          "false_positive": 0
         },
         "placeholder": {
           "accuracy": 1.0,
@@ -53,220 +54,32 @@
         }
       },
       "cases": 40,
-      "claim_detection_gaps": [
-        {
-          "category": "paraphrased_grounded",
-          "expected_claim_count": 0,
-          "id": "para_01",
-          "observed_claim_count": 1,
-          "observed_claims": [
-            {
-              "kind": "tarih",
-              "value": "1 Mart 2026"
-            }
-          ]
-        },
-        {
-          "category": "paraphrased_grounded",
-          "expected_claim_count": 0,
-          "id": "para_03",
-          "observed_claim_count": 1,
-          "observed_claims": [
-            {
-              "kind": "mevzuat",
-              "value": "m. 11"
-            }
-          ]
-        },
-        {
-          "category": "paraphrased_grounded",
-          "expected_claim_count": 0,
-          "id": "para_06",
-          "observed_claim_count": 1,
-          "observed_claims": [
-            {
-              "kind": "tarih",
-              "value": "15 Nisan 2026"
-            }
-          ]
-        },
-        {
-          "category": "paraphrased_grounded",
-          "expected_claim_count": 0,
-          "id": "para_09",
-          "observed_claim_count": 1,
-          "observed_claims": [
-            {
-              "kind": "tarih",
-              "value": "5 Şubat 2026"
-            }
-          ]
-        },
-        {
-          "category": "hallucinated",
-          "expected_claim_count": 1,
-          "id": "hall_01",
-          "observed_claim_count": 2,
-          "observed_claims": [
-            {
-              "kind": "sayı",
-              "value": "E-98765432-111-999"
-            },
-            {
-              "kind": "mevzuat",
-              "value": "999 sayılı"
-            }
-          ]
-        },
-        {
-          "category": "hallucinated",
-          "expected_claim_count": 2,
-          "id": "hall_03",
-          "observed_claim_count": 1,
-          "observed_claims": [
-            {
-              "kind": "mevzuat",
-              "value": "9999 sayılı"
-            }
-          ]
-        },
-        {
-          "category": "hallucinated",
-          "expected_claim_count": 2,
-          "id": "hall_08",
-          "observed_claim_count": 3,
-          "observed_claims": [
-            {
-              "kind": "sayı",
-              "value": "E-31313131-841-500"
-            },
-            {
-              "kind": "mevzuat",
-              "value": "500 sayılı"
-            },
-            {
-              "kind": "tutar",
-              "value": "90.750,00 TL"
-            }
-          ]
-        },
-        {
-          "category": "hallucinated",
-          "expected_claim_count": 2,
-          "id": "hall_10",
-          "observed_claim_count": 1,
-          "observed_claims": [
-            {
-              "kind": "mevzuat",
-              "value": "6698 sayılı"
-            }
-          ]
-        },
-        {
-          "category": "hallucinated",
-          "expected_claim_count": 2,
-          "id": "hall_12",
-          "observed_claim_count": 3,
-          "observed_claims": [
-            {
-              "kind": "sayı",
-              "value": "2024/512"
-            },
-            {
-              "kind": "mevzuat",
-              "value": "512 sayılı"
-            },
-            {
-              "kind": "kurum",
-              "value": "Talep Deneme Sağlık Müdürlüğü"
-            }
-          ]
-        }
-      ],
+      "claim_detection_gaps": [],
       "counts": {
         "false_negative": 0,
-        "false_positive": 4,
-        "true_negative": 13,
+        "false_positive": 0,
+        "true_negative": 17,
         "true_positive": 23
       },
-      "failures": [
-        {
-          "category": "paraphrased_grounded",
-          "confidence_score": 88.0,
-          "expected_requires_human_approval": false,
-          "id": "para_01",
-          "kind": "false_positive",
-          "missing_structure": [],
-          "observed_requires_human_approval": true,
-          "placeholder_count": 0,
-          "unsupported_claims": [
-            {
-              "kind": "tarih",
-              "value": "1 Mart 2026"
-            }
-          ]
-        },
-        {
-          "category": "paraphrased_grounded",
-          "confidence_score": 88.0,
-          "expected_requires_human_approval": false,
-          "id": "para_03",
-          "kind": "false_positive",
-          "missing_structure": [],
-          "observed_requires_human_approval": true,
-          "placeholder_count": 0,
-          "unsupported_claims": [
-            {
-              "kind": "mevzuat",
-              "value": "m. 11"
-            }
-          ]
-        },
-        {
-          "category": "paraphrased_grounded",
-          "confidence_score": 88.0,
-          "expected_requires_human_approval": false,
-          "id": "para_06",
-          "kind": "false_positive",
-          "missing_structure": [],
-          "observed_requires_human_approval": true,
-          "placeholder_count": 0,
-          "unsupported_claims": [
-            {
-              "kind": "tarih",
-              "value": "15 Nisan 2026"
-            }
-          ]
-        },
-        {
-          "category": "paraphrased_grounded",
-          "confidence_score": 88.0,
-          "expected_requires_human_approval": false,
-          "id": "para_09",
-          "kind": "false_positive",
-          "missing_structure": [],
-          "observed_requires_human_approval": true,
-          "placeholder_count": 0,
-          "unsupported_claims": [
-            {
-              "kind": "tarih",
-              "value": "5 Şubat 2026"
-            }
-          ]
-        }
-      ],
+      "failures": [],
       "false_negative_rate": 0.0,
-      "false_positive_rate": 0.2353
+      "false_positive_rate": 0.0
     },
     "intents": {
-      "abstention_rate": 0.1842,
-      "accuracy_over_all": 0.6316,
-      "accuracy_over_decided": 0.7742,
+      "abstention_rate": 0.1313,
+      "accuracy_over_all": 0.825,
+      "accuracy_over_decided": 0.9496,
       "by_category": {
+        "clarify_resolution": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 6
+        },
         "compound": {
           "abstention_rate": 0.0,
-          "accuracy_over_all": 0.5,
-          "accuracy_over_decided": 0.5,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
           "cases": 8
         },
         "continuation": {
@@ -283,14 +96,20 @@
         },
         "escalation": {
           "abstention_rate": 0.0,
-          "accuracy_over_all": 0.875,
-          "accuracy_over_decided": 0.875,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
           "cases": 8
+        },
+        "heldout_paraphrase": {
+          "abstention_rate": 0.3182,
+          "accuracy_over_all": 0.4091,
+          "accuracy_over_decided": 0.6,
+          "cases": 22
         },
         "inversion": {
           "abstention_rate": 0.0,
-          "accuracy_over_all": 0.0,
-          "accuracy_over_decided": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
           "cases": 8
         },
         "keyword_analyze": {
@@ -299,7 +118,7 @@
           "accuracy_over_decided": 1.0,
           "cases": 8
         },
-        "keyword_chat": {
+        "keyword_assist": {
           "abstention_rate": 0.0,
           "accuracy_over_all": 1.0,
           "accuracy_over_decided": 1.0,
@@ -313,33 +132,45 @@
         },
         "memory_recall": {
           "abstention_rate": 0.0,
-          "accuracy_over_all": 0.9,
-          "accuracy_over_decided": 0.9,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
           "cases": 10
         },
         "paraphrase_analyze": {
-          "abstention_rate": 0.8333,
-          "accuracy_over_all": 0.0,
-          "accuracy_over_decided": 0.0,
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
           "cases": 6
         },
         "paraphrase_draft": {
-          "abstention_rate": 0.75,
-          "accuracy_over_all": 0.125,
-          "accuracy_over_decided": 0.5,
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
           "cases": 8
         },
         "paraphrase_memory": {
-          "abstention_rate": 0.7,
-          "accuracy_over_all": 0.1,
-          "accuracy_over_decided": 0.3333,
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
           "cases": 10
         },
         "precedence": {
-          "abstention_rate": 0.5,
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 6
+        },
+        "revise": {
+          "abstention_rate": 0.6,
+          "accuracy_over_all": 0.3,
+          "accuracy_over_decided": 0.75,
+          "cases": 10
+        },
+        "short_imperative": {
+          "abstention_rate": 1.0,
           "accuracy_over_all": 0.0,
           "accuracy_over_decided": 0.0,
-          "cases": 6
+          "cases": 8
         },
         "short_message": {
           "abstention_rate": 0.0,
@@ -348,603 +179,470 @@
           "cases": 6
         }
       },
-      "cases": 114,
+      "cases": 160,
+      "clarify_rate": 0.0875,
       "confusion_matrix": {
         "<abstain>": {
-          "<abstain>": 7,
-          "document_qa": 1
+          "<abstain>": 8
         },
         "analyze": {
-          "<abstain>": 5,
-          "analyze": 11,
-          "document_qa": 1,
-          "draft": 3
+          "<abstain>": 1,
+          "analyze": 21,
+          "assist": 5
         },
-        "chat": {
-          "<abstain>": 10,
-          "analyze": 1,
-          "chat": 25,
-          "document_qa": 4,
-          "draft": 6
-        },
-        "document_qa": {
-          "document_qa": 10
+        "assist": {
+          "<abstain>": 3,
+          "assist": 64
         },
         "draft": {
-          "<abstain>": 6,
-          "analyze": 4,
-          "document_qa": 1,
-          "draft": 19
+          "<abstain>": 10,
+          "assist": 1,
+          "draft": 35
+        },
+        "revise": {
+          "<abstain>": 7,
+          "analyze": 1,
+          "revise": 4
         }
       },
-      "expected_calibration_error": 0.3011,
+      "expected_calibration_error": 0.2736,
       "failures": [
         {
-          "category": "memory_recall",
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "draft",
+          "id": "held_03",
+          "message": "Bunun cevabını sen yazar mısın?",
+          "observed": "assist",
+          "previous_intent": null,
+          "source": "scored"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "draft",
+          "id": "held_04",
+          "message": "İlgili makama sunulmak üzere bir yazı ihzar et.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "context_default"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "analyze",
+          "id": "held_05",
+          "message": "Şu belgeye bir göz atıp durumu anlatır mısın?",
+          "observed": "assist",
+          "previous_intent": null,
+          "source": "scored"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "analyze",
+          "id": "held_06",
+          "message": "Bu evrakta bir sorun var mı acaba?",
+          "observed": "assist",
+          "previous_intent": null,
+          "source": "scored"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "analyze",
+          "id": "held_07",
+          "message": "Bu yazının kurallara uyup uymadığını söyler misin?",
+          "observed": "assist",
+          "previous_intent": null,
+          "source": "semantic"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "analyze",
+          "id": "held_08",
+          "message": "Belgenin durumunu bir çıkar bakalım.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "context_default"
+        },
+        {
+          "category": "heldout_paraphrase",
           "document_attached": false,
-          "expected": "chat",
-          "id": "recall_07",
-          "message": "Konuşma geçmişimizi özetler misin?",
+          "expected": "assist",
+          "id": "held_12",
+          "message": "Sen ne tür işler görebiliyorsun?",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "context_default"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": false,
+          "expected": "assist",
+          "id": "held_13",
+          "message": "Buradaki akış nasıl ilerliyor tam olarak?",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "context_default"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": false,
+          "expected": "assist",
+          "id": "held_15",
+          "message": "Şu ana kadar neler geçti aramızda?",
+          "observed": "<abstain>",
+          "previous_intent": "assist",
+          "source": "context_default"
+        },
+        {
+          "category": "revise",
+          "document_attached": false,
+          "expected": "revise",
+          "id": "revise_01",
+          "message": "Bu taslağı biraz kısalt.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "revise",
+          "document_attached": false,
+          "expected": "revise",
+          "id": "revise_02",
+          "message": "Metni biraz uzat.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "revise",
+          "document_attached": false,
+          "expected": "revise",
+          "id": "revise_03",
+          "message": "Taslağı daha resmi yap.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "revise",
+          "document_attached": false,
+          "expected": "revise",
+          "id": "revise_07",
+          "message": "Yazının tonunu değiştir.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "revise",
+          "document_attached": false,
+          "expected": "revise",
+          "id": "revise_08",
+          "message": "Şu cümleyi düzeltir misin?",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "revise",
+          "document_attached": false,
+          "expected": "revise",
+          "id": "revise_09",
+          "message": "Taslağı güncelle lütfen.",
           "observed": "analyze",
-          "previous_intent": "chat",
-          "source": "keyword"
+          "previous_intent": null,
+          "source": "semantic"
         },
         {
-          "category": "inversion",
+          "category": "revise",
+          "document_attached": false,
+          "expected": "revise",
+          "id": "revise_10",
+          "message": "Kapanışı değiştirir misin?",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "short_imperative",
+          "document_attached": false,
+          "expected": "draft",
+          "id": "short_imp_01",
+          "message": "Cevap yaz.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "short_imperative",
+          "document_attached": false,
+          "expected": "draft",
+          "id": "short_imp_02",
+          "message": "Yazı hazırla.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "short_imperative",
+          "document_attached": false,
+          "expected": "draft",
+          "id": "short_imp_03",
+          "message": "Kaleme al.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "short_imperative",
+          "document_attached": false,
+          "expected": "draft",
+          "id": "short_imp_04",
+          "message": "Metni yaz.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "short_imperative",
+          "document_attached": false,
+          "expected": "draft",
+          "id": "short_imp_05",
+          "message": "Tanzim et.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "short_imperative",
+          "document_attached": false,
+          "expected": "draft",
+          "id": "short_imp_06",
+          "message": "Cevap hazırla.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "short_imperative",
+          "document_attached": false,
+          "expected": "draft",
+          "id": "short_imp_07",
+          "message": "Cevabı hazırla.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "short_imperative",
+          "document_attached": false,
+          "expected": "draft",
+          "id": "short_imp_08",
+          "message": "Yanıt hazırla.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": false,
+          "expected": "draft",
+          "id": "held_18",
+          "message": "Bu konuda ilgili makama iletilecek bir metin oluşturalım mı?",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "context_default"
+        },
+        {
+          "category": "heldout_paraphrase",
           "document_attached": true,
           "expected": "analyze",
-          "id": "inv_01",
-          "message": "Hazırladığın taslak metnini incele.",
-          "observed": "draft",
-          "previous_intent": "draft",
-          "source": "keyword"
+          "id": "held_19",
+          "message": "Bu belgenin sorunlu yanları var mı bakar mısın?",
+          "observed": "assist",
+          "previous_intent": null,
+          "source": "scored"
         },
         {
-          "category": "inversion",
+          "category": "heldout_paraphrase",
           "document_attached": true,
           "expected": "analyze",
-          "id": "inv_02",
-          "message": "Bu taslak mevzuata uygun mu, kontrol et.",
-          "observed": "draft",
-          "previous_intent": "draft",
-          "source": "keyword"
+          "id": "held_20",
+          "message": "Bu evrakın ne tür bir yazı olduğunu sen söyle.",
+          "observed": "assist",
+          "previous_intent": null,
+          "source": "scored"
         },
         {
-          "category": "inversion",
+          "category": "heldout_paraphrase",
           "document_attached": false,
-          "expected": "chat",
-          "id": "inv_03",
-          "message": "Resmi yazı ne demek, kısaca anlatır mısın?",
-          "observed": "draft",
-          "previous_intent": null,
-          "source": "keyword"
-        },
-        {
-          "category": "inversion",
-          "document_attached": false,
-          "expected": "chat",
-          "id": "inv_04",
-          "message": "Üst yazı ile cevap yazısı arasındaki fark nedir?",
-          "observed": "draft",
-          "previous_intent": null,
-          "source": "keyword"
-        },
-        {
-          "category": "inversion",
-          "document_attached": false,
-          "expected": "chat",
-          "id": "inv_05",
-          "message": "Taslak oluşturma süreci sistemde nasıl işliyor?",
-          "observed": "draft",
-          "previous_intent": null,
-          "source": "keyword"
-        },
-        {
-          "category": "inversion",
-          "document_attached": false,
-          "expected": "chat",
-          "id": "inv_06",
-          "message": "Taslak hakkında ne düşünüyorsun?",
-          "observed": "draft",
-          "previous_intent": "draft",
-          "source": "keyword"
-        },
-        {
-          "category": "inversion",
-          "document_attached": false,
-          "expected": "chat",
-          "id": "inv_07",
-          "message": "Bir bilgilendirme metni hangi durumlarda kullanılır?",
-          "observed": "draft",
-          "previous_intent": null,
-          "source": "keyword"
-        },
-        {
-          "category": "inversion",
-          "document_attached": true,
-          "expected": "analyze",
-          "id": "inv_08",
-          "message": "Taslak içindeki eksik alanları listeler misin?",
-          "observed": "draft",
-          "previous_intent": "draft",
-          "source": "keyword"
-        },
-        {
-          "category": "compound",
-          "document_attached": true,
-          "expected": "draft",
-          "id": "comp_02",
-          "message": "Önce evrakı değerlendir, sonra yanıt metnini üret.",
-          "observed": "analyze",
-          "previous_intent": null,
-          "source": "keyword"
-        },
-        {
-          "category": "compound",
-          "document_attached": true,
-          "expected": "draft",
-          "id": "comp_03",
-          "message": "Bu dilekçeyi sınıflandır ve uygun bir mukabele hazırla.",
-          "observed": "analyze",
-          "previous_intent": null,
-          "source": "keyword"
-        },
-        {
-          "category": "compound",
-          "document_attached": true,
-          "expected": "draft",
-          "id": "comp_04",
-          "message": "Evrakı özetle, ardından cevabını yazıya dök.",
-          "observed": "analyze",
-          "previous_intent": null,
-          "source": "keyword"
-        },
-        {
-          "category": "compound",
-          "document_attached": true,
-          "expected": "draft",
-          "id": "comp_06",
-          "message": "Eksik bilgileri tespit ettikten sonra resmi cevabı düzenle.",
-          "observed": "analyze",
-          "previous_intent": null,
-          "source": "keyword"
-        },
-        {
-          "category": "precedence",
-          "document_attached": true,
-          "expected": "chat",
-          "id": "prec_01",
-          "message": "Merhaba",
+          "expected": "revise",
+          "id": "held_21",
+          "message": "Yazdığın metni bir kez daha ele alır mısın?",
           "observed": "<abstain>",
           "previous_intent": null,
-          "source": null
-        },
-        {
-          "category": "precedence",
-          "document_attached": true,
-          "expected": "chat",
-          "id": "prec_02",
-          "message": "Teşekkürler",
-          "observed": "<abstain>",
-          "previous_intent": "document_qa",
-          "source": null
-        },
-        {
-          "category": "precedence",
-          "document_attached": true,
-          "expected": "chat",
-          "id": "prec_03",
-          "message": "İyi akşamlar, yarın devam ederiz.",
-          "observed": "draft",
-          "previous_intent": "draft",
-          "source": "continuation"
-        },
-        {
-          "category": "precedence",
-          "document_attached": true,
-          "expected": "chat",
-          "id": "prec_04",
-          "message": "Sağol, çok iyi oldu.",
-          "observed": "<abstain>",
-          "previous_intent": "draft",
-          "source": null
-        },
-        {
-          "category": "precedence",
-          "document_attached": true,
-          "expected": "chat",
-          "id": "prec_05",
-          "message": "Sen neler yapabilirsin?",
-          "observed": "document_qa",
-          "previous_intent": null,
-          "source": "document_question"
-        },
-        {
-          "category": "precedence",
-          "document_attached": true,
-          "expected": "chat",
-          "id": "prec_06",
-          "message": "Bu sistem nasıl çalışır, kısaca anlatır mısın?",
-          "observed": "document_qa",
-          "previous_intent": null,
-          "source": "document_question"
-        },
-        {
-          "category": "paraphrase_draft",
-          "document_attached": true,
-          "expected": "draft",
-          "id": "pdraft_01",
-          "message": "Bu evraka bir mukabele metni oluştur.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": null
-        },
-        {
-          "category": "paraphrase_draft",
-          "document_attached": true,
-          "expected": "draft",
-          "id": "pdraft_02",
-          "message": "Gelen yazıya karşılık bir metin tanzim et.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": null
-        },
-        {
-          "category": "paraphrase_draft",
-          "document_attached": true,
-          "expected": "draft",
-          "id": "pdraft_03",
-          "message": "Buna uygun bir tebligat metni düzenle.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": null
-        },
-        {
-          "category": "paraphrase_draft",
-          "document_attached": true,
-          "expected": "draft",
-          "id": "pdraft_05",
-          "message": "Bu başvuruya resmi bir mukabelede bulun.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": null
-        },
-        {
-          "category": "paraphrase_draft",
-          "document_attached": true,
-          "expected": "draft",
-          "id": "pdraft_06",
-          "message": "İlgili birime iletilecek bir tezkere düzenlemeni istiyorum.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": null
-        },
-        {
-          "category": "paraphrase_draft",
-          "document_attached": true,
-          "expected": "draft",
-          "id": "pdraft_07",
-          "message": "Vatandaşa dönüş yapacak bir metin kurgular mısın?",
-          "observed": "document_qa",
-          "previous_intent": null,
-          "source": "document_question"
-        },
-        {
-          "category": "paraphrase_draft",
-          "document_attached": true,
-          "expected": "draft",
-          "id": "pdraft_08",
-          "message": "Bu konuda kuruma bildirim yapacak bir yazışma kurgula.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": null
-        },
-        {
-          "category": "paraphrase_analyze",
-          "document_attached": true,
-          "expected": "analyze",
-          "id": "panalyze_01",
-          "message": "Bu evrakı bir gözden geçir bakalım.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": null
-        },
-        {
-          "category": "paraphrase_analyze",
-          "document_attached": true,
-          "expected": "analyze",
-          "id": "panalyze_02",
-          "message": "Belgedeki eksiklikleri tespit etmeni istiyorum.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": null
-        },
-        {
-          "category": "paraphrase_analyze",
-          "document_attached": true,
-          "expected": "analyze",
-          "id": "panalyze_03",
-          "message": "Evrakın tam olup olmadığına bir bak.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": null
-        },
-        {
-          "category": "paraphrase_analyze",
-          "document_attached": true,
-          "expected": "analyze",
-          "id": "panalyze_04",
-          "message": "Bu belgenin usule uygunluğunu irdele.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": null
-        },
-        {
-          "category": "paraphrase_analyze",
-          "document_attached": true,
-          "expected": "analyze",
-          "id": "panalyze_05",
-          "message": "Evrakı bir süz ve bulgularını raporla.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": null
-        },
-        {
-          "category": "paraphrase_analyze",
-          "document_attached": true,
-          "expected": "analyze",
-          "id": "panalyze_06",
-          "message": "Belgenin hangi kategoriye girdiğini tespit etmeni istiyorum.",
-          "observed": "document_qa",
-          "previous_intent": null,
-          "source": "document_question"
-        },
-        {
-          "category": "paraphrase_memory",
-          "document_attached": false,
-          "expected": "chat",
-          "id": "precall_01",
-          "message": "Biraz evvel sana ilettiğim konu neydi?",
-          "observed": "<abstain>",
-          "previous_intent": "chat",
-          "source": null
-        },
-        {
-          "category": "paraphrase_memory",
-          "document_attached": false,
-          "expected": "chat",
-          "id": "precall_02",
-          "message": "Önceki turda konuştuğumuz konuyu tekrar eder misin?",
-          "observed": "<abstain>",
-          "previous_intent": "chat",
-          "source": null
-        },
-        {
-          "category": "paraphrase_memory",
-          "document_attached": false,
-          "expected": "chat",
-          "id": "precall_03",
-          "message": "Bu diyalogda hangi konulara değindik?",
-          "observed": "<abstain>",
-          "previous_intent": "chat",
-          "source": null
-        },
-        {
-          "category": "paraphrase_memory",
-          "document_attached": false,
-          "expected": "chat",
-          "id": "precall_04",
-          "message": "Geçen sefer hangi kurumun adını vermiştim?",
-          "observed": "<abstain>",
-          "previous_intent": "chat",
-          "source": null
-        },
-        {
-          "category": "paraphrase_memory",
-          "document_attached": true,
-          "expected": "chat",
-          "id": "precall_05",
-          "message": "Yukarıda bahsettiğim evrak hangisiydi?",
-          "observed": "document_qa",
-          "previous_intent": "document_qa",
-          "source": "document_question"
-        },
-        {
-          "category": "paraphrase_memory",
-          "document_attached": false,
-          "expected": "chat",
-          "id": "precall_07",
-          "message": "Demin verdiğin cevabı bir daha söyler misin?",
-          "observed": "<abstain>",
-          "previous_intent": "chat",
-          "source": null
-        },
-        {
-          "category": "paraphrase_memory",
-          "document_attached": false,
-          "expected": "chat",
-          "id": "precall_08",
-          "message": "Buraya kadar neler konuştuğumuzu toparlar mısın?",
-          "observed": "<abstain>",
-          "previous_intent": "chat",
-          "source": null
-        },
-        {
-          "category": "paraphrase_memory",
-          "document_attached": true,
-          "expected": "chat",
-          "id": "precall_09",
-          "message": "Sana ilettiğim ilk talebi anımsıyor musun?",
-          "observed": "document_qa",
-          "previous_intent": "document_qa",
-          "source": "document_question"
-        },
-        {
-          "category": "paraphrase_memory",
-          "document_attached": false,
-          "expected": "chat",
-          "id": "precall_10",
-          "message": "Evvelce sorduğum soruyu tekrarlayabilir misin?",
-          "observed": "<abstain>",
-          "previous_intent": "chat",
-          "source": null
-        },
-        {
-          "category": "escalation",
-          "document_attached": true,
-          "expected": "<abstain>",
-          "id": "esc_06",
-          "message": "Bu belgeyle ilgili ne gerekiyorsa onu uygula.",
-          "observed": "document_qa",
-          "previous_intent": null,
-          "source": "document_question"
+          "source": "context_default"
         }
       ],
-      "macro_f1": 0.7289,
+      "macro_f1": 0.8311,
       "per_label": [
         {
-          "f1": 0.9333333333333333,
+          "f1": 1.0,
           "label": "<abstain>",
           "precision": 1.0,
-          "recall": 0.875,
+          "recall": 1.0,
           "support": 8
         },
         {
-          "f1": 0.6111111111111112,
+          "f1": 0.8571428571428572,
           "label": "analyze",
-          "precision": 0.6875,
-          "recall": 0.55,
-          "support": 20
+          "precision": 0.9545454545454546,
+          "recall": 0.7777777777777778,
+          "support": 27
         },
         {
-          "f1": 0.704225352112676,
-          "label": "chat",
+          "f1": 0.9343065693430657,
+          "label": "assist",
+          "precision": 0.9142857142857143,
+          "recall": 0.9552238805970149,
+          "support": 67
+        },
+        {
+          "f1": 0.8641975308641976,
+          "label": "draft",
           "precision": 1.0,
-          "recall": 0.5434782608695652,
+          "recall": 0.7608695652173914,
           "support": 46
         },
         {
-          "f1": 0.7407407407407407,
-          "label": "document_qa",
-          "precision": 0.5882352941176471,
-          "recall": 1.0,
-          "support": 10
-        },
-        {
-          "f1": 0.6551724137931035,
-          "label": "draft",
-          "precision": 0.6785714285714286,
-          "recall": 0.6333333333333333,
-          "support": 30
+          "f1": 0.5,
+          "label": "revise",
+          "precision": 1.0,
+          "recall": 0.3333333333333333,
+          "support": 12
         }
       ],
       "risk_coverage": [
         {
-          "coverage": 0.8157894736842105,
-          "risk": 0.22580645161290322,
+          "coverage": 0.86875,
+          "risk": 0.050359712230215826,
           "threshold": 0.0
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.8,
+          "risk": 0.0546875,
           "threshold": 0.05
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.8,
+          "risk": 0.0546875,
           "threshold": 0.1
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.8,
+          "risk": 0.0546875,
           "threshold": 0.15
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.8,
+          "risk": 0.0546875,
           "threshold": 0.2
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.8,
+          "risk": 0.0546875,
           "threshold": 0.25
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.8,
+          "risk": 0.0546875,
           "threshold": 0.3
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.8,
+          "risk": 0.0546875,
           "threshold": 0.35
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.73125,
+          "risk": 0.05982905982905983,
           "threshold": 0.4
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.6375,
+          "risk": 0.029411764705882353,
           "threshold": 0.45
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.6375,
+          "risk": 0.029411764705882353,
           "threshold": 0.5
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.6,
+          "risk": 0.03125,
           "threshold": 0.55
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.6,
+          "risk": 0.03125,
           "threshold": 0.6
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.6,
+          "risk": 0.03125,
           "threshold": 0.65
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.6,
+          "risk": 0.03125,
           "threshold": 0.7
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.6,
+          "risk": 0.03125,
           "threshold": 0.75
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.35625,
+          "risk": 0.05263157894736842,
           "threshold": 0.8
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.26875,
+          "risk": 0.023255813953488372,
           "threshold": 0.85
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.25,
+          "risk": 0.025,
           "threshold": 0.9
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.25,
+          "risk": 0.025,
           "threshold": 0.95
         },
         {
-          "coverage": 0.7543859649122807,
-          "risk": 0.2441860465116279,
+          "coverage": 0.24375,
+          "risk": 0.0,
           "threshold": 1.0
         }
-      ]
+      ],
+      "source_distribution": {
+        "clarification_resolved": 6,
+        "clarify": 14,
+        "compound": 8,
+        "context_default": 15,
+        "continuation": 7,
+        "empty": 2,
+        "scored": 101,
+        "semantic": 7
+      }
     }
   }
 }

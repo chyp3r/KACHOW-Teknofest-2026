@@ -67,6 +67,14 @@ def _intent_summary(run: EvalRun) -> dict[str, Any]:
         "expected_calibration_error": round(
             expected_calibration_error(predictions), 4
         ),
+        # Only meaningful for the intent suite: how much of the ladder's
+        # decided traffic each rung actually produced, and how often it
+        # asked the user instead of committing. Neither is derivable from
+        # the accuracy/F1 numbers above -- a ladder can hold accuracy steady
+        # while quietly shifting its cost profile toward asking more
+        # questions, and this is what would show it.
+        "source_distribution": intent_suite.source_distribution(run),
+        "clarify_rate": round(intent_suite.clarify_rate(run), 4),
         "per_label": [asdict(score) for score in per_label_scores(predictions)],
         "confusion_matrix": confusion_matrix(predictions),
         "risk_coverage": [
@@ -138,7 +146,18 @@ def _format_intent_markdown(summary: dict[str, Any]) -> list[str]:
         f"| Doğruluk (tüm vakalar) | {summary['accuracy_over_all']:.4f} |",
         f"| Doğruluk (karar verilenler) | {summary['accuracy_over_decided']:.4f} |",
         f"| Eskalasyon (abstention) oranı | {summary['abstention_rate']:.4f} |",
+        f"| **Clarify oranı** (kullanıcıya soru) | **{summary['clarify_rate']:.4f}** |",
         f"| Kalibrasyon hatası (ECE) | {summary['expected_calibration_error']:.4f} |",
+        "",
+        "### Kaynak dağılımı",
+        "",
+        "| Kaynak | Vaka |",
+        "|---|---|",
+    ]
+    for source, count in summary["source_distribution"].items():
+        lines.append(f"| `{source}` | {count} |")
+
+    lines += [
         "",
         "### Kategori kırılımı",
         "",
@@ -248,6 +267,7 @@ def _diff_lines(suite: str, current: dict[str, Any], baseline: dict[str, Any]) -
         tracked += [
             ("accuracy_over_all", "Doğruluk (tüm vakalar)", True),
             ("abstention_rate", "Eskalasyon oranı", False),
+            ("clarify_rate", "Clarify oranı", False),
             ("expected_calibration_error", "Kalibrasyon hatası", False),
         ]
     else:
