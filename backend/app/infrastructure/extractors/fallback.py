@@ -66,6 +66,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         *,
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
+        raster_cache: Optional[dict] = None,
     ) -> ExtractedDocument:
         """Extract text using the first extractor that produces a usable result.
 
@@ -73,6 +74,12 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
             content: The raw document bytes.
             file_name: Original file name, used for dispatch.
             mime_type: Declared content type, used for dispatch.
+            raster_cache: Optional pre-existing raster cache, honoured if this
+                chain is itself nested under another caller. Created fresh
+                per call otherwise, so a scanned PDF that escalates from one
+                OCR extractor to the next in *this* chain reuses the pages
+                already rendered, without ever leaking that cache across two
+                unrelated documents.
 
         Returns:
             The first result meeting the threshold, or the richest result seen.
@@ -80,6 +87,8 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         Raises:
             DocumentExtractionError: If no extractor applies or all of them fail.
         """
+        if raster_cache is None:
+            raster_cache = {}
         best: Optional[ExtractedDocument] = None
         last_error: Optional[Exception] = None
         attempted = 0
@@ -93,7 +102,10 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
             attempted += 1
             try:
                 result = await extractor.extract(
-                    content, file_name=file_name, mime_type=mime_type
+                    content,
+                    file_name=file_name,
+                    mime_type=mime_type,
+                    raster_cache=raster_cache,
                 )
             except Exception as exc:
                 last_error = exc

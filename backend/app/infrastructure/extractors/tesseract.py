@@ -73,6 +73,7 @@ class TesseractExtractor(BaseDocumentExtractor):
         *,
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
+        raster_cache: Optional[dict] = None,
     ) -> ExtractedDocument:
         """Recognise text in a scanned PDF or an image.
 
@@ -80,6 +81,11 @@ class TesseractExtractor(BaseDocumentExtractor):
             content: Raw PDF or image bytes.
             file_name: Original file name, used to decide the input kind.
             mime_type: Declared content type, used to decide the input kind.
+            raster_cache: Optional shared cache of already-rasterised pages,
+                keyed by DPI (see `BaseDocumentExtractor.extract`). Checked
+                before rendering and populated after, so an escalation to
+                `OllamaVisionExtractor` at the same DPI reuses these pages
+                instead of rasterising the same PDF a second time.
 
         Returns:
             The recognised text with one entry per page, flagged as OCR output.
@@ -99,7 +105,23 @@ class TesseractExtractor(BaseDocumentExtractor):
             )
 
         try:
-            pages = await asyncio.to_thread(self._recognize, content, is_pdf)
+            if not is_pdf:
+                images = [await asyncio.to_thread(Image.open, io.BytesIO(content))]
+            elif raster_cache is not None and self.dpi in raster_cache:
+                images = raster_cache[self.dpi]
+                logger.info("Reusing %d already-rasterised page(s) at %d DPI.", len(images), self.dpi)
+            else:
+                images = await asyncio.to_thread(self._render_pages, content)
+                if raster_cache is not None:
+                    raster_cache[self.dpi] = images
+            # Each pytesseract call blocks on its own `tesseract` subprocess,
+            # which releases the GIL for the duration -- concurrent threads
+            # here run as genuinely separate OS processes, not serialised by
+            # Python. Rendering stays sequential above (pdfium is already
+            # fast per page; OCR is the actual cost this parallelises).
+            pages = await asyncio.gather(
+                *(asyncio.to_thread(self._ocr_image, image) for image in images)
+            )
         except DocumentExtractionError:
             raise
         except Exception as exc:
@@ -121,38 +143,40 @@ class TesseractExtractor(BaseDocumentExtractor):
             used_ocr=True,
         )
 
-    def _recognize(self, content: bytes, is_pdf: bool) -> list[str]:
-        """Run OCR over every page or over a single image.
+    def _render_pages(self, content: bytes) -> list:
+        """Rasterise every page of a PDF to a PIL image, in document order.
 
         Args:
-            content: Raw PDF or image bytes.
-            is_pdf: Whether the content must be rasterised first.
+            content: Raw PDF bytes.
 
         Returns:
-            Recognised text per page.
+            One rendered PIL image per page.
         """
-        config = f"--psm {self.page_segmentation_mode}"
-        if not is_pdf:
-            image = Image.open(io.BytesIO(content))
-            return [pytesseract.image_to_string(image, lang=self.language, config=config)]
-
         scale = self.dpi / PDF_POINTS_PER_INCH
         document = pdfium.PdfDocument(content)
         try:
-            pages = []
+            images = []
             for page in document:
                 bitmap = page.render(scale=scale)
                 try:
-                    pages.append(
-                        pytesseract.image_to_string(
-                            bitmap.to_pil(), lang=self.language, config=config
-                        )
-                    )
+                    images.append(bitmap.to_pil())
                 finally:
                     page.close()
-            return pages
+            return images
         finally:
             document.close()
+
+    def _ocr_image(self, image) -> str:
+        """Run Tesseract over a single page image.
+
+        Args:
+            image: A PIL image.
+
+        Returns:
+            The recognised text.
+        """
+        config = f"--psm {self.page_segmentation_mode}"
+        return pytesseract.image_to_string(image, lang=self.language, config=config)
 
     def supports(
         self,

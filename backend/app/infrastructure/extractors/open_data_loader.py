@@ -10,6 +10,7 @@ from app.infrastructure.extractors.base import (
     DocumentExtractionError,
     ExtractedDocument,
     has_pdf_magic_bytes,
+    has_pdf_text_layer,
     matches_extension,
 )
 
@@ -71,6 +72,7 @@ class OpenDataLoaderExtractor(BaseDocumentExtractor):
         *,
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
+        raster_cache: Optional[dict] = None,
     ) -> ExtractedDocument:
         """Parse a PDF into per-page text using OpenDataLoader.
 
@@ -78,6 +80,8 @@ class OpenDataLoaderExtractor(BaseDocumentExtractor):
             content: The raw PDF bytes.
             file_name: Original file name (unused).
             mime_type: Declared content type (unused).
+            raster_cache: Unused; this extractor reads the PDF's own text
+                layer and never rasterises anything.
 
         Returns:
             The extracted text with one entry per page.
@@ -145,9 +149,17 @@ class OpenDataLoaderExtractor(BaseDocumentExtractor):
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
     ) -> bool:
-        """Accept PDFs only, detected by signature or declared type."""
-        if has_pdf_magic_bytes(content):
-            return True
-        if mime_type == "application/pdf":
-            return True
-        return matches_extension(file_name, PDF_EXTENSIONS)
+        """Accept PDFs with a text layer; reject genuine scans outright.
+
+        A scanned PDF has nothing for this extractor to find -- it always
+        rejects, but not before paying OpenDataLoader's JVM startup cost to
+        find that out. `has_pdf_text_layer` is a cheap, no-JVM probe that
+        catches this ahead of time so a scan skips straight to the OCR
+        extractors instead.
+        """
+        is_pdf = (
+            has_pdf_magic_bytes(content)
+            or mime_type == "application/pdf"
+            or matches_extension(file_name, PDF_EXTENSIONS)
+        )
+        return is_pdf and has_pdf_text_layer(content)
