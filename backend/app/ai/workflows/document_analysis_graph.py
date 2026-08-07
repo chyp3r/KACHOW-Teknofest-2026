@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from copy import deepcopy
 from typing import Any, Optional, TypedDict
@@ -25,7 +26,7 @@ from app.ai.guardrails.llm_nuance import judge_input_sensitivity
 from app.ai.guardrails.sensitivity import SensitivityAssessment
 from app.ai.guardrails.sensitivity import assess as assess_sensitivity
 from app.ai.llms.base import BaseLLMClient
-from app.ai.retrieval.hybrid import HybridRetriever
+from app.ai.policy.budget import node_budget
 from app.ai.workflows.events import emit_node_end, emit_node_error, emit_node_start, emit_partial
 from app.ai.workflows.resilience import (
     IO_RETRY,
@@ -47,6 +48,32 @@ MEVZUAT_RESULT_LIMIT = 3
 
 #: The merged classify+extract call emits a nested object with a dozen fields.
 ANALYSIS_MAX_TOKENS = 1536
+
+#: Share of the suggest_mevzuat budget the model call may use, leaving the rest
+#: for the node's own degradation path. Without this the node's timeout fires
+#: outside its try/except -- where its fallback cannot reach it -- and the whole
+#: analysis fails over the optional half of requirement 5.
+SUGGESTION_BUDGET_SHARE = 0.85
+
+#: Generation cap for the suggestion node. Its output is a handful of one-sentence
+#: justifications, so the 1024-token default buys the model room it does not use
+#: -- but 384 is too tight against real retrieved excerpts and was measured
+#: costing more than it saves: qwen3.5:9b truncated mid-JSON, failed to parse,
+#: retried, failed again, and the run fell through to the raw-citation fallback
+#: after 2x the model's own generation time. That failure only showed up end to
+#: end, not in the isolated call that first picked 384 -- worth remembering
+#: before trusting an isolated timing again.
+#:
+#: 512 was measured against six document/missing-field combinations, two
+#: repeats each: 6/6 succeeded on the first attempt, no retries. Confirmed
+#: through the live endpoint against a single verified server process: three
+#: consecutive uploads of the same document at 49-51s each (was 65-85s
+#: uncapped), the ComplianceAgent call itself down to ~25s from ~35s, and the
+#: deterministic core (type, compliance status, missing fields) identical
+#: across all three. Lowering MEVZUAT_RESULT_LIMIT was measured too and
+#: rejected: it saves ~2s and *changes* the answer, which is not the same kind
+#: of win as a cap that reproduces the uncapped text.
+SUGGESTION_MAX_TOKENS = 512
 
 
 class DocumentAnalysisState(TypedDict, total=False):
@@ -248,7 +275,7 @@ def _render_mevzuat_excerpts(documents: list[Document]) -> str:
 
 def create_document_analysis_graph(
     llm_client: BaseLLMClient,
-    mevzuat_retriever: Optional[HybridRetriever] = None,
+    mevzuat_retriever: Optional[Any] = None,
     reasoning_llm_client: Optional[BaseLLMClient] = None,
     fast_llm_client: Optional[BaseLLMClient] = None,
 ):
@@ -272,8 +299,12 @@ def create_document_analysis_graph(
 
     Args:
         llm_client: The LLM used for document analysis.
-        mevzuat_retriever: Optional legislation retriever. When omitted, the two
-            legislation nodes degrade to no-ops and the rest still runs.
+        mevzuat_retriever: Optional legislation retriever -- a HybridRetriever
+            (local corpus) or a FallbackMevzuatRetriever (MCP-first with local
+            fallback, see app.ai.retrieval.mcp_mevzuat); anything exposing
+            ``async retrieve(query, limit) -> list[Document]`` works. When
+            omitted, the two legislation nodes degrade to no-ops and the rest
+            still runs.
         reasoning_llm_client: Optional separate client for the legislation
             suggestion step. Defaults to ``llm_client``.
         fast_llm_client: Optional fast-tier client. When the quality tier fails
@@ -616,10 +647,32 @@ def create_document_analysis_graph(
             "adı üretme."
         )
         try:
-            res: MevzuatSuggestionOutput = await compliance_agent.run_structured(
-                messages=prompt,
-                response_model=MevzuatSuggestionOutput,
-                temperature=0.0,
+            # Bounded *inside* the node, below the node's own budget, so an
+            # overrun lands in the degradation path below instead of escaping to
+            # node_timeout. Explaining the excerpts is the optional half of
+            # requirement 5 -- the citations are already retrieved and correct --
+            # so a slow model should cost the explanation, never the analysis.
+            #
+            # The reasoning level is read from `state` here for the same reason
+            # the outer @node_timeout reads it via _reasoning_level_of: the two
+            # budgets must scale together. DocumentAnalysisState carries no
+            # reasoning_level field today, so both currently resolve to the same
+            # balanced default -- but they resolved to it independently, by two
+            # separately-written call sites that happened to agree rather than
+            # being structurally tied. Had a future reasoning_level field been
+            # added to this state without updating this line too, a fast run
+            # (0.6x outer) would make this inner bound (0.85x) exceed its own
+            # node_timeout, and suggest_mevzuat's degradation path -- the whole
+            # reason this inner bound exists -- would become unreachable again.
+            res: MevzuatSuggestionOutput = await asyncio.wait_for(
+                compliance_agent.run_structured(
+                    messages=prompt,
+                    response_model=MevzuatSuggestionOutput,
+                    temperature=0.0,
+                    max_tokens=SUGGESTION_MAX_TOKENS,
+                ),
+                timeout=node_budget("suggest_mevzuat", state.get("reasoning_level"))
+                * SUGGESTION_BUDGET_SHARE,
             )
             suggestions = [item.model_dump() for item in res.suggestions]
         except TRANSIENT_ERRORS:

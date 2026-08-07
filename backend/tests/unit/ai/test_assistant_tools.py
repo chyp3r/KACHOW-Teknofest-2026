@@ -68,6 +68,73 @@ def test_get_document_details_handler_takes_no_arguments():
     assert GetDocumentDetailsArgs.model_fields == {}
 
 
+# ==========================================
+# get_document_details / missing_fields shape (regression)
+# ==========================================
+_ANALYSIS_WITH_MISSING_FIELDS = {
+    "pages": ["tek sayfa"],
+    "extracted_text": "tek sayfa",
+    "analysis": {
+        "summary": "İzin talebi",
+        "compliance_status": "eksik_bilgi",
+        # Every real producer (document_analysis_graph.py's check_compliance_node)
+        # writes MissingField.model_dump() dicts here, never bare strings -- this
+        # is the actual on-disk shape, not a simplified test fixture.
+        "missing_fields": [
+            {
+                "key": "sayi",
+                "label": "Sayı",
+                "severity": "zorunlu",
+                "mevzuat": "RYUEHY m.11",
+                "reason": "Belgelerde sayı bulunması zorunludur.",
+            },
+            {
+                "key": "muhatap",
+                "label": "Muhatap",
+                "severity": "zorunlu",
+                "mevzuat": "RYUEHY m.14",
+                "reason": "Muhatap belirtilmelidir.",
+            },
+        ],
+    },
+}
+
+
+@pytest.mark.asyncio
+async def test_get_document_details_does_not_crash_on_a_document_with_missing_fields():
+    """18 of 20 real cached analyses have a non-empty missing_fields at this
+    exact shape. `", ".join(list_of_dicts)` raised TypeError on every one of
+    them, and the assistant swallowed it -- answering without the document's
+    analysis, silently, no error surfaced to the user."""
+    tools = build_assistant_tools(
+        **_kwargs(document_id="uploads/evrak.pdf", cached_document=_ANALYSIS_WITH_MISSING_FIELDS)
+    )
+    details = next(tool for tool in tools if tool.name == "get_document_details")
+
+    text = await details.handler()
+
+    assert "İzin talebi" in text
+    assert "Sayı" in text
+    assert "Muhatap" in text
+
+
+@pytest.mark.asyncio
+async def test_get_document_details_tolerates_string_missing_fields_too():
+    """Defensive: if some future producer ever writes plain strings instead of
+    MissingField dicts, this must still render rather than crash."""
+    doc = {
+        "pages": ["x"],
+        "extracted_text": "x",
+        "analysis": {"summary": "özet", "missing_fields": ["Sayı", "Muhatap"]},
+    }
+    tools = build_assistant_tools(**_kwargs(document_id="uploads/evrak.pdf", cached_document=doc))
+    details = next(tool for tool in tools if tool.name == "get_document_details")
+
+    text = await details.handler()
+
+    assert "Sayı" in text and "Muhatap" in text
+
+
 @pytest.mark.asyncio
 async def test_search_document_handler_is_scoped_to_the_attached_document_id():
     """The handler's own signature has no document-id parameter -- it is
@@ -130,6 +197,12 @@ async def test_search_document_cites_the_hit_page_when_present():
 
 @pytest.mark.asyncio
 async def test_search_document_falls_back_to_cached_text_when_search_finds_nothing():
+    """The fallback text must carry a visible marker, not just an internal
+    `confidence` value the model itself never sees. Before this, a retrieval
+    outage and 'genuinely no matching passage' both silently returned the
+    document's opening lines with no distinguishing signal at all, so a
+    question about page 40 of a 60-page document got answered -- wrongly,
+    with unwarranted confidence -- from pages 1-2."""
     vector_store = AsyncMock()
     vector_store.hybrid_search.return_value = []
     embeddings_client = AsyncMock()
@@ -152,7 +225,71 @@ async def test_search_document_falls_back_to_cached_text_when_search_finds_nothi
 
     result = await search.handler(query="herhangi bir soru")
 
-    assert result == "belgenin tam metni burada"
+    assert "belgenin tam metni burada" in result
+    assert "[Not:" in result
+
+
+@pytest.mark.asyncio
+async def test_search_document_carries_the_degraded_marker_into_the_reported_result_too():
+    """The side-channel ToolResult.text (what output_gate's groundedness check
+    reads) must be the exact same string the model saw, marker included --
+    not a second, silently different copy."""
+    vector_store = AsyncMock()
+    vector_store.hybrid_search.return_value = []
+    embeddings_client = AsyncMock()
+    embeddings_client.embed_query.return_value = [0.1]
+
+    class _StubSparseEncoder:
+        def encode_query(self, query):
+            return [], []
+
+    reported = []
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/doc.pdf",
+            cached_document={"extracted_text": "belgenin tam metni burada"},
+            vector_store=vector_store,
+            embeddings_client=embeddings_client,
+            qa_sparse_encoder=_StubSparseEncoder(),
+            on_tool_result=reported.append,
+        )
+    )
+    search = next(tool for tool in tools if tool.name == "search_document")
+
+    result = await search.handler(query="herhangi bir soru")
+
+    assert reported[0].text == result
+    assert reported[0].confidence == 0.5
+
+
+@pytest.mark.asyncio
+async def test_search_document_does_not_mark_a_real_targeted_hit_as_degraded():
+    """The marker must only appear on the fallback path -- a genuine search
+    hit is exactly as confident as it always was."""
+    vector_store = AsyncMock()
+    vector_store.hybrid_search.return_value = [{"text": "hedefli sonuç", "metadata": {}}]
+    embeddings_client = AsyncMock()
+    embeddings_client.embed_query.return_value = [0.1]
+
+    class _StubSparseEncoder:
+        def encode_query(self, query):
+            return [], []
+
+    tools = build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/doc.pdf",
+            cached_document={"extracted_text": "belgenin tam metni burada"},
+            vector_store=vector_store,
+            embeddings_client=embeddings_client,
+            qa_sparse_encoder=_StubSparseEncoder(),
+        )
+    )
+    search = next(tool for tool in tools if tool.name == "search_document")
+
+    result = await search.handler(query="herhangi bir soru")
+
+    assert result == "hedefli sonuç"
+    assert "[Not:" not in result
 
 
 @pytest.mark.asyncio

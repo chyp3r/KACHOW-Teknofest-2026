@@ -2,7 +2,7 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
-## [1.41.0] - 2026-08-07
+## [1.47.0] - 2026-08-07
 ### Değiştirildi
 - **Niyet router'ı kalibre edilmiş sinyal füzyonuna taşındı (Router SOTA, Faz 1-5)**: router "bazen saçmalıyor" şikayetinin üç somut kök nedeni bulundu ve düzeltildi.
   - **Faz 1 -- sessiz bozulma**: `datasets/prototypes/intent.json` `policy_version: "1.2.0"` ve eski niyet uzayıyla (`chat`/`document_qa`) damgalıydı; çalışan politika `1.4.0`'dı. `PrototypeMatcher` sürüm uyuşmazlığında dosyayı sessizce atlıyordu -- semantik katman (Katman 2) üretimde haftalardır devre dışıydı ve sözlüksel katmanın çekimser kaldığı her mesaj doğrudan clarify/guess dalına düşüyordu. Vektörler yeniden üretildi, `revise` için prototipler eklendi (önceden hiç yoktu), ve bu sınıfın sessizce tekrarlanmasını önleyen bir bayatlık testi eklendi (`test_prototype_freshness.py`) -- artık `ROUTER_SEMANTIC_AVAILABLE` Prometheus gauge'u ve `/system/health?deep=true`'nun `router_semantic` alanı katmanın gerçekten yüklü olup olmadığını gösteriyor.
@@ -11,6 +11,57 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   - **Faz 4 -- model rungu**: hızlı-katman model tasarım gereği en pahalı ama en akıllı rung olması gerekirken fiilen erişilemezdi ve yalnızca 3 etiket biliyordu (`revise` hiç döndürülemiyordu, "emin değilim" kanalı yoktu). `IntentOutput` 5 etikete çıkarıldı (`unclear` dahil), prompt aktif taslağı ve önceki niyeti görüyor, model çağrısının çökmesi (`model_failed`) ile modelin dürüstçe kararsız kalması (`unclear`) artık aynı sinyale toplanmıyor.
   - **Faz 5 -- gözlemlenebilirlik**: `kachow_router_decisions_total`/`kachow_router_confidence`/`kachow_router_stage_duration_seconds` Prometheus metrikleri, Grafana panosuna kaynak dağılımı ve clarify oranı panelleri, `planning_completed` SSE olayına `source`/`confidence`/`alternatives`, ve üretim trafiğinden düşük güvenli/clarify kararları JSONL olarak dışa aktaran `scripts/export_router_traces.py` (altın kümenin insan onaylı geri beslemeyle büyümesi için -- otomatik yeniden eğitim yok, bilinçli bir seçim).
   - `POLICY_VERSION` 1.4.0 → 1.5.0 (`IntentPolicy`'ye `tau_high`/`tau_low` eklendi). **Not**: bu sürümden itibaren bir policy bump hem `scripts/build_prototypes.py` hem `scripts/fit_router.py`'nin yeniden çalıştırılmasını gerektiriyor (bkz. `AGENTS.md`).
+
+## [1.46.0] - 2026-08-07
+### Değiştirildi
+- **OCR Zinciri Hızlandırıldı**: dört değişiklik, ilki diğer üçünün ölçümünü güvenilir kılmak için zorunluydu.
+  - **Kıyaslama betiklerinin tek-sayfa hatası düzeltildi**: `evaluate_ocr_benchmark.py`'deki `rasterise()` yalnızca `document[0]`'ı işliyordu -- çok sayfalı bir kaynak PDF'de bile her motora tek sayfalık bir görsel veriliyor, aşağıdaki sıralı döngüler hiç çalıştırılmıyordu. Artık her sayfayı rasterize ediyor; `ocr` modu artık PDF baytlarını doğrudan motora veriyor (her motor kendi çok sayfalı döngüsünü çalıştırıyor, üretimdekiyle birebir), `ocr-degraded` modu her sayfayı bozup tek bir çok sayfalı PDF'e yeniden paketliyor. `evaluate_ocr_fields.py` (hangi motorun gönderileceğine karar veren betik) hiç süre ölçmüyordu; artık motor başına toplam süre de raporluyor.
+  - **Tesseract sayfaları artık eşzamanlı OCR ediliyor**: `_recognize`'ın tek arka plan iş parçacığı içindeki sıralı döngüsü, rasterize etmeyi (ucuz, sıralı kalıyor) OCR'dan (asıl maliyet) ayıran iki adıma bölündü; sayfa başına bir `pytesseract` çağrısı kendi `tesseract` alt sürecini bekleyen ayrı bir iş parçacığında çalışıyor -- alt süreç çağrıları GIL'i serbest bırakır, dolayısıyla eşzamanlı iş parçacıkları gerçekten ayrı CPU çekirdeklerinde çalışır. Regresyon testi, her sayfanın çağrısının **tüm sayfaların çağrıları başlamadan** dönmesini engelleyen bir `threading.Barrier` kullanıyor: sıralı bir uygulama sonsuza dek bekler (zaman aşımıyla başarısız olur), eşzamanlı bir uygulama anında serbest kalır.
+  - **Görsel dil modeli yolu kasıtlı olarak sıralı bırakıldı**: Ollama tek bir modele karşı üretimi sıralar; bu projede daha önce ölçülen eşzamanlı `classify`+`extract` çağrılarıyla aynı maliyet şekli (kazanç yerine kayıp). Bu ortamda canlı bir Ollama örneği olmadan bunu yeniden ölçmek mümkün değildi -- son çare, en zor okunur belgeler için olan bu yolda tahmin ederek yanlış yapmak, doğru ölçüp uygulamaktan daha riskli.
+  - **Taranmış PDF'ler artık yalnızca bir kez rasterize ediliyor**: `TesseractExtractor` ve `OllamaVisionExtractor` arasında paylaşılan, DPI'a göre anahtarlanan bir `raster_cache` sözlüğü -- `FallbackDocumentExtractor` her üst düzey `extract()` çağrısında tazesini kuruyor. Tesseract'ın sonucu reddedilip zincir görsel modele yükseldiğinde (bozuk bir taramada asıl senaryo budur), ikinci motor pdfium'u hiç açmadan Tesseract'ın zaten render ettiği sayfaları yeniden kullanıyor.
+  - **`opendataloader` artık gerçek taramalarda hiç çalıştırılmıyor**: yeni `has_pdf_text_layer` (pdfium'un kendi metin akışını okuyan, JVM'siz, OCR'sız ucuz bir yoklama; ilk birkaç sayfayla sınırlı) hem `OpenDataLoaderExtractor.supports()` hem `PdfiumExtractor.supports()`'a eklendi. Metin katmanı olmayan bir PDF artık bu iki metin-katmanı çıkarıcısını tamamen atlayıp doğrudan OCR motorlarına düşüyor -- taranmış bir belge artık `opendataloader`'ın JVM başlatma maliyetini hiç ödemiyor.
+
+## [1.45.0] - 2026-08-07
+### Eklendi
+- **Belge Analizi Artık Varsayılan Olarak Canlı Mevzuat Kullanıyor (MCP-first)**: `retrieve_mevzuat` düğümü artık `MEVZUAT_SOURCE` ayarına göre kaynak seçiyor -- `"mcp"` (yeni varsayılan) korpustaki yedi kanunun güncel metnini `mevzuat-mcp` üzerinden çeker, bellekte BM25 ile indeksler ve mevcut `_build_mevzuat_query`'nin ürettiği sorguyla sıralar; `"local"` önceki davranışın aynısı, doğrudan yerel `HybridRetriever` (Qdrant, dense+sparse).
+  - **Uygunluk kararı hâlâ dokunulmuyor.** `check_required_fields` sabit madde numaraları üzerinde küme farkı; yeni `test_missing_fields_is_identical_regardless_of_the_mevzuat_source` iki kaynak altında `missing_fields`'in bayt bayt aynı kaldığını, yalnızca alıntıların (`mevzuat_documents`) farklılaşabildiğini doğruluyor.
+  - **`mevzuat-mcp`'nin gerçek yüzeyi bir içerik/konu araması değil, bir katalog aramasıdır** (numara/ad ile ara, tam metni getir) -- `_build_mevzuat_query`'nin ürettiği anahtar-kelime yoğun konu dizesini doğrudan bir katalog başlığı aramasına vermek neredeyse hiç eşleşmezdi. Bunun yerine korpusun zaten küratörlüğünü yaptığı aynı yedi kanun numara ile çekilip yerel indeksle aynı `RecursiveChunker(1000, 200)` parametreleriyle parçalanıyor ve taze bir `BM25Retriever`'da sıralanıyor.
+  - **Getirim isteğe hiç ağ I/O'su eklemiyor.** `McpMevzuatRetriever.retrieve()` yalnızca `warm_up()`'ın en son kurduğu bellek-içi indeksi okur; `retrieve_mevzuat`'ın düğüm bütçesi (dengeli seviyede 25 sn) yedi kanunun playwright-destekli bir MCP sunucusundan soğuk çekilmesini garanti bitiremeyeceğinden, çekim tamamen istek yolunun dışında tutuluyor. `warm_up()` açılışta diğer ısınma adımlarıyla (`app.lifespan`) birlikte en iyi çaba ilkesiyle çalışıyor; yavaş/erişilemeyen sunucu açılışı bloklamıyor, yalnızca canlı kaynağın devreye girmesini geciktiriyor.
+  - **Her hata yerel korpusa düşüyor:** kayıtsız sunucu, zaman aşımı (kanun başına, yedisi eşzamanlı çekilirken biri asılı kalırsa diğerlerini bekletmemesi için ayrı ayrı sınırlı), kısmi getirim, boş sonuç -- hepsi `FallbackMevzuatRetriever` üzerinden yerel `HybridRetriever`'a düşüyor.
+  - **Genel asistan sohbeti (Görev 3) bu anahtardan etkilenmiyor.** `get_rag_graph` hâlâ yalnızca yerel korpusu okuyan `get_mevzuat_retriever`'ı kullanıyor; yeni `get_document_analysis_mevzuat_retriever` bu anahtarı yalnızca belge analizine uyguluyor.
+  - **`register_servers()` artık iki anahtardan herhangi biri açıkken sunucuyu kaydediyor** (`MEVZUAT_MCP_ENABLED or MEVZUAT_SOURCE == "mcp"`) -- aksi hâlde belgelenen varsayılan (`MEVZUAT_SOURCE="mcp"`, `MEVZUAT_MCP_ENABLED=False`, asistan aracı hâlâ kapalı) sunucuyu hiç kaydetmez ve yeni varsayılan sessizce hiçbir şey yapmazdı.
+  - Mülga mevzuat ayıklama mantığı (`pick_document_id`) ve numara çözümleme (`resolve_and_fetch`, KANUN-filtreli önce, filtresiz yeniden deneme) `app.mcp.mevzuat_client`'a taşındı; asistanın canlı arama aracı (`mevzuat_tools.py`) ve bu yeni getirici artık aynı, tek uygulamayı paylaşıyor.
+
+## [1.44.0] - 2026-08-07
+### Düzeltildi
+- **11 Hata Giderildi**: bkz. PR #133 için ayrıntılı açıklama. Kısaca: hız sınırlayıcının ZSET üye çakışması yüzünden hiç sınırlamaması (kaba kuvvet savunması etkisizdi), `X-Forwarded-For`'un koşulsuz güvenilmesi, `get_document_details`'in gerçek analizlerin çoğunda çökmesi, `search_document`'ın vektör deposu kesintisiyle "sonuç yok"u ayırt etmeden aynı yedek metne düşmesi, Türkçe katlamanın `ı`'yı NFKD'de sessizce silmesi (kurum adı iki kez uydurma sayılıyordu), `MEVZUAT_MCP_ARGS`'ın pydantic-settings'in JSON-önce-doğrulama sırasıyla açılışta çökmesi, numaralı yönetmelik aramalarının KANUN filtresiyle hep NOT_FOUND dönmesi, logout'un blacklist yazma hatasını yutup 200 dönmesi, ve Türkçe büyük-I'nin stopword filtresinden kaçması.
+  - Her hata için, düzeltme öncesi kodda başarısız olduğu `git stash`/`pop` ile doğrulanmış bir regresyon testi var.
+  - `suggest_mevzuat`'ın iç bütçesi artık dış `node_timeout`'un okuduğu aynı `state.get("reasoning_level")`'ı okuyor -- bugün her ikisi de aynı varsayılana rastlantıyla düşüyor, ama artık yapı gereği bağlı.
+
+## [1.43.0] - 2026-08-06
+### Değiştirildi
+- **Mevzuat Önerisi Düğümü Hızlandırıldı**: `suggest_mevzuat` artık üretim belirteç sayısını 512 ile sınırlıyor (varsayılan 1024). Çıktısı birkaç tek cümlelik gerekçeden ibaret olduğu için varsayılan yalnızca modele kullanmadığı alan veriyordu.
+  - **İlk denenen 384 değeri gerçek alıntılara karşı yetersiz çıktı ve kazandırdığından fazlasına mal oldu**: `qwen3.5:9b` JSON'u yarıda kesip ayrıştırma hatası veriyor, yeniden deneniyor, tekrar başarısız oluyor ve model kendi üretim süresinin iki katı harcandıktan sonra ham alıntı geri dönüşüne düşülüyordu. Bu başarısızlık yalnızca uçtan uca ortaya çıktı, 384'ü ilk seçen izole çağrıda değil.
+  - **512 değeri altı belge/eksik-alan kombinasyonunda, ikişer tekrarla ölçüldü**: 6/6 ilk denemede başarılı, hiç yeniden deneme yok. Doğrulanmış tek bir sunucu süreci üzerinden canlı uçla da doğrulandı: aynı belgenin arka arkaya üç yüklemesi **49-51 sn** (önceden sınırsızken 65-85 sn), `ComplianceAgent` çağrısının kendisi ~35 sn'den ~25 sn'ye indi, deterministik çekirdek (tür, uygunluk durumu, eksik alanlar) üç koşuda da aynı.
+  - `MEVZUAT_RESULT_LIMIT` düşürülmesi de ölçüldü ve reddedildi: ~2 sn kazandırıyor ama **cevabı değiştiriyor** — sınırsız metni birebir üreten bir sınırla aynı türden bir kazanım değil.
+
+## [1.42.0] - 2026-08-05
+### Düzeltildi
+- **Bütçesini Aşan Düğümler Artık Yeniden Denenmiyor**: Uçtan uca demo sırasında bulundu — aynı belge yüklemesi 58 sn'de 200, ardından 166 sn'de **502**, ardından 55 sn'de 200 döndürüyordu. Sebep yavaş model değildi.
+  - `node_timeout` yalın bir `TimeoutError` fırlatıyordu ve `TRANSIENT_ERRORS` içinde `TimeoutError` vardı; dolayısıyla yalnızca bütçesini aşan bir düğüm, kopmuş bir bağlantı gibi görünüp **yeniden deneniyordu**. `suggest_mevzuat` 70 sn'lik bütçeye karşı normalde 28-34 sn sürüyor; ara sıra uzadığında LangGraph ikinci bir denemeye 70 sn daha harcayıp tüm isteği düşürüyordu. Marjinal bir yavaşlama, **alıntılar zaten doğru biçimde getirilmişken**, 5. gereksinimin *isteğe bağlı* yarısı uğruna 166 sn süren bir 502'ye dönüşüyordu.
+  - Bütçe aşımı artık `NodeBudgetExceeded` fırlatır: bilinçli olarak `TimeoutError` değildir ve bilinçli olarak `TRANSIENT_ERRORS` içinde yer almaz. İkisi birbirine benzer ve zıt şeyler söyler — asılı kalmış bir bağlantı ikinci denemeye değer, bütçesine sığmayan iş ikinci denemede de sığmaz.
+  - `suggest_mevzuat` ayrıca kendi model çağrısını düğüm bütçesinin altında sınırlar. `node_timeout` tüm düğümü sardığı için zaman aşımı `try/except` **dışında** tetikleniyor ve düğümün mevcut düşüş yolu (ham alıntılara geri dönme) hiçbir zaman devreye giremiyordu. Artık aşım, üretilen açıklamaya mal olur; analize değil.
+  - **Ölçüm** (aynı belge, arka arkaya dört yükleme): 4/4 HTTP 200 (önceden 1/3), en kötü durum 166 sn + 502 yerine 85 sn, sıfır zaman-aşımı-yeniden-deneme olayı ve deterministik çekirdek (tür, uygunluk durumu, eksik alanlar) dört koşuda da bayt bayt aynı.
+
+## [1.41.0] - 2026-08-05
+### Eklendi
+- **Asistan İçin Canlı Mevzuat Sorgusu (MCP, varsayılan kapalı)**: `app/mcp/registry.py` dolduruldu — boş duran bu dosya, `docs/architecture/ai.md`'nin "AI yalnızca MCP istemcisini kullanır" ifadesiyle çelişen tek yerdi. `MEVZUAT_MCP_ENABLED` açıkken [`mevzuat-mcp`](https://github.com/saidsurucu/mevzuat-mcp) (MIT) sunucusu `mcp_manager`'a kaydedilir ve asistana `search_legislation_live` aracı eklenir.
+  - **Yalnızca ekler.** Uygunluk kararına hiç dokunmaz: `check_required_fields` sabit madde numaraları üzerinde küme farkıdır ve analiz hattı bu modülü hiç çağırmaz. Aynı evrakın her çalıştırmada bayt bayt aynı çıktıyı vermesini sağlayan özellik korunur.
+  - **İkinci sırada.** Yerel korpus aracı (`search_legislation`) önce kayıtlıdır; model varsayılan olarak çevrimdışı yola uzanır, bu bir yükseltmedir.
+  - **Hata da bir cevaptır.** Erişilemeyen sunucu, zaman aşımı, boş içerik — hepsi yerel aracın döndürdüğü "bulunamadı" ifadesini döndürür, asla istisna fırlatmaz. Üçüncü taraf bir devlet sitesi yüzünden sohbet turu 500 vermez. Bayrak kapalıyken araç modele **hiç sunulmaz**, yani çalıştırılamayacak bir araç önerilmez.
+  - **Mülga mevzuat ayıklanır.** `657` araması, gerçek Devlet Memurları Kanunu'nun (`mevzuat_id=102924`) **üstünde** "DEVLET MEMURLARI KANUNUNUN YÜRÜRLÜKTEN KALDIRILMIŞ HÜKÜMLERİ" kaydını (`335559`) döndürüyor — ikisi de meşru biçimde 657 numaralı, biri yürürlükten kalkmış. İlk sonucu almak, yürürlükten kalkmış metni yürürlükteki kanun gibi alıntılamak olurdu; bu, projenin önlemek için var olduğu uydurma atıf hatasının ta kendisidir. Sayısal sorgular ayrıca `mevzuat_tur=KANUN` ile süzülür.
+  - Uzun kanunlar kısaltılır: 657 yarım milyon karakteri aşar, sınırsız bırakılsa bağlam penceresini taşırırdı.
+  - Sunucu backend imajına **dahil değildir** (bağımlılık ağacı `playwright` sabitler); komut ve argümanlar yapılandırmada tutulur, böylece yerel süreçten yardımcı konteynere geçiş kod değişikliği değildir.
 
 ## [1.40.0] - 2026-08-06
 ### Değiştirildi
@@ -36,7 +87,6 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 ### Test
 - API Authorization/refresh, parçalı SSE ve event dedup, client session/thread ayrımı, interrupt recovery ve belge guardrail gösterimi için frontend testleri eklendi.
 - Alpine frontend imajında Rollup'un Linux x64 musl native paketi, npm'in platforma özgü optional dependency lockfile hatasına karşı seçilen Rollup sürümüyle açıkça kuruluyor.
-
 
 ## [1.39.0] - 2026-08-05
 ### Eklendi

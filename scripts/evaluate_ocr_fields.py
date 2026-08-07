@@ -26,9 +26,9 @@ Usage:
 
 import argparse
 import asyncio
-import io
 import os
 import sys
+import time
 from typing import Optional
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "backend"))
@@ -42,8 +42,8 @@ from app.infrastructure.extractors import (  # noqa: E402
 from evaluate_ocr_benchmark import (  # noqa: E402
     COMPARISON_PROMPT,
     degrade,
+    pages_to_pdf,
     rasterise,
-    to_png,
 )
 
 SAMPLE_DIR = os.path.join(
@@ -114,7 +114,7 @@ async def run(vision_models: list[str], prompt: str, limit: Optional[int]) -> No
         for model in vision_models
     ]
 
-    scores = {name: {"found": 0, "exact": 0} for name, _ in engines}
+    scores = {name: {"found": 0, "exact": 0, "sec": 0.0} for name, _ in engines}
 
     print("=" * 88)
     print(f"  Evrak alan kurtarma — {len(items)} belge, {total} etiketli alan")
@@ -122,13 +122,19 @@ async def run(vision_models: list[str], prompt: str, limit: Optional[int]) -> No
     print("=" * 88)
 
     for index, (name, pdf, expected) in enumerate(items):
-        png = to_png(degrade(rasterise(pdf), seed=index))
+        # Every page degraded, then packed back into one PDF -- each engine
+        # rasterises it again internally, the same multi-page loop it runs
+        # in production, so a document with more than one page is actually
+        # exercised instead of only ever timing/scoring page one.
+        pdf_bytes = pages_to_pdf([degrade(page, seed=index) for page in rasterise(pdf)])
         line = f"  {name:14s} ({len(expected)} alan)"
         for engine_name, engine in engines:
+            started = time.time()
             try:
-                text = (await engine.extract(png, mime_type="image/png")).text
+                text = (await engine.extract(pdf_bytes, mime_type="application/pdf")).text
             except Exception:  # noqa: BLE001 - a failed engine recovers nothing
                 text = ""
+            scores[engine_name]["sec"] += time.time() - started
             found, exact = _score(expected, parse_labelled_fields(text))
             scores[engine_name]["found"] += found
             scores[engine_name]["exact"] += exact
@@ -136,11 +142,12 @@ async def run(vision_models: list[str], prompt: str, limit: Optional[int]) -> No
         print(line, flush=True)
 
     print("-" * 88)
-    print(f"{'motor':26s} {'bulunan':>12s} {'birebir':>12s}")
+    print(f"{'motor':26s} {'bulunan':>12s} {'birebir':>12s} {'süre':>9s}")
     for engine_name, _ in engines:
         s = scores[engine_name]
         print(
-            f"{engine_name:26s} {s['found']:5d}/{total:<6d} {s['exact']:5d}/{total:<6d}"
+            f"{engine_name:26s} {s['found']:5d}/{total:<6d} {s['exact']:5d}/{total:<6d} "
+            f"{s['sec']:8.1f}s"
         )
     print(
         "\n'bulunan': alan adı çıkarılan metinde bulundu. 'birebir': değeri de "

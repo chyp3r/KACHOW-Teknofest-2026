@@ -394,22 +394,74 @@ Bu yaklaşım;
 
 ## Mevcut durum
 
-`app/mcp/` katmanı (stdio `MCPClient` + `MCPManager`) çalışır durumdadır ancak
-**çalışma zamanında kayıtlı bir sunucu yoktur**; `registry.py` boştur.
+`app/mcp/` katmanı üç yerde kullanılır; üçü de aynı sunucuya bağlanır:
+[`mevzuat-mcp`](https://github.com/saidsurucu/mevzuat-mcp) (MIT), mevzuat.gov.tr
+ve bedesten.adalet.gov.tr üzerinden sorgu yapar.
 
-Bugün MCP'nin tek gerçek kullanımı geliştirme zamanındadır:
-`scripts/fetch_mevzuat_corpus.py`, aynı `MCPClient` üzerinden
-[`mevzuat-mcp`](https://github.com/saidsurucu/mevzuat-mcp) (MIT) sunucusuna
-bağlanıp mevzuat.gov.tr'den tam metin çeker ve `datasets/mevzuat/` altına yazar.
+**1. Geliştirme zamanı — korpus üretimi.** `scripts/fetch_mevzuat_corpus.py`
+tam metinleri çekip `datasets/mevzuat/` altına yazar; bu, `MEVZUAT_SOURCE="local"`
+olduğunda ve MCP-first bir çalışma zamanı hatasında geri düşülen korpustur.
+Tamamen çevrimdışıdır ve puanlanan gereksinimlerin garantili yolu budur.
+
+**2. Çalışma zamanı — belge analizi (Görev 1, varsayılan açık).**
+`app.ai.retrieval.mcp_mevzuat` (`McpMevzuatRetriever` + `FallbackMevzuatRetriever`),
+`retrieve_mevzuat_node`'un tek erişim noktası. `MEVZUAT_SOURCE="mcp"` (varsayılan)
+iken korpustaki yedi kanunun güncel metnini MCP üzerinden çeker, bellekte BM25 ile
+indeksler ve `_build_mevzuat_query`'nin ürettiği sorguyla sıralar; `"local"` iken
+doğrudan yerel `HybridRetriever`'ı (Qdrant, dense+sparse) kullanır, bu ayar
+eklenmeden önceki davranışın aynısı.
+
+* **Uygunluk kararına hiç dokunmaz.** `check_required_fields` sabit madde
+  numaraları üzerinde küme farkıdır; hangi kaynağın kullanıldığından bağımsız
+  olarak `missing_fields` bayt bayt aynıdır (bkz.
+  `test_missing_fields_is_identical_regardless_of_the_mevzuat_source`).
+* **Canlı getirim, istek yolunda değil.** `retrieve()` hiçbir zaman ağa
+  çıkmaz — yalnızca `warm_up()`'ın en son kurduğu bellek-içi indeksi okur.
+  `warm_up()`, uygulama açılışında diğer ısınma adımlarıyla birlikte en iyi
+  çaba ilkesiyle çalışır (`app.lifespan`); yavaş veya erişilemeyen bir sunucu
+  açılışı bloklamaz, yalnızca canlı kaynağın devreye girmesini geciktirir.
+* **Her hata yerel korpusa düşer.** Kayıtsız sunucu, zaman aşımı, kısmi
+  getirim (bazı kanunlar başarısız), boş sonuç — hepsi `FallbackMevzuatRetriever`
+  üzerinden yerel `HybridRetriever`'a düşer, asla istisna fırlatmaz.
+* **Genel asistan sohbeti (Görev 3) bu anahtardan etkilenmez.** `get_rag_graph`
+  hâlâ yalnızca yerel korpusu kullanan `get_mevzuat_retriever`'ı okur;
+  `MEVZUAT_SOURCE` yalnızca belge analizinin kendi retriever'ını seçer
+  (`get_document_analysis_mevzuat_retriever`).
+
+**3. Çalışma zamanı — asistan aracı (varsayılan kapalı).** `registry.py`,
+`MEVZUAT_MCP_ENABLED` açıksa sunucuyu `mcp_manager`'a kaydeder ve asistana
+`search_legislation_live` aracı eklenir — `MEVZUAT_SOURCE`'tan bağımsız ikinci
+bir anahtar; bir dağıtım ikisini birbirinden bağımsız açıp kapatabilir.
+
+* **İkinci sırada.** Yerel korpus aracı (`search_legislation`) önce kayıtlıdır;
+  bu, korpusun kapsamadığı sorular için bir yükseltmedir.
+* **Hata da bir cevaptır.** Erişilemeyen bir devlet sitesi, yerel aracın
+  döndürdüğü "bulunamadı" ifadesinin aynısını döndürür; asla istisna fırlatmaz.
+  Üçüncü taraf bir site yüzünden sohbet turu 500 vermez.
+
+`register_servers()`, iki anahtardan **herhangi biri** açıkken sunucuyu kaydeder
+(`MEVZUAT_MCP_ENABLED or MEVZUAT_SOURCE == "mcp"`) — aksi hâlde belgelenen
+varsayılan (`MEVZUAT_SOURCE="mcp"`, `MEVZUAT_MCP_ENABLED=False`) sunucuyu hiç
+kaydetmez ve yeni varsayılan sessizce devre dışı kalırdı.
+
+Mülga mevzuat ayıklanır: 657 aramasında "DEVLET MEMURLARI KANUNUNUN YÜRÜRLÜKTEN
+KALDIRILMIŞ HÜKÜMLERİ" kaydı aynı numarayı taşır ve gerçek kanunun **üstünde**
+döner. Yürürlükten kalkmış metni yürürlükteki kanun gibi alıntılamak, bu projenin
+önlemek için var olduğu uydurma atıf hatasının ta kendisidir. Bu ayıklama
+(`app.mcp.mevzuat_client.pick_document_id`) belge analizi ve asistan aracı
+arasında paylaşılan tek bir uygulamadır.
 
 Sunucu **backend imajına dahil değildir**: bağımlılık ağacı `playwright`
-sabitler ve tarayıcı ikilisi çeker. Bu nedenle korpus üretimi izole bir sanal
-ortamda, elle çalıştırılır; analiz hattı yalnızca commit'lenmiş yerel dosyaları
-okur ve ağa hiç ihtiyaç duymaz. Bu, evrak analizinin çevrimdışı ve tekrar
-üretilebilir kalmasını sağlar.
+sabitler ve tarayıcı ikilisi çeker. Bu nedenle korpus üretimi ve her iki çalışma
+zamanı yolu da kurulu bir kopyaya işaret eden `MEVZUAT_MCP_COMMAND` gerektirir
+(yerelde izole bir sanal ortam, ileride bir yardımcı konteyner). Komut ve
+argümanlar yapılandırmada tutulur, kodda değil — böylece bu geçiş kod değişikliği
+değil ayar değişikliğidir.
 
 Korpusa yazılan her dosya `mevzuat_id`, kaynak ve çekilme tarihini taşır;
-böylece üretilen her atıf resmî metne kadar izlenebilir.
+böylece üretilen her atıf resmî metne kadar izlenebilir. Belge analizinin
+MCP-first yolu, hangi `mevzuat_id`'nin kullanıldığını `source` metadata'sında
+(`"mcp:<id>"`) taşır, aynı gerekçeyle.
 
 ---
 

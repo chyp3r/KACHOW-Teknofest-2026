@@ -4,6 +4,13 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.constants import TEXT_LAYER_PROBE_MAX_PAGES, TEXT_LAYER_PROBE_MIN_CHARS
+
+try:  # pragma: no cover - exercised via patching in tests
+    import pypdfium2 as pdfium
+except ImportError:  # pragma: no cover
+    pdfium = None
+
 PDF_MAGIC_BYTES = b"%PDF"
 
 #: Word-ish token: letters and digits, Turkish characters included.
@@ -82,6 +89,7 @@ class BaseDocumentExtractor(ABC):
         *,
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
+        raster_cache: Optional[dict] = None,
     ) -> ExtractedDocument:
         """Extract text from raw document bytes.
 
@@ -89,6 +97,16 @@ class BaseDocumentExtractor(ABC):
             content: The raw document bytes.
             file_name: Original file name, used for extension-based dispatch.
             mime_type: Declared content type, used for dispatch.
+            raster_cache: Optional shared cache of already-rasterised PDF
+                pages for this one document, keyed by DPI. A scanned PDF is
+                rendered by whichever OCR extractor `FallbackDocumentExtractor`
+                tries first; if that result is rejected and the chain
+                escalates to the next OCR extractor, this is what lets it
+                reuse the same rendered pages instead of paying pdfium's
+                render cost again. `FallbackDocumentExtractor` creates one
+                per top-level `extract()` call and passes it down; extractors
+                that never rasterise (`PlainTextExtractor`,
+                `OpenDataLoaderExtractor`) ignore it.
 
         Returns:
             The extracted text along with page breakdown and provenance.
@@ -131,6 +149,52 @@ def has_pdf_magic_bytes(content: bytes) -> bool:
         True when the content is a PDF regardless of the declared MIME type.
     """
     return content[:4] == PDF_MAGIC_BYTES
+
+
+def has_pdf_text_layer(content: bytes) -> bool:
+    """Cheaply report whether a PDF has any meaningful embedded text layer.
+
+    Reads pdfium's native text stream directly -- no OCR, no JVM -- so this
+    is fast enough to run before deciding whether `OpenDataLoaderExtractor`
+    or `PdfiumExtractor` are worth trying at all. A genuine scan has no text
+    layer on any page; a born-digital PDF has real text almost immediately,
+    so checking the first few pages tells them apart cheaply even on a long
+    document.
+
+    Args:
+        content: The raw PDF bytes.
+
+    Returns:
+        True when pdfium finds enough embedded text, or when the probe
+        itself cannot run at all (pdfium missing, or the PDF fails to open).
+        Failing open is deliberate: this function exists purely to skip
+        extractors that would waste time on a scan, and a probe that can't
+        even open the file is far more informative as "let the real
+        extractors report the failure" than as a silent skip.
+    """
+    if pdfium is None:
+        return True
+    try:
+        document = pdfium.PdfDocument(content)
+    except Exception:
+        return True
+
+    try:
+        found = 0
+        for index, page in enumerate(document):
+            if index >= TEXT_LAYER_PROBE_MAX_PAGES:
+                break
+            text_page = page.get_textpage()
+            try:
+                found += len(text_page.get_text_range().strip())
+            finally:
+                text_page.close()
+                page.close()
+        return found >= TEXT_LAYER_PROBE_MIN_CHARS
+    except Exception:
+        return True
+    finally:
+        document.close()
 
 
 def matches_extension(file_name: Optional[str], extensions: set[str]) -> bool:

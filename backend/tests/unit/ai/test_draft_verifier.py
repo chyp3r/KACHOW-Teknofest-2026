@@ -195,6 +195,41 @@ def test_a_different_amount_is_still_flagged():
     assert [claim.kind for claim in report.unsupported_claims] == ["tutar"]
 
 
+def test_an_all_caps_turkish_letterhead_grounds_the_same_institution_in_title_case():
+    """Regression: `_fold` ran NFKD without translating Turkish letters first.
+    'ı' (U+0131, dotless i) has no NFKD decomposition, so ascii/ignore silently
+    deleted it, while plain ASCII 'I' in an all-caps source survived and folded
+    to 'i' -- 'Kadıköy Kaymakamlığı' (draft) and 'KADIKÖY KAYMAKAMLIĞI' (an
+    all-caps letterhead -- the standard Turkish convention, and also what OCR of
+    a scanned header produces) folded to two different strings. A draft that
+    copied the institution name straight off the source's own letterhead was
+    flagged as fabricating it -- twice, since the source's own occurrence didn't
+    match itself either.
+
+    The institution phrase is placed after a lowercase word, same reasoning as
+    `test_institution_paraphrase_escape_hatch_via_token_overlap` above:
+    INSTITUTION_PATTERN's leading capitalized-word group is greedy, so a
+    preceding capitalized word (e.g. "Sayın") would be swallowed into the
+    match and the folded claim would carry an extra token the source doesn't
+    have -- a separate, pre-existing quirk this test must not conflate with
+    the Turkish-folding bug it is actually checking.
+    """
+    draft = (
+        "Konu: Yıllık İzin Talebi\n"
+        "Sayı: E-123-456\n"
+        "Tarih: 30.07.2026\n\n"
+        "Sayın Makam, konu hakkında yerel şubemiz Kadıköy Kaymakamlığı'na bilgi vermiştir.\n\n"
+        "Arz ederim.\n\n"
+        "Mehmet Öztürk\nGenel Müdür"
+    )
+    report = verify_draft(
+        draft,
+        source_document="T.C.\nKADIKÖY KAYMAKAMLIĞI\nSayı: E-123-456 Tarih: 30.07.2026",
+    )
+
+    assert not any(claim.kind == "kurum" for claim in report.unsupported_claims)
+
+
 def test_document_number_separator_style_does_not_matter():
     draft = WELL_FORMED_DRAFT.replace("E-123-456", "E/123/456")
 

@@ -1,3 +1,6 @@
+import shlex
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,6 +38,17 @@ class Settings(BaseSettings):
     #: is protected -- never point it at a network reachable outside a
     #: trusted demo/dev environment.
     REQUIRE_AUTH: bool = True
+
+    #: Off by default. `rate_limit()` (app.api.rate_limit) keys its Redis
+    #: counter on the caller's IP, read from the `X-Forwarded-For` header when
+    #: this is on, or from `request.client.host` (the actual TCP peer, which a
+    #: client cannot spoof) when it is off. Trusting X-Forwarded-For with no
+    #: reverse proxy in front of the app lets every request carry its own
+    #: fabricated IP, so each one lands in its own Redis key and the limiter
+    #: never accumulates a count -- unlimited login attempts, unlimited
+    #: uploads. Set to True only when the app sits behind a proxy that
+    #: overwrites (not merely appends to) this header before it reaches here.
+    TRUST_PROXY_HEADERS: bool = False
 
     #: Persist each planning-graph run's decision trail to Postgres (see
     #: app.observability.run_recorder). On by default in every real
@@ -164,6 +178,53 @@ class Settings(BaseSettings):
     MEVZUAT_CORPUS_DIR: str = "./datasets/mevzuat"
     MEVZUAT_COLLECTION_NAME: str = "mevzuat"
 
+    # Live legislation lookup over MCP (github.com/saidsurucu/mevzuat-mcp, MIT),
+    # querying mevzuat.gov.tr directly.
+    #
+    # Two independent switches read this same server:
+    #
+    # * MEVZUAT_SOURCE decides where document analysis's legislation retrieval
+    #   (app.ai.retrieval.mcp_mevzuat) reads from. "mcp" (default) fetches the
+    #   curated corpus's current official text live and falls back to the
+    #   committed corpus under MEVZUAT_CORPUS_DIR on any failure; "local" skips
+    #   MCP entirely and always uses the committed corpus, exactly as before
+    #   this setting existed. Neither value ever touches compliance:
+    #   check_required_fields is set subtraction over a rule table with
+    #   hard-coded article numbers, and no source switch reaches that code.
+    # * MEVZUAT_MCP_ENABLED (default off) is the assistant's own switch,
+    #   offering search_legislation_live as an escalation when the local
+    #   corpus tool finds nothing. Independent of MEVZUAT_SOURCE on purpose --
+    #   a deployment can run document analysis against live legislation
+    #   without also handing the chat model a live government-site tool, or
+    #   the reverse.
+    #
+    # register_servers() registers the server whenever *either* switch wants
+    # it, so the documented default (MEVZUAT_SOURCE="mcp",
+    # MEVZUAT_MCP_ENABLED=False) still actually reaches the server instead of
+    # silently registering nothing.
+    #
+    # The server is not in the backend image -- its dependency tree pins
+    # playwright and pulls a browser binary -- so either switch needs the
+    # command below to point at an installed copy (an isolated venv locally,
+    # or a sidecar container). Command and args live here rather than in code
+    # so that swap is configuration.
+    MEVZUAT_SOURCE: Literal["mcp", "local"] = "mcp"
+    MEVZUAT_MCP_ENABLED: bool = False
+    MEVZUAT_MCP_COMMAND: str = "mevzuat-mcp"
+    #: Space-separated, not a list. pydantic-settings JSON-decodes any env var
+    #: bound to a structured type (list, dict, ...) *before* the model's own
+    #: validators ever run, so a plain `list[str]` field made
+    #: `MEVZUAT_MCP_ARGS="--transport stdio"` -- the obvious shell-style value
+    #: -- a hard crash at `Settings()` construction: "error parsing value for
+    #: field ... from source EnvSettingsSource", with no mention of JSON and no
+    #: chance to fix it in a validator. A plain `str` field is read as a raw
+    #: string, so this type is what actually avoids the crash; use
+    #: `mevzuat_mcp_args` below to get the parsed list.
+    MEVZUAT_MCP_ARGS: str = ""
+    #: Cap on one lookup. The government site publishes no rate limit and the
+    #: assistant must not stall a chat turn waiting on it.
+    MEVZUAT_MCP_TIMEOUT_SECONDS: float = 25.0
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore"
     )
@@ -177,6 +238,16 @@ class Settings(BaseSettings):
         share one connection string instead of keeping two in sync.
         """
         return self.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+
+    @property
+    def mevzuat_mcp_args(self) -> list[str]:
+        """``MEVZUAT_MCP_ARGS`` split into an argv list for `subprocess`/MCP.
+
+        `shlex.split`, not `str.split`: an arg containing a space (a quoted
+        path with spaces, say) must survive as one argument rather than being
+        cut in two.
+        """
+        return shlex.split(self.MEVZUAT_MCP_ARGS)
 
 
 settings = Settings()

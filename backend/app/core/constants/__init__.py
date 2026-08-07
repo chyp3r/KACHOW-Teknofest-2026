@@ -13,6 +13,8 @@ from app.core.constants.system import (
     OCR_LANGUAGE,
     OCR_PAGE_SEGMENTATION_MODE,
     OCR_RENDER_DPI,
+    TEXT_LAYER_PROBE_MAX_PAGES,
+    TEXT_LAYER_PROBE_MIN_CHARS,
 )
 
 __all__ = [
@@ -30,4 +32,6 @@ __all__ = [
     "OCR_LANGUAGE",
     "OCR_PAGE_SEGMENTATION_MODE",
     "OCR_RENDER_DPI",
+    "TEXT_LAYER_PROBE_MAX_PAGES",
+    "TEXT_LAYER_PROBE_MIN_CHARS",
 ]

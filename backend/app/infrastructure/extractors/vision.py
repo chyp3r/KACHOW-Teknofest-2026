@@ -113,6 +113,7 @@ class OllamaVisionExtractor(BaseDocumentExtractor):
         *,
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
+        raster_cache: Optional[dict] = None,
     ) -> ExtractedDocument:
         """Transcribe a scanned document with a vision-language model.
 
@@ -120,6 +121,12 @@ class OllamaVisionExtractor(BaseDocumentExtractor):
             content: Raw PDF or image bytes.
             file_name: Original file name, used to decide the input kind.
             mime_type: Declared content type, used to decide the input kind.
+            raster_cache: Optional shared cache of already-rasterised pages,
+                keyed by DPI (see `BaseDocumentExtractor.extract`). This
+                extractor is the usual escalation *after*
+                `TesseractExtractor` rejects a result, so the common case is
+                a cache hit -- reusing pages already rendered at the same
+                DPI instead of rasterising the same PDF a second time.
 
         Returns:
             The transcribed text, flagged as OCR output.
@@ -134,7 +141,35 @@ class OllamaVisionExtractor(BaseDocumentExtractor):
             )
 
         try:
-            images = await asyncio.to_thread(self._to_images, content, is_pdf)
+            if not is_pdf:
+                images = [content]
+            else:
+                if raster_cache is not None and self.dpi in raster_cache:
+                    pil_pages = raster_cache[self.dpi]
+                    logger.info(
+                        "Reusing %d already-rasterised page(s) at %d DPI.",
+                        len(pil_pages),
+                        self.dpi,
+                    )
+                else:
+                    pil_pages = await asyncio.to_thread(self._render_pages, content)
+                    if raster_cache is not None:
+                        raster_cache[self.dpi] = pil_pages
+                images = await asyncio.to_thread(self._encode_png, pil_pages)
+            # Deliberately sequential, unlike TesseractExtractor's page loop.
+            # Tesseract pages parallelise safely because each OCR call is its
+            # own `tesseract` subprocess, competing for CPU cores the OS
+            # already schedules. A vision-model call is a generation request
+            # against one Ollama-served model; Ollama serialises generation
+            # against a given model rather than running requests on it
+            # concurrently, so concurrent page requests would queue behind
+            # each other on the server side regardless of client-side
+            # fan-out -- the same shape of cost this project already measured
+            # as a net loss for concurrent classify+extract calls against the
+            # same model. Revisit only with a live Ollama instance to measure
+            # against; guessing wrong here costs latency on OllamaVisionExtractor
+            # specifically, which is already the last-resort path for the
+            # hardest-to-read documents.
             pages = [await asyncio.to_thread(self._transcribe, img) for img in images]
         except DocumentExtractionError:
             raise
@@ -158,31 +193,49 @@ class OllamaVisionExtractor(BaseDocumentExtractor):
             used_ocr=True,
         )
 
-    def _to_images(self, content: bytes, is_pdf: bool) -> list[bytes]:
-        """Return one PNG per page, or the image itself when input is an image.
+    def _render_pages(self, content: bytes) -> list:
+        """Rasterise every page of a PDF to a PIL image, in document order.
+
+        Kept separate from PNG encoding (`_encode_png`) so the raw rendered
+        pages are what goes into `raster_cache` -- the same shape
+        `TesseractExtractor` caches, and reusable for any future consumer
+        that doesn't specifically need PNG bytes.
 
         Args:
-            content: Raw PDF or image bytes.
-            is_pdf: Whether the content must be rasterised first.
+            content: Raw PDF bytes.
 
         Returns:
-            PNG bytes per page.
+            One rendered PIL image per page.
         """
-        if not is_pdf:
-            return [content]
-
         scale = self.dpi / PDF_POINTS_PER_INCH
         document = pdfium.PdfDocument(content)
         try:
             images = []
             for page in document:
-                buffer = io.BytesIO()
-                page.render(scale=scale).to_pil().save(buffer, format="PNG")
-                images.append(buffer.getvalue())
-                page.close()
+                bitmap = page.render(scale=scale)
+                try:
+                    images.append(bitmap.to_pil())
+                finally:
+                    page.close()
             return images
         finally:
             document.close()
+
+    def _encode_png(self, images: list) -> list[bytes]:
+        """Encode PIL images to PNG bytes, the format Ollama's API expects.
+
+        Args:
+            images: PIL images, in document order.
+
+        Returns:
+            PNG-encoded bytes per image, same order.
+        """
+        encoded = []
+        for image in images:
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+            encoded.append(buffer.getvalue())
+        return encoded
 
     def _transcribe(self, image: bytes) -> str:
         """Send one page image to the model and return its transcription.

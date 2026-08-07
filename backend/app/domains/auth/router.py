@@ -1,3 +1,6 @@
+import logging
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Body, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,8 +13,11 @@ from app.api.dependency import oauth2_scheme
 from app.infrastructure.cache import get_cache
 from app.core.security import decode_token, REFRESH_TOKEN_EXPIRE_DAYS
 from app.api.exceptions.authentication import AuthenticationException
+from app.api.exceptions.base import BaseAppException
 from app.api.rate_limit import rate_limit
 import time
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -56,34 +62,68 @@ async def refresh(
     token_response = await service.refresh_access_token(schema.refresh_token)
     return SuccessResponse(data=token_response)
 
+async def _blacklist(cache, token: str, now: float) -> Optional[bool]:
+    """Blacklist one token for the remainder of its natural lifetime.
+
+    Args:
+        cache: The Redis cache client.
+        token: The raw JWT to blacklist.
+        now: Current epoch time, shared across both tokens in one logout call
+            so they are judged against the same instant.
+
+    Returns:
+        True if the token was live and successfully blacklisted, False if it
+        was live but the write failed, None if the token could not be decoded
+        or had already expired -- there was nothing to revoke, which is not a
+        failure. Only a `False` return should ever surface to the caller.
+    """
+    try:
+        payload = decode_token(token)
+    except Exception:
+        # A malformed or already-expired token carries no live session to
+        # revoke -- nothing failed here, there was simply nothing to do.
+        return None
+    exp = payload.get("exp")
+    if not exp:
+        return None
+    remaining = int(exp - now)
+    if remaining <= 0:
+        return None
+    # cache.set() never raises (see RedisCache.set); it logs internally and
+    # returns False on failure. That return value is the only signal a
+    # blacklist attempt failed, and it used to be discarded entirely --
+    # logout returned 200 whether or not the token was actually revoked, so
+    # a user who logged out on a shared machine during a Redis blip had no
+    # way to know the token was still live.
+    return await cache.set(f"token_blacklist:{token}", "1", expire_seconds=remaining)
+
+
 @router.post("/logout", response_model=APIResponse[None])
 async def logout(schema: RefreshRequest = Body(default=None), token: str = Depends(oauth2_scheme)):
-    """Logout the current user by blacklisting both access and refresh tokens in Redis."""
+    """Logout the current user by blacklisting both access and refresh tokens in Redis.
+
+    Raises:
+        BaseAppException: 500, if a token that was still live could not be
+            blacklisted -- the caller must not be told logout succeeded when
+            the token remains usable.
+    """
     cache = get_cache()
     now = time.time()
 
-    # Blacklist access token
+    results = []
     if token:
-        try:
-            payload = decode_token(token)
-            exp = payload.get("exp")
-            if exp:
-                remaining = int(exp - now)
-                if remaining > 0:
-                    await cache.set(f"token_blacklist:{token}", "1", expire_seconds=remaining)
-        except Exception:
-            pass
-
-    # Blacklist refresh token
+        results.append(("access", await _blacklist(cache, token, now)))
     if schema and schema.refresh_token:
-        try:
-            payload = decode_token(schema.refresh_token)
-            exp = payload.get("exp")
-            if exp:
-                remaining = int(exp - now)
-                if remaining > 0:
-                    await cache.set(f"token_blacklist:{schema.refresh_token}", "1", expire_seconds=remaining)
-        except Exception:
-            pass
+        results.append(("refresh", await _blacklist(cache, schema.refresh_token, now)))
+
+    failed = [kind for kind, ok in results if ok is False]
+    if failed:
+        logger.error("Logout could not revoke %s token(s); they remain valid until natural expiry.", failed)
+        raise BaseAppException(
+            message="Logout could not fully revoke your session. Please try again.",
+            error_code="LOGOUT_REVOCATION_FAILED",
+            status_code=500,
+            details={"unrevoked_tokens": failed},
+        )
 
     return SuccessResponse(data=None)

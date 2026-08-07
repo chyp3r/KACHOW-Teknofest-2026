@@ -229,6 +229,96 @@ async def test_graph_suggests_mevzuat_from_retrieved_excerpts(mock_classify, moc
 @pytest.mark.asyncio
 @patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
 @patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_missing_fields_is_identical_regardless_of_the_mevzuat_source(
+    mock_classify, mock_suggest
+):
+    """PR3's whole premise: MEVZUAT_SOURCE picks where retrieve_mevzuat reads
+    citations from, and must never touch check_compliance. check_compliance
+    and retrieve_mevzuat run as independent parallel branches over disjoint
+    state keys (see create_document_analysis_graph's own docstring) -- this
+    locks that architectural separation in from the outside, rather than
+    trusting it holds just because the code isn't wired the other way today.
+    Two retrievers standing in for "local" and "mcp" return deliberately
+    different excerpts (a local-only retriever would legitimately do that,
+    an MCP outage would too) -- missing_fields must not move a byte either
+    way, only mevzuat_references may differ."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER,
+        "İzin talebi.",
+        **COMPLETE_FIELDS.model_copy(update={"sayi": None}).model_dump(),
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(suggestions=[])
+
+    local_retriever = AsyncMock(spec=HybridRetriever)
+    local_retriever.retrieve.return_value = [
+        Document(page_content="MADDE 11- yerel korpus.", metadata={"mevzuat": "Yerel"})
+    ]
+    mcp_retriever = AsyncMock()
+    mcp_retriever.retrieve.return_value = [
+        Document(page_content="MADDE 11- canlı mevzuat.", metadata={"mevzuat": "MCP"})
+    ]
+
+    local_graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=local_retriever
+    )
+    mcp_graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=mcp_retriever
+    )
+
+    local_result = await local_graph.ainvoke({"input_text": INCOMPLETE_LETTER_TEXT})
+    mcp_result = await mcp_graph.ainvoke({"input_text": INCOMPLETE_LETTER_TEXT})
+
+    assert local_result["missing_fields"] == mcp_result["missing_fields"]
+    assert local_result["compliance_status"] == mcp_result["compliance_status"]
+    assert local_result["missing_fields"], "fixture must actually exercise a non-empty case"
+    # The retrieval branch, in contrast, is exactly where they're allowed to differ.
+    assert local_result["mevzuat_documents"] != mcp_result["mevzuat_documents"]
+
+
+@pytest.mark.asyncio
+@patch("app.ai.workflows.document_analysis_graph.node_budget")
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_suggestion_inner_budget_reads_reasoning_level_from_state_explicitly(
+    mock_classify, mock_suggest, mock_node_budget
+):
+    """suggest_mevzuat_node's inner asyncio.wait_for bound and the outer
+    @node_timeout decorator must resolve a budget for the same node from the
+    same state, or a fast run makes the inner bound (0.85x) exceed the outer
+    node_timeout (0.6x) and the degradation path below becomes unreachable.
+    Before the fix, the inner call site was `node_budget("suggest_mevzuat")`
+    -- the level argument omitted outright rather than read from state -- so
+    the two call sites agreed only by coincidence. DocumentAnalysisState
+    carries no reasoning_level field yet: LangGraph builds its channels from
+    the state schema and drops any input key the schema doesn't declare, so
+    state.get("reasoning_level") reads None today regardless of what
+    ainvoke() is given. What this locks in is that the call site explicitly
+    performs that lookup and passes it through -- two positional args, not
+    one -- so the day the field is added, the two stay coupled by
+    construction instead of by luck.
+    """
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "x", **COMPLETE_FIELDS.model_dump()
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(suggestions=[])
+    mock_node_budget.return_value = 42.0
+
+    retriever = AsyncMock(spec=HybridRetriever)
+    retriever.retrieve.return_value = [
+        Document(page_content="MADDE 11-", metadata={"mevzuat": "RYUEHY"})
+    ]
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=retriever
+    )
+    await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    mock_node_budget.assert_called_once_with("suggest_mevzuat", None)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
 async def test_graph_degrades_to_raw_citations_when_suggestion_fails(mock_classify, mock_suggest):
     """Requirement 5 is still met by the retrieved citations alone."""
     mock_classify.return_value = _merged(
