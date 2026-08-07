@@ -27,7 +27,6 @@ from app.ai.guardrails.sensitivity import SensitivityAssessment
 from app.ai.guardrails.sensitivity import assess as assess_sensitivity
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy.budget import node_budget
-from app.ai.retrieval.hybrid import HybridRetriever
 from app.ai.workflows.events import emit_node_end, emit_node_error, emit_node_start, emit_partial
 from app.ai.workflows.resilience import (
     IO_RETRY,
@@ -276,7 +275,7 @@ def _render_mevzuat_excerpts(documents: list[Document]) -> str:
 
 def create_document_analysis_graph(
     llm_client: BaseLLMClient,
-    mevzuat_retriever: Optional[HybridRetriever] = None,
+    mevzuat_retriever: Optional[Any] = None,
     reasoning_llm_client: Optional[BaseLLMClient] = None,
     fast_llm_client: Optional[BaseLLMClient] = None,
 ):
@@ -300,8 +299,12 @@ def create_document_analysis_graph(
 
     Args:
         llm_client: The LLM used for document analysis.
-        mevzuat_retriever: Optional legislation retriever. When omitted, the two
-            legislation nodes degrade to no-ops and the rest still runs.
+        mevzuat_retriever: Optional legislation retriever -- a HybridRetriever
+            (local corpus) or a FallbackMevzuatRetriever (MCP-first with local
+            fallback, see app.ai.retrieval.mcp_mevzuat); anything exposing
+            ``async retrieve(query, limit) -> list[Document]`` works. When
+            omitted, the two legislation nodes degrade to no-ops and the rest
+            still runs.
         reasoning_llm_client: Optional separate client for the legislation
             suggestion step. Defaults to ``llm_client``.
         fast_llm_client: Optional fast-tier client. When the quality tier fails

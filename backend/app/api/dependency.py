@@ -9,6 +9,7 @@ from app.ai.embeddings.models import get_embeddings_client
 from app.ai.embeddings.service import EmbeddingService
 from app.ai.llms import get_fast_llm_client, get_llm_client
 from app.ai.retrieval.hybrid import HybridRetriever
+from app.ai.retrieval.mcp_mevzuat import FallbackMevzuatRetriever, McpMevzuatRetriever
 from app.ai.workflows.document_analysis_graph import create_document_analysis_graph
 from app.ai.workflows.draft_graph import create_draft_graph
 from app.ai.workflows.routing_graph import create_routing_graph
@@ -107,13 +108,19 @@ async def require_auth_if_enabled(
 # corpus loading and graph compilation are not free, so only the first request
 # pays for them.
 _mevzuat_retriever: Optional[HybridRetriever] = None
+_document_analysis_mevzuat_retriever: Any = None
 _document_analysis_graph: Any = None
 
 
 async def get_mevzuat_retriever() -> HybridRetriever:
-    """Build the legislation retriever once per process.
+    """Build the local legislation retriever once per process.
 
-    Uses native Qdrant hybrid search with a pre-saved sparse vocabulary.
+    Uses native Qdrant hybrid search with a pre-saved sparse vocabulary. This
+    is the *local-corpus* retriever specifically: it also backs the general
+    assistant's RAG flow (get_rag_graph, Görev 3), which MEVZUAT_SOURCE does
+    not affect -- that switch is scoped to document analysis alone. Document
+    analysis's own retriever, which may layer MCP-first retrieval on top of
+    this one, is get_document_analysis_mevzuat_retriever below.
     """
     global _mevzuat_retriever
     if _mevzuat_retriever is None:
@@ -129,8 +136,44 @@ async def get_mevzuat_retriever() -> HybridRetriever:
     return _mevzuat_retriever
 
 
+async def get_document_analysis_mevzuat_retriever(
+    local: HybridRetriever = Depends(get_mevzuat_retriever),
+) -> Any:
+    """Build document analysis's legislation retriever once per process.
+
+    MEVZUAT_SOURCE="mcp" (default) layers MCP-first retrieval over the same
+    local corpus used everywhere else, falling back to it on any failure;
+    "local" returns the local retriever directly, unchanged from before this
+    setting existed.
+
+    The returned object may or may not have its live cache warmed yet --
+    that happens separately (see app.lifespan._warm_up_graphs) so that a
+    slow or unreachable MCP server never blocks compiling this graph, only
+    delays when the live source starts actually being used.
+
+    Args:
+        local: The local-corpus retriever, always constructed regardless of
+            source (it is MCP-first's fallback, and local mode's only
+            retriever).
+
+    Returns:
+        A HybridRetriever (source="local") or a FallbackMevzuatRetriever
+        wrapping it (source="mcp"). Both satisfy the same
+        `async retrieve(query, limit) -> list[Document]` interface.
+    """
+    global _document_analysis_mevzuat_retriever
+    if _document_analysis_mevzuat_retriever is None:
+        if settings.MEVZUAT_SOURCE == "mcp":
+            _document_analysis_mevzuat_retriever = FallbackMevzuatRetriever(
+                McpMevzuatRetriever(), local
+            )
+        else:
+            _document_analysis_mevzuat_retriever = local
+    return _document_analysis_mevzuat_retriever
+
+
 async def get_document_analysis_graph(
-    retriever: HybridRetriever = Depends(get_mevzuat_retriever),
+    retriever: Any = Depends(get_document_analysis_mevzuat_retriever),
 ) -> Any:
     """Compile the document analysis workflow once per process.
 

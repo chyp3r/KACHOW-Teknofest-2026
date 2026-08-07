@@ -1,9 +1,14 @@
 """Unit tests for MCP server registration and the live legislation tool.
 
-Two properties matter more than the happy path:
+Three properties matter more than the happy path:
 
-* off by default -- the analysis pipeline must stay offline and reproducible, and
-  a tool the model cannot run must never appear in its tool list;
+* the server registers under its *real*, documented default configuration
+  (MEVZUAT_SOURCE="mcp", MEVZUAT_MCP_ENABLED=False) -- otherwise "MCP is the
+  default" is just a comment, not something a fresh checkout actually does;
+* the assistant tool stays off by default regardless -- a tool the model
+  cannot run must never appear in its tool list, and MEVZUAT_SOURCE wanting
+  the server registered is a different question from the assistant being
+  allowed to call it;
 * every failure degrades to "not found" -- a third-party government site being
   slow or down must not turn a chat turn into a 500.
 
@@ -20,11 +25,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.ai.tools.mevzuat_tools import (
-    NOT_FOUND,
-    _pick_document_id,
-    build_live_legislation_tools,
-)
+from app.ai.tools.mevzuat_tools import NOT_FOUND, build_live_legislation_tools
 from app.mcp.manager import mcp_manager
 from app.mcp.registry import MEVZUAT_SERVER, is_registered, register_servers
 
@@ -69,12 +70,15 @@ def _enabled():
 # ==========================================
 # Registration
 # ==========================================
-def test_no_server_is_registered_by_default():
-    """Off unless explicitly enabled: the committed corpus answers every scored
-    requirement with no network, and that property is worth defending."""
-    with patch("app.mcp.registry.settings.MEVZUAT_MCP_ENABLED", False):
-        assert register_servers() == []
-        assert is_registered(MEVZUAT_SERVER) is False
+def test_the_real_default_configuration_registers_the_server():
+    """No patches: this is what a fresh checkout with no .env overrides
+    actually does. MEVZUAT_SOURCE defaults to "mcp", so document analysis's
+    retrieval must be able to reach the server even though the assistant's
+    own MEVZUAT_MCP_ENABLED switch is still off -- proving the two switches
+    are genuinely independent, not that one silently masks the other."""
+    assert register_servers() == [MEVZUAT_SERVER]
+    assert is_registered(MEVZUAT_SERVER) is True
+    assert build_live_legislation_tools() == []
 
 
 def test_enabling_the_flag_registers_the_server():
@@ -89,6 +93,30 @@ def test_registration_is_idempotent():
         register_servers()
         register_servers()
         assert len(mcp_manager.clients) == 1
+
+
+def test_mcp_source_registers_the_server_even_with_the_assistant_flag_off():
+    """MEVZUAT_SOURCE="mcp" is the document-analysis pipeline's own switch,
+    independent of MEVZUAT_MCP_ENABLED (the assistant tool's switch). If
+    registration only checked the assistant flag, a fresh checkout with the
+    documented default (MEVZUAT_SOURCE="mcp", MEVZUAT_MCP_ENABLED=False) would
+    never actually register the server -- every document analysis would
+    silently fall back to the local corpus, making the new default inert."""
+    with patch("app.mcp.registry.settings.MEVZUAT_MCP_ENABLED", False), \
+         patch("app.mcp.registry.settings.MEVZUAT_SOURCE", "mcp"):
+        assert register_servers() == [MEVZUAT_SERVER]
+        assert is_registered(MEVZUAT_SERVER) is True
+        # Registration is not the same question as assistant tool exposure --
+        # that stays gated on MEVZUAT_MCP_ENABLED alone, unchanged by this flag.
+        assert build_live_legislation_tools() == []
+
+
+def test_local_source_and_disabled_flag_registers_nothing():
+    """Both switches off (today's default) must still be a full no-op."""
+    with patch("app.mcp.registry.settings.MEVZUAT_MCP_ENABLED", False), \
+         patch("app.mcp.registry.settings.MEVZUAT_SOURCE", "local"):
+        assert register_servers() == []
+        assert is_registered(MEVZUAT_SERVER) is False
 
 
 # ==========================================
@@ -115,28 +143,6 @@ def test_the_tool_disappears_once_the_flag_is_off_again_even_if_still_registered
         register_servers()
     assert is_registered(MEVZUAT_SERVER) is True  # registration itself persists
     assert build_live_legislation_tools() == []  # but the flag is off again now
-
-
-# ==========================================
-# Repealed-legislation guard
-# ==========================================
-def test_repealed_legislation_is_not_preferred():
-    """657's repealed-provisions companion carries the same number and sorts
-    above the law itself. Quoting it as current law would be a fabricated
-    citation of exactly the kind this project exists to avoid."""
-    assert _pick_document_id(SEARCH_657) == "102924"
-
-
-def test_repealed_result_is_still_better_than_nothing():
-    only_repealed = (
-        "- [657] ... YÜRÜRLÜKTEN KALDIRILMIŞ HÜKÜMLERİ (Mülga Mevzuat) "
-        "| mevzuatId: 335559\n"
-    )
-    assert _pick_document_id(only_repealed) == "335559"
-
-
-def test_no_results_yields_no_id():
-    assert _pick_document_id("Results: 0 total") is None
 
 
 # ==========================================

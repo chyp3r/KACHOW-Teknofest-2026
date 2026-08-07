@@ -43,9 +43,10 @@ async def _warm_up_models() -> None:
 
 
 async def _warm_up_graphs() -> None:
-    """Compile the workflows and build the retriever before traffic arrives."""
+    """Compile the workflows and build the retrievers before traffic arrives."""
     from app.api.dependency import (
         get_document_analysis_graph,
+        get_document_analysis_mevzuat_retriever,
         get_draft_graph,
         get_mevzuat_retriever,
         get_planning_graph,
@@ -53,12 +54,25 @@ async def _warm_up_graphs() -> None:
         get_routing_graph,
     )
 
-    retriever = await get_mevzuat_retriever()
-    analysis_graph = await get_document_analysis_graph(retriever)
+    local_retriever = await get_mevzuat_retriever()
+    analysis_retriever = await get_document_analysis_mevzuat_retriever(local_retriever)
+    analysis_graph = await get_document_analysis_graph(analysis_retriever)
     rag_graph = await get_rag_graph()
     draft_graph = await get_draft_graph()
     routing_graph = await get_routing_graph()
     await get_planning_graph(analysis_graph, rag_graph, draft_graph, routing_graph)
+
+    # Best-effort like every step in this module: only present when
+    # MEVZUAT_SOURCE="mcp" built a FallbackMevzuatRetriever (see
+    # get_document_analysis_mevzuat_retriever); a plain HybridRetriever (local
+    # mode) has no warm-up step at all. Runs inside this function's own best-
+    # effort gather in _startup(), so a slow or unreachable MCP server delays
+    # the live source coming online without blocking or failing the boot --
+    # every request in the meantime just uses the already-graceful fallback.
+    warm_up = getattr(analysis_retriever, "warm_up", None)
+    if warm_up is not None:
+        await warm_up()
+
     logger.info("Compiled all AI workflows.")
 
 
