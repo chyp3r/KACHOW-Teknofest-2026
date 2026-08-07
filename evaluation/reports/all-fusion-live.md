@@ -7,26 +7,26 @@ Policy sürümü: `1.5.0`
 
 ## Suite: `intents`
 
-Altın küme: `evaluation/datasets/intents.jsonl` · Koşu: 2026-08-07T10:26:49 · Süre: 32.8 ms
+Altın küme: `evaluation/datasets/intents.jsonl` · Koşu: 2026-08-07T14:37:34 · Süre: 34.1 ms
 
 ### Genel
 
 | Metrik | Değer |
 |---|---|
-| Vaka sayısı | 160 |
-| Macro F1 | 0.9452 |
-| Doğruluk (tüm vakalar) | 0.9062 |
-| Doğruluk (karar verilenler) | 0.9667 |
-| Eskalasyon (abstention) oranı | 0.0625 |
-| **Clarify oranı** (kullanıcıya soru) | **0.1125** |
-| Kalibrasyon hatası (ECE) | 0.1139 |
+| Vaka sayısı | 164 |
+| Macro F1 | 0.9539 |
+| Doğruluk (tüm vakalar) | 0.9146 |
+| Doğruluk (karar verilenler) | 0.9677 |
+| Eskalasyon (abstention) oranı | 0.0549 |
+| **Clarify oranı** (kullanıcıya soru) | **0.1037** |
+| Kalibrasyon hatası (ECE) | 0.1127 |
 
 ### Kaynak dağılımı
 
 | Kaynak | Vaka |
 |---|---|
-| `fused` | 128 |
-| `clarify` | 18 |
+| `fused` | 133 |
+| `clarify` | 17 |
 | `compound` | 8 |
 | `clarification_resolved` | 6 |
 
@@ -39,7 +39,7 @@ Altın küme: `evaluation/datasets/intents.jsonl` · Koşu: 2026-08-07T10:26:49 
 | `continuation` | 8 | 1.00 | 0.00 |
 | `document_question` | 10 | 1.00 | 0.00 |
 | `escalation` | 8 | 1.00 | 0.00 |
-| `heldout_paraphrase` | 22 | 0.32 | 0.45 |
+| `heldout_paraphrase` | 22 | 0.36 | 0.41 |
 | `inversion` | 8 | 1.00 | 0.00 |
 | `keyword_analyze` | 8 | 1.00 | 0.00 |
 | `keyword_assist` | 8 | 1.00 | 0.00 |
@@ -49,7 +49,7 @@ Altın küme: `evaluation/datasets/intents.jsonl` · Koşu: 2026-08-07T10:26:49 
 | `paraphrase_draft` | 8 | 1.00 | 0.00 |
 | `paraphrase_memory` | 10 | 1.00 | 0.00 |
 | `precedence` | 6 | 1.00 | 0.00 |
-| `revise` | 10 | 1.00 | 0.00 |
+| `revise` | 14 | 1.00 | 0.00 |
 | `short_imperative` | 8 | 1.00 | 0.00 |
 | `short_message` | 6 | 1.00 | 0.00 |
 
@@ -61,9 +61,9 @@ Altın küme: `evaluation/datasets/intents.jsonl` · Koşu: 2026-08-07T10:26:49 
 | `analyze` | 1.00 | 0.81 | 0.90 | 27 |
 | `assist` | 0.93 | 0.96 | 0.94 | 67 |
 | `draft` | 1.00 | 0.87 | 0.93 | 46 |
-| `revise` | 1.00 | 0.92 | 0.96 | 12 |
+| `revise` | 1.00 | 1.00 | 1.00 | 16 |
 
-### Başarısız vakalar (15)
+### Başarısız vakalar (14)
 
 | ID | Kategori | Mesaj | Beklenen | Gözlenen | Kaynak |
 |---|---|---|---|---|---|
@@ -81,21 +81,20 @@ Altın küme: `evaluation/datasets/intents.jsonl` · Koşu: 2026-08-07T10:26:49 
 | `held_18` | `heldout_paraphrase` | Bu konuda ilgili makama iletilecek bir metin oluşturalım mı? | `draft` | `<abstain>` | `clarify` |
 | `held_19` | `heldout_paraphrase` | Bu belgenin sorunlu yanları var mı bakar mısın? | `analyze` | `assist` | `fused` |
 | `held_20` | `heldout_paraphrase` | Bu evrakın ne tür bir yazı olduğunu sen söyle. | `analyze` | `assist` | `fused` |
-| `held_21` | `heldout_paraphrase` | Yazdığın metni bir kez daha ele alır mısın? | `revise` | `<abstain>` | `clarify` |
 
 ### Baseline karşılaştırması
 
 | Metrik | Baseline | Şimdi | Δ |
 |---|---|---|---|
-| Macro F1 | 0.8311 | 0.9452 | +0.1141 ↑ |
-| Doğruluk (tüm vakalar) | 0.8250 | 0.9062 | +0.0812 ↑ |
-| Eskalasyon oranı | 0.1313 | 0.0625 | -0.0688 ↓ |
-| Clarify oranı | 0.0875 | 0.1125 | +0.0250 ↑ (kötü) |
-| Kalibrasyon hatası | 0.2736 | 0.1139 | -0.1597 ↓ |
+| Macro F1 | 0.8311 | 0.9539 | +0.1228 ↑ |
+| Doğruluk (tüm vakalar) | 0.8250 | 0.9146 | +0.0896 ↑ |
+| Eskalasyon oranı | 0.1313 | 0.0549 | -0.0764 ↓ |
+| Clarify oranı | 0.0875 | 0.1037 | +0.0162 ↑ (kötü) |
+| Kalibrasyon hatası | 0.2736 | 0.1127 | -0.1609 ↓ |
 
 ## Suite: `drafts`
 
-Altın küme: `evaluation/datasets/drafts.jsonl` · Koşu: 2026-08-07T10:26:49 · Süre: 4.6 ms
+Altın küme: `evaluation/datasets/drafts.jsonl` · Koşu: 2026-08-07T14:37:34 · Süre: 4.8 ms
 
 ### Genel
 
