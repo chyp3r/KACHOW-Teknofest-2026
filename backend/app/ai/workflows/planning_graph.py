@@ -41,6 +41,8 @@ from app.ai.workflows.events import (
     emit_partial,
     emit_token,
 )
+from app.ai.workflows.intent_rules import RESET_SURFACES
+from app.ai.workflows.intent_scorer import normalize
 from app.ai.workflows.planner import resolve_plan
 from app.ai.workflows.revise import run_revise
 from app.ai.workflows.step_graph import STEP_SPECS, StepSpec, all_steps_settled, ready_steps
@@ -896,13 +898,19 @@ def create_planning_graph(
         concern (see its docstring).
         """
         focus = state.get("focus") or SessionFocus()
+        input_text = state.get("input_text", "")
+        normalized_input = normalize(input_text)
+        reset_requested = any(
+            f" {surface} " in f" {normalized_input} " for surface in RESET_SURFACES
+        )
         update = compute_focus_update(
             focus,
             document_id=state.get("document_id"),
             plan_intent=state.get("plan_intent"),
-            input_text=state.get("input_text", ""),
+            input_text=input_text,
             draft_result=state.get("draft_result") or {},
             assist_result=state.get("assist_result") or {},
+            reset_requested=reset_requested,
         )
         return {"focus": update} if update else {}
 

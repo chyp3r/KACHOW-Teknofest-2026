@@ -375,6 +375,19 @@ CONTINUATION_SURFACES: tuple[str, ...] = (
 #: chat or document_qa turn has no unambiguous follow-up action.
 CONTINUABLE_INTENTS = frozenset({"draft", "analyze", "revise"})
 
+#: Phrases that explicitly abandon the currently open draft rather than ask
+#: for it to be phrased differently -- "yeni bir taslak" after one is already
+#: open means "a different, unrelated one", not "revise this one again".
+#: Read by ``app.ai.workflows.planning_graph``'s ``focus_node`` to clear
+#: ``SessionFocus.active_draft`` immediately instead of waiting out
+#: ``app.ai.session.focus.ACTIVE_DRAFT_IDLE_LIMIT`` idle turns -- a user who
+#: says this is not idling, they are actively moving on.
+RESET_SURFACES: tuple[str, ...] = (
+    "yeni bir taslak", "yeni bir yazi", "yeni bir belge", "yeni bir cevap",
+    "farkli bir yazi", "bastan baslayalim", "en bastan baslayalim",
+    "bu taslagi birak", "bunu birak", "vazgectim",
+)
+
 #: Question markers, used as a shape hint rather than a routing decision.
 #: Bare "ne" is deliberately absent: "ne gerekiyorsa onu uygula" is an
 #: instruction, not a question, and treating it as one made an

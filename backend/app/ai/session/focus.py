@@ -33,10 +33,25 @@ _VERSIONABLE_DRAFT_STATUSES = frozenset(
 #: built"; a draft/analyze/revise request is.
 _OBJECTIVE_INTENTS = frozenset({"draft", "analyze", "revise"})
 
+#: Intents that count as the user actively working on the open draft, as
+#: opposed to merely coexisting with one. Distinct from `_OBJECTIVE_INTENTS`
+#: above: `analyze` folds into the session's stated objective just as much as
+#: `draft`/`revise` do, but inspecting some other document is not evidence
+#: the active draft is still what the user is doing right now.
+_DRAFT_TOUCHING_INTENTS = frozenset({"draft", "revise"})
+
 #: `objective`'s upper bound. A handful of short turns' worth -- enough for
 #: "taslak hazırla" + "kime" + "Valiliğe'ye" to all still be present, not so
 #: much that a long session's objective grows without bound.
 OBJECTIVE_CHAR_CAP = 500
+
+#: Turns an active draft may sit untouched by a draft/revise turn before it
+#: is treated as abandoned. Without this, `active_draft` -- once set --
+#: never clears itself (nothing else in this module writes `None` to it),
+#: so `has_active_draft` stays permanently true for the rest of the thread
+#: and every `REVISE_RULES` surface keeps firing long after the
+#: conversation moved on to something unrelated.
+ACTIVE_DRAFT_IDLE_LIMIT = 10
 
 
 @dataclasses.dataclass(frozen=True)
@@ -99,6 +114,11 @@ class SessionFocus:
             "this turn's result" -- this is the same value read from the
             place that means "the session's state", for a future consumer
             that shouldn't have to know the distinction.
+        active_draft_idle_turns: Turns since ``active_draft`` was last
+            produced or worked on (see ``_DRAFT_TOUCHING_INTENTS``). Reset to
+            0 whenever the user is actively drafting or revising; once it
+            reaches ``ACTIVE_DRAFT_IDLE_LIMIT``, ``active_draft`` clears
+            itself. Meaningless while ``active_draft`` is ``None``.
     """
 
     active_document_id: Optional[str] = None
@@ -108,6 +128,7 @@ class SessionFocus:
     pending_clarification: Optional[dict[str, Any]] = None
     last_referenced_anchor: Optional[str] = None
     last_intent: Optional[str] = None
+    active_draft_idle_turns: int = 0
 
 
 def _accumulate_objective(existing: str, addition: str) -> str:
@@ -139,6 +160,7 @@ def compute_focus_update(
     input_text: str,
     draft_result: dict[str, Any],
     assist_result: Optional[dict[str, Any]] = None,
+    reset_requested: bool = False,
 ) -> dict[str, Any]:
     """Derive this turn's partial ``SessionFocus`` update.
 
@@ -157,6 +179,13 @@ def compute_focus_update(
             included an assist step. Carries ``last_referenced_anchor`` when
             a document tool read a specific page this turn (see
             ``app.ai.tools.document_tools``).
+        reset_requested: Whether this turn's message explicitly asked to
+            abandon the open draft (see ``app.ai.workflows.intent_rules.
+            RESET_SURFACES``). Takes effect only when this turn didn't also
+            produce a new version -- an explicit reset and a settled draft
+            in the same turn cannot both be true of a real message, and a
+            freshly produced version winning that contradiction is the safer
+            of the two readings.
 
     Returns:
         A partial update for the ``focus`` channel (see ``merge_focus``).
@@ -177,7 +206,8 @@ def compute_focus_update(
             update["objective"] = _accumulate_objective(focus.objective, input_text)
 
     draft_status = (draft_result or {}).get("status")
-    if draft_status in _VERSIONABLE_DRAFT_STATUSES:
+    produced_version = draft_status in _VERSIONABLE_DRAFT_STATUSES
+    if produced_version:
         # Keyed off which step actually produced this turn's result, not
         # inferred from "a draft already existed" -- the latter mislabeled
         # any second, entirely unrelated draft request in a later turn as a
@@ -199,6 +229,28 @@ def compute_focus_update(
         )
         update["active_draft"] = version
         update["draft_history"] = (*focus.draft_history, version)
+
+    # The active draft's lifetime: touching it (producing a version, or a
+    # draft/revise turn even when that particular attempt didn't settle one --
+    # e.g. it needs more input) keeps its idle clock at zero; an explicit
+    # reset phrase or ACTIVE_DRAFT_IDLE_LIMIT turns of anything else clears
+    # it. `draft_history` is untouched either way -- this only decides which
+    # version, if any, counts as "the" open one right now.
+    if produced_version:
+        update["active_draft_idle_turns"] = 0
+    elif reset_requested and focus.active_draft is not None:
+        update["active_draft"] = None
+        update["active_draft_idle_turns"] = 0
+    elif focus.active_draft is not None:
+        if plan_intent in _DRAFT_TOUCHING_INTENTS:
+            update["active_draft_idle_turns"] = 0
+        else:
+            idle_turns = focus.active_draft_idle_turns + 1
+            if idle_turns >= ACTIVE_DRAFT_IDLE_LIMIT:
+                update["active_draft"] = None
+                update["active_draft_idle_turns"] = 0
+            else:
+                update["active_draft_idle_turns"] = idle_turns
 
     return update
 
