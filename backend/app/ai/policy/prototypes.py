@@ -55,6 +55,18 @@ PROTOTYPES: Mapping[str, Mapping[str, tuple[str, ...]]] = {
             "Teşekkür ederim, çok yardımcı oldun.",
             "Daha önce ne konuşmuştuk, hatırlıyor musun?",
         ),
+        #: Added alongside the `revise` intent's lexical rules (see
+        #: `intent_rules.REVISE_RULES`, all gated on an active draft). Chosen to
+        #: be different phrasings from those surfaces, not restatements of
+        #: them -- a prototype that repeats a matched surface never reaches
+        #: this layer at all (see this module's own docstring).
+        "revise": (
+            "Bu taslağın tonunu biraz yumuşatır mısın?",
+            "Son paragrafı tekrar ele alalım.",
+            "Yazıyı biraz daha resmî bir üsluba çevir.",
+            "Az önceki metni gözden geçirip düzelt.",
+            "Bu bölümü farklı bir şekilde ifade edelim.",
+        ),
     },
     "correspondence_type": {
         "cover_letter": (

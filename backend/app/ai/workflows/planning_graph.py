@@ -50,7 +50,11 @@ from app.core.enums.sensitivity_level import SensitivityLevel
 from app.core.enums.step_status import StepStatus
 from app.infrastructure.vectorstore.base import BaseVectorStore
 from app.observability import guardrail_recorder
-from app.observability.ai_metrics import HITL_INTERRUPTS, NODE_DURATION
+from app.observability.ai_metrics import (
+    HITL_INTERRUPTS,
+    NODE_DURATION,
+    ROUTER_SEMANTIC_AVAILABLE,
+)
 from app.observability.run_recorder import end_run, record_step, start_run
 
 logger = logging.getLogger(__name__)
@@ -472,6 +476,18 @@ def create_planning_graph(
             embeddings_client, model_name=settings.OLLAMA_EMBEDDING_MODEL
         )
         prototype_matcher = candidate if candidate.available else None
+
+    ROUTER_SEMANTIC_AVAILABLE.set(1.0 if prototype_matcher is not None else 0.0)
+    if prototype_matcher is None:
+        # Not a warning: every message the lexical layer abstains on skips
+        # straight past the semantic rung until someone notices and reruns
+        # scripts/build_prototypes.py. See ROUTER_SEMANTIC_AVAILABLE's
+        # docstring for why this must be loud rather than logged and forgotten.
+        logger.error(
+            "Semantic intent layer unavailable (missing or stale prototype "
+            "vectors) -- every lexically-abstained message will skip straight "
+            "to the model/clarify fallback. Run scripts/build_prototypes.py."
+        )
 
     async def planning_node(
         state: PlanningState, config: RunnableConfig

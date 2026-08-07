@@ -237,6 +237,17 @@ def resolve_plan_deterministic(
         to commit -- which is the signal to escalate, not a failure.
     """
     scores = score_intents(message, document_id, previous_intent, has_active_draft)
+    return _decide_from_scores(scores)
+
+
+def _decide_from_scores(scores: IntentScores) -> Optional[PlanDecision]:
+    """The deterministic decision, given scores already computed once.
+
+    Split out of :func:`resolve_plan_deterministic` so :func:`resolve_plan`
+    can reuse the same ``IntentScores`` for both the deterministic attempt and
+    the contested-candidate fallback below, instead of scoring the message
+    twice for one turn.
+    """
     ranked = scores.ranked
 
     if not ranked:
@@ -500,9 +511,8 @@ async def resolve_plan(
 
     has_active_draft = bool(focus and focus.active_draft is not None)
 
-    decided = resolve_plan_deterministic(
-        message, document_id, previous_intent, has_active_draft
-    )
+    scores = score_intents(message, document_id, previous_intent, has_active_draft)
+    decided = _decide_from_scores(scores)
     if decided is not None:
         logger.info(
             "Plan resolved deterministically (%s): %s", decided.source, decided.steps
@@ -535,11 +545,8 @@ async def resolve_plan(
                 match.runner_up_gap,
             )
 
-    # Neither rung was decisive. Re-scoring here (rather than threading the
-    # scores `resolve_plan_deterministic` already discarded on abstain) keeps
-    # that function's own contract simple; the recomputation is pure
-    # arithmetic over a small table, not worth the coupling to avoid.
-    scores = score_intents(message, document_id, previous_intent, has_active_draft)
+    # Neither rung was decisive. Reuses the scores computed above rather than
+    # asking `score_intents` to redo the same arithmetic for the same message.
     candidate = scores.ranked[0][0] if scores.ranked else None
 
     if candidate is None:

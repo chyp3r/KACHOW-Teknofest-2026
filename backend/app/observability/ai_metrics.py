@@ -20,7 +20,7 @@ but unpopulated rather than instrumented with fabricated numbers.
 
 import logging
 
-from prometheus_client import Counter, Histogram, Info
+from prometheus_client import Counter, Gauge, Histogram, Info
 
 from app.ai.policy import POLICY_VERSION
 
@@ -124,6 +124,21 @@ CLAIM_MATCH = Counter(
     ["kind", "method"],
 )
 
+#: Whether the intent ladder's semantic rung (app.ai.semantic.prototype_matcher)
+#: is actually loaded, as opposed to having silently disabled itself because
+#: the on-disk vector file was stale (built under a different embedding model
+#: or a different POLICY_VERSION) or missing outright. Layer 2 disabling
+#: itself is the *correct* behaviour -- deciding from stale vectors is worse
+#: than paying for a model call -- but it must not be silent: every message
+#: the lexical layer abstains on then skips straight to the clarify/guess
+#: fallback instead of getting a semantic second opinion. Set once at graph
+#: construction time (see planning_graph.py's PrototypeMatcher setup), not
+#: per-request, so this is a Gauge rather than a Counter.
+ROUTER_SEMANTIC_AVAILABLE = Gauge(
+    "kachow_router_semantic_available",
+    "Whether the intent ladder's semantic prototype layer loaded successfully (1) or disabled itself (0).",
+)
+
 #: The parameter set the deterministic decisions above were produced under.
 #: Without it a shift in DRAFT_SCORE or CLAIM_MATCH is ambiguous between "the
 #: traffic changed" and "we moved a threshold" -- and those call for opposite
@@ -133,6 +148,16 @@ POLICY_INFO = Info(
     "Active version of the deterministic decision layer's parameter set.",
 )
 POLICY_INFO.info({"version": POLICY_VERSION})
+
+
+def router_semantic_available() -> bool:
+    """Read ``ROUTER_SEMANTIC_AVAILABLE`` back, for the ``/system/health?deep`` probe.
+
+    ``prometheus_client`` gauges have no public getter; ``_value`` is the
+    documented escape hatch other instrumentation code uses for exactly this
+    "read my own gauge back" case, rather than tracking the state twice.
+    """
+    return bool(ROUTER_SEMANTIC_AVAILABLE._value.get())
 
 
 def init_ai_metrics() -> None:
