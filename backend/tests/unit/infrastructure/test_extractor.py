@@ -10,6 +10,7 @@ from app.infrastructure.extractors.base import (
     DocumentExtractionError,
     ExtractedDocument,
     has_pdf_magic_bytes,
+    has_pdf_text_layer,
     matches_extension,
 )
 from app.infrastructure.extractors.fallback import FallbackDocumentExtractor
@@ -33,7 +34,7 @@ class _FakeExtractor(BaseDocumentExtractor):
         self._supported = supported
         self.call_count = 0
 
-    async def extract(self, content, *, file_name=None, mime_type=None):
+    async def extract(self, content, *, file_name=None, mime_type=None, raster_cache=None):
         self.call_count += 1
         if self._error is not None:
             raise self._error
@@ -59,6 +60,66 @@ def test_matches_extension_is_case_insensitive():
     assert matches_extension("evrak.txt", {"pdf"}) is False
     assert matches_extension("no_extension", {"pdf"}) is False
     assert matches_extension(None, {"pdf"}) is False
+
+
+@patch("app.infrastructure.extractors.base.pdfium")
+def test_has_pdf_text_layer_true_when_pdfium_finds_real_text(mock_pdfium):
+    page = MagicMock()
+    text_page = MagicMock()
+    text_page.get_text_range.return_value = "Sayı: 12345 gerçek metin burada"
+    page.get_textpage.return_value = text_page
+    document = MagicMock()
+    document.__iter__.return_value = iter([page])
+    mock_pdfium.PdfDocument.return_value = document
+
+    assert has_pdf_text_layer(PDF_BYTES) is True
+
+
+@patch("app.infrastructure.extractors.base.pdfium")
+def test_has_pdf_text_layer_false_for_a_genuine_scan(mock_pdfium):
+    """A scanned page's pdfium text layer is empty -- nothing for
+    OpenDataLoader or PDFium to find, which is the whole reason to skip
+    them."""
+    page = MagicMock()
+    text_page = MagicMock()
+    text_page.get_text_range.return_value = ""
+    page.get_textpage.return_value = text_page
+    document = MagicMock()
+    document.__iter__.return_value = iter([page, page, page])
+    mock_pdfium.PdfDocument.return_value = document
+
+    assert has_pdf_text_layer(PDF_BYTES) is False
+
+
+@patch("app.infrastructure.extractors.base.pdfium", None)
+def test_has_pdf_text_layer_fails_open_without_pdfium():
+    assert has_pdf_text_layer(PDF_BYTES) is True
+
+
+@patch("app.infrastructure.extractors.base.pdfium")
+def test_has_pdf_text_layer_fails_open_when_the_pdf_wont_open(mock_pdfium):
+    """A probe that can't even open the file should not be the reason a real
+    extractor never gets tried -- let that extractor report the failure."""
+    mock_pdfium.PdfDocument.side_effect = RuntimeError("corrupt PDF")
+    assert has_pdf_text_layer(PDF_BYTES) is True
+
+
+@patch("app.infrastructure.extractors.base.pdfium")
+def test_has_pdf_text_layer_stops_after_the_page_cap(mock_pdfium):
+    """A long scanned document must not pay for probing every page."""
+    pages = [MagicMock() for _ in range(50)]
+    for page in pages:
+        text_page = MagicMock()
+        text_page.get_text_range.return_value = ""
+        page.get_textpage.return_value = text_page
+    document = MagicMock()
+    document.__iter__.return_value = iter(pages)
+    mock_pdfium.PdfDocument.return_value = document
+
+    has_pdf_text_layer(PDF_BYTES)
+
+    checked = sum(1 for page in pages if page.get_textpage.called)
+    assert checked <= 3  # TEXT_LAYER_PROBE_MAX_PAGES
 
 
 def test_extracted_document_char_count_ignores_surrounding_whitespace():
@@ -166,6 +227,13 @@ def test_open_data_loader_extractor_supports_pdf_only():
     assert extractor.supports(b"abc", mime_type="text/plain") is False
 
 
+@patch("app.infrastructure.extractors.open_data_loader.has_pdf_text_layer", return_value=False)
+def test_open_data_loader_extractor_rejects_a_pdf_with_no_text_layer(mock_probe):
+    """A genuine scan has nothing for OpenDataLoader to find -- skip it
+    before paying its JVM startup cost, not after."""
+    assert OpenDataLoaderExtractor().supports(PDF_BYTES) is False
+
+
 # ==========================================
 # PdfiumExtractor
 # ==========================================
@@ -193,6 +261,11 @@ async def test_pdfium_extractor_reads_text_layer(mock_pdfium):
 async def test_pdfium_extractor_raises_without_dependency():
     with pytest.raises(DocumentExtractionError):
         await PdfiumExtractor().extract(PDF_BYTES)
+
+
+@patch("app.infrastructure.extractors.pdfium.has_pdf_text_layer", return_value=False)
+def test_pdfium_extractor_rejects_a_pdf_with_no_text_layer(mock_probe):
+    assert PdfiumExtractor().supports(PDF_BYTES) is False
 
 
 # ==========================================
@@ -252,6 +325,130 @@ def test_tesseract_extractor_supports_images_and_pdf_but_not_text():
     assert extractor.supports(PDF_BYTES) is True
     assert extractor.supports(b"x", file_name="evrak.tiff") is True
     assert extractor.supports(b"x", mime_type="text/plain") is False
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.tesseract.pdfium")
+@patch("app.infrastructure.extractors.tesseract.pytesseract")
+async def test_tesseract_extractor_ocrs_pages_concurrently_not_one_at_a_time(
+    mock_pytesseract, mock_pdfium
+):
+    """Regression: pages used to OCR strictly one at a time inside a single
+    background thread, so a 10-page scan paid 10x pytesseract's latency in
+    series. Each page's call here blocks on a barrier that only releases
+    once every page's call has actually started -- a sequential
+    implementation deadlocks (the first call waits forever for a second
+    call that can't start until the first returns), where a genuinely
+    concurrent one releases immediately."""
+    import threading
+
+    page_count = 4
+    barrier = threading.Barrier(page_count, timeout=2)
+
+    def _blocking_ocr(image, lang, config):
+        barrier.wait()
+        return "sayfa metni"
+
+    mock_pytesseract.image_to_string.side_effect = _blocking_ocr
+
+    pages = [MagicMock() for _ in range(page_count)]
+    document = MagicMock()
+    document.__iter__.return_value = iter(pages)
+    mock_pdfium.PdfDocument.return_value = document
+
+    result = await TesseractExtractor().extract(PDF_BYTES)
+
+    assert result.page_count == page_count
+    assert mock_pytesseract.image_to_string.call_count == page_count
+
+
+# ==========================================
+# Shared raster cache (Tesseract -> Vision escalation)
+# ==========================================
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.vision.pdfium")
+@patch("app.infrastructure.extractors.tesseract.pdfium")
+@patch("app.infrastructure.extractors.tesseract.Image")
+@patch("app.infrastructure.extractors.tesseract.pytesseract")
+async def test_tesseract_populates_the_raster_cache_for_vision_to_reuse(
+    mock_pytesseract, mock_image, mock_tesseract_pdfium, mock_vision_pdfium
+):
+    """Regression: a scanned PDF used to be rasterised once by Tesseract
+    (discarded once its result was rejected) and again by the vision model
+    -- the exact escalation FallbackDocumentExtractor performs on a degraded
+    scan. Sharing one raster_cache dict between the two calls means the
+    second extractor must never touch pdfium.PdfDocument at all."""
+    mock_pytesseract.image_to_string.return_value = "zayif metin"
+    page = MagicMock()
+    document = MagicMock()
+    document.__iter__.return_value = iter([page])
+    mock_tesseract_pdfium.PdfDocument.return_value = document
+
+    cache = {}
+    await TesseractExtractor().extract(PDF_BYTES, raster_cache=cache)
+
+    assert mock_tesseract_pdfium.PdfDocument.call_count == 1
+    assert list(cache.keys()) == [300]  # OCR_RENDER_DPI default
+    assert len(cache[300]) == 1
+
+    import json as _json
+
+    class _Resp:
+        def read(self_inner):
+            return _json.dumps({"response": "iyi metin"}).encode()
+
+        def __enter__(self_inner):
+            return self_inner
+
+        def __exit__(self_inner, *args):
+            return False
+
+    with patch("app.infrastructure.extractors.vision.urllib.request.urlopen", return_value=_Resp()):
+        result = await OllamaVisionExtractor(model="test-model").extract(
+            PDF_BYTES, raster_cache=cache
+        )
+
+    assert mock_vision_pdfium.PdfDocument.call_count == 0
+    assert result.text == "iyi metin"
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.tesseract.pdfium")
+@patch("app.infrastructure.extractors.tesseract.Image")
+@patch("app.infrastructure.extractors.tesseract.pytesseract")
+async def test_a_different_dpi_does_not_reuse_another_dpis_cache_entry(
+    mock_pytesseract, mock_image, mock_pdfium
+):
+    mock_pytesseract.image_to_string.return_value = "metin"
+    page = MagicMock()
+    document = MagicMock()
+    document.__iter__.return_value = iter([page])
+    mock_pdfium.PdfDocument.return_value = document
+
+    cache = {150: [MagicMock()]}  # already warm at a different DPI
+    await TesseractExtractor(dpi=300).extract(PDF_BYTES, raster_cache=cache)
+
+    # 300 isn't in the cache yet, so this must render, not reuse 150's pages.
+    mock_pdfium.PdfDocument.assert_called_once()
+    assert 300 in cache
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.tesseract.pdfium")
+@patch("app.infrastructure.extractors.tesseract.Image")
+@patch("app.infrastructure.extractors.tesseract.pytesseract")
+async def test_no_cache_still_works_exactly_as_before(mock_pytesseract, mock_image, mock_pdfium):
+    """raster_cache is optional -- a caller that never passes one (or passes
+    None) must see identical behaviour to before this parameter existed."""
+    mock_pytesseract.image_to_string.return_value = "metin"
+    page = MagicMock()
+    document = MagicMock()
+    document.__iter__.return_value = iter([page])
+    mock_pdfium.PdfDocument.return_value = document
+
+    result = await TesseractExtractor().extract(PDF_BYTES)
+
+    assert result.text == "metin"
 
 
 # ==========================================

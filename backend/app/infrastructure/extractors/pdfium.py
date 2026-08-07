@@ -7,6 +7,7 @@ from app.infrastructure.extractors.base import (
     DocumentExtractionError,
     ExtractedDocument,
     has_pdf_magic_bytes,
+    has_pdf_text_layer,
     matches_extension,
 )
 
@@ -37,6 +38,7 @@ class PdfiumExtractor(BaseDocumentExtractor):
         *,
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
+        raster_cache: Optional[dict] = None,
     ) -> ExtractedDocument:
         """Extract the embedded text layer of a PDF.
 
@@ -44,6 +46,8 @@ class PdfiumExtractor(BaseDocumentExtractor):
             content: The raw PDF bytes.
             file_name: Original file name (unused).
             mime_type: Declared content type (unused).
+            raster_cache: Unused; this extractor reads the PDF's own text
+                layer and never rasterises anything.
 
         Returns:
             The extracted text with one entry per page.
@@ -105,9 +109,16 @@ class PdfiumExtractor(BaseDocumentExtractor):
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
     ) -> bool:
-        """Accept PDFs only, detected by signature or declared type."""
-        if has_pdf_magic_bytes(content):
-            return True
-        if mime_type == "application/pdf":
-            return True
-        return matches_extension(file_name, PDF_EXTENSIONS)
+        """Accept PDFs with a text layer; reject genuine scans outright.
+
+        This extractor reads exactly the text layer `has_pdf_text_layer`
+        already probed for -- on a genuine scan `_read_pages` would return
+        nothing anyway, so skipping it here saves one PDF open-and-iterate
+        pass, and lets the chain reach the OCR extractors sooner.
+        """
+        is_pdf = (
+            has_pdf_magic_bytes(content)
+            or mime_type == "application/pdf"
+            or matches_extension(file_name, PDF_EXTENSIONS)
+        )
+        return is_pdf and has_pdf_text_layer(content)

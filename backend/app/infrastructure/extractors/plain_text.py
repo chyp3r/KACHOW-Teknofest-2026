@@ -25,6 +25,7 @@ class PlainTextExtractor(BaseDocumentExtractor):
         *,
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
+        raster_cache: Optional[dict] = None,
     ) -> ExtractedDocument:
         """Decode the bytes as UTF-8, replacing undecodable sequences.
 
@@ -32,6 +33,7 @@ class PlainTextExtractor(BaseDocumentExtractor):
             content: The raw document bytes.
             file_name: Original file name (unused).
             mime_type: Declared content type (unused).
+            raster_cache: Unused; this extractor never rasterises anything.
 
         Returns:
             The decoded text as a single page.

@@ -41,6 +41,17 @@ MIN_TEXT_QUALITY_RATIO: float = 0.6
 # Tesseract page segmentation mode 6 = assume a single uniform block of text,
 # which matches the block layout of official correspondence.
 OCR_PAGE_SEGMENTATION_MODE: int = 6
+# Minimum embedded-text characters (across the first few pages) for a PDF to
+# count as having a text layer at all, gating OpenDataLoaderExtractor and
+# PdfiumExtractor. Deliberately far below MIN_EXTRACTED_CHAR_COUNT: this is a
+# cheap "is there anything here" probe, not a quality bar -- a genuine scan
+# reads as ~0 characters (maybe a few from an embedded watermark), where any
+# born-digital page has real text almost immediately.
+TEXT_LAYER_PROBE_MIN_CHARS: int = 20
+# How many leading pages the text-layer probe reads before deciding. A scan
+# has no text layer on any page, so checking the first few is enough to tell
+# it apart from a born-digital PDF even when the document runs much longer.
+TEXT_LAYER_PROBE_MAX_PAGES: int = 3
 
 # ---------- Pagination ----------
 DEFAULT_PAGE_SIZE: int = 20
