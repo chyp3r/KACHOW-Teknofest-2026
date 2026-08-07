@@ -506,6 +506,11 @@ def create_planning_graph(
             previous_intent=state.get("plan_intent"),
             matcher=prototype_matcher,
             focus=state.get("focus") or SessionFocus(),
+            # The current turn is appended to `history` only after this node
+            # returns (see the `"history"` key below), so what's here is
+            # already exactly the prior turns -- no trailing duplicate to
+            # drop, unlike `_prior_turns`'s assumption for the assist step.
+            history=state.get("history"),
         )
         logger.info(
             "Plan: %s (intent=%s, source=%s)",

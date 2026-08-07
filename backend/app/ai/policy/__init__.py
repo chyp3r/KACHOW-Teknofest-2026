@@ -24,7 +24,7 @@ from app.ai.policy.schema import (
 
 #: Semantic version of the parameter set. Bump on any value change:
 #: patch for a threshold, minor for a new parameter, major for a removed one.
-POLICY_VERSION = "1.5.0"
+POLICY_VERSION = "1.6.0"
 
 _POLICY = Policy(version=POLICY_VERSION)
 

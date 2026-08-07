@@ -21,13 +21,28 @@ calibrated linear model (:mod:`app.ai.workflows.router_fusion`, coefficients
 in :mod:`app.ai.policy.router_weights`, fit offline by
 ``scripts/fit_router.py``) instead of letting one rung's own internal test
 gate the others. The result is one probability per intent, and the decision
-policy is a simple band on the winner's probability:
+policy is:
 
-* At or above ``tau_high`` -- committed outright (``source="fused"``).
-* Between ``tau_low`` and ``tau_high`` -- genuinely contested; a fast-tier
-  model call breaks the tie when one is available (``source="model"``).
-* Below ``tau_low`` -- too little signal to be worth a model call either;
-  asks the user (``source="clarify"``).
+* At or above ``tau_high``, **and** backed by more than a structural filler
+  (see ``_WEAK_EVIDENCE_IDS``) -- committed outright (``source="fused"`` /
+  ``"fused_semantic"``). A win supported only by "the message was short" or
+  "a document happens to be attached" is a win by default, not by evidence,
+  and is treated as contested instead.
+* Otherwise, whenever a fast-tier model is available -- asked to break the
+  tie (``source="model"``), now regardless of how low the fused probability
+  fell. A thin fused signal is exactly the case a model call earns its keep;
+  it stopped being a reason to skip the call once the ladder became a
+  fusion (skipping below ``tau_low`` was a leftover from the old rung-order
+  design, where a low *lexical* margin meant nothing else had run yet --
+  here every signal already has). The model's own ``unclear`` verdict is
+  only honored as a genuine tie -- and turned into a clarifying question --
+  when the fused top two are within ``clarify_margin`` of each other *and*
+  the fused top probability is itself below ``tau_low``; otherwise the
+  fused top intent wins the tie the model declined to break
+  (``source="model_unclear"``).
+* No model available at all (only in tests and matcher/LLM-less
+  deployments) -- ``tau_low`` still gates a direct clarify, unchanged from
+  before.
 
 Two things do not go through fusion at all, on purpose:
 
@@ -51,6 +66,7 @@ from pydantic import BaseModel, Field
 
 from app.observability.ai_metrics import ROUTER_STAGE_DURATION
 
+from app.ai.context.compress import truncate_with_marker
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
 from app.ai.policy.router_weights import ROUTER_WEIGHTS
@@ -139,6 +155,17 @@ _AFFIRMATIVE_SURFACES = CONTINUATION_SURFACES
 #: for.
 COMPOUND_PAIR = frozenset({"draft", "analyze"})
 
+#: Evidence ids that are structural fillers, not intent-specific signal --
+#: "the message is short" or "a question landed while a document happens to
+#: be attached" describes the message's shape, not what it asked for. See
+#: `intent_scorer.score_intents`'s `assist.short_message` and
+#: `assist.question_with_document` rules. A fused decision whose winning
+#: intent is backed *only* by ids in this set (once ``requires_active_draft``
+#: rules are also live, a genuine four-word revise instruction like "giriş
+#: kısmını yumuşat" scores on its own surface, not on brevity) is escalated
+#: to the model instead of committed -- see `_has_only_weak_evidence`.
+_WEAK_EVIDENCE_IDS = frozenset({"assist.short_message", "assist.question_with_document"})
+
 #: Confidence reported for a model-broken tie and for the safe default used
 #: when the model call itself fails. Not the fusion layer's own
 #: `top_probability` (that number is fusion's uncertainty, the exact thing
@@ -150,6 +177,13 @@ COMPOUND_PAIR = frozenset({"draft", "analyze"})
 #: (`evaluation/harness/intent_suite.py::run_with_model`) is the optional,
 #: opt-in measurement this constant should eventually be replaced with.
 _MODEL_CONFIDENCE = 0.75
+
+#: Raw turns handed to the fast-tier model call, most recent last. Small on
+#: purpose -- this is a label call, not the assist step's own generation, so
+#: it only needs enough of the conversation's shape to disambiguate a short
+#: message ("selam" after a revise turn vs. after silence), not the full
+#: window the assist step budgets for.
+_MODEL_HISTORY_TURNS = 4
 
 
 class PlanDecision(NamedTuple):
@@ -227,6 +261,27 @@ def _merge_steps(intents: frozenset[str]) -> list[str]:
     """
     merged = {step for intent in intents for step in PLAN_BY_INTENT[intent]}
     return [step for step in STEP_ORDER if step in merged]
+
+
+def _has_only_weak_evidence(intent: str, lexical: IntentScores) -> bool:
+    """Whether ``intent``'s win rests on nothing but structural filler.
+
+    Args:
+        intent: The fusion layer's winning intent.
+        lexical: The message's lexical evidence.
+
+    Returns:
+        True when every lexical rule that fired *for this intent* is in
+        ``_WEAK_EVIDENCE_IDS`` -- including the case where none fired at all,
+        meaning the win came from the semantic layer or the fusion model's
+        prior alone, weaker still than a filler rule.
+    """
+    strong = [
+        rule_id
+        for rule_id in lexical.evidence
+        if rule_id.startswith(f"{intent}.") and rule_id not in _WEAK_EVIDENCE_IDS
+    ]
+    return not strong
 
 
 def _try_compound(lexical: IntentScores) -> Optional[PlanDecision]:
@@ -392,6 +447,7 @@ async def classify_intent_with_model(
     document_id: Optional[str],
     focus: Optional[SessionFocus] = None,
     previous_intent: Optional[str] = None,
+    history: Optional[list[dict[str, str]]] = None,
 ) -> str:
     """Break a fusion tie with a one-label model call.
 
@@ -400,12 +456,22 @@ async def classify_intent_with_model(
         message: The user's message.
         document_id: Storage path of an attached document, when present.
         focus: The session's persistent focus, when known -- supplies whether
-            a draft is already open and what kind, the context a bare label
-            call otherwise has no way to see (the fusion layer sees it too,
-            as ``has_active_draft``, but this prompt has to spell it out in
-            words instead of a feature value).
+            a draft is already open and what kind (plus an excerpt of its
+            text and the session's accumulated objective), context a bare
+            label call otherwise has no way to see. The fusion layer sees
+            `has_active_draft` too, as a feature value, but this prompt has
+            to spell the same fact out in words -- and, unlike the fusion
+            layer, can also show *what* the draft says, which is exactly
+            what a message like "son cümle bana biraz sert geldi" needs to
+            resolve against.
         previous_intent: The intent resolved for the previous turn, when
             known.
+        history: The last few raw turns of this conversation, oldest first,
+            when known. Now that this call is the fallback for *every*
+            fusion-contested message rather than a narrow middle band, it
+            needs the same kind of conversational grounding the assist step
+            already gets -- a bare "selam" or "yarın devam ederiz" only reads
+            as small talk in light of what the turn before it was.
 
     Returns:
         One of ``PLAN_BY_INTENT``'s keys, or ``"unclear"``/``"model_failed"``
@@ -438,17 +504,30 @@ async def classify_intent_with_model(
     )
 
     active_draft = focus.active_draft if focus else None
+    objective = (focus.objective if focus else "") or ""
     context_lines = [
-        f'Mesaj: "{message}"',
         f"Sisteme yüklü bir belge var mı: {'evet' if document_id else 'hayır'}",
         (
-            f"Açık bir taslak var, türü: {active_draft.correspondence_type}"
+            f"Açık bir taslak var, türü: {active_draft.correspondence_type}.\n"
+            f"Taslağın başı: \"{truncate_with_marker(active_draft.text, 60)}\""
             if active_draft is not None
             else "Açık (üzerinde çalışılan) bir taslak yok"
         ),
         f"Önceki turun niyeti: {previous_intent or 'yok'}",
     ]
-    prompt = "\n".join(context_lines) + "\n\nBu mesajın niyetini belirle."
+    if objective:
+        context_lines.append(f"Bu oturumda kullanıcının amacı (özet): {objective}")
+
+    if history:
+        recent = history[-_MODEL_HISTORY_TURNS:]
+        turns_text = "\n".join(
+            f"{turn.get('role')}: {truncate_with_marker(turn.get('content', ''), 40)}"
+            for turn in recent
+        )
+        context_lines.append(f"Son konuşma turları:\n{turns_text}")
+
+    context_lines.append(f'Son mesaj: "{message}"')
+    prompt = "\n".join(context_lines) + "\n\nSon mesajın niyetini belirle."
 
     try:
         result: IntentOutput = await agent.run_structured(
@@ -463,6 +542,43 @@ async def classify_intent_with_model(
         return "model_failed"
 
 
+def _clarify_or_fallback(
+    ranked: list[tuple[str, float]],
+    probs: dict[str, float],
+    lexical: IntentScores,
+    focus: Optional[SessionFocus],
+) -> PlanDecision:
+    """Ask a clarifying question, unless the previous turn already asked one.
+
+    A user who didn't answer the last clarifying question clearly (see
+    ``_try_resolve_pending_clarification``) and then sent another message the
+    decision layer also finds ambiguous would otherwise be asked a second
+    question in a row -- annoying on its own, and indistinguishable to the
+    user from the system having ignored their first answer. Committing to the
+    fused top intent is the better failure mode: wrong sometimes, but never a
+    conversation that only ever asks.
+
+    Args:
+        ranked: Intents sorted by fused probability, highest first.
+        probs: The fused probability for every intent.
+        lexical: The message's lexical evidence.
+        focus: The session's persistent focus, when known.
+
+    Returns:
+        A clarifying decision, or a committed decision for the fused top
+        intent when the previous turn was already a clarify.
+    """
+    if focus is not None and focus.last_intent == "clarify":
+        top_intent, _ = ranked[0]
+        logger.info(
+            "Previous turn was already a clarify; committing to the fused top "
+            "intent instead of asking a second time in a row: intent=%s",
+            top_intent,
+        )
+        return _fused_decision(top_intent, probs, ranked, lexical, "clarify_repeat_guard")
+    return _build_clarify_decision(ranked)
+
+
 async def resolve_plan(
     message: str,
     document_id: Optional[str],
@@ -470,15 +586,17 @@ async def resolve_plan(
     previous_intent: Optional[str] = None,
     matcher: Optional["PrototypeMatcher"] = None,
     focus: Optional[SessionFocus] = None,
+    history: Optional[list[dict[str, str]]] = None,
 ) -> PlanDecision:
     """Resolve the execution plan for a user message.
 
     Args:
         message: The user's message.
         document_id: Storage path of an attached document, when present.
-        llm_client: Fast-tier client for the band between ``tau_low`` and
-            ``tau_high``. When omitted, that band falls to a clarifying
-            question instead of a model call.
+        llm_client: Fast-tier client consulted whenever fusion doesn't commit
+            outright (``tau_high`` and, since a filler-only win isn't enough
+            on its own, the evidence check next to it). When omitted, that
+            same case falls to a clarifying question instead of a model call.
         previous_intent: The intent resolved for this thread's previous turn,
             when known -- enables the short-affirmative continuation rule and
             feeds the fusion layer's ``prev_*`` features.
@@ -488,6 +606,11 @@ async def resolve_plan(
         focus: The session's persistent focus. Supplies whether a draft is
             active (gates ``revise``) and any open clarifying question
             (checked first, before fusion runs at all).
+        history: This thread's raw prior turns, oldest first, when known --
+            forwarded to ``classify_intent_with_model`` unchanged. Fusion
+            itself never reads it (only ``previous_intent`` feeds the fused
+            features); it exists solely so the model call escalation has the
+            same conversational grounding the assist step gets.
 
     Returns:
         The execution plan and the rationale shown to the user.
@@ -545,16 +668,29 @@ async def resolve_plan(
             top_intent, top_probability = ranked[0]
             source = "fused_semantic"
 
-    if top_probability >= policy.tau_high:
+    # The weak-evidence gate only applies to a lexical-only commit: once the
+    # semantic pass has run and moved the needle (`source == "fused_semantic"`),
+    # the embedding similarity *is* the real signal a filler rule is a stand-in
+    # for elsewhere, and second-guessing it here would just be a slower way of
+    # ignoring the semantic layer's own vote.
+    weak = source == "fused" and _has_only_weak_evidence(top_intent, lexical)
+    if top_probability >= policy.tau_high and not weak:
         logger.info(
             "Plan resolved via %s: intent=%s p=%.3f", source, top_intent, top_probability
         )
         return _fused_decision(top_intent, probs, ranked, lexical, source)
 
-    if top_probability >= policy.tau_low and llm_client is not None:
+    if llm_client is not None:
+        _model_start = time.perf_counter()
         result = await classify_intent_with_model(
-            llm_client, message, document_id, focus=focus, previous_intent=previous_intent
+            llm_client,
+            message,
+            document_id,
+            focus=focus,
+            previous_intent=previous_intent,
+            history=history,
         )
+        ROUTER_STAGE_DURATION.labels(stage="model").observe(time.perf_counter() - _model_start)
 
         if result == "model_failed":
             logger.warning(
@@ -571,11 +707,23 @@ async def resolve_plan(
             )
 
         if result == "unclear" or result not in PLAN_BY_INTENT:
+            top_two_margin = ranked[0][1] - ranked[1][1]
+            if top_probability < policy.tau_low and top_two_margin < policy.clarify_margin:
+                logger.info(
+                    "Fused probability %.3f contested; model was unclear too and the "
+                    "top two intents are within %.3f of each other. Asking instead.",
+                    top_probability,
+                    top_two_margin,
+                )
+                return _clarify_or_fallback(ranked, probs, lexical, focus)
             logger.info(
-                "Fused probability %.3f contested; model was unclear too. Asking instead.",
+                "Model was unclear, but the fused top intent (%s, p=%.3f, margin=%.3f) "
+                "already leads clearly; committing to it instead of asking again.",
+                top_intent,
                 top_probability,
+                top_two_margin,
             )
-            return _build_clarify_decision(ranked)
+            return _fused_decision(top_intent, probs, ranked, lexical, "model_unclear")
 
         logger.info(
             "Fused probability %.3f contested; model broke the tie: intent=%s",
@@ -592,8 +740,9 @@ async def resolve_plan(
         )
 
     logger.info(
-        "Fused probability %.3f (%s) not decisive enough to act on; asking instead.",
+        "Fused probability %.3f (%s) not decisive enough to act on and no model "
+        "available; asking instead.",
         top_probability,
         top_intent,
     )
-    return _build_clarify_decision(ranked)
+    return _clarify_or_fallback(ranked, probs, lexical, focus)
