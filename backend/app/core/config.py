@@ -1,4 +1,5 @@
 import shlex
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -178,17 +179,36 @@ class Settings(BaseSettings):
     MEVZUAT_COLLECTION_NAME: str = "mevzuat"
 
     # Live legislation lookup over MCP (github.com/saidsurucu/mevzuat-mcp, MIT),
-    # querying mevzuat.gov.tr directly. Off by default and deliberately so: the
-    # committed corpus under MEVZUAT_CORPUS_DIR answers every scored requirement
-    # with no network at all, and evrak analysis staying offline and byte-
-    # reproducible is worth more than live coverage. This only ever *adds* an
-    # assistant tool; it never gates a compliance decision.
+    # querying mevzuat.gov.tr directly.
+    #
+    # Two independent switches read this same server:
+    #
+    # * MEVZUAT_SOURCE decides where document analysis's legislation retrieval
+    #   (app.ai.retrieval.mcp_mevzuat) reads from. "mcp" (default) fetches the
+    #   curated corpus's current official text live and falls back to the
+    #   committed corpus under MEVZUAT_CORPUS_DIR on any failure; "local" skips
+    #   MCP entirely and always uses the committed corpus, exactly as before
+    #   this setting existed. Neither value ever touches compliance:
+    #   check_required_fields is set subtraction over a rule table with
+    #   hard-coded article numbers, and no source switch reaches that code.
+    # * MEVZUAT_MCP_ENABLED (default off) is the assistant's own switch,
+    #   offering search_legislation_live as an escalation when the local
+    #   corpus tool finds nothing. Independent of MEVZUAT_SOURCE on purpose --
+    #   a deployment can run document analysis against live legislation
+    #   without also handing the chat model a live government-site tool, or
+    #   the reverse.
+    #
+    # register_servers() registers the server whenever *either* switch wants
+    # it, so the documented default (MEVZUAT_SOURCE="mcp",
+    # MEVZUAT_MCP_ENABLED=False) still actually reaches the server instead of
+    # silently registering nothing.
     #
     # The server is not in the backend image -- its dependency tree pins
-    # playwright and pulls a browser binary -- so enabling this needs the command
-    # below to point at an installed copy (an isolated venv locally, or a sidecar
-    # container). Command and args live here rather than in code so that swap is
-    # configuration.
+    # playwright and pulls a browser binary -- so either switch needs the
+    # command below to point at an installed copy (an isolated venv locally,
+    # or a sidecar container). Command and args live here rather than in code
+    # so that swap is configuration.
+    MEVZUAT_SOURCE: Literal["mcp", "local"] = "mcp"
     MEVZUAT_MCP_ENABLED: bool = False
     MEVZUAT_MCP_COMMAND: str = "mevzuat-mcp"
     #: Space-separated, not a list. pydantic-settings JSON-decodes any env var

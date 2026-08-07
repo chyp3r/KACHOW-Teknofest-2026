@@ -6,15 +6,28 @@ startup, and so a server can be switched off by configuration without touching
 code.
 
 One server today: `mevzuat-mcp` (github.com/saidsurucu/mevzuat-mcp, MIT), which
-queries mevzuat.gov.tr and bedesten.adalet.gov.tr. It backs a live legislation
-lookup for the assistant and nothing else. In particular it does **not** feed the
-document analysis pipeline: `check_required_fields` is set subtraction over a rule
-table with hard-coded article numbers, and keeping a live external service out of
-that is what makes the same evrak yield byte-identical output on every run.
+queries mevzuat.gov.tr and bedesten.adalet.gov.tr. Two runtime callers share it,
+gated by two independent settings (see `core.config.Settings` for the full
+reasoning):
+
+* `app.ai.retrieval.mcp_mevzuat` -- document analysis's legislation retrieval,
+  live by default (`MEVZUAT_SOURCE="mcp"`), falling back to the committed
+  corpus on failure. Never touches `check_required_fields`: that is set
+  subtraction over a rule table with hard-coded article numbers, so the
+  compliance decision stays deterministic regardless of which source served
+  the citations.
+* `app.ai.tools.mevzuat_tools` -- the assistant's live lookup tool, off by
+  default (`MEVZUAT_MCP_ENABLED`), offered as an escalation when the local
+  corpus tool finds nothing.
+
+`register_servers()` below registers the server whenever *either* setting
+wants it, so the documented default keeps working even though the two
+settings' defaults disagree (`MEVZUAT_SOURCE="mcp"` but
+`MEVZUAT_MCP_ENABLED=False`).
 
 The same server is also used off-line, by `scripts/fetch_mevzuat_corpus.py`, to
-build the committed corpus. That path is what the scored requirements depend on;
-this one is a convenience for questions the corpus does not cover.
+build the committed corpus that both the "local" source above and the assistant's
+local-corpus tool read from.
 """
 
 import logging
@@ -39,7 +52,7 @@ def register_servers() -> list[str]:
     """
     registered: list[str] = []
 
-    if settings.MEVZUAT_MCP_ENABLED:
+    if settings.MEVZUAT_MCP_ENABLED or settings.MEVZUAT_SOURCE == "mcp":
         mcp_manager.register_server(
             name=MEVZUAT_SERVER,
             command=settings.MEVZUAT_MCP_COMMAND,
@@ -47,15 +60,17 @@ def register_servers() -> list[str]:
         )
         registered.append(MEVZUAT_SERVER)
         logger.info(
-            "Registered MCP server '%s' (command: %s). Live legislation lookup "
-            "is available to the assistant.",
+            "Registered MCP server '%s' (command: %s). MEVZUAT_MCP_ENABLED=%s, "
+            "MEVZUAT_SOURCE=%s.",
             MEVZUAT_SERVER,
             settings.MEVZUAT_MCP_COMMAND,
+            settings.MEVZUAT_MCP_ENABLED,
+            settings.MEVZUAT_SOURCE,
         )
     else:
         logger.debug(
-            "MEVZUAT_MCP_ENABLED is off; the assistant answers legislation "
-            "questions from the committed corpus only."
+            "Neither MEVZUAT_MCP_ENABLED nor MEVZUAT_SOURCE=mcp is set; nothing "
+            "reaches mevzuat-mcp and legislation stays fully local."
         )
 
     return registered
