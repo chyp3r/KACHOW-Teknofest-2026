@@ -95,10 +95,13 @@ async def test_short_affirmative_continues_the_previous_continuable_intent(previ
 @pytest.mark.asyncio
 async def test_continuation_does_not_apply_to_non_continuable_previous_intents():
     """A bare 'evet' after an assist turn has no unambiguous follow-up
-    action -- it resolves on its own (short-message) merits instead of
-    silently continuing that flow."""
+    action, and no other evidence of its own either -- `assist.short_message`
+    is the *only* thing that can fire, which the weak-evidence gate (see
+    `_has_only_weak_evidence`) refuses to commit on its own. With no model
+    client to break the tie, that means asking rather than silently guessing
+    assist purely because the message happened to be short."""
     decision = await resolve_plan("evet", None, previous_intent="assist")
-    assert decision.intent == "assist"
+    assert decision.intent == "clarify"
 
 
 @pytest.mark.asyncio
@@ -214,24 +217,49 @@ async def test_a_genuinely_underspecified_command_asks_without_a_client():
 
 
 @pytest.mark.asyncio
-async def test_a_genuinely_underspecified_command_does_not_pay_for_a_model_call_either():
-    """Below `tau_low` there is too little signal for a model call to be
-    worth its round trip -- the ladder asks the user even when a client is
-    available, rather than escalating everything it cannot resolve on its
-    own the way the pre-fusion ladder's `context_default` branch used to."""
+async def test_a_genuinely_underspecified_command_now_pays_for_a_model_call():
+    """`tau_low` no longer gates the model call -- a thin fused signal is
+    exactly the case a model call earns its keep, not a reason to skip it
+    (unlike the old rung-order ladder, where a low *lexical* margin meant
+    nothing else had run yet; here every other signal already has). With a
+    client available, the ladder asks the model instead of the user."""
     classify = AsyncMock(return_value="assist")
     with patch("app.ai.workflows.planner.classify_intent_with_model", new=classify):
         decision = await resolve_plan("Gereğini yap.", "uploads/doc.pdf", llm_client=MagicMock())
 
-    assert decision.source == "clarify"
-    classify.assert_not_awaited()
+    assert decision.source == "model"
+    assert decision.intent == "assist"
+    classify.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_the_model_saying_unclear_still_asks_the_user():
+async def test_the_model_saying_unclear_asks_only_on_a_genuine_tie():
+    """A model call that lands on `unclear` is only honored as a real tie --
+    and turned into a clarifying question -- when the fused top two are also
+    within `clarify_margin` of each other and the top probability itself is
+    below `tau_low`. Here they are not (0.45 vs. 0.183, a wide margin), so
+    the model's uncertainty is overridden by the fused top intent instead of
+    asking the user something the fusion layer already has a clear read on."""
     contested = {"draft": (_TAU_LOW + _TAU_HIGH) / 2, "analyze": 0.2, "assist": 0.15, "revise": 0.15}
     classify = AsyncMock(return_value="unclear")
     with patch("app.ai.workflows.planner.predict_proba", return_value=contested), patch(
+        "app.ai.workflows.planner.classify_intent_with_model", new=classify
+    ):
+        decision = await resolve_plan("belirsiz bir mesaj", "uploads/doc.pdf", llm_client=MagicMock())
+
+    assert decision.source == "model_unclear"
+    assert decision.intent == "draft"
+    classify.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_the_model_saying_unclear_asks_the_user_on_a_genuine_photo_finish():
+    """The other half of the same policy: when the fused top two really are
+    close *and* the model also couldn't separate them, that is the one case
+    worth a clarifying question."""
+    tight = {"draft": 0.30, "analyze": 0.28, "assist": 0.22, "revise": 0.20}
+    classify = AsyncMock(return_value="unclear")
+    with patch("app.ai.workflows.planner.predict_proba", return_value=tight), patch(
         "app.ai.workflows.planner.classify_intent_with_model", new=classify
     ):
         decision = await resolve_plan("belirsiz bir mesaj", "uploads/doc.pdf", llm_client=MagicMock())

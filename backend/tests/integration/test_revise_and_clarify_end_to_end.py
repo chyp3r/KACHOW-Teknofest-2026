@@ -13,11 +13,12 @@ genuinely ambiguous, expensive-to-guess-wrong follow-up gets a question
 instead of a guess.
 """
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from langgraph.checkpoint.memory import MemorySaver
 
+from app.ai.workflows.planner import IntentOutput
 from app.ai.workflows.planning_graph import create_planning_graph
 
 DRAFT_TEXT = (
@@ -124,24 +125,25 @@ async def test_an_ambiguous_expensive_followup_asks_instead_of_guessing(fake_llm
         {"input_text": "Bu evraka cevap yazısı hazırla.", "document_id": None}, config=config
     )
 
-    # Not "Kısalt." -- that phrase is now exactly the case the fusion rewrite
-    # fixed (an unambiguous revise imperative that used to score a losing
-    # margin against the generic short-message hint and fall through to a
-    # question it never should have asked; see test_revise_clarify_routing.py
-    # for that regression pinned directly). "Yazdığın metni ele alır mısın?"
-    # doesn't work here either anymore, for the same reason: "yazdığın metni"
-    # was added as its own revise surface after a live report of exactly this
-    # phrasing wrongly resolving to draft/clarify (see intent_rules.py's
-    # `revise.explicit_request`). Also avoid any of CONTINUATION_SURFACES
-    # ("yap", "tamam", ...) in a <=6-word message here -- the previous turn's
-    # intent was "draft", so a short message ending in one of those words
-    # continues it outright instead of staying contested. This message
-    # carries no lexical revise/draft/analyze surface and no continuation
-    # word, so it stays genuinely contested even under fusion.
-    result = await graph.ainvoke(
-        {"input_text": "Bunu biraz farklı ele alalım.", "document_id": None},
-        config=config,
-    )
+    # Not "Kısalt." or "Bunu biraz farklı ele alalım." -- both are now exactly
+    # the cases the fusion rewrite and the follow-up lexical fixes exist for
+    # (see test_revise_clarify_routing.py and intent_rules.py's
+    # `revise.explicit_request` "farkli ele al"/"biraz farkli ele" surfaces):
+    # unambiguous revise imperatives that used to fall through to a question
+    # they never should have asked. Genuine ambiguity now has to come from a
+    # message with *no* lexical surface at all -- forced here by patching
+    # `predict_proba` to a tight, undecided distribution and the fast-tier
+    # model to an honest "unclear", rather than relying on a real message
+    # happening to land in the fusion layer's undecided band, which the
+    # model-escalation policy change (tau_low no longer skips the model call)
+    # makes far narrower than it used to be.
+    tight = {"revise": 0.30, "analyze": 0.28, "assist": 0.22, "draft": 0.20}
+    fake_fast_llm.generate_structured_return = IntentOutput(intent="unclear")
+    with patch("app.ai.workflows.planner.predict_proba", return_value=tight):
+        result = await graph.ainvoke(
+            {"input_text": "Bunu nasıl buluyorsun?", "document_id": None},
+            config=config,
+        )
 
     # No second draft/revise generation happened -- the system asked instead.
     assert draft_graph.ainvoke.await_count == 1
@@ -153,7 +155,13 @@ async def test_an_ambiguous_expensive_followup_asks_instead_of_guessing(fake_llm
     assert snapshot.values["focus"].pending_clarification is not None
 
     # A short affirmative now resolves the open question directly, without
-    # falling through the ladder or the model.
+    # falling through the ladder or the model. Reset the fast client's
+    # canned response first -- revise's own JudgeAgent call shares the same
+    # fast-tier client, and the leftover IntentOutput from the classify call
+    # above would otherwise be handed back as if it were a DraftJudgeVerdict
+    # (FakeLLMClient doesn't validate against `response_model`, it just
+    # returns whatever's configured).
+    fake_fast_llm.generate_structured_return = None
     fake_llm.stream_chunks = ["Taslak kısaltıldı."]
     followup = await graph.ainvoke({"input_text": "evet", "document_id": None}, config=config)
 
