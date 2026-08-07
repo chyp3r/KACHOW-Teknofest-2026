@@ -37,10 +37,6 @@ logger = logging.getLogger(__name__)
 
 NOT_FOUND = "İlgili bir mevzuat maddesi bulunamadı."
 
-#: How many search hits to resolve to full text. Each resolution is a second
-#: round-trip to the government site, and the assistant summarises rather than
-#: quotes at length, so one good hit beats three partial ones.
-RESOLVE_LIMIT = 1
 #: Characters of legislation text handed back to the model. A whole law can run to
 #: half a million characters (657 does), which would blow the context window.
 EXCERPT_CHAR_LIMIT = 6000
@@ -125,19 +121,37 @@ async def _lookup(query: str) -> str:
     # law 7417, a 2022 act *amending* 657, at the top while 657 itself does not
     # appear at all. Same trap `scripts/fetch_mevzuat_corpus.py` documents.
     stripped = query.strip()
-    arguments: dict[str, object] = {"page_size": 5}
+    document_id: Optional[str] = None
     if stripped.isdigit():
-        # Type-filtered as well as numbered. Without the filter, 657 returns its
-        # repealed-provisions companion first -- the filter drops that entry
-        # entirely, and _pick_document_id guards the name-search path where no
-        # equivalent filter applies.
-        arguments["mevzuat_no"] = stripped
-        arguments["mevzuat_tur"] = "KANUN"
+        # KANUN-filtered first: without a type filter, 657 returns its
+        # repealed-provisions companion first, and this filter drops that
+        # entry entirely rather than relying on _pick_document_id's fallback.
+        # But this tool's own description promises "kanun veya yönetmeliğin"
+        # and tells the model a numeric query is the reliable one -- so a
+        # numbered yönetmelik, tüzük or KHK must not dead-end here just
+        # because the first attempt only asked for KANUN. Retry unfiltered
+        # (still number-matched) before giving up; _pick_document_id's
+        # repealed-marker check is generic, not KANUN-specific, so it still
+        # protects this second attempt.
+        filtered = await mcp_manager.call_tool(
+            MEVZUAT_SERVER,
+            "search_mevzuat",
+            {"mevzuat_no": stripped, "mevzuat_tur": "KANUN", "page_size": 5},
+        )
+        document_id = _pick_document_id(_text_of(filtered))
+        if document_id is None:
+            unfiltered = await mcp_manager.call_tool(
+                MEVZUAT_SERVER,
+                "search_mevzuat",
+                {"mevzuat_no": stripped, "page_size": 5},
+            )
+            document_id = _pick_document_id(_text_of(unfiltered))
     else:
-        arguments["mevzuat_adi"] = stripped
+        by_name = await mcp_manager.call_tool(
+            MEVZUAT_SERVER, "search_mevzuat", {"mevzuat_adi": stripped, "page_size": 5}
+        )
+        document_id = _pick_document_id(_text_of(by_name))
 
-    found = await mcp_manager.call_tool(MEVZUAT_SERVER, "search_mevzuat", arguments)
-    document_id = _pick_document_id(_text_of(found))
     if document_id is None:
         return NOT_FOUND
 
@@ -161,7 +175,13 @@ def build_live_legislation_tools() -> list[ToolSpec]:
         registered, otherwise an empty list -- so the model is never offered a
         tool that cannot run.
     """
-    if not is_registered(MEVZUAT_SERVER):
+    # Both conditions, not just registration: today `register_servers()` is the
+    # only caller of `mcp_manager.register_server`, and it already gates on this
+    # same flag, so checking is_registered() alone happens to agree with the
+    # flag. Checking both directly here removes the dependency on that being the
+    # only registration path ever added, rather than leaving it as a fact a
+    # future caller could silently invalidate.
+    if not settings.MEVZUAT_MCP_ENABLED or not is_registered(MEVZUAT_SERVER):
         return []
 
     async def _search_legislation_live(query: str) -> str:

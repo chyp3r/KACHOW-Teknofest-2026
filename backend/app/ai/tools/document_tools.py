@@ -213,13 +213,30 @@ def build_assistant_tools(
                 logger.exception("Assistant document search failed")
 
             confidence = 1.0
+            degraded = False
             if not passages and cached_document.get("extracted_text"):
+                # A retrieval outage and "genuinely no matching passage" used
+                # to collapse into this same branch with no distinguishing
+                # signal, so the model read the document's opening lines with
+                # the same confidence as a real targeted hit -- and a
+                # question about page 40 of a 60-page document got answered,
+                # wrongly, from pages 1-2. `confidence` already recorded the
+                # difference for ToolResult/output_gate's groundedness check;
+                # `degraded` carries the same fact into the text the model
+                # itself reads, which previously had no marker at all.
                 passages = [cached_document["extracted_text"][:TEXT_SLICE_CHARS]]
                 confidence = 0.5
+                degraded = True
             if not passages:
                 return "Belgede bu soruyla ilgili bir içerik bulunamadı."
 
             text = "\n\n---\n\n".join(passages)
+            if degraded:
+                text = (
+                    "[Not: Hedefli arama sonuç vermedi; bu, belgenin yalnızca "
+                    "başlangıç kısmıdır ve sorunuzla doğrudan ilgili olmayabilir.]"
+                    f"\n\n{text}"
+                )
             _report(
                 ToolResult(
                     tool="search_document",
@@ -251,9 +268,18 @@ def build_assistant_tools(
             if analysis.get("compliance_status"):
                 parts.append(f"Uygunluk durumu: {analysis['compliance_status']}")
             if analysis.get("missing_fields"):
-                parts.append(
-                    "Eksik alanlar: " + ", ".join(analysis["missing_fields"])
-                )
+                # Every producer of this list writes MissingField.model_dump()
+                # dicts (see document_analysis_graph.py's check_compliance_node),
+                # never bare strings -- joining the list directly raised
+                # TypeError on any document with a real compliance gap, which
+                # the assistant then swallowed and answered without the
+                # document's analysis at all, silently. `label` is the one key
+                # every dict is guaranteed to carry.
+                labels = [
+                    item.get("label", str(item)) if isinstance(item, dict) else str(item)
+                    for item in analysis["missing_fields"]
+                ]
+                parts.append("Eksik alanlar: " + ", ".join(labels))
             text = "\n\n".join(parts)
             _report(
                 ToolResult(

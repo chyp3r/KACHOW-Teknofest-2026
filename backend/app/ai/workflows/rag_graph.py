@@ -32,6 +32,21 @@ TURKISH_STOPWORDS = frozenset(
 #: regulation vocabulary to match on.
 DOMAIN_EXPANSION = "mevzuat yönetmelik madde hüküm resmî yazışma"
 
+#: Python's own `str.lower()` maps "İ" (U+0130, dotted capital I) to "i" + a
+#: combining dot above (U+0307) -- a two-codepoint string that never equals the
+#: single-codepoint "i" every stopword below is written with, so "İçin".lower()
+#: != "için" and the capitalised form of every stopword silently escaped the
+#: filter. Translated explicitly before folding, same single-entry fix as every
+#: other Turkish-aware lowercasing in this codebase (see
+#: app.ai.compliance.checker.normalize_value) -- ASCII "I" is deliberately left
+#: alone since Python's default .lower() already maps it to "i" correctly.
+_TURKISH_CASEFOLD = str.maketrans({"İ": "i"})
+
+
+def _turkish_lower(token: str) -> str:
+    """Lowercase a token the way Turkish stopwords are actually spelled."""
+    return token.translate(_TURKISH_CASEFOLD).lower()
+
 
 class RAGState(TypedDict, total=False):
     """LangGraph state for the retrieval workflow."""
@@ -64,7 +79,7 @@ def build_search_query(query: str) -> str:
     terms = [
         token
         for token in cleaned.split()
-        if len(token) > 2 and token.lower() not in TURKISH_STOPWORDS
+        if len(token) > 2 and _turkish_lower(token) not in TURKISH_STOPWORDS
     ]
     if not terms:
         terms = cleaned.split()

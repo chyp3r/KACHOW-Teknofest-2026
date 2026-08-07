@@ -1,3 +1,5 @@
+import shlex
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,6 +37,17 @@ class Settings(BaseSettings):
     #: is protected -- never point it at a network reachable outside a
     #: trusted demo/dev environment.
     REQUIRE_AUTH: bool = True
+
+    #: Off by default. `rate_limit()` (app.api.rate_limit) keys its Redis
+    #: counter on the caller's IP, read from the `X-Forwarded-For` header when
+    #: this is on, or from `request.client.host` (the actual TCP peer, which a
+    #: client cannot spoof) when it is off. Trusting X-Forwarded-For with no
+    #: reverse proxy in front of the app lets every request carry its own
+    #: fabricated IP, so each one lands in its own Redis key and the limiter
+    #: never accumulates a count -- unlimited login attempts, unlimited
+    #: uploads. Set to True only when the app sits behind a proxy that
+    #: overwrites (not merely appends to) this header before it reaches here.
+    TRUST_PROXY_HEADERS: bool = False
 
     #: Persist each planning-graph run's decision trail to Postgres (see
     #: app.observability.run_recorder). On by default in every real
@@ -178,7 +191,16 @@ class Settings(BaseSettings):
     # configuration.
     MEVZUAT_MCP_ENABLED: bool = False
     MEVZUAT_MCP_COMMAND: str = "mevzuat-mcp"
-    MEVZUAT_MCP_ARGS: list[str] = []
+    #: Space-separated, not a list. pydantic-settings JSON-decodes any env var
+    #: bound to a structured type (list, dict, ...) *before* the model's own
+    #: validators ever run, so a plain `list[str]` field made
+    #: `MEVZUAT_MCP_ARGS="--transport stdio"` -- the obvious shell-style value
+    #: -- a hard crash at `Settings()` construction: "error parsing value for
+    #: field ... from source EnvSettingsSource", with no mention of JSON and no
+    #: chance to fix it in a validator. A plain `str` field is read as a raw
+    #: string, so this type is what actually avoids the crash; use
+    #: `mevzuat_mcp_args` below to get the parsed list.
+    MEVZUAT_MCP_ARGS: str = ""
     #: Cap on one lookup. The government site publishes no rate limit and the
     #: assistant must not stall a chat turn waiting on it.
     MEVZUAT_MCP_TIMEOUT_SECONDS: float = 25.0
@@ -196,6 +218,16 @@ class Settings(BaseSettings):
         share one connection string instead of keeping two in sync.
         """
         return self.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+
+    @property
+    def mevzuat_mcp_args(self) -> list[str]:
+        """``MEVZUAT_MCP_ARGS`` split into an argv list for `subprocess`/MCP.
+
+        `shlex.split`, not `str.split`: an arg containing a space (a quoted
+        path with spaces, say) must survive as one argument rather than being
+        cut in two.
+        """
+        return shlex.split(self.MEVZUAT_MCP_ARGS)
 
 
 settings = Settings()

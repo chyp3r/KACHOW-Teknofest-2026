@@ -26,7 +26,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 from app.ai.policy import get_policy
-from app.ai.verification.normalizers import canonical_for_kind
+from app.ai.verification.normalizers import _TURKISH_MAP, canonical_for_kind
 from app.observability.ai_metrics import CLAIM_MATCH
 
 logger = logging.getLogger(__name__)
@@ -184,8 +184,19 @@ def _fold(text: str) -> str:
         "E-12345678-903" matches "e 12345678 903" and casing or spacing
         differences between draft and source do not read as fabrication.
     """
-    folded = unicodedata.normalize("NFKD", text or "")
-    ascii_text = folded.encode("ascii", "ignore").decode("ascii").lower()
+    # Turkish letters are translated explicitly before NFKD, not left to it: "ı"
+    # (U+0131, dotless i) has no NFKD decomposition, so ascii/ignore silently
+    # deleted it -- 'Kadıköy Kaymakamlığı' folded to 'kadkoy kaymakamlg' while the
+    # same institution written 'KADIKÖY KAYMAKAMLIĞI' (the all-caps Turkish
+    # letterhead convention, and also what OCR of a scanned header yields) folded
+    # to 'kadikoy kaymakamligi' -- two different strings for one institution. A
+    # draft that copied the name straight off the source document's own
+    # letterhead scored as fabricating it twice and lost 24 points. Same map and
+    # same translate-before-NFKD order as every other Turkish-aware fold in this
+    # codebase (see app.ai.compliance.checker.normalize_value).
+    folded = (text or "").translate(_TURKISH_MAP)
+    decomposed = unicodedata.normalize("NFKD", folded)
+    ascii_text = decomposed.encode("ascii", "ignore").decode("ascii").lower()
     return re.sub(r"[^a-z0-9]+", " ", ascii_text).strip()
 
 

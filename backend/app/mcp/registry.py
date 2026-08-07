@@ -43,7 +43,7 @@ def register_servers() -> list[str]:
         mcp_manager.register_server(
             name=MEVZUAT_SERVER,
             command=settings.MEVZUAT_MCP_COMMAND,
-            args=list(settings.MEVZUAT_MCP_ARGS),
+            args=settings.mevzuat_mcp_args,
         )
         registered.append(MEVZUAT_SERVER)
         logger.info(

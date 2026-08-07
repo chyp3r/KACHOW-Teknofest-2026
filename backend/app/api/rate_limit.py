@@ -14,8 +14,10 @@ Usage example:
 import logging
 import time
 from typing import Callable
+from uuid import uuid4
 from fastapi import Depends, Request
 
+from app.core.config import settings
 from app.infrastructure.cache import get_cache
 from app.api.exceptions.rate_limit import RateLimitException
 
@@ -39,14 +41,29 @@ def rate_limit(
     """
 
     async def _check_rate_limit(request: Request) -> None:
-        # Identify client by IP (works behind proxies with X-Forwarded-For)
-        client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
-        client_ip = client_ip.split(",")[0].strip()
+        # X-Forwarded-For is only meaningful -- and only safe -- behind a proxy
+        # that overwrites rather than appends to it. Trusting it unconditionally
+        # let a client set a fresh header per request and never accumulate a
+        # count at all; see TRUST_PROXY_HEADERS' docstring in core/config.py.
+        if settings.TRUST_PROXY_HEADERS and "X-Forwarded-For" in request.headers:
+            client_ip = request.headers["X-Forwarded-For"].split(",")[0].strip()
+        else:
+            client_ip = request.client.host if request.client else "unknown"
 
         cache = get_cache()
         redis_key = f"{key_prefix}:{client_ip}"
         now = int(time.time())
         window_start = now - window_seconds
+        # The ZSET member must be unique per request, not per second. Redis
+        # ZADD on an existing member updates its score rather than adding a
+        # second entry, so using the bare timestamp as the member collapsed
+        # every request within the same second into one: N requests sent
+        # inside one second scored ZCARD=1, and the "5 requests per 60
+        # seconds" limit could never see more than `window_seconds` distinct
+        # entries no matter how many requests actually arrived. Appending a
+        # random suffix keeps the score (used for the window trim below)
+        # while making every member distinct.
+        member = f"{now}:{uuid4().hex}"
 
         # Fail open, not closed. Rate limiting is a protection mechanism, not a
         # correctness requirement: if the counter is unreachable we cannot know
@@ -65,8 +82,8 @@ def rate_limit(
             pipe = cache.client.pipeline()
             # Remove counts outside the current window
             pipe.zremrangebyscore(redis_key, "-inf", window_start)
-            # Add current request timestamp
-            pipe.zadd(redis_key, {str(now): now})
+            # Record this request under its own unique member (see above)
+            pipe.zadd(redis_key, {member: now})
             # Count requests in window
             pipe.zcard(redis_key)
             # Reset TTL so key expires after inactivity
