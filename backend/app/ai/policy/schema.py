@@ -100,23 +100,44 @@ class RoutingPolicy:
 
 @dataclass(frozen=True)
 class IntentPolicy:
-    """Margin thresholds for the scored intent resolver.
+    """Margin thresholds for the lexical layer, and probability bands for the
+    fused decision built on top of it.
 
     Attributes:
-        presence_floor: Below this an intent is noise, not a candidate. Without
-            a floor two rules scoring 0.1 and 0.0 would read as a confident
-            decision purely because nothing contested them.
-        decisive_margin: Lead the top intent needs over the runner-up to be
-            acted on. Below it the resolver abstains.
+        presence_floor: Below this an intent is noise, not a candidate in the
+            lexical layer's own scoring. Without a floor two rules scoring 0.1
+            and 0.0 would read as a confident decision purely because nothing
+            contested them. Still meaningful as a property of
+            ``score_intents``'s output even though the top-level decision
+            (see ``tau_high``/``tau_low`` below) no longer gates on it
+            directly.
+        decisive_margin: Reference lead for the lexical layer's own margin;
+            same status as ``presence_floor`` above.
         compound_floor: Score at which both draft and analyze count as
-            independently well-attested, making the message a compound request.
-        confidence_scale: Margin that maps to full confidence.
+            independently well-attested lexically, making the message a
+            compound request. Checked on the raw additive lexical scores
+            *before* fusion runs, deliberately -- a softmax's classes compete
+            by construction, so it cannot represent "both readings are
+            independently strong" the way an additive score can (see
+            ``scripts/fit_router.py``'s module docstring).
+        confidence_scale: Margin that maps to the lexical layer's own
+            confidence in [0, 1] (``IntentScores.confidence``).
+        tau_high: Minimum fused probability for the router to commit to an
+            intent outright. Below it the ladder does not guess.
+        tau_low: Below this fused probability there is no point asking a
+            model either -- the evidence is too thin to be worth a round
+            trip, so the ladder goes straight to a clarifying question.
+            Between ``tau_low`` and ``tau_high`` is the band a fast-tier
+            model call is reserved for (see
+            ``app.ai.workflows.planner.classify_intent_with_model``).
     """
 
     presence_floor: float = 1.4
     decisive_margin: float = 1.2
     compound_floor: float = 2.6
     confidence_scale: float = 4.0
+    tau_high: float = 0.55
+    tau_low: float = 0.35
 
 
 @dataclass(frozen=True)
@@ -322,6 +343,19 @@ class Policy:
             raise ValueError(
                 "intent.compound_floor must be at least intent.presence_floor -- a "
                 "compound reading cannot need less evidence than a single one"
+            )
+
+        for name, value in (
+            ("intent.tau_high", self.intent.tau_high),
+            ("intent.tau_low", self.intent.tau_low),
+        ):
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be a probability in [0, 1]")
+
+        if self.intent.tau_low >= self.intent.tau_high:
+            raise ValueError(
+                "intent.tau_low must stay below intent.tau_high -- otherwise the "
+                "model-call band between them is empty or inverted"
             )
 
         if self.memory.history_raw_cap <= self.memory.history_window:

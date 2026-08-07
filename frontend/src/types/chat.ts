@@ -93,6 +93,12 @@ export type WorkflowEvent =
       intent: string;
       reasoning: string;
       reasoning_level?: ReasoningLevel;
+      // Which mechanism produced this decision (fused/fused_semantic/compound/
+      // clarification_resolved/model/model_failed/clarify) and how confident it
+      // was -- see backend app.ai.workflows.event_schema.PlanningCompletedEvent.
+      source?: string;
+      confidence?: number;
+      alternatives?: [string, number][];
     })
   | (EventBase & { event: "tool_call" } & ToolCallEvent)
   | (EventBase & { event: "guardrail" } & GuardrailEvent)

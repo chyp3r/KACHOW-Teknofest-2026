@@ -283,6 +283,18 @@ AI geliştirmelerinde;
 * Prompt merkezi yönetilmelidir.
 * Tool güvenli olmalıdır.
 * Memory doğru kullanılmalıdır.
+* `app/ai/policy/schema.py`'deki `POLICY_VERSION` her arttığında, ondan
+  türetilmiş **her** artefakt yeniden üretilip commit edilmelidir:
+  `docker compose run --rm --no-deps backend python scripts/build_prototypes.py`
+  (semantik prototip vektörleri) **ve**
+  `docker compose run --rm --no-deps backend python scripts/fit_router.py`
+  (router füzyon ağırlıkları). İkisi de kendi damgasını taşır ve
+  `backend/tests/unit/ai/test_prototype_freshness.py` prototip damgasını
+  kontrol eder -- ama bu kontrol yalnızca prototipler için var; router
+  ağırlıkları uyuşmazlığında yalnızca bir `logger.warning` var, testte
+  yakalanmıyor. Bir POLICY_VERSION bump'ını ikisini de yeniden üretmeden
+  commit etmek, router'ı haftalarca sessizce eski bir kalibrasyonla
+  çalıştırmaya devam eder (tam olarak bu, K1 kök nedeniydi).
 
 Detaylar için:
 

@@ -20,7 +20,7 @@ but unpopulated rather than instrumented with fabricated numbers.
 
 import logging
 
-from prometheus_client import Counter, Histogram, Info
+from prometheus_client import Counter, Gauge, Histogram, Info
 
 from app.ai.policy import POLICY_VERSION
 
@@ -124,6 +124,57 @@ CLAIM_MATCH = Counter(
     ["kind", "method"],
 )
 
+#: Whether the intent ladder's semantic rung (app.ai.semantic.prototype_matcher)
+#: is actually loaded, as opposed to having silently disabled itself because
+#: the on-disk vector file was stale (built under a different embedding model
+#: or a different POLICY_VERSION) or missing outright. Layer 2 disabling
+#: itself is the *correct* behaviour -- deciding from stale vectors is worse
+#: than paying for a model call -- but it must not be silent: every message
+#: the lexical layer abstains on then skips straight to the clarify/guess
+#: fallback instead of getting a semantic second opinion. Set once at graph
+#: construction time (see planning_graph.py's PrototypeMatcher setup), not
+#: per-request, so this is a Gauge rather than a Counter.
+ROUTER_SEMANTIC_AVAILABLE = Gauge(
+    "kachow_router_semantic_available",
+    "Whether the intent ladder's semantic prototype layer loaded successfully (1) or disabled itself (0).",
+)
+
+#: Every router decision, by resolved intent and by the mechanism that
+#: produced it (``fused``/``fused_semantic``/``compound``/
+#: ``clarification_resolved``/``model``/``model_failed``/``clarify`` -- see
+#: ``app.ai.workflows.planner.PlanDecision.source``). This is the number that
+#: was previously invisible outside of a `run_recorder` DB row: how often
+#: production actually asks a clarifying question, and which rung is doing
+#: the deciding.
+ROUTER_DECISIONS = Counter(
+    "kachow_router_decisions_total",
+    "Router decisions, by resolved intent and by the mechanism that produced them.",
+    ["intent", "source"],
+)
+
+#: Distribution of `PlanDecision.confidence`, by source. Comparable across
+#: every source since the fusion rewrite gave them a single calibrated scale
+#: (see `PlanDecision.confidence`'s docstring) -- before that, three
+#: incompatible scales landing in the same histogram would have been
+#: meaningless.
+ROUTER_CONFIDENCE = Histogram(
+    "kachow_router_confidence",
+    "Router decision confidence in [0, 1], by source.",
+    ["source"],
+    buckets=(0.0, 0.2, 0.35, 0.5, 0.55, 0.7, 0.85, 0.95, 1.0),
+)
+
+#: Wall-clock cost of each stage `resolve_plan` can pay for, so the semantic
+#: rung coming back online (see `ROUTER_SEMANTIC_AVAILABLE`) has a number
+#: attached to the latency it adds, and the (currently empty on the gold set,
+#: see `evaluation/harness/intent_suite.py::run_with_model`) model band's
+#: real-traffic cost is visible once it does fire.
+ROUTER_STAGE_DURATION = Histogram(
+    "kachow_router_stage_duration_seconds",
+    "Wall-clock duration of one router decision stage.",
+    ["stage"],
+)
+
 #: The parameter set the deterministic decisions above were produced under.
 #: Without it a shift in DRAFT_SCORE or CLAIM_MATCH is ambiguous between "the
 #: traffic changed" and "we moved a threshold" -- and those call for opposite
@@ -133,6 +184,16 @@ POLICY_INFO = Info(
     "Active version of the deterministic decision layer's parameter set.",
 )
 POLICY_INFO.info({"version": POLICY_VERSION})
+
+
+def router_semantic_available() -> bool:
+    """Read ``ROUTER_SEMANTIC_AVAILABLE`` back, for the ``/system/health?deep`` probe.
+
+    ``prometheus_client`` gauges have no public getter; ``_value`` is the
+    documented escape hatch other instrumentation code uses for exactly this
+    "read my own gauge back" case, rather than tracking the state twice.
+    """
+    return bool(ROUTER_SEMANTIC_AVAILABLE._value.get())
 
 
 def init_ai_metrics() -> None:

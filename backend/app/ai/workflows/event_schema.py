@@ -89,6 +89,17 @@ class PlanningCompletedEvent(BaseModel):
     plan_steps: list[str]
     intent: str
     reasoning: str
+    #: Which mechanism produced this decision (``fused``/``fused_semantic``/
+    #: ``compound``/``clarification_resolved``/``model``/``model_failed``/
+    #: ``clarify`` -- see ``app.ai.workflows.planner.PlanDecision.source``).
+    #: Surfaced so the frontend's decision-flow view can show *how* the
+    #: router decided, not just what it decided.
+    source: str = ""
+    #: The decision's own confidence in [0, 1] -- comparable across every
+    #: source since the fusion rewrite (see ``PlanDecision.confidence``).
+    confidence: float = 1.0
+    #: Runner-up intents with their probabilities, highest first.
+    alternatives: list[tuple[str, float]] = Field(default_factory=list)
     seq: Optional[int] = None
 
 

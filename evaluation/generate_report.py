@@ -67,6 +67,14 @@ def _intent_summary(run: EvalRun) -> dict[str, Any]:
         "expected_calibration_error": round(
             expected_calibration_error(predictions), 4
         ),
+        # Only meaningful for the intent suite: how much of the ladder's
+        # decided traffic each rung actually produced, and how often it
+        # asked the user instead of committing. Neither is derivable from
+        # the accuracy/F1 numbers above -- a ladder can hold accuracy steady
+        # while quietly shifting its cost profile toward asking more
+        # questions, and this is what would show it.
+        "source_distribution": intent_suite.source_distribution(run),
+        "clarify_rate": round(intent_suite.clarify_rate(run), 4),
         "per_label": [asdict(score) for score in per_label_scores(predictions)],
         "confusion_matrix": confusion_matrix(predictions),
         "risk_coverage": [
@@ -105,11 +113,15 @@ def _draft_summary(run: EvalRun) -> dict[str, Any]:
     }
 
 
-def _run_suite(name: str) -> tuple[EvalRun, dict[str, Any]]:
+def _run_suite(name: str, *, with_model: bool = False) -> tuple[EvalRun, dict[str, Any]]:
     """Run one suite and score it.
 
     Args:
         name: ``"intents"`` or ``"drafts"``.
+        with_model: Only meaningful for ``"intents"`` -- wires a real
+            fast-tier model into the model band instead of the default fully
+            offline run (see ``intent_suite.run_with_model``). Ignored for
+            ``"drafts"``, which has no model band to begin with.
 
     Returns:
         The run and its summary.
@@ -118,7 +130,7 @@ def _run_suite(name: str) -> tuple[EvalRun, dict[str, Any]]:
         ValueError: For an unknown suite name.
     """
     if name == "intents":
-        run = intent_suite.run()
+        run = intent_suite.run_with_model() if with_model else intent_suite.run()
         return run, _intent_summary(run)
     if name == "drafts":
         run = draft_suite.run()
@@ -138,7 +150,18 @@ def _format_intent_markdown(summary: dict[str, Any]) -> list[str]:
         f"| Doğruluk (tüm vakalar) | {summary['accuracy_over_all']:.4f} |",
         f"| Doğruluk (karar verilenler) | {summary['accuracy_over_decided']:.4f} |",
         f"| Eskalasyon (abstention) oranı | {summary['abstention_rate']:.4f} |",
+        f"| **Clarify oranı** (kullanıcıya soru) | **{summary['clarify_rate']:.4f}** |",
         f"| Kalibrasyon hatası (ECE) | {summary['expected_calibration_error']:.4f} |",
+        "",
+        "### Kaynak dağılımı",
+        "",
+        "| Kaynak | Vaka |",
+        "|---|---|",
+    ]
+    for source, count in summary["source_distribution"].items():
+        lines.append(f"| `{source}` | {count} |")
+
+    lines += [
         "",
         "### Kategori kırılımı",
         "",
@@ -248,6 +271,7 @@ def _diff_lines(suite: str, current: dict[str, Any], baseline: dict[str, Any]) -
         tracked += [
             ("accuracy_over_all", "Doğruluk (tüm vakalar)", True),
             ("abstention_rate", "Eskalasyon oranı", False),
+            ("clarify_rate", "Clarify oranı", False),
             ("expected_calibration_error", "Kalibrasyon hatası", False),
         ]
     else:
@@ -347,6 +371,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="A previous report's .json to compare the headline metrics against.",
     )
     parser.add_argument("--out", type=Path, default=REPORT_DIR)
+    parser.add_argument(
+        "--with-model",
+        action="store_true",
+        help=(
+            "Intents suite only: wire a real fast-tier model into the "
+            "contested band instead of running fully offline. Makes live "
+            "Ollama calls -- see `make eval-llm`."
+        ),
+    )
     args = parser.parse_args(argv)
 
     selected = SUITES if args.suite == "all" else (args.suite,)
@@ -354,7 +387,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     runs: dict[str, EvalRun] = {}
     summaries: dict[str, dict[str, Any]] = {}
     for suite in selected:
-        run, summary = _run_suite(suite)
+        run, summary = _run_suite(suite, with_model=args.with_model)
         runs[suite] = run
         summaries[suite] = summary
 

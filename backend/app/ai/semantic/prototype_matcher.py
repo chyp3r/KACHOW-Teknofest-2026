@@ -164,19 +164,27 @@ class PrototypeMatcher:
                 "Prototype matcher loaded families: %s", sorted(self._families)
             )
 
-    async def match(self, text: str, family: str) -> Optional[SemanticMatch]:
-        """Score a message against one family's prototypes.
+    async def label_similarities(self, text: str, family: str) -> Optional[dict[str, float]]:
+        """Score a message against every label of one family, not just the winner.
 
-        Never raises. An embeddings outage degrades this layer to a no-op and
-        the caller escalates exactly as it did before the layer existed.
+        The single ``match()`` result below is a *decision* -- it collapses
+        every label to the winner plus a decisive/not-decisive verdict, which
+        is exactly right for the old "semantic rung decides alone or stays
+        silent" ladder. The fusion layer (``app.ai.workflows.router_fusion``)
+        needs the full per-label similarity as continuous evidence instead --
+        "how close is this to *each* label" is a richer feature than "which
+        label won" the same way the lexical layer's per-intent scores are.
+
+        Never raises. An embeddings outage degrades this to ``None`` and the
+        caller treats semantic evidence as absent, exactly as ``match()`` did.
 
         Args:
             text: The user's message.
             family: The family to score against.
 
         Returns:
-            The best match, or None when the family is unavailable, the text is
-            empty, or the embedding call failed.
+            Label -> best cosine similarity, or None when the family is
+            unavailable, the text is empty, or the embedding call failed.
         """
         entries = self._families.get(family)
         if not entries or not (text or "").strip():
@@ -197,6 +205,23 @@ class PrototypeMatcher:
             if score > best_per_label.get(label, -1.0):
                 best_per_label[label] = score
 
+        return best_per_label or None
+
+    async def match(self, text: str, family: str) -> Optional[SemanticMatch]:
+        """Score a message against one family's prototypes.
+
+        Never raises. An embeddings outage degrades this layer to a no-op and
+        the caller escalates exactly as it did before the layer existed.
+
+        Args:
+            text: The user's message.
+            family: The family to score against.
+
+        Returns:
+            The best match, or None when the family is unavailable, the text is
+            empty, or the embedding call failed.
+        """
+        best_per_label = await self.label_similarities(text, family)
         if not best_per_label:
             return None
 
