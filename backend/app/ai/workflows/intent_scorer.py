@@ -114,6 +114,28 @@ def normalize(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", ascii_text).strip()
 
 
+def _compile_surface(surface: str) -> re.Pattern:
+    """Compile one rule surface with a left word boundary, no right boundary.
+
+    A left boundary alone fixes the concrete false positive ("uzat" inside
+    "uzatma") without pretending to Turkish morphology: the language is
+    agglutinative, so a legitimate hit routinely continues past the bare
+    surface ("kısaltır mısın" for "kisalt", "revize edelim" for "revize et"
+    only if the rule surface itself ends where the suffix begins). The right
+    side stays open on purpose.
+    """
+    return re.compile(r"(?<![a-z0-9])" + re.escape(surface))
+
+
+#: One compiled pattern per surface, keyed by rule id and built once at
+#: import time rather than per call -- `ALL_RULES` is a fixed module-level
+#: tuple, so there is nothing to invalidate.
+_SURFACE_PATTERNS: dict[str, tuple[re.Pattern, ...]] = {
+    rule.id: tuple(_compile_surface(surface) for surface in rule.surfaces)
+    for rule in ALL_RULES
+}
+
+
 def _fires(
     rule: EvidenceRule, normalized: str, has_document: bool, has_active_draft: bool
 ) -> bool:
@@ -125,11 +147,16 @@ def _fires(
         and rule.requires_active_draft is not has_active_draft
     ):
         return False
-    return any(surface in normalized for surface in rule.surfaces)
+    return any(pattern.search(normalized) for pattern in _SURFACE_PATTERNS[rule.id])
 
 
-def _looks_like_question(raw: str, normalized: str) -> bool:
-    """Heuristically decide whether the message asks something."""
+def looks_like_question(raw: str, normalized: str) -> bool:
+    """Heuristically decide whether the message asks something.
+
+    Public (not `_`-prefixed): reused by `router_features.extract_features`
+    as one of the fusion layer's structural signals, not just internally by
+    `score_intents`.
+    """
     if "?" in raw:
         return True
     padded = f" {normalized} "
@@ -221,7 +248,7 @@ def score_intents(
     # softener and memory-recall counters that used to run here are gone, not
     # renamed, because their sole purpose was resolving a tension this merge
     # eliminated.
-    if has_document and _looks_like_question(message, normalized):
+    if has_document and looks_like_question(message, normalized):
         result.scores["assist"] = (
             result.scores.get("assist", 0.0) + WEIGHT_DOMAIN
         )

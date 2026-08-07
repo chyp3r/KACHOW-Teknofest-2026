@@ -1,12 +1,13 @@
-"""Measures the full intent ladder against the intent gold set.
+"""Measures the full intent decision against the intent gold set.
 
 Binds to :func:`app.ai.workflows.planner.resolve_plan` with ``llm_client=None``
--- the lexical *and* semantic rungs, but not the fast-tier model call. That
-keeps ``make eval`` fully offline and reproducible (no model call, no
-non-determinism) while finally measuring what production actually runs:
-previously this suite called ``resolve_plan_deterministic`` directly, which
-meant the semantic rung, the clarify/guessed_cheap fallbacks and every
-``requires_active_draft`` rule (all of ``revise``) were invisible to it.
+-- lexical evidence, the compound check and the semantic rung all run for
+real; only the fast-tier model call is skipped. That keeps ``make eval`` fully
+offline and reproducible (no model call, no non-determinism) while measuring
+what production actually runs: an earlier version of this suite called the
+lexical-only decision function directly, which meant the semantic rung, the
+clarify fallback and every ``requires_active_draft`` rule (all of ``revise``)
+were invisible to it.
 
 The semantic rung needs embeddings at request time; ``evaluation.harness.
 cached_embeddings.CachedEmbeddingsClient`` supplies precomputed vectors
@@ -83,15 +84,13 @@ def _build_matcher() -> Optional[PrototypeMatcher]:
 
 _MATCHER = _build_matcher()
 
-#: Sources that mean "the lexical and semantic rungs both had nothing" --
-#: the same event ``resolve_plan_deterministic`` used to signal by returning
-#: None, before ``resolve_plan`` replaced that with an explicit next step
-#: (ask the model, or -- with ``llm_client=None`` here -- fall back by
-#: context). ``clarify`` asks the user; ``context_default``/``model``/
-#: ``model_failed`` hand off silently. All four are "escalated beyond what
-#: this suite measures" for the ``expected_abstain`` gold cases, which is why
-#: a bare ``observed_intent == "clarify"`` check would wrongly fail every
-#: genuinely-ambiguous case that landed on ``context_default`` instead.
+#: Sources that mean "fusion did not commit on its own" -- with
+#: ``llm_client=None`` here, ``resolve_plan`` always lands on ``clarify`` for
+#: these cases, but the set also names the sources a *model*-backed call would
+#: produce instead (``model``/``model_failed``, once Faz 4 wires those in) and
+#: the retired ``context_default`` label from before fusion existed, so this
+#: check keeps working unchanged as that lands. All are "escalated beyond
+#: what this suite measures" for the ``expected_abstain`` gold cases.
 _ESCALATION_SOURCES = frozenset({"clarify", "context_default", "model", "model_failed"})
 
 
@@ -200,13 +199,13 @@ def to_predictions(run_result: EvalRun) -> list[Prediction]:
 
 
 def source_distribution(run_result: EvalRun) -> dict[str, int]:
-    """Count how many decisions each rung of the ladder produced.
+    """Count how many decisions each mechanism produced.
 
-    The number the deterministic-only harness could never show: how often the
-    ladder actually reaches the clarify fallback or the guessed-cheap branch,
-    broken down by the exact mechanism (``scored``/``compound``/``continuation``/
-    ``semantic``/``clarify``/``guessed_cheap``/``context_default`` -- ``model``
-    never appears here since ``llm_client=None``).
+    The number the deterministic-only harness could never show: how often
+    the ladder actually reaches the clarify fallback, broken down by the
+    exact mechanism (``fused``/``fused_semantic``/``compound``/
+    ``clarification_resolved``/``clarify`` -- ``model``/``model_failed``
+    never appear here since ``llm_client=None``).
 
     Args:
         run_result: A completed intent run.

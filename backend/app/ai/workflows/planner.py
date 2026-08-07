@@ -1,33 +1,46 @@
 """Intent resolution for the master workflow.
 
-The choice between the system's four flows used to be a full structured LLM call
-against an orchestrator prompt, which cost a round trip plus a Pydantic retry
-loop on the critical path. That was replaced by an ordered keyword cascade:
-check draft phrases, then analyze phrases, then greetings, and return on the
-first hit.
+The choice between the system's flows used to be a full structured LLM call
+against an orchestrator prompt, then an ordered keyword cascade, then a
+three-rung ladder (lexical score -> semantic prototype -> fast-tier model)
+where whichever rung answered first decided alone and the others were never
+consulted. The ladder fixed the cascade's "table order is the decision"
+failure, but introduced its own: the lexical layer's margin test gated
+*everything*, including messages an unambiguous imperative should have
+settled outright. "Cevap yaz." scores `draft=3.0` (an explicit request) against
+`assist=2.0` (the generic "short message with no document" structural hint) --
+a margin of 1.0, just under the old ladder's 1.2 threshold -- and fell through
+to a clarifying question a user should never have been asked. The margin test
+cannot tell an explicit imperative apart from a weak structural hint once both
+are already folded into the same per-intent sum; reordering the rungs does not
+fix that, the same way reordering the cascade never fixed *its* failure.
 
-The cascade removed the model call but made the *order* the decision, and that
-is not fixable by reordering. Measured on ``evaluation/datasets/intents.jsonl``
-it scored 0.00 on two whole categories:
+This module now keeps every signal source distinct (see
+:mod:`app.ai.workflows.router_features`) and combines them through a
+calibrated linear model (:mod:`app.ai.workflows.router_fusion`, coefficients
+in :mod:`app.ai.policy.router_weights`, fit offline by
+``scripts/fit_router.py``) instead of letting one rung's own internal test
+gate the others. The result is one probability per intent, and the decision
+policy is a simple band on the winner's probability:
 
-* ``inversion`` -- with draft checked first, "Resmi yazı ne demek?" matched
-  "resmi yazi" and started a three-step drafting pipeline. Reordering only moves
-  the failure: with analyze first, "analiz sonrası taslak hazırla" resolves to
-  analysis.
-* ``precedence`` -- the greeting branch was gated on ``document_id is None``, so
-  "Merhaba" with a document attached fell past every branch and escalated to the
-  model, and "İyi akşamlar, yarın devam ederiz" after a draft turn matched the
-  continuation rule on "devam" and produced a draft.
+* At or above ``tau_high`` -- committed outright (``source="fused"``).
+* Between ``tau_low`` and ``tau_high`` -- genuinely contested; a fast-tier
+  model call breaks the tie when one is available (``source="model"``).
+* Below ``tau_low`` -- too little signal to be worth a model call either;
+  asks the user (``source="clarify"``).
 
-This module now scores a message against a declarative evidence table
-(:mod:`app.ai.workflows.intent_rules`) and decides on the **margin** between the
-top two intents rather than on which rule fired first. Evidence accumulates
-instead of short-circuiting, so a contested message stays visibly contested --
-which is what lets it resolve to a compound plan or escalate, instead of being
-resolved by table order. Still no model call, still sub-millisecond.
+Two things do not go through fusion at all, on purpose:
 
-Only genuinely balanced or evidence-free messages fall through to a model, and
-that call remains a single label from the fast tier.
+* A **compound** request (both ``draft`` and ``analyze`` independently
+  well-attested) is checked on the raw additive lexical scores *before*
+  fusion runs. A softmax's classes compete for probability mass by
+  construction, so it cannot represent "both readings are independently
+  strong" -- see ``scripts/fit_router.py``'s module docstring for why
+  training even excludes these cases rather than trying to teach it to.
+* An **open clarifying question's answer** is resolved against the pending
+  question's own options, before the message is scored at all -- an
+  affirmative like "evet, hazırla" would otherwise be re-scored from
+  (almost) nothing.
 """
 
 import logging
@@ -36,16 +49,13 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Optional
 from pydantic import BaseModel, Field
 
 from app.ai.llms.base import BaseLLMClient
+from app.ai.policy import get_policy
+from app.ai.policy.router_weights import ROUTER_WEIGHTS
 from app.ai.session.focus import SessionFocus
 from app.ai.workflows.intent_rules import CONTINUATION_SURFACES, Intent
-from app.ai.workflows.intent_scorer import (
-    COMPOUND_FLOOR,
-    DECISIVE_MARGIN,
-    PRESENCE_FLOOR,
-    IntentScores,
-    normalize,
-    score_intents,
-)
+from app.ai.workflows.intent_scorer import COMPOUND_FLOOR, IntentScores, normalize, score_intents
+from app.ai.workflows.router_features import RouterSignals, extract_features
+from app.ai.workflows.router_fusion import predict_proba
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle avoidance only
     from app.ai.semantic.prototype_matcher import PrototypeMatcher
@@ -60,7 +70,6 @@ __all__ = [
     "classify_intent_with_model",
     "normalize",
     "resolve_plan",
-    "resolve_plan_deterministic",
 ]
 
 #: Step sequences per intent.
@@ -71,11 +80,6 @@ __all__ = [
 #: the same retrieval behind an extra query-rewrite LLM call and threw the first
 #: result away.
 #:
-#: ``chat`` and ``document_qa`` used to be two separate plans here. They are
-#: now one: ``assist`` is a single tool-using agent that answers conversationally
-#: and reaches for document retrieval itself when the question needs it, rather
-#: than the router having to decide in advance whether an answer needs the
-#: document. See ``app.ai.workflows.planning_graph``'s ``_run_assist``.
 #: ``revise`` is deliberately its own single-step plan, not a variant of
 #: ``draft``: it never re-runs classification and never re-retrieves
 #: legislation, only the one LLM call that rewrites the targeted part of the
@@ -109,12 +113,6 @@ STEP_ORDER: tuple[str, ...] = (
     "assist",
 )
 
-#: Intents expensive enough that a wrong guess costs real LLM calls and
-#: wall-clock time (a full draft run, or a targeted rewrite) rather than a
-#: single conversational reply -- see ``resolve_plan``'s clarify-vs-guess
-#: decision.
-_EXPENSIVE_INTENTS = frozenset({"draft", "revise"})
-
 #: Turkish description of each intent, used to phrase a clarifying question
 #: in terms a user recognizes rather than an internal name like "revise".
 _CLARIFY_LABELS: dict[str, str] = {
@@ -146,17 +144,23 @@ class PlanDecision(NamedTuple):
         steps: The sub-workflows to run, in order.
         intent: The resolved intent.
         reasoning: Turkish rationale shown to the user.
-        source: Which mechanism decided. ``scored`` for a decisive margin,
-            ``compound`` for a merged plan, ``continuation``/``empty`` for the
-            two special cases, ``model``/``context_default`` when the
-            deterministic layer abstained.
-        confidence: The decision's own confidence in [0, 1], derived from the
-            margin. Lets a caller threshold on it rather than treating every
-            deterministic answer as equally certain.
-        evidence: Ids of the rules that fired. Recorded so a production
-            decision can be explained after the fact -- the previous resolver
-            reported only which branch it took, never which phrase matched.
-        alternatives: Runner-up intents with their scores, highest first.
+        source: Which mechanism decided. ``compound`` for a merged plan (see
+            ``COMPOUND_PAIR``), ``clarification_resolved`` when a pending
+            question's answer settled it, ``fused`` when the calibrated
+            fusion probability cleared ``tau_high`` on its own,
+            ``model``/``model_failed`` when it needed the fast-tier model to
+            break a tie, ``clarify`` when even that wasn't warranted or
+            available.
+        confidence: The decision's own confidence in [0, 1]. For ``fused`` and
+            ``clarify`` this is the fusion layer's own calibrated probability
+            for the winning/leading intent -- directly comparable across
+            every source now, unlike the three incompatible scales
+            (lexical margin, raw cosine similarity, a hardcoded 1.0) the
+            pre-fusion ladder reported under the same field.
+        evidence: Ids of the lexical rules that fired, when any did. Recorded
+            so a production decision can be explained after the fact.
+        alternatives: Runner-up intents with their fused probabilities,
+            highest first.
         clarification: Set only when ``intent == "clarify"``: the question
             and its options (``[{"intent", "label"}, ...]``), written into
             ``SessionFocus.pending_clarification`` so the next turn's reply
@@ -175,13 +179,13 @@ class PlanDecision(NamedTuple):
 
 
 class IntentOutput(BaseModel):
-    """Single-label intent classification, used only for ambiguous messages."""
+    """Single-label intent classification, used only for genuinely contested messages."""
 
     intent: Literal["draft", "analyze", "assist"] = Field(
         description=(
             "Kullanıcının niyeti. draft: resmi yazı/taslak hazırlanması isteniyor. "
             "analyze: evrakın analiz edilmesi isteniyor. "
-            "assist: genel sohbet veya yüklü bir belge hakkında soru soruluyor."
+            "assist: yukarıdakilerin hiçbiri; genel sohbet veya yüklü bir belge hakkında soru."
         )
     )
 
@@ -199,139 +203,74 @@ def _merge_steps(intents: frozenset[str]) -> list[str]:
     return [step for step in STEP_ORDER if step in merged]
 
 
-def _decision(
-    intent: str, scores: IntentScores, source: str, reasoning_suffix: str = ""
+def _try_compound(lexical: IntentScores) -> Optional[PlanDecision]:
+    """Detect a compound draft+analyze request from the raw lexical scores.
+
+    Checked before fusion runs at all -- see the module docstring for why a
+    softmax cannot represent this case the way an additive score can.
+
+    Args:
+        lexical: The message's lexical evidence, already scored.
+
+    Returns:
+        A merged ``draft``+``analyze`` plan, or None when the message isn't
+        independently well-attested for both.
+    """
+    present = {intent: score for intent, score in lexical.ranked if score >= COMPOUND_FLOOR}
+    if not COMPOUND_PAIR.issubset(present):
+        return None
+
+    return PlanDecision(
+        steps=_merge_steps(COMPOUND_PAIR),
+        intent="draft",
+        reasoning=(
+            REASONING_BY_INTENT["draft"] + " (hem inceleme hem taslak istendiği tespit edildi)"
+        ),
+        source="compound",
+        confidence=round(lexical.confidence, 3),
+        evidence=tuple(lexical.evidence),
+        alternatives=tuple(lexical.ranked[1:3]),
+    )
+
+
+def _fused_decision(
+    intent: str,
+    probs: dict[str, float],
+    ranked: list[tuple[str, float]],
+    lexical: IntentScores,
+    source: str,
 ) -> PlanDecision:
-    """Build a decision for a single resolved intent."""
+    """Build a decision for an intent the fusion probability committed to."""
     return PlanDecision(
         steps=list(PLAN_BY_INTENT[intent]),
         intent=intent,  # type: ignore[arg-type]
-        reasoning=REASONING_BY_INTENT[intent] + reasoning_suffix,
+        reasoning=REASONING_BY_INTENT[intent],
         source=source,
-        confidence=round(scores.confidence, 3),
-        evidence=tuple(scores.evidence),
-        alternatives=tuple(scores.ranked[1:3]),
+        confidence=round(probs[intent], 3),
+        evidence=tuple(lexical.evidence),
+        alternatives=tuple(ranked[1:3]),
     )
 
 
-def resolve_plan_deterministic(
-    message: str,
-    document_id: Optional[str],
-    previous_intent: Optional[str] = None,
-    has_active_draft: bool = False,
-) -> Optional[PlanDecision]:
-    """Resolve the plan without a model, when the evidence allows it.
+def _build_clarify_decision(ranked: list[tuple[str, float]]) -> PlanDecision:
+    """Build a clarifying question from the fused probabilities.
+
+    Called when the fused distribution is too flat to commit to (below
+    ``tau_low``) or was contested and no model was available to break the
+    tie (see ``resolve_plan``). Unlike the pre-fusion ladder's version of
+    this function, there is no "only one candidate exists" special case to
+    handle: softmax always produces a full distribution over all four
+    intents, so a runner-up is always available to offer as the question's
+    second option.
 
     Args:
-        message: The user's message.
-        document_id: Storage path of an attached document, when present.
-        previous_intent: The intent resolved for this thread's previous turn,
-            when known. Lets a short affirmative ("evet, hazırla") continue a
-            draft/analyze/revise offer instead of being read as conversational
-            filler.
-        has_active_draft: Whether ``SessionFocus.active_draft`` is set --
-            gates ``revise``'s rules (see ``score_intents``).
-
-    Returns:
-        A decision, or None when the evidence is too weak or too evenly split
-        to commit -- which is the signal to escalate, not a failure.
-    """
-    scores = score_intents(message, document_id, previous_intent, has_active_draft)
-    return _decide_from_scores(scores)
-
-
-def _decide_from_scores(scores: IntentScores) -> Optional[PlanDecision]:
-    """The deterministic decision, given scores already computed once.
-
-    Split out of :func:`resolve_plan_deterministic` so :func:`resolve_plan`
-    can reuse the same ``IntentScores`` for both the deterministic attempt and
-    the contested-candidate fallback below, instead of scoring the message
-    twice for one turn.
-    """
-    ranked = scores.ranked
-
-    if not ranked:
-        logger.info("Intent abstained: no rule fired.")
-        return None
-
-    top_intent, top_score = ranked[0]
-
-    # Nothing scored highly enough to be a candidate at all. Without this floor
-    # a lone weak hint would read as a confident decision purely because
-    # nothing contested it.
-    if top_score < PRESENCE_FLOOR:
-        logger.info("Intent abstained: top score %.2f below presence floor.", top_score)
-        return None
-
-    # Compound is checked before the margin, not after it. "Uygunluk denetimi
-    # yap, sonra cevabı kaleme al" carries explicit evidence for both readings
-    # but scores them unevenly, so a margin test would resolve it to analysis
-    # alone and silently drop the drafting half of the request. When both
-    # intents are independently well-attested, the message asked for both --
-    # how lopsided the scores happen to be is not the question.
-    present = {
-        intent: score for intent, score in ranked if score >= COMPOUND_FLOOR
-    }
-    if COMPOUND_PAIR.issubset(present):
-        return PlanDecision(
-            steps=_merge_steps(COMPOUND_PAIR),
-            intent="draft",
-            reasoning=(
-                REASONING_BY_INTENT["draft"]
-                + " (hem inceleme hem taslak istendiği tespit edildi)"
-            ),
-            source="compound",
-            confidence=round(scores.confidence, 3),
-            evidence=tuple(scores.evidence),
-            alternatives=tuple(scores.ranked[1:3]),
-        )
-
-    if scores.margin >= DECISIVE_MARGIN:
-        if "assist.empty_message" in scores.evidence:
-            return _decision(top_intent, scores, "empty")
-        if f"{top_intent}.continuation" in scores.evidence:
-            return _decision(
-                top_intent, scores, "continuation", " (önceki isteğin devamı)"
-            )
-        return _decision(top_intent, scores, "scored")
-
-    # Two readings, evenly matched, and not the one pair that composes. This is
-    # the honest escalation case: the evidence really is balanced, so guessing
-    # would be worse than paying for a single fast-tier label.
-    runner_up_intent, runner_up_score = ranked[1]
-    logger.info(
-        "Intent abstained: %s (%.2f) vs %s (%.2f), margin %.2f.",
-        top_intent,
-        top_score,
-        runner_up_intent,
-        runner_up_score,
-        scores.margin,
-    )
-    return None
-
-
-def _build_clarify_decision(scores: IntentScores) -> PlanDecision:
-    """Build a deterministic, LLM-free clarifying question from contested scores.
-
-    Called when neither the lexical nor the semantic rung was decisive and
-    the leading (non-decisive) candidate is expensive enough that guessing
-    wrong is worse than asking -- see ``resolve_plan``.
-
-    Args:
-        scores: The scoring outcome that was too close to call.
+        ranked: Intents sorted by fused probability, highest first.
 
     Returns:
         A ``clarify`` decision carrying the question and its options in
         ``clarification``.
     """
-    top_two = list(scores.ranked[:2])
-    if len(top_two) == 1:
-        # Only one candidate ever cleared the presence floor, but nothing
-        # contested it decisively enough either -- pair it with `assist` so
-        # the question still offers a real alternative, not a confirmation
-        # of a foregone conclusion.
-        top_two.append(("assist", 0.0))
-
+    top_two = ranked[:2]
     options = [
         {"intent": intent, "label": _CLARIFY_LABELS.get(intent, intent)}
         for intent, _ in top_two
@@ -346,8 +285,8 @@ def _build_clarify_decision(scores: IntentScores) -> PlanDecision:
         intent="clarify",
         reasoning=REASONING_BY_INTENT["clarify"],
         source="clarify",
-        confidence=round(scores.confidence, 3),
-        evidence=tuple(scores.evidence),
+        confidence=round(top_two[0][1], 3),
+        evidence=(),
         alternatives=tuple(top_two),
         clarification={"question": question, "options": options},
     )
@@ -358,9 +297,9 @@ def _try_resolve_pending_clarification(
 ) -> Optional[PlanDecision]:
     """Resolve a reply against an open clarifying question, if it answers it.
 
-    Checked before the normal ladder runs at all: an explicit answer to
+    Checked before the fusion decision runs at all: an explicit answer to
     "taslak mı, revizyon mu?" must not be re-scored from nothing, where a
-    short reply could easily fall below the presence floor on its own.
+    short reply could easily read as low-signal on its own.
 
     Args:
         message: The user's new message.
@@ -370,7 +309,7 @@ def _try_resolve_pending_clarification(
     Returns:
         A decision for whichever option the reply selected, or ``None`` when
         the message doesn't clearly answer the question -- the caller then
-        falls through to the normal ladder, and the stale clarification is
+        falls through to the normal decision, and the stale clarification is
         superseded rather than forced onto an unrelated new message.
     """
     if not pending:
@@ -383,28 +322,38 @@ def _try_resolve_pending_clarification(
     words = normalized.split()
 
     selected: Optional[str] = None
+    via_affirmative = False
     if len(words) <= 4 and any(
         f" {surface} " in f" {normalized} " for surface in _AFFIRMATIVE_SURFACES
     ):
         selected = options[0]["intent"]
+        via_affirmative = True
     else:
+        # Matched against the Turkish label a user could plausibly echo back
+        # ("Bir taslak hazırlama isteği."), not the internal English intent
+        # name -- that never appears in a Turkish reply, so checking for it
+        # only ever produced a false sense of an extra fallback.
         for option in options:
             label = option.get("label") or ""
-            candidate_intent = option.get("intent") or ""
-            if (label and normalize(label) in normalized) or (
-                candidate_intent and normalize(candidate_intent) in normalized
-            ):
-                selected = candidate_intent
+            if label and normalize(label) in normalized:
+                selected = option.get("intent")
                 break
 
     if not selected or selected not in PLAN_BY_INTENT:
         return None
 
+    if via_affirmative:
+        chosen_label = next(
+            (option["label"] for option in options if option["intent"] == selected), selected
+        )
+        suffix = f" ({chosen_label} olarak ilerliyorum)"
+    else:
+        suffix = " (açıklayıcı soruya verilen yanıtla çözüldü)"
+
     return PlanDecision(
         steps=list(PLAN_BY_INTENT[selected]),
         intent=selected,  # type: ignore[arg-type]
-        reasoning=REASONING_BY_INTENT[selected]
-        + " (açıklayıcı soruya verilen yanıtla çözüldü)",
+        reasoning=REASONING_BY_INTENT[selected] + suffix,
         source="clarification_resolved",
         confidence=1.0,
         evidence=("clarification.resolved",),
@@ -414,7 +363,7 @@ def _try_resolve_pending_clarification(
 async def classify_intent_with_model(
     llm_client: BaseLLMClient, message: str, document_id: Optional[str]
 ) -> Intent:
-    """Fall back to a one-label model call for genuinely ambiguous messages.
+    """Break a fusion tie with a one-label model call.
 
     Args:
         llm_client: Fast-tier LLM client.
@@ -475,26 +424,21 @@ async def resolve_plan(
 ) -> PlanDecision:
     """Resolve the execution plan for a user message.
 
-    Cheapest first. The lexical layer answers almost everything at no cost;
-    the semantic layer separates a real paraphrase from a genuinely unclear
-    message at roughly a twentieth of what a model call costs. What's left
-    once both abstain no longer escalates to the model by default: a cheap
-    candidate (``assist``) is guessed, an expensive one (``draft``/``revise``)
-    is asked about instead of risked, and the model rung is now reserved for
-    the case neither rung produced any signal for at all.
-
     Args:
         message: The user's message.
         document_id: Storage path of an attached document, when present.
-        llm_client: Fast-tier client for the genuinely signal-free case. When
-            omitted, that case resolves by context instead of by model.
+        llm_client: Fast-tier client for the band between ``tau_low`` and
+            ``tau_high``. When omitted, that band falls to a clarifying
+            question instead of a model call.
         previous_intent: The intent resolved for this thread's previous turn,
-            when known -- enables the short-affirmative continuation rule.
-        matcher: Prototype matcher for the semantic rung. Omitted or unavailable
-            means the ladder simply skips it, exactly as before it existed.
+            when known -- enables the short-affirmative continuation rule and
+            feeds the fusion layer's ``prev_*`` features.
+        matcher: Prototype matcher supplying per-label semantic similarity.
+            Omitted or unavailable means fusion simply runs without those
+            features, exactly as before the semantic layer existed.
         focus: The session's persistent focus. Supplies whether a draft is
             active (gates ``revise``) and any open clarifying question
-            (checked first, before the ladder runs at all).
+            (checked first, before fusion runs at all).
 
     Returns:
         The execution plan and the rationale shown to the user.
@@ -510,63 +454,67 @@ async def resolve_plan(
             return resolved
 
     has_active_draft = bool(focus and focus.active_draft is not None)
+    lexical = score_intents(message, document_id, previous_intent, has_active_draft)
 
-    scores = score_intents(message, document_id, previous_intent, has_active_draft)
-    decided = _decide_from_scores(scores)
-    if decided is not None:
-        logger.info(
-            "Plan resolved deterministically (%s): %s", decided.source, decided.steps
+    compound = _try_compound(lexical)
+    if compound is not None:
+        logger.info("Plan resolved as compound: %s", compound.steps)
+        return compound
+
+    policy = get_policy().intent
+
+    def _fuse(semantic: Optional[dict[str, float]]):
+        signals = RouterSignals(
+            lexical=lexical,
+            semantic=semantic,
+            has_document=document_id is not None,
+            has_active_draft=has_active_draft,
+            previous_intent=previous_intent,
         )
-        return decided
+        features = extract_features(message, signals)
+        probs = predict_proba(features, ROUTER_WEIGHTS)
+        ranked = sorted(probs.items(), key=lambda item: (-item[1], item[0]))
+        return probs, ranked
 
-    if matcher is not None:
-        match = await matcher.match(message, "intent")
-        if match is not None and match.decisive and match.label in PLAN_BY_INTENT:
-            logger.info(
-                "Plan resolved semantically: intent=%s similarity=%.3f gap=%.3f",
-                match.label,
-                match.similarity,
-                match.runner_up_gap,
-            )
-            return PlanDecision(
-                steps=list(PLAN_BY_INTENT[match.label]),
-                intent=match.label,  # type: ignore[arg-type]
-                reasoning=REASONING_BY_INTENT[match.label],
-                source="semantic",
-                confidence=round(match.similarity, 3),
-                evidence=(f"semantic.{match.label}",),
-            )
-        if match is not None:
-            logger.info(
-                "Semantic match not decisive (%s, similarity=%.3f, gap=%.3f); "
-                "checking whether it's worth a clarifying question before the model.",
-                match.label,
-                match.similarity,
-                match.runner_up_gap,
-            )
+    # Lexical-only fusion first, exactly like the old ladder's cheapest rung:
+    # a message the lexical evidence alone already commits to must not pay
+    # for an embedding call it doesn't need.
+    probs, ranked = _fuse(None)
+    top_intent, top_probability = ranked[0]
+    source = "fused"
 
-    # Neither rung was decisive. Reuses the scores computed above rather than
-    # asking `score_intents` to redo the same arithmetic for the same message.
-    candidate = scores.ranked[0][0] if scores.ranked else None
+    if top_probability < policy.tau_high and matcher is not None:
+        semantic = await matcher.label_similarities(message, "intent")
+        if semantic:
+            probs, ranked = _fuse(semantic)
+            top_intent, top_probability = ranked[0]
+            source = "fused_semantic"
 
-    if candidate is None:
-        if llm_client is None:
-            intent: Intent = "assist"
-            source = "context_default"
-        else:
-            intent = await classify_intent_with_model(llm_client, message, document_id)
-            source = "model"
-        logger.info("Plan resolved via %s: intent=%s", source, intent)
+    if top_probability >= policy.tau_high:
+        logger.info(
+            "Plan resolved via %s: intent=%s p=%.3f", source, top_intent, top_probability
+        )
+        return _fused_decision(top_intent, probs, ranked, lexical, source)
+
+    if top_probability >= policy.tau_low and llm_client is not None:
+        intent = await classify_intent_with_model(llm_client, message, document_id)
+        logger.info(
+            "Fused probability %.3f contested; model broke the tie: intent=%s",
+            top_probability,
+            intent,
+        )
         return PlanDecision(
-            list(PLAN_BY_INTENT[intent]), intent, REASONING_BY_INTENT[intent], source
+            steps=list(PLAN_BY_INTENT[intent]),
+            intent=intent,
+            reasoning=REASONING_BY_INTENT[intent],
+            source="model",
+            confidence=round(top_probability, 3),
+            evidence=tuple(lexical.evidence),
         )
 
-    if candidate in _EXPENSIVE_INTENTS:
-        logger.info(
-            "Contested candidate '%s' is expensive to guess wrong; asking instead.",
-            candidate,
-        )
-        return _build_clarify_decision(scores)
-
-    logger.info("Contested candidate '%s' is cheap; guessing rather than asking.", candidate)
-    return _decision(candidate, scores, "guessed_cheap")
+    logger.info(
+        "Fused probability %.3f (%s) not decisive enough to act on; asking instead.",
+        top_probability,
+        top_intent,
+    )
+    return _build_clarify_decision(ranked)
