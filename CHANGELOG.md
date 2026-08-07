@@ -2,6 +2,14 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [1.47.0] - 2026-08-07
+### Değiştirildi
+- **`mevzuat-mcp` artık backend imajına gömülü, hiçbir elle kurulum gerektirmiyor**: 1.45.0'ın belgelediği "izole sanal ortamı elle kur" adımı artık `deploy/docker/backend.Dockerfile`'da derleme zamanında otomatik yapılıyor -- `git`, `/tmp/mcpvenv`, `pip install git+...mevzuat-mcp` ve `playwright install --with-deps chromium` hepsi imaja gömülü. `compose.yml`'in backend servisi artık `MEVZUAT_MCP_COMMAND=/tmp/mcpvenv/bin/mevzuat-mcp`'ı zaten ayarlıyor -- önceki varsayılan (`mevzuat-mcp`, PATH'te bulunamayan çıplak bir komut adı) her canlı sorguyu aynı şekilde başarısız kılıyordu.
+  - **Kendi sanal ortamına kuruldu, `requirements.txt`'ye eklenmedi**: `mevzuat-mcp`'nin bağımlılık ağacı `fastapi`/`pydantic`/`httpx`/`mcp`'yi bu projenin kendi pinlerine yakın ama aynı olmayan sürümlere çözümlüyor (`pydantic-settings` burada 2.15.0'a çözümlenirken bu projenin pini 2.14.2) -- paylaşılan tek bir ortamda birinin pinini sessizce kırmaya yetecek bir fark.
+  - **Gerçek bir taze derlemeyle uçtan uca doğrulandı**: `docker compose build backend` sıfırdan, ardından `docker compose up -d backend` -- açılış günlükleri hiçbir elle müdahale olmadan `MCP-first legislation index warm: 852 chunk(s) from 7/7 law(s).` gösterdi. `/api/v1/health` yanıt verdi, tam birim testi takımı taze imaj içinde **1157/1157** geçti.
+  - Görsel dil-modeli araması için Playwright'ın Chromium indirmesi (~280 MB indirme, sıkıştırılmamış daha büyük) imajı belirgin şekilde büyütüyor -- bu bilinçli bir ödünleşim: canlı mevzuat sorgusunun kurulumsuz çalışması, daha küçük bir imajdan daha değerli.
+  - `mevzuat-mcp`'nin kendi giriş noktası `sys.argv`'yi hiç ayrıştırmıyor (canlı olarak doğrulandı) -- `.env.example`'daki `MEVZUAT_MCP_ARGS` için yanıltıcı "--transport stdio" örneği kaldırıldı. Paket ayrıca stdio dışında bir taşıma sunmuyor, dolayısıyla ağ üzerinden ayrı bir yan-konteyner (sidecar) mimarisi üçüncü taraf paketin iç yapısına çatallanmadan mümkün değil.
+
 ## [1.46.0] - 2026-08-07
 ### Değiştirildi
 - **OCR Zinciri Hızlandırıldı**: dört değişiklik, ilki diğer üçünün ölçümünü güvenilir kılmak için zorunluydu.

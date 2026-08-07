@@ -40,6 +40,15 @@ services:
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-1234567890}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-1234567890}
       - LANGFUSE_HOST=http://langfuse:3000
+      # mevzuat-mcp is baked into the image (backend.Dockerfile) at this
+      # exact path -- without pointing this at it, MEVZUAT_MCP_COMMAND falls
+      # back to the bare "mevzuat-mcp", which is not on PATH, and every
+      # live legislation fetch fails identically before ever reaching the
+      # network. Override MEVZUAT_SOURCE=local in a root .env to skip MCP
+      # entirely and always use the committed corpus.
+      - MEVZUAT_SOURCE=${MEVZUAT_SOURCE:-mcp}
+      - MEVZUAT_MCP_ENABLED=${MEVZUAT_MCP_ENABLED:-false}
+      - MEVZUAT_MCP_COMMAND=${MEVZUAT_MCP_COMMAND:-/tmp/mcpvenv/bin/mevzuat-mcp}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

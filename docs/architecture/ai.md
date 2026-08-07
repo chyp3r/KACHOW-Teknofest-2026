@@ -461,12 +461,19 @@ döner. Yürürlükten kalkmış metni yürürlükteki kanun gibi alıntılamak,
 (`app.mcp.mevzuat_client.pick_document_id`) belge analizi ve asistan aracı
 arasında paylaşılan tek bir uygulamadır.
 
-Sunucu **backend imajına dahil değildir**: bağımlılık ağacı `playwright`
-sabitler ve tarayıcı ikilisi çeker. Bu nedenle korpus üretimi ve her iki çalışma
-zamanı yolu da kurulu bir kopyaya işaret eden `MEVZUAT_MCP_COMMAND` gerektirir
-(yerelde izole bir sanal ortam, ileride bir yardımcı konteyner). Komut ve
-argümanlar yapılandırmada tutulur, kodda değil — böylece bu geçiş kod değişikliği
-değil ayar değişikliğidir.
+Sunucunun bağımlılık ağacı `playwright` sabitler ve tarayıcı ikilisi çeker, bu
+yüzden bu projenin **kendi** Python bağımlılıklarından (`requirements.txt`)
+ayrı, izole bir sanal ortama kurulur: çözümlenen sürümleri
+(`fastapi`/`pydantic`/`httpx`/`mcp`) bu projenin kendi pinlerine yakın ama aynı
+değil (`pydantic-settings` burada 2.15.0'a çözümlenirken bu projenin pini
+2.14.2), bu da paylaşılan tek bir ortamda birinin pinini sessizce kırmaya
+yetecek kadar bir fark. Docker imajı (`deploy/docker/backend.Dockerfile`) bu
+izole ortamı **derleme zamanında zaten kuruyor** — `docker compose up` ekstra
+kurulum gerektirmeden çalışır. Docker dışında çalıştıran biri aynı kurulumu
+elle yapmalı (bkz. `.env.example`). Her iki durumda da her iki çalışma zamanı
+yolu da kurulu bir kopyaya işaret eden `MEVZUAT_MCP_COMMAND` gerektirir. Komut
+ve argümanlar yapılandırmada tutulur, kodda değil — böylece bu geçiş kod
+değişikliği değil ayar değişikliğidir.
 
 Korpusa yazılan her dosya `mevzuat_id`, kaynak ve çekilme tarihini taşır;
 böylece üretilen her atıf resmî metne kadar izlenebilir. Belge analizinin
