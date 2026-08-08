@@ -280,3 +280,75 @@ def test_a_genuine_law_citation_is_still_extracted():
 
     assert [claim.kind for claim in report.unsupported_claims] == ["mevzuat"]
     assert report.unsupported_claims[0].canonical == "kanun:9999"
+
+
+# --- Few-shot style-example leak detection -----------------------------------
+#
+# A style example is a real letter, not a synthetic one -- it carries genuine
+# institution names, dates and case numbers. writer.md instructs the model not
+# to copy them, but a prompt instruction is not a guarantee, so verify_draft
+# closes the loop deterministically: any unsupported claim that also appears
+# in a style example is split into example_leaks and always forces approval.
+
+
+def _draft_mentioning(institution: str) -> str:
+    return (
+        "Konu: Yıllık İzin Talebi\n"
+        "Sayı: E-123-456\n"
+        "Tarih: 30.07.2026\n\n"
+        f"Sayın Makam, konu hakkında yerel şubemiz {institution}'na bilgi vermiştir.\n\n"
+        "Arz ederim.\n\n"
+        "Mehmet Öztürk\nGenel Müdür"
+    )
+
+
+def test_a_value_only_present_in_a_style_example_is_flagged_as_a_leak():
+    draft = _draft_mentioning("Bursa Kaymakamlığı")
+    report = verify_draft(
+        draft,
+        source_document="Sayı: E-123-456, Tarih: 30.07.2026 tarihli evrak.",
+        style_examples=["Bu örnek yazı Bursa Kaymakamlığı tarafından hazırlanmıştır."],
+    )
+
+    assert [claim.value for claim in report.example_leaks] == ["Bursa Kaymakamlığı"]
+    assert report.example_leaks[0].kind == "ornek_sizintisi"
+    # Split out of unsupported_claims, not duplicated into it -- otherwise the
+    # same leak would also feed a revision repair item.
+    assert not any(claim.kind == "kurum" for claim in report.unsupported_claims)
+    assert report.requires_human_approval is True
+
+
+def test_a_value_also_grounded_in_the_source_is_not_a_leak():
+    draft = _draft_mentioning("Bursa Kaymakamlığı")
+    report = verify_draft(
+        draft,
+        source_document="Bursa Kaymakamlığı tarafından gönderilen yazı üzerine.",
+        style_examples=["Bu örnek yazı Bursa Kaymakamlığı tarafından hazırlanmıştır."],
+    )
+
+    assert report.example_leaks == []
+
+
+def test_an_example_leak_forces_approval_even_when_strict_is_false():
+    """other_official's leniency covers conventional boilerplate, not a real
+    fact copied from a retrieved example -- the two are different problems."""
+    draft = _draft_mentioning("Bursa Kaymakamlığı")
+    report = verify_draft(
+        draft,
+        source_document="tamamen ilgisiz bir kaynak",
+        style_examples=["Bu örnek yazı Bursa Kaymakamlığı tarafından hazırlanmıştır."],
+        strict=False,
+    )
+
+    assert report.example_leaks
+    assert report.requires_human_approval is True
+
+
+def test_no_style_examples_leaves_unsupported_claims_unaffected():
+    """Regression guard: omitting style_examples must reproduce pre-feature
+    behaviour exactly, not just "no leaks found"."""
+    draft = WELL_FORMED_DRAFT.replace("E-123-456", "E-999-999")
+    report = verify_draft(draft, source_document="Sayı: E-123-456 tarihli evrak.")
+
+    assert report.example_leaks == []
+    assert any(claim.kind == "sayı" for claim in report.unsupported_claims)

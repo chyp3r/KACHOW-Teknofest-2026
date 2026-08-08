@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import List
+from typing import Any, Dict, List, Optional
 
 from langchain_core.documents import Document
 
@@ -50,12 +50,20 @@ class HybridRetriever:
             f"Initialized HybridRetriever targeting collection '{collection_name}'"
         )
 
-    async def retrieve(self, query: str, limit: int = 5) -> List[Document]:
+    async def retrieve(
+        self,
+        query: str,
+        limit: int = 5,
+        filter_dict: Optional[Dict[str, Any]] = None,
+    ) -> List[Document]:
         """Perform semantic and keyword search simultaneously on Qdrant, returning RRF-fused results.
 
         Args:
             query: User's question or search query.
             limit: Maximum documents to retrieve.
+            filter_dict: Optional payload filter, forwarded as-is to
+                ``BaseVectorStore.hybrid_search`` (see its
+                ``_build_qdrant_filter`` for the accepted shape).
         """
         if not query.strip():
             return []
@@ -74,6 +82,7 @@ class HybridRetriever:
                 sparse_indices=sparse_indices,
                 sparse_values=sparse_values,
                 limit=limit,
+                filter_dict=filter_dict,
             )
 
             # 4. Format hits into LangChain Document objects

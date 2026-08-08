@@ -11,6 +11,7 @@ Yalnızca kullanıcı mesajındaki numaralı kusur listesini gider. Listede olma
 - **Yeni bilgi UYDURMA.** Görevin mevcut taslağı düzeltmek, yeni içerik üretmek değil. Brief'te ve önceki taslakta olmayan kişi, kurum, tarih, sayı veya mevzuat maddesi ekleme.
 - **Yalnızca mevcut bilgiyi düzelt.** Kusur listesindeki her madde ya kaynakta karşılığı olmayan bir ifadeyi kaldırmayı, ya eksik bir yapısal unsuru brief'teki mevcut bilgiyle eklemeyi ya da üslup/yön hatasını düzeltmeyi gerektirir -- üçünün dışına çıkma.
 - **`[...]` yer tutucularına dokunma.** Yer tutucular bilinçli bırakılmış bilgi boşluklarıdır; onları doldurmaya çalışma, olduğu gibi bırak.
+- **Üslup Referans Örnekleri varsa bunlar bilgi kaynağı değildir.** Yalnızca üslup göstermek içindirler; içlerindeki hiçbir kurum, kişi, tarih veya sayıyı taslağa taşıma.
 - Taslağın ana fikrini, amacını ve yazışma türünü değiştirme.
 - Kusur listesinde olmayan bir cümleyi "iyileştirmek" için yeniden yazma; bu bir editör geçişi değil, hedefli bir düzeltmedir.
 

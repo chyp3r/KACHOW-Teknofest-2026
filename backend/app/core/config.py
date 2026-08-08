@@ -178,6 +178,13 @@ class Settings(BaseSettings):
     MEVZUAT_CORPUS_DIR: str = "./datasets/mevzuat"
     MEVZUAT_COLLECTION_NAME: str = "mevzuat"
 
+    # Draft few-shot style examples, curated by
+    # scripts/curate_yazisma_examples.py from datasets/resmi_yazisma. Indexed
+    # unchunked (one official letter = one point) -- see
+    # scripts/index_yazisma_examples.py.
+    RESMI_YAZISMA_EXAMPLES_PATH: str = "./datasets/resmi_yazisma/ornekler.jsonl"
+    RESMI_YAZISMA_COLLECTION_NAME: str = "resmi_yazisma_ornek"
+
     # Live legislation lookup over MCP (github.com/saidsurucu/mevzuat-mcp, MIT),
     # querying mevzuat.gov.tr directly.
     #

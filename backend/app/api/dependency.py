@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.embeddings.models import get_embeddings_client
 from app.ai.embeddings.service import EmbeddingService
 from app.ai.llms import get_fast_llm_client, get_llm_client
+from app.ai.retrieval.examples import ExampleRetriever
 from app.ai.retrieval.hybrid import HybridRetriever
 from app.ai.retrieval.mcp_mevzuat import FallbackMevzuatRetriever, McpMevzuatRetriever
 from app.ai.workflows.document_analysis_graph import create_document_analysis_graph
@@ -136,6 +137,32 @@ async def get_mevzuat_retriever() -> HybridRetriever:
     return _mevzuat_retriever
 
 
+_example_retriever: Optional[ExampleRetriever] = None
+
+
+async def get_example_retriever() -> ExampleRetriever:
+    """Build the draft few-shot style-example retriever once per process.
+
+    Same idiom and same native Qdrant hybrid search as
+    ``get_mevzuat_retriever`` above, targeting the separate
+    ``resmi_yazisma_ornek`` collection built by
+    ``scripts/index_yazisma_examples.py`` instead of the legislation corpus.
+    """
+    global _example_retriever
+    if _example_retriever is None:
+        import os
+        hybrid = HybridRetriever(
+            vector_store=get_vector_store(),
+            embeddings_client=get_embeddings_client(),
+            collection_name=settings.RESMI_YAZISMA_COLLECTION_NAME,
+            sparse_vocab_path=os.path.join(
+                os.path.dirname(settings.RESMI_YAZISMA_EXAMPLES_PATH), "sparse_vocab.json"
+            ),
+        )
+        _example_retriever = ExampleRetriever(hybrid)
+    return _example_retriever
+
+
 async def get_document_analysis_mevzuat_retriever(
     local: HybridRetriever = Depends(get_mevzuat_retriever),
 ) -> Any:
@@ -246,7 +273,9 @@ async def get_draft_graph() -> Any:
     global _draft_graph
     if _draft_graph is None:
         _draft_graph = create_draft_graph(
-            llm_client=get_llm_client(), fast_llm_client=get_fast_llm_client()
+            llm_client=get_llm_client(),
+            fast_llm_client=get_fast_llm_client(),
+            example_retriever=await get_example_retriever(),
         )
     return _draft_graph
 
