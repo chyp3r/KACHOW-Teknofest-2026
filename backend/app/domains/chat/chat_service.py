@@ -6,7 +6,7 @@ from uuid import uuid4
 from app.ai.reasoning_levels import get_reasoning_level_preset
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.authorization import AuthorizationException
-from app.core.constants import AI_WORKFLOW_TIMEOUT_SECONDS
+from app.core.config import settings
 from app.domains.chat import chat_recorder
 from app.domains.drafts import draft_recorder
 from app.domains.chat.schema.chat_schema import (
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 #: The orchestrated flow runs several sub-graphs, so it gets a longer budget
 #: than a single analysis pass.
-ORCHESTRATION_TIMEOUT_SECONDS = AI_WORKFLOW_TIMEOUT_SECONDS * 2
+ORCHESTRATION_TIMEOUT_SECONDS = settings.AI_WORKFLOW_TIMEOUT_SECONDS * 2
 
 DEFAULT_REPLY = "İşleminiz tamamlandı."
 INTERRUPTED_REPLY = "Devam etmek için ek bilgiye veya onayınıza ihtiyaç var."

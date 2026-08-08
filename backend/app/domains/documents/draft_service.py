@@ -6,7 +6,7 @@ from app.ai.guardrails.injection import scrub_extracted_text
 from app.ai.reasoning_levels import get_reasoning_level_preset
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
-from app.core.constants import AI_WORKFLOW_TIMEOUT_SECONDS
+from app.core.config import settings
 from app.domains.documents.schema.document_schema import DraftRequestSchema, DraftResponseSchema
 from app.domains.drafts import draft_recorder
 from app.infrastructure.extractors.base import BaseDocumentExtractor, DocumentExtractionError
@@ -82,7 +82,7 @@ class DraftService:
         classification_dict = request.classification.model_dump(mode="json")
 
         draft_timeout = (
-            AI_WORKFLOW_TIMEOUT_SECONDS
+            settings.AI_WORKFLOW_TIMEOUT_SECONDS
             * 1.5
             * get_reasoning_level_preset(request.reasoning_level).timeout_multiplier
         )
@@ -177,12 +177,12 @@ class DraftService:
                     },
                     config=self._trace_config()
                 ),
-                timeout=AI_WORKFLOW_TIMEOUT_SECONDS,
+                timeout=settings.AI_WORKFLOW_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError as e:
             raise AIException(
                 message="Yönlendirme kararı zaman aşımına uğradı.",
-                details={"timeout_seconds": AI_WORKFLOW_TIMEOUT_SECONDS},
+                details={"timeout_seconds": settings.AI_WORKFLOW_TIMEOUT_SECONDS},
             ) from e
         except Exception as e:
             logger.exception("Routing workflow failed")

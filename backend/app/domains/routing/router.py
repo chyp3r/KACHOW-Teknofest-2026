@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from app.api.dependency import get_routing_graph, require_auth_if_enabled
 from app.api.exceptions.ai_error import AIException
 from app.api.responses import SuccessResponse
-from app.core.constants import AI_WORKFLOW_TIMEOUT_SECONDS
+from app.core.config import settings
 from app.domains.routing.schema import RoutingSuggestionRequest, RoutingSuggestionResponse
 
 logger = logging.getLogger(__name__)
@@ -33,12 +33,12 @@ async def suggest_routing(
             routing_graph.ainvoke(
                 {"draft": request.draft, "confidence_score": request.confidence_score}
             ),
-            timeout=AI_WORKFLOW_TIMEOUT_SECONDS,
+            timeout=settings.AI_WORKFLOW_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError as exc:
         raise AIException(
             message="Yönlendirme kararı zaman aşımına uğradı.",
-            details={"timeout_seconds": AI_WORKFLOW_TIMEOUT_SECONDS},
+            details={"timeout_seconds": settings.AI_WORKFLOW_TIMEOUT_SECONDS},
         ) from exc
     except Exception as exc:
         logger.exception("Standalone routing suggestion failed")

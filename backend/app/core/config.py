@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     #: timeout rather than blocking.
     REVISION_RERETRIEVAL_TIMEOUT_SECONDS: float = 10.0
 
+    #: Ceiling on a single planning-graph run (chat, draft generation,
+    #: routing). Env-configurable so a local run against a slow/CPU-only
+    #: Ollama model can be given more headroom without a code change; the
+    #: orchestrated chat flow multiplies this (see
+    #: app.domains.chat.chat_service.ORCHESTRATION_TIMEOUT_SECONDS).
+    AI_WORKFLOW_TIMEOUT_SECONDS: int = 480
+
     #: On by default: /documents/* and /chat/* require a JWT bearer token,
     #: and the RBAC guardrail layer (app.core.permissions.role_checker,
     #: app.ai.guardrails.output_gate, document_tools.py's deny-at-retrieval

@@ -1,6 +1,5 @@
 from app.core.config import settings
 from app.core.constants import (
-    AI_WORKFLOW_TIMEOUT_SECONDS,
     ALLOWED_FILE_TYPES,
     CACHE_TTL_SECONDS,
     CORS_ORIGINS,
@@ -31,7 +30,6 @@ __all__ = [
     "ALLOWED_FILE_TYPES",
     "DEFAULT_PAGE_SIZE",
     "MAX_PAGE_SIZE",
-    "AI_WORKFLOW_TIMEOUT_SECONDS",
     "MAX_RETRY_ATTEMPTS",
     "CORS_ORIGINS",
     "CACHE_TTL_SECONDS",

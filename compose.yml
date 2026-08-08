@@ -32,6 +32,13 @@ services:
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
       - OLLAMA_FAST_MODEL=${OLLAMA_FAST_MODEL:-}
       - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text:latest}
+      # AI workflow timeouts (seconds). Raise these to test long-running
+      # "deep" reasoning runs locally without them being cut off early.
+      - AI_WORKFLOW_TIMEOUT_SECONDS=${AI_WORKFLOW_TIMEOUT_SECONDS:-480}
+      - REVISION_RERETRIEVAL_TIMEOUT_SECONDS=${REVISION_RERETRIEVAL_TIMEOUT_SECONDS:-10}
+      - DRAFT_JUDGE_TIMEOUT_SECONDS=${DRAFT_JUDGE_TIMEOUT_SECONDS:-30}
+      - GUARDRAIL_JUDGE_TIMEOUT_SECONDS=${GUARDRAIL_JUDGE_TIMEOUT_SECONDS:-15}
+      - MEVZUAT_MCP_TIMEOUT_SECONDS=${MEVZUAT_MCP_TIMEOUT_SECONDS:-25}
       # Derived from the same POSTGRES_* values as the db service below, so
       # the two can never drift out of sync with each other.
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-kachow}
