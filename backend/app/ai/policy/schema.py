@@ -30,6 +30,7 @@ from app.core.enums.user_role import UserRole
 
 __all__ = [
     "BudgetPolicy",
+    "DraftPolicy",
     "GuardrailPolicy",
     "IntentPolicy",
     "MemoryPolicy",
@@ -235,6 +236,10 @@ class BudgetPolicy:
                 # gracefully degrading to None and the node finishing on the
                 # deterministic result alone.
                 "scan_sensitivity": 25.0,
+                # Same budget as retrieve_mevzuat: an identical Qdrant/Ollama
+                # round trip, and a timeout degrades to zero style examples
+                # rather than failing the draft (see retrieve_examples_node).
+                "retrieve_examples": 25.0,
             }
         )
     )
@@ -298,6 +303,35 @@ class GuardrailPolicy:
 
 
 @dataclass(frozen=True)
+class DraftPolicy:
+    """Few-shot style-example retrieval for the draft writer.
+
+    Attributes:
+        style_examples_enabled: Master switch. False reproduces pre-feature
+            behaviour exactly (``retrieve_examples_node`` short-circuits to
+            an empty list without touching Qdrant) -- the A/B and
+            emergency-rollback lever.
+        style_example_count: Style examples requested per draft. Two, not
+            one: a single example teaches its own idiosyncrasies as if they
+            were the format; two let the writer see what varies (wording,
+            length) versus what is structurally constant (field order,
+            closing direction). Not raised further without re-measuring --
+            more examples also means more surface for
+            ``draft_verifier``'s ``ornek_sizintisi`` check to have to catch.
+        style_example_char_budget: Ceiling on the combined character length
+            of retrieved example text; the longest example is dropped first
+            past this. Sized so brief + writer.md + examples stays well
+            inside ``OLLAMA_NUM_CTX`` (8192 tokens) even in Turkish, where
+            ``CHARS_PER_TOKEN_TR`` (2.8) makes the same text cost noticeably
+            more tokens than in English.
+    """
+
+    style_examples_enabled: bool = True
+    style_example_count: int = 2
+    style_example_char_budget: int = 4000
+
+
+@dataclass(frozen=True)
 class Policy:
     """The complete parameter surface of the deterministic decision layer."""
 
@@ -309,6 +343,7 @@ class Policy:
     semantic: SemanticPolicy = field(default_factory=SemanticPolicy)
     budget: BudgetPolicy = field(default_factory=BudgetPolicy)
     guardrail: GuardrailPolicy = field(default_factory=GuardrailPolicy)
+    draft: DraftPolicy = field(default_factory=DraftPolicy)
 
     def check_invariants(self) -> None:
         """Assert the relationships between parameters that must always hold.
@@ -407,3 +442,8 @@ class Policy:
                 "guardrail.role_clearance_map is missing entries for: "
                 f"{sorted(role.value for role in missing_roles)}"
             )
+
+        if self.draft.style_example_count <= 0:
+            raise ValueError("draft.style_example_count must be positive")
+        if self.draft.style_example_char_budget <= 0:
+            raise ValueError("draft.style_example_char_budget must be positive")
