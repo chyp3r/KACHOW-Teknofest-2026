@@ -20,6 +20,40 @@ export interface ChatMessage {
   details?: Record<string, unknown>;
 }
 
+// Kind of instruction<->mevzuat/source clash app.ai.revision.conflict can
+// find. The instruction is always applied first -- a finding here is a
+// warning attached to it, never a reason it was reverted or refused (see
+// ConflictReport.applied_anyway on the backend).
+export type ConflictKind =
+  | "mevzuat_dayanaksiz"
+  | "mevzuat_celiskisi"
+  | "kaynak_celiskisi"
+  | "yapisal_ihlal"
+  | "kisisel_veri"
+  | "belirsizlik";
+
+export interface ConflictFinding {
+  kind: ConflictKind;
+  severity: "critical" | "major" | "minor";
+  detail: string;
+  instruction_fragment?: string;
+  evidence?: string;
+  source?: "deterministic" | "llm";
+}
+
+export interface ChangeEntry {
+  directive: string;
+  scope: string;
+  before: string;
+  after: string;
+  char_delta: number;
+}
+
+export interface RevisionChangelog {
+  entries: ChangeEntry[];
+  summary: string;
+}
+
 export interface InterruptState {
   kind: "missing_information" | "draft_approval";
   interruptId: string;
@@ -30,6 +64,15 @@ export interface InterruptState {
     judge?: Record<string, unknown>;
     combined_score?: number;
     requires_human_approval?: boolean;
+    conflicts?: ConflictFinding[];
+    conflict_notes?: string;
+    changelog?: RevisionChangelog;
+    // The human approval gate's own "revizyon iste" loop -- see backend
+    // planning_graph.gate_revise_node/route_after_gate. Absent (not just
+    // zero) on the very first gate of a turn, before any round has run.
+    revision_round?: number;
+    max_revision_rounds?: number;
+    revision_exhausted?: boolean;
   };
 }
 
@@ -128,6 +171,7 @@ export interface ResumeRequest {
   action: "answer" | "approve" | "revise" | "reject";
   answers: Record<string, string>;
   instructions: string;
+  reason?: string;
   reasoning_level?: ReasoningLevel;
 }
 

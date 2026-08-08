@@ -1020,6 +1020,26 @@ textarea { min-height: 105px; resize: vertical; }
 .interrupt-actions { justify-content: flex-end; gap: 9px; margin-top: 14px; }
 .interrupt-actions > small { margin-right: auto; color: var(--text-muted); }
 
+.interrupt-revision-round { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; color: var(--text-muted); font-size: 12px; }
+.interrupt-revision-exhausted { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; color: #fbbf24; font-size: 12px; }
+
+.interrupt-conflicts { margin: 12px 0; padding: 12px 14px; border: 1px solid rgba(245, 158, 11, .4); border-radius: 10px; background: rgba(245, 158, 11, .08); }
+.interrupt-conflicts-heading { display: flex; align-items: center; gap: 7px; margin: 0 0 8px; font-weight: 700; color: #fbbf24; }
+.interrupt-conflicts ul { display: grid; gap: 6px; margin: 0; padding: 0 0 0 4px; list-style: none; font-size: 13px; color: var(--text-secondary); }
+.interrupt-conflicts li { padding-left: 10px; border-left: 2px solid rgba(245, 158, 11, .5); }
+.interrupt-conflicts li.conflict-severity-critical { border-left-color: #f87171; }
+.interrupt-conflicts li.conflict-severity-minor { border-left-color: var(--border-glass-focus); }
+.conflict-evidence { color: var(--text-muted); }
+
+.interrupt-changelog { margin: 14px 0; }
+.interrupt-changelog summary { display: flex; justify-content: space-between; cursor: pointer; }
+.changelog-entries { display: grid; gap: 10px; margin: 10px 0 0; padding: 0; list-style: none; }
+.changelog-entries li { padding: 10px 12px; border: 1px solid var(--border-glass); border-radius: 9px; background: var(--bg-primary); }
+.changelog-directive { margin: 0 0 6px; color: var(--text-muted); font-size: 12px; font-style: italic; }
+.changelog-diff { display: grid; gap: 3px; font-family: var(--font-mono, monospace); font-size: 12px; white-space: pre-wrap; }
+.changelog-before { margin: 0; color: #f87171; }
+.changelog-after { margin: 0; color: #34d399; }
+
 .documents-layout, .drafts-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(340px, .8fr); gap: 18px; }
 .upload-card { padding: 18px; margin-bottom: 18px; }
 .dropzone { display: grid; place-items: center; gap: 9px; min-height: 180px; padding: 20px; border: 1px dashed var(--border-glass-focus); border-radius: 13px; text-align: center; }

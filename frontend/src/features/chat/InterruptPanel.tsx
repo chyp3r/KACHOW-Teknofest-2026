@@ -1,6 +1,12 @@
-import { AlertCircle, CheckCircle2, ChevronDown, FileText } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, FileText, History } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import type { InterruptState } from "../../types/chat";
+import type { ConflictFinding, InterruptState } from "../../types/chat";
+
+const SEVERITY_LABEL: Record<ConflictFinding["severity"], string> = {
+  critical: "Kritik",
+  major: "Önemli",
+  minor: "Küçük",
+};
 
 export function InterruptPanel({
   interrupt,
@@ -13,20 +19,35 @@ export function InterruptPanel({
     action: "answer" | "approve" | "revise" | "reject",
     answers: Record<string, string>,
     instructions: string,
+    reason?: string,
   ) => Promise<void>;
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [instructions, setInstructions] = useState("");
+  const [rejectReason, setRejectReason] = useState("");
+  const [showRejectForm, setShowRejectForm] = useState(false);
   const questions = interrupt.payload.questions ?? [];
   const canSubmitAnswers = questions
     .filter((question) => question.required !== false)
     .every((question) => answers[question.key]?.trim());
   const isMissingInformation = interrupt.kind === "missing_information";
 
+  const conflicts = interrupt.payload.conflicts ?? [];
+  const changelog = interrupt.payload.changelog;
+  const revisionRound = interrupt.payload.revision_round;
+  const maxRevisionRounds = interrupt.payload.max_revision_rounds;
+  const revisionExhausted = interrupt.payload.revision_exhausted ?? false;
+
   const submitAnswers = (event: FormEvent) => {
     event.preventDefault();
     if (!canSubmitAnswers || loading) return;
     void onResume("answer", answers, "");
+  };
+
+  const submitReject = (event: FormEvent) => {
+    event.preventDefault();
+    if (!rejectReason.trim() || loading) return;
+    void onResume("reject", {}, "", rejectReason.trim());
   };
 
   return (
@@ -59,6 +80,33 @@ export function InterruptPanel({
         </div>
       </header>
 
+      {!isMissingInformation && typeof revisionRound === "number" && (
+        <p className="interrupt-revision-round">
+          <History size={14} />
+          Revizyon turu {revisionRound + 1}
+          {typeof maxRevisionRounds === "number" ? `/${maxRevisionRounds}` : ""}
+        </p>
+      )}
+
+      {conflicts.length > 0 && (
+        <div className="interrupt-conflicts" role="alert">
+          <p className="interrupt-conflicts-heading">
+            <AlertTriangle size={16} />
+            Talimatınız uygulandı, ancak mevzuat/kaynak ile şu noktalarda çelişiyor:
+          </p>
+          <ul>
+            {conflicts.map((conflict, index) => (
+              <li key={index} className={`conflict-severity-${conflict.severity}`}>
+                <strong>[{SEVERITY_LABEL[conflict.severity]}]</strong> {conflict.detail}
+                {conflict.evidence && (
+                  <span className="conflict-evidence"> — dayanak: {conflict.evidence}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {interrupt.payload.draft && (
         <details className="interrupt-draft" open={!isMissingInformation}>
           <summary>
@@ -69,6 +117,29 @@ export function InterruptPanel({
             <ChevronDown size={15} />
           </summary>
           <pre className="draft-preview">{interrupt.payload.draft}</pre>
+        </details>
+      )}
+
+      {changelog && changelog.entries.length > 0 && (
+        <details className="interrupt-changelog">
+          <summary>
+            <span>
+              <History size={15} />
+              Değişiklik günlüğü ({changelog.summary})
+            </span>
+            <ChevronDown size={15} />
+          </summary>
+          <ul className="changelog-entries">
+            {changelog.entries.map((entry, index) => (
+              <li key={index}>
+                {entry.directive && <p className="changelog-directive">"{entry.directive}"</p>}
+                <div className="changelog-diff">
+                  {entry.before && <p className="changelog-before">- {entry.before}</p>}
+                  {entry.after && <p className="changelog-after">+ {entry.after}</p>}
+                </div>
+              </li>
+            ))}
+          </ul>
         </details>
       )}
 
@@ -113,6 +184,35 @@ export function InterruptPanel({
             </button>
           </div>
         </form>
+      ) : showRejectForm ? (
+        <form className="interrupt-form form-stack" onSubmit={submitReject}>
+          <label>
+            Red gerekçesi
+            <textarea
+              value={rejectReason}
+              onChange={(event) => setRejectReason(event.target.value)}
+              placeholder="Bu taslağı neden reddediyorsunuz?"
+              required
+            />
+          </label>
+          <div className="interrupt-actions approval-actions">
+            <button
+              type="button"
+              className="button button-secondary"
+              disabled={loading}
+              onClick={() => setShowRejectForm(false)}
+            >
+              Vazgeç
+            </button>
+            <button
+              type="submit"
+              className="button button-danger"
+              disabled={loading || !rejectReason.trim()}
+            >
+              {loading ? "Gönderiliyor…" : "Reddi onayla"}
+            </button>
+          </div>
+        </form>
       ) : (
         <div className="interrupt-form form-stack">
           <label>
@@ -121,8 +221,15 @@ export function InterruptPanel({
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
               placeholder="Revizyon istiyorsanız talimatınızı yazın."
+              disabled={revisionExhausted}
             />
           </label>
+          {revisionExhausted && (
+            <p className="interrupt-revision-exhausted">
+              <AlertCircle size={14} />
+              Revizyon turu sınırına ulaşıldı; onaylayın, reddedin veya yeni bir mesajla devam edin.
+            </p>
+          )}
           <div className="interrupt-actions approval-actions">
             <button
               className="button button-primary"
@@ -133,7 +240,7 @@ export function InterruptPanel({
             </button>
             <button
               className="button button-secondary"
-              disabled={loading || !instructions.trim()}
+              disabled={loading || !instructions.trim() || revisionExhausted}
               onClick={() => void onResume("revise", {}, instructions)}
             >
               Revizyon iste
@@ -141,7 +248,7 @@ export function InterruptPanel({
             <button
               className="button button-danger"
               disabled={loading}
-              onClick={() => void onResume("reject", {}, "")}
+              onClick={() => setShowRejectForm(true)}
             >
               Reddet
             </button>

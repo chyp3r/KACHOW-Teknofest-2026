@@ -106,6 +106,16 @@ const NODES: GraphNode[] = [
     description: "Eksik bilgi veya onay gerektiğinde akışı güvenli biçimde durdurur.",
   },
   {
+    id: "gate_revise",
+    label: "Geri Bildirimli Revizyon",
+    short: "GERİ BLD.",
+    kind: "rule",
+    x: 150,
+    y: 610,
+    description:
+      'Onay kapısındaki "Revizyon iste" talebinizi aynı çalışmada uygular ve kapıya geri döner.',
+  },
+  {
     id: "routing",
     label: "Birim Sevki",
     short: "SEVK",
@@ -139,6 +149,8 @@ const EDGES: GraphEdge[] = [
   { from: "human_gate", to: "routing" },
   { from: "verify", to: "revise", back: true },
   { from: "revise", to: "draft", back: true },
+  { from: "human_gate", to: "gate_revise", back: true },
+  { from: "gate_revise", to: "human_gate", back: true },
 ];
 
 const STATUS_LABELS: Record<WorkflowNodeStatus, string> = {
@@ -245,7 +257,7 @@ export function DecisionFlow({
         <div className="graph-container decision-graph-container">
           <svg
             width="100%"
-            viewBox="0 0 560 580"
+            viewBox="0 0 560 650"
             preserveAspectRatio="xMidYMid meet"
             role="img"
             aria-label="Karar akışı düğüm grafiği"

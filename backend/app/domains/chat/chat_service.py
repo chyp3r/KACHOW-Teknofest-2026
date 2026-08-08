@@ -581,6 +581,7 @@ class ChatService:
             "action": request.action,
             "answers": request.answers,
             "instructions": request.instructions,
+            "reason": request.reason,
             "reasoning_level": (
                 request.reasoning_level.value if request.reasoning_level else None
             ),
@@ -596,6 +597,8 @@ class ChatService:
         """
         if request.action == "answer" and request.answers:
             return "; ".join(f"{key}: {value}" for key, value in request.answers.items())
+        if request.action == "reject" and request.reason:
+            return f"reject: {request.reason}"
         if request.instructions:
             return f"{request.action}: {request.instructions}"
         return request.action
@@ -667,14 +670,37 @@ class ChatService:
             if routing.get("routed_unit"):
                 parts.append(f"\n\n**Önerilen Birim:** {routing['routed_unit']}")
             if draft.get("status") == "REJECTED":
-                parts.append("\n\n_Bu taslak reddedildi._")
+                reason = draft.get("rejection_reason")
+                parts.append(
+                    f"\n\n_Bu taslak reddedildi (gerekçe: {reason})._"
+                    if reason
+                    else "\n\n_Bu taslak reddedildi._"
+                )
             elif draft.get("status") == "REVISE_REQUESTED":
-                parts.append("\n\n_Bu taslak için revizyon talep edildi._")
+                parts.append(
+                    "\n\n_Bu taslak için revizyon talep edildi, ancak revizyon turu "
+                    "sınırına ulaşıldığı için bu son sürüm korundu._"
+                )
             elif draft.get("requires_human_approval"):
                 parts.append(
                     "\n\n_Bu taslak insan onayı gerektiriyor: "
                     f"{draft.get('evaluation_notes', '')}_"
                 )
+            # Applied, not refused -- see app.ai.revision.conflict's
+            # applied_anyway invariant; the note here is the same "uygulandı
+            # ama şu noktalarda çelişiyor" framing the gate payload uses.
+            conflicts = draft.get("conflicts") or []
+            if conflicts:
+                lines = "\n".join(
+                    f"- [{c.get('severity', '')}] {c.get('detail', '')}" for c in conflicts
+                )
+                parts.append(
+                    "\n\n**⚠ Talimatınız uygulandı, ancak mevzuat/kaynakla şu "
+                    f"noktalarda çelişiyor:**\n{lines}"
+                )
+            changelog_summary = (draft.get("changelog") or {}).get("summary")
+            if changelog_summary:
+                parts.append(f"\n\n**Değişiklik özeti:** {changelog_summary}")
             return "".join(parts)
 
         if draft.get("error"):

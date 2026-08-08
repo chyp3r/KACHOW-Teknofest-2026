@@ -73,6 +73,9 @@ class ChatResumeRequest(BaseModel):
     instructions: str = Field(
         default="", max_length=4000, description="action='revise' için ek talimat."
     )
+    reason: str = Field(
+        default="", max_length=2000, description="action='reject' için red gerekçesi."
+    )
     reasoning_level: Optional[ReasoningLevel] = Field(
         default=None,
         description=(

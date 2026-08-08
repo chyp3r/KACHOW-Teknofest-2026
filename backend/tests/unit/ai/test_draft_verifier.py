@@ -352,3 +352,50 @@ def test_no_style_examples_leaves_unsupported_claims_unaffected():
 
     assert report.example_leaks == []
     assert any(claim.kind == "sayı" for claim in report.unsupported_claims)
+
+
+# ===========================================================================
+# instruction_only_claims -- a claim traced only to the user's own revision
+# instruction, not to the source document or mevzuat context.
+# ===========================================================================
+def test_a_value_only_present_in_the_instruction_is_split_out_not_penalized():
+    draft = WELL_FORMED_DRAFT.replace("E-123-456", "E-999-999")
+    report = verify_draft(
+        draft,
+        source_document="Sayı: E-123-456, Tarih: 30.07.2026 tarihli evrak.",
+        instructions="Sayıyı E-999-999 olarak güncelle.",
+    )
+
+    assert [claim.value for claim in report.instruction_only_claims] == ["E-999-999"]
+    # Split out of unsupported_claims -- the user's own word is trusted by
+    # construction, exactly as it was before this field existed.
+    assert not any(claim.kind == "sayı" for claim in report.unsupported_claims)
+    assert report.confidence_score == 100.0
+    assert report.requires_human_approval is False
+
+
+def test_a_value_in_both_the_instruction_and_an_example_is_instruction_only_not_a_leak():
+    """User supremacy: a value the user explicitly typed must never be
+    mislabeled as a leaked style example just because it also happens to
+    appear in one -- see draft_verifier.verify_draft's docstring."""
+    draft = _draft_mentioning("Bursa Kaymakamlığı")
+    report = verify_draft(
+        draft,
+        source_document="Sayı: E-123-456, Tarih: 30.07.2026 tarihli evrak.",
+        instructions="Yerel şube olarak Bursa Kaymakamlığı'nı yaz.",
+        style_examples=["Bu örnek yazı Bursa Kaymakamlığı tarafından hazırlanmıştır."],
+    )
+
+    assert report.example_leaks == []
+    assert [claim.value for claim in report.instruction_only_claims] == ["Bursa Kaymakamlığı"]
+    assert report.requires_human_approval is False
+
+
+def test_a_value_grounded_in_the_source_is_not_also_instruction_only():
+    report = verify_draft(
+        WELL_FORMED_DRAFT,
+        source_document="Sayı: E-123-456, Tarih: 30.07.2026 tarihli evrak.",
+        instructions="Sayıyı E-123-456 olarak bırak.",
+    )
+
+    assert report.instruction_only_claims == []

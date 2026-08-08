@@ -25,6 +25,34 @@ class Settings(BaseSettings):
     #: the competition brief explicitly asks for.
     HITL_APPROVAL_GATE_ENABLED: bool = True
 
+    #: How many times the human approval gate's "revizyon iste" action may
+    #: send the draft back through the revise sub-graph within the same run
+    #: before the gate stops offering it (see planning_graph.gate_revise_node
+    #: /route_after_gate). Bounds worst-case latency per turn -- without a
+    #: cap, a human clicking "revizyon iste" repeatedly on a stubborn draft
+    #: pays for an unbounded number of LLM calls in one request.
+    HITL_MAX_GATE_REVISIONS: int = 2
+
+    #: Whether a revision checks the user's own instruction against the
+    #: retrieved mevzuat/source document for contradictions (see
+    #: app.ai.revision.conflict). The deterministic layer always runs;
+    #: this only gates the additional fast-tier LLM pass. Off does not mean
+    #: "no warning" -- see the deterministic layer's own findings -- it means
+    #: no second, reasoning-based opinion on top of them.
+    REVISION_CONFLICT_AUDIT_ENABLED: bool = True
+
+    #: Whether a revision whose instruction introduces new normative content
+    #: (a law/article citation, an institution, a date) re-retrieves
+    #: legislation before rewriting, instead of relying solely on the
+    #: frozen context carried over from when the draft was first written.
+    #: See app.ai.revision.retrieval.maybe_extend_context.
+    REVISION_RERETRIEVAL_ENABLED: bool = True
+
+    #: Hard ceiling on the conditional re-retrieval call so one slow Qdrant
+    #: query cannot stall a revision -- degrades to the frozen context on
+    #: timeout rather than blocking.
+    REVISION_RERETRIEVAL_TIMEOUT_SECONDS: float = 10.0
+
     #: On by default: /documents/* and /chat/* require a JWT bearer token,
     #: and the RBAC guardrail layer (app.core.permissions.role_checker,
     #: app.ai.guardrails.output_gate, document_tools.py's deny-at-retrieval
