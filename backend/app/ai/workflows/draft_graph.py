@@ -14,6 +14,7 @@ from app.ai.guardrails.pii import find_pii
 from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
 from app.ai.llms.base import BaseLLMClient
+from app.ai.retrieval.examples import ExampleRetriever
 from app.ai.verification import (
     DraftJudgeVerdict,
     InfoQuestion,
@@ -33,6 +34,7 @@ from app.ai.workflows.events import (
     emit_node_start,
     emit_token,
 )
+from app.ai.workflows.resilience import IO_RETRY
 from app.ai.reasoning_levels import ReasoningLevelPreset, get_reasoning_level_preset
 from app.core.config import settings
 from app.core.enums.reasoning_level import ReasoningLevel
@@ -92,6 +94,14 @@ class DraftState(TypedDict, total=False):
     #: resolves to "balanced", so older callers that never set it are
     #: unaffected.
     reasoning_level: str
+    #: Few-shot style examples retrieved for this draft (see
+    #: retrieve_examples_node), each a plain dict with "text",
+    #: "correspondence_type", "niyet", "kurum", "baslik". Set once before the
+    #: first writer pass and left untouched by revise_node, so a repair
+    #: attempt sees the same examples as the original draft rather than
+    #: re-querying. Empty (never absent) when retrieval is disabled, finds
+    #: nothing, or fails -- few-shot is a quality boost, not a dependency.
+    style_examples: list[dict[str, Any]]
 
 
 def _format_classification(classification: dict[str, Any]) -> str:
@@ -206,6 +216,47 @@ def _build_repair_prompt(state: DraftState) -> str:
         "### KURAL:\n"
         "Yalnızca listelenen kusurları düzelt. Başka hiçbir cümleyi değiştirme. "
         "`[...]` yer tutucularını olduğu gibi bırak."
+        f"{_format_style_examples(state.get('style_examples'))}"
+    )
+
+
+def _format_style_examples(style_examples: list[dict[str, Any]] | None) -> str:
+    """Render retrieved few-shot style examples as a prompt block.
+
+    Returns "" (not an empty section) when there are none -- an "### ÜSLUP
+    REFERANS ÖRNEKLERİ" header with nothing under it would read to the model
+    as a missing-context signal, not as "no examples were retrieved this
+    time".
+
+    The examples are real letters pulled from
+    ``datasets/resmi_yazisma/ornekler.jsonl`` via ``ExampleRetriever`` --
+    genuine institution names, dates and case numbers, not synthetic
+    placeholders. The block explicitly tells the model they are a style
+    reference only, never a source of fact, and the boundary is enforced a
+    second time downstream by ``draft_verifier``'s ``ornek_sizintisi`` check
+    (deterministic, not prompt-only) precisely because a prompt instruction
+    alone is not a guarantee.
+    """
+    if not style_examples:
+        return ""
+
+    blocks = "\n".join(
+        f'<ornek tur="{example.get("correspondence_type", "")}" '
+        f'niyet="{example.get("niyet", "")}">\n'
+        f'{example.get("text", "")}\n'
+        "</ornek>"
+        for example in style_examples
+    )
+
+    return (
+        "\n\n### ÜSLUP REFERANS ÖRNEKLERİ:\n"
+        "Aşağıdaki metinler gerçek resmî yazılardan alınmış ÜSLUP VE YAPI örnekleridir. "
+        "Bunlar brief'in bir parçası DEĞİLDİR ve doğrulanmış bilgi kaynağı DEĞİLDİR.\n\n"
+        f"{blocks}\n\n"
+        "KURAL (KRİTİK): Örneklerden YALNIZCA biçimi öğren -- alan sıralaması, ilgi satırı "
+        "kalıbı, paragraf ritmi, kapanış ve imza bloğu düzeni, resmî üslup. Örneklerdeki "
+        "hiçbir kurum adı, kişi adı, tarih, sayı, mevzuat atfı, tutar veya olayı taslağa "
+        "TAŞIMA. Taslaktaki her somut bilgi yalnızca BRIEF BELGESİ'nden gelmelidir."
     )
 
 
@@ -226,14 +277,18 @@ def _resolve_free_text_client(
     return llm_client
 
 
-def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient | None = None):
+def create_draft_graph(
+    llm_client: BaseLLMClient,
+    fast_llm_client: BaseLLMClient | None = None,
+    example_retriever: ExampleRetriever | None = None,
+):
     """Create and compile the drafting workflow.
 
     Flow::
 
-        START -> validate_input -+-> writer -+-> verify -+-> revise -> writer
-                                  \\-> END      \\-> END     |-> END (needs_input)
-                                                             \\-> END
+        START -> validate_input -+-> retrieve_examples -> writer -+-> verify -+-> revise -> writer
+                                  \\-> END                          \\-> END     |-> END (needs_input)
+                                                                                 \\-> END
 
     The former single-pass "writer -> LLM editor" pipeline had no path back to
     the writer, so a low-scoring draft was only ever flagged, never repaired.
@@ -250,6 +305,10 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
         llm_client: The quality-tier LLM used by the writer and reviser.
         fast_llm_client: Optional fast-tier client for the judge. Falls back
             to ``llm_client`` when omitted.
+        example_retriever: Optional few-shot style-example retriever (see
+            ``retrieve_examples_node``). None reproduces pre-feature
+            behaviour exactly -- the node short-circuits to zero examples
+            without touching Qdrant.
 
     Returns:
         The compiled LangGraph workflow.
@@ -302,7 +361,92 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
         }
 
     def route_after_validation(state: DraftState) -> str:
-        return "end" if state.get("status") == "FAILED" else "writer"
+        return "end" if state.get("status") == "FAILED" else "retrieve_examples"
+
+    async def retrieve_examples_node(state: DraftState, config: RunnableConfig) -> dict[str, Any]:
+        """Fetch few-shot style examples for the writer's first pass.
+
+        Runs once per draft, before the writer/revise loop -- not inside
+        ``node_timeout``'s decorator, deliberately: that decorator lets a
+        timeout propagate out of the node and crash the whole graph run (see
+        ``writer_node``'s own note on why it avoids it too), which is the
+        opposite of what an optional quality boost should do on a slow
+        Qdrant. The budget is still enforced, just with an inline
+        ``asyncio.timeout`` whose failure path degrades to zero examples
+        instead.
+        """
+        await emit_node_start(
+            config,
+            "examples",
+            "Üslup Örnekleri",
+            "Benzer resmî yazı örnekleri aranıyor...",
+        )
+
+        policy = get_policy().draft
+        if example_retriever is None or not policy.style_examples_enabled:
+            await emit_node_skipped(
+                config, "examples", "Üslup Örnekleri", "Örnek getirimi devre dışı."
+            )
+            return {"style_examples": []}
+
+        classification = state.get("classification") or {}
+        fields = _coerce_fields(classification)
+        query = " ".join(
+            part
+            for part in (
+                fields.get("konu") or "",
+                classification.get("summary") or "",
+                state.get("instructions") or "",
+            )
+            if part
+        ).strip()
+        correspondence_type = state.get("correspondence_type") or "other_official"
+
+        preset = get_reasoning_level_preset(state.get("reasoning_level"))
+        budget = node_budget("retrieve_examples", preset.level)
+        try:
+            async with asyncio.timeout(budget):
+                examples = await example_retriever.retrieve(
+                    query=query,
+                    correspondence_type=correspondence_type,
+                    limit=policy.style_example_count,
+                    char_budget=policy.style_example_char_budget,
+                )
+        except Exception:
+            # ExampleRetriever.retrieve never raises on its own (it degrades
+            # to []) -- the only thing this can catch is the asyncio.timeout
+            # above firing. Caught broadly anyway so a future change to the
+            # retriever can't turn an optional lookup into a failed draft.
+            logger.exception("Style example retrieval failed; continuing without examples.")
+            await emit_node_error(
+                config,
+                "examples",
+                "Üslup Örnekleri",
+                "Örnek getirimi başarısız; taslak örneksiz devam ediyor.",
+                fatal=False,
+            )
+            return {"style_examples": []}
+
+        style_examples = [
+            {
+                "text": example.text,
+                "correspondence_type": example.correspondence_type,
+                "niyet": example.niyet,
+                "kurum": example.kurum,
+                "baslik": example.baslik,
+            }
+            for example in examples
+        ]
+        await emit_node_end(
+            config,
+            "examples",
+            "Üslup Örnekleri",
+            f"{len(style_examples)} üslup örneği bulundu."
+            if style_examples
+            else "Uygun üslup örneği bulunamadı.",
+            {"style_examples": style_examples},
+        )
+        return {"style_examples": style_examples}
 
     async def writer_node(state: DraftState, config: RunnableConfig) -> dict[str, Any]:
         attempt_number = state.get("attempts", 0) + 1
@@ -360,6 +504,7 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
                 f"### YAZIŞMA TÜRÜ PROFİLİ:\n"
                 f"{format_correspondence_profile(state['correspondence_type'])}\n\n"
                 f"### KURALLAR:\n{rules}"
+                f"{_format_style_examples(state.get('style_examples'))}"
             )
             agent = WriterAgent(client)
             temperature = 0.4
@@ -652,14 +797,18 @@ def create_draft_graph(llm_client: BaseLLMClient, fast_llm_client: BaseLLMClient
 
     builder = StateGraph(DraftState)
     builder.add_node("validate_input", validate_input_node)
+    builder.add_node("retrieve_examples", retrieve_examples_node, retry_policy=IO_RETRY)
     builder.add_node("writer", writer_node)
     builder.add_node("verify", verify_node)
     builder.add_node("revise", revise_node)
 
     builder.add_edge(START, "validate_input")
     builder.add_conditional_edges(
-        "validate_input", route_after_validation, {"writer": "writer", "end": END}
+        "validate_input",
+        route_after_validation,
+        {"retrieve_examples": "retrieve_examples", "end": END},
     )
+    builder.add_edge("retrieve_examples", "writer")
     builder.add_conditional_edges(
         "writer", route_after_writer, {"verify": "verify", "end": END}
     )
