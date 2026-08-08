@@ -331,6 +331,7 @@ export function useChatWorkflow(
       action: "answer" | "approve" | "revise" | "reject",
       answers: Record<string, string>,
       instructions: string,
+      reason?: string,
     ) => {
       if (!threadId || !pendingInterrupt || loading) return;
       setLoading(true);
@@ -340,7 +341,13 @@ export function useChatWorkflow(
       try {
         setPendingInterrupt(null);
         await chatService.resume(
-          { session_id: threadId, action, answers, instructions },
+          { session_id: threadId, action, answers, instructions, reason },
+          // The gate's own "revizyon iste" loop (see backend
+          // planning_graph.gate_revise_node) can re-interrupt within this
+          // same stream -- handleEvent's "interrupt" case already re-opens
+          // the panel for a round it hasn't seen (dedup keys on
+          // interrupt_id, which the backend varies per round), so no extra
+          // handling is needed here beyond passing events through.
           handleEvent,
           controller.signal,
         );
