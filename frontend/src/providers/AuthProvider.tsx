@@ -38,12 +38,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const developmentBypass = isDevelopmentBypassEnabled();
 
   useEffect(() => {
-    const expire = () =>
+    const expire = () => {
+      // Bypass mode has no real session (tokens are cleared below on
+      // purpose), so a 401 here means some endpoint is demanding a token
+      // regardless of REQUIRE_AUTH -- not a real session expiry. Wiping
+      // DEVELOPMENT_USER in that case is what was bouncing the whole app to
+      // /login then /chats mid-edit; see apiClient's notifyExpiredSession
+      // console.error for which request triggered it.
+      if (developmentBypass) {
+        console.warn(
+          "Bypass modunda 401 alındı; oturum korunuyor. Bir uç REQUIRE_AUTH'a bakmadan token istiyor olabilir.",
+        );
+        return;
+      }
       setUser((current) => {
         if (current)
           localStorage.removeItem(`kachow.chat.session.${current.id}`);
         return null;
       });
+    };
     window.addEventListener(AUTH_EXPIRED_EVENT, expire);
     if (developmentBypass) {
       clearTokens();
