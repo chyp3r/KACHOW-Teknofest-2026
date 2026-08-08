@@ -25,6 +25,7 @@ from app.ai.revision.instruction import (
     needs_reretrieval,
     parse_revision_instruction,
 )
+from app.ai.revision.retrieval import maybe_extend_context
 
 __all__ = [
     "ChangeEntry",
@@ -41,6 +42,7 @@ __all__ = [
     "decompose_instruction",
     "detect_conflicts_deterministic",
     "locate_target",
+    "maybe_extend_context",
     "merge_conflicts",
     "needs_reretrieval",
     "parse_revision_instruction",
