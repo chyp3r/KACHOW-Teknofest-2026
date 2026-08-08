@@ -23,9 +23,7 @@ the fact.
 """
 
 import logging
-import re
-from dataclasses import dataclass
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
 
@@ -34,6 +32,18 @@ from app.ai.agents.reviser import ReviserAgent
 from app.ai.guardrails.injection import assert_no_prompt_leak
 from app.ai.llms.base import BaseLLMClient
 from app.ai.reasoning_levels import get_reasoning_level_preset
+from app.ai.revision.instruction import (
+    EditDirective,
+    Operation,
+    RevisionInstruction,
+    Scope,
+    TargetSpan,
+    _merge,
+    decompose_instruction,
+    locate_target,
+    needs_reretrieval,
+    parse_revision_instruction,
+)
 from app.ai.session.focus import DraftVersion
 from app.ai.verification import (
     InfoQuestion,
@@ -43,175 +53,25 @@ from app.ai.verification import (
     verify_draft,
 )
 from app.ai.workflows.correspondence import format_correspondence_profile
-from app.ai.workflows.intent_scorer import normalize
 from app.core.config import settings
 from app.core.enums.step_status import StepStatus
 
 logger = logging.getLogger(__name__)
 
-Scope = Literal["paragraph", "section", "whole"]
-Operation = Literal["tone_formal", "tone_informal", "shorten", "lengthen", "content"]
-
-
-@dataclass(frozen=True)
-class RevisionInstruction:
-    """The user's revise request, parsed into a scope and an operation.
-
-    Attributes:
-        scope: What part of the draft the instruction targets.
-        operation: What kind of change it asks for. Informational only --
-            it does not change which prompt runs, only what a caller might
-            log or show; the model reads ``raw`` directly.
-        section_hint: A recognized structural part name (see
-            ``_SECTION_HINTS``), when ``scope == "section"``.
-        ordinal: A 1-based paragraph index (``-1`` means "last"), when
-            ``scope == "paragraph"``.
-        raw: The instruction text, unmodified, for the prompt.
-    """
-
-    scope: Scope
-    operation: Operation
-    section_hint: Optional[str]
-    ordinal: Optional[int]
-    raw: str
-
-
-@dataclass(frozen=True)
-class TargetSpan:
-    """A char range in the draft the rewrite should be confined to."""
-
-    start: int
-    end: int
-    text: str
-
-
-#: Recognized structural parts of the fixed 9-part official letter format
-#: (see prompts/templates/writer.md) and the phrases that name them.
-_SECTION_HINTS: dict[str, tuple[str, ...]] = {
-    "konu": ("konu",),
-    "giris": ("giris", "ilk paragraf", "baslangic paragrafi"),
-    "kapanis": ("kapanis", "son paragraf", "arz kismi", "rica kismi"),
-    "imza": ("imza", "imza blogu", "imza kismi"),
-}
-
-#: Phrases inside the *closing* paragraph specifically -- used to locate the
-#: "kapanış" section structurally rather than just by position, since a
-#: closing sentence can appear mid-paragraph rather than alone on one.
-_CLOSING_MARKERS = ("arz ederim", "rica ederim", "bilgilerinize sunulur")
-
-_ORDINAL_PATTERN = re.compile(r"(\d+)\s*\.?\s*paragraf")
-_ORDINAL_WORDS: dict[str, int] = {
-    "ilk": 1, "birinci": 1, "ikinci": 2, "ucuncu": 3, "dorduncu": 4, "son": -1,
-}
-
-_OPERATION_HINTS: dict[Operation, tuple[str, ...]] = {
-    "tone_formal": ("daha resmi", "resmiyet"),
-    "tone_informal": ("daha samimi", "daha sicak"),
-    "shorten": ("kisalt", "daha kisa", "ozetle"),
-    "lengthen": ("uzat", "daha uzun", "detaylandir", "genislet"),
-}
-
-
-def parse_revision_instruction(instruction: str) -> RevisionInstruction:
-    """Extract a scope and an operation from a revise request.
-
-    Deterministic keyword matching over the draft's own known, fixed
-    structure -- not a general NLU parse. An instruction naming neither a
-    paragraph number nor a recognized section resolves to ``scope="whole"``,
-    which is the safe default: a full, still single-call rewrite rather than
-    a guess at which part was meant.
-
-    Args:
-        instruction: The user's revise request.
-
-    Returns:
-        The parsed instruction.
-    """
-    normalized = normalize(instruction)
-
-    section_hint: Optional[str] = None
-    for canonical, surfaces in _SECTION_HINTS.items():
-        if any(surface in normalized for surface in surfaces):
-            section_hint = canonical
-            break
-
-    ordinal: Optional[int] = None
-    match = _ORDINAL_PATTERN.search(normalized)
-    if match:
-        ordinal = int(match.group(1))
-    else:
-        padded = f" {normalized} "
-        for word, value in _ORDINAL_WORDS.items():
-            if f" {word} paragraf" in padded:
-                ordinal = value
-                break
-
-    operation: Operation = "content"
-    for op, surfaces in _OPERATION_HINTS.items():
-        if any(surface in normalized for surface in surfaces):
-            operation = op
-            break
-
-    if ordinal is not None:
-        scope: Scope = "paragraph"
-    elif section_hint is not None:
-        scope = "section"
-    else:
-        scope = "whole"
-
-    return RevisionInstruction(
-        scope=scope, operation=operation, section_hint=section_hint,
-        ordinal=ordinal, raw=instruction,
-    )
-
-
-def _split_paragraphs(draft: str) -> list[tuple[int, int]]:
-    """Return (start, end) char offsets of each blank-line-separated paragraph."""
-    return [(m.start(), m.end()) for m in re.finditer(r"[^\n]+(?:\n(?!\n)[^\n]+)*", draft)]
-
-
-def locate_target(draft: str, instruction: RevisionInstruction) -> Optional[TargetSpan]:
-    """Find the char span ``instruction`` targets, if it names one precisely.
-
-    Args:
-        draft: The current draft text.
-        instruction: The parsed instruction.
-
-    Returns:
-        The target span, or ``None`` when the scope is ``"whole"`` or the
-        named paragraph/section can't be located -- callers treat ``None``
-        as "rewrite the whole draft" rather than guessing.
-    """
-    paragraphs = _split_paragraphs(draft)
-    if not paragraphs:
-        return None
-
-    if instruction.scope == "paragraph" and instruction.ordinal is not None:
-        index = instruction.ordinal - 1 if instruction.ordinal > 0 else len(paragraphs) - 1
-        if 0 <= index < len(paragraphs):
-            start, end = paragraphs[index]
-            return TargetSpan(start, end, draft[start:end])
-        return None
-
-    if instruction.scope == "section" and instruction.section_hint:
-        if instruction.section_hint == "imza":
-            start, end = paragraphs[-1]
-            return TargetSpan(start, end, draft[start:end])
-        if instruction.section_hint == "kapanis":
-            for start, end in paragraphs:
-                if any(marker in normalize(draft[start:end]) for marker in _CLOSING_MARKERS):
-                    return TargetSpan(start, end, draft[start:end])
-            return None
-        if instruction.section_hint == "konu":
-            for start, end in paragraphs:
-                if normalize(draft[start:end]).startswith("konu"):
-                    return TargetSpan(start, end, draft[start:end])
-            return None
-        if instruction.section_hint == "giris":
-            start, end = paragraphs[0]
-            return TargetSpan(start, end, draft[start:end])
-
-    return None
+#: Re-exported for callers (and tests) that imported these from this module
+#: before parsing moved to app.ai.revision.instruction.
+__all__ = [
+    "EditDirective",
+    "Operation",
+    "RevisionInstruction",
+    "Scope",
+    "TargetSpan",
+    "decompose_instruction",
+    "locate_target",
+    "needs_reretrieval",
+    "parse_revision_instruction",
+    "run_revise",
+]
 
 
 def _build_revise_prompt(
@@ -248,16 +108,6 @@ def _build_revise_prompt(
         "### ÇIKTI:\nYalnızca istenen bölümün (veya kural tüm taslağı kapsıyorsa taslağın "
         "tamamının) yeni metnini döndür. Meta yorum, markdown kod bloğu veya açıklama ekleme."
     )
-
-
-def _merge(source_draft: str, target: Optional[TargetSpan], rewritten: str) -> str:
-    """Splice the rewritten text back in. See module docstring for why this
-    makes an unintended change to the untouched portion structurally
-    impossible rather than merely something to check for afterward."""
-    rewritten = rewritten.strip()
-    if target is None:
-        return rewritten
-    return f"{source_draft[:target.start]}{rewritten}{source_draft[target.end:]}"
 
 
 async def run_revise(
