@@ -76,6 +76,17 @@ class DraftVersion:
             to, for the same reason -- without it, a revise turn's
             groundedness check has strictly less material to match claims
             against than the original draft's did.
+        style_examples: The few-shot style-example texts this version was
+            written with (see ``retrieve_examples_node``), carried forward
+            so a later `revise` turn's verifier can run the same
+            ``ornek_sizintisi`` leak check the original draft got --
+            without this a revision's verify pass had strictly weaker
+            grounding checks than the draft it revised.
+        correspondence_type_source: Whether ``correspondence_type`` was
+            resolved from an explicit signal or guessed (``"fallback"``,
+            see ``resolve_correspondence_type``). Carried forward so a
+            revise turn's approval gate applies the same "a guessed type
+            needs a human" rule ``draft_graph.verify_node`` always has.
     """
 
     version: int
@@ -86,6 +97,8 @@ class DraftVersion:
     classification: dict[str, Any] = dataclasses.field(default_factory=dict)
     context: str = ""
     source_document: str = ""
+    style_examples: tuple[str, ...] = ()
+    correspondence_type_source: str = ""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -226,6 +239,11 @@ def compute_focus_update(
             classification=draft_result.get("classification") or {},
             context=draft_result.get("context") or "",
             source_document=draft_result.get("source_document") or "",
+            style_examples=tuple(
+                example.get("text", "") if isinstance(example, dict) else str(example)
+                for example in (draft_result.get("style_examples") or [])
+            ),
+            correspondence_type_source=draft_result.get("correspondence_type_source") or "",
         )
         update["active_draft"] = version
         update["draft_history"] = (*focus.draft_history, version)
