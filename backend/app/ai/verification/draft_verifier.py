@@ -173,6 +173,17 @@ class VerificationReport(BaseModel):
             "kopyalamaması söylenmiş olsa da, bunun deterministik doğrulaması."
         ),
     )
+    instruction_only_claims: list[UnsupportedClaim] = Field(
+        default_factory=list,
+        description=(
+            "Taslakta geçen, kaynak evrakta veya mevzuat bağlamında doğrulanamayan "
+            "ama kullanıcının revizyon talimatında geçen değerler. Skora ve onay "
+            "kararına example_leaks gibi katılmazlar -- kullanıcının talimatı "
+            "tanım gereği kabul edilir (bkz. modül dokümantasyonu) -- ancak "
+            "app.ai.revision.conflict bu listeyi talimatın mevzuat/kaynakla "
+            "çelişip çelişmediğini denetlemek için okur."
+        ),
+    )
     placeholder_count: int = Field(
         default=0, description="Taslakta doldurulması gereken yer tutucu sayısı."
     )
@@ -403,7 +414,16 @@ def verify_draft(
         classification: Analysis output, whose extracted fields also count as
             trusted material.
         instructions: The user's instructions, which may legitimately introduce
-            names or dates the source document does not contain.
+            names or dates the source document does not contain. Not folded
+            into the grounding haystack (see ``trusted`` below) -- a claim
+            that traces only to the instructions is split into
+            ``instruction_only_claims`` instead, so it still scores and
+            approves exactly as if it were grounded (the user's word is
+            trusted by construction, same net effect as before this field
+            existed), but the fact that it came *only* from the instruction
+            and not from the source/mevzuat becomes visible to
+            ``app.ai.revision.conflict``, which is the layer responsible for
+            deciding whether that is worth warning about.
         strict: When False (the ``other_official`` correspondence type, where the
             writer is permitted to supply conventional boilerplate) ungrounded
             claims are reported but do not force human approval.
@@ -426,7 +446,11 @@ def verify_draft(
             evaluation_notes="Taslak boş olduğu için doğrulanamadı.",
         )
 
-    trusted: list[str] = [source_document, context, instructions]
+    # `instructions` is deliberately not in the grounding haystack -- it is
+    # split out below via `instruction_only_claims` instead of being folded
+    # in here, so its presence is visible to the caller rather than silently
+    # indistinguishable from source/mevzuat grounding.
+    trusted: list[str] = [source_document, context]
     if classification:
         trusted.append(_flatten_classification(classification))
 
@@ -442,6 +466,33 @@ def verify_draft(
 
     claims = _collect_claims(auditable, haystack, canonical_index)
     missing_structure, structure_penalty = _check_structure(draft)
+
+    # Split out claims that are unsupported by source/mevzuat but *are*
+    # present in the user's own instructions -- checked before example_leaks
+    # so a value the user explicitly typed is never mislabeled as a leaked
+    # style example just because it happens to also appear in one. Kept out
+    # of `claims`/the penalty and out of `requires_approval` on purpose: the
+    # user's word is trusted by construction (see `verify_draft`'s
+    # docstring), so this split changes *visibility*, not scoring.
+    instruction_only_claims: list[UnsupportedClaim] = []
+    instructions_haystack = _fold(instructions)
+    if instructions_haystack:
+        remaining_after_instructions: list[UnsupportedClaim] = []
+        for claim in claims:
+            if _fold(claim.value) in instructions_haystack:
+                instruction_only_claims.append(
+                    claim.model_copy(
+                        update={
+                            "explanation": (
+                                "Bu değer kaynak evrakta veya mevzuat bağlamında değil, "
+                                f"yalnızca kullanıcının talimatında geçiyor (özgün tür: {claim.kind})."
+                            ),
+                        }
+                    )
+                )
+            else:
+                remaining_after_instructions.append(claim)
+        claims = remaining_after_instructions
 
     # Split out claims that are unsupported by the trusted sources *and*
     # traceable to a style example -- a stronger, more specific signal than
@@ -490,6 +541,7 @@ def verify_draft(
         requires_human_approval=requires_approval,
         unsupported_claims=claims,
         example_leaks=example_leaks,
+        instruction_only_claims=instruction_only_claims,
         missing_structure=missing_structure,
         placeholder_count=placeholder_count,
         evaluation_notes=_build_notes(
