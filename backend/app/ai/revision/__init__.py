@@ -6,6 +6,7 @@ revision sub-graph, and ``app.ai.workflows.revise`` for the public entry
 point (``run_revise``) that callers outside this package use.
 """
 
+from app.ai.revision.changelog import ChangeEntry, RevisionChangelog, build_changelog
 from app.ai.revision.instruction import (
     EditDirective,
     Operation,
@@ -19,11 +20,14 @@ from app.ai.revision.instruction import (
 )
 
 __all__ = [
+    "ChangeEntry",
     "EditDirective",
     "Operation",
+    "RevisionChangelog",
     "RevisionInstruction",
     "Scope",
     "TargetSpan",
+    "build_changelog",
     "decompose_instruction",
     "locate_target",
     "needs_reretrieval",
