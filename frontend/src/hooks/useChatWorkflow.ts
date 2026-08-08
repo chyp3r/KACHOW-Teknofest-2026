@@ -259,8 +259,35 @@ export function useChatWorkflow(
             },
           ]);
           break;
-        case "error":
+        case "error": {
           appendLog(`Hata: ${event.message}`);
+          // The backend refuses a fresh message on a thread it still
+          // considers paused (see chat_service._invoke's AIException,
+          // details={"session_id": ...}) -- the client-side threadId then
+          // points at a session that can never advance. Treat it the same
+          // as pressing "Yeni Sohbet" instead of showing the raw backend
+          // text, which only told the user to hit an endpoint by hand.
+          const staleThreadId =
+            typeof event.details === "object" &&
+            event.details !== null &&
+            typeof (event.details as { session_id?: unknown }).session_id ===
+              "string";
+          if (staleThreadId) {
+            setClientSessionId(createClientSessionId());
+            setThreadId(null);
+            setPendingInterrupt(null);
+            seenInterrupts.current.clear();
+            setMessages((previous) => [
+              ...previous,
+              {
+                sender: "assistant",
+                text: "Bu oturum askıda kalmış görünüyor; yeni bir sohbet başlatıldı. Mesajınızı tekrar gönderebilirsiniz.",
+                status: "FAILED",
+                logs: logsRef.current,
+              },
+            ]);
+            break;
+          }
           setMessages((previous) => [
             ...previous,
             {
@@ -271,6 +298,7 @@ export function useChatWorkflow(
             },
           ]);
           break;
+        }
       }
     },
     [appendLog],

@@ -12,8 +12,8 @@ from app.domains.documents.model.document_model import DocumentModel
 from app.domains.documents.repository import DocumentRepository
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
+from app.core.config import settings
 from app.core.constants import (
-    AI_WORKFLOW_TIMEOUT_SECONDS,
     ALLOWED_DOCUMENT_EXTENSIONS,
     ALLOWED_FILE_TYPES,
     MAX_FILE_SIZE_BYTES,
@@ -431,12 +431,12 @@ class DocumentService:
                     {"input_text": text, "is_ocr_text": used_ocr},
                     config=self._trace_config(),
                 ),
-                timeout=AI_WORKFLOW_TIMEOUT_SECONDS,
+                timeout=settings.AI_WORKFLOW_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError as exc:
             raise AIException(
                 message="Evrak analizi zaman aşımına uğradı.",
-                details={"timeout_seconds": AI_WORKFLOW_TIMEOUT_SECONDS},
+                details={"timeout_seconds": settings.AI_WORKFLOW_TIMEOUT_SECONDS},
             ) from exc
         except Exception as exc:
             logger.exception("Document analysis workflow failed")

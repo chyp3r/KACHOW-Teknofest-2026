@@ -58,8 +58,9 @@ DEFAULT_PAGE_SIZE: int = 20
 MAX_PAGE_SIZE: int = 100
 
 # ---------- AI Workflow ----------
+# AI_WORKFLOW_TIMEOUT_SECONDS lives in core/config.py (Settings) -- it is
+# deployment-configurable, unlike the constants in this file.
 MAX_RETRY_ATTEMPTS: int = 3
-AI_WORKFLOW_TIMEOUT_SECONDS: int = 480
 
 # ---------- CORS ----------
 CORS_ORIGINS: list[str] = [

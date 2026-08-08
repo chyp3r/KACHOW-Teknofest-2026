@@ -38,7 +38,11 @@ export function getRefreshToken(): string | null {
   return sessionStorage.getItem(REFRESH_TOKEN_KEY);
 }
 
-function notifyExpiredSession(): void {
+function notifyExpiredSession(path: string): void {
+  // Any 401 anywhere logs the whole app out (see AuthProvider's listener),
+  // so when that happens unexpectedly this is the fastest way to see which
+  // request actually caused it.
+  console.error(`Oturum sonlandırıldı: ${path} 401 döndürdü.`);
   clearTokens();
   window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
 }
@@ -132,7 +136,7 @@ export async function apiFetch(
   }
 
   if (!(await ensureRefreshed())) {
-    notifyExpiredSession();
+    notifyExpiredSession(path);
     return response;
   }
 
@@ -140,7 +144,7 @@ export async function apiFetch(
     ...init,
     headers: requestHeaders(init, authenticated),
   });
-  if (response.status === 401) notifyExpiredSession();
+  if (response.status === 401) notifyExpiredSession(path);
   return response;
 }
 
