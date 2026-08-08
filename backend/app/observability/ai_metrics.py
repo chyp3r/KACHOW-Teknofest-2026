@@ -175,6 +175,42 @@ ROUTER_STAGE_DURATION = Histogram(
     ["stage"],
 )
 
+#: How the human approval gate's "revizyon iste" loop (planning_graph
+#: gate_revise_node/route_after_gate) resolves: another round produced (still
+#: within HITL_MAX_GATE_REVISIONS) vs. the round cap was hit and the gate
+#: stopped offering it. Distinguishes "users keep revising and it works" from
+#: "users keep hitting the cap," which call for different responses (better
+#: rewrites vs. a higher cap).
+GATE_REVISIONS = Counter(
+    "kachow_gate_revisions_total",
+    "Human approval gate revision rounds, by outcome.",
+    ["outcome"],
+)
+
+#: Findings from app.ai.revision.conflict -- a user's revision instruction
+#: applied despite contradicting the retrieved mevzuat or the source
+#: document. Every finding is applied anyway and only forces a human gate
+#: (see ConflictReport.applied_anyway); this metric is what makes "how often
+#: does that actually happen, and of what kind" visible instead of only
+#: showing up as an extra HITL_INTERRUPTS count with no context.
+REVISION_CONFLICTS = Counter(
+    "kachow_revision_conflicts_total",
+    "Instruction-vs-mevzuat/source conflicts detected during a revision, by kind, severity and source.",
+    ["kind", "severity", "source"],
+)
+
+#: Whether a revision's conditional legislation re-retrieval
+#: (app.ai.revision.retrieval.maybe_extend_context) actually ran, by outcome
+#: -- most revisions should skip (pure tone/length edits), so a rising
+#: "extended" share tracks how often users ask revisions to introduce new
+#: normative content, and "failed" tracks retriever health independent of
+#: the draft's own quality gate.
+REVISION_RETRIEVAL = Counter(
+    "kachow_revision_retrieval_total",
+    "Revision-time conditional legislation re-retrieval outcomes.",
+    ["decision"],
+)
+
 #: The parameter set the deterministic decisions above were produced under.
 #: Without it a shift in DRAFT_SCORE or CLAIM_MATCH is ambiguous between "the
 #: traffic changed" and "we moved a threshold" -- and those call for opposite
