@@ -20,13 +20,26 @@ import dataclasses
 from typing import Any, Literal, Optional
 
 #: draft_result statuses that represent a real, user-visible draft text --
-#: worth recording as a version. Deliberately excludes REVISE_REQUESTED,
-#: REJECTED and FAILED: a revise request has no new text yet (the actual
-#: revision flow that would produce one doesn't exist until a later phase),
-#: a rejection and a failure aren't versions of anything.
+#: worth recording as a version. FAILED is excluded: it carries no new text.
+#: REVISE_REQUESTED is included -- unintuitively, since it sounds like "no
+#: text yet" -- because the only way it reaches this function as a *turn's
+#: final* status is the human approval gate's revision-round cap being hit
+#: (see planning_graph.route_after_gate/gate_revise_node): by construction,
+#: every "revizyon iste" click that still has rounds left is immediately
+#: superseded by a real gate_revise_node result before the turn can end, so
+#: a REVISE_REQUESTED status reaching here always carries the *last actually
+#: produced* revision's text, just capped from trying one more round -- not
+#: a request with nothing behind it yet.
 _VERSIONABLE_DRAFT_STATUSES = frozenset(
-    {"COMPLETED", "NEEDS_HUMAN_APPROVAL", "NEEDS_INPUT", "APPROVED"}
+    {"COMPLETED", "NEEDS_HUMAN_APPROVAL", "NEEDS_INPUT", "APPROVED", "REVISE_REQUESTED"}
 )
+
+#: draft_result statuses that end the active draft's life without producing
+#: a new version of it -- the existing version is annotated and archived
+#: instead (see compute_focus_update's rejection branch). REJECTED is the
+#: only one: unlike REVISE_REQUESTED above, a rejection is a real decision
+#: about the *existing* text, not new text of its own.
+_ARCHIVE_ONLY_DRAFT_STATUSES = frozenset({"REJECTED"})
 
 #: Intents whose message is worth folding into the session's objective.
 #: A greeting or a document question isn't part of "what the user wants
@@ -87,18 +100,36 @@ class DraftVersion:
             see ``resolve_correspondence_type``). Carried forward so a
             revise turn's approval gate applies the same "a guessed type
             needs a human" rule ``draft_graph.verify_node`` always has.
+        status: The ``draft_result`` status this version was recorded
+            under (e.g. ``"COMPLETED"``, ``"NEEDS_HUMAN_APPROVAL"``,
+            ``"REJECTED"``). Informational -- nothing here re-derives
+            behaviour from it, it is for a caller (a history view, a log)
+            that wants to show what happened without re-deriving it from
+            ``created_from``/``rejection_reason``.
+        rejection_reason: Why this version was rejected, when
+            ``created_from == "rejected"``. Empty otherwise.
+        conflicts: This version's own instruction-vs-mevzuat/source
+            conflict findings, when it was produced by a revision (see
+            ``app.ai.revision.conflict``). Empty for a fresh draft.
+        changelog: This version's own change log against the version it
+            replaced, when it was produced by a revision (see
+            ``app.ai.revision.changelog``). Empty for a fresh draft.
     """
 
     version: int
     text: str
     correspondence_type: str
     confidence_score: float
-    created_from: Literal["draft", "revise", "human_fill"]
+    created_from: Literal["draft", "revise", "human_fill", "gate_revise", "rejected"]
     classification: dict[str, Any] = dataclasses.field(default_factory=dict)
     context: str = ""
     source_document: str = ""
     style_examples: tuple[str, ...] = ()
     correspondence_type_source: str = ""
+    status: str = ""
+    rejection_reason: str = ""
+    conflicts: tuple[dict[str, Any], ...] = ()
+    changelog: dict[str, Any] = dataclasses.field(default_factory=dict)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -132,6 +163,12 @@ class SessionFocus:
             0 whenever the user is actively drafting or revising; once it
             reaches ``ACTIVE_DRAFT_IDLE_LIMIT``, ``active_draft`` clears
             itself. Meaningless while ``active_draft`` is ``None``.
+        last_rejection: The most recently rejected version's own summary
+            (``{"version", "reason", "draft"}``), set whenever a
+            ``REJECTED`` draft_result archives the active draft (see
+            ``compute_focus_update``). Lets a reply or a later turn
+            reference "the draft you just rejected" without walking
+            ``draft_history`` to find it.
     """
 
     active_document_id: Optional[str] = None
@@ -142,6 +179,7 @@ class SessionFocus:
     last_referenced_anchor: Optional[str] = None
     last_intent: Optional[str] = None
     active_draft_idle_turns: int = 0
+    last_rejection: Optional[dict[str, Any]] = None
 
 
 def _accumulate_objective(existing: str, addition: str) -> str:
@@ -220,12 +258,23 @@ def compute_focus_update(
 
     draft_status = (draft_result or {}).get("status")
     produced_version = draft_status in _VERSIONABLE_DRAFT_STATUSES
+    archived_rejection = (
+        draft_status in _ARCHIVE_ONLY_DRAFT_STATUSES and focus.active_draft is not None
+    )
     if produced_version:
         # Keyed off which step actually produced this turn's result, not
         # inferred from "a draft already existed" -- the latter mislabeled
         # any second, entirely unrelated draft request in a later turn as a
-        # "revise" of the first.
-        created_from = "revise" if plan_intent == "revise" else "draft"
+        # "revise" of the first. A result from the human approval gate's own
+        # "revizyon iste" loop (see planning_graph.gate_revise_node) is
+        # distinguished from an ordinary revise turn -- both are still a
+        # revision, but one happened inside the gate, not the plan.
+        if draft_result.get("instruction_origin") == "human_gate":
+            created_from = "gate_revise"
+        elif plan_intent == "revise":
+            created_from = "revise"
+        else:
+            created_from = "draft"
         version = DraftVersion(
             version=len(focus.draft_history) + 1,
             text=draft_result.get("draft", ""),
@@ -244,9 +293,34 @@ def compute_focus_update(
                 for example in (draft_result.get("style_examples") or [])
             ),
             correspondence_type_source=draft_result.get("correspondence_type_source") or "",
+            status=str(draft_status or ""),
+            conflicts=tuple(draft_result.get("conflicts") or ()),
+            changelog=draft_result.get("changelog") or {},
         )
         update["active_draft"] = version
         update["draft_history"] = (*focus.draft_history, version)
+    elif archived_rejection:
+        # A rejection is a decision about the *existing* version, not a new
+        # one -- the text is unchanged, so the active draft is annotated
+        # in place (replacing its own entry in draft_history, which the
+        # SessionFocus invariant guarantees is that same object) rather than
+        # appended as a second, textually-identical version. The draft is
+        # archived, never lost -- see this module's docstring for why that
+        # matters (a rejected draft used to vanish entirely).
+        reason = (draft_result.get("rejection_reason") or "").strip()
+        rejected_version = dataclasses.replace(
+            focus.active_draft, created_from="rejected", status=str(draft_status),
+            rejection_reason=reason,
+        )
+        if focus.draft_history and focus.draft_history[-1] is focus.active_draft:
+            history = (*focus.draft_history[:-1], rejected_version)
+        else:
+            history = (*focus.draft_history, rejected_version)
+        update["draft_history"] = history
+        update["active_draft"] = None
+        update["last_rejection"] = {
+            "version": rejected_version.version, "reason": reason, "draft": rejected_version.text,
+        }
 
     # The active draft's lifetime: touching it (producing a version, or a
     # draft/revise turn even when that particular attempt didn't settle one --
@@ -254,7 +328,7 @@ def compute_focus_update(
     # reset phrase or ACTIVE_DRAFT_IDLE_LIMIT turns of anything else clears
     # it. `draft_history` is untouched either way -- this only decides which
     # version, if any, counts as "the" open one right now.
-    if produced_version:
+    if produced_version or archived_rejection:
         update["active_draft_idle_turns"] = 0
     elif reset_requested and focus.active_draft is not None:
         update["active_draft"] = None
