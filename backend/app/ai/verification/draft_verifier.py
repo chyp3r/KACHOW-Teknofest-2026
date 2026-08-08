@@ -165,6 +165,14 @@ class VerificationReport(BaseModel):
     missing_structure: list[str] = Field(
         default_factory=list, description="Resmî yazıda eksik olan yapısal unsurlar."
     )
+    example_leaks: list[UnsupportedClaim] = Field(
+        default_factory=list,
+        description=(
+            "Taslakta geçen, kaynakta doğrulanamayan ve yalnızca üslup referans "
+            "örneklerinde bulunan değerler -- writer/reviser'a örnekten somut bilgi "
+            "kopyalamaması söylenmiş olsa da, bunun deterministik doğrulaması."
+        ),
+    )
     placeholder_count: int = Field(
         default=0, description="Taslakta doldurulması gereken yer tutucu sayısı."
     )
@@ -384,6 +392,7 @@ def verify_draft(
     classification: dict[str, Any] | None = None,
     instructions: str = "",
     strict: bool = True,
+    style_examples: list[str] | None = None,
 ) -> VerificationReport:
     """Verify a draft's groundedness and structural completeness.
 
@@ -398,6 +407,14 @@ def verify_draft(
         strict: When False (the ``other_official`` correspondence type, where the
             writer is permitted to supply conventional boilerplate) ungrounded
             claims are reported but do not force human approval.
+        style_examples: Few-shot style-example texts handed to the writer (see
+            ``ExampleRetriever``), if any. Any ungrounded claim that traces
+            back to one of these -- a real institution name, date or case
+            number the writer copied instead of treating the example as
+            style-only -- is split out into ``example_leaks`` and always
+            forces human approval, independent of ``strict``: a leaked real
+            fact is a confidentiality/integrity problem the correspondence
+            type's leniency was never meant to cover.
 
     Returns:
         The verification report.
@@ -426,6 +443,35 @@ def verify_draft(
     claims = _collect_claims(auditable, haystack, canonical_index)
     missing_structure, structure_penalty = _check_structure(draft)
 
+    # Split out claims that are unsupported by the trusted sources *and*
+    # traceable to a style example -- a stronger, more specific signal than
+    # a generic unsupported claim (which could just as easily be an ordinary
+    # model slip). Kept out of `claims`/repair_items on purpose: a repair
+    # pass sees the exact same examples, so looping it back through the
+    # reviser risks reproducing the same leak instead of fixing it (see
+    # draft_graph.verify_node, which never feeds example_leaks into revision).
+    example_leaks: list[UnsupportedClaim] = []
+    examples_haystack = _fold(" \n ".join(style_examples or []))
+    if examples_haystack:
+        remaining: list[UnsupportedClaim] = []
+        for claim in claims:
+            if _fold(claim.value) in examples_haystack:
+                example_leaks.append(
+                    claim.model_copy(
+                        update={
+                            "kind": "ornek_sizintisi",
+                            "explanation": (
+                                "Bu değer yalnızca üslup referans örneğinde geçiyor; "
+                                "kaynak evrakta, mevzuat bağlamında veya kullanıcı "
+                                f"talimatında bulunmuyor (özgün tür: {claim.kind})."
+                            ),
+                        }
+                    )
+                )
+            else:
+                remaining.append(claim)
+        claims = remaining
+
     claim_penalty = min(
         len(claims) * UNSUPPORTED_CLAIM_PENALTY, MAX_UNSUPPORTED_PENALTY
     )
@@ -436,16 +482,18 @@ def verify_draft(
         or bool(missing_structure)
         or placeholder_count > 0
         or (strict and bool(claims))
+        or bool(example_leaks)
     )
 
     return VerificationReport(
         confidence_score=round(score, 1),
         requires_human_approval=requires_approval,
         unsupported_claims=claims,
+        example_leaks=example_leaks,
         missing_structure=missing_structure,
         placeholder_count=placeholder_count,
         evaluation_notes=_build_notes(
-            claims, missing_structure, placeholder_count, score
+            claims, missing_structure, placeholder_count, score, example_leaks
         ),
     )
 
@@ -511,6 +559,7 @@ def _build_notes(
     missing_structure: list[str],
     placeholder_count: int,
     score: float,
+    example_leaks: list[UnsupportedClaim] | None = None,
 ) -> str:
     """Compose the Turkish rationale shown alongside the score.
 
@@ -519,11 +568,18 @@ def _build_notes(
         missing_structure: Missing structural elements.
         placeholder_count: Number of unfilled placeholders.
         score: The computed confidence score.
+        example_leaks: Unsupported claims traced back to a style example.
 
     Returns:
         A human-readable summary.
     """
     notes: list[str] = []
+    if example_leaks:
+        sample = ", ".join(f"'{claim.value}'" for claim in example_leaks[:3])
+        notes.append(
+            f"{len(example_leaks)} adet değer yalnızca üslup referans örneğinde "
+            f"bulundu ve kaynakta doğrulanamadı ({sample}); insan onayı gerekiyor."
+        )
     if claims:
         sample = ", ".join(f"{claim.kind}: '{claim.value}'" for claim in claims[:3])
         notes.append(

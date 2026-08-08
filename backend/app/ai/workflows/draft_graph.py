@@ -610,6 +610,9 @@ def create_draft_graph(
             classification=classification,
             instructions=state.get("instructions", ""),
             strict=strict,
+            style_examples=[
+                example.get("text", "") for example in state.get("style_examples") or []
+            ],
         )
 
         # None means the level has no opinion; defer to the global setting.
