@@ -350,6 +350,7 @@ async def get_planning_graph(
     rag_graph: Any = Depends(get_rag_graph),
     draft_graph: Any = Depends(get_draft_graph),
     routing_graph: Any = Depends(get_routing_graph),
+    mevzuat_retriever: Any = Depends(get_document_analysis_mevzuat_retriever),
 ) -> Any:
     """Compile the master planning graph once per process.
 
@@ -370,6 +371,7 @@ async def get_planning_graph(
             embeddings_client=get_embeddings_client(),
             fast_llm_client=get_fast_llm_client(),
             checkpointer=get_checkpointer(),
+            mevzuat_retriever=mevzuat_retriever,
         )
     return _planning_graph
 

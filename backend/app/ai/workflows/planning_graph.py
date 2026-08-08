@@ -21,7 +21,7 @@ from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.guardrails.llm_nuance import judge_output_leakage
 from app.ai.guardrails.output_gate import classify_reason_kind, evaluate_response
 from app.ai.guardrails.sensitivity import SensitivityAssessment, assessment_from_analysis
-from app.ai.session.focus import SessionFocus, compute_focus_update, merge_focus
+from app.ai.session.focus import DraftVersion, SessionFocus, compute_focus_update, merge_focus
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
@@ -45,6 +45,7 @@ from app.ai.workflows.intent_rules import RESET_SURFACES
 from app.ai.workflows.intent_scorer import normalize
 from app.ai.workflows.planner import resolve_plan
 from app.ai.workflows.revise import run_revise
+from app.ai.workflows.revise_graph import create_revise_graph
 from app.ai.workflows.step_graph import STEP_SPECS, StepSpec, all_steps_settled, ready_steps
 from app.core.config import settings
 from app.core.enums.reasoning_level import ReasoningLevel
@@ -72,6 +73,7 @@ STEP_LABELS = {
     "assist": "Asistan",
     "revise": "Taslak Revizyonu",
     "clarify": "Açıklayıcı Soru",
+    "gate_revise": "Geri Bildirimli Revizyon",
 }
 
 STEP_MESSAGES = {
@@ -81,6 +83,7 @@ STEP_MESSAGES = {
     "assist": "Asistan yanıtı hazırlanıyor...",
     "revise": "Taslak talebe göre güncelleniyor...",
     "clarify": "İsteğinizi netleştirmek için bir soru hazırlanıyor...",
+    "gate_revise": "Onay kapısındaki geri bildiriminize göre taslak güncelleniyor...",
 }
 
 def _dependency_failed(
@@ -251,6 +254,15 @@ class PlanningState(TypedDict, total=False):
     revise_result: dict[str, Any]
     clarify_result: dict[str, Any]
     final_output: dict[str, Any]
+    #: How many times the human approval gate's own "revizyon iste" action
+    #: has re-run the revise sub-graph *within this turn* (see
+    #: gate_revise_node/route_after_gate). Reset to 0 every turn in
+    #: planning_node, bounded by settings.HITL_MAX_GATE_REVISIONS.
+    gate_revision_count: int
+    #: The human's typed revision note from the gate's most recent
+    #: "revizyon iste" click, consumed by gate_revise_node and cleared
+    #: immediately after -- never read anywhere else.
+    gate_revision_note: str
     #: Persists across separate ainvoke() calls on the same checkpointer
     #: thread_id (see ChatService._thread_id) -- this is the whole memory
     #: story; there is no separate store to keep consistent with it. Holds up
@@ -413,7 +425,12 @@ def _summarize_step_outcome(
             error = draft_result.get("error") or "bilinmeyen bir hata"
             return f"[Sistem notu] {label} başarısız oldu: {error}"
         if status == StepStatus.REJECTED:
-            return f"[Sistem notu] {label} reddedildi."
+            reason = draft_result.get("rejection_reason")
+            return (
+                f"[Sistem notu] {label} reddedildi (gerekçe: {reason})."
+                if reason
+                else f"[Sistem notu] {label} reddedildi."
+            )
         return None
 
     if plan_intent == "analyze":
@@ -490,6 +507,7 @@ def create_planning_graph(
     embeddings_client: BaseEmbeddingsClient | None = None,
     fast_llm_client: Optional[BaseLLMClient] = None,
     checkpointer: Any = None,
+    mevzuat_retriever: Any = None,
 ):
     """Create and compile the master orchestration workflow.
 
@@ -510,6 +528,9 @@ def create_planning_graph(
             document search.
         fast_llm_client: Small model for intent classification on ambiguous
             messages. Falls back to ``llm_client``.
+        mevzuat_retriever: Optional retriever handed to the revise
+            sub-graph for conditional legislation re-retrieval (see
+            ``app.ai.revision.retrieval``). None always skips it.
         checkpointer: Optional LangGraph checkpointer (see
             ``app.infrastructure.checkpointing``). Required for the
             ``human_gate`` node's ``interrupt()`` calls to actually pause and
@@ -543,6 +564,12 @@ def create_planning_graph(
     # is still a meaningful lexical signal for RRF fusion against the dense
     # vector.
     qa_sparse_encoder = SparseBM25Encoder()
+
+    # Built once per graph, like draft_graph/routing_graph -- run_revise
+    # (both the plain "revise" step and the human approval gate's own
+    # "revizyon iste" loop, see gate_revise_node) invokes this compiled
+    # sub-graph rather than building a fresh one per call.
+    revise_graph = create_revise_graph(llm_client, fast_llm_client, mevzuat_retriever)
 
     # Layer 2 of the intent ladder. Built once per graph, and only when there is
     # an embeddings client to build it with -- without one the ladder simply
@@ -645,6 +672,8 @@ def create_planning_graph(
             "revise_result": {},
             "clarify_result": {},
             "final_output": {},
+            "gate_revision_count": 0,
+            "gate_revision_note": "",
             "history": [{"role": "user", "content": state["input_text"]}],
             # Always written, even to None: a decision of any other kind
             # supersedes and clears a stale open question rather than
@@ -1130,7 +1159,9 @@ def create_planning_graph(
             fast_llm_client=fast_llm_client,
             reasoning_level=state.get("reasoning_level", ReasoningLevel.BALANCED.value),
             config=config,
-            emit_token_fn=emit_token,
+            mevzuat_retriever=mevzuat_retriever,
+            revise_graph=revise_graph,
+            instruction_origin="user_turn",
         )
         updates["draft_result"] = result
         updates["revise_result"] = {"status": result["status"]}
@@ -1313,7 +1344,15 @@ def create_planning_graph(
         """
         steps = state.get("plan_steps") or []
         if all_steps_settled(steps, state):
-            return {}
+            # Reached after the human approval gate's own loop (approve, or
+            # gate_revise_node settling without needing another gate round)
+            # resolves a plan with no step left to naturally recompute
+            # final_output -- "revise" is a single-step plan (see
+            # planner.PLAN_BY_INTENT), so nothing downstream of the gate
+            # would otherwise ever refresh it, and the turn's reply would
+            # silently reflect the stale pre-gate snapshot instead of what
+            # the gate actually decided.
+            return {"final_output": _compile_final_output(state, {})}
 
         ready = ready_steps(steps, state)
         if not ready:
@@ -1372,13 +1411,21 @@ def create_planning_graph(
             else StepStatus.COMPLETED
         )
 
-        return {
+        output: dict[str, Any] = {
             "status": final_status,
             "classification": _pick("classification_result"),
             "draft": draft_result,
             "routing": _pick("routing_result"),
             "assist": _pick("assist_result"),
         }
+        if draft_result.get("conflicts") or draft_result.get("changelog"):
+            output["revision"] = {
+                "conflicts": draft_result.get("conflicts") or [],
+                "conflict_notes": draft_result.get("conflict_notes", ""),
+                "changelog": draft_result.get("changelog") or {},
+                "rounds": state.get("gate_revision_count", 0),
+            }
+        return output
 
     async def human_gate_node(
         state: PlanningState, config: RunnableConfig
@@ -1395,6 +1442,7 @@ def create_planning_graph(
         missing_information = draft_result.get("missing_information") or []
         kind = "missing_information" if missing_information else "draft_approval"
 
+        gate_revision_count = state.get("gate_revision_count", 0)
         payload = {
             "kind": kind,
             "questions": missing_information,
@@ -1403,14 +1451,25 @@ def create_planning_graph(
             "judge": draft_result.get("judge", {}),
             "combined_score": draft_result.get("combined_score"),
             "requires_human_approval": draft_result.get("requires_human_approval"),
+            "conflicts": draft_result.get("conflicts") or [],
+            "conflict_notes": draft_result.get("conflict_notes", ""),
+            "changelog": draft_result.get("changelog") or {},
+            "revision_round": gate_revision_count,
+            "max_revision_rounds": settings.HITL_MAX_GATE_REVISIONS,
+            "revision_exhausted": gate_revision_count >= settings.HITL_MAX_GATE_REVISIONS,
         }
         # Deterministic, not a fresh uuid4: interrupt() re-executes everything
         # before it on resume, including this id's computation, and it must
         # come out identical both times for the frontend's dedup to work.
+        # gate_revision_count is part of the hash so a second gate round
+        # within the same turn gets a distinct id even when the model
+        # happens to produce byte-identical text -- without it the
+        # frontend's interrupt_id dedup would silently swallow the second
+        # round's interrupt and the run would hang waiting for an answer
+        # the client thinks it already gave.
         interrupt_id = hashlib.sha256(
-            f"{kind}:{draft_result.get('draft', '')}:{state.get('current_step_idx', 0)}".encode(
-                "utf-8"
-            )
+            f"{kind}:{draft_result.get('draft', '')}:{state.get('current_step_idx', 0)}:"
+            f"{gate_revision_count}".encode("utf-8")
         ).hexdigest()[:16]
 
         HITL_INTERRUPTS.labels(kind=kind).inc()
@@ -1473,24 +1532,46 @@ def create_planning_graph(
         # draft_approval
         action = answer.get("action")
         if action == "revise":
+            # Does NOT append to draft_result["instructions"] and does NOT
+            # set final_output -- the turn is not over. gate_revise_node
+            # (see route_after_gate) picks this note up and actually runs
+            # the revision in the same run, producing a real new draft
+            # before the gate is shown again. Previously this branch only
+            # tagged the status and ended the turn; the note was appended to
+            # "instructions" but nothing ever read it again (planning_node
+            # resets draft_result every turn, and REVISE_REQUESTED wasn't
+            # versionable), so "revizyon iste" silently discarded the draft
+            # and produced no revision at all.
             note = (answer.get("instructions") or "").strip()
-            existing = draft_result.get("instructions", "")
-            updated = {
-                **draft_result,
-                "instructions": f"{existing}\n\nEk talimat (insan geri bildirimi): {note}".strip(),
-                "status": StepStatus.REVISE_REQUESTED,
+            updates: dict[str, Any] = {
+                "gate_revision_note": note,
+                "draft_result": {**draft_result, "status": StepStatus.REVISE_REQUESTED},
             }
-            updates = {"draft_result": updated}
             # A resume may ask for a different reasoning level on the retry
             # (e.g. escalate to "deep" after a "fast" draft was rejected).
             # Omitted -> state's existing reasoning_level is left untouched.
             if answer.get("reasoning_level"):
                 updates["reasoning_level"] = answer["reasoning_level"]
-            updates["final_output"] = _compile_final_output(state, updates)
+            if state.get("gate_revision_count", 0) >= settings.HITL_MAX_GATE_REVISIONS:
+                # The round cap is already spent -- route_after_gate sends
+                # this straight to "end"/"focus" without ever visiting
+                # executor (unlike a clean approval, which loops back
+                # through it), so nothing else would compute final_output
+                # for this turn. draft_result["draft"] is unchanged by this
+                # branch, so this still reflects the last successful
+                # gate_revise round's real text, not a fresh attempt this
+                # click asked for but the cap won't allow.
+                updates["final_output"] = _compile_final_output(state, updates)
             return updates
 
         if action == "reject":
-            updated = {**draft_result, "status": StepStatus.REJECTED}
+            reason = (answer.get("reason") or answer.get("instructions") or "").strip()
+            updated = {
+                **draft_result,
+                "status": StepStatus.REJECTED,
+                "rejection_reason": reason,
+                "rejected_by": answer.get("user_id"),
+            }
             updates = {"draft_result": updated}
             updates["final_output"] = _compile_final_output(state, updates)
             return updates
@@ -1502,6 +1583,78 @@ def create_planning_graph(
             "approved_by": answer.get("user_id"),
         }
         return {"draft_result": updated}
+
+    async def gate_revise_node(state: PlanningState, config: RunnableConfig) -> dict[str, Any]:
+        """Actually perform the approval gate's "revizyon iste" request.
+
+        A separate node from ``human_gate_node`` for the same reason the
+        interrupt lives in its own node at all: resuming replays
+        ``human_gate_node`` from the top, and this node's revise sub-graph
+        call (a real, possibly multi-second LLM round trip) must not sit
+        inside that replay path.
+
+        Builds its own ``DraftVersion`` from ``draft_result`` -- this turn's
+        current settled draft -- rather than ``focus.active_draft``:
+        ``focus_node`` runs once, at the very end of the turn, so during a
+        multi-round gate loop ``focus.active_draft`` is still whatever it
+        was at the *start* of this turn. Reading it here would silently
+        revise a stale, one-round-older version on every round after the
+        first.
+        """
+        draft_result = state.get("draft_result") or {}
+        note = state.get("gate_revision_note", "")
+
+        active_draft = DraftVersion(
+            version=0,  # unused -- this DraftVersion is consumed by run_revise, never stored
+            text=draft_result.get("draft", ""),
+            correspondence_type=draft_result.get("correspondence_type") or "",
+            confidence_score=(
+                draft_result.get("combined_score") or draft_result.get("confidence_score") or 0.0
+            ),
+            created_from="draft",
+            classification=draft_result.get("classification") or {},
+            context=draft_result.get("context") or "",
+            source_document=draft_result.get("source_document") or "",
+            style_examples=tuple(
+                example.get("text", "") if isinstance(example, dict) else str(example)
+                for example in (draft_result.get("style_examples") or [])
+            ),
+            correspondence_type_source=draft_result.get("correspondence_type_source") or "",
+        )
+
+        await emit_node_start(
+            config, "gate_revise", "Geri Bildirimli Revizyon",
+            "Onay kapısındaki geri bildiriminize göre taslak güncelleniyor...",
+        )
+        result = await run_revise(
+            active_draft=active_draft,
+            instructions=note,
+            correspondence_type=active_draft.correspondence_type,
+            llm_client=llm_client,
+            fast_llm_client=fast_llm_client,
+            reasoning_level=state.get("reasoning_level", ReasoningLevel.BALANCED.value),
+            config=config,
+            mevzuat_retriever=mevzuat_retriever,
+            revise_graph=revise_graph,
+            instruction_origin="human_gate",
+        )
+        if result.get("status") == StepStatus.FAILED:
+            await emit_node_error(
+                config, "gate_revise", "Geri Bildirimli Revizyon",
+                "Geri bildiriminize göre revizyon üretilemedi.", detail=result.get("error", ""),
+            )
+        else:
+            await emit_node_end(
+                config, "gate_revise", "Geri Bildirimli Revizyon",
+                "Geri bildiriminize göre taslak güncellendi.", result,
+            )
+
+        return {
+            "draft_result": result,
+            "revise_result": {"status": result.get("status")},
+            "gate_revision_count": state.get("gate_revision_count", 0) + 1,
+            "gate_revision_note": "",
+        }
 
     def route_after_step(state: PlanningState) -> str:
         steps = state.get("plan_steps") or []
@@ -1524,14 +1677,44 @@ def create_planning_graph(
         status = draft_result.get("status")
         if status == StepStatus.NEEDS_INPUT:
             return "human_gate"
-        if status in {StepStatus.REVISE_REQUESTED, StepStatus.REJECTED}:
+        if status == StepStatus.REJECTED:
             return "end"
+        if status == StepStatus.REVISE_REQUESTED:
+            # Bounded: once the round cap is hit, the gate stops offering
+            # another automatic revision and the turn ends with whatever
+            # text the last successful round produced (see
+            # SessionFocus._VERSIONABLE_DRAFT_STATUSES's own docstring on
+            # why that is still safe to version).
+            if state.get("gate_revision_count", 0) < settings.HITL_MAX_GATE_REVISIONS:
+                return "gate_revise"
+            return "end"
+        return "continue"
+
+    def route_after_gate_revise(state: PlanningState) -> str:
+        draft_result = state.get("draft_result") or {}
+        status = draft_result.get("status")
+        if status == StepStatus.FAILED:
+            return "end"
+        if not has_checkpointer:
+            return "continue"
+        if status == StepStatus.NEEDS_INPUT:
+            return "human_gate"
+        # A conflict is grounds for the gate the same way a low score or a
+        # PII finding is -- the instruction was still applied in full (see
+        # app.ai.revision.conflict's applied_anyway invariant), this only
+        # decides whether a human sees a warning about it before the run
+        # can call itself done.
+        if (
+            status == StepStatus.NEEDS_HUMAN_APPROVAL or draft_result.get("conflicts")
+        ) and settings.HITL_APPROVAL_GATE_ENABLED:
+            return "human_gate"
         return "continue"
 
     builder = StateGraph(PlanningState)
     builder.add_node("planning", planning_node)
     builder.add_node("executor", execute_step_node)
     builder.add_node("human_gate", human_gate_node)
+    builder.add_node("gate_revise", gate_revise_node)
     builder.add_node("focus", focus_node)
     builder.add_node("consolidate_memory", consolidate_memory_node)
 
@@ -1545,6 +1728,16 @@ def create_planning_graph(
     builder.add_conditional_edges(
         "human_gate",
         route_after_gate,
+        {
+            "human_gate": "human_gate",
+            "gate_revise": "gate_revise",
+            "continue": "executor",
+            "end": "focus",
+        },
+    )
+    builder.add_conditional_edges(
+        "gate_revise",
+        route_after_gate_revise,
         {"human_gate": "human_gate", "continue": "executor", "end": "focus"},
     )
     builder.add_edge("focus", "consolidate_memory")

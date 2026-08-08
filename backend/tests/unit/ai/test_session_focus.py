@@ -251,7 +251,32 @@ def test_a_rejected_draft_is_archived_without_staying_active():
     }
 
 
-def test_a_rejection_with_no_active_draft_is_a_no_op():
+def test_a_rejection_with_no_prior_active_draft_still_archives_the_real_text():
+    """The ordinary case, not an edge case: a draft created and rejected
+    within the same turn never became `focus.active_draft` first -- the
+    gate interrupts before `focus_node` ever runs (see its own docstring).
+    `draft_result["draft"]` still carries the real text and must not be
+    dropped just because there was no prior version to annotate."""
+    focus = SessionFocus()
+
+    update = compute_focus_update(
+        focus, document_id=None, plan_intent="draft", input_text="x",
+        draft_result={
+            "status": "REJECTED", "rejection_reason": "Üslup uygun değil.",
+            "draft": "reddedilen ilk taslak",
+        },
+    )
+
+    assert update["active_draft"] is None
+    archived = update["draft_history"][0]
+    assert archived.version == 1
+    assert archived.text == "reddedilen ilk taslak"
+    assert archived.created_from == "rejected"
+    assert archived.rejection_reason == "Üslup uygun değil."
+    assert update["last_rejection"]["draft"] == "reddedilen ilk taslak"
+
+
+def test_a_rejection_with_neither_active_draft_nor_text_is_a_no_op():
     """Not reachable through the router today (reject only fires from the
     approval gate, which requires a draft_result to exist) -- defensive."""
     focus = SessionFocus()

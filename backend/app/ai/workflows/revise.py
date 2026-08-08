@@ -181,6 +181,16 @@ async def run_revise(
         "classification": active_draft.classification,
         "context": final_state.get("context") or active_draft.context,
         "source_document": active_draft.source_document,
+        # Carried forward unchanged from the version being revised, not
+        # re-derived -- a revision neither retrieves new style examples nor
+        # re-resolves the correspondence type (see this module's docstring).
+        # Needed so a *second* gate_revise round (see
+        # planning_graph.gate_revise_node) building its own DraftVersion
+        # from this dict still has them, instead of silently losing the
+        # PII/fallback-type gate parity and leak detection revise_graph's
+        # verify_node depends on.
+        "style_examples": [{"text": text} for text in active_draft.style_examples],
+        "correspondence_type_source": active_draft.correspondence_type_source,
         "reasoning_level": preset.level.value,
         "instruction_origin": instruction_origin,
     }

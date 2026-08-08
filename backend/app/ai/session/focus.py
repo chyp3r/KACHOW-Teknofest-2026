@@ -203,6 +203,43 @@ def _accumulate_objective(existing: str, addition: str) -> str:
     return combined[-OBJECTIVE_CHAR_CAP:]
 
 
+def _draft_version_from_result(
+    draft_result: dict[str, Any],
+    *,
+    version: int,
+    created_from: Literal["draft", "revise", "human_fill", "gate_revise", "rejected"],
+    rejection_reason: str = "",
+) -> DraftVersion:
+    """Build a ``DraftVersion`` straight from a settled ``draft_result``.
+
+    Shared by the ordinary versioning branch and the "rejected with no
+    prior active_draft" branch of ``compute_focus_update`` -- both start
+    from the same raw material, they only differ in ``created_from`` and
+    (for a rejection) the reason.
+    """
+    return DraftVersion(
+        version=version,
+        text=draft_result.get("draft", ""),
+        correspondence_type=draft_result.get("correspondence_type") or "",
+        confidence_score=(
+            draft_result.get("combined_score") or draft_result.get("confidence_score") or 0.0
+        ),
+        created_from=created_from,
+        classification=draft_result.get("classification") or {},
+        context=draft_result.get("context") or "",
+        source_document=draft_result.get("source_document") or "",
+        style_examples=tuple(
+            example.get("text", "") if isinstance(example, dict) else str(example)
+            for example in (draft_result.get("style_examples") or [])
+        ),
+        correspondence_type_source=draft_result.get("correspondence_type_source") or "",
+        status=str(draft_result.get("status") or ""),
+        conflicts=tuple(draft_result.get("conflicts") or ()),
+        changelog=draft_result.get("changelog") or {},
+        rejection_reason=rejection_reason,
+    )
+
+
 def compute_focus_update(
     focus: SessionFocus,
     *,
@@ -258,8 +295,14 @@ def compute_focus_update(
 
     draft_status = (draft_result or {}).get("status")
     produced_version = draft_status in _VERSIONABLE_DRAFT_STATUSES
-    archived_rejection = (
-        draft_status in _ARCHIVE_ONLY_DRAFT_STATUSES and focus.active_draft is not None
+    # A rejection reachable with no prior `focus.active_draft` is not an edge
+    # case -- it is the *ordinary* first-approval reject: a turn that both
+    # drafts and gets rejected within the same turn (gate interrupts before
+    # focus_node ever runs, see focus_node's own docstring) never had a
+    # chance to become `focus.active_draft` first. `draft_result["draft"]`
+    # is what carries the real text either way.
+    archived_rejection = draft_status in _ARCHIVE_ONLY_DRAFT_STATUSES and bool(
+        focus.active_draft is not None or draft_result.get("draft")
     )
     if produced_version:
         # Keyed off which step actually produced this turn's result, not
@@ -275,46 +318,38 @@ def compute_focus_update(
             created_from = "revise"
         else:
             created_from = "draft"
-        version = DraftVersion(
-            version=len(focus.draft_history) + 1,
-            text=draft_result.get("draft", ""),
-            correspondence_type=draft_result.get("correspondence_type") or "",
-            confidence_score=(
-                draft_result.get("combined_score")
-                or draft_result.get("confidence_score")
-                or 0.0
-            ),
-            created_from=created_from,
-            classification=draft_result.get("classification") or {},
-            context=draft_result.get("context") or "",
-            source_document=draft_result.get("source_document") or "",
-            style_examples=tuple(
-                example.get("text", "") if isinstance(example, dict) else str(example)
-                for example in (draft_result.get("style_examples") or [])
-            ),
-            correspondence_type_source=draft_result.get("correspondence_type_source") or "",
-            status=str(draft_status or ""),
-            conflicts=tuple(draft_result.get("conflicts") or ()),
-            changelog=draft_result.get("changelog") or {},
+        version = _draft_version_from_result(
+            draft_result, version=len(focus.draft_history) + 1, created_from=created_from,
         )
         update["active_draft"] = version
         update["draft_history"] = (*focus.draft_history, version)
     elif archived_rejection:
-        # A rejection is a decision about the *existing* version, not a new
-        # one -- the text is unchanged, so the active draft is annotated
-        # in place (replacing its own entry in draft_history, which the
-        # SessionFocus invariant guarantees is that same object) rather than
-        # appended as a second, textually-identical version. The draft is
-        # archived, never lost -- see this module's docstring for why that
-        # matters (a rejected draft used to vanish entirely).
+        # A rejection is a decision about the *existing* text, not new text
+        # of its own. When that text was already `focus.active_draft` (a
+        # draft rejected in a later turn than the one that produced it), it
+        # is annotated in place -- replacing its own entry in
+        # `draft_history`, which the SessionFocus invariant guarantees is
+        # that same object -- rather than appended as a second,
+        # textually-identical version. Otherwise (rejected within the same
+        # turn it was drafted, before ever reaching `focus.active_draft`) a
+        # fresh version is built straight from `draft_result`, tagged
+        # rejected from the start. Either way the draft is archived, never
+        # lost -- see this module's docstring for why that matters.
         reason = (draft_result.get("rejection_reason") or "").strip()
-        rejected_version = dataclasses.replace(
-            focus.active_draft, created_from="rejected", status=str(draft_status),
-            rejection_reason=reason,
-        )
-        if focus.draft_history and focus.draft_history[-1] is focus.active_draft:
-            history = (*focus.draft_history[:-1], rejected_version)
+        if focus.active_draft is not None:
+            rejected_version = dataclasses.replace(
+                focus.active_draft, created_from="rejected", status=str(draft_status),
+                rejection_reason=reason,
+            )
+            if focus.draft_history and focus.draft_history[-1] is focus.active_draft:
+                history = (*focus.draft_history[:-1], rejected_version)
+            else:
+                history = (*focus.draft_history, rejected_version)
         else:
+            rejected_version = _draft_version_from_result(
+                draft_result, version=len(focus.draft_history) + 1, created_from="rejected",
+                rejection_reason=reason,
+            )
             history = (*focus.draft_history, rejected_version)
         update["draft_history"] = history
         update["active_draft"] = None
