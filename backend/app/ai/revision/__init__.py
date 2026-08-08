@@ -7,6 +7,13 @@ point (``run_revise``) that callers outside this package use.
 """
 
 from app.ai.revision.changelog import ChangeEntry, RevisionChangelog, build_changelog
+from app.ai.revision.conflict import (
+    ConflictFinding,
+    ConflictReport,
+    assess_conflicts_llm,
+    detect_conflicts_deterministic,
+    merge_conflicts,
+)
 from app.ai.revision.instruction import (
     EditDirective,
     Operation,
@@ -21,15 +28,20 @@ from app.ai.revision.instruction import (
 
 __all__ = [
     "ChangeEntry",
+    "ConflictFinding",
+    "ConflictReport",
     "EditDirective",
     "Operation",
     "RevisionChangelog",
     "RevisionInstruction",
     "Scope",
     "TargetSpan",
+    "assess_conflicts_llm",
     "build_changelog",
     "decompose_instruction",
+    "detect_conflicts_deterministic",
     "locate_target",
+    "merge_conflicts",
     "needs_reretrieval",
     "parse_revision_instruction",
 ]

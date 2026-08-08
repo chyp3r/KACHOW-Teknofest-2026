@@ -28,6 +28,7 @@ TEMPLATE_CONTRACTS: Dict[str, frozenset] = {
     "guardrail_judge": frozenset(),
     "reviser": frozenset(),
     "memory_summary": frozenset({"existing_summary", "new_turns"}),
+    "conflict_auditor": frozenset(),
 }
 
 
