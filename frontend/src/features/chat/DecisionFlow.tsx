@@ -1,10 +1,15 @@
-import { AlertCircle, Clock3, GitBranch, X } from "lucide-react";
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { AlertCircle, ChevronDown, Clock3, GitBranch, X } from "lucide-react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import type {
   GuardrailEvent,
   ToolCallEvent,
   WorkflowNodeStatus,
 } from "../../types/chat";
+import { InteractiveGraphViewport } from "./InteractiveGraphViewport";
+import { Button, IconButton } from "../../components/Button";
+import { StatusBadge, type StatusTone } from "../../components/StatusBadge";
+import { Alert } from "../../components/Surface";
+import { WorkflowStepper, type WorkflowStageItem } from "./WorkflowStepper";
 
 interface GraphNode {
   id: string;
@@ -111,7 +116,7 @@ const NODES: GraphNode[] = [
     short: "GERİ BLD.",
     kind: "rule",
     x: 150,
-    y: 610,
+    y: 630,
     description:
       'Onay kapısındaki "Revizyon iste" talebinizi aynı çalışmada uygular ve kapıya geri döner.',
   },
@@ -174,11 +179,36 @@ const STATUS_STROKES: Partial<Record<WorkflowNodeStatus, string>> = {
   skipped: "var(--status-skipped)",
 };
 
-function statusTone(status: WorkflowNodeStatus): string {
+function statusTone(status: WorkflowNodeStatus): StatusTone {
   if (status === "completed") return "success";
   if (status === "failed") return "danger";
   if (status === "running") return "info";
   return "neutral";
+}
+
+const WORKFLOW_STAGES: Array<{
+  id: string;
+  label: string;
+  description: string;
+  nodes: string[];
+}> = [
+  { id: "analysis", label: "Evrak analizi", description: "Belge türü, alanlar ve mevzuat bağlamı", nodes: ["classification", "compliance", "rag"] },
+  { id: "drafting", label: "Taslak oluşturma", description: "Resmî yazı ve gerekli revizyonlar", nodes: ["draft", "revise", "gate_revise"] },
+  { id: "verification", label: "Doğrulama", description: "Kaynak, uygunluk ve kalite kontrolleri", nodes: ["verify", "judge"] },
+  { id: "approval", label: "İnsan onayı", description: "Eksik bilgi veya kullanıcı kararı", nodes: ["human_gate"] },
+  { id: "routing", label: "Yönlendirme", description: "Hedef birim önerisi", nodes: ["routing"] },
+];
+
+function stageStatus(
+  nodes: string[],
+  statuses: Record<string, WorkflowNodeStatus>,
+): WorkflowNodeStatus {
+  const values = nodes.map((node) => statuses[node] ?? "todo");
+  if (values.includes("failed")) return "failed";
+  if (values.includes("running")) return "running";
+  if (values.some((value) => value === "completed")) return "completed";
+  if (values.every((value) => value === "skipped")) return "skipped";
+  return "todo";
 }
 
 export function DecisionFlow({
@@ -199,6 +229,7 @@ export function DecisionFlow({
   onClose?: () => void;
 }) {
   const [selectedId, setSelectedId] = useState("planning");
+  const [technicalOpen, setTechnicalOpen] = useState(false);
   const selected = NODES.find((node) => node.id === selectedId) ?? NODES[0];
   const selectedStatus = statuses[selected.id] ?? "todo";
   const selectedData = useMemo(
@@ -212,6 +243,15 @@ export function DecisionFlow({
   const planLabels = planSteps.map(
     (step) => NODES.find((node) => node.id === step)?.label ?? step,
   );
+  const stages: WorkflowStageItem[] = WORKFLOW_STAGES.map((stage) => {
+    const status = stageStatus(stage.nodes, statuses);
+    const needsAction = stage.id === "approval" && status === "running";
+    return {
+      ...stage,
+      status: needsAction ? "interrupted" : status,
+      target: stage.nodes.find((node) => statuses[node] === "failed" || statuses[node] === "running") ?? stage.nodes[0],
+    };
+  });
 
   const selectWithKeyboard = (
     event: KeyboardEvent<SVGGElement>,
@@ -221,26 +261,33 @@ export function DecisionFlow({
     event.preventDefault();
     setSelectedId(nodeId);
   };
+  useEffect(() => {
+    if (!onClose) return;
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
 
   return (
-    <aside className="workflow-panel workflow-graph-panel" aria-label="Karar akışı">
+    <aside className={`workflow-panel workflow-graph-panel ${technicalOpen ? "is-technical-open" : ""}`} aria-label="İş akışı">
       <header>
         <div>
           <span className="eyebrow">
             <GitBranch size={14} />
-            Canlı plan
+            İşlem durumu
           </span>
-          <h2>Karar Akışı</h2>
-          <p>Planı, paralel adımları ve revizyon döngüsünü canlı izleyin.</p>
+          <h2>İş Akışı</h2>
+          <p>Şu an ne olduğunu ve sıradaki adımı takip edin.</p>
         </div>
         {onClose && (
-          <button
-            className="workflow-close icon-button"
-            aria-label="Karar akışını kapat"
+          <IconButton
+            className="workflow-close"
+            icon={<X />}
+            aria-label="İş akışını kapat"
             onClick={onClose}
-          >
-            <X size={18} />
-          </button>
+          />
         )}
       </header>
 
@@ -254,14 +301,31 @@ export function DecisionFlow({
           </strong>
         </div>
 
-        <div className="graph-container decision-graph-container">
-          <svg
-            width="100%"
-            viewBox="0 0 560 650"
-            preserveAspectRatio="xMidYMid meet"
-            role="img"
-            aria-label="Karar akışı düğüm grafiği"
+        <WorkflowStepper stages={stages} onSelect={setSelectedId} />
+
+        {statuses.assist && statuses.assist !== "todo" && (
+          <div className={`workflow-assist-state stage-${statuses.assist}`}>
+            <span className="workflow-stage-marker"><GitBranch size={15} /></span>
+            <div><strong>Yanıt hazırlanıyor</strong><small>Belge ve mevzuat araçları gerektiğinde kullanılır.</small></div>
+            <span>{STATUS_LABELS[statuses.assist]}</span>
+          </div>
+        )}
+
+        <section className={`technical-workflow ${technicalOpen ? "is-open" : ""}`}>
+          <Button
+            className="technical-workflow-toggle"
+            variant="ghost"
+            fullWidth
+            aria-expanded={technicalOpen}
+            leadingIcon={<GitBranch size={15} />}
+            trailingIcon={<ChevronDown className="technical-workflow-chevron" />}
+            onClick={() => setTechnicalOpen((open) => !open)}
           >
+            {technicalOpen ? "Teknik grafiği gizle" : "Teknik grafiği görüntüle"}
+          </Button>
+          {technicalOpen && (
+            <div className="technical-workflow-content">
+              <InteractiveGraphViewport ariaLabel="Karar akışı düğüm grafiği">
             {EDGES.map((edge) => {
               const from = NODES.find((node) => node.id === edge.from);
               const to = NODES.find((node) => node.id === edge.to);
@@ -303,7 +367,7 @@ export function DecisionFlow({
                   <circle
                     cx={node.x}
                     cy={node.y}
-                    r={25}
+                    r={36}
                     style={{
                       stroke,
                       strokeWidth: selected.id === node.id ? 4 : 2.5,
@@ -312,14 +376,13 @@ export function DecisionFlow({
                   <text x={node.x} y={node.y + 3} className="node-short">
                     {node.short}
                   </text>
-                  <text x={node.x} y={node.y + 41} className="node-label">
+                  <text x={node.x} y={node.y + 48} className="node-label">
                     {node.label}{attempt}
                   </text>
                 </g>
               );
             })}
-          </svg>
-        </div>
+              </InteractiveGraphViewport>
 
         <div className="workflow-legend" aria-label="Düğüm türleri">
           <span className="legend-rule">Deterministik</span>
@@ -358,21 +421,15 @@ export function DecisionFlow({
               <h3>{selected.label}</h3>
               <p>{selected.description}</p>
             </div>
-            <span className={`status-badge status-${statusTone(selectedStatus)}`}>
+            <StatusBadge tone={statusTone(selectedStatus)}>
               {STATUS_LABELS[selectedStatus]}
-            </span>
+            </StatusBadge>
           </div>
           {selectedStatus === "failed" && (
-            <p className="notice danger">
-              <AlertCircle size={16} />
-              Bu adımda hata oluştu. Teknik ayrıntıyı aşağıdan inceleyin.
-            </p>
+            <Alert variant="error" icon={<AlertCircle />}>Bu adımda hata oluştu. Teknik ayrıntıyı aşağıdan inceleyin.</Alert>
           )}
           {selected.id === "human_gate" && selectedStatus === "running" && (
-            <p className="notice warning">
-              <Clock3 size={16} />
-              Sohbet alanında kullanıcı yanıtı veya onayı bekleniyor.
-            </p>
+            <Alert variant="warning" icon={<Clock3 />}>Sohbet alanında kullanıcı yanıtı veya onayı bekleniyor.</Alert>
           )}
           <details>
             <summary>Teknik detaylar</summary>
@@ -389,6 +446,9 @@ export function DecisionFlow({
               )}
             </pre>
           </details>
+              </section>
+            </div>
+          )}
         </section>
       </div>
     </aside>

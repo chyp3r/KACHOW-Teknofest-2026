@@ -1,7 +1,9 @@
 import { Send } from "lucide-react";
-import { useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { DocumentSelector } from "../documents/DocumentSelector";
 import type { DocumentMetadata, ReasoningLevel } from "../../types/documents";
+import { IconButton } from "../../components/Button";
+import { Select, Textarea } from "../../components/FormControls";
 
 export function ChatComposer({
   documents,
@@ -10,6 +12,8 @@ export function ChatComposer({
   onSelectDocument,
   onClearDocument,
   onSend,
+  promptTemplate,
+  onPromptTemplateConsumed,
 }: {
   documents: DocumentMetadata[];
   selectedDocument: DocumentMetadata | null;
@@ -21,9 +25,18 @@ export function ChatComposer({
     level: ReasoningLevel,
     useDocument: boolean,
   ) => Promise<void>;
+  promptTemplate?: string | null;
+  onPromptTemplateConsumed?: () => void;
 }) {
   const [text, setText] = useState("");
   const [level, setLevel] = useState<ReasoningLevel>("balanced");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!promptTemplate) return;
+    setText(promptTemplate);
+    onPromptTemplateConsumed?.();
+    textareaRef.current?.focus();
+  }, [onPromptTemplateConsumed, promptTemplate]);
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
     if (!text.trim() || loading) return;
@@ -46,20 +59,22 @@ export function ChatComposer({
           onSelect={onSelectDocument}
           onClear={onClearDocument}
         />
-        <label className="compact-select">
-          <span>Yanıt biçimi</span>
-          <select
+        <label className="composer-mode">
+          <span>AI modu</span>
+          <Select
+            controlSize="sm"
             value={level}
             onChange={(event) => setLevel(event.target.value as ReasoningLevel)}
           >
             <option value="fast">Hızlı</option>
             <option value="balanced">Dengeli</option>
             <option value="deep">Derin</option>
-          </select>
+          </Select>
         </label>
       </div>
       <div className="composer-input">
-        <textarea
+        <Textarea
+          ref={textareaRef}
           value={text}
           disabled={loading}
           onChange={(event) => setText(event.target.value)}
@@ -72,17 +87,19 @@ export function ChatComposer({
               : "Bir soru yazın veya resmî yazı hazırlanmasını isteyin…"
           }
           aria-label="Sohbet mesajı"
+          aria-describedby="composer-keyboard-help"
         />
-        <button
+        <IconButton
           className="send-button"
           type="submit"
+          variant="primary"
+          icon={<Send />}
+          loading={loading}
           disabled={loading || !text.trim()}
-          aria-label="Mesajı gönder"
-        >
-          <Send size={18} />
-        </button>
+          aria-label={loading ? "Mesaj gönderiliyor" : "Mesajı gönder"}
+        />
       </div>
-      <small>Göndermek için Enter, yeni satır için Shift + Enter</small>
+      <small className="composer-keyboard-help" id="composer-keyboard-help">Göndermek için Enter, yeni satır için Shift + Enter</small>
     </form>
   );
 }
