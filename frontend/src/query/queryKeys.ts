@@ -1,0 +1,14 @@
+export const queryKeys = {
+  currentUser: ["current-user"] as const,
+  documents: (page = 1) => ["documents", page] as const,
+  documentAnalysis: (storagePath: string) => ["documents", "analysis", storagePath] as const,
+  chatSessions: (page = 1) => ["chat-sessions", page] as const,
+  chatMessages: (sessionId: string, page = 1) => ["chat-messages", sessionId, page] as const,
+  chatState: (sessionId: string) => ["chat-state", sessionId] as const,
+  drafts: (page = 1) => ["drafts", page] as const,
+  draft: (draftId: string) => ["draft", draftId] as const,
+  draftVersions: (draftId: string) => ["draft", draftId, "versions"] as const,
+  routing: ["routing-suggestion"] as const,
+  users: ["admin-users"] as const,
+  health: (deep: boolean) => ["health", deep ? "deep" : "normal"] as const,
+};

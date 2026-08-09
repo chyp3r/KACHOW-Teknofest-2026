@@ -7,6 +7,12 @@ export interface ApiEnvelope<T> {
   meta?: Record<string, unknown>;
 }
 
+export interface ApiValidationError {
+  field: string;
+  type?: string;
+  msg: string;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;
