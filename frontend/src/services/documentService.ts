@@ -7,13 +7,16 @@ import type {
   DraftRequest,
   DraftResult,
 } from "../types/documents";
+import { collectPages } from "./pagination";
 
 export const documentService = {
   async list(): Promise<DocumentMetadata[]> {
-    const result = await apiRequest<
-      PaginatedResponse<DocumentMetadata> | DocumentMetadata[]
-    >("/api/v1/documents");
-    return Array.isArray(result) ? result : result.items;
+    const result = await collectPages((page) =>
+      apiRequest<PaginatedResponse<DocumentMetadata>>(
+        `/api/v1/documents?page=${page}&size=100`,
+      ),
+    );
+    return result.items;
   },
   analyze(file: File): Promise<DocumentAnalysis> {
     const body = new FormData();

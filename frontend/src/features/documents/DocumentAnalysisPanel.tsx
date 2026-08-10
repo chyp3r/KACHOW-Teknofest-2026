@@ -1,5 +1,6 @@
 import { AlertTriangle, FileSearch, ShieldAlert } from "lucide-react";
 import { StatusBadge } from "../../components/StatusBadge";
+import { Alert, Card } from "../../components/Surface";
 import type { DocumentAnalysis, EvrakFields } from "../../types/documents";
 import { SENSITIVITY_LABELS } from "../../types/security";
 
@@ -34,16 +35,16 @@ export function DocumentAnalysisPanel({
 }) {
   if (!analysis)
     return (
-      <section className="surface analysis-placeholder">
+      <Card className="analysis-placeholder">
         <FileSearch size={22} />
         <div>
           <h2>Analiz ayrıntıları</h2>
           <p>Üst veri ve mevzuat sonuçlarını görmek için bir evrak seçin.</p>
         </div>
-      </section>
+      </Card>
     );
   return (
-    <section className="surface analysis-panel">
+    <Card className="analysis-panel">
       <div className="section-heading">
         <div>
           <h2>Analiz ayrıntıları</h2>
@@ -51,24 +52,23 @@ export function DocumentAnalysisPanel({
         </div>
         <StatusBadge
           tone={
-            analysis.compliance_status === "COMPLIANT" ? "success" : "warning"
+            analysis.compliance_status === "compliant" ? "success" : "warning"
           }
         >
-          {analysis.compliance_status === "COMPLIANT"
+          {analysis.compliance_status === "compliant"
             ? "Uygun"
-            : "Kontrol gerekli"}
+            : analysis.compliance_status === "partially_compliant"
+              ? "Kısmen uygun"
+              : "Eksik"}
         </StatusBadge>
       </div>
       {(analysis.extraction.used_ocr ||
         (analysis.extraction.scrubbed_markers?.length ?? 0) > 0) && (
-        <div className="notice warning">
-          <AlertTriangle size={17} />
-          <span>
-            {analysis.extraction.used_ocr
-              ? "Evrak OCR ile okundu; çıkarılan alanları doğrulayın."
-              : "Olası talimat enjeksiyonu işaretleri metinden temizlendi."}
-          </span>
-        </div>
+        <Alert variant="warning" icon={<AlertTriangle />}>
+          {analysis.extraction.used_ocr
+            ? "Evrak OCR ile okundu; çıkarılan alanları doğrulayın."
+            : "Olası talimat enjeksiyonu işaretleri metinden temizlendi."}
+        </Alert>
       )}
       {analysis.guardrail && (
         <details open>
@@ -82,10 +82,7 @@ export function DocumentAnalysisPanel({
               {SENSITIVITY_LABELS[analysis.guardrail.sensitivity_level]}
             </StatusBadge>
             {analysis.guardrail.requires_human_review && (
-              <div className="notice danger">
-                <ShieldAlert size={17} />
-                <span>Bu evrak insan incelemesi gerektiriyor.</span>
-              </div>
+              <Alert variant="error" icon={<ShieldAlert />}>Bu evrak insan incelemesi gerektiriyor.</Alert>
             )}
             {analysis.guardrail.reasons.length > 0 && (
               <ul className="detail-list">
@@ -150,6 +147,6 @@ export function DocumentAnalysisPanel({
           <p className="detail-empty">Mevzuat önerisi bulunamadı.</p>
         )}
       </details>
-    </section>
+    </Card>
   );
 }

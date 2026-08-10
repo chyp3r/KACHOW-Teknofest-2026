@@ -36,4 +36,28 @@ describe("consumeSseStream", () => {
       "guardrail",
     ]);
   });
+
+  it("ignores malformed and unknown frames without dropping later valid events", async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {not-json}\n\n'));
+        controller.enqueue(encoder.encode('data: {"event":"future_event","seq":3}\n\n'));
+        controller.enqueue(encoder.encode('data: {"event":"planning_completed","seq":3}\n\n'));
+        controller.enqueue(
+          encoder.encode('data: {"event":"token","seq":4,"node":"draft","text":"Merhaba"}\n\n'),
+        );
+        controller.close();
+      },
+    });
+    const events: WorkflowEvent[] = [];
+
+    await consumeSseStream(new Response(stream, { status: 200 }), (event) =>
+      events.push(event),
+    );
+
+    expect(events).toEqual([
+      { event: "token", seq: 4, node: "draft", text: "Merhaba" },
+    ]);
+  });
 });

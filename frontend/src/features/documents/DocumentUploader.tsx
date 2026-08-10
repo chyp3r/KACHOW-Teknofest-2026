@@ -1,5 +1,8 @@
 import { useRef, useState, type DragEvent } from "react";
 import { CheckCircle2, UploadCloud } from "lucide-react";
+import { Button } from "../../components/Button";
+import { Input } from "../../components/FormControls";
+import { Alert } from "../../components/Surface";
 
 const MAX_SIZE = 50 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [
@@ -81,14 +84,13 @@ export function DocumentUploader({
           </strong>
           <span>PDF, TXT, DOC veya görsel • En fazla 50 MB</span>
         </div>
-        <button
-          className="button button-primary"
-          disabled={uploading}
+        <Button
+          loading={uploading}
           onClick={() => inputRef.current?.click()}
         >
-          {uploading ? "Yükleniyor…" : "Dosya seç"}
-        </button>
-        <input
+          Dosya seç
+        </Button>
+        <Input
           ref={inputRef}
           className="sr-only"
           type="file"
@@ -99,14 +101,7 @@ export function DocumentUploader({
         />
       </div>
       {message && (
-        <p
-          className={
-            message.startsWith("Evrak") ? "feedback success" : "feedback error"
-          }
-        >
-          <CheckCircle2 size={15} />
-          {message}
-        </p>
+        <Alert variant={message.startsWith("Evrak") ? "success" : "error"} icon={<CheckCircle2 />}>{message}</Alert>
       )}
     </section>
   );

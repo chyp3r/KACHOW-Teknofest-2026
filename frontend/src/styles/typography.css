@@ -1,0 +1,662 @@
+/*
+ * System-wide semantic typography.
+ *
+ * This file is loaded after the legacy layout styles so typography has one
+ * authoritative source while the existing component geometry stays intact.
+ */
+:root {
+  --font-family-sans:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  --font-family-display:
+    Outfit, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  --font-family-mono:
+    "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  --text-overline: 0.6875rem;
+  --leading-overline: 1rem;
+  --text-caption: 0.75rem;
+  --leading-caption: 1.125rem;
+  /* `--text-secondary` is already the semantic secondary text color. */
+  --font-size-secondary: 0.8125rem;
+  --leading-secondary: 1.1875rem;
+  --text-body: 0.875rem;
+  --leading-body: 1.375rem;
+  --text-body-lg: 1rem;
+  --leading-body-lg: 1.5rem;
+  --text-heading-md: 1.125rem;
+  --leading-heading-md: 1.625rem;
+  --text-heading-lg: 1.375rem;
+  --leading-heading-lg: 1.875rem;
+  --text-display: 1.75rem;
+  --leading-display: 2.25rem;
+  --text-display-mobile: 1.5rem;
+  --leading-display-mobile: 2rem;
+  --text-heading-lg-mobile: 1.25rem;
+  --leading-heading-lg-mobile: 1.75rem;
+  --leading-control: 1.25rem;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0;
+  --tracking-overline: 0.08em;
+
+  --text-disabled: color-mix(in srgb, var(--text-primary) 42%, transparent);
+  --text-inverse: #ffffff;
+  --text-link: #60a5fa;
+  --text-success: #6ee7b7;
+  --text-warning: #fcd34d;
+  --text-error: #fca5a5;
+
+  /* Backward-compatible aliases used by non-typography layout rules. */
+  --font-sans: var(--font-family-sans);
+  --font-display: var(--font-family-display);
+  --font-mono: var(--font-family-mono);
+}
+
+[data-theme="light"] {
+  --text-muted: #656a74;
+  --text-link: #1d4ed8;
+  --text-success: #176b3a;
+  --text-warning: #854d0e;
+  --text-error: #b42318;
+}
+
+[data-theme="dark"] {
+  --text-muted: #9ca3af;
+  --text-link: #60a5fa;
+  --text-success: #6ee7b7;
+  --text-warning: #fcd34d;
+  --text-error: #fca5a5;
+}
+
+html {
+  font-size: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-family-sans);
+  font-size: var(--text-body);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body);
+  letter-spacing: var(--tracking-normal);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+button,
+.button,
+.nav-item,
+.login-link,
+summary,
+[role="button"] {
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-normal);
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled,
+[aria-disabled="true"] {
+  color: var(--text-disabled);
+}
+
+input,
+textarea {
+  font-size: var(--text-body-lg);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body-lg);
+}
+
+.search-box input,
+.input-container textarea,
+.sidebar-document-library .search-field input {
+  font-size: var(--text-body-lg);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body-lg);
+}
+
+select {
+  font-size: var(--text-body);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  overflow-wrap: anywhere;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-family-display);
+  color: var(--text-primary);
+}
+
+h1 {
+  font-size: var(--text-display);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-display);
+  letter-spacing: var(--tracking-tight);
+}
+
+h2 {
+  font-size: var(--text-heading-md);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-heading-md);
+  letter-spacing: var(--tracking-tight);
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-normal);
+}
+
+strong,
+b {
+  font-weight: var(--weight-semibold);
+}
+
+a {
+  color: var(--text-link);
+}
+
+small,
+time {
+  font-size: var(--text-caption);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-caption);
+}
+
+code,
+pre,
+.live-logs-content {
+  font-family: var(--font-family-mono);
+}
+
+/* Display and heading roles */
+.page-header h1,
+.centered-state > h1 {
+  font-size: var(--text-display);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-display);
+  letter-spacing: var(--tracking-tight);
+}
+
+.chat-empty-state h2,
+.empty-state h2 {
+  font-size: var(--text-heading-lg);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-heading-lg);
+  letter-spacing: var(--tracking-tight);
+}
+
+.section-heading h2,
+.section-heading h3,
+.dialog h2,
+.document-picker h2,
+.chat-history-header h2,
+.workflow-panel h2,
+.interrupt-header h2,
+.login-card h2 {
+  font-size: var(--text-heading-md);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-heading-md);
+  letter-spacing: var(--tracking-tight);
+}
+
+.chat-header-info h2,
+.visualizer-header h3,
+.draft-create-heading h2,
+.document-upload-panel .upload-card .section-heading h2,
+.sidebar-document-library .section-heading h2 {
+  font-size: var(--text-heading-md);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-heading-md);
+  letter-spacing: var(--tracking-tight);
+}
+
+.draft-versions-heading h3,
+.routing-result h3,
+.chat-history-empty h3,
+.graph-step-details h3 {
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-normal);
+}
+
+/* Primary reading content */
+.chat-message .markdown-content,
+.message-bubble,
+.chat-empty-state > p,
+.draft-preview,
+.draft-document,
+.draft-version-content pre,
+.analysis-panel,
+.routing-result > p,
+.version-history article pre {
+  font-size: var(--text-body-lg);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body-lg);
+}
+
+.markdown-content,
+.draft-preview,
+.draft-document,
+.draft-version-content pre,
+.analysis-panel > details,
+.routing-result > p,
+.version-history article pre {
+  max-width: 75ch;
+}
+
+.markdown-content h1 {
+  font-size: var(--text-heading-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-heading-lg);
+}
+
+.markdown-content h2,
+.markdown-content h3 {
+  font-size: var(--text-heading-md);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-heading-md);
+}
+
+.markdown-content code,
+.changelog-diff,
+.graph-step-details pre,
+.step-details pre {
+  font-size: var(--font-size-secondary);
+  line-height: var(--leading-secondary);
+}
+
+/* Standard interface body */
+.page-header p,
+.section-heading p,
+.surface p,
+.notice,
+.feedback,
+.health-grid,
+.table-loading,
+.library-loading,
+.centered-state,
+.document-picker-list,
+.document-list-card,
+.draft-list-section,
+.interrupt-conflicts,
+.decision-stepper,
+.subprocess,
+.workflow-assist-state {
+  font-size: var(--text-body);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body);
+}
+
+.details-grid,
+.sidebar-document-library .section-heading p,
+.sidebar-document-library .quick-document-list,
+.sidebar-document-library .library-loading {
+  font-size: var(--text-body);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body);
+}
+
+/* Navigation and control labels */
+.nav-item,
+.login-link,
+.button,
+.draft-content-toggle,
+.attach-document-button,
+.copy-btn,
+.theme-control,
+.sidebar-document-library .dropzone strong,
+.sidebar-document-library .dropzone .button,
+.sidebar-document-library .library-details-button,
+.document-picker-list > button strong,
+.document-row-primary > strong,
+.draft-row-primary > strong,
+.draft-row-meta strong,
+.draft-version-list > li > header strong,
+.chat-session-copy strong,
+.workflow-stage-copy strong,
+.decision-stepper strong,
+.quick-document-copy strong,
+.details-title,
+.doc-name,
+.user-card strong,
+.chat-message header,
+.selected-document-title,
+.checkbox-label,
+td > strong {
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-control);
+}
+
+.nav-item.active,
+.button-primary,
+.button-danger,
+.document-accordion-trigger[aria-expanded="true"] .document-row-primary > strong,
+.draft-accordion-trigger[aria-expanded="true"] .draft-row-primary > strong {
+  font-weight: var(--weight-semibold);
+}
+
+/* Desktop compact navigation is intentionally icon-only; the accessible name remains. */
+.sidebar-compact .nav-item,
+.sidebar-compact .login-link {
+  font-size: 0;
+  line-height: 0;
+}
+
+label,
+.form-stack label,
+.compact-select,
+.interrupt-question-grid label,
+.draft-create-grid label {
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-control);
+}
+
+/* Secondary explanatory content */
+.detail-empty,
+.detail-list li span,
+.document-row-primary > span,
+.document-row-type strong,
+.draft-row-primary > span,
+.draft-row-document strong,
+.chat-session-preview,
+.chat-history-error p,
+.chat-history-empty p,
+.document-picker header p,
+.document-picker footer a,
+.technical-workflow > summary,
+.workflow-panel p,
+.draft-history-preview,
+.drop-zone p,
+.chat-header-info p,
+.visualizer-header p,
+.drawer-inline-error,
+.chat-inline-error,
+.doc-summary-preview,
+.chat-history-no-results,
+.sidebar-document-library .notice,
+.sidebar-document-library .upload-card .feedback {
+  font-size: var(--font-size-secondary);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-secondary);
+}
+
+.document-picker footer a,
+.technical-workflow > summary {
+  font-weight: var(--weight-medium);
+}
+
+/* Helpers and validation are expected to be read, so they stay at 13px. */
+.form-stack label > small,
+.draft-create-grid label > small,
+.chat-composer > small,
+.feedback,
+.interrupt-actions > small,
+.interrupt-revision-round,
+.interrupt-revision-exhausted,
+.conflict-evidence,
+.document-upload-panel .dropzone > div span,
+.sidebar-document-library .dropzone > div span,
+.sidebar-document-library .empty-state p,
+.routing-result > small {
+  font-size: var(--font-size-secondary);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-secondary);
+}
+
+/* Captions and compact metadata */
+.brand small,
+.user-card small,
+.status-badge,
+.message-logs,
+.processing-line,
+.draft-row-document small,
+.draft-row-meta time,
+.draft-versions-heading > span,
+.draft-version-list > li > header span,
+.draft-version-list > li > header time,
+.document-row-type small,
+.document-row-date,
+.chat-history-refresh,
+.chat-session-copy time,
+.suggested-actions button small,
+.workflow-stage-copy small,
+.workflow-stage-state,
+.workflow-assist-state small,
+.workflow-assist-state > span:last-child,
+.graph-toolbar output,
+.graph-interaction-help,
+.workflow-legend,
+.decision-stepper small,
+.decision-stepper em,
+.subprocess span,
+.metadata-grid dt,
+.quick-document-copy small,
+.quick-document-state,
+.draft-history-meta time,
+.draft-history-destination,
+.live-logs-content,
+.active-doc-indicator,
+.drop-zone span,
+.draft-history-list button small,
+.version-history article time,
+.doc-meta,
+.doc-type-badge {
+  font-size: var(--text-caption);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-caption);
+}
+
+.status-badge,
+.draft-versions-heading > span,
+.draft-version-list > li > header span {
+  font-weight: var(--weight-medium);
+}
+
+.brand strong,
+.logo-section h1 {
+  font-family: var(--font-family-display);
+  font-size: var(--text-body-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-body-lg);
+  letter-spacing: var(--tracking-tight);
+}
+
+.avatar {
+  font-weight: var(--weight-bold);
+}
+
+.version-history summary,
+.analysis-panel summary,
+.interrupt-conflicts-heading {
+  font-weight: var(--weight-semibold);
+}
+
+.graph-step-details summary {
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-control);
+}
+
+.graph-step-details pre,
+.step-details pre {
+  font-size: var(--font-size-secondary);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-secondary);
+}
+
+.draft-box {
+  font-size: var(--text-body-lg);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body-lg);
+}
+
+.sidebar-document-library .empty-state h2 {
+  font-size: var(--text-heading-lg);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-heading-lg);
+}
+
+.workflow-plan-summary strong {
+  font-size: var(--font-size-secondary);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-secondary);
+}
+
+/* Structural overlines only; never apply to sentences or actions. */
+.nav-caption,
+.eyebrow,
+.selected-document-label,
+.chat-session-group > h3,
+.workflow-plan-summary > span,
+.live-logs-header,
+.doc-list-header h2 {
+  font-size: var(--text-overline);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-overline);
+  letter-spacing: var(--tracking-overline);
+  text-transform: uppercase;
+}
+
+.feedback.error,
+.notice.danger,
+.chat-inline-error,
+.drawer-inline-error,
+.status-danger {
+  color: var(--text-error);
+}
+
+.notice.warning,
+.interrupt-revision-exhausted,
+.interrupt-conflicts-heading,
+.status-warning {
+  color: var(--text-warning);
+}
+
+.notice.success,
+.status-success {
+  color: var(--text-success);
+}
+
+/* Tables */
+table,
+td {
+  font-size: var(--text-body);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body);
+}
+
+th {
+  color: var(--text-secondary);
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-normal);
+  text-transform: none;
+}
+
+/* Workflow SVG text is information, not decorative microcopy. */
+.node text,
+.decision-graph-container .node-short {
+  font-family: var(--font-family-sans);
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+}
+
+.decision-graph-container .node-label {
+  font-family: var(--font-family-sans);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-regular);
+}
+
+.chat-empty-state > p {
+  line-height: var(--leading-body);
+}
+
+.suggested-actions button small,
+.document-item-copy > span,
+.workflow-step-description {
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-compact);
+}
+
+.brand small {
+  line-height: var(--leading-compact);
+}
+
+/* Turkish strings should wrap before clipping, including long institution names. */
+.page-header,
+.section-heading,
+.button,
+.nav-item,
+.notice,
+.feedback,
+.document-row-primary,
+.document-row-type,
+.draft-row-primary,
+.draft-row-document,
+.chat-session-copy,
+.selected-document-copy,
+.workflow-stage-copy,
+.metadata-grid dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 47.5rem) {
+  .sidebar-compact .nav-item,
+  .sidebar-compact .login-link {
+    font-size: var(--text-body);
+    line-height: var(--leading-control);
+  }
+
+  .page-header h1,
+  .centered-state > h1 {
+    font-size: var(--text-display-mobile);
+    line-height: var(--leading-display-mobile);
+  }
+
+  .chat-empty-state h2,
+  .empty-state h2,
+  .sidebar-document-library .empty-state h2 {
+    font-size: var(--text-heading-lg-mobile);
+    line-height: var(--leading-heading-lg-mobile);
+  }
+}

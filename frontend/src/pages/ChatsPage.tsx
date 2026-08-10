@@ -1,18 +1,30 @@
-import { GitBranch, Plus } from "lucide-react";
+import { useRef, useState } from "react";
+import { AlertCircle, GitBranch, History, Plus, RotateCcw, Square } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { ChatComposer } from "../features/chat/ChatComposer";
+import { ConversationHistoryDrawer } from "../features/chat/ConversationHistoryDrawer";
 import { InterruptPanel } from "../features/chat/InterruptPanel";
 import { MessageList } from "../features/chat/MessageList";
 import type {
   ChatMessage,
+  ChatSession,
   GuardrailEvent,
   InterruptState,
   WorkflowLog,
 } from "../types/chat";
 import type { DocumentMetadata, ReasoningLevel } from "../types/documents";
+import { Button } from "../components/Button";
+import { Alert, Spinner } from "../components/Surface";
 
 export function ChatsPage({
   documents,
+  sessions,
+  activeSessionId,
+  sessionsLoading,
+  sessionsRefreshing,
+  sessionsError,
+  historyLoading,
+  historyError,
   selectedDocument,
   messages,
   streamingText,
@@ -21,14 +33,28 @@ export function ChatsPage({
   guardrailEvents,
   interrupt,
   workflowOpen,
+  historyOpen,
   onSelectDocument,
   onClearDocument,
   onSend,
   onResume,
   onNewChat,
+  onOpenSession,
+  onCloseHistory,
+  onOpenHistory,
+  onRetrySessions,
+  onRetryHistory,
+  onCancel,
   onToggleWorkflow,
 }: {
   documents: DocumentMetadata[];
+  sessions: ChatSession[];
+  activeSessionId: string | null;
+  sessionsLoading: boolean;
+  sessionsRefreshing: boolean;
+  sessionsError: string | null;
+  historyLoading: boolean;
+  historyError: string | null;
   selectedDocument: DocumentMetadata | null;
   messages: ChatMessage[];
   streamingText: string;
@@ -37,6 +63,7 @@ export function ChatsPage({
   guardrailEvents: GuardrailEvent[];
   interrupt: InterruptState | null;
   workflowOpen: boolean;
+  historyOpen: boolean;
   onSelectDocument: (document: DocumentMetadata) => void;
   onClearDocument: () => void;
   onSend: (
@@ -50,41 +77,78 @@ export function ChatsPage({
     instructions: string,
   ) => Promise<void>;
   onNewChat: () => void;
+  onOpenSession: (sessionId: string) => void;
+  onCloseHistory: () => void;
+  onOpenHistory: () => void;
+  onRetrySessions: () => Promise<void>;
+  onRetryHistory: () => Promise<void>;
+  onCancel: () => void;
   onToggleWorkflow: () => void;
 }) {
+  const [promptTemplate, setPromptTemplate] = useState<string | null>(null);
+  const historyTriggerRef = useRef<HTMLButtonElement>(null);
+
   return (
     <div className="chat-page">
       <PageHeader
         title="Karar Destek Sohbeti"
         description="Evraklarınızı inceleyin, taslak hazırlayın ve işlem sürecini takip edin."
-        actions={
+        secondaryActions={
           <>
-            <button
-              className="button button-secondary workflow-toggle"
-              onClick={onToggleWorkflow}
+            <Button
+              ref={historyTriggerRef}
+              variant="ghost"
+              className="history-toggle"
+              aria-haspopup="dialog"
+              aria-expanded={historyOpen}
+              aria-controls="conversation-history-drawer"
+              onClick={onOpenHistory}
+              leadingIcon={<History />}
             >
-              <GitBranch size={16} />
-              {workflowOpen ? "Akışı kapat" : "Karar akışı"}
-            </button>
-            <button className="button button-primary" onClick={onNewChat}>
-              <Plus size={16} />
-              Yeni sohbet
-            </button>
+              Geçmiş
+            </Button>
+            <Button
+              variant="secondary"
+              className="workflow-toggle"
+              aria-pressed={workflowOpen}
+              onClick={onToggleWorkflow}
+              leadingIcon={<GitBranch />}
+            >
+              {workflowOpen ? "İş akışını kapat" : "İş akışını göster"}
+            </Button>
           </>
         }
+        primaryAction={<Button leadingIcon={<Plus />} onClick={onNewChat}>Yeni sohbet</Button>}
       />
+      {historyOpen && (
+        <ConversationHistoryDrawer
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          activeMessages={messages}
+          loading={sessionsLoading}
+          refreshing={sessionsRefreshing}
+          error={sessionsError}
+          returnFocusRef={historyTriggerRef}
+          onClose={onCloseHistory}
+          onRetry={onRetrySessions}
+          onNewChat={onNewChat}
+          onOpenSession={onOpenSession}
+        />
+      )}
       <div className="chat-workspace">
+        <div className="chat-content">
+        {historyError && !historyOpen && (
+          <Alert variant="error" icon={<AlertCircle />} action={<Button variant="ghost" size="sm" leadingIcon={<RotateCcw />} onClick={() => void onRetryHistory()}>Tekrar dene</Button>}>{historyError}</Alert>
+        )}
+        {historyLoading && <div className="processing-line"><Spinner label="Sohbet yükleniyor" />Sohbet yükleniyor…</div>}
         {guardrailEvents.map((guardrail, index) => (
-          <div
-            className={`notice ${
-              guardrail.decision === "blocked" ? "danger" : "warning"
-            }`}
-            role="status"
+          <Alert
+            variant={guardrail.decision === "blocked" ? "error" : "warning"}
+            title={`Güvenlik kontrolü: ${guardrail.decision}`}
             key={`${guardrail.stage}-${guardrail.kind}-${index}`}
           >
-            <strong>Güvenlik kontrolü: {guardrail.decision}</strong>
             <span>{guardrail.reasons.join(" · ")}</span>
-          </div>
+          </Alert>
         ))}
         {interrupt && (
           <InterruptPanel
@@ -98,15 +162,25 @@ export function ChatsPage({
           streamingText={streamingText}
           loading={loading}
           logs={logs}
+          hasSelectedDocument={Boolean(selectedDocument)}
+          onSuggestion={setPromptTemplate}
         />
-        <ChatComposer
+        {loading && (
+          <Button className="cancel-stream-button" variant="ghost" size="sm" leadingIcon={<Square />} onClick={onCancel}>İşlemi durdur</Button>
+        )}
+        </div>
+        <div className="composer-dock">
+          <ChatComposer
           documents={documents}
           selectedDocument={selectedDocument}
           loading={loading || Boolean(interrupt)}
           onSelectDocument={onSelectDocument}
           onClearDocument={onClearDocument}
           onSend={onSend}
-        />
+          promptTemplate={promptTemplate}
+          onPromptTemplateConsumed={() => setPromptTemplate(null)}
+          />
+        </div>
       </div>
     </div>
   );

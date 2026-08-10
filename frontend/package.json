@@ -9,13 +9,18 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "test": "vitest run",
     "test:watch": "vitest",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "api:types": "openapi-typescript http://localhost:8000/openapi.json -o src/api/generated.ts",
+    "api:types:check": "npm run api:types && git diff --exit-code -- src/api/generated.ts"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.85.0",
     "lucide-react": "^0.344.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-markdown": "^10.1.0"
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.8.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.4.8",
@@ -29,6 +34,7 @@
     "eslint-plugin-react-hooks": "^4.6.2",
     "eslint-plugin-react-refresh": "^0.4.7",
     "jsdom": "^24.1.1",
+    "openapi-typescript": "^7.9.0",
     "typescript": "^5.2.2",
     "vite": "^5.1.8",
     "vitest": "^2.0.5"
