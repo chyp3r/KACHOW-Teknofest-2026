@@ -19,6 +19,16 @@ services:
       # baked into the image so `make eval` picks up dataset edits without a
       # rebuild -- the gold sets are edited far more often than the code.
       - ./evaluation:/workspace/evaluation
+      # Uploaded documents and their analysis cache (settings.LOCAL_STORAGE_DIR,
+      # "./storage_data" relative to /workspace). Without this mount it lives
+      # only in the container's writable layer: every document's DB row
+      # (GET /documents' library listing, including its summary) is backed by
+      # the real postgres_data volume and survives a container recreate, but
+      # its analysis cache JSON (backing GET /documents/{path} and the AI
+      # workflow's cached-document reads) does not -- producing a document
+      # that shows a summary in the library but 404s as "Bu evrak için bir
+      # analiz bulunamadı" the moment it's opened.
+      - ./backend/storage_data:/workspace/storage_data
     environment:
       - ENVIRONMENT=development
       # Local demo mode only. Production refuses to start while auth is off.
