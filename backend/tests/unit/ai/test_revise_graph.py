@@ -2,6 +2,8 @@
 -- the gates the old single-call run_revise implementation never applied
 (PII, fallback correspondence type) and the repair loop it never had."""
 
+import asyncio
+
 import pytest
 
 from app.ai.session.focus import DraftVersion
@@ -148,3 +150,65 @@ async def test_persistent_structural_defects_trigger_exactly_max_attempts_rewrit
     # "balanced" -> max_draft_attempts == 2 (see reasoning_levels.py).
     assert len(fake_llm.stream_calls) == 2
     assert result["status"] != StepStatus.FAILED
+
+
+@pytest.mark.asyncio
+async def test_a_scaffold_echoing_completion_fails_the_revision_instead_of_leaking(fake_llm):
+    """The regression: a completion that echoes the reviser's own numbered
+    brief scaffold (rather than plain draft prose) must never reach the
+    user. rewrite_node buffers the whole completion and validates it before
+    anything is shown -- this is the failure path that guarantees the leak
+    never surfaces, not just becomes less likely."""
+    fake_llm.stream_chunks = [
+        "### BRIEF BELGESİ:\n1. Önceki Taslak Sürümü: 1\n2. Doğrulanmış Sınıflandırma: İzin talebi."
+    ]
+    graph = create_revise_graph(fake_llm)
+
+    result = await graph.ainvoke(
+        {
+            "active_draft": _active_draft(),
+            "instructions": "Bunu daha iyi yap.",
+            "reasoning_level": "fast",
+        }
+    )
+
+    assert result["status"] == StepStatus.FAILED
+    # The original draft is preserved, not the leaked scaffold text.
+    assert result["draft"] == _active_draft().text
+    assert "BRIEF BELGESİ" not in result["draft"]
+
+
+@pytest.mark.asyncio
+async def test_revise_never_emits_a_per_chunk_token_only_one_validated_text(fake_llm):
+    """Regression for the concatenation bug: the old implementation emitted
+    one "token" event per streamed chunk, live and unvalidated. rewrite_node
+    now buffers fully and emits exactly one token event carrying the final,
+    validated text -- see app.ai.workflows.events.emit_token's call site in
+    rewrite_node."""
+    fake_llm.stream_chunks = [
+        "Konu: Yıllık İzin Talebi\nSayı: E-1\nTarih: 30.07.2026\n\nSayın Makam,\n\n",
+        "İlgi yazı kapsamında personelimizin izin talebi tarafımıza iletilmiştir.\n\n",
+        "Arz ederim.\n\nAli Veli\nGenel Müdür",
+    ]
+    graph = create_revise_graph(fake_llm)
+
+    queue = asyncio.Queue()
+    config = {"configurable": {"status_queue": queue}}
+
+    await graph.ainvoke(
+        {
+            "active_draft": _active_draft(),
+            "instructions": "Bunu daha iyi yap.",
+            "reasoning_level": "fast",
+        },
+        config=config,
+    )
+
+    tokens = []
+    while not queue.empty():
+        event = queue.get_nowait()
+        if event.get("event") == "token" and event.get("node") == "revise":
+            tokens.append(event["text"])
+
+    assert len(tokens) == 1
+    assert "Sayın Makam" in tokens[0]
