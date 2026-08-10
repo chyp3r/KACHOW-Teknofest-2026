@@ -46,6 +46,7 @@ from app.ai.workflows.events import (
 from app.ai.workflows.intent_rules import RESET_SURFACES
 from app.ai.workflows.intent_scorer import normalize
 from app.ai.workflows.planner import resolve_plan
+from app.ai.workflows.relevance import build_unrelated_reply, resolve_relevance
 from app.ai.workflows.revise import run_revise
 from app.ai.workflows.scope import build_refusal_reply
 from app.ai.workflows.revise_graph import create_revise_graph
@@ -94,7 +95,7 @@ STEP_MESSAGES = {
 def _dependency_failed(
     step: str, state: "PlanningState", updates: dict[str, Any]
 ) -> Optional[str]:
-    """Return the name of a failed dependency for ``step``, if any.
+    """Return the name of a failed-or-skipped dependency for ``step``, if any.
 
     A step whose dependency's own result carries status FAILED must not run
     on empty/garbage input. Without this a failed draft still let routing
@@ -104,6 +105,11 @@ def _dependency_failed(
     function is the other half -- *whether a failure* should skip the step,
     which is deliberately not `ready_steps`'s concern (see its docstring).
 
+    SKIPPED counts the same as FAILED here: a dependency that decided not to
+    produce output (e.g. ``_step_draft`` refusing an off-topic request via
+    ``app.ai.workflows.relevance``) leaves nothing for a dependent step to
+    run on either, even though nothing actually errored.
+
     Args:
         step: The plan step about to run.
         state: The graph state as of the start of this superstep.
@@ -111,13 +117,13 @@ def _dependency_failed(
             (a dependency that just ran this turn is not yet in ``state``).
 
     Returns:
-        The failed dependency's step name, or None when every dependency (if
-        any) succeeded or has not run yet.
+        The failed/skipped dependency's step name, or None when every
+        dependency (if any) settled successfully or has not run yet.
     """
     spec = STEP_SPECS.get(step, StepSpec(name=step))
     for dependency in spec.depends_on:
         result = updates.get(f"{dependency}_result") or state.get(f"{dependency}_result") or {}
-        if result.get("status") == StepStatus.FAILED:
+        if result.get("status") in (StepStatus.FAILED, StepStatus.SKIPPED):
             return dependency
     return None
 
@@ -1111,6 +1117,41 @@ def create_planning_graph(
     async def _step_draft(
         state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
     ) -> None:
+        """Run the draft sub-graph, unless this document isn't what it's about.
+
+        The scope gate (``app.ai.workflows.scope``) already required *some*
+        anchor before this plan was even allowed to start -- for a document-
+        attached turn, an attached document counts as that anchor on its
+        own. This is the narrower check on top: does the request actually
+        concern *this* document, now that its classification (in particular
+        ``summary``) exists to compare against. Only runs when a document is
+        attached; a document-less draft request already had to clear
+        ``scope``'s own ``domain_vocabulary`` requirement to get this far, so
+        there is nothing further to check it against here.
+        """
+        document_id = state.get("document_id")
+        if document_id:
+            verdict = await resolve_relevance(
+                state["input_text"], classification, llm_client=intent_client
+            )
+            if not verdict.relevant:
+                logger.info(
+                    "Draft refused as unrelated to the attached document: "
+                    "reason=%s (%s)",
+                    verdict.reason,
+                    verdict.detail,
+                )
+                reason = "İstek yüklü belgeyle ilgili görünmüyor."
+                await emit_node_skipped(config, "draft", STEP_LABELS["draft"], reason)
+                reply = build_unrelated_reply(
+                    classification.get("summary", ""),
+                    classification.get("document_type_label", ""),
+                )
+                updates["assist_result"] = {"reply": reply, "status": StepStatus.COMPLETED}
+                updates["draft_result"] = {"status": StepStatus.SKIPPED, "reason": reason}
+                updates["history"] = [{"role": "assistant", "content": reply}]
+                return
+
         updates["draft_result"] = await _run_draft(state, classification, config)
 
     async def _step_routing(
@@ -1316,7 +1357,7 @@ def create_planning_graph(
         if failed_dependency is not None:
             reason = (
                 f"'{STEP_LABELS.get(failed_dependency, failed_dependency)}' adımı "
-                "başarısız olduğu için bu adım atlandı."
+                "tamamlanamadığı için bu adım atlandı."
             )
             logger.warning("Skipping plan step '%s': %s", step, reason)
             await emit_node_skipped(config, step, label, reason)

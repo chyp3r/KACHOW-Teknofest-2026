@@ -42,6 +42,7 @@ from pydantic import BaseModel, Field
 
 from app.ai.llms.base import BaseLLMClient
 from app.ai.workflows.intent_scorer import normalize
+from app.ai.workflows.topic_words import content_words
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ __all__ = [
 ScopeReason = Literal[
     "conversational",
     "system_question",
+    "bare_command",
     "anchored_document",
     "anchored_draft",
     "domain_vocabulary",
@@ -235,6 +237,19 @@ def assess_scope_deterministic(
     if intent == "revise" and has_active_draft:
         return ScopeVerdict(
             True, "anchored_draft", detail="Açık taslak üzerinde revizyon."
+        )
+
+    # A message that is *nothing but* the drafting/revision command itself
+    # ("Cevap yaz.") carries no evidence of being about anything other than
+    # this system's own subject matter -- there is no extra noun phrase left
+    # to be off-topic *about*. This is what keeps the gate from refusing the
+    # bare imperative the router's own module docstring uses as its worked
+    # example of an unambiguous draft request; only a command with something
+    # else attached to it ("Cevap yaz, çiğköfte kampanyası için") reaches the
+    # anchoring checks below at all.
+    if not content_words(message):
+        return ScopeVerdict(
+            True, "bare_command", detail="Salt üretim komutu; ek bir konu içermiyor."
         )
 
     if _contains(normalized, DOMAIN_SURFACES):

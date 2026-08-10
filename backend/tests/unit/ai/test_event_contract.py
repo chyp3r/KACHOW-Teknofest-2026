@@ -22,7 +22,10 @@ EVENT_MODELS = [
     event_schema.ToolCallEvent,
     event_schema.PartialResultEvent,
     event_schema.PlanningCompletedEvent,
+    event_schema.GuardrailEvent,
     event_schema.InterruptEvent,
+    event_schema.NoticeEvent,
+    event_schema.QuestionEvent,
     event_schema.FinalResultEvent,
     event_schema.ErrorEvent,
 ]
