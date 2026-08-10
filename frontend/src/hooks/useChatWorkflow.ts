@@ -7,6 +7,7 @@ import type {
   GuardrailEvent,
   InterruptState,
   PersistedChatMessage,
+  QuestionOption,
   ToolCallEvent,
   WorkflowEvent,
   WorkflowLog,
@@ -62,6 +63,11 @@ export function useChatWorkflow(
   const seenInterrupts = useRef(new Set<string>());
   const activeRequest = useRef<AbortController | null>(null);
   const internallyResolvedSession = useRef<string | null>(null);
+  // Set by the last "question" event this turn, consumed once by the very
+  // next "final_result" (the clarify step's own reply) and cleared -- a
+  // question is always answered by the turn that asked it, so nothing else
+  // should ever attach these options to an unrelated later message.
+  const pendingQuestionOptions = useRef<QuestionOption[] | null>(null);
 
   const sessionsQuery = useQuery({
     queryKey: queryKeys.chatSessions(),
@@ -138,6 +144,7 @@ export function useChatWorkflow(
     setGuardrailEvents([]);
     logsRef.current = [];
     setLogs([]);
+    pendingQuestionOptions.current = null;
   }, []);
 
   const refreshServerState = useCallback(
@@ -162,7 +169,13 @@ export function useChatWorkflow(
         case "node_start":
           setNodeStatus((previous) => ({ ...previous, [event.node]: "running" }));
           if (event.meta) setNodeMeta((previous) => ({ ...previous, [event.node]: event.meta ?? {} }));
-          if (event.node === "draft") setStreamingText("");
+          // Every node_start clears any in-progress streamingText, not just
+          // "draft"'s -- a revise round (the initial rewrite, then every
+          // repair/multi-directive re-entry into the same "revise" node)
+          // starts fresh each time. Without this, a second round's tokens
+          // appended onto the first round's leftover text instead of
+          // replacing it.
+          setStreamingText("");
           appendLog(`${event.label} işlemi başlatıldı.`);
           break;
         case "planning_completed":
@@ -199,6 +212,29 @@ export function useChatWorkflow(
           setGuardrailEvents((previous) => [...previous, { stage: event.stage, kind: event.kind, decision: event.decision, reasons: event.reasons }]);
           appendLog(`Güvenlik kontrolü: ${event.decision}.`);
           break;
+        case "notice":
+          // Its own chat message, appended immediately rather than folded
+          // into whatever comes next -- a conflict finding is a heads-up
+          // about an edit that already happened (see
+          // app.ai.revision.conflict's applied_anyway invariant), not a
+          // decision to block on, so it must never look like the
+          // human-approval popup (pendingInterrupt) and must never wait for
+          // final_result to be shown.
+          setStreamingText("");
+          setMessages((previous) => [
+            ...previous,
+            {
+              sender: "assistant",
+              text: `**${event.title}**\n\n${event.message}`,
+              kind: "notice",
+            },
+          ]);
+          appendLog(`Bilgilendirme: ${event.title}`);
+          break;
+        case "question":
+          pendingQuestionOptions.current = event.options;
+          appendLog("Netleştirme sorusu soruldu.");
+          break;
         case "interrupt":
           if (seenInterrupts.current.has(event.interrupt_id)) break;
           seenInterrupts.current.add(event.interrupt_id);
@@ -206,12 +242,25 @@ export function useChatWorkflow(
           setNodeStatus((previous) => ({ ...previous, human_gate: "running" }));
           appendLog(event.kind === "missing_information" ? "Eksik bilgi bekleniyor." : "İnsan onayı bekleniyor.");
           break;
-        case "final_result":
+        case "final_result": {
           setStreamingText("");
           setPendingInterrupt(null);
-          setMessages((previous) => [...previous, { sender: "assistant", text: event.reply, status: event.workflow_status, logs: logsRef.current, details: event.details }]);
+          const questionOptions = pendingQuestionOptions.current ?? undefined;
+          pendingQuestionOptions.current = null;
+          setMessages((previous) => [
+            ...previous,
+            {
+              sender: "assistant",
+              text: event.reply,
+              status: event.workflow_status,
+              logs: logsRef.current,
+              details: event.details,
+              questionOptions,
+            },
+          ]);
           if (threadIdRef.current) refreshServerState(threadIdRef.current);
           break;
+        }
         case "error":
           appendLog(`Hata: ${event.message}`);
           setMessages((previous) => [...previous, { sender: "assistant", text: `İşlem tamamlanamadı: ${event.message}`, status: "FAILED", logs: logsRef.current }]);

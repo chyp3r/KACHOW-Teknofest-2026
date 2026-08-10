@@ -316,6 +316,81 @@ async def emit_guardrail_event(
     )
 
 
+async def emit_notice(
+    config: Optional[RunnableConfig],
+    *,
+    node: str,
+    title: str,
+    message: str,
+    level: str = "info",
+) -> None:
+    """Publish a non-blocking, informational message as its own chat turn.
+
+    The non-pausing counterpart to :func:`emit_interrupt`. Use this for a
+    finding that must be surfaced but must never gate the run -- an
+    instruction/mevzuat conflict is the motivating case (see
+    ``app.ai.revision.conflict``'s ``applied_anyway`` invariant: the edit
+    already happened, this is only telling the user about a wrinkle in it).
+    The frontend renders it as its own assistant message rather than folding
+    it into the streamed reply, so a warning about round 1 never gets
+    concatenated onto round 2's text the way raw token streaming would.
+
+    Args:
+        config: The node's runnable config.
+        node: Which node raised this notice (e.g. ``"revise_audit"``).
+        title: Short Turkish heading.
+        message: The full Turkish notice text.
+        level: Severity; only ``"info"`` exists today.
+    """
+    await emit(
+        config,
+        {
+            "event": "notice",
+            "node": node,
+            "level": level,
+            "title": title,
+            "message": message,
+        },
+    )
+
+
+async def emit_question(
+    config: Optional[RunnableConfig],
+    *,
+    node: str,
+    question: str,
+    options: list[dict[str, str]],
+    allow_free_text: bool = True,
+) -> None:
+    """Publish a decision the run needs, offered as clickable options.
+
+    Unlike :func:`emit_interrupt`, this never pauses a LangGraph run via
+    ``interrupt()`` -- the clarify step already ends its own turn
+    deterministically and simply waits for the user's next message, which
+    ``app.ai.workflows.planner._try_resolve_pending_clarification`` resolves
+    against these same options. This event only tells the client to render
+    them as a card instead of leaving the user to retype a label verbatim.
+
+    Args:
+        config: The node's runnable config.
+        node: Which node raised this question (``"clarify"`` today).
+        question: The Turkish question text.
+        options: ``[{"value": ..., "label": ...}, ...]``.
+        allow_free_text: Whether a typed reply can also resolve this
+            question. Always True today.
+    """
+    await emit(
+        config,
+        {
+            "event": "question",
+            "node": node,
+            "question": question,
+            "options": list(options),
+            "allow_free_text": allow_free_text,
+        },
+    )
+
+
 async def emit_partial(
     config: Optional[RunnableConfig], key: str, value: Any
 ) -> None:

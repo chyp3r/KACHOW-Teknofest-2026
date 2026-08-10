@@ -846,6 +846,10 @@ textarea { min-height: 105px; resize: vertical; }
 .markdown-content ul, .markdown-content ol { padding-left: var(--space-5); }
 .message-logs { margin-top: var(--space-3); color: var(--text-muted); }
 .message-logs p { display: flex; gap: var(--space-2); margin-top: var(--space-1); }
+.chat-message.notice-message > div { background: color-mix(in srgb, var(--status-running) 9%, var(--surface-panel)); border-color: color-mix(in srgb, var(--status-running) 45%, var(--border-default)); }
+.chat-message.notice-message .message-avatar { color: var(--text-warning); background: color-mix(in srgb, var(--status-running) 15%, transparent); }
+.chat-message.notice-message header { color: var(--text-warning); }
+.message-options { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
 .processing-line { display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); }
 .streaming-caret { display: inline-block; width: 7px; height: 16px; margin-left: var(--space-1); vertical-align: text-bottom; background: var(--accent-blue); animation: blink .8s infinite; }
 @keyframes blink { 50% { opacity: 0; } }

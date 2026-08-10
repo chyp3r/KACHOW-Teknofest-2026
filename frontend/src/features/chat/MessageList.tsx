@@ -1,4 +1,4 @@
-import { Bot, FilePenLine, FileSearch, MessageSquare, Route, UserRound } from "lucide-react";
+import { Bot, FilePenLine, FileSearch, Info, MessageSquare, Route, UserRound } from "lucide-react";
 import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import type { ChatMessage, WorkflowLog } from "../../types/chat";
@@ -13,6 +13,7 @@ export function MessageList({
   logs,
   hasSelectedDocument,
   onSuggestion,
+  onSelectOption,
 }: {
   messages: ChatMessage[];
   streamingText: string;
@@ -20,6 +21,11 @@ export function MessageList({
   logs: WorkflowLog[];
   hasSelectedDocument: boolean;
   onSuggestion: (prompt: string) => void;
+  // Answers a clarify question's option the same way typing its label would
+  // -- see app.ai.workflows.planner._try_resolve_pending_clarification.
+  // Optional: a caller that doesn't wire clarify options simply never
+  // passes questionOptions on a message, so this is never invoked.
+  onSelectOption?: (label: string) => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -47,10 +53,14 @@ export function MessageList({
         messages.map((message, index) => (
           <article
             key={`${message.sender}-${index}`}
-            className={`chat-message ${message.sender}`}
+            className={`chat-message ${message.sender}${
+              message.kind === "notice" ? " notice-message" : ""
+            }`}
           >
             <span className="message-avatar">
-              {message.sender === "assistant" ? (
+              {message.kind === "notice" ? (
+                <Info size={17} />
+              ) : message.sender === "assistant" ? (
                 <Bot size={17} />
               ) : (
                 <UserRound size={17} />
@@ -58,11 +68,30 @@ export function MessageList({
             </span>
             <div>
               <header>
-                {message.sender === "assistant" ? "KACHOW Asistan" : "Siz"}
+                {message.kind === "notice"
+                  ? "Bilgilendirme"
+                  : message.sender === "assistant"
+                    ? "KACHOW Asistan"
+                    : "Siz"}
               </header>
               <div className="markdown-content">
                 <ReactMarkdown>{message.text}</ReactMarkdown>
               </div>
+              {message.questionOptions?.length ? (
+                <div className="message-options" role="group" aria-label="Yanıt seçenekleri">
+                  {message.questionOptions.map((option) => (
+                    <Button
+                      key={option.value}
+                      variant="secondary"
+                      size="sm"
+                      disabled={loading}
+                      onClick={() => onSelectOption?.(option.label)}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
               {message.logs?.length ? (
                 <details className="message-logs">
                   <summary>Akış günlüğü ({message.logs.length})</summary>

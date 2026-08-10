@@ -1,18 +1,32 @@
 """End-to-end proof that a revision instruction contradicting mevzuat/kaynak
-is still applied in full and only *additionally* forces the human approval
-gate -- never silently softened, rejected or reverted.
+is still applied in full, is reported to the user, and never pauses the run.
 
-Follows test_revise_and_clarify_end_to_end.py's pattern: only the LLM-backed
-sub-graphs are mocked; the revise sub-graph's conflict audit
-(app.ai.revision.conflict) runs for real against a frozen legislation
+Was ``test_revision_conflict_forces_gate.py``, asserting the opposite of
+this file's name: that a conflict finding forced the human-approval gate
+open, indistinguishable from a genuine low-quality-draft pause. That
+behaviour is gone -- ``ConflictReport.applied_anyway`` (see
+``app.ai.revision.conflict``'s module docstring) is a hard invariant, and a
+gate the user has to click through for a finding that changes nothing about
+what already happened is exactly the kind of unnecessary blocking popup this
+rewrite removes. A conflict is now advisory only: it never appears in
+``PlanningState.draft_result["status"]``'s escalation, and is instead
+published live as a non-blocking ``notice`` SSE event (see
+``app.ai.workflows.events.emit_notice``), rendered by the frontend as its
+own chat message rather than folded into the draft reply or a popup.
+
+Follows ``test_revise_and_clarify_end_to_end.py``'s pattern: only the
+LLM-backed sub-graphs are mocked; the revise sub-graph's conflict audit
+(``app.ai.revision.conflict``) runs for real against a frozen legislation
 context that does not cover the law the second turn's instruction cites.
 """
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
 from langgraph.checkpoint.memory import MemorySaver
 
+from app.ai.workflows.events import STATUS_QUEUE_KEY
 from app.ai.workflows.planning_graph import create_planning_graph
 
 DRAFT_TEXT = (
@@ -79,11 +93,12 @@ def _build_graph(fake_llm, fake_fast_llm):
 
 
 @pytest.mark.asyncio
-async def test_an_unfounded_legislation_citation_is_applied_and_forces_the_gate(
+async def test_an_unfounded_legislation_citation_is_applied_and_only_notices(
     fake_llm, fake_fast_llm
 ):
     graph, draft_graph = _build_graph(fake_llm, fake_fast_llm)
-    config = {"configurable": {"thread_id": "conflict-gate-1"}}
+    queue: asyncio.Queue = asyncio.Queue()
+    config = {"configurable": {"thread_id": "conflict-notice-1", STATUS_QUEUE_KEY: queue}}
 
     first = await graph.ainvoke(
         {"input_text": "Bu evraka cevap yazısı hazırla.", "document_id": None}, config=config
@@ -105,15 +120,24 @@ async def test_an_unfounded_legislation_citation_is_applied_and_forces_the_gate(
     assert draft_graph.ainvoke.await_count == 1
 
     # The instruction was applied in full, not refused or softened --
-    # it forced a pause for approval, not a rejection or a reverted edit.
+    # and the run settled on its own, with no human-approval pause.
     snapshot = await graph.aget_state(config)
-    assert snapshot.next == ("human_gate",)
-    assert second["final_output"]["status"] == "NEEDS_HUMAN_APPROVAL"
-    payload = snapshot.tasks[0].interrupts[0].value
-    assert "4982 sayılı Kanun" in payload["draft"]
+    assert snapshot.next == ()
+    assert second["final_output"]["status"] == "COMPLETED"
+    assert "4982 sayılı Kanun" in second["final_output"]["draft"]["draft"]
 
-    # ...and it is flagged, not silently accepted.
-    conflicts = payload["conflicts"]
+    # ...and it is flagged, not silently accepted: the structured finding
+    # is still attached to the draft result...
+    conflicts = second["final_output"]["draft"]["conflicts"]
     assert conflicts
     assert any(c["kind"] == "mevzuat_dayanaksiz" for c in conflicts)
-    assert payload["requires_human_approval"] is True
+    assert second["final_output"]["draft"]["requires_human_approval"] is False
+
+    # ...and reported live as its own non-blocking notice, never a popup.
+    events = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    notices = [event for event in events if event.get("event") == "notice"]
+    assert notices, "expected a notice event for the conflict finding"
+    assert "4982" in notices[0]["message"] or "4982" in notices[0]["title"]
+    assert not any(event.get("event") == "interrupt" for event in events)

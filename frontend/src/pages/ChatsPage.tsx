@@ -164,6 +164,12 @@ export function ChatsPage({
           logs={logs}
           hasSelectedDocument={Boolean(selectedDocument)}
           onSuggestion={setPromptTemplate}
+          // A clarify option is answered the same way typing its label
+          // would be -- balanced/no-forced-document mirrors the composer's
+          // own defaults, since a one-click answer to "taslak mı,
+          // revizyon mu?" isn't the moment to also silently change the
+          // reasoning level or attach/detach the document.
+          onSelectOption={(label) => void onSend(label, "balanced", Boolean(selectedDocument))}
         />
         {loading && (
           <Button className="cancel-stream-button" variant="ghost" size="sm" leadingIcon={<Square />} onClick={onCancel}>İşlemi durdur</Button>

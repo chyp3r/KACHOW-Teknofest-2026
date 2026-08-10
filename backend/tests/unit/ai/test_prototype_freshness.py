@@ -33,8 +33,12 @@ from app.ai.policy.prototypes import FAMILIES
 
 #: `clarify` is resolved without ever reaching the semantic rung (see
 #: `resolve_plan`'s clarify-before-model branch), so it has no prototypes and
-#: never will.
-_EXPECTED_INTENT_LABELS = set(PLAN_BY_INTENT) - {"clarify"}
+#: never will. `refuse` is not part of the intent space the semantic/fusion
+#: layer classifies over at all -- it is a domain-admission verdict applied
+#: *after* an intent (draft/analyze/assist/revise) is already resolved (see
+#: `app.ai.workflows.scope.resolve_scope` and `planner._apply_scope_gate`),
+#: so it likewise has no prototypes and never will.
+_EXPECTED_INTENT_LABELS = set(PLAN_BY_INTENT) - {"clarify", "refuse"}
 
 
 def _load(family: str) -> dict:

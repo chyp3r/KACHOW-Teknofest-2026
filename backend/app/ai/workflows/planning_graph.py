@@ -38,13 +38,17 @@ from app.ai.workflows.events import (
     emit_node_error,
     emit_node_skipped,
     emit_node_start,
+    emit_notice,
     emit_partial,
+    emit_question,
     emit_token,
 )
 from app.ai.workflows.intent_rules import RESET_SURFACES
 from app.ai.workflows.intent_scorer import normalize
 from app.ai.workflows.planner import resolve_plan
+from app.ai.workflows.relevance import build_unrelated_reply, resolve_relevance
 from app.ai.workflows.revise import run_revise
+from app.ai.workflows.scope import build_refusal_reply
 from app.ai.workflows.revise_graph import create_revise_graph
 from app.ai.workflows.step_graph import STEP_SPECS, StepSpec, all_steps_settled, ready_steps
 from app.core.config import settings
@@ -73,6 +77,7 @@ STEP_LABELS = {
     "assist": "Asistan",
     "revise": "Taslak Revizyonu",
     "clarify": "Açıklayıcı Soru",
+    "refuse": "Kapsam Denetimi",
     "gate_revise": "Geri Bildirimli Revizyon",
 }
 
@@ -83,13 +88,14 @@ STEP_MESSAGES = {
     "assist": "Asistan yanıtı hazırlanıyor...",
     "revise": "Taslak talebe göre güncelleniyor...",
     "clarify": "İsteğinizi netleştirmek için bir soru hazırlanıyor...",
+    "refuse": "İstek sistemin görev alanına göre denetleniyor...",
     "gate_revise": "Onay kapısındaki geri bildiriminize göre taslak güncelleniyor...",
 }
 
 def _dependency_failed(
     step: str, state: "PlanningState", updates: dict[str, Any]
 ) -> Optional[str]:
-    """Return the name of a failed dependency for ``step``, if any.
+    """Return the name of a failed-or-skipped dependency for ``step``, if any.
 
     A step whose dependency's own result carries status FAILED must not run
     on empty/garbage input. Without this a failed draft still let routing
@@ -99,6 +105,11 @@ def _dependency_failed(
     function is the other half -- *whether a failure* should skip the step,
     which is deliberately not `ready_steps`'s concern (see its docstring).
 
+    SKIPPED counts the same as FAILED here: a dependency that decided not to
+    produce output (e.g. ``_step_draft`` refusing an off-topic request via
+    ``app.ai.workflows.relevance``) leaves nothing for a dependent step to
+    run on either, even though nothing actually errored.
+
     Args:
         step: The plan step about to run.
         state: The graph state as of the start of this superstep.
@@ -106,13 +117,13 @@ def _dependency_failed(
             (a dependency that just ran this turn is not yet in ``state``).
 
     Returns:
-        The failed dependency's step name, or None when every dependency (if
-        any) succeeded or has not run yet.
+        The failed/skipped dependency's step name, or None when every
+        dependency (if any) settled successfully or has not run yet.
     """
     spec = STEP_SPECS.get(step, StepSpec(name=step))
     for dependency in spec.depends_on:
         result = updates.get(f"{dependency}_result") or state.get(f"{dependency}_result") or {}
-        if result.get("status") == StepStatus.FAILED:
+        if result.get("status") in (StepStatus.FAILED, StepStatus.SKIPPED):
             return dependency
     return None
 
@@ -253,6 +264,10 @@ class PlanningState(TypedDict, total=False):
     #: field left both steps looking permanently unsettled and looping.
     revise_result: dict[str, Any]
     clarify_result: dict[str, Any]
+    #: Same arrangement as clarify: the out-of-scope refusal's real payload
+    #: goes into assist_result (it is a reply like any other), and this field
+    #: exists only so the scheduler can see the step settle.
+    refuse_result: dict[str, Any]
     final_output: dict[str, Any]
     #: How many times the human approval gate's own "revizyon iste" action
     #: has re-run the revise sub-graph *within this turn* (see
@@ -671,6 +686,7 @@ def create_planning_graph(
             "assist_result": {},
             "revise_result": {},
             "clarify_result": {},
+            "refuse_result": {},
             "final_output": {},
             "gate_revision_count": 0,
             "gate_revision_note": "",
@@ -1101,6 +1117,41 @@ def create_planning_graph(
     async def _step_draft(
         state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
     ) -> None:
+        """Run the draft sub-graph, unless this document isn't what it's about.
+
+        The scope gate (``app.ai.workflows.scope``) already required *some*
+        anchor before this plan was even allowed to start -- for a document-
+        attached turn, an attached document counts as that anchor on its
+        own. This is the narrower check on top: does the request actually
+        concern *this* document, now that its classification (in particular
+        ``summary``) exists to compare against. Only runs when a document is
+        attached; a document-less draft request already had to clear
+        ``scope``'s own ``domain_vocabulary`` requirement to get this far, so
+        there is nothing further to check it against here.
+        """
+        document_id = state.get("document_id")
+        if document_id:
+            verdict = await resolve_relevance(
+                state["input_text"], classification, llm_client=intent_client
+            )
+            if not verdict.relevant:
+                logger.info(
+                    "Draft refused as unrelated to the attached document: "
+                    "reason=%s (%s)",
+                    verdict.reason,
+                    verdict.detail,
+                )
+                reason = "İstek yüklü belgeyle ilgili görünmüyor."
+                await emit_node_skipped(config, "draft", STEP_LABELS["draft"], reason)
+                reply = build_unrelated_reply(
+                    classification.get("summary", ""),
+                    classification.get("document_type_label", ""),
+                )
+                updates["assist_result"] = {"reply": reply, "status": StepStatus.COMPLETED}
+                updates["draft_result"] = {"status": StepStatus.SKIPPED, "reason": reason}
+                updates["history"] = [{"role": "assistant", "content": reply}]
+                return
+
         updates["draft_result"] = await _run_draft(state, classification, config)
 
     async def _step_routing(
@@ -1180,11 +1231,53 @@ def create_planning_graph(
         focus = state.get("focus") or SessionFocus()
         pending = focus.pending_clarification or {}
         question = pending.get("question") or "Bu isteğinizi biraz açar mısınız?"
-        updates["assist_result"] = {"reply": question, "status": StepStatus.COMPLETED}
+        options = [
+            {"intent": option.get("intent", ""), "label": option.get("label", "")}
+            for option in (pending.get("options") or [])
+        ]
+        # A decision card, not a sentence the user has to answer in prose.
+        # The options carry the *same* Turkish labels
+        # `_try_resolve_pending_clarification` matches against, so clicking
+        # one and typing it out by hand resolve through exactly the same path
+        # next turn -- the card is a shortcut, never a second mechanism.
+        await emit_question(
+            config,
+            node="clarify",
+            question=question,
+            options=[
+                {"value": option["intent"], "label": option["label"]}
+                for option in options
+            ],
+            allow_free_text=True,
+        )
+        updates["assist_result"] = {
+            "reply": question,
+            "status": StepStatus.COMPLETED,
+            "question_options": options,
+        }
         # Same reason as _step_revise's marker: the scheduler keys readiness
         # on `clarify_result`, not on the `assist_result` key this step's
         # actual payload lives in.
         updates["clarify_result"] = {"status": StepStatus.COMPLETED}
+
+    async def _step_refuse(
+        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
+    ) -> None:
+        """Answer an out-of-domain request without running anything.
+
+        Deterministic by design (see ``PLAN_BY_INTENT``'s note on the
+        ``refuse`` plan): the reply is rendered from
+        ``scope.CAPABILITY_MANIFEST``, never generated, so the model that was
+        just declined the off-topic request never gets a turn in which to
+        fulfil it anyway.
+        """
+        cached = state.get("cached_document") or {}
+        analysis = classification or cached.get("analysis") or {}
+        summary = analysis.get("summary", "") if state.get("document_id") else ""
+        reply = build_refusal_reply(document_summary=summary)
+        updates["assist_result"] = {"reply": reply, "status": StepStatus.COMPLETED}
+        updates["refuse_result"] = {"status": StepStatus.COMPLETED}
+        updates["history"] = [{"role": "assistant", "content": reply}]
 
     #: One entry per dispatchable step name. Each runner reads whatever it
     #: needs from `state`/`classification` and writes its result(s) directly
@@ -1201,6 +1294,7 @@ def create_planning_graph(
         "assist": _step_assist,
         "revise": _step_revise,
         "clarify": _step_clarify,
+        "refuse": _step_refuse,
     }
 
     def _result_key(step: str) -> str:
@@ -1263,7 +1357,7 @@ def create_planning_graph(
         if failed_dependency is not None:
             reason = (
                 f"'{STEP_LABELS.get(failed_dependency, failed_dependency)}' adımı "
-                "başarısız olduğu için bu adım atlandı."
+                "tamamlanamadığı için bu adım atlandı."
             )
             logger.warning("Skipping plan step '%s': %s", step, reason)
             await emit_node_skipped(config, step, label, reason)
@@ -1699,14 +1793,13 @@ def create_planning_graph(
             return "continue"
         if status == StepStatus.NEEDS_INPUT:
             return "human_gate"
-        # A conflict is grounds for the gate the same way a low score or a
-        # PII finding is -- the instruction was still applied in full (see
-        # app.ai.revision.conflict's applied_anyway invariant), this only
-        # decides whether a human sees a warning about it before the run
-        # can call itself done.
-        if (
-            status == StepStatus.NEEDS_HUMAN_APPROVAL or draft_result.get("conflicts")
-        ) and settings.HITL_APPROVAL_GATE_ENABLED:
+        # A conflict finding is never grounds for the gate on its own --
+        # app.ai.revision.conflict's audit_node already reports it as a
+        # non-blocking chat notice (applied_anyway is a hard invariant: the
+        # instruction was applied in full regardless). Only a genuine
+        # quality/PII/groundedness verdict from verify_node, reflected in
+        # `status` itself, opens the gate here.
+        if status == StepStatus.NEEDS_HUMAN_APPROVAL and settings.HITL_APPROVAL_GATE_ENABLED:
             return "human_gate"
         return "continue"
 

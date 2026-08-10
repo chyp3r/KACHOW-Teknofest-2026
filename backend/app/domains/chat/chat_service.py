@@ -686,18 +686,16 @@ class ChatService:
                     "\n\n_Bu taslak insan onayı gerektiriyor: "
                     f"{draft.get('evaluation_notes', '')}_"
                 )
-            # Applied, not refused -- see app.ai.revision.conflict's
-            # applied_anyway invariant; the note here is the same "uygulandı
-            # ama şu noktalarda çelişiyor" framing the gate payload uses.
-            conflicts = draft.get("conflicts") or []
-            if conflicts:
-                lines = "\n".join(
-                    f"- [{c.get('severity', '')}] {c.get('detail', '')}" for c in conflicts
-                )
-                parts.append(
-                    "\n\n**⚠ Talimatınız uygulandı, ancak mevzuat/kaynakla şu "
-                    f"noktalarda çelişiyor:**\n{lines}"
-                )
+            # A conflict finding is *not* folded into this reply on the
+            # streaming path -- app.ai.workflows.revise_graph.audit_node
+            # already published it live as its own "notice" SSE event (see
+            # emit_notice), which the frontend renders as a separate chat
+            # message rather than appended text, precisely so it reads as
+            # "here's a separate heads-up" instead of a blocking popup or an
+            # inline aside bolted onto the actual answer. The structured
+            # finding is still available programmatically either way, via
+            # final_output["revision"]["conflicts"] (see
+            # _compile_final_output) -- only the free-text reply omits it.
             changelog_summary = (draft.get("changelog") or {}).get("summary")
             if changelog_summary:
                 parts.append(f"\n\n**Değişiklik özeti:** {changelog_summary}")

@@ -53,6 +53,10 @@ STEP_SPECS: dict[str, StepSpec] = {
     "revise": StepSpec(name="revise"),
     #: Deterministic, LLM-free -- see planner._build_clarify_decision.
     "clarify": StepSpec(name="clarify"),
+    #: Also deterministic and LLM-free: it renders
+    #: `app.ai.workflows.scope.CAPABILITY_MANIFEST` and ends the turn. It is
+    #: always the only step in its plan, so it has nothing to depend on.
+    "refuse": StepSpec(name="refuse"),
 }
 
 

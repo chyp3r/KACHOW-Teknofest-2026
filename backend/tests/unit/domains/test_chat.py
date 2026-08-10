@@ -258,7 +258,15 @@ def test_select_reply_includes_the_rejection_reason():
     assert "Üslup çok resmi değil." in reply
 
 
-def test_select_reply_surfaces_conflicts_without_implying_the_edit_was_reverted():
+def test_select_reply_omits_conflicts_now_delivered_as_a_separate_live_notice():
+    """A conflict finding is no longer folded into the merged reply text --
+    app.ai.workflows.revise_graph.audit_node now publishes it live as its own
+    "notice" SSE event instead (rendered as a separate chat message, never a
+    blocking popup). The structured finding itself is untouched, still
+    reachable via final_output["draft"]["conflicts"] for any caller that
+    wants it programmatically (e.g. the non-streaming REST path, which has
+    no notice channel) -- only the free-text reply omits it, to avoid
+    showing the same warning twice on the streaming path."""
     final_output = {
         "draft": {
             "draft": "Taslak metni",
@@ -277,8 +285,10 @@ def test_select_reply_surfaces_conflicts_without_implying_the_edit_was_reverted(
 
     reply = ChatService._select_reply(final_output)
 
-    assert "uygulandı" in reply
-    assert "4982 sayılı atıf mevzuat bağlamında yok." in reply
+    assert "4982 sayılı atıf mevzuat bağlamında yok." not in reply
+    assert final_output["draft"]["conflicts"][0]["detail"] == (
+        "4982 sayılı atıf mevzuat bağlamında yok."
+    )
 
 
 def test_select_reply_includes_the_changelog_summary():
