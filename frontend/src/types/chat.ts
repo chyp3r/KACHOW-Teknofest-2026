@@ -12,12 +12,27 @@ export interface WorkflowLog {
   text: string;
 }
 
+export interface QuestionOption {
+  value: string;
+  label: string;
+}
+
 export interface ChatMessage {
   sender: "user" | "assistant";
   text: string;
   status?: string;
   logs?: WorkflowLog[];
   details?: Record<string, unknown>;
+  // "notice" renders as a visually distinct, non-blocking aside (see backend
+  // app.ai.workflows.events.emit_notice) -- a conflict warning attached to a
+  // revision that was already applied, never a decision the user has to
+  // make. Absent (ordinary assistant reply) is the default.
+  kind?: "notice";
+  // Present on a clarify turn's own message -- clickable shortcuts for
+  // app.ai.workflows.planner._try_resolve_pending_clarification's options,
+  // resolved by sending the option's label back as the next message (the
+  // same thing typing it out by hand would do).
+  questionOptions?: QuestionOption[];
 }
 
 // Kind of instruction<->mevzuat/source clash app.ai.revision.conflict can
@@ -150,6 +165,20 @@ export type WorkflowEvent =
       kind: InterruptState["kind"];
       interrupt_id: string;
       payload: InterruptState["payload"];
+    })
+  | (EventBase & {
+      event: "notice";
+      node: string;
+      level: "info";
+      title: string;
+      message: string;
+    })
+  | (EventBase & {
+      event: "question";
+      node: string;
+      question: string;
+      options: QuestionOption[];
+      allow_free_text: boolean;
     })
   | (EventBase & {
       event: "final_result";

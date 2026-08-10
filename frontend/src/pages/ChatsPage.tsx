@@ -98,6 +98,12 @@ export function ChatsPage({
           streamingText={streamingText}
           loading={loading}
           logs={logs}
+          // A clarify option is answered the same way typing its label
+          // would be -- balanced/no-forced-document mirrors the composer's
+          // own defaults, since a one-click answer to "taslak mı,
+          // revizyon mu?" isn't the moment to also silently change the
+          // reasoning level or attach/detach the document.
+          onSelectOption={(label) => void onSend(label, "balanced", Boolean(selectedDocument))}
         />
         <ChatComposer
           documents={documents}

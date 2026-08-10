@@ -987,6 +987,11 @@ textarea { min-height: 105px; resize: vertical; }
 .markdown-content ul, .markdown-content ol { padding-left: 20px; }
 .message-logs { margin-top: 10px; color: var(--text-muted); font-size: 11px; }
 .message-logs p { display: flex; gap: 8px; margin-top: 5px; }
+.chat-message.notice-message > div { background: rgba(245, 158, 11, .09); border-color: rgba(245, 158, 11, .3); }
+.chat-message.notice-message .message-avatar { color: #f59e0b; background: rgba(245, 158, 11, .15); }
+.chat-message.notice-message header { color: #f59e0b; }
+.message-options { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.message-option-button { font-size: 13px; padding: 7px 14px; }
 .processing-line { display: flex; align-items: center; gap: 9px; color: var(--text-secondary); font-size: 12px; }
 .spinner { width: 15px; height: 15px; border: 2px solid var(--border-glass); border-top-color: var(--accent-blue); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

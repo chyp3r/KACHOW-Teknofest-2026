@@ -1793,14 +1793,13 @@ def create_planning_graph(
             return "continue"
         if status == StepStatus.NEEDS_INPUT:
             return "human_gate"
-        # A conflict is grounds for the gate the same way a low score or a
-        # PII finding is -- the instruction was still applied in full (see
-        # app.ai.revision.conflict's applied_anyway invariant), this only
-        # decides whether a human sees a warning about it before the run
-        # can call itself done.
-        if (
-            status == StepStatus.NEEDS_HUMAN_APPROVAL or draft_result.get("conflicts")
-        ) and settings.HITL_APPROVAL_GATE_ENABLED:
+        # A conflict finding is never grounds for the gate on its own --
+        # app.ai.revision.conflict's audit_node already reports it as a
+        # non-blocking chat notice (applied_anyway is a hard invariant: the
+        # instruction was applied in full regardless). Only a genuine
+        # quality/PII/groundedness verdict from verify_node, reflected in
+        # `status` itself, opens the gate here.
+        if status == StepStatus.NEEDS_HUMAN_APPROVAL and settings.HITL_APPROVAL_GATE_ENABLED:
             return "human_gate"
         return "continue"
 

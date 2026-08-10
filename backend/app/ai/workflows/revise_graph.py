@@ -42,12 +42,12 @@ from langgraph.graph import END, START, StateGraph
 from app.ai.agents.conflict_auditor import ConflictAuditorAgent
 from app.ai.agents.judge import JudgeAgent
 from app.ai.agents.reviser import ReviserAgent
-from app.ai.guardrails.injection import assert_no_prompt_leak
+from app.ai.guardrails.injection import assert_no_prompt_leak, assert_no_scaffold_echo
 from app.ai.guardrails.pii import find_pii
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
-from app.ai.reasoning_levels import get_reasoning_level_preset
+from app.ai.reasoning_levels import ReasoningLevelPreset, get_reasoning_level_preset
 from app.ai.revision.changelog import build_changelog
 from app.ai.revision.conflict import (
     assess_conflicts_llm,
@@ -78,6 +78,7 @@ from app.ai.workflows.events import (
     emit_node_error,
     emit_node_skipped,
     emit_node_start,
+    emit_notice,
     emit_token,
 )
 from app.ai.workflows.resilience import IO_RETRY
@@ -337,7 +338,60 @@ def create_revise_graph(
 
         return {"context": context, "retrieval_meta": meta}
 
+    async def _generate_validated(
+        agent: ReviserAgent, prompt: str, preset: ReasoningLevelPreset
+    ) -> str:
+        """Run one reviser call, fully buffered, validated before anything
+        reaches the client.
+
+        Nothing is emitted to the "revise" SSE node here -- see
+        ``rewrite_node``'s own docstring for why. A single reviser call can
+        run several times per turn (once per directive in the
+        multi-directive path, again on every repair round), and the old
+        per-chunk ``emit_token`` streamed each of those raw completions
+        live, unvalidated, straight into the chat: a completion that echoed
+        its own numbered brief scaffold (a known failure mode of smaller
+        local models given a heavily-structured prompt like this one) or
+        that simply ran twice in the same turn showed up in the chat as
+        literal "1. ... 2. ..." garbage concatenated across rounds with no
+        boundary between them. Buffering here and validating before
+        ``rewrite_node`` emits anything makes both impossible structurally,
+        not just less likely.
+
+        Raises:
+            ValueError: Empty completion.
+            GuardrailViolation: A prompt-injection or scaffold-echo pattern
+                was detected (see ``app.ai.guardrails.injection``).
+        """
+        chunks: list[str] = []
+        async for chunk in agent.stream(
+            messages=prompt, temperature=0.2, max_tokens=preset.draft_max_tokens,
+            reasoning=preset.reasoning,
+        ):
+            chunks.append(chunk)
+        rewritten = "".join(chunks).strip()
+        if not rewritten:
+            raise ValueError("Ajan boş bir revizyon döndürdü.")
+        assert_no_prompt_leak(rewritten)
+        assert_no_scaffold_echo(rewritten)
+        return rewritten
+
     async def rewrite_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
+        """Rewrite (or repair) the draft, buffering the model's output until
+        it has passed validation before anything is shown to the user.
+
+        The reviser's own prompts (``_build_brief``, ``_build_directive_
+        prompt``, ``_build_repair_prompt``) are dense, numbered scaffolding
+        by necessity -- a smaller local model asked to continue that shape
+        sometimes imitates it in its completion instead of producing plain
+        draft prose. Streaming that live, chunk by chunk, as the old
+        implementation did, put the leak on screen before any check could
+        run. Buffering through ``_generate_validated`` and only then
+        emitting the *validated* text (once, as a single token event just
+        before ``emit_node_end``) closes that gap without touching what the
+        user ultimately sees on a clean run -- the final draft text is
+        identical either way.
+        """
         active_draft = state["active_draft"]
         attempt_number = state.get("attempts", 0) + 1
         is_repair = bool(state.get("previous_draft"))
@@ -364,18 +418,7 @@ def create_revise_graph(
                         style_examples=style_examples,
                     )
                     agent = ReviserAgent(client)
-                    chunks: list[str] = []
-                    async for chunk in agent.stream(
-                        messages=prompt, temperature=0.2, max_tokens=preset.draft_max_tokens,
-                        reasoning=preset.reasoning,
-                    ):
-                        chunks.append(chunk)
-                        await emit_token(config, "revise", chunk)
-                    rewritten = "".join(chunks).strip()
-                    if not rewritten:
-                        raise ValueError("Ajan boş bir revizyon döndürdü.")
-                    assert_no_prompt_leak(rewritten)
-                    merged_draft = rewritten
+                    merged_draft = await _generate_validated(agent, prompt, preset)
                 else:
                     directives = state["directives"]
                     targets = state["targets"]
@@ -400,17 +443,7 @@ def create_revise_graph(
                                 correspondence_type=correspondence_type,
                                 style_examples=style_examples,
                             )
-                            chunks = []
-                            async for chunk in agent.stream(
-                                messages=prompt, temperature=0.2,
-                                max_tokens=preset.draft_max_tokens, reasoning=preset.reasoning,
-                            ):
-                                chunks.append(chunk)
-                                await emit_token(config, "revise", chunk)
-                            rewritten = "".join(chunks).strip()
-                            if not rewritten:
-                                raise ValueError("Ajan boş bir revizyon döndürdü.")
-                            assert_no_prompt_leak(rewritten)
+                            rewritten = await _generate_validated(agent, prompt, preset)
                             working_draft = _merge(working_draft, targets[i], rewritten)
                         merged_draft = working_draft
                     else:
@@ -425,17 +458,7 @@ def create_revise_graph(
                             brief=brief, correspondence_type=correspondence_type,
                             style_examples=style_examples,
                         )
-                        chunks = []
-                        async for chunk in agent.stream(
-                            messages=prompt, temperature=0.2,
-                            max_tokens=preset.draft_max_tokens, reasoning=preset.reasoning,
-                        ):
-                            chunks.append(chunk)
-                            await emit_token(config, "revise", chunk)
-                        rewritten = "".join(chunks).strip()
-                        if not rewritten:
-                            raise ValueError("Ajan boş bir revizyon döndürdü.")
-                        assert_no_prompt_leak(rewritten)
+                        rewritten = await _generate_validated(agent, prompt, preset)
                         merged_draft = _merge(active_draft.text, target, rewritten)
         except TimeoutError:
             logger.warning(
@@ -463,6 +486,12 @@ def create_revise_graph(
                 "error": f"Revizyon üretilemedi: {exc}",
             }
 
+        # One shot, after validation -- see _generate_validated's docstring.
+        # Mirrors planning_graph._run_assist's own buffered-streaming branch:
+        # a "typed all at once" bubble is a strictly better outcome than a
+        # live per-chunk stream that might have shown scaffold-echo garbage
+        # before this point was ever reached.
+        await emit_token(config, "revise", merged_draft)
         await emit_node_end(
             config, "revise", "Taslak Revizyonu", "Revizyon tamamlandı.", {"draft": merged_draft},
         )
@@ -640,6 +669,19 @@ def create_revise_graph(
         no point auditing a draft the user is about to be asked more
         questions about (see route_after_verify's `needs_input` shortcut,
         which skips this node entirely).
+
+        A conflict finding here is advisory, never a gate: ``ConflictReport.
+        applied_anyway`` (see ``app.ai.revision.conflict``'s module
+        docstring) is a hard invariant, so this node must not turn a finding
+        into a reason the turn pauses for a human. It used to -- escalating
+        ``status`` to ``NEEDS_HUMAN_APPROVAL`` whenever
+        ``conflict_report.requires_human_approval`` was set -- which is what
+        put "Talimatınız uygulandı, ancak..." behind the same blocking
+        approval popup a genuine low-quality draft gets, indistinguishable
+        from an actual decision the run needed from the user. A conflict
+        now only ever produces a non-blocking ``notice`` event (see
+        ``emit_notice``) rendered as its own chat message; ``status`` here
+        reflects only what ``verify_node`` already decided.
         """
         active_draft = state["active_draft"]
         instruction = state["instruction"]
@@ -671,10 +713,27 @@ def create_revise_graph(
         conflict_report = merge_conflicts(deterministic, llm_findings)
         changelog = build_changelog(active_draft.text, draft_text, state.get("directives") or [])
 
-        requires_approval = bool(state.get("requires_human_approval")) or conflict_report.requires_human_approval
+        # Advisory only -- see this node's own docstring. Whether the turn
+        # pauses for a human is entirely verify_node's call; a conflict
+        # finding never adds to it.
+        requires_approval = bool(state.get("requires_human_approval"))
         status = state.get("status")
-        if requires_approval and status == StepStatus.COMPLETED:
-            status = StepStatus.NEEDS_HUMAN_APPROVAL
+
+        if conflict_report.conflicts:
+            severity_label = {"critical": "Kritik", "major": "Önemli", "minor": "Küçük"}
+            lines = "\n".join(
+                f"- [{severity_label.get(f.severity, f.severity)}] {f.detail}"
+                for f in conflict_report.conflicts
+            )
+            await emit_notice(
+                config,
+                node="revise_audit",
+                title="Talimat uygulandı, ancak bir çelişki tespit edildi",
+                message=(
+                    "Talimatınız taslağa uygulandı; ancak mevzuat veya kaynak "
+                    f"evrakla şu noktalarda çelişiyor:\n{lines}"
+                ),
+            )
 
         await emit_node_end(
             config, "revise_audit", "Çelişki Denetimi", conflict_report.notes,
