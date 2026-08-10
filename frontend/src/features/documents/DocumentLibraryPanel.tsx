@@ -3,6 +3,11 @@ import { useMemo, useState } from "react";
 import { EmptyState } from "../../components/EmptyState";
 import type { DocumentMetadata } from "../../types/documents";
 import { DocumentUploader } from "./DocumentUploader";
+import { Button } from "../../components/Button";
+import { Input } from "../../components/FormControls";
+import { ListRow } from "../../components/ListRow";
+import { SectionHeader } from "../../components/SectionHeader";
+import { Alert, Spinner } from "../../components/Surface";
 
 interface DocumentLibraryPanelProps {
   documents: DocumentMetadata[];
@@ -44,9 +49,7 @@ export function DocumentLibraryPanel({
       aria-label="Evrak Kütüphanesi hızlı erişim"
     >
       {error && (
-        <div className="notice danger" role="alert">
-          {error}
-        </div>
+        <Alert variant="error">{error}</Alert>
       )}
 
       <DocumentUploader uploading={uploading} onUpload={onUpload} />
@@ -55,24 +58,18 @@ export function DocumentLibraryPanel({
         className="quick-document-list"
         aria-labelledby="quick-list-title"
       >
-        <div className="section-heading">
-          <div>
-            <h2 id="quick-list-title">Kayıtlı evraklar</h2>
-            <p>{documents.length} evrak kütüphanede bulunuyor.</p>
-          </div>
-        </div>
-        <label className="search-field">
-          <Search size={15} />
-          <input
+        <SectionHeader title="Kayıtlı evraklar" description={`${documents.length} evrak kütüphanede bulunuyor.`} />
+        <Input
+            fieldClassName="search-field"
+            leadingIcon={<Search />}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Evraklarda ara"
             aria-label="Evraklarda ara"
           />
-        </label>
 
         {loading ? (
-          <div className="library-loading">Evraklar yükleniyor…</div>
+          <div className="library-loading"><Spinner label="Evraklar yükleniyor" />Evraklar yükleniyor…</div>
         ) : filteredDocuments.length === 0 ? (
           <EmptyState
             icon={FileText}
@@ -90,24 +87,16 @@ export function DocumentLibraryPanel({
                 selected?.storage_path === document.storage_path;
               return (
                 <li key={document.storage_path}>
-                  <button
+                  <ListRow
                     className={isSelected ? "is-selected" : ""}
                     aria-pressed={isSelected}
                     onClick={() => onSelect(document)}
-                  >
-                    <span className="quick-document-icon">
-                      <FileText size={15} />
-                    </span>
-                    <span className="quick-document-copy">
-                      <strong title={document.file_name}>{document.file_name}</strong>
-                      <small>
-                        {document.document_type_label || document.document_type}
-                      </small>
-                    </span>
-                    <span className="quick-document-state">
-                      {isSelected ? "Seçili" : "Seç"}
-                    </span>
-                  </button>
+                    selected={isSelected}
+                    leading={<FileText />}
+                    primary={document.file_name}
+                    secondary={document.document_type_label || document.document_type}
+                    status={<span className="quick-document-state">{isSelected ? "Seçili" : "Seç"}</span>}
+                  />
                 </li>
               );
             })}
@@ -115,13 +104,14 @@ export function DocumentLibraryPanel({
         )}
       </section>
 
-      <button
-        className="button button-secondary library-details-button"
+      <Button
+        variant="secondary"
+        className="library-details-button"
         onClick={onViewDetails}
+        trailingIcon={<ArrowRight />}
       >
         Detaylı görüntüle
-        <ArrowRight size={15} />
-      </button>
+      </Button>
     </section>
   );
 }

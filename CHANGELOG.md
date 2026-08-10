@@ -2,7 +2,7 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
-## [1.48.0] - 2026-08-10
+## [1.52.0] - 2026-08-10
 ### Eklendi
 - **Görev Alanı Denetimi (Domain Admission Gate)**: `resolve_plan` şimdiye kadar yalnızca *hangi* akışın istendiğine karar veriyordu, isteğin sistemin görev alanına girip girmediğine hiç bakmıyordu -- "Çiğköfte kampanyası için bir metin yaz" `draft.explicit_request`'in kendi `"metni yaz"` yüzeyine tam uyduğu için sözlüksel katman, füzyon ve gerekirse model tie-breaker'ın tamamı bunu *niyet* olarak doğru şekilde `draft`'a çözüyor, ve alt akışların hiçbiri bunu sorgulamıyordu. Yeni `app.ai.workflows.scope` modülü niyet çözümlendikten *sonra*, herhangi bir adım çalışmadan önce ayrı bir kabul denetimi uyguluyor: deterministik katman isteği yüklü bir belgeye, açık bir taslağa veya resmî yazışma/mevzuat terminolojisine (`DOMAIN_SURFACES`) çapalanmış olarak arıyor; yalnızca çapasız üretim istekleri (draft/analyze/revise) hızlı katman modeline (`resolve_plan`'ın kendi tie-breaker'ıyla aynı istemci) yükseltiliyor. Kapsam dışı bir istek artık her zaman deterministik yeni bir `refuse` plan adımına çözülüyor: `CAPABILITY_MANIFEST`'ten **üretilmeden** (generate edilmeden) render edilen sabit bir yetenek listesi döndürüyor -- bir ret asla bir üretim değildir, aksi hâlde az önce reddedilen model aynı off-topic metni üretmek için bir şans daha bulurdu.
   - **Deny-list değil, kanıt gerektiren model.** Yasaklı konuların bir listesi yerine (öngörülemeyen her yeni konuda tekrar açık kalır), kural tersine çevrildi: küçük sohbet, nezaket, sistem hakkında sorular ve bu konuşmanın kendisiyle ilgili sorular her zaman kapsam içi; bir şey *üretme* isteği yalnızca bir belgeye, açık bir taslağa veya resmî yazışma kaydına çapalıysa kapsam içi.
@@ -17,6 +17,68 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - **"Cevap yaz." ve "evet, hazırla" Yanlışlıkla Reddedilmesi**: kapsam denetiminin bare-command muafiyeti ilk sürümde iki durumda başarısız oluyordu -- (1) `hazirla` gibi tek kelimelik `CONTINUATION_SURFACES` yüzeyleri, daha uzun `"yazi hazirla"` gibi çok kelimeli komut yüzeylerinden **önce** çıkarılıyor, ifadeyi parçalayıp "yazi"yı sahte bir konu kelimesi olarak arkada bırakıyordu; `content_words` artık yüzeyleri en uzundan en kısaya doğru çıkarıyor. (2) "evet" gibi kısa bir onay kelimesi konu içeriği olarak sayılıyordu; `CONTINUATION_SURFACES` artık `topic_words`'ün komut/konu ayrıştırıcısına da dahil.
 
 Refs: [#155](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/155)
+
+## [1.51.0] - 2026-08-09
+### Eklendi
+- İş akışı, evrak ve taslak alanlarının farklı bilgi yapıları için `WorkflowStepper`, `DocumentListItem` ve `DraftTable` feature composite bileşenleri eklendi. Ortak primitive sistemi korunurken satır semantiği feature katmanında ayrıştırıldı.
+- Uygulama/sidebar/içerik/panel/etkileşim/yükseltilmiş/input yüzeyleri ile 248/76 piksel sidebar rolleri semantik design tokenlarına bağlandı.
+
+### Düzeltildi
+- Teknik grafik açıldığında iş akışı panelinin genişlemesi kaldırıldı; panel 400 piksel rolünü korurken grafik düğüm daireleri ve dış etiket mesafeleri büyütüldü.
+- Chat composer üst kontrol satırı tek hizaya indirildi; evrak eylemi solda, `AI modu` ve seviye seçimi sağda konumlanarak gereksiz dikey yükseklik kaldırıldı.
+- İş akışı marker, başlık, açıklama ve tek durum badge'i sabit grid yapısına geçirildi; dar panelde çakışma kaldırıldı. Teknik grafik kontrollü progressive disclosure, genişleyen panel, tam genişlikte statik toolbar–canvas–yardım katmanları ve yeniden boyutlanınca kamera sıfırlama davranışı kazandı.
+- `PageHeader` eylem grupları, sidebar marka/footer/tema kontrolleri ve chat composer/boş durum hizaları ortak responsive hiyerarşiye getirildi; geniş sidebar'daki ikinci tema ikonu kaldırıldı.
+- Evrak arama/filtre/sıralama araç çubuğu içerik ölçüsüne göre dengelendi; evrak satırları dosya adı, kısa özet, tür, tarih ve durum alanlarıyla okunabilir hâle getirildi.
+- Taslak listesi masaüstünde gerçek kolonlu tabloya, tablet ve mobilde ayrı etiketli alanlara dönüştürüldü; büyük-küçük harf farkı taşıyan kalıcı durumlar kullanıcı diline normalize edildi.
+
+### Test
+- Page header, workflow stepper/disclosure/graph, composer loading, duplicate tema kontrolü, evrak/taslak semantiği ve klavye aktivasyonu için regresyon testleri eklendi. 1920×1080, 1440×900, 1366×768, 800×1024, 390×844 ve 200% ölçek eşdeğeri görünümler açık/koyu/sistem temalarında tarayıcıda doğrulandı.
+
+## [1.50.0] - 2026-08-09
+### Eklendi
+- **Frontend design-system temeli oluşturuldu**: 4 piksel spacing ölçeği; ortak control/touch-target, icon/container, radius, semantic border, focus, surface ve elevation tokenları `design-system.css` içinde merkezileştirildi.
+- `Button`, `IconButton`, `Input`, `Select`, `Textarea`, `FormField`, `Card`, `StatusBadge`, `Alert`, `Divider`, `Spinner`, `Skeleton`, `PageHeader`, `SectionHeader`, `EmptyState`, `ErrorState`, `ListRow`, `Drawer`, `Dialog`, `FormActions`, `Stack`, `Inline`, `Cluster` ve `Grid` ortak bileşenleri eklendi veya mevcut ortak bileşenler genişletildi.
+- Geçiş öncesi ölçüm envanteri, component API sözleşmesi, state/erişilebilirlik kuralları ve belgelenmiş geometri istisnaları `docs/development/frontend-design-system.md` içinde kaydedildi.
+
+### Değiştirildi
+- Uygulama kabuğu, sohbet/composer, sohbet geçmişi, evrak kütüphanesi/seçici/yükleyici, taslaklar, yönlendirme, hesap, yönetim, sistem durumu, workflow ve interrupt panelleri ortak component sistemine taşındı; ordinary production JSX içinde sayfa-özel button/input/select/textarea uygulamaları kaldırıldı.
+- Taslak oluşturma alanı responsive shared form grid, `FormField` yapısı, gömülü textarea counter ve mobilde tam genişlikte `FormActions` kullanıyor. Taslak ve evrak kayıtları tüm satırı aktive eden erişilebilir `ListRow` yapısını paylaşır.
+- Eski spacing/radius/border bildirimleri 4 piksel token ölçeğine geçirildi; 32/40/44 piksel kontrol ve touch-target rolleri merkezileştirildi. Desktop/tablet/mobile gutterları 32/24/16 piksel olarak standardize edildi.
+- Drawer ve dialog focus trap, Escape, scroll lock ve tetikleyiciye focus dönüşü ortak overlay bileşenlerinde konsolide edildi.
+
+### Test
+- Button variant/loading/disabled, icon-only accessible name, field label/error ilişkileri, list-row activation, dialog Escape, drawer scroll/focus davranışı ve kritik design token sözleşmeleri için testler eklendi.
+
+## [1.49.0] - 2026-08-09
+### Değiştirildi
+- **Sohbet ekranı konuşma odaklı bilgi mimarisine taşındı**: Varsayılan masaüstü görünümü 248 piksellik birincil navigasyon ve 860 piksele kadar merkezlenen konuşma alanıyla iki kalıcı sütuna indirildi. Evrak yükleyici/kütüphanesi ve boş sohbet geçmişi kalıcı yan sütunlardan kaldırıldı.
+- **Navigasyon ve ikincil içerikler progressive disclosure ile düzenlendi**: Masaüstü navigasyonunun 76 piksellik dar tercihi kalıcı hâle getirildi; mobil navigasyon çekmece olarak çalışıyor. Sohbet geçmişi isteğe bağlı çekmeceye, evrak erişimi aranabilir modal/tam ekran seçiciye taşındı; seçilen evrak kompakt kaldırılabilir çip olarak gösteriliyor.
+- **Dar sidebar geri dönüşü ve footer taşması düzeltildi**: Dar görünümde marka metninin ve footer kontrollerinin 76 piksel dışına taşması kaldırıldı. Her zaman görünür 44×44 genişletme düğmesi, 44×44 navigasyon hedefleri ve yalnız ikonlu tema/oturum kontrolleri eklendi. Mobil çekmece masaüstü dar tercihinden ayrıştırıldı; hamburger çekmece açıkken gizleniyor, marka ve kapatma düğmesi çakışmıyor.
+- **İlk mesajdan sonra sohbetin sıfırlanması düzeltildi**: Backend'in ilk `session` SSE olayı URL'yi gerçek thread kimliğine taşıdığında bu iç route değişimi artık harici sohbet seçimi gibi aktif isteği abort edip mesajları temizlemiyor. Stream sürerken mesaj/state geçmişi sorguları bekletilerek boş veya kısmi backend cevabının iyimser kullanıcı mesajını ve canlı yanıtı ezdiği yarış durumu kapatıldı.
+- **İlk taslak onay ekranının çökmesi düzeltildi**: Backend'in henüz revizyon yapılmamış taslaklarda gönderdiği boş `changelog` nesnesi güvenli biçimde karşılanıyor; panel değişiklik girdilerini yalnızca gerçek bir liste mevcutsa oluşturuyor.
+- **Taslaklar sayfası tek sütunlu açılır listeye dönüştürüldü**: Yeni taslak formu varsayılan görünümden kaldırılıp sağ üstteki “Yeni taslak” eylemiyle açılan kompakt, tam genişlikte bir panele taşındı. Kalıcı taslaklar kaynak evrak adlarıyla birlikte satır halinde gösteriliyor; route tabanlı satır seçimi sürüm geçmişini aynı satırın altında açıyor. Her sürüm 420 karakterlik önizleme ve erişilebilir “Tümünü gör / Daha az göster” chevron kontrolü kullanıyor.
+- **Evrak Kütüphanesi taslaklarla aynı açılır liste düzenine taşındı**: Ana başlığın yanındaki açıklama kaldırıldı; yükleme alanı sağ üstteki “Evrak yükle” düğmesiyle açılan kompakt, tam genişlikte bir panele dönüştürüldü. Arama/filtre/sıralama korundu; evrak satırı seçildiğinde analiz ayrıntıları mevcut derin route davranışıyla satırın altında açılıyor ve aynı satırdan kapatılabiliyor.
+- **Teknik karar grafiği etkileşimli ve keskin bir viewport kazandı**: Grafik %60–%300 arasında büyütülüp küçültülebiliyor; fare/tek parmak sürükleme, iki parmak pinch, tekerlek, araç çubuğu ve klavye kontrolleri destekleniyor. CSS katmanı ölçeklemek yerine SVG'nin yerel `viewBox` kamerası değiştirildiği için yüksek yakınlaştırmada çizgi ve metinler bitmap bulanıklığına düşmüyor. Görünüm sıfırlama, yakınlaştırma yüzdesi, kullanım ipucu ve düğüm seçimiyle çakışmayan pan davranışı eklendi.
+- **Teknik grafiğin bağlantı çizgileri belirginleştirildi**: Bekleyen edge'lerin tema uyumlu kontrastı ve kalınlığı artırıldı; çalışan, tamamlanan ve hatalı bağlantılara durum rengiyle hafif vurgu eklendi. `non-scaling-stroke` sayesinde zoom sırasında çizgi kalınlığı ekranda tutarlı kalıyor.
+- **Sohbet geçmişi çekmecesi erişilebilir modal durum makinesine dönüştürüldü**: Çekmece artık viewport'un sol kenarından açılıp sidebar'ı örter; masaüstünde 380 piksel, dar mobilde tam genişlik kullanır. Escape/backdrop/44×44 kapatma düğmesi, odak tuzağı, scroll kilidi ve tetikleyiciye odak dönüşü eklendi. Yükleme skeleton'ları, yalnız hata+retry görünümü, açıklamalı boş durum, Bugün/Dün/Daha eski gruplu başarı listesi ve listeyi koruyan ince yenileme durumu birbirinden ayrıldı; yalnız büyük listelerde arama gösteriliyor.
+- **İş akışı varsayılan olarak kapatıldı ve sadeleştirildi**: İlk görünüm beş adımlı durum zaman çizelgesidir; aktif, tamamlanan, başarısız ve kullanıcı eylemi bekleyen durumlar ikon ve metinle belirtilir. Tam teknik düğüm grafiği, tool/guardrail sinyalleri ve meta veriler ayrı bir genişletme eyleminin arkasında korunur. Panel 1366 pikselde konuşma ölçüsünü değiştirmeyen 400 piksellik örtü, mobilde tam ekran katman olarak açılır.
+- **Görsel yoğunluk ve hata kapsamı azaltıldı**: Nötr açık/koyu yüzeyler, daha az kart/gölge ve kompakt 24–27 piksel sayfa başlıkları kullanılıyor. Yerel geçmiş hataları tüm sayfayı kaplayan banner yerine ilgili alanda yeniden denenebilir inline bildirim olarak sunuluyor; mesaj oluşturucu tek yüzeyde belge, yanıt biçimi, giriş ve gönderme hiyerarşisini koruyor.
+- **Frontend typography sistemi semantik tokenlarla birleştirildi**: Sayfa/boş-durum/bölüm başlıkları, 16 piksellik okuma içeriği, 14 piksellik arayüz ve kontrol metinleri, 13 piksellik ikincil metinler ile 12 piksellik caption rolleri `typography.css` içinde merkezileştirildi. Eski tek seferlik 7.5–36 piksel değerler ve 750/800 ağırlıklar kaldırıldı; Türkçe sarma, 60–75 karakterlik içerik ölçüsü, açık/koyu tema kontrast renkleri, mobil başlık ölçeği ve tarayıcı font ölçekleme davranışı standardize edildi.
+
+### Test
+- Evrak seçicinin varsayılan kapalı durumu, arama/seçim akışı ve kaldırılabilir çipi için bileşen testleri eklendi; teknik grafiğin açık kullanıcı eylemine kadar kapalı kaldığı doğrulandı. Sohbet geçmişi için durum ayrımı, gruplama, koşullu arama, yenileme, Escape/backdrop, odak tuzağı, scroll kilidi ve odak geri dönüş testleri eklendi. Dar sidebar genişletme geri dönüşü, açık mobil drawer'da hamburgerin kaldırılması, ilk `session` route çözümlemesinin aktif stream'i koruması, boş taslak changelog'unun onay panelini çökertmemesi, taslak formu/liste/sürüm metni, evrak yükleme/liste/analiz progressive-disclosure akışları ve teknik grafiğin zoom/pan/reset etkileşimleri için regresyon testleri eklendi. Frontend test paketi 21 dosyada 43 test, TypeScript denetimi, ESLint ve production build ile doğrulandı.
+- Typography token ölçeği, kritik semantik rol eşlemeleri, dört izinli ağırlık ve eski layout stylesheet'lerinde keyfi typography bildirimi kalmaması için kaynak sözleşmesi testleri eklendi.
+
+## [1.48.0] - 2026-08-09
+### Eklendi
+- **Frontend–backend entegrasyonu tamamlandı**: React Router tabanlı korumalı ve lazy rotalar; TanStack Query ile sunucu-otoriteli belge, sohbet, taslak, yönlendirme ve health verileri; kalıcı sohbet/taslak geçmişi; hesap şifre değişimi; stateless yönlendirme önerisi ve rol kontrollü sistem durumu ekranları eklendi.
+- **OpenAPI tip üretimi kuruldu**: Çalışan FastAPI uygulamasının gerçek OpenAPI çıktısından `frontend/src/api/generated.ts` üretildi; yeniden üretme ve drift kontrol komutları package script'lerine eklendi.
+- **SSE dayanıklılığı genişletildi**: Parçalı frame buffer'ı, event-family doğrulaması, `seq` tekrar önleme, bozuk/bilinmeyen olay toleransı, kullanıcı iptali ve sayfa yenilemesinden backend state ile interrupt kurtarma eklendi.
+
+### Değiştirildi
+- **Kimlik doğrulama ve hata yönetimi merkezileştirildi**: Eşzamanlı 401 yanıtları tek refresh isteğinde birleştiriliyor; tekrar döngüsü engelleniyor; refresh başarısızlığında güvenli logout ve kullanıcı bildirimi üretiliyor. API hata kodu, request ID ve Retry-After bilgisi ortak hata modeline taşındı.
+- **Backend tek doğruluk kaynağı yapıldı**: Belge, sohbet ve taslak geçmişi için eski localStorage otoritesi kaldırıldı; localStorage yalnızca tema tercihiyle sınırlandı.
+- **Taslak deneyimi tamamlandı**: Backend list/detail/version endpoint'leri, doğrudan taslak üretimi, son iki sürüm karşılaştırması ve routing girdisi olarak kalıcı taslak seçimi bağlandı.
 
 ## [1.47.0] - 2026-08-07
 ### Değiştirildi

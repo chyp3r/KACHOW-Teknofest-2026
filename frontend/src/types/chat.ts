@@ -18,6 +18,7 @@ export interface QuestionOption {
 }
 
 export interface ChatMessage {
+  id?: string;
   sender: "user" | "assistant";
   text: string;
   status?: string;
@@ -33,6 +34,23 @@ export interface ChatMessage {
   // resolved by sending the option's label back as the next message (the
   // same thing typing it out by hand would do).
   questionOptions?: QuestionOption[];
+}
+
+export interface ChatSession {
+  session_id: string;
+  title: string | null;
+  document_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersistedChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  workflow_status: string | null;
+  details: Record<string, unknown> | null;
+  created_at: string;
 }
 
 // Kind of instruction<->mevzuat/source clash app.ai.revision.conflict can
@@ -81,7 +99,9 @@ export interface InterruptState {
     requires_human_approval?: boolean;
     conflicts?: ConflictFinding[];
     conflict_notes?: string;
-    changelog?: RevisionChangelog;
+    // Fresh drafts currently carry an empty object; revision entries only
+    // become available after a revision has actually been produced.
+    changelog?: Partial<RevisionChangelog>;
     // The human approval gate's own "revizyon iste" loop -- see backend
     // planning_graph.gate_revise_node/route_after_gate. Absent (not just
     // zero) on the very first gate of a turn, before any round has run.

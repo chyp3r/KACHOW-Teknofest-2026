@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../query/queryKeys";
 import { chatService } from "../services/chatService";
 import type {
   ChatMessage,
   GuardrailEvent,
   InterruptState,
+  PersistedChatMessage,
   QuestionOption,
   ToolCallEvent,
   WorkflowEvent,
@@ -14,56 +17,41 @@ import type { DocumentMetadata, ReasoningLevel } from "../types/documents";
 
 type NodeResults = Record<string, Record<string, unknown>>;
 
-interface StoredSession {
-  clientSessionId: string;
-  threadId: string | null;
-}
-
 function createClientSessionId(): string {
   return `web:${crypto.randomUUID()}`;
 }
 
-function sessionStorageKey(userId: string): string {
-  return `kachow.chat.session.${userId}`;
+function clientSessionId(threadId: string, userId: string): string {
+  const prefix = `${userId}:`;
+  return threadId.startsWith(prefix) ? threadId.slice(prefix.length) : threadId;
 }
 
-function loadSession(userId: string): StoredSession {
-  try {
-    const value = localStorage.getItem(sessionStorageKey(userId));
-    if (value) {
-      const parsed = JSON.parse(value) as Partial<StoredSession>;
-      if (typeof parsed.clientSessionId === "string") {
-        return {
-          clientSessionId: parsed.clientSessionId,
-          threadId: typeof parsed.threadId === "string" ? parsed.threadId : null,
-        };
-      }
-    }
-  } catch {
-    // Storage can be unavailable in private browsing; a memory-only session is fine.
-  }
-  return { clientSessionId: createClientSessionId(), threadId: null };
+function toChatMessage(message: PersistedChatMessage): ChatMessage {
+  return {
+    id: message.id,
+    sender: message.role,
+    text: message.content,
+    status: message.workflow_status ?? undefined,
+    details: message.details ?? undefined,
+  };
 }
 
 export function useChatWorkflow(
   selectedDocument: DocumentMetadata | null,
   userId: string,
+  activeSessionId: string | null = null,
+  onSessionResolved?: (sessionId: string) => void,
 ) {
-  const [initialSession] = useState<StoredSession>(() => loadSession(userId));
+  const queryClient = useQueryClient();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
-  const [clientSessionId, setClientSessionId] = useState(
-    initialSession.clientSessionId,
+  const [clientId, setClientId] = useState(() =>
+    activeSessionId ? clientSessionId(activeSessionId, userId) : createClientSessionId(),
   );
-  const [threadId, setThreadId] = useState<string | null>(
-    initialSession.threadId,
-  );
-  const [pendingInterrupt, setPendingInterrupt] =
-    useState<InterruptState | null>(null);
-  const [nodeStatus, setNodeStatus] = useState<
-    Record<string, WorkflowNodeStatus>
-  >({});
+  const [threadId, setThreadId] = useState<string | null>(activeSessionId);
+  const [pendingInterrupt, setPendingInterrupt] = useState<InterruptState | null>(null);
+  const [nodeStatus, setNodeStatus] = useState<Record<string, WorkflowNodeStatus>>({});
   const [nodeResults, setNodeResults] = useState<NodeResults>({});
   const [nodeMeta, setNodeMeta] = useState<NodeResults>({});
   const [planSteps, setPlanSteps] = useState<string[]>([]);
@@ -71,61 +59,77 @@ export function useChatWorkflow(
   const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([]);
   const [guardrailEvents, setGuardrailEvents] = useState<GuardrailEvent[]>([]);
   const logsRef = useRef<WorkflowLog[]>([]);
+  const threadIdRef = useRef<string | null>(activeSessionId);
   const seenInterrupts = useRef(new Set<string>());
   const activeRequest = useRef<AbortController | null>(null);
+  const internallyResolvedSession = useRef<string | null>(null);
   // Set by the last "question" event this turn, consumed once by the very
   // next "final_result" (the clarify step's own reply) and cleared -- a
   // question is always answered by the turn that asked it, so nothing else
   // should ever attach these options to an unrelated later message.
   const pendingQuestionOptions = useRef<QuestionOption[] | null>(null);
 
+  const sessionsQuery = useQuery({
+    queryKey: queryKeys.chatSessions(),
+    queryFn: () => chatService.sessions(),
+    staleTime: 15_000,
+  });
+  const messagesQuery = useQuery({
+    queryKey: queryKeys.chatMessages(threadId ?? ""),
+    queryFn: () => chatService.messages(threadId!),
+    enabled: Boolean(threadId) && !loading,
+  });
+  const stateQuery = useQuery({
+    queryKey: queryKeys.chatState(threadId ?? ""),
+    queryFn: () => chatService.state(threadId!),
+    enabled: Boolean(threadId) && !loading,
+    staleTime: 0,
+  });
+
   useEffect(() => {
-    try {
-      localStorage.setItem(
-        sessionStorageKey(userId),
-        JSON.stringify({ clientSessionId, threadId }),
-      );
-    } catch {
-      // Continue with an in-memory session when persistent storage is unavailable.
+    if (
+      activeSessionId &&
+      internallyResolvedSession.current === activeSessionId
+    ) {
+      internallyResolvedSession.current = null;
+      threadIdRef.current = activeSessionId;
+      setThreadId(activeSessionId);
+      return;
     }
-  }, [clientSessionId, threadId, userId]);
+    internallyResolvedSession.current = null;
+    activeRequest.current?.abort();
+    threadIdRef.current = activeSessionId;
+    setThreadId(activeSessionId);
+    setClientId(
+      activeSessionId ? clientSessionId(activeSessionId, userId) : createClientSessionId(),
+    );
+    setMessages([]);
+    setPendingInterrupt(null);
+    seenInterrupts.current.clear();
+  }, [activeSessionId, userId]);
 
   useEffect(() => {
-    if (!threadId) return;
-    let active = true;
-    chatService
-      .state(threadId)
-      .then((state) => {
-        if (!active || state.status !== "interrupted" || !state.interrupt) return;
-        const { kind: recoveredKind, ...payload } = state.interrupt;
-        const kind =
-          recoveredKind ??
-          ((payload.questions?.length ?? 0) > 0
-            ? "missing_information"
-            : "draft_approval");
-        const recoveredId = `recovered:${threadId}`;
-        seenInterrupts.current.add(recoveredId);
-        setPendingInterrupt({ kind, interruptId: recoveredId, payload });
-        setNodeStatus((previous) => ({ ...previous, human_gate: "running" }));
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [threadId]);
+    if (messagesQuery.data && !activeRequest.current) {
+      setMessages(messagesQuery.data.items.map(toChatMessage));
+    }
+  }, [messagesQuery.data]);
 
-  useEffect(
-    () => () => {
-      activeRequest.current?.abort();
-    },
-    [],
-  );
+  useEffect(() => {
+    const state = stateQuery.data;
+    if (!threadId || state?.status !== "interrupted" || !state.interrupt) return;
+    const { kind: recoveredKind, ...payload } = state.interrupt;
+    const kind =
+      recoveredKind ??
+      ((payload.questions?.length ?? 0) > 0 ? "missing_information" : "draft_approval");
+    const recoveredId = `recovered:${threadId}`;
+    setPendingInterrupt({ kind, interruptId: recoveredId, payload });
+    setNodeStatus((previous) => ({ ...previous, human_gate: "running" }));
+  }, [stateQuery.data, threadId]);
+
+  useEffect(() => () => activeRequest.current?.abort(), []);
 
   const appendLog = useCallback((text: string) => {
-    const next = [
-      ...logsRef.current,
-      { time: new Date().toLocaleTimeString("tr-TR"), text },
-    ];
+    const next = [...logsRef.current, { time: new Date().toLocaleTimeString("tr-TR"), text }];
     logsRef.current = next;
     setLogs(next);
   }, []);
@@ -143,22 +147,28 @@ export function useChatWorkflow(
     pendingQuestionOptions.current = null;
   }, []);
 
+  const refreshServerState = useCallback(
+    (resolvedThreadId: string) => {
+      void queryClient.invalidateQueries({ queryKey: ["chat-sessions"] });
+      void queryClient.invalidateQueries({ queryKey: ["chat-messages", resolvedThreadId] });
+      void queryClient.invalidateQueries({ queryKey: ["chat-state", resolvedThreadId] });
+      void queryClient.invalidateQueries({ queryKey: ["drafts"] });
+    },
+    [queryClient],
+  );
+
   const handleEvent = useCallback(
     (event: WorkflowEvent) => {
       switch (event.event) {
         case "session":
+          internallyResolvedSession.current = event.thread_id;
+          threadIdRef.current = event.thread_id;
           setThreadId(event.thread_id);
+          onSessionResolved?.(event.thread_id);
           break;
         case "node_start":
-          setNodeStatus((previous) => ({
-            ...previous,
-            [event.node]: "running",
-          }));
-          if (event.meta)
-            setNodeMeta((previous) => ({
-              ...previous,
-              [event.node]: event.meta ?? {},
-            }));
+          setNodeStatus((previous) => ({ ...previous, [event.node]: "running" }));
+          if (event.meta) setNodeMeta((previous) => ({ ...previous, [event.node]: event.meta ?? {} }));
           // Every node_start clears any in-progress streamingText, not just
           // "draft"'s -- a revise round (the initial rewrite, then every
           // repair/multi-directive re-entry into the same "revise" node)
@@ -168,79 +178,38 @@ export function useChatWorkflow(
           setStreamingText("");
           appendLog(`${event.label} işlemi başlatıldı.`);
           break;
-        case "planning_completed": {
-          const planned = event.plan_steps.map((step) => step.toLowerCase());
-          setPlanSteps(planned);
+        case "planning_completed":
+          setPlanSteps(event.plan_steps.map((step) => step.toLowerCase()));
           setNodeStatus((previous) => ({ ...previous, planning: "completed" }));
-          appendLog(
-            `İşlem planı belirlendi: ${planned.join(" → ") || "genel sohbet"}.`,
-          );
+          appendLog(`İşlem planı belirlendi: ${event.plan_steps.join(" → ") || "genel sohbet"}.`);
           break;
-        }
         case "node_end":
-          setNodeStatus((previous) => ({
-            ...previous,
-            [event.node]: "completed",
-          }));
-          if (event.result)
-            setNodeResults((previous) => ({
-              ...previous,
-              [event.node]: {
-                ...(previous[event.node] ?? {}),
-                ...event.result,
-              },
-            }));
-          if (event.meta)
-            setNodeMeta((previous) => ({
-              ...previous,
-              [event.node]: event.meta ?? {},
-            }));
+          setNodeStatus((previous) => ({ ...previous, [event.node]: "completed" }));
+          if (event.result) setNodeResults((previous) => ({ ...previous, [event.node]: { ...(previous[event.node] ?? {}), ...event.result } }));
+          if (event.meta) setNodeMeta((previous) => ({ ...previous, [event.node]: event.meta ?? {} }));
           appendLog(`${event.label} tamamlandı.`);
           break;
         case "node_error":
-          setNodeStatus((previous) => ({
-            ...previous,
-            [event.node]: event.fatal
-              ? "failed"
-              : (previous[event.node] ?? "completed"),
-          }));
-          appendLog(
-            `${event.fatal ? "Hata" : "Uyarı"} (${event.label}): ${event.message}`,
-          );
+          setNodeStatus((previous) => ({ ...previous, [event.node]: event.fatal ? "failed" : (previous[event.node] ?? "completed") }));
+          appendLog(`${event.fatal ? "Hata" : "Uyarı"} (${event.label}): ${event.message}`);
           break;
         case "node_skipped":
-          setNodeStatus((previous) => ({
-            ...previous,
-            [event.node]: "skipped",
-          }));
+          setNodeStatus((previous) => ({ ...previous, [event.node]: "skipped" }));
           appendLog(`${event.label} atlandı: ${event.reason}`);
           break;
         case "token":
           setStreamingText((previous) => previous + event.text);
           break;
         case "partial_result":
-          setNodeResults((previous) => ({
-            ...previous,
-            [event.key]: { ...(previous[event.key] ?? {}), ...event.value },
-          }));
+          if (typeof event.value === "object" && event.value !== null)
+            setNodeResults((previous) => ({ ...previous, [event.key]: { ...(previous[event.key] ?? {}), ...event.value } }));
           break;
         case "tool_call":
-          setToolCalls((previous) => [
-            ...previous,
-            { node: event.node, tool: event.tool, args: event.args },
-          ]);
+          setToolCalls((previous) => [...previous, { node: event.node, tool: event.tool, args: event.args }]);
           appendLog(`Araç çağrıldı: ${event.tool}.`);
           break;
         case "guardrail":
-          setGuardrailEvents((previous) => [
-            ...previous,
-            {
-              stage: event.stage,
-              kind: event.kind,
-              decision: event.decision,
-              reasons: event.reasons,
-            },
-          ]);
+          setGuardrailEvents((previous) => [...previous, { stage: event.stage, kind: event.kind, decision: event.decision, reasons: event.reasons }]);
           appendLog(`Güvenlik kontrolü: ${event.decision}.`);
           break;
         case "notice":
@@ -269,17 +238,9 @@ export function useChatWorkflow(
         case "interrupt":
           if (seenInterrupts.current.has(event.interrupt_id)) break;
           seenInterrupts.current.add(event.interrupt_id);
-          setPendingInterrupt({
-            kind: event.kind,
-            interruptId: event.interrupt_id,
-            payload: event.payload,
-          });
+          setPendingInterrupt({ kind: event.kind, interruptId: event.interrupt_id, payload: event.payload });
           setNodeStatus((previous) => ({ ...previous, human_gate: "running" }));
-          appendLog(
-            event.kind === "missing_information"
-              ? "Eksik bilgi bekleniyor."
-              : "İnsan onayı bekleniyor.",
-          );
+          appendLog(event.kind === "missing_information" ? "Eksik bilgi bekleniyor." : "İnsan onayı bekleniyor.");
           break;
         case "final_result": {
           setStreamingText("");
@@ -297,173 +258,83 @@ export function useChatWorkflow(
               questionOptions,
             },
           ]);
+          if (threadIdRef.current) refreshServerState(threadIdRef.current);
           break;
         }
-        case "error": {
+        case "error":
           appendLog(`Hata: ${event.message}`);
-          // The backend refuses a fresh message on a thread it still
-          // considers paused (see chat_service._invoke's AIException,
-          // details={"session_id": ...}) -- the client-side threadId then
-          // points at a session that can never advance. Treat it the same
-          // as pressing "Yeni Sohbet" instead of showing the raw backend
-          // text, which only told the user to hit an endpoint by hand.
-          const staleThreadId =
-            typeof event.details === "object" &&
-            event.details !== null &&
-            typeof (event.details as { session_id?: unknown }).session_id ===
-              "string";
-          if (staleThreadId) {
-            setClientSessionId(createClientSessionId());
-            setThreadId(null);
-            setPendingInterrupt(null);
-            seenInterrupts.current.clear();
-            setMessages((previous) => [
-              ...previous,
-              {
-                sender: "assistant",
-                text: "Bu oturum askıda kalmış görünüyor; yeni bir sohbet başlatıldı. Mesajınızı tekrar gönderebilirsiniz.",
-                status: "FAILED",
-                logs: logsRef.current,
-              },
-            ]);
-            break;
-          }
-          setMessages((previous) => [
-            ...previous,
-            {
-              sender: "assistant",
-              text: `İşlem tamamlanamadı: ${event.message}`,
-              status: "FAILED",
-              logs: logsRef.current,
-            },
-          ]);
+          setMessages((previous) => [...previous, { sender: "assistant", text: `İşlem tamamlanamadı: ${event.message}`, status: "FAILED", logs: logsRef.current }]);
           break;
-        }
       }
     },
-    [appendLog],
+    [appendLog, onSessionResolved, refreshServerState],
   );
 
-  const send = useCallback(
-    async (
-      text: string,
-      reasoningLevel: ReasoningLevel,
-      useDocument: boolean,
-    ) => {
-      if (!text.trim() || loading) return;
-      setLoading(true);
+  const send = useCallback(async (text: string, reasoningLevel: ReasoningLevel, useDocument: boolean) => {
+    if (!text.trim() || loading || activeRequest.current) return;
+    setLoading(true);
+    setPendingInterrupt(null);
+    resetFlow();
+    setMessages((previous) => [...previous, { sender: "user", text: text.trim() }]);
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    try {
+      await chatService.send({ message: text.trim(), session_id: clientId, document_id: useDocument ? (selectedDocument?.storage_path ?? null) : null, reasoning_level: reasoningLevel }, handleEvent, controller.signal);
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") return;
+      setMessages((previous) => [...previous, { sender: "assistant", text: caught instanceof Error ? caught.message : "İletişim sırasında bir hata oluştu.", status: "FAILED" }]);
+    } finally {
+      if (activeRequest.current === controller) activeRequest.current = null;
+      setLoading(false);
+    }
+  }, [clientId, handleEvent, loading, resetFlow, selectedDocument]);
+
+  const resume = useCallback(async (action: "answer" | "approve" | "revise" | "reject", answers: Record<string, string>, instructions: string, reason?: string) => {
+    if (!threadId || !pendingInterrupt || loading || activeRequest.current) return;
+    setLoading(true);
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    const currentInterrupt = pendingInterrupt;
+    try {
+      const state = await chatService.state(threadId);
+      if (state.status !== "interrupted") throw new Error("Bekleyen onay artık geçerli değil. Oturum yenileniyor.");
       setPendingInterrupt(null);
       resetFlow();
-      setMessages((previous) => [
-        ...previous,
-        { sender: "user", text: text.trim() },
-      ]);
-      const controller = new AbortController();
-      activeRequest.current = controller;
-      try {
-        await chatService.send(
-          {
-            message: text.trim(),
-            session_id: clientSessionId,
-            document_id: useDocument
-              ? (selectedDocument?.storage_path ?? null)
-              : null,
-            reasoning_level: reasoningLevel,
-          },
-          handleEvent,
-          controller.signal,
-        );
-      } catch (caught) {
-        if (caught instanceof DOMException && caught.name === "AbortError") return;
-        setMessages((previous) => [
-          ...previous,
-          {
-            sender: "assistant",
-            text:
-              caught instanceof Error
-                ? caught.message
-                : "İletişim sırasında bir hata oluştu.",
-            status: "FAILED",
-          },
-        ]);
-      } finally {
-        if (activeRequest.current === controller) activeRequest.current = null;
-        setLoading(false);
-      }
-    },
-    [clientSessionId, handleEvent, loading, resetFlow, selectedDocument],
-  );
-
-  const resume = useCallback(
-    async (
-      action: "answer" | "approve" | "revise" | "reject",
-      answers: Record<string, string>,
-      instructions: string,
-      reason?: string,
-    ) => {
-      if (!threadId || !pendingInterrupt || loading) return;
-      setLoading(true);
-      resetFlow();
-      const controller = new AbortController();
-      activeRequest.current = controller;
-      try {
-        setPendingInterrupt(null);
-        await chatService.resume(
-          { session_id: threadId, action, answers, instructions, reason },
-          // The gate's own "revizyon iste" loop (see backend
-          // planning_graph.gate_revise_node) can re-interrupt within this
-          // same stream -- handleEvent's "interrupt" case already re-opens
-          // the panel for a round it hasn't seen (dedup keys on
-          // interrupt_id, which the backend varies per round), so no extra
-          // handling is needed here beyond passing events through.
-          handleEvent,
-          controller.signal,
-        );
-      } catch (caught) {
-        if (caught instanceof DOMException && caught.name === "AbortError") return;
-        setPendingInterrupt(pendingInterrupt);
-        setMessages((previous) => [
-          ...previous,
-          {
-            sender: "assistant",
-            text:
-              caught instanceof Error
-                ? caught.message
-                : "Devam işlemi tamamlanamadı.",
-            status: "FAILED",
-          },
-        ]);
-      } finally {
-        if (activeRequest.current === controller) activeRequest.current = null;
-        setLoading(false);
-      }
-    },
-    [handleEvent, loading, pendingInterrupt, resetFlow, threadId],
-  );
+      await chatService.resume({ session_id: threadId, action, answers, instructions, reason }, handleEvent, controller.signal);
+      refreshServerState(threadId);
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") return;
+      setPendingInterrupt(currentInterrupt);
+      setMessages((previous) => [...previous, { sender: "assistant", text: caught instanceof Error ? caught.message : "Devam işlemi tamamlanamadı.", status: "FAILED" }]);
+    } finally {
+      if (activeRequest.current === controller) activeRequest.current = null;
+      setLoading(false);
+    }
+  }, [handleEvent, loading, pendingInterrupt, refreshServerState, resetFlow, threadId]);
 
   const newChat = useCallback(() => {
     activeRequest.current?.abort();
+    internallyResolvedSession.current = null;
     setMessages([]);
-    setClientSessionId(createClientSessionId());
+    setClientId(createClientSessionId());
+    threadIdRef.current = null;
     setThreadId(null);
     setPendingInterrupt(null);
     seenInterrupts.current.clear();
     resetFlow();
   }, [resetFlow]);
 
-  const addUploadMessage = useCallback(
-    (fileName: string) =>
-      setMessages((previous) => [
-        ...previous,
-        {
-          sender: "assistant",
-          text: `“${fileName}” evrakı yüklendi ve analiz edildi. Sohbette kullanmak için evrak seçimini açık bırakın.`,
-        },
-      ]),
-    [],
-  );
+  const cancel = useCallback(() => activeRequest.current?.abort(), []);
+  const addUploadMessage = useCallback((fileName: string) => setMessages((previous) => [...previous, { sender: "assistant", text: `“${fileName}” evrakı yüklendi ve analiz edildi.` }]), []);
 
   return {
+    sessions: sessionsQuery.data?.items ?? [],
+    sessionsLoading: sessionsQuery.isLoading,
+    sessionsRefreshing: sessionsQuery.isFetching && !sessionsQuery.isLoading,
+    sessionsError:
+      sessionsQuery.error instanceof Error ? sessionsQuery.error.message : null,
+    historyLoading: messagesQuery.isLoading || stateQuery.isLoading,
+    historyError: messagesQuery.error instanceof Error ? messagesQuery.error.message : stateQuery.error instanceof Error ? stateQuery.error.message : null,
     messages,
     loading,
     streamingText,
@@ -478,6 +349,16 @@ export function useChatWorkflow(
     send,
     resume,
     newChat,
+    cancel,
     addUploadMessage,
+    refreshSessions: sessionsQuery.refetch,
+    retrySessions: async () => {
+      await sessionsQuery.refetch();
+    },
+    retryHistory: async () => {
+      await Promise.all([
+        ...(threadId ? [messagesQuery.refetch(), stateQuery.refetch()] : []),
+      ]);
+    },
   };
 }

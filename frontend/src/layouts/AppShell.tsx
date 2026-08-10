@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   Activity,
   FileText,
-  ChevronDown,
   LogIn,
   LogOut,
   Menu,
@@ -13,32 +12,37 @@ import {
   X,
   FilePenLine,
   Monitor,
+  Route,
+  Settings,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { ROLE_LABELS } from "../types/users";
 import { useTheme } from "../hooks/useTheme";
 import type { ThemeMode } from "../contexts/ThemeContext";
-import type { AppRoute } from "../hooks/useAppRoute";
+import { Button, IconButton } from "../components/Button";
+import { Select } from "../components/FormControls";
+import { OverlayBackdrop } from "../components/Surface";
 
 interface AppShellProps {
-  route: AppRoute;
-  navigate: (route: AppRoute) => void;
   children: ReactNode;
   aside?: ReactNode;
-  documentLibrary?: ReactNode;
-  documentLibraryOpen?: boolean;
-  onToggleDocumentLibrary?: () => void;
 }
 
 const NAV_ITEMS: Array<{
-  route: AppRoute;
+  route: string;
   label: string;
   icon: typeof MessageSquare;
   admin?: boolean;
 }> = [
-  { route: "/admin", label: "Yönetim Paneli", icon: ShieldCheck, admin: true },
   { route: "/chats", label: "Sohbetler", icon: MessageSquare },
+  { route: "/documents", label: "Evraklar", icon: FileText },
   { route: "/drafts", label: "Taslaklar", icon: FilePenLine },
-  { route: "/documents", label: "Evrak Kütüphanesi", icon: FileText },
+  { route: "/routing", label: "Yönlendirme", icon: Route },
+  { route: "/account", label: "Hesabım", icon: Settings },
+  { route: "/admin", label: "Yönetim", icon: ShieldCheck, admin: true },
 ];
 
 const THEME_ICONS: Record<ThemeMode, typeof Sun> = {
@@ -48,41 +52,66 @@ const THEME_ICONS: Record<ThemeMode, typeof Sun> = {
 };
 
 export function AppShell({
-  route,
-  navigate,
   children,
   aside,
-  documentLibrary,
-  documentLibraryOpen = false,
-  onToggleDocumentLibrary,
 }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [compact, setCompact] = useState(
+    () => localStorage.getItem("kachow.sidebar.compact") === "true",
+  );
+  const location = useLocation();
+  const navigate = useNavigate();
+  const route = location.pathname;
   const { user, logout } = useAuth();
   const { mode, setMode } = useTheme();
   const ThemeIcon = THEME_ICONS[mode];
+  const themeModes: ThemeMode[] = ["system", "light", "dark"];
   useEffect(() => setMobileOpen(false), [route]);
-  const go = (next: AppRoute) => {
+  const go = (next: string) => {
     navigate(next);
     setMobileOpen(false);
   };
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [mobileOpen]);
+  const toggleCompact = () => {
+    setCompact((current) => {
+      const next = !current;
+      localStorage.setItem("kachow.sidebar.compact", String(next));
+      return next;
+    });
+  };
+  const cycleTheme = () => {
+    const index = themeModes.indexOf(mode);
+    setMode(themeModes[(index + 1) % themeModes.length]);
+  };
 
   return (
-    <div className={`app-shell ${aside ? "with-aside" : ""}`}>
-      <button
-        className="mobile-menu-button icon-button"
-        aria-label="Menüyü aç"
-        onClick={() => setMobileOpen(true)}
-      >
-        <Menu size={20} />
-      </button>
+    <div className={`app-shell ${compact ? "sidebar-compact" : ""} ${aside ? "with-aside" : ""}`}>
+      {!mobileOpen && (
+        <IconButton
+          className="mobile-menu-button"
+          icon={<Menu />}
+          aria-label="Menüyü aç"
+          aria-controls="primary-sidebar"
+          aria-expanded="false"
+          onClick={() => setMobileOpen(true)}
+        />
+      )}
       {mobileOpen && (
-        <button
+        <OverlayBackdrop
           className="sidebar-backdrop"
           aria-label="Menüyü kapat"
           onClick={() => setMobileOpen(false)}
         />
       )}
       <aside
+        id="primary-sidebar"
         className={`app-sidebar ${mobileOpen ? "is-open" : ""}`}
         aria-label="Ana menü"
       >
@@ -90,67 +119,43 @@ export function AppShell({
           <span className="brand-mark">
             <Activity size={21} />
           </span>
-          <div>
+          <div className="brand-copy">
             <strong>KACHOW</strong>
             <small>Karar Destek Sistemi</small>
           </div>
-          <button
-            className="sidebar-close icon-button"
+          <IconButton
+            className="sidebar-compact-toggle"
+            icon={compact ? <PanelLeftOpen /> : <PanelLeftClose />}
+            aria-label={compact ? "Menüyü genişlet" : "Menüyü daralt"}
+            aria-controls="primary-sidebar"
+            aria-expanded={!compact}
+            title={compact ? "Menüyü genişlet" : "Menüyü daralt"}
+            onClick={toggleCompact}
+          />
+          <IconButton
+            className="sidebar-close"
+            icon={<X />}
             aria-label="Menüyü kapat"
             onClick={() => setMobileOpen(false)}
-          >
-            <X size={18} />
-          </button>
+          />
         </div>
         <nav className="sidebar-nav">
           <span className="nav-caption">Çalışma Alanı</span>
           {NAV_ITEMS.filter(
             (item) =>
               !item.admin || user?.role === "admin" || user?.role === "manager",
-          ).map(({ route: itemRoute, label, icon: Icon }) => {
-            if (itemRoute === "/documents") {
-              return (
-                <div className="nav-library-section" key={itemRoute}>
-                  <button
-                    type="button"
-                    className={`nav-item ${
-                      route === itemRoute || documentLibraryOpen ? "active" : ""
-                    }`}
-                    aria-expanded={documentLibraryOpen}
-                    aria-controls="document-library-panel"
-                    onClick={onToggleDocumentLibrary}
-                  >
-                    <Icon size={18} />
-                    <span>{label}</span>
-                    <ChevronDown
-                      className={`nav-chevron ${
-                        documentLibraryOpen ? "is-open" : ""
-                      }`}
-                      size={15}
-                      aria-hidden="true"
-                    />
-                  </button>
-                  {documentLibraryOpen && documentLibrary}
-                </div>
-              );
-            }
-
-            return (
-              <a
+          ).map(({ route: itemRoute, label, icon: Icon }) => (
+              <NavLink
                 key={itemRoute}
-                href={itemRoute}
-                className={`nav-item ${route === itemRoute ? "active" : ""}`}
-                aria-current={route === itemRoute ? "page" : undefined}
-                onClick={(event) => {
-                  event.preventDefault();
-                  go(itemRoute);
-                }}
+                to={itemRoute}
+                className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+                title={compact ? label : undefined}
+                onClick={() => setMobileOpen(false)}
               >
                 <Icon size={18} />
                 <span>{label}</span>
-              </a>
-            );
-          })}
+              </NavLink>
+          ))}
         </nav>
         <div className="sidebar-footer">
           <label className="theme-control">
@@ -158,7 +163,7 @@ export function AppShell({
               <ThemeIcon size={17} />
               Tema
             </span>
-            <select
+            <Select
               aria-label="Tema seçimi"
               value={mode}
               onChange={(event) => setMode(event.target.value as ThemeMode)}
@@ -166,8 +171,17 @@ export function AppShell({
               <option value="system">Sistem</option>
               <option value="light">Açık</option>
               <option value="dark">Koyu</option>
-            </select>
+            </Select>
           </label>
+          {compact && (
+            <IconButton
+              className="compact-theme-button"
+              icon={<ThemeIcon />}
+              aria-label={`Tema: ${mode}. Temayı değiştir`}
+              title={`Tema: ${mode}`}
+              onClick={cycleTheme}
+            />
+          )}
           {user ? (
             <div className="user-card">
               <span className="avatar">
@@ -175,27 +189,22 @@ export function AppShell({
               </span>
               <div>
                 <strong>{user.username}</strong>
-                <small>{user.role === "admin" ? "Yönetici" : user.role}</small>
+                <small>{ROLE_LABELS[user.role]}</small>
               </div>
-              <button
-                className="icon-button"
+              <IconButton
+                icon={<LogOut />}
                 aria-label="Oturumu kapat"
                 title="Oturumu kapat"
                 onClick={() => void logout()}
-              >
-                <LogOut size={17} />
-              </button>
+              />
             </div>
           ) : (
-            <button className="login-link" onClick={() => go("/login")}>
-              <LogIn size={17} />
-              Oturum aç
-            </button>
+            <Button variant="ghost" className="login-link" leadingIcon={<LogIn />} onClick={() => go("/login")}>Oturum aç</Button>
           )}
         </div>
       </aside>
       <main className="app-main">{children}</main>
-      {aside}
+      {aside && <div className="workflow-region">{aside}</div>}
     </div>
   );
 }

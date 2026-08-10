@@ -1,10 +1,56 @@
 import { apiErrorFromResponse, apiFetch, apiRequest } from "./apiClient";
 import type {
   ChatRequest,
+  ChatSession,
+  PersistedChatMessage,
   ResumeRequest,
   SessionState,
   WorkflowEvent,
 } from "../types/chat";
+import type { PaginatedResponse } from "../types/api";
+import { collectPages } from "./pagination";
+
+function isWorkflowEvent(value: unknown): value is WorkflowEvent {
+  if (typeof value !== "object" || value === null) return false;
+  const event = value as Record<string, unknown>;
+  if (event.seq !== undefined && typeof event.seq !== "number") return false;
+  const strings = (...keys: string[]) => keys.every((key) => typeof event[key] === "string");
+  const record = (key: string) =>
+    typeof event[key] === "object" && event[key] !== null && !Array.isArray(event[key]);
+  const stringArray = (key: string) =>
+    Array.isArray(event[key]) && event[key].every((item) => typeof item === "string");
+
+  switch (event.event) {
+    case "session":
+      return strings("thread_id");
+    case "planning_completed":
+      return strings("intent", "reasoning") && stringArray("plan_steps");
+    case "node_start":
+      return strings("node", "label", "message");
+    case "node_end":
+      return strings("node", "label", "message");
+    case "node_error":
+      return strings("node", "label", "message") && typeof event.fatal === "boolean";
+    case "node_skipped":
+      return strings("node", "label", "reason");
+    case "token":
+      return strings("node", "text");
+    case "partial_result":
+      return strings("key") && record("value");
+    case "tool_call":
+      return strings("node", "tool") && record("args");
+    case "guardrail":
+      return strings("stage", "kind", "decision") && stringArray("reasons");
+    case "interrupt":
+      return strings("kind", "interrupt_id") && record("payload");
+    case "final_result":
+      return strings("reply", "workflow_status");
+    case "error":
+      return strings("message");
+    default:
+      return false;
+  }
+}
 
 export async function consumeSseStream(
   response: Response,
@@ -16,7 +62,7 @@ export async function consumeSseStream(
 
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
-  let lastSequence = 0;
+  let lastSequence = Number.NEGATIVE_INFINITY;
 
   const consumeBlock = (block: string) => {
     const raw = block
@@ -26,7 +72,14 @@ export async function consumeSseStream(
       .join("\n")
       .trim();
     if (!raw || raw === "[DONE]") return;
-    const event = JSON.parse(raw) as WorkflowEvent;
+    let candidate: unknown;
+    try {
+      candidate = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (!isWorkflowEvent(candidate)) return;
+    const event = candidate;
     if (event.seq !== undefined) {
       if (event.seq <= lastSequence) return;
       lastSequence = event.seq;
@@ -35,15 +88,19 @@ export async function consumeSseStream(
   };
 
   let streamEnded = false;
-  while (!streamEnded) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
-    const blocks = buffer.split("\n\n");
-    buffer = blocks.pop() ?? "";
-    blocks.forEach(consumeBlock);
-    if (done) streamEnded = true;
+  try {
+    while (!streamEnded) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
+      const blocks = buffer.split("\n\n");
+      buffer = blocks.pop() ?? "";
+      blocks.forEach(consumeBlock);
+      if (done) streamEnded = true;
+    }
+    if (buffer.trim()) consumeBlock(buffer);
+  } finally {
+    reader.releaseLock();
   }
-  if (buffer.trim()) consumeBlock(buffer);
 }
 
 async function stream(
@@ -62,6 +119,18 @@ async function stream(
 }
 
 export const chatService = {
+  sessions: () =>
+    collectPages((page) =>
+      apiRequest<PaginatedResponse<ChatSession>>(
+        `/api/v1/chat/sessions?page=${page}&size=100`,
+      ),
+    ),
+  messages: (threadId: string) =>
+    collectPages((page) =>
+      apiRequest<PaginatedResponse<PersistedChatMessage>>(
+        `/api/v1/chat/sessions/${encodeURIComponent(threadId)}/messages?page=${page}&size=100`,
+      ),
+    ),
   send: (
     request: ChatRequest,
     onEvent: (event: WorkflowEvent) => void,

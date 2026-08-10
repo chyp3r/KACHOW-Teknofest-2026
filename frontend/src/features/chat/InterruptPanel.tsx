@@ -1,6 +1,9 @@
 import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, FileText, History } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import type { ConflictFinding, InterruptState } from "../../types/chat";
+import { Button } from "../../components/Button";
+import { Input, Textarea } from "../../components/FormControls";
+import { FormActions } from "../../components/LayoutPrimitives";
 
 const SEVERITY_LABEL: Record<ConflictFinding["severity"], string> = {
   critical: "Kritik",
@@ -26,14 +29,19 @@ export function InterruptPanel({
   const [instructions, setInstructions] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
-  const questions = interrupt.payload.questions ?? [];
+  const questions = Array.isArray(interrupt.payload.questions)
+    ? interrupt.payload.questions
+    : [];
   const canSubmitAnswers = questions
     .filter((question) => question.required !== false)
     .every((question) => answers[question.key]?.trim());
   const isMissingInformation = interrupt.kind === "missing_information";
 
-  const conflicts = interrupt.payload.conflicts ?? [];
+  const conflicts = Array.isArray(interrupt.payload.conflicts)
+    ? interrupt.payload.conflicts
+    : [];
   const changelog = interrupt.payload.changelog;
+  const changelogEntries = Array.isArray(changelog?.entries) ? changelog.entries : [];
   const revisionRound = interrupt.payload.revision_round;
   const maxRevisionRounds = interrupt.payload.max_revision_rounds;
   const revisionExhausted = interrupt.payload.revision_exhausted ?? false;
@@ -120,17 +128,17 @@ export function InterruptPanel({
         </details>
       )}
 
-      {changelog && changelog.entries.length > 0 && (
+      {changelogEntries.length > 0 && (
         <details className="interrupt-changelog">
           <summary>
             <span>
               <History size={15} />
-              Değişiklik günlüğü ({changelog.summary})
+              Değişiklik günlüğü ({changelog?.summary ?? "Değişiklikler"})
             </span>
             <ChevronDown size={15} />
           </summary>
           <ul className="changelog-entries">
-            {changelog.entries.map((entry, index) => (
+            {changelogEntries.map((entry, index) => (
               <li key={index}>
                 {entry.directive && <p className="changelog-directive">"{entry.directive}"</p>}
                 <div className="changelog-diff">
@@ -147,15 +155,10 @@ export function InterruptPanel({
         <form className="interrupt-form" onSubmit={submitAnswers}>
           <div className="interrupt-question-grid">
             {questions.map((question) => (
-              <label key={question.key}>
-                <span>
-                  {question.label}
-                  {question.required !== false && (
-                    <small className="required-mark">Gerekli</small>
-                  )}
-                </span>
-                {question.why && <small>{question.why}</small>}
-                <input
+              <Input
+                  key={question.key}
+                  label={question.label}
+                  description={question.why}
                   value={answers[question.key] ?? ""}
                   placeholder={question.example ?? ""}
                   required={question.required !== false}
@@ -166,7 +169,6 @@ export function InterruptPanel({
                     }))
                   }
                 />
-              </label>
             ))}
           </div>
           <div className="interrupt-actions">
@@ -175,84 +177,79 @@ export function InterruptPanel({
                 ? "Bilgiler hazır. İşleme devam edebilirsiniz."
                 : "Devam etmek için gerekli alanları doldurun."}
             </small>
-            <button
-              className="button button-primary"
+            <Button
               type="submit"
-              disabled={loading || !canSubmitAnswers}
+              loading={loading}
+              disabled={!canSubmitAnswers}
             >
               {loading ? "Gönderiliyor…" : "Bilgileri gönder ve devam et"}
-            </button>
+            </Button>
           </div>
         </form>
       ) : showRejectForm ? (
         <form className="interrupt-form form-stack" onSubmit={submitReject}>
-          <label>
-            Red gerekçesi
-            <textarea
+          <Textarea
+              label="Red gerekçesi"
               value={rejectReason}
               onChange={(event) => setRejectReason(event.target.value)}
               placeholder="Bu taslağı neden reddediyorsunuz?"
               required
             />
-          </label>
-          <div className="interrupt-actions approval-actions">
-            <button
-              type="button"
-              className="button button-secondary"
+          <FormActions className="interrupt-actions approval-actions">
+            <Button
+              variant="secondary"
               disabled={loading}
               onClick={() => setShowRejectForm(false)}
             >
               Vazgeç
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              className="button button-danger"
-              disabled={loading || !rejectReason.trim()}
+              variant="destructive"
+              loading={loading}
+              disabled={!rejectReason.trim()}
             >
               {loading ? "Gönderiliyor…" : "Reddi onayla"}
-            </button>
-          </div>
+            </Button>
+          </FormActions>
         </form>
       ) : (
         <div className="interrupt-form form-stack">
-          <label>
-            Revizyon notu
-            <textarea
+          <Textarea
+              label="Revizyon notu"
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
               placeholder="Revizyon istiyorsanız talimatınızı yazın."
               disabled={revisionExhausted}
             />
-          </label>
           {revisionExhausted && (
             <p className="interrupt-revision-exhausted">
               <AlertCircle size={14} />
               Revizyon turu sınırına ulaşıldı; onaylayın, reddedin veya yeni bir mesajla devam edin.
             </p>
           )}
-          <div className="interrupt-actions approval-actions">
-            <button
-              className="button button-primary"
+          <FormActions className="interrupt-actions approval-actions">
+            <Button
               disabled={loading}
               onClick={() => void onResume("approve", {}, "")}
             >
               Onayla
-            </button>
-            <button
-              className="button button-secondary"
+            </Button>
+            <Button
+              variant="secondary"
               disabled={loading || !instructions.trim() || revisionExhausted}
               onClick={() => void onResume("revise", {}, instructions)}
             >
               Revizyon iste
-            </button>
-            <button
-              className="button button-danger"
+            </Button>
+            <Button
+              variant="destructive"
               disabled={loading}
               onClick={() => setShowRejectForm(true)}
             >
               Reddet
-            </button>
-          </div>
+            </Button>
+          </FormActions>
         </div>
       )}
     </section>

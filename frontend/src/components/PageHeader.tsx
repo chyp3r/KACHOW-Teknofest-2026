@@ -4,18 +4,28 @@ export function PageHeader({
   title,
   description,
   actions,
+  primaryAction,
+  secondaryActions,
 }: {
   title: string;
-  description: string;
+  description?: string;
   actions?: ReactNode;
+  primaryAction?: ReactNode;
+  secondaryActions?: ReactNode;
 }) {
+  const renderedActions = actions ?? (primaryAction || secondaryActions ? (
+    <>
+      {secondaryActions && <div className="page-secondary-actions">{secondaryActions}</div>}
+      {primaryAction && <div className="page-primary-action">{primaryAction}</div>}
+    </>
+  ) : null);
   return (
     <header className="page-header">
-      <div>
+      <div className="page-header-copy">
         <h1>{title}</h1>
-        <p>{description}</p>
+        {description && <p>{description}</p>}
       </div>
-      {actions && <div className="page-actions">{actions}</div>}
+      {renderedActions && <div className="page-actions">{renderedActions}</div>}
     </header>
   );
 }

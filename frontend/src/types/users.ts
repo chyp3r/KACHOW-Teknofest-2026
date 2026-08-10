@@ -1,19 +1,11 @@
-import type { SensitivityLevel } from "./security";
+import type { components } from "../api/generated";
 
-export type UserRole = "admin" | "manager" | "employee";
+export type UserRole = components["schemas"]["UserRole"];
+export type User = components["schemas"]["UserResponse"];
+export type TokenPair = components["schemas"]["TokenResponse"];
 
-export interface User {
-  id: string;
-  username: string;
-  email: string;
-  role: UserRole;
-  clearance_level: SensitivityLevel;
-  is_active: boolean;
-  is_deleted: boolean;
-}
-
-export interface TokenPair {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-}
+export const ROLE_LABELS: Record<UserRole, string> = {
+  admin: "Yönetici",
+  manager: "Yönetici yardımcısı",
+  employee: "Çalışan",
+};

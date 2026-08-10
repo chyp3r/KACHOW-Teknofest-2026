@@ -65,4 +65,51 @@ describe("InterruptPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Onayla" }));
     expect(onResume).toHaveBeenCalledWith("approve", {}, "");
   });
+
+  it("accepts the empty changelog object returned for a fresh draft", () => {
+    render(
+      <InterruptPanel
+        interrupt={{
+          kind: "draft_approval",
+          interruptId: "interrupt-fresh-draft",
+          payload: { draft: "Yeni taslak", changelog: {} },
+        }}
+        loading={false}
+        onResume={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(screen.getByText("Yeni taslak")).toBeInTheDocument();
+    expect(screen.queryByText(/Değişiklik günlüğü/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Onayla" })).toBeEnabled();
+  });
+
+  it("supports revision and reasoned rejection while disabling duplicate submissions", () => {
+    const onResume = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(
+      <InterruptPanel
+        interrupt={{ kind: "draft_approval", interruptId: "interrupt-3", payload: { draft: "Taslak" } }}
+        loading={false}
+        onResume={onResume}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Revizyon notu"), { target: { value: "Tarihi düzelt" } });
+    fireEvent.click(screen.getByRole("button", { name: "Revizyon iste" }));
+    expect(onResume).toHaveBeenCalledWith("revise", {}, "Tarihi düzelt");
+
+    fireEvent.click(screen.getByRole("button", { name: "Reddet" }));
+    fireEvent.change(screen.getByLabelText("Red gerekçesi"), { target: { value: "Yetkisiz içerik" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reddi onayla" }));
+    expect(onResume).toHaveBeenCalledWith("reject", {}, "", "Yetkisiz içerik");
+
+    rerender(
+      <InterruptPanel
+        interrupt={{ kind: "draft_approval", interruptId: "interrupt-3", payload: { draft: "Taslak" } }}
+        loading
+        onResume={onResume}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Gönderiliyor…" })).toBeDisabled();
+  });
 });

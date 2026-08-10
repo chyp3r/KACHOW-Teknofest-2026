@@ -1,10 +1,6 @@
-export type SensitivityLevel =
-  | "unmarked"
-  | "tasnif_disi"
-  | "hizmete_ozel"
-  | "ozel"
-  | "gizli"
-  | "cok_gizli";
+import type { components } from "../api/generated";
+
+export type SensitivityLevel = components["schemas"]["SensitivityLevel"];
 
 export const SENSITIVITY_LABELS: Record<SensitivityLevel, string> = {
   unmarked: "İşaretlenmemiş",

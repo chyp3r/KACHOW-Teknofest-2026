@@ -1,8 +1,11 @@
+import { Plus, X } from "lucide-react";
+import { useState } from "react";
 import { PageHeader } from "../components/PageHeader";
-import { DocumentAnalysisPanel } from "../features/documents/DocumentAnalysisPanel";
 import { DocumentTable } from "../features/documents/DocumentTable";
 import { DocumentUploader } from "../features/documents/DocumentUploader";
 import type { DocumentAnalysis, DocumentMetadata } from "../types/documents";
+import { Button } from "../components/Button";
+import { Alert } from "../components/Surface";
 
 export function DocumentsPage({
   documents,
@@ -13,6 +16,7 @@ export function DocumentsPage({
   error,
   onUpload,
   onSelect,
+  onCloseDocument,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
@@ -22,30 +26,50 @@ export function DocumentsPage({
   error: string | null;
   onUpload: (file: File) => Promise<void>;
   onSelect: (document: DocumentMetadata) => void;
+  onCloseDocument?: () => void;
 }) {
+  const [uploadOpen, setUploadOpen] = useState(false);
+
+  const upload = async (file: File) => {
+    await onUpload(file);
+    setUploadOpen(false);
+  };
+
   return (
-    <div className="page page-scroll">
+    <div className="page page-scroll documents-page">
       <PageHeader
         title="Evrak Kütüphanesi"
-        description="Evrakları yükleyin, analiz sonuçlarını inceleyin ve sohbetlerde kullanmak üzere seçin."
+        primaryAction={(
+          <Button
+            variant={uploadOpen ? "outline" : "primary"}
+            aria-controls="document-upload-panel"
+            aria-expanded={uploadOpen}
+            onClick={() => setUploadOpen((current) => !current)}
+            leadingIcon={uploadOpen ? <X /> : <Plus />}
+          >
+            {uploadOpen ? "Yüklemeyi kapat" : "Evrak yükle"}
+          </Button>
+        )}
       />
+
       {error && (
-        <div className="notice danger" role="alert">
-          {error}
+        <Alert variant="error">{error}</Alert>
+      )}
+
+      {uploadOpen && (
+        <div id="document-upload-panel" className="document-upload-panel">
+          <DocumentUploader uploading={uploading} onUpload={upload} />
         </div>
       )}
-      <div className="documents-layout">
-        <div>
-          <DocumentUploader uploading={uploading} onUpload={onUpload} />
-          <DocumentTable
-            documents={documents}
-            selected={selected}
-            loading={loading}
-            onSelect={onSelect}
-          />
-        </div>
-        <DocumentAnalysisPanel analysis={analysis} />
-      </div>
+
+      <DocumentTable
+        documents={documents}
+        selected={selected}
+        analysis={analysis}
+        loading={loading}
+        onSelect={onSelect}
+        onClose={onCloseDocument}
+      />
     </div>
   );
 }
