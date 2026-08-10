@@ -103,11 +103,86 @@ class PlanningCompletedEvent(BaseModel):
     seq: Optional[int] = None
 
 
+class GuardrailEvent(BaseModel):
+    """A guardrail decision that changed the response, published live.
+
+    Was already emitted by ``app.ai.workflows.events.emit_guardrail_event``
+    and consumed by the frontend's own ``GuardrailEvent`` type -- this class
+    only backfills the missing typed contract entry so
+    ``test_event_contract.py`` actually covers it, the same way every other
+    event on the wire already is.
+    """
+
+    event: Literal["guardrail"] = "guardrail"
+    stage: Literal["input", "output"]
+    kind: str
+    decision: Literal["flagged", "blocked", "redacted", "needs_review"]
+    reasons: list[str] = Field(default_factory=list)
+    seq: Optional[int] = None
+
+
 class InterruptEvent(BaseModel):
     event: Literal["interrupt"] = "interrupt"
     kind: Literal["missing_information", "draft_approval"]
     interrupt_id: str
     payload: dict[str, Any]
+    seq: Optional[int] = None
+
+
+class NoticeEvent(BaseModel):
+    """A non-blocking, informational message rendered as its own chat turn.
+
+    The counterpart to ``InterruptEvent``: an interrupt pauses the run and
+    demands a human answer before anything else can happen (see
+    ``langgraph.types.interrupt``); a notice never pauses anything -- the
+    graph keeps running and the client only has to render one more bubble.
+    Introduced so a finding that must never gate the run (an instruction/
+    mevzuat conflict -- see ``app.ai.revision.conflict``'s
+    ``applied_anyway`` invariant) has somewhere to go other than either
+    silently vanishing into a result blob or, worse, forcing a popup the way
+    a "revizyon" gate briefly did.
+    """
+
+    event: Literal["notice"] = "notice"
+    node: str
+    #: "info" today; the field exists so a future distinct severity (e.g. a
+    #: guardrail-adjacent warning) doesn't need a second event type.
+    level: Literal["info"] = "info"
+    title: str
+    message: str
+    seq: Optional[int] = None
+
+
+class QuestionOption(BaseModel):
+    """One clickable answer to a ``QuestionEvent``."""
+
+    value: str
+    label: str
+
+
+class QuestionEvent(BaseModel):
+    """A decision the run needs from the user, offered as clickable options.
+
+    Unlike ``InterruptEvent``, this never pauses a LangGraph run via
+    ``interrupt()`` -- the clarify step already ends its own turn
+    deterministically (see ``PLAN_BY_INTENT["clarify"]``) and simply waits
+    for the user's *next* message, which
+    ``planner._try_resolve_pending_clarification`` resolves against these
+    same options. This event only tells the client to render the options as
+    a card instead of leaving the user to retype one of the two Turkish
+    labels verbatim.
+    """
+
+    event: Literal["question"] = "question"
+    node: str
+    question: str
+    options: list[QuestionOption] = Field(default_factory=list)
+    #: Whether a free-text reply (not one of ``options``) can also resolve
+    #: this question. Always True today -- every clarify question is also
+    #: resolvable by echoing a label back, per
+    #: ``_try_resolve_pending_clarification`` -- kept explicit so the client
+    #: never has to assume it.
+    allow_free_text: bool = True
     seq: Optional[int] = None
 
 
@@ -140,7 +215,10 @@ WORKFLOW_EVENT_NAMES: frozenset[str] = frozenset(
         "tool_call",
         "partial_result",
         "planning_completed",
+        "guardrail",
         "interrupt",
+        "notice",
+        "question",
         "final_result",
         "error",
     }
@@ -155,6 +233,10 @@ __all__ = [
     "TokenEvent",
     "ToolCallEvent",
     "PartialResultEvent",
+    "GuardrailEvent",
+    "NoticeEvent",
+    "QuestionOption",
+    "QuestionEvent",
     "PlanningCompletedEvent",
     "InterruptEvent",
     "FinalResultEvent",

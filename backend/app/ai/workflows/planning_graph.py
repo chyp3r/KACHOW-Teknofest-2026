@@ -38,13 +38,16 @@ from app.ai.workflows.events import (
     emit_node_error,
     emit_node_skipped,
     emit_node_start,
+    emit_notice,
     emit_partial,
+    emit_question,
     emit_token,
 )
 from app.ai.workflows.intent_rules import RESET_SURFACES
 from app.ai.workflows.intent_scorer import normalize
 from app.ai.workflows.planner import resolve_plan
 from app.ai.workflows.revise import run_revise
+from app.ai.workflows.scope import build_refusal_reply
 from app.ai.workflows.revise_graph import create_revise_graph
 from app.ai.workflows.step_graph import STEP_SPECS, StepSpec, all_steps_settled, ready_steps
 from app.core.config import settings
@@ -73,6 +76,7 @@ STEP_LABELS = {
     "assist": "Asistan",
     "revise": "Taslak Revizyonu",
     "clarify": "Açıklayıcı Soru",
+    "refuse": "Kapsam Denetimi",
     "gate_revise": "Geri Bildirimli Revizyon",
 }
 
@@ -83,6 +87,7 @@ STEP_MESSAGES = {
     "assist": "Asistan yanıtı hazırlanıyor...",
     "revise": "Taslak talebe göre güncelleniyor...",
     "clarify": "İsteğinizi netleştirmek için bir soru hazırlanıyor...",
+    "refuse": "İstek sistemin görev alanına göre denetleniyor...",
     "gate_revise": "Onay kapısındaki geri bildiriminize göre taslak güncelleniyor...",
 }
 
@@ -253,6 +258,10 @@ class PlanningState(TypedDict, total=False):
     #: field left both steps looking permanently unsettled and looping.
     revise_result: dict[str, Any]
     clarify_result: dict[str, Any]
+    #: Same arrangement as clarify: the out-of-scope refusal's real payload
+    #: goes into assist_result (it is a reply like any other), and this field
+    #: exists only so the scheduler can see the step settle.
+    refuse_result: dict[str, Any]
     final_output: dict[str, Any]
     #: How many times the human approval gate's own "revizyon iste" action
     #: has re-run the revise sub-graph *within this turn* (see
@@ -671,6 +680,7 @@ def create_planning_graph(
             "assist_result": {},
             "revise_result": {},
             "clarify_result": {},
+            "refuse_result": {},
             "final_output": {},
             "gate_revision_count": 0,
             "gate_revision_note": "",
@@ -1180,11 +1190,53 @@ def create_planning_graph(
         focus = state.get("focus") or SessionFocus()
         pending = focus.pending_clarification or {}
         question = pending.get("question") or "Bu isteğinizi biraz açar mısınız?"
-        updates["assist_result"] = {"reply": question, "status": StepStatus.COMPLETED}
+        options = [
+            {"intent": option.get("intent", ""), "label": option.get("label", "")}
+            for option in (pending.get("options") or [])
+        ]
+        # A decision card, not a sentence the user has to answer in prose.
+        # The options carry the *same* Turkish labels
+        # `_try_resolve_pending_clarification` matches against, so clicking
+        # one and typing it out by hand resolve through exactly the same path
+        # next turn -- the card is a shortcut, never a second mechanism.
+        await emit_question(
+            config,
+            node="clarify",
+            question=question,
+            options=[
+                {"value": option["intent"], "label": option["label"]}
+                for option in options
+            ],
+            allow_free_text=True,
+        )
+        updates["assist_result"] = {
+            "reply": question,
+            "status": StepStatus.COMPLETED,
+            "question_options": options,
+        }
         # Same reason as _step_revise's marker: the scheduler keys readiness
         # on `clarify_result`, not on the `assist_result` key this step's
         # actual payload lives in.
         updates["clarify_result"] = {"status": StepStatus.COMPLETED}
+
+    async def _step_refuse(
+        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
+    ) -> None:
+        """Answer an out-of-domain request without running anything.
+
+        Deterministic by design (see ``PLAN_BY_INTENT``'s note on the
+        ``refuse`` plan): the reply is rendered from
+        ``scope.CAPABILITY_MANIFEST``, never generated, so the model that was
+        just declined the off-topic request never gets a turn in which to
+        fulfil it anyway.
+        """
+        cached = state.get("cached_document") or {}
+        analysis = classification or cached.get("analysis") or {}
+        summary = analysis.get("summary", "") if state.get("document_id") else ""
+        reply = build_refusal_reply(document_summary=summary)
+        updates["assist_result"] = {"reply": reply, "status": StepStatus.COMPLETED}
+        updates["refuse_result"] = {"status": StepStatus.COMPLETED}
+        updates["history"] = [{"role": "assistant", "content": reply}]
 
     #: One entry per dispatchable step name. Each runner reads whatever it
     #: needs from `state`/`classification` and writes its result(s) directly
@@ -1201,6 +1253,7 @@ def create_planning_graph(
         "assist": _step_assist,
         "revise": _step_revise,
         "clarify": _step_clarify,
+        "refuse": _step_refuse,
     }
 
     def _result_key(step: str) -> str:

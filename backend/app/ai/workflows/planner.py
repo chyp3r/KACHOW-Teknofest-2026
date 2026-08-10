@@ -44,6 +44,14 @@ policy is:
   deployments) -- ``tau_low`` still gates a direct clarify, unchanged from
   before.
 
+One thing runs *after* fusion and can override any of it: the domain scope
+gate (:mod:`app.ai.workflows.scope`). Fusion answers which flow a message
+wants; it has no way to answer whether the message wants any flow at all,
+and every layer here would confidently route "Çiğköfte kampanyası için bir
+metin yaz" to ``draft`` because, as a matter of intent, that is exactly what
+it is. ``resolve_plan`` therefore resolves the intent first and admits it
+second -- see ``_apply_scope_gate``.
+
 Two things do not go through fusion at all, on purpose:
 
 * A **compound** request (both ``draft`` and ``analyze`` independently
@@ -75,6 +83,7 @@ from app.ai.workflows.intent_rules import CONTINUATION_SURFACES, Intent
 from app.ai.workflows.intent_scorer import COMPOUND_FLOOR, IntentScores, normalize, score_intents
 from app.ai.workflows.router_features import RouterSignals, extract_features
 from app.ai.workflows.router_fusion import predict_proba
+from app.ai.workflows.scope import ScopeVerdict, resolve_scope
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle avoidance only
     from app.ai.semantic.prototype_matcher import PrototypeMatcher
@@ -105,12 +114,18 @@ __all__ = [
 #: already-active draft (see ``app.ai.workflows.revise``). ``clarify`` costs
 #: nothing at all -- it renders a question from ``PlanDecision.clarification``
 #: and ends the turn there.
+#: ``refuse`` is a single deterministic step that renders the capability
+#: manifest and ends the turn (see ``planning_graph._step_refuse``). It costs
+#: no model call on purpose -- a refusal must not be a generation, or the
+#: model that was just told not to write the off-topic text gets one more
+#: opportunity to write it anyway.
 PLAN_BY_INTENT: dict[str, list[str]] = {
     "draft": ["classification", "draft", "routing"],
     "analyze": ["classification"],
     "assist": ["assist"],
     "revise": ["revise"],
     "clarify": ["clarify"],
+    "refuse": ["refuse"],
 }
 
 REASONING_BY_INTENT: dict[str, str] = {
@@ -119,6 +134,7 @@ REASONING_BY_INTENT: dict[str, str] = {
     "assist": "Genel bir soru veya belge hakkında bir soru tespit edildi: asistan yanıtı hazırlanacak.",
     "revise": "Mevcut taslakta bir revizyon talebi tespit edildi: hedefli düzeltme çalıştırılacak.",
     "clarify": "İstek belirsiz olduğu için kullanıcıya açıklayıcı bir soru soruldu.",
+    "refuse": "İstek sistemin görev alanı dışında kaldığı için hiçbir üretim akışı çalıştırılmadı.",
 }
 
 #: Canonical execution order, used to merge two intents' step lists without
@@ -225,6 +241,10 @@ class PlanDecision(NamedTuple):
             ``SessionFocus.pending_clarification`` so the next turn's reply
             can be resolved against the same options instead of re-scoring
             from nothing (see ``_try_resolve_pending_clarification``).
+        scope_reason: Which domain-admission rule settled this turn (see
+            ``app.ai.workflows.scope.ScopeReason``). Recorded on *every*
+            decision, not only refusals, so "why did this run" is as
+            traceable as "why was this refused".
     """
 
     steps: list[str]
@@ -235,6 +255,7 @@ class PlanDecision(NamedTuple):
     evidence: tuple[str, ...] = ()
     alternatives: tuple[tuple[str, float], ...] = ()
     clarification: Optional[dict[str, Any]] = None
+    scope_reason: str = ""
 
 
 class IntentOutput(BaseModel):
@@ -601,6 +622,35 @@ def _clarify_or_fallback(
     return _build_clarify_decision(ranked)
 
 
+def _apply_scope_gate(decision: PlanDecision, verdict: ScopeVerdict) -> PlanDecision:
+    """Fold a scope verdict into an already-resolved plan.
+
+    Args:
+        decision: The intent-resolved plan.
+        verdict: The domain-admission verdict for the same message.
+
+    Returns:
+        ``decision`` with ``scope_reason`` recorded when admitted; a
+        single-step ``refuse`` plan when not. The original intent is kept in
+        ``evidence`` (``scope.refused_intent:<name>``) rather than discarded
+        -- a refusal that loses what it refused is unreviewable, and the
+        offline harness scores refusals against the intent they replaced.
+    """
+    if verdict.in_scope:
+        return decision._replace(scope_reason=verdict.reason)
+
+    return PlanDecision(
+        steps=list(PLAN_BY_INTENT["refuse"]),
+        intent="refuse",  # type: ignore[arg-type]
+        reasoning=REASONING_BY_INTENT["refuse"],
+        source=f"scope_{verdict.source}",
+        confidence=decision.confidence,
+        evidence=(*decision.evidence, f"scope.refused_intent:{decision.intent}"),
+        alternatives=decision.alternatives,
+        scope_reason=verdict.reason,
+    )
+
+
 async def resolve_plan(
     message: str,
     document_id: Optional[str],
@@ -610,7 +660,66 @@ async def resolve_plan(
     focus: Optional[SessionFocus] = None,
     history: Optional[list[dict[str, str]]] = None,
 ) -> PlanDecision:
-    """Resolve the execution plan for a user message.
+    """Resolve the execution plan, then admit it (or refuse it) by scope.
+
+    Intent resolution (``_resolve_intent``) and domain admission
+    (``app.ai.workflows.scope``) are deliberately two passes over the same
+    message rather than one enlarged classifier: "which flow does this want"
+    and "does this want any flow" have different evidence, different failure
+    modes, and different costs to get wrong. Merging them is what a fifth
+    intent label would do, and a fifth label competes for softmax mass with
+    the four real ones instead of vetoing them.
+
+    Args and Returns are as ``_resolve_intent``'s, with one addition: the
+    returned decision may be a ``refuse`` plan regardless of what the intent
+    layer concluded.
+    """
+    decision = await _resolve_intent(
+        message,
+        document_id,
+        llm_client=llm_client,
+        previous_intent=previous_intent,
+        matcher=matcher,
+        focus=focus,
+        history=history,
+    )
+
+    # A resolved clarifying question is the user answering *us*; re-admitting
+    # it would re-litigate a turn whose scope was already settled when the
+    # question was asked.
+    if decision.source == "clarification_resolved":
+        return decision._replace(scope_reason="clarification_resolved")
+
+    _scope_start = time.perf_counter()
+    verdict = await resolve_scope(
+        message,
+        decision.intent,
+        has_document=document_id is not None,
+        has_active_draft=bool(focus and focus.active_draft is not None),
+        llm_client=llm_client,
+    )
+    ROUTER_STAGE_DURATION.labels(stage="scope").observe(time.perf_counter() - _scope_start)
+
+    if not verdict.in_scope:
+        logger.info(
+            "Request refused as out of domain: intent=%s reason=%s (%s)",
+            decision.intent,
+            verdict.reason,
+            verdict.detail,
+        )
+    return _apply_scope_gate(decision, verdict)
+
+
+async def _resolve_intent(
+    message: str,
+    document_id: Optional[str],
+    llm_client: Optional[BaseLLMClient] = None,
+    previous_intent: Optional[str] = None,
+    matcher: Optional["PrototypeMatcher"] = None,
+    focus: Optional[SessionFocus] = None,
+    history: Optional[list[dict[str, str]]] = None,
+) -> PlanDecision:
+    """Resolve which of the system's flows a message wants.
 
     Args:
         message: The user's message.
