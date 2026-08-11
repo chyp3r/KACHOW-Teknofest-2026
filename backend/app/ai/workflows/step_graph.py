@@ -45,7 +45,11 @@ class StepSpec:
 #: of state that silently drifts from what `PLAN_BY_INTENT` can produce.
 STEP_SPECS: dict[str, StepSpec] = {
     "classification": StepSpec(name="classification"),
-    "draft": StepSpec(name="draft", depends_on=("classification",)),
+    #: Deterministic, LLM-free -- see app.ai.workflows.writing_brief. Runs
+    #: after classification so a document-reply turn's role-inversion rule
+    #: has fields.gonderen_kurum/muhatap to resolve against.
+    "brief": StepSpec(name="brief", depends_on=("classification",)),
+    "draft": StepSpec(name="draft", depends_on=("classification", "brief")),
     "routing": StepSpec(name="routing", depends_on=("draft",)),
     "assist": StepSpec(name="assist"),
     #: No dependency on "classification": revise operates on

@@ -142,6 +142,7 @@ async def run_revise(
             "classification": active_draft.classification,
             "context": active_draft.context,
             "source_document": active_draft.source_document,
+            "writing_brief": active_draft.writing_brief,
         }
 
     status = final_state.get("status", StepStatus.FAILED)
@@ -157,6 +158,7 @@ async def run_revise(
             "classification": active_draft.classification,
             "context": active_draft.context,
             "source_document": active_draft.source_document,
+            "writing_brief": active_draft.writing_brief,
         }
 
     return {
@@ -191,6 +193,7 @@ async def run_revise(
         # verify_node depends on.
         "style_examples": [{"text": text} for text in active_draft.style_examples],
         "correspondence_type_source": active_draft.correspondence_type_source,
+        "writing_brief": active_draft.writing_brief,
         "reasoning_level": preset.level.value,
         "instruction_origin": instruction_origin,
     }

@@ -28,6 +28,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.ai.workflows.events import STATUS_QUEUE_KEY
 from app.ai.workflows.planning_graph import create_planning_graph
+from app.core.config import settings
 
 DRAFT_TEXT = (
     "Sayı: 2026/1\n"
@@ -94,8 +95,16 @@ def _build_graph(fake_llm, fake_fast_llm):
 
 @pytest.mark.asyncio
 async def test_an_unfounded_legislation_citation_is_applied_and_only_notices(
-    fake_llm, fake_fast_llm
+    fake_llm, fake_fast_llm, monkeypatch
 ):
+    # This turn is document-less with empty classification fields, which
+    # would otherwise pause the first turn at the pre-draft writing brief
+    # (see app.ai.workflows.writing_brief) -- this file is about the
+    # revision conflict audit, not that gate, and disabling it keeps the
+    # accumulated-queue "no interrupt event at all" assertion below
+    # meaningful (an unrelated brief_gate interrupt from turn one would
+    # otherwise trip it for the wrong reason).
+    monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
     graph, draft_graph = _build_graph(fake_llm, fake_fast_llm)
     queue: asyncio.Queue = asyncio.Queue()
     config = {"configurable": {"thread_id": "conflict-notice-1", STATUS_QUEUE_KEY: queue}}

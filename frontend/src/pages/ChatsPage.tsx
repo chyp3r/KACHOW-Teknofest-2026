@@ -73,7 +73,7 @@ export function ChatsPage({
   ) => Promise<void>;
   onResume: (
     action: "answer" | "approve" | "revise" | "reject",
-    answers: Record<string, string>,
+    answers: Record<string, string | string[]>,
     instructions: string,
   ) => Promise<void>;
   onNewChat: () => void;

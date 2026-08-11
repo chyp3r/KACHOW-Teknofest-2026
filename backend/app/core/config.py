@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     #: the competition brief explicitly asks for.
     HITL_APPROVAL_GATE_ENABLED: bool = True
 
+    #: Gate the pre-draft writing-brief interrupt (who's writing, who it's
+    #: going to, closing formula -- see app.ai.workflows.writing_brief)
+    #: separately from the post-draft approval gate above. Smart-skip means
+    #: this only ever pauses a turn when a slot is genuinely unresolved, but
+    #: a demo that wants zero pauses can still disable it outright.
+    HITL_BRIEF_GATE_ENABLED: bool = True
+
     #: How many times the human approval gate's "revizyon iste" action may
     #: send the draft back through the revise sub-graph within the same run
     #: before the gate stops offering it (see planning_graph.gate_revise_node

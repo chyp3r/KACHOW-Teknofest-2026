@@ -173,7 +173,7 @@ async def test_a_compound_request_runs_one_pipeline_covering_both_readings():
     )
     assert decision.source == "compound"
     assert decision.intent == "draft"
-    assert decision.steps == ["classification", "draft", "routing"]
+    assert decision.steps == ["classification", "brief", "draft", "routing"]
 
 
 @pytest.mark.asyncio
@@ -181,7 +181,7 @@ async def test_compound_merging_keeps_canonical_step_order():
     decision = await resolve_plan(
         "Belgeyi kontrol et ve gerekiyorsa bir üst yazı çıkar.", "uploads/doc.pdf"
     )
-    assert decision.steps == ["classification", "draft", "routing"]
+    assert decision.steps == ["classification", "brief", "draft", "routing"]
 
 
 @pytest.mark.asyncio

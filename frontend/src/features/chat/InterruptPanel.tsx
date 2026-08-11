@@ -1,15 +1,73 @@
 import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, FileText, History } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import type { ConflictFinding, InterruptState } from "../../types/chat";
+import type { ConflictFinding, InterruptState, PromptQuestion } from "../../types/chat";
 import { Button } from "../../components/Button";
-import { Input, Textarea } from "../../components/FormControls";
+import { Textarea } from "../../components/FormControls";
 import { FormActions } from "../../components/LayoutPrimitives";
+import { PromptQuestionCard, type PromptAnswers } from "./PromptQuestionCard";
 
 const SEVERITY_LABEL: Record<ConflictFinding["severity"], string> = {
   critical: "Kritik",
   major: "Önemli",
   minor: "Küçük",
 };
+
+// Quick-pick revision shortcuts shown above the free-text note. Each
+// option's label is itself a complete Turkish instruction fragment, so
+// compiling a selection is just joining the chosen labels -- these ride
+// the existing free-text `instructions` field of onResume("revise", ...),
+// not a new resume contract.
+const REVISION_QUICK_PICKS: PromptQuestion[] = [
+  {
+    key: "uslup",
+    header: "Üslup",
+    question: "Üslupta hazır bir değişiklik ister misiniz?",
+    options: [
+      { value: "daha_resmi", label: "Daha resmi bir üslup kullan" },
+      { value: "daha_samimi", label: "Daha sıcak/samimi bir üslup kullan" },
+    ],
+    multi_select: true,
+    allow_free_text: false,
+    required: false,
+  },
+  {
+    key: "hitap",
+    header: "Hitap / Yön",
+    question: "Hitap veya yönle ilgili hazır bir değişiklik ister misiniz?",
+    options: [
+      { value: "yazan_taraf", label: "Yazan tarafı (göndereni) değiştir" },
+      { value: "muhatap", label: "Muhatabı değiştir" },
+    ],
+    multi_select: true,
+    allow_free_text: false,
+    required: false,
+  },
+  {
+    key: "kapanis",
+    header: "Kapanış",
+    question: "Kapanış ifadesini değiştirmek ister misiniz?",
+    options: [
+      { value: "arz", label: "Kapanışı 'Arz ederim' yap" },
+      { value: "rica", label: "Kapanışı 'Rica ederim' yap" },
+      { value: "bilgi", label: "Kapanışı 'Bilgilerinize sunulur' yap" },
+    ],
+    multi_select: true,
+    allow_free_text: false,
+    required: false,
+  },
+  {
+    key: "kapsam",
+    header: "Kapsam",
+    question: "Metnin kapsamında hazır bir değişiklik ister misiniz?",
+    options: [
+      { value: "kisalt", label: "Metni kısalt" },
+      { value: "detaylandir", label: "Metni detaylandır" },
+    ],
+    multi_select: true,
+    allow_free_text: false,
+    required: false,
+  },
+];
 
 export function InterruptPanel({
   interrupt,
@@ -20,22 +78,21 @@ export function InterruptPanel({
   loading: boolean;
   onResume: (
     action: "answer" | "approve" | "revise" | "reject",
-    answers: Record<string, string>,
+    answers: PromptAnswers,
     instructions: string,
     reason?: string,
   ) => Promise<void>;
 }) {
-  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [instructions, setInstructions] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
+  const [quickPicks, setQuickPicks] = useState<PromptAnswers>({});
   const questions = Array.isArray(interrupt.payload.questions)
     ? interrupt.payload.questions
     : [];
-  const canSubmitAnswers = questions
-    .filter((question) => question.required !== false)
-    .every((question) => answers[question.key]?.trim());
   const isMissingInformation = interrupt.kind === "missing_information";
+  const isWritingBrief = interrupt.kind === "writing_brief";
+  const autoValue = interrupt.payload.auto_value ?? "__auto__";
 
   const conflicts = Array.isArray(interrupt.payload.conflicts)
     ? interrupt.payload.conflicts
@@ -45,12 +102,12 @@ export function InterruptPanel({
   const revisionRound = interrupt.payload.revision_round;
   const maxRevisionRounds = interrupt.payload.max_revision_rounds;
   const revisionExhausted = interrupt.payload.revision_exhausted ?? false;
-
-  const submitAnswers = (event: FormEvent) => {
-    event.preventDefault();
-    if (!canSubmitAnswers || loading) return;
-    void onResume("answer", answers, "");
-  };
+  const combinedScore = interrupt.payload.combined_score;
+  const requiresApproval = interrupt.payload.requires_human_approval;
+  const evaluationNotes =
+    typeof interrupt.payload.verification?.evaluation_notes === "string"
+      ? interrupt.payload.verification.evaluation_notes
+      : "";
 
   const submitReject = (event: FormEvent) => {
     event.preventDefault();
@@ -58,42 +115,83 @@ export function InterruptPanel({
     void onResume("reject", {}, "", rejectReason.trim());
   };
 
+  // Turns the quick-pick selections back into the Turkish instruction
+  // fragments they're labeled with, combined with anything typed by hand --
+  // both ride the same free-text `instructions` field gate_revise_node
+  // already runs through, so no resume-contract change was needed for this.
+  const compiledInstructions = (() => {
+    const picked = REVISION_QUICK_PICKS.flatMap((question) => {
+      const selected = quickPicks[question.key];
+      const values = Array.isArray(selected) ? selected : [];
+      return question.options
+        .filter((option) => values.includes(option.value))
+        .map((option) => option.label);
+    });
+    return [...picked, instructions.trim()].filter(Boolean).join(". ");
+  })();
+
+  const acceptAllDefaults = () => {
+    if (loading) return;
+    const answers: PromptAnswers = {};
+    for (const question of questions) answers[question.key] = autoValue;
+    void onResume("answer", answers, "");
+  };
+
   return (
     <section
       className={`interrupt-panel ${
-        isMissingInformation ? "interrupt-information" : "interrupt-approval"
+        isMissingInformation
+          ? "interrupt-information"
+          : isWritingBrief
+            ? "interrupt-brief"
+            : "interrupt-approval"
       }`}
       aria-labelledby="interrupt-title"
     >
       <header className="interrupt-header">
         <span className="interrupt-icon">
-          {isMissingInformation ? (
-            <AlertCircle size={20} />
+          {isMissingInformation || isWritingBrief ? (
+            <AlertCircle size={15} />
           ) : (
-            <CheckCircle2 size={20} />
+            <CheckCircle2 size={15} />
           )}
         </span>
-        <div>
-          <span className="eyebrow">İşlem sizden bilgi bekliyor</span>
-          <h2 id="interrupt-title">
-            {isMissingInformation
-              ? "Devam etmek için birkaç bilgi gerekli"
-              : "Hazırlanan taslak onayınızı bekliyor"}
-          </h2>
-          <p>
-            {isMissingInformation
-              ? "Alanları tamamladığınızda çalışma kaldığı yerden devam edecek."
-              : "Taslağı inceleyip onaylayabilir veya değişiklik isteyebilirsiniz."}
-          </p>
-        </div>
+        <h2 id="interrupt-title">
+          {isWritingBrief
+            ? (interrupt.payload.title ?? "Taslak öncesi birkaç nokta")
+            : isMissingInformation
+              ? "Birkaç bilgi daha gerekiyor"
+              : "Taslak onayınızı bekliyor"}
+        </h2>
       </header>
+      {isWritingBrief && interrupt.payload.intro && (
+        <p className="interrupt-subtext">{interrupt.payload.intro}</p>
+      )}
 
-      {!isMissingInformation && typeof revisionRound === "number" && (
-        <p className="interrupt-revision-round">
-          <History size={14} />
-          Revizyon turu {revisionRound + 1}
-          {typeof maxRevisionRounds === "number" ? `/${maxRevisionRounds}` : ""}
-        </p>
+      {!isMissingInformation && !isWritingBrief && (
+        <>
+          {typeof revisionRound === "number" && (
+            <p className="interrupt-revision-round">
+              <History size={14} />
+              Revizyon turu {revisionRound + 1}
+              {typeof maxRevisionRounds === "number" ? `/${maxRevisionRounds}` : ""}
+            </p>
+          )}
+          {(typeof combinedScore === "number" || requiresApproval) && (
+            <div className="draft-meta-strip">
+              {typeof combinedScore === "number" && (
+                <span className="draft-meta-chip">Güven skoru: {combinedScore}/100</span>
+              )}
+              {requiresApproval && (
+                <span className="draft-meta-chip draft-meta-warning">
+                  <AlertCircle size={13} />
+                  İnsan onayı gerekiyor
+                  {evaluationNotes ? `: ${evaluationNotes}` : ""}
+                </span>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {conflicts.length > 0 && (
@@ -152,40 +250,34 @@ export function InterruptPanel({
       )}
 
       {isMissingInformation ? (
-        <form className="interrupt-form" onSubmit={submitAnswers}>
-          <div className="interrupt-question-grid">
-            {questions.map((question) => (
-              <Input
-                  key={question.key}
-                  label={question.label}
-                  description={question.why}
-                  value={answers[question.key] ?? ""}
-                  placeholder={question.example ?? ""}
-                  required={question.required !== false}
-                  onChange={(event) =>
-                    setAnswers((previous) => ({
-                      ...previous,
-                      [question.key]: event.target.value,
-                    }))
-                  }
-                />
-            ))}
-          </div>
-          <div className="interrupt-actions">
-            <small>
-              {canSubmitAnswers
-                ? "Bilgiler hazır. İşleme devam edebilirsiniz."
-                : "Devam etmek için gerekli alanları doldurun."}
-            </small>
-            <Button
-              type="submit"
-              loading={loading}
-              disabled={!canSubmitAnswers}
-            >
-              {loading ? "Gönderiliyor…" : "Bilgileri gönder ve devam et"}
+        <PromptQuestionCard
+          questions={questions}
+          loading={loading}
+          submitLabel={loading ? "Gönderiliyor…" : "Bilgileri gönder ve devam et"}
+          onSubmit={(answers) => void onResume("answer", answers, "")}
+        />
+      ) : isWritingBrief ? (
+        <>
+          <PromptQuestionCard
+            questions={questions}
+            resolved={interrupt.payload.resolved}
+            loading={loading}
+            submitLabel={loading ? "Gönderiliyor…" : "Bilgileri gönder ve devam et"}
+            onSubmit={(answers) => void onResume("answer", answers, "")}
+          />
+          <FormActions className="interrupt-actions approval-actions">
+            <Button variant="secondary" disabled={loading} onClick={acceptAllDefaults}>
+              Sen karar ver, devam et
             </Button>
-          </div>
-        </form>
+            <Button
+              variant="destructive"
+              disabled={loading}
+              onClick={() => void onResume("reject", {}, "", "Kullanıcı taslağı iptal etti.")}
+            >
+              Vazgeç
+            </Button>
+          </FormActions>
+        </>
       ) : showRejectForm ? (
         <form className="interrupt-form form-stack" onSubmit={submitReject}>
           <Textarea
@@ -215,11 +307,48 @@ export function InterruptPanel({
         </form>
       ) : (
         <div className="interrupt-form form-stack">
+          <div className="prompt-question-list quick-pick-list">
+            {REVISION_QUICK_PICKS.map((question) => {
+              const selected = Array.isArray(quickPicks[question.key])
+                ? (quickPicks[question.key] as string[])
+                : [];
+              return (
+                <div className="prompt-question" key={question.key}>
+                  <span className="prompt-question-chip">{question.header}</span>
+                  <div className="prompt-question-options" role="group">
+                    {question.options.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`prompt-question-option ${
+                          selected.includes(option.value) ? "is-selected" : ""
+                        }`}
+                        disabled={revisionExhausted}
+                        onClick={() =>
+                          setQuickPicks((previous) => {
+                            const current = Array.isArray(previous[question.key])
+                              ? (previous[question.key] as string[])
+                              : [];
+                            const next = current.includes(option.value)
+                              ? current.filter((value) => value !== option.value)
+                              : [...current, option.value];
+                            return { ...previous, [question.key]: next };
+                          })
+                        }
+                      >
+                        <span className="prompt-question-option-label">{option.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
           <Textarea
               label="Revizyon notu"
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
-              placeholder="Revizyon istiyorsanız talimatınızı yazın."
+              placeholder="Yukarıdaki hazır seçeneklere ek olarak, isterseniz talimatınızı yazın."
               disabled={revisionExhausted}
             />
           {revisionExhausted && (
@@ -237,8 +366,8 @@ export function InterruptPanel({
             </Button>
             <Button
               variant="secondary"
-              disabled={loading || !instructions.trim() || revisionExhausted}
-              onClick={() => void onResume("revise", {}, instructions)}
+              disabled={loading || !compiledInstructions.trim() || revisionExhausted}
+              onClick={() => void onResume("revise", {}, compiledInstructions)}
             >
               Revizyon iste
             </Button>

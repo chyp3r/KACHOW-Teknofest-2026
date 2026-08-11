@@ -15,9 +15,11 @@ from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
 from app.ai.llms.base import BaseLLMClient
 from app.ai.retrieval.examples import ExampleRetriever
+from app.ai.revision.elision import detect_content_loss
 from app.ai.verification import (
     DraftJudgeVerdict,
     InfoQuestion,
+    RepairItem,
     build_missing_info_request,
     judge_draft,
     merge_verdicts,
@@ -35,6 +37,7 @@ from app.ai.workflows.events import (
     emit_token,
 )
 from app.ai.workflows.resilience import IO_RETRY
+from app.ai.workflows.writing_brief import format_writing_brief
 from app.ai.reasoning_levels import ReasoningLevelPreset, get_reasoning_level_preset
 from app.core.config import settings
 from app.core.enums.reasoning_level import ReasoningLevel
@@ -89,6 +92,13 @@ class DraftState(TypedDict, total=False):
     error: str
     attempts: int
     brief: str
+    #: Final slot answers from the pre-draft writing-brief gate (see
+    #: app.ai.workflows.writing_brief) -- who's writing, who it's going to,
+    #: anlatım/kapanış. Rendered into `brief` (the writer's actual prompt
+    #: text) by `_build_brief`; kept here too, untouched, so the resulting
+    #: draft_result carries it forward for SessionFocus.DraftVersion (see
+    #: planning_graph._draft_version_from_result) and a later `revise` turn.
+    writing_brief: dict[str, Any]
     #: Speed-vs-quality tier for this run ("fast"/"balanced"/"deep"); see
     #: app.ai.reasoning_levels.get_reasoning_level_preset. Absent or unknown
     #: resolves to "balanced", so older callers that never set it are
@@ -144,7 +154,10 @@ def _coerce_fields(classification: dict[str, Any]) -> dict[str, Any]:
 
 
 def _build_brief(
-    classification: dict[str, Any], context: str, instructions: str
+    classification: dict[str, Any],
+    context: str,
+    instructions: str,
+    writing_brief: dict[str, Any] | None = None,
 ) -> str:
     """Compose the grounding brief handed to the writer.
 
@@ -152,6 +165,13 @@ def _build_brief(
         classification: Analysis output for the incoming document.
         context: Retrieved legislation excerpts.
         instructions: The user's drafting instructions.
+        writing_brief: Resolved pre-draft writing-style slots (see
+            app.ai.workflows.writing_brief) -- who's writing, who it's
+            going to, anlatım/kapanış. Rendered as section 7, marked as
+            human-approved source information: this is what fixes the
+            "KACMAK ekibi olarak" bug, where the only proper noun in the
+            user's own text had no declared direction and the writer put
+            it in the one slot this brief used to describe (Muhatap).
 
     Returns:
         The brief text.
@@ -178,6 +198,8 @@ def _build_brief(
         f'5. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
         f"{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
         f"6. Kullanıcı Talebi ve Talimatlar: {instructions}\n"
+        f"7. YAZIM BRİEFİ (İNSAN ONAYLI -- KAYNAK BİLGİ SAYILIR):\n"
+        f"{format_writing_brief(writing_brief or {})}\n"
     )
 
 
@@ -354,7 +376,9 @@ def create_draft_graph(
             "correspondence_type_source": type_source,
             "context": context,
             "instructions": instructions,
-            "brief": _build_brief(classification, context, instructions),
+            "brief": _build_brief(
+                classification, context, instructions, state.get("writing_brief")
+            ),
             "status": "IN_PROGRESS",
             "error": "",
             "attempts": state.get("attempts", 0),
@@ -681,6 +705,36 @@ def create_draft_graph(
 
         combined = merge_verdicts(report, verdict, missing_information=missing_information)
 
+        # Mirrors revise_graph.verify_node's content-loss check (see
+        # app.ai.revision.elision's module docstring). A repair pass here
+        # (writer_node's is_revision branch) hands the reviser's raw output
+        # through as `draft` with no splice guarantee, same failure mode: the
+        # model can stand in an ellipsis/shorthand for a paragraph it judges
+        # "unchanged" instead of reproducing it. Only meaningful once there is
+        # a `previous_draft` to compare against -- the first writer pass has
+        # nothing prior to have elided.
+        content_loss = None
+        previous_draft = state.get("previous_draft", "")
+        if previous_draft:
+            content_loss = detect_content_loss(
+                previous_draft, draft_text, state.get("instructions", "")
+            )
+        if content_loss is not None:
+            logger.warning("Draft repair pass dropped content: %s", content_loss.detail)
+            combined.repair_items.append(
+                RepairItem(
+                    kind="content_loss",
+                    source="deterministic",
+                    detail=content_loss.detail,
+                    suggested_fix=content_loss.suggested_fix,
+                )
+            )
+            combined.requires_revision = True
+            # Same rationale as revise_graph: if the bounded repair loop runs
+            # out before this is actually fixed, the draft must not ship as a
+            # quiet COMPLETED.
+            combined.requires_human_approval = True
+
         DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)
         if verdict is not None:
             DRAFT_SCORE.labels(source="judge").observe(verdict.score)
@@ -732,6 +786,8 @@ def create_draft_graph(
                 f"{evaluation_notes} Taslakta {len(pii_findings)} adet kişisel veri "
                 f"bulgusu tespit edildi ({kinds}); insan onayı gerekiyor."
             )
+        if content_loss is not None:
+            evaluation_notes = f"{evaluation_notes} {content_loss.detail}"
 
         update = {
             "confidence_score": combined.combined_score,

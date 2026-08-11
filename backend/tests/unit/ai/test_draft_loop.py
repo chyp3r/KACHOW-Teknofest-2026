@@ -108,6 +108,41 @@ async def test_missing_structure_triggers_exactly_one_revision_then_completes():
 
 
 @pytest.mark.asyncio
+async def test_a_repair_pass_that_elides_previously_filled_content_is_flagged():
+    """A repair pass (writer_node's `is_revision` branch) hands the
+    reviser's raw output through as `draft` with no splice guarantee, the
+    same failure mode revise_graph.verify_node's content-loss check exists
+    for (see app.ai.revision.elision's module docstring). The very first
+    writer pass has no `previous_draft` to compare against, so this can only
+    fire from the second attempt (a repair pass) onward."""
+    graph = create_draft_graph(_mock_llm_client())
+
+    elided_repair = (
+        "Konu: Test Konusu\n"
+        "Sayı: E-1-1\n"
+        "Tarih: 30.07.2026\n\n"
+        "Sayın Makam,\n\n"
+        "...\n\n"
+        "Arz ederim.\n\nAli Veli\nGenel Müdür"
+    )
+
+    with (
+        patch.object(WriterAgent, "stream") as mock_writer,
+        patch.object(ReviserAgent, "stream") as mock_reviser,
+    ):
+        mock_writer.side_effect = lambda **kwargs: _one_chunk(BAD_DRAFT)
+        mock_reviser.side_effect = lambda **kwargs: _one_chunk(elided_repair)
+
+        result = await graph.ainvoke(BASE_STATE)
+
+    assert mock_writer.call_count == 1
+    assert mock_reviser.call_count == 1
+    assert any(item["kind"] == "content_loss" for item in result["repair_items"])
+    assert result["requires_human_approval"] is True
+    assert result["status"] == "NEEDS_HUMAN_APPROVAL"
+
+
+@pytest.mark.asyncio
 async def test_a_placeholder_short_circuits_to_needs_input_after_one_writer_call():
     """An explicit [...] placeholder means the writer already told the system
     it doesn't know the value -- retrying produces the same gap or a guess,

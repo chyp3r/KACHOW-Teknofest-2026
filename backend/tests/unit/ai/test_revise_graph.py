@@ -212,3 +212,41 @@ async def test_revise_never_emits_a_per_chunk_token_only_one_validated_text(fake
 
     assert len(tokens) == 1
     assert "Sayın Makam" in tokens[0]
+
+
+@pytest.mark.asyncio
+async def test_a_reviser_that_elides_previously_filled_content_is_flagged(fake_llm):
+    """A whole-draft rewrite (no located target, see instruction.py's
+    scope="whole" default) is never spliced through `_merge` -- the model's
+    raw output becomes the draft outright. If it stands in an ellipsis for
+    content it judged "unchanged" instead of reproducing it, nothing but
+    this check would ever notice, and the previously-filled addressee/body
+    the user already supplied would silently vanish."""
+    fake_llm.stream_chunks = ["Konu: Yıllık İzin Talebi\n\n...\n\nArz ederim.\nAli Veli"]
+    graph = create_revise_graph(fake_llm)
+
+    active_draft = _active_draft(
+        text=(
+            "Konu: Yıllık İzin Talebi\nSayı: E-1\nTarih: 30.07.2026\n\n"
+            "Sayın Ahmet Yılmaz,\n\n"
+            "İlgi yazı kapsamında 15-20 Ağustos 2026 tarihleri arasında yıllık izin "
+            "kullanmak istediğimi arz ederim. Bu süre zarfında yerime vekalet edecek "
+            "personel Mehmet Kaya'dır.\n\n"
+            "Arz ederim.\n\nAli Veli\nGenel Müdür"
+        )
+    )
+
+    result = await graph.ainvoke(
+        {
+            "active_draft": active_draft,
+            "instructions": "Bunu daha iyi yap.",
+            "reasoning_level": "fast",
+        }
+    )
+
+    assert any(item["kind"] == "content_loss" for item in result["repair_items"])
+    assert result["requires_human_approval"] is True
+    assert "içerik" in result["evaluation_notes"].lower() or "kısaltma" in result["evaluation_notes"].lower()
+    # The elided text still ships (repair is bounded and "fast" allows only
+    # one attempt) -- but flagged for a human, never silently as COMPLETED.
+    assert result["status"] == StepStatus.NEEDS_HUMAN_APPROVAL

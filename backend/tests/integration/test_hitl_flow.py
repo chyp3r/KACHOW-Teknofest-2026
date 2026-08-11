@@ -11,6 +11,16 @@ This is the requirement Görev 2 hinges on: "gerekli durumlarda eksik bilgi
 talep edebilmesi" -- a draft that leaves a placeholder pauses the whole
 orchestration graph rather than silently shipping an incomplete letter, and
 answering it does not re-run the ~30s draft generation.
+
+Every turn here starts a document-less "draft" plan with an empty
+classification (`fields: {}`), which today also means every writing-brief
+slot is unresolved -- the pre-draft brief_gate (see
+app.ai.workflows.writing_brief) fires before the missing_information/
+draft_approval gate this file actually tests. Two of the three tests disable
+it (`HITL_BRIEF_GATE_ENABLED=False`) since they are about the missing-info
+gate, not this one; the third resumes the brief gate first with "Sen karar
+ver" answers, which is also the composability proof that two gates can
+chain within a single turn.
 """
 
 from unittest.mock import AsyncMock, MagicMock
@@ -21,6 +31,7 @@ from langgraph.types import Command
 
 from app.ai.llms.base import BaseLLMClient
 from app.ai.workflows.planning_graph import create_planning_graph
+from app.core.config import settings
 
 SOURCE_DOCUMENT = "Sayı: E-1-1, Tarih: 30.07.2026 tarihli evrak."
 
@@ -98,6 +109,24 @@ def _build_graph():
     return graph, mocks
 
 
+async def _resolve_brief_gate_with_defaults(graph, config):
+    """Resume a paused brief_gate with "Sen karar ver" for every question.
+
+    Shared by every test in this file that doesn't itself want to exercise
+    the brief gate -- their input classification has empty `fields`, so
+    every writing-brief slot is unresolved and the gate always opens first.
+    """
+    snapshot = await graph.aget_state(config)
+    if snapshot.next != ("brief_gate",):
+        return None
+    payload = snapshot.tasks[0].interrupts[0].value
+    answers = {question["key"]: "__auto__" for question in payload["questions"]}
+    return await graph.ainvoke(
+        Command(resume={"action": "answer", "answers": answers, "instructions": ""}),
+        config=config,
+    )
+
+
 @pytest.mark.asyncio
 async def test_a_placeholder_pauses_the_whole_orchestration_graph():
     graph, _mocks = _build_graph()
@@ -106,6 +135,14 @@ async def test_a_placeholder_pauses_the_whole_orchestration_graph():
     result = await graph.ainvoke(
         {"input_text": "Bu evraka cevap yazısı hazırla", "document_id": None}, config=config
     )
+
+    # The run paused at the pre-draft writing brief -- the same "no
+    # classification fields, nothing resolved" turn shape means every slot
+    # is unknown. Resolving it (with "Sen karar ver" for every slot) is
+    # what proves the two gates compose within a single turn.
+    snapshot = await graph.aget_state(config)
+    assert snapshot.next == ("brief_gate",)
+    result = await _resolve_brief_gate_with_defaults(graph, config)
 
     # The run paused rather than completing: no final_output was compiled.
     assert not result.get("final_output")
@@ -121,7 +158,8 @@ async def test_a_placeholder_pauses_the_whole_orchestration_graph():
 
 
 @pytest.mark.asyncio
-async def test_answering_resumes_without_regenerating_the_draft():
+async def test_answering_resumes_without_regenerating_the_draft(monkeypatch):
+    monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
     graph, mocks = _build_graph()
     config = {"configurable": {"thread_id": "hitl-test-2"}}
 
@@ -149,9 +187,10 @@ async def test_answering_resumes_without_regenerating_the_draft():
 
 
 @pytest.mark.asyncio
-async def test_a_still_missing_answer_pauses_again_instead_of_completing():
+async def test_a_still_missing_answer_pauses_again_instead_of_completing(monkeypatch):
     """A blank answer leaves the placeholder unfilled -- the gate must ask
     again rather than shipping an incomplete draft."""
+    monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
     graph, mocks = _build_graph()
     config = {"configurable": {"thread_id": "hitl-test-4"}}
 

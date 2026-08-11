@@ -1,4 +1,5 @@
-import type { InfoQuestion, ReasoningLevel } from "./documents";
+import type { ReasoningLevel } from "./documents";
+import type { DiffSegment } from "../utils/textDiff";
 
 export type WorkflowNodeStatus =
   | "todo"
@@ -15,6 +16,23 @@ export interface WorkflowLog {
 export interface QuestionOption {
   value: string;
   label: string;
+  description?: string;
+}
+
+// The canonical shape every "ask the user" surface publishes questions in --
+// the pre-draft writing brief, missing-information requests, and clarify's
+// intent question all render through one PromptQuestionCard component
+// keyed on this type. See backend app.ai.workflows.event_schema.PromptQuestion.
+export interface PromptQuestion {
+  key: string;
+  question: string;
+  header?: string;
+  help?: string;
+  example?: string | null;
+  options: QuestionOption[];
+  multi_select: boolean;
+  allow_free_text: boolean;
+  required: boolean;
 }
 
 export interface ChatMessage {
@@ -29,11 +47,19 @@ export interface ChatMessage {
   // revision that was already applied, never a decision the user has to
   // make. Absent (ordinary assistant reply) is the default.
   kind?: "notice";
-  // Present on a clarify turn's own message -- clickable shortcuts for
-  // app.ai.workflows.planner._try_resolve_pending_clarification's options,
-  // resolved by sending the option's label back as the next message (the
-  // same thing typing it out by hand would do).
-  questionOptions?: QuestionOption[];
+  // Present on a clarify turn's own message -- rendered through the same
+  // PromptQuestionCard every HITL gate uses. Resolved by sending the
+  // selected option's label back as the next message (the same thing
+  // typing it out by hand would do), per
+  // app.ai.workflows.planner._try_resolve_pending_clarification.
+  questions?: PromptQuestion[];
+  // One-time reveal: which spans of `text` differ from what was streamed a
+  // moment ago (see useChatWorkflow's final_result handler / utils/textDiff).
+  // Present only when a post-draft pass (guardrail redaction, a repair)
+  // changed a small, targeted part of the streamed preview -- MessageList
+  // renders these instead of `text` directly, animating just the changed
+  // spans rather than the whole message silently swapping.
+  diffSegments?: DiffSegment[];
 }
 
 export interface ChatSession {
@@ -88,10 +114,26 @@ export interface RevisionChangelog {
 }
 
 export interface InterruptState {
-  kind: "missing_information" | "draft_approval";
+  kind: "missing_information" | "draft_approval" | "writing_brief";
   interruptId: string;
   payload: {
-    questions?: InfoQuestion[];
+    questions?: PromptQuestion[];
+    // Slots the writing-brief gate already resolved without asking --
+    // rendered as a read-only "bunları zaten biliyorum" strip. Only
+    // present on kind "writing_brief".
+    resolved?: Record<string, { value: string; label?: string; source?: string }>;
+    title?: string;
+    intro?: string;
+    // "answer" on every gate today -- carried explicitly so the card knows
+    // to POST /chat/resume rather than send an ordinary chat message (the
+    // clarify "question" event has no resume_action for that reason).
+    resume_action?: "answer";
+    // The "Sen karar ver" sentinel value -- see backend
+    // app.ai.workflows.writing_brief.AUTO_ANSWER. Blank is deliberately
+    // never used for this: an empty answer must still count as unanswered
+    // so a required-and-skipped slot gets re-asked.
+    auto_value?: string;
+    round?: number;
     draft?: string;
     verification?: Record<string, unknown>;
     judge?: Record<string, unknown>;
@@ -199,6 +241,7 @@ export type WorkflowEvent =
       question: string;
       options: QuestionOption[];
       allow_free_text: boolean;
+      questions?: PromptQuestion[];
     })
   | (EventBase & {
       event: "final_result";
@@ -218,7 +261,9 @@ export interface ChatRequest {
 export interface ResumeRequest {
   session_id: string;
   action: "answer" | "approve" | "revise" | "reject";
-  answers: Record<string, string>;
+  // A multi_select PromptQuestion answers with a list; every other question
+  // shape (including the "__auto__" sentinel) answers with a single string.
+  answers: Record<string, string | string[]>;
   instructions: string;
   reason?: string;
   reasoning_level?: ReasoningLevel;

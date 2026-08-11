@@ -98,7 +98,15 @@ def _build_graph(fake_llm, fake_fast_llm, *, draft_result=None):
 
 
 @pytest.mark.asyncio
-async def test_revizyon_iste_produces_a_new_draft_in_the_same_run(fake_llm, fake_fast_llm):
+async def test_revizyon_iste_produces_a_new_draft_in_the_same_run(
+    fake_llm, fake_fast_llm, monkeypatch
+):
+    # Every turn here starts document-less with empty classification
+    # fields, so the pre-draft writing brief (see
+    # app.ai.workflows.writing_brief) would otherwise pause first -- this
+    # file is about the approval gate's revise loop, not that one (see
+    # test_hitl_flow.py for the two-gates-compose proof).
+    monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
     graph, mocks = _build_graph(fake_llm, fake_fast_llm)
     config = {"configurable": {"thread_id": "gate-revise-1"}}
 
@@ -146,6 +154,7 @@ async def test_the_revision_round_cap_ends_the_turn_without_losing_the_last_draf
     fake_llm, fake_fast_llm, monkeypatch
 ):
     monkeypatch.setattr(settings, "DRAFT_JUDGE_ENABLED", False)
+    monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
     draft_result = {**MOCK_DRAFT_RESULT, "draft": STRUCTURALLY_INCOMPLETE_DRAFT}
     graph, mocks = _build_graph(fake_llm, fake_fast_llm, draft_result=draft_result)
     config = {"configurable": {"thread_id": "gate-revise-cap"}}
@@ -188,7 +197,10 @@ async def test_the_revision_round_cap_ends_the_turn_without_losing_the_last_draf
 
 
 @pytest.mark.asyncio
-async def test_reddet_captures_a_reason_and_archives_the_draft(fake_llm, fake_fast_llm):
+async def test_reddet_captures_a_reason_and_archives_the_draft(
+    fake_llm, fake_fast_llm, monkeypatch
+):
+    monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
     graph, _mocks = _build_graph(fake_llm, fake_fast_llm)
     config = {"configurable": {"thread_id": "gate-reject-1"}}
 

@@ -547,12 +547,40 @@ label,
 .chat-session-group > h3,
 .workflow-plan-summary > span,
 .live-logs-header,
-.doc-list-header h2 {
+.doc-list-header h2,
+.prompt-question-resolved-title {
   font-size: var(--text-overline);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-overline);
   letter-spacing: var(--tracking-overline);
   text-transform: uppercase;
+}
+
+/* PromptQuestionCard: the shared card behind the missing-information gate,
+   the pre-draft writing brief, and clarify's intent question. */
+.prompt-question-chip {
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-caption);
+}
+
+.prompt-question-text {
+  font-size: var(--text-body-lg);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-body-lg);
+}
+
+.prompt-question-help,
+.prompt-question-option-description {
+  font-size: var(--font-size-secondary);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-secondary);
+}
+
+.prompt-question-option-label {
+  font-size: var(--text-body);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body);
 }
 
 .feedback.error,
