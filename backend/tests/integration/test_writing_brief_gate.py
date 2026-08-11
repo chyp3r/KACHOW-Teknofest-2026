@@ -93,6 +93,11 @@ async def test_the_draft_pipeline_never_runs_while_the_brief_gate_is_paused(fake
     assert payload["resolved"]["yazan_taraf"]["value"] == "KACMAK ekibi"
     # muhatap is the one thing this turn's message doesn't answer.
     assert any(question["key"] == "muhatap" for question in payload["questions"])
+    # imza/sayi_tarih default silently to "Sen karar ver" (see
+    # resolve_brief) -- they must never show up in the "Bilinenler" strip
+    # as if they were a resolved fact rather than an unasked default.
+    assert "imza" not in payload["resolved"]
+    assert "sayi_tarih" not in payload["resolved"]
 
 
 @pytest.mark.asyncio

@@ -867,10 +867,13 @@ textarea { min-height: 105px; resize: vertical; }
 .selected-document > .icon-button { flex: 0 0 auto; }
 .compact-select { grid-template-columns: auto 110px; align-items: center; }
 
-.interrupt-panel { padding: var(--space-4); border-color: rgba(245, 158, 11, .35); }
-.interrupt-header { align-items: flex-start; gap: var(--space-3); }
-.interrupt-header h2 { margin-top: var(--space-1); }
-.interrupt-icon { width: var(--icon-container-md); height: var(--icon-container-md); border-radius: var(--radius-md); color: #fbbf24; background: rgba(245, 158, 11, .13); }
+/* Claude-style compact card, not a dashboard alert panel -- a routine
+   question isn't a warning, so no amber alarm border/badge. */
+.interrupt-panel { padding: var(--space-3) var(--space-4); border-color: var(--border-default); }
+.interrupt-header { align-items: center; gap: var(--space-2); }
+.interrupt-header h2 { margin: 0; }
+.interrupt-icon { width: var(--icon-container-sm); height: var(--icon-container-sm); border-radius: var(--radius-md); color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 12%, transparent); }
+.interrupt-subtext { margin: var(--space-1) 0 0; color: var(--text-secondary); }
 .interrupt-draft { margin: var(--space-4) 0; }
 .interrupt-draft summary { display: flex; justify-content: space-between; cursor: pointer; }
 .draft-preview, .draft-document { margin-top: var(--space-3); padding: var(--space-4); max-height: 420px; overflow: auto; white-space: pre-wrap; color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-primary); }
@@ -890,6 +893,27 @@ textarea { min-height: 105px; resize: vertical; }
 .draft-meta-chip.draft-meta-warning { color: #fbbf24; border-color: rgba(245, 158, 11, .4); }
 .draft-meta-chip.draft-meta-danger { color: #f87171; border-color: rgba(248, 113, 113, .4); }
 .draft-meta-chip.draft-meta-success { color: var(--status-completed); border-color: color-mix(in srgb, var(--status-completed) 40%, transparent); }
+
+/* One-time reveal of what a post-draft pass (guardrail redaction, a
+   repair) changed relative to the streamed preview -- see
+   DiffRevealText / useChatWorkflow's final_result handler. Plain text,
+   not markdown, so it needs its own whitespace handling. */
+.diff-reveal-text { margin: 0; white-space: pre-wrap; }
+mark.diff-changed {
+  padding: 0 2px;
+  margin: 0 -2px;
+  border-radius: 3px;
+  color: inherit;
+  background: transparent;
+  animation: diff-flash 1.8s ease-out forwards;
+}
+@keyframes diff-flash {
+  0% { background: color-mix(in srgb, var(--accent-blue) 45%, transparent); }
+  100% { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  mark.diff-changed { animation: none; background: color-mix(in srgb, var(--accent-blue) 20%, transparent); }
+}
 
 /* PromptQuestionCard: the single card missing-information, the pre-draft
    writing brief, and clarify's intent question all render through.

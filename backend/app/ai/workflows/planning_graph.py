@@ -1166,9 +1166,16 @@ def create_planning_graph(
         updates["brief_result"] = {
             "status": StepStatus.COMPLETED,
             "answers": {key: item.value for key, item in resolution.resolved.items()},
+            # "default"-sourced entries are an optional slot silently
+            # defaulted to AUTO_ANSWER (see resolve_brief) -- they were
+            # never resolved *from* anything, so showing them in the
+            # "Bilinenler" strip as if they were a known fact ("Sen karar
+            # ver" appearing as something the system already knows) is
+            # backwards. Only genuinely resolved slots are worth surfacing.
             "resolved": {
                 key: {"value": item.value, "label": item.label, "source": item.source}
                 for key, item in resolution.resolved.items()
+                if item.source != "default"
             },
             "questions": list(resolution.questions),
         }

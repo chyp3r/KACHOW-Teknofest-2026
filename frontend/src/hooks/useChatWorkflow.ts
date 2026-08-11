@@ -14,6 +14,7 @@ import type {
   WorkflowNodeStatus,
 } from "../types/chat";
 import type { DocumentMetadata, ReasoningLevel } from "../types/documents";
+import { diffWords, isTargetedDiff } from "../utils/textDiff";
 
 type NodeResults = Record<string, Record<string, unknown>>;
 
@@ -68,6 +69,12 @@ export function useChatWorkflow(
   // question is always answered by the turn that asked it, so nothing else
   // should ever attach these options to an unrelated later message.
   const pendingQuestions = useRef<PromptQuestion[] | null>(null);
+  // Mirrors `streamingText` synchronously (state updates don't commit
+  // in time to read back within the same handler) -- final_result reads
+  // this as "what the user was looking at a moment ago" to diff against
+  // the settled reply, so a guardrail redaction animates in place instead
+  // of the streamed draft just vanishing and reappearing edited.
+  const streamingTextRef = useRef("");
 
   const sessionsQuery = useQuery({
     queryKey: queryKeys.chatSessions(),
@@ -135,6 +142,7 @@ export function useChatWorkflow(
   }, []);
 
   const resetFlow = useCallback(() => {
+    streamingTextRef.current = "";
     setStreamingText("");
     setNodeStatus({});
     setNodeResults({});
@@ -169,13 +177,22 @@ export function useChatWorkflow(
         case "node_start":
           setNodeStatus((previous) => ({ ...previous, [event.node]: "running" }));
           if (event.meta) setNodeMeta((previous) => ({ ...previous, [event.node]: event.meta ?? {} }));
-          // Every node_start clears any in-progress streamingText, not just
-          // "draft"'s -- a revise round (the initial rewrite, then every
-          // repair/multi-directive re-entry into the same "revise" node)
-          // starts fresh each time. Without this, a second round's tokens
-          // appended onto the first round's leftover text instead of
-          // replacing it.
-          setStreamingText("");
+          // Only the three nodes that actually emit_token (see backend
+          // app.ai.workflows.events.emit_token call sites: "draft",
+          // "revise", "assist") clear the in-progress preview -- each of
+          // their own node_start events means a fresh generation is about
+          // to stream in (a revise round re-enters the same "revise" node
+          // per repair/multi-directive pass, and each pass's tokens must
+          // replace the last, not append onto it). Every other node
+          // (verify, guardrail checks, routing, the writing brief, ...)
+          // never streams anything, so clearing on those too used to blank
+          // the screen for the whole gap between the draft finishing and
+          // final_result arriving -- the streamed draft should stay
+          // visible as a preview through that gap instead of vanishing.
+          if (event.node === "draft" || event.node === "revise" || event.node === "assist") {
+            streamingTextRef.current = "";
+            setStreamingText("");
+          }
           appendLog(`${event.label} işlemi başlatıldı.`);
           break;
         case "planning_completed":
@@ -198,6 +215,7 @@ export function useChatWorkflow(
           appendLog(`${event.label} atlandı: ${event.reason}`);
           break;
         case "token":
+          streamingTextRef.current += event.text;
           setStreamingText((previous) => previous + event.text);
           break;
         case "partial_result":
@@ -220,6 +238,7 @@ export function useChatWorkflow(
           // decision to block on, so it must never look like the
           // human-approval popup (pendingInterrupt) and must never wait for
           // final_result to be shown.
+          streamingTextRef.current = "";
           setStreamingText("");
           setMessages((previous) => [
             ...previous,
@@ -255,16 +274,29 @@ export function useChatWorkflow(
           appendLog(event.kind === "missing_information" ? "Eksik bilgi bekleniyor." : "İnsan onayı bekleniyor.");
           break;
         case "final_result": {
+          // What the user was actually looking at a moment ago -- if a
+          // post-draft guardrail/verify pass changed the text (a redaction,
+          // a repaired sentence), diffing against it lets MessageList
+          // animate just the changed span instead of the streamed preview
+          // silently vanishing and the final text popping in already edited.
+          const previousPreview = streamingTextRef.current;
+          streamingTextRef.current = "";
           setStreamingText("");
           setPendingInterrupt(null);
           const questions = pendingQuestions.current ?? undefined;
           pendingQuestions.current = null;
+          const diffSegments =
+            previousPreview && previousPreview !== event.reply
+              ? diffWords(previousPreview, event.reply)
+              : undefined;
           setMessages((previous) => [
             ...previous,
             {
               sender: "assistant",
               text: event.reply,
               status: event.workflow_status,
+              diffSegments:
+                diffSegments && isTargetedDiff(diffSegments) ? diffSegments : undefined,
               logs: logsRef.current,
               details: event.details,
               questions,

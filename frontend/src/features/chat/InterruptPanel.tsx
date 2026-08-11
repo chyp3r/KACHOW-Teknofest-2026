@@ -151,30 +151,22 @@ export function InterruptPanel({
       <header className="interrupt-header">
         <span className="interrupt-icon">
           {isMissingInformation || isWritingBrief ? (
-            <AlertCircle size={20} />
+            <AlertCircle size={15} />
           ) : (
-            <CheckCircle2 size={20} />
+            <CheckCircle2 size={15} />
           )}
         </span>
-        <div>
-          <span className="eyebrow">İşlem sizden bilgi bekliyor</span>
-          <h2 id="interrupt-title">
-            {isWritingBrief
-              ? (interrupt.payload.title ?? "Taslak öncesi birkaç nokta")
-              : isMissingInformation
-                ? "Devam etmek için birkaç bilgi gerekli"
-                : "Hazırlanan taslak onayınızı bekliyor"}
-          </h2>
-          <p>
-            {isWritingBrief
-              ? (interrupt.payload.intro ??
-                "Taslağı yazmadan önce netleştirmem gereken birkaç nokta var.")
-              : isMissingInformation
-                ? "Alanları tamamladığınızda çalışma kaldığı yerden devam edecek."
-                : "Taslağı inceleyip onaylayabilir veya değişiklik isteyebilirsiniz."}
-          </p>
-        </div>
+        <h2 id="interrupt-title">
+          {isWritingBrief
+            ? (interrupt.payload.title ?? "Taslak öncesi birkaç nokta")
+            : isMissingInformation
+              ? "Birkaç bilgi daha gerekiyor"
+              : "Taslak onayınızı bekliyor"}
+        </h2>
       </header>
+      {isWritingBrief && interrupt.payload.intro && (
+        <p className="interrupt-subtext">{interrupt.payload.intro}</p>
+      )}
 
       {!isMissingInformation && !isWritingBrief && (
         <>
