@@ -13,6 +13,7 @@ import pytest
 from langgraph.checkpoint.memory import MemorySaver
 
 from app.ai.workflows.planning_graph import create_planning_graph
+from app.core.config import settings
 
 DRAFT_RESULT = {
     "status": "COMPLETED",
@@ -62,8 +63,13 @@ def _build_graph(fake_llm, fake_fast_llm):
 
 @pytest.mark.asyncio
 async def test_the_objective_accumulates_and_the_active_draft_survives_across_turns(
-    fake_llm, fake_fast_llm
+    fake_llm, fake_fast_llm, monkeypatch
 ):
+    # Both turns here are document-less with empty classification fields,
+    # which would otherwise pause each one at the pre-draft writing brief
+    # (see app.ai.workflows.writing_brief) -- this file is about
+    # SessionFocus persistence, not that gate.
+    monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
     graph = _build_graph(fake_llm, fake_fast_llm)
     config = {"configurable": {"thread_id": "focus-persistence-test"}}
 
@@ -102,8 +108,9 @@ async def test_the_objective_accumulates_and_the_active_draft_survives_across_tu
 
 @pytest.mark.asyncio
 async def test_a_conversational_turn_does_not_reset_a_prior_draft_s_focus(
-    fake_llm, fake_fast_llm
+    fake_llm, fake_fast_llm, monkeypatch
 ):
+    monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
     fake_llm.stream_chunks = ["merhaba"]
     graph = _build_graph(fake_llm, fake_fast_llm)
     config = {"configurable": {"thread_id": "focus-persistence-chat-does-not-reset"}}

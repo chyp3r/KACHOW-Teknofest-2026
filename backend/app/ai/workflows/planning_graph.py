@@ -51,6 +51,7 @@ from app.ai.workflows.revise import run_revise
 from app.ai.workflows.scope import build_refusal_reply
 from app.ai.workflows.revise_graph import create_revise_graph
 from app.ai.workflows.step_graph import STEP_SPECS, StepSpec, all_steps_settled, ready_steps
+from app.ai.workflows.writing_brief import AUTO_ANSWER, resolve_brief
 from app.core.config import settings
 from app.core.enums.reasoning_level import ReasoningLevel
 from app.core.enums.sensitivity_level import SensitivityLevel
@@ -72,6 +73,7 @@ QA_RESULT_LIMIT = get_policy().memory.qa_result_limit
 
 STEP_LABELS = {
     "classification": "Evrak Analizi",
+    "brief": "Yazım Briefi",
     "draft": "Taslak Oluşturma",
     "routing": "Birim Yönlendirme",
     "assist": "Asistan",
@@ -83,6 +85,7 @@ STEP_LABELS = {
 
 STEP_MESSAGES = {
     "classification": "Belge sınıflandırılıyor ve üst veriler çıkarılıyor...",
+    "brief": "Taslak öncesi yazım briefi hazırlanıyor...",
     "draft": "Resmî cevap taslağı hazırlanıyor...",
     "routing": "Cevap taslağının iletileceği birim analiz ediliyor...",
     "assist": "Asistan yanıtı hazırlanıyor...",
@@ -250,6 +253,17 @@ class PlanningState(TypedDict, total=False):
     _last_ran_step: Optional[str]
     cached_document: dict[str, Any]
     classification_result: dict[str, Any]
+    #: Deterministic pre-draft writing-style resolution -- see
+    #: app.ai.workflows.writing_brief. `{"status", "answers", "resolved",
+    #: "questions"}`; `answers` is what draft_graph._build_brief renders.
+    #: Reset every turn in planning_node, unlike focus.writing_brief (its
+    #: session-scoped carry-forward).
+    brief_result: dict[str, Any]
+    #: How many rounds brief_gate_node has re-asked this turn -- plays the
+    #: same role gate_revision_count plays for human_gate_node's hash: a
+    #: re-ask after a blank required answer must not collide with round 0's
+    #: interrupt_id.
+    brief_gate_round: int
     draft_result: dict[str, Any]
     routing_result: dict[str, Any]
     assist_result: dict[str, Any]
@@ -681,6 +695,8 @@ def create_planning_graph(
             "_last_ran_step": None,
             "cached_document": _load_cached_document(state.get("document_id")),
             "classification_result": {},
+            "brief_result": {},
+            "brief_gate_round": 0,
             "draft_result": {},
             "routing_result": {},
             "assist_result": {},
@@ -780,6 +796,7 @@ def create_planning_graph(
                 ),
                 "attempts": 0,
                 "reasoning_level": state.get("reasoning_level", ReasoningLevel.BALANCED.value),
+                "writing_brief": (state.get("brief_result") or {}).get("answers") or {},
             },
             config=child_config(config),
         )
@@ -1058,6 +1075,7 @@ def create_planning_graph(
             draft_result=state.get("draft_result") or {},
             assist_result=state.get("assist_result") or {},
             reset_requested=reset_requested,
+            brief_answers=(state.get("brief_result") or {}).get("answers"),
         )
         result: dict[str, Any] = {"focus": update} if update else {}
         outcome_note = _summarize_step_outcome(
@@ -1113,6 +1131,47 @@ def create_planning_graph(
         state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
     ) -> None:
         updates["classification_result"] = await _run_classification(state, config)
+
+    async def _step_brief(
+        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
+    ) -> None:
+        """Resolve the pre-draft writing brief -- deterministic, no interrupt().
+
+        Never pauses the run itself: that happens in brief_gate_node, a
+        separate node reached only via route_after_step, for the same
+        reason human_gate_node is split from the step that produces
+        draft_result -- interrupt() replays its own node from the top on
+        resume, and this resolution is cheap enough to replay but the point
+        of the split is to keep it that way as the resolver grows.
+
+        Wrapped in its own try/except and degrades to a zero-question
+        result (falling back to whatever the session's prior brief already
+        carries) on any failure: a bug in a hint-gatherer must never be
+        able to leave `brief_result` empty, which would leave `draft`
+        looking permanently unready to `step_graph.ready_steps`.
+        """
+        focus = state.get("focus") or SessionFocus()
+        try:
+            resolution = resolve_brief(state["input_text"], classification, focus.writing_brief)
+        except Exception:
+            logger.exception("Writing-brief resolution failed; continuing without one.")
+            updates["brief_result"] = {
+                "status": StepStatus.COMPLETED,
+                "answers": dict(focus.writing_brief or {}),
+                "resolved": {},
+                "questions": [],
+            }
+            return
+
+        updates["brief_result"] = {
+            "status": StepStatus.COMPLETED,
+            "answers": {key: item.value for key, item in resolution.resolved.items()},
+            "resolved": {
+                key: {"value": item.value, "label": item.label, "source": item.source}
+                for key, item in resolution.resolved.items()
+            },
+            "questions": list(resolution.questions),
+        }
 
     async def _step_draft(
         state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
@@ -1289,6 +1348,7 @@ def create_planning_graph(
         str, Callable[[PlanningState, RunnableConfig, dict[str, Any], dict[str, Any]], Awaitable[None]]
     ] = {
         "classification": _step_classification,
+        "brief": _step_brief,
         "draft": _step_draft,
         "routing": _step_routing,
         "assist": _step_assist,
@@ -1521,6 +1581,110 @@ def create_planning_graph(
             }
         return output
 
+    async def brief_gate_node(state: PlanningState, config: RunnableConfig) -> dict[str, Any]:
+        """Pause the run for the writing brief's unanswered questions.
+
+        A separate node from `_step_brief` for the same reason `human_gate_node`
+        is separate from `execute_step_node`: `interrupt()` replays its own
+        node from the top on resume. `_step_brief`'s actual resolution work
+        already ran and is sitting in `brief_result` -- resuming here replays
+        only a hash and a couple of dict lookups, never `resolve_brief` itself.
+        """
+        brief_result = state.get("brief_result") or {}
+        questions = brief_result.get("questions") or []
+        brief_gate_round = state.get("brief_gate_round", 0)
+
+        payload = {
+            "kind": "writing_brief",
+            "title": "Yazım Briefi",
+            "intro": "Taslağı yazmadan önce netleştirmem gereken birkaç nokta var.",
+            "questions": questions,
+            "resolved": brief_result.get("resolved") or {},
+            "round": brief_gate_round,
+            "resume_action": "answer",
+            "auto_value": AUTO_ANSWER,
+        }
+        # Deterministic, not a fresh uuid4 -- same reason human_gate_node's
+        # hash is: interrupt() re-executes everything before it on resume,
+        # including this computation, and it must come out identical both
+        # times for the frontend's dedup to work. run_id (not
+        # current_step_idx, which brief always runs at index 0 or 1 well
+        # before draft) plus brief_gate_round is what gives a re-ask after a
+        # blank required answer a distinct id from round 0's.
+        interrupt_id = hashlib.sha256(
+            f"writing_brief:{'|'.join(sorted(question['key'] for question in questions))}:"
+            f"{state.get('run_id', '')}:{brief_gate_round}".encode("utf-8")
+        ).hexdigest()[:16]
+
+        HITL_INTERRUPTS.labels(kind="writing_brief").inc()
+        await emit_node_start(
+            config, "brief_gate", "Yazım Briefi", "Taslak öncesi yazım briefi bekleniyor..."
+        )
+        await emit_interrupt(
+            config, kind="writing_brief", interrupt_id=interrupt_id, payload=payload
+        )
+        answer = interrupt(payload)
+        answer = answer if isinstance(answer, dict) else {}
+        await emit_node_end(
+            config, "brief_gate", "Yazım Briefi", "Yazım briefi yanıtı alındı.", answer
+        )
+
+        if answer.get("action") == "reject":
+            reply = "Taslak talebi iptal edildi."
+            updates: dict[str, Any] = {
+                # Clears `questions` too -- route_after_brief_gate reads it
+                # to decide whether to re-pause, and without this the stale
+                # pre-reject question list would route straight back to
+                # "brief_gate" instead of "end".
+                "brief_result": {**brief_result, "questions": []},
+                "assist_result": {"reply": reply, "status": StepStatus.COMPLETED},
+                "draft_result": {
+                    "status": StepStatus.SKIPPED,
+                    "reason": "Kullanıcı taslağı iptal etti.",
+                },
+                "history": [{"role": "assistant", "content": reply}],
+            }
+            updates["final_output"] = _compile_final_output(state, updates)
+            return updates
+
+        raw_answers = answer.get("answers") or {}
+        merged_answers = dict(brief_result.get("answers") or {})
+        for key, value in raw_answers.items():
+            if isinstance(value, list):
+                merged_answers[key] = ", ".join(str(item) for item in value if item)
+            elif isinstance(value, str):
+                merged_answers[key] = value
+
+        required_keys = {
+            question["key"] for question in questions if question.get("required", True)
+        }
+        residual = [key for key in required_keys if not (merged_answers.get(key) or "").strip()]
+
+        if residual:
+            residual_questions = [question for question in questions if question["key"] in residual]
+            return {
+                "brief_result": {
+                    **brief_result,
+                    "answers": merged_answers,
+                    "questions": residual_questions,
+                },
+                "brief_gate_round": brief_gate_round + 1,
+            }
+
+        return {
+            "brief_result": {**brief_result, "answers": merged_answers, "questions": []},
+            "focus": {"writing_brief": merged_answers},
+        }
+
+    def route_after_brief_gate(state: PlanningState) -> str:
+        brief_result = state.get("brief_result") or {}
+        if brief_result.get("questions"):
+            return "brief_gate"
+        draft_result = state.get("draft_result") or {}
+        if draft_result.get("status") == StepStatus.SKIPPED:
+            return "end"
+        return "continue"
+
     async def human_gate_node(
         state: PlanningState, config: RunnableConfig
     ) -> dict[str, Any]:
@@ -1725,6 +1889,7 @@ def create_planning_graph(
                 for example in (draft_result.get("style_examples") or [])
             ),
             correspondence_type_source=draft_result.get("correspondence_type_source") or "",
+            writing_brief=draft_result.get("writing_brief") or {},
         )
 
         await emit_node_start(
@@ -1763,6 +1928,14 @@ def create_planning_graph(
 
     def route_after_step(state: PlanningState) -> str:
         steps = state.get("plan_steps") or []
+
+        if (
+            has_checkpointer
+            and settings.HITL_BRIEF_GATE_ENABLED
+            and state.get("_last_ran_step") == "brief"
+            and (state.get("brief_result") or {}).get("questions")
+        ):
+            return "brief_gate"
 
         if has_checkpointer and state.get("_last_ran_step") in {"draft", "revise"}:
             draft_result = state.get("draft_result") or {}
@@ -1817,6 +1990,7 @@ def create_planning_graph(
     builder = StateGraph(PlanningState)
     builder.add_node("planning", planning_node)
     builder.add_node("executor", execute_step_node)
+    builder.add_node("brief_gate", brief_gate_node)
     builder.add_node("human_gate", human_gate_node)
     builder.add_node("gate_revise", gate_revise_node)
     builder.add_node("focus", focus_node)
@@ -1827,7 +2001,17 @@ def create_planning_graph(
     builder.add_conditional_edges(
         "executor",
         route_after_step,
-        {"continue": "executor", "human_gate": "human_gate", "end": "focus"},
+        {
+            "continue": "executor",
+            "brief_gate": "brief_gate",
+            "human_gate": "human_gate",
+            "end": "focus",
+        },
+    )
+    builder.add_conditional_edges(
+        "brief_gate",
+        route_after_brief_gate,
+        {"brief_gate": "brief_gate", "continue": "executor", "end": "focus"},
     )
     builder.add_conditional_edges(
         "human_gate",

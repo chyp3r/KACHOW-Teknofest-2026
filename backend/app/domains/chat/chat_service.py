@@ -596,7 +596,10 @@ class ChatService:
         something a chat history view can show in place of a message bubble.
         """
         if request.action == "answer" and request.answers:
-            return "; ".join(f"{key}: {value}" for key, value in request.answers.items())
+            return "; ".join(
+                f"{key}: {', '.join(value) if isinstance(value, list) else value}"
+                for key, value in request.answers.items()
+            )
         if request.action == "reject" and request.reason:
             return f"reject: {request.reason}"
         if request.instructions:

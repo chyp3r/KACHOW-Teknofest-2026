@@ -82,6 +82,7 @@ from app.ai.workflows.events import (
     emit_token,
 )
 from app.ai.workflows.resilience import IO_RETRY
+from app.ai.workflows.writing_brief import format_writing_brief
 from app.core.config import settings
 from app.core.enums.step_status import StepStatus
 from app.observability.ai_metrics import DRAFT_REVISIONS, DRAFT_SCORE
@@ -159,6 +160,7 @@ def _build_brief(active_draft: DraftVersion, context: str) -> str:
         f"2. Doğrulanmış Sınıflandırma: {active_draft.classification.get('summary', 'Özet yok.')}\n"
         f'3. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
         f"{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
+        f"4. Yazım Briefi:\n{format_writing_brief(active_draft.writing_brief)}\n"
     )
 
 

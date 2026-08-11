@@ -59,11 +59,12 @@ def test_routing_is_unaffected_by_a_failed_classification_it_does_not_depend_on(
     assert _dependency_failed("routing", state, {}) is None
 
 
-def test_step_specs_cover_all_seven_dispatchable_steps_with_only_two_edges():
+def test_step_specs_cover_all_eight_dispatchable_steps_with_only_three_edges():
     assert set(STEP_SPECS) == {
-        "classification", "draft", "routing", "assist", "revise", "clarify", "refuse",
+        "classification", "brief", "draft", "routing", "assist", "revise", "clarify", "refuse",
     }
-    assert STEP_SPECS["draft"].depends_on == ("classification",)
+    assert STEP_SPECS["brief"].depends_on == ("classification",)
+    assert STEP_SPECS["draft"].depends_on == ("classification", "brief")
     assert STEP_SPECS["routing"].depends_on == ("draft",)
     for name in ("classification", "assist", "revise", "clarify", "refuse"):
         assert STEP_SPECS[name].depends_on == ()

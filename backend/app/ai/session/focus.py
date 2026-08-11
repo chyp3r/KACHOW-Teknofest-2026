@@ -126,6 +126,14 @@ class DraftVersion:
     source_document: str = ""
     style_examples: tuple[str, ...] = ()
     correspondence_type_source: str = ""
+    #: The pre-draft writing brief this version was written under (see
+    #: app.ai.workflows.writing_brief) -- who's writing, who it's going to,
+    #: anlatım/kapanış. Carried forward for the same reason
+    #: classification/context/source_document are: a later `revise` turn
+    #: rebuilds the same grounding brief without re-resolving it, and must
+    #: not drift back to an unstated direction the way the original
+    #: "KACMAK ekibi olarak" bug did.
+    writing_brief: dict[str, Any] = dataclasses.field(default_factory=dict)
     status: str = ""
     rejection_reason: str = ""
     conflicts: tuple[dict[str, Any], ...] = ()
@@ -169,6 +177,13 @@ class SessionFocus:
             ``compute_focus_update``). Lets a reply or a later turn
             reference "the draft you just rejected" without walking
             ``draft_history`` to find it.
+        writing_brief: Answers from the pre-draft writing-brief gate (see
+            ``app.ai.workflows.writing_brief``), carried across turns so a
+            second draft/revise turn in the same session doesn't re-ask who
+            is writing to whom. Cleared whenever ``active_draft`` is reset
+            (see ``compute_focus_update``'s ``reset_requested`` branch) --
+            otherwise "yeni bir taslak yazalım" would silently inherit the
+            previous letter's addressee.
     """
 
     active_document_id: Optional[str] = None
@@ -180,6 +195,7 @@ class SessionFocus:
     last_intent: Optional[str] = None
     active_draft_idle_turns: int = 0
     last_rejection: Optional[dict[str, Any]] = None
+    writing_brief: Optional[dict[str, Any]] = None
 
 
 def _accumulate_objective(existing: str, addition: str) -> str:
@@ -233,6 +249,7 @@ def _draft_version_from_result(
             for example in (draft_result.get("style_examples") or [])
         ),
         correspondence_type_source=draft_result.get("correspondence_type_source") or "",
+        writing_brief=draft_result.get("writing_brief") or {},
         status=str(draft_result.get("status") or ""),
         conflicts=tuple(draft_result.get("conflicts") or ()),
         changelog=draft_result.get("changelog") or {},
@@ -249,6 +266,7 @@ def compute_focus_update(
     draft_result: dict[str, Any],
     assist_result: Optional[dict[str, Any]] = None,
     reset_requested: bool = False,
+    brief_answers: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Derive this turn's partial ``SessionFocus`` update.
 
@@ -274,12 +292,23 @@ def compute_focus_update(
             in the same turn cannot both be true of a real message, and a
             freshly produced version winning that contradiction is the safer
             of the two readings.
+        brief_answers: This turn's settled ``brief_result["answers"]``, if
+            the plan included a ``brief`` step. Carried forward
+            unconditionally so a turn whose brief resolved silently (no
+            gate needed) still persists it for the next turn -- the gate
+            itself already writes the same value directly when it does
+            fire (see ``planning_graph.brief_gate_node``); this is what
+            covers the no-gate path. Overridden by an explicit
+            ``reset_requested`` below, which always wins.
 
     Returns:
         A partial update for the ``focus`` channel (see ``merge_focus``).
         Empty when nothing changed.
     """
     update: dict[str, Any] = {}
+
+    if brief_answers:
+        update["writing_brief"] = brief_answers
 
     anchor = (assist_result or {}).get("last_referenced_anchor")
     if anchor:
@@ -368,6 +397,7 @@ def compute_focus_update(
     elif reset_requested and focus.active_draft is not None:
         update["active_draft"] = None
         update["active_draft_idle_turns"] = 0
+        update["writing_brief"] = None
     elif focus.active_draft is not None:
         if plan_intent in _DRAFT_TOUCHING_INTENTS:
             update["active_draft_idle_turns"] = 0

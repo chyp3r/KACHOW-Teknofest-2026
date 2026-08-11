@@ -120,7 +120,7 @@ __all__ = [
 #: model that was just told not to write the off-topic text gets one more
 #: opportunity to write it anyway.
 PLAN_BY_INTENT: dict[str, list[str]] = {
-    "draft": ["classification", "draft", "routing"],
+    "draft": ["classification", "brief", "draft", "routing"],
     "analyze": ["classification"],
     "assist": ["assist"],
     "revise": ["revise"],
@@ -142,6 +142,7 @@ REASONING_BY_INTENT: dict[str, str] = {
 #: purpose: it never appears in a compound plan (see ``COMPOUND_PAIR``).
 STEP_ORDER: tuple[str, ...] = (
     "classification",
+    "brief",
     "draft",
     "revise",
     "routing",

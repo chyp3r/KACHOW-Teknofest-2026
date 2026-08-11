@@ -112,7 +112,22 @@ def build_missing_info_request(
     return list(seen.values())
 
 
-def apply_answers(draft: str, answers: dict[str, str]) -> tuple[str, list[str]]:
+def _coerce_answer(value: object) -> str:
+    """Flatten a resume answer to a string, joining a multi-select list.
+
+    ``ChatResumeRequest.answers`` widened to ``dict[str, str | list[str]]``
+    to carry a multi_select PromptQuestion's answer (see
+    app.ai.workflows.event_schema.PromptQuestion) -- no missing-information
+    question is multi_select today, but this keeps ``apply_answers`` correct
+    if that ever changes, joined plainly rather than via a hidden delimiter
+    that could leak into the substituted placeholder text.
+    """
+    if isinstance(value, list):
+        return ", ".join(str(item) for item in value if item)
+    return str(value or "")
+
+
+def apply_answers(draft: str, answers: dict[str, Any]) -> tuple[str, list[str]]:
     """Substitute answered placeholders back into the draft without regenerating it.
 
     Args:
@@ -128,7 +143,7 @@ def apply_answers(draft: str, answers: dict[str, str]) -> tuple[str, list[str]]:
     def _replace(match: "re.Match[str]") -> str:
         placeholder_text = match.group(0).strip("[]").strip()
         key = _slugify(placeholder_text)
-        answer = (answers.get(key) or "").strip()
+        answer = _coerce_answer(answers.get(key)).strip()
         if answer:
             return answer
         residual.append(key)

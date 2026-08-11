@@ -35,6 +35,7 @@ from app.ai.workflows.events import (
     emit_token,
 )
 from app.ai.workflows.resilience import IO_RETRY
+from app.ai.workflows.writing_brief import format_writing_brief
 from app.ai.reasoning_levels import ReasoningLevelPreset, get_reasoning_level_preset
 from app.core.config import settings
 from app.core.enums.reasoning_level import ReasoningLevel
@@ -89,6 +90,13 @@ class DraftState(TypedDict, total=False):
     error: str
     attempts: int
     brief: str
+    #: Final slot answers from the pre-draft writing-brief gate (see
+    #: app.ai.workflows.writing_brief) -- who's writing, who it's going to,
+    #: anlatım/kapanış. Rendered into `brief` (the writer's actual prompt
+    #: text) by `_build_brief`; kept here too, untouched, so the resulting
+    #: draft_result carries it forward for SessionFocus.DraftVersion (see
+    #: planning_graph._draft_version_from_result) and a later `revise` turn.
+    writing_brief: dict[str, Any]
     #: Speed-vs-quality tier for this run ("fast"/"balanced"/"deep"); see
     #: app.ai.reasoning_levels.get_reasoning_level_preset. Absent or unknown
     #: resolves to "balanced", so older callers that never set it are
@@ -144,7 +152,10 @@ def _coerce_fields(classification: dict[str, Any]) -> dict[str, Any]:
 
 
 def _build_brief(
-    classification: dict[str, Any], context: str, instructions: str
+    classification: dict[str, Any],
+    context: str,
+    instructions: str,
+    writing_brief: dict[str, Any] | None = None,
 ) -> str:
     """Compose the grounding brief handed to the writer.
 
@@ -152,6 +163,13 @@ def _build_brief(
         classification: Analysis output for the incoming document.
         context: Retrieved legislation excerpts.
         instructions: The user's drafting instructions.
+        writing_brief: Resolved pre-draft writing-style slots (see
+            app.ai.workflows.writing_brief) -- who's writing, who it's
+            going to, anlatım/kapanış. Rendered as section 7, marked as
+            human-approved source information: this is what fixes the
+            "KACMAK ekibi olarak" bug, where the only proper noun in the
+            user's own text had no declared direction and the writer put
+            it in the one slot this brief used to describe (Muhatap).
 
     Returns:
         The brief text.
@@ -178,6 +196,8 @@ def _build_brief(
         f'5. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
         f"{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
         f"6. Kullanıcı Talebi ve Talimatlar: {instructions}\n"
+        f"7. YAZIM BRİEFİ (İNSAN ONAYLI -- KAYNAK BİLGİ SAYILIR):\n"
+        f"{format_writing_brief(writing_brief or {})}\n"
     )
 
 
@@ -354,7 +374,9 @@ def create_draft_graph(
             "correspondence_type_source": type_source,
             "context": context,
             "instructions": instructions,
-            "brief": _build_brief(classification, context, instructions),
+            "brief": _build_brief(
+                classification, context, instructions, state.get("writing_brief")
+            ),
             "status": "IN_PROGRESS",
             "error": "",
             "attempts": state.get("attempts", 0),

@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import Command
 
 from app.ai.workflows.planner import IntentOutput
 from app.ai.workflows.planning_graph import create_planning_graph
@@ -80,6 +81,26 @@ def _build_graph(fake_llm, fake_fast_llm):
     return graph, draft_graph
 
 
+async def _resolve_brief_gate_with_defaults(graph, config, result):
+    """Resume a paused brief_gate with "Sen karar ver" for every question.
+
+    Every "draft" turn here starts document-less with empty classification
+    fields, so the pre-draft writing brief (see
+    app.ai.workflows.writing_brief) always has something unresolved and
+    pauses first -- this file is about revise/clarify, not that gate.
+    """
+    if result.get("final_output"):
+        return result
+    snapshot = await graph.aget_state(config)
+    assert snapshot.next == ("brief_gate",)
+    payload = snapshot.tasks[0].interrupts[0].value
+    answers = {question["key"]: "__auto__" for question in payload["questions"]}
+    return await graph.ainvoke(
+        Command(resume={"action": "answer", "answers": answers, "instructions": ""}),
+        config=config,
+    )
+
+
 @pytest.mark.asyncio
 async def test_a_targeted_revise_never_reruns_the_draft_pipeline(fake_llm, fake_fast_llm):
     graph, draft_graph = _build_graph(fake_llm, fake_fast_llm)
@@ -88,6 +109,7 @@ async def test_a_targeted_revise_never_reruns_the_draft_pipeline(fake_llm, fake_
     first = await graph.ainvoke(
         {"input_text": "Bu evraka cevap yazısı hazırla.", "document_id": None}, config=config
     )
+    first = await _resolve_brief_gate_with_defaults(graph, config, first)
     assert first["final_output"]["draft"]["draft"] == DRAFT_TEXT
     assert draft_graph.ainvoke.await_count == 1
 
@@ -98,8 +120,12 @@ async def test_a_targeted_revise_never_reruns_the_draft_pipeline(fake_llm, fake_
     )
 
     # The single-call revise flow ran instead -- the (expensive, multi-call)
-    # draft pipeline was never touched a second time.
+    # draft pipeline was never touched a second time. And unlike the first
+    # (draft) turn, a revise turn's plan is just ["revise"] -- "brief" is
+    # not in it at all, so the writing-brief gate structurally cannot fire.
     assert draft_graph.ainvoke.await_count == 1
+    snapshot_after_revise = await graph.aget_state(config)
+    assert snapshot_after_revise.next != ("brief_gate",)
 
     revised_draft = second["final_output"]["draft"]["draft"]
     assert "Bilgilerinize sunulur." in revised_draft
@@ -121,9 +147,10 @@ async def test_an_ambiguous_expensive_followup_asks_instead_of_guessing(fake_llm
     graph, draft_graph = _build_graph(fake_llm, fake_fast_llm)
     config = {"configurable": {"thread_id": "clarify-e2e"}}
 
-    await graph.ainvoke(
+    initial = await graph.ainvoke(
         {"input_text": "Bu evraka cevap yazısı hazırla.", "document_id": None}, config=config
     )
+    await _resolve_brief_gate_with_defaults(graph, config, initial)
 
     # Not "Kısalt." or "Bunu biraz farklı ele alalım." -- both are now exactly
     # the cases the fusion rewrite and the follow-up lexical fixes exist for
