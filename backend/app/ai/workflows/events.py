@@ -361,6 +361,7 @@ async def emit_question(
     question: str,
     options: list[dict[str, str]],
     allow_free_text: bool = True,
+    questions: Optional[list[dict[str, Any]]] = None,
 ) -> None:
     """Publish a decision the run needs, offered as clickable options.
 
@@ -378,6 +379,11 @@ async def emit_question(
         options: ``[{"value": ..., "label": ...}, ...]``.
         allow_free_text: Whether a typed reply can also resolve this
             question. Always True today.
+        questions: The canonical ``PromptQuestion``-shaped list this event
+            carries. Omitted by every caller today (``_step_clarify`` only
+            ever asks one question) -- when absent, a single-element list is
+            built from ``question``/``options``/``allow_free_text`` so old
+            and new clients see the same content either way.
     """
     await emit(
         config,
@@ -387,6 +393,18 @@ async def emit_question(
             "question": question,
             "options": list(options),
             "allow_free_text": allow_free_text,
+            "questions": questions
+            if questions is not None
+            else [
+                {
+                    "key": node,
+                    "question": question,
+                    "options": list(options),
+                    "allow_free_text": allow_free_text,
+                    "multi_select": False,
+                    "required": True,
+                }
+            ],
         },
     )
 

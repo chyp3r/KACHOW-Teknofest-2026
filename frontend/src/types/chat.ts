@@ -1,4 +1,4 @@
-import type { InfoQuestion, ReasoningLevel } from "./documents";
+import type { ReasoningLevel } from "./documents";
 
 export type WorkflowNodeStatus =
   | "todo"
@@ -15,6 +15,23 @@ export interface WorkflowLog {
 export interface QuestionOption {
   value: string;
   label: string;
+  description?: string;
+}
+
+// The canonical shape every "ask the user" surface publishes questions in --
+// the pre-draft writing brief, missing-information requests, and clarify's
+// intent question all render through one PromptQuestionCard component
+// keyed on this type. See backend app.ai.workflows.event_schema.PromptQuestion.
+export interface PromptQuestion {
+  key: string;
+  question: string;
+  header?: string;
+  help?: string;
+  example?: string | null;
+  options: QuestionOption[];
+  multi_select: boolean;
+  allow_free_text: boolean;
+  required: boolean;
 }
 
 export interface ChatMessage {
@@ -88,10 +105,26 @@ export interface RevisionChangelog {
 }
 
 export interface InterruptState {
-  kind: "missing_information" | "draft_approval";
+  kind: "missing_information" | "draft_approval" | "writing_brief";
   interruptId: string;
   payload: {
-    questions?: InfoQuestion[];
+    questions?: PromptQuestion[];
+    // Slots the writing-brief gate already resolved without asking --
+    // rendered as a read-only "bunları zaten biliyorum" strip. Only
+    // present on kind "writing_brief".
+    resolved?: Record<string, { value: string; label?: string; source?: string }>;
+    title?: string;
+    intro?: string;
+    // "answer" on every gate today -- carried explicitly so the card knows
+    // to POST /chat/resume rather than send an ordinary chat message (the
+    // clarify "question" event has no resume_action for that reason).
+    resume_action?: "answer";
+    // The "Sen karar ver" sentinel value -- see backend
+    // app.ai.workflows.writing_brief.AUTO_ANSWER. Blank is deliberately
+    // never used for this: an empty answer must still count as unanswered
+    // so a required-and-skipped slot gets re-asked.
+    auto_value?: string;
+    round?: number;
     draft?: string;
     verification?: Record<string, unknown>;
     judge?: Record<string, unknown>;
@@ -199,6 +232,7 @@ export type WorkflowEvent =
       question: string;
       options: QuestionOption[];
       allow_free_text: boolean;
+      questions?: PromptQuestion[];
     })
   | (EventBase & {
       event: "final_result";

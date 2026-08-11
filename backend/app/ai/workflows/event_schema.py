@@ -123,7 +123,7 @@ class GuardrailEvent(BaseModel):
 
 class InterruptEvent(BaseModel):
     event: Literal["interrupt"] = "interrupt"
-    kind: Literal["missing_information", "draft_approval"]
+    kind: Literal["missing_information", "draft_approval", "writing_brief"]
     interrupt_id: str
     payload: dict[str, Any]
     seq: Optional[int] = None
@@ -154,10 +154,37 @@ class NoticeEvent(BaseModel):
 
 
 class QuestionOption(BaseModel):
-    """One clickable answer to a ``QuestionEvent``."""
+    """One clickable answer to a ``PromptQuestion``/``QuestionEvent``."""
 
     value: str
     label: str
+    #: Optional second line of explanation shown under the option's label.
+    description: str = ""
+
+
+class PromptQuestion(BaseModel):
+    """One question in the canonical shape shared by every "ask the user"
+    surface -- the pre-draft writing brief, missing-information requests,
+    and clarify's intent question all publish ``list[PromptQuestion]`` so a
+    single frontend card component can render all three.
+
+    ``missing_information`` keeps its own ``InfoQuestion`` internally (its
+    ``key`` is the join key ``apply_answers`` substitutes placeholders by)
+    and only converts to this shape at the emit boundary, via
+    ``InfoQuestion.to_prompt_question``.
+    """
+
+    key: str
+    question: str
+    header: str = ""
+    #: Why this is being asked -- legal/regulatory justification or similar
+    #: context. Mirrors ``InfoQuestion.why``.
+    help: str = ""
+    example: Optional[str] = None
+    options: list[QuestionOption] = Field(default_factory=list)
+    multi_select: bool = False
+    allow_free_text: bool = True
+    required: bool = True
 
 
 class QuestionEvent(BaseModel):
@@ -171,6 +198,10 @@ class QuestionEvent(BaseModel):
     same options. This event only tells the client to render the options as
     a card instead of leaving the user to retype one of the two Turkish
     labels verbatim.
+
+    ``question``/``options``/``allow_free_text`` are the original
+    single-question fields, kept as a populated mirror of ``questions[0]``
+    for backward compatibility; new clients should read ``questions``.
     """
 
     event: Literal["question"] = "question"
@@ -183,6 +214,7 @@ class QuestionEvent(BaseModel):
     #: ``_try_resolve_pending_clarification`` -- kept explicit so the client
     #: never has to assume it.
     allow_free_text: bool = True
+    questions: list[PromptQuestion] = Field(default_factory=list)
     seq: Optional[int] = None
 
 
@@ -236,6 +268,7 @@ __all__ = [
     "GuardrailEvent",
     "NoticeEvent",
     "QuestionOption",
+    "PromptQuestion",
     "QuestionEvent",
     "PlanningCompletedEvent",
     "InterruptEvent",

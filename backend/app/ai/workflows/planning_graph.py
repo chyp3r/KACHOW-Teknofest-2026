@@ -28,7 +28,7 @@ from app.ai.policy.budget import node_budget
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.ai.semantic.prototype_matcher import PrototypeMatcher
 from app.ai.tools.document_tools import ToolResult, build_assistant_tools
-from app.ai.verification import apply_answers, verify_draft
+from app.ai.verification import InfoQuestion, apply_answers, verify_draft
 from app.ai.workflows.events import (
     child_config,
     emit,
@@ -1536,10 +1536,21 @@ def create_planning_graph(
         missing_information = draft_result.get("missing_information") or []
         kind = "missing_information" if missing_information else "draft_approval"
 
+        # Emit-boundary conversion to the canonical PromptQuestion shape --
+        # InfoQuestion stays the internal type everywhere else (apply_answers
+        # and the resume contract key off it), this only widens what goes
+        # over the wire. Legacy label/why keys are kept alongside the new
+        # ones so the pre-existing frontend InfoQuestion[] parsing still
+        # works during the transition.
+        prompt_questions = [
+            {**question, **InfoQuestion(**question).to_prompt_question()}
+            for question in missing_information
+        ]
+
         gate_revision_count = state.get("gate_revision_count", 0)
         payload = {
             "kind": kind,
-            "questions": missing_information,
+            "questions": prompt_questions,
             "draft": draft_result.get("draft", ""),
             "verification": draft_result.get("verification", {}),
             "judge": draft_result.get("judge", {}),

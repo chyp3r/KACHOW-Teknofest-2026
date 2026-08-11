@@ -26,6 +26,28 @@ class InfoQuestion(BaseModel):
     example: str | None = Field(default=None, description="An example value, when one is obvious.")
     required: bool = Field(default=True)
 
+    def to_prompt_question(self) -> dict[str, Any]:
+        """Convert to the canonical ``PromptQuestion`` shape for the emit boundary.
+
+        ``InfoQuestion`` stays the type used everywhere internally --
+        ``apply_answers``/``_slugify`` and the resume contract all key off
+        ``key`` -- this only runs at ``human_gate_node``'s emit call, so one
+        frontend card component can render this alongside the writing-brief
+        and clarify questions. ``key`` is carried through byte-for-byte: it
+        is the join key ``apply_answers`` substitutes placeholders by.
+        """
+        return {
+            "key": self.key,
+            "question": f"'{self.label}' bilgisi nedir?",
+            "header": self.label,
+            "help": self.why,
+            "example": self.example,
+            "options": [],
+            "multi_select": False,
+            "allow_free_text": True,
+            "required": self.required,
+        }
+
 
 def _slugify(text: str) -> str:
     """Fold placeholder text into a stable, reproducible answer key."""
