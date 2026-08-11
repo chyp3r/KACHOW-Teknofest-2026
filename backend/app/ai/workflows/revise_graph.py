@@ -29,7 +29,13 @@ Two invariants this graph never violates:
    cannot silently drift (see ``app.ai.revision.instruction`` module
    docstring). Multiple spans are applied right-to-left against the
    *original* draft so earlier (leftward) offsets are never invalidated by
-   a later (rightward) splice.
+   a later (rightward) splice. The two paths that regenerate the *whole*
+   draft instead (no target span located; any repair-loop pass) have no
+   splice to fall back on, so they get a deterministic backstop instead --
+   ``verify`` runs ``app.ai.revision.elision.detect_content_loss`` against
+   the turn's true starting draft on every pass, catching a model that
+   elided real (already-filled-in) content with an ellipsis/shorthand
+   instead of reproducing it.
 """
 
 import asyncio
@@ -54,6 +60,7 @@ from app.ai.revision.conflict import (
     detect_conflicts_deterministic,
     merge_conflicts,
 )
+from app.ai.revision.elision import detect_content_loss
 from app.ai.revision.instruction import (
     EditDirective,
     RevisionInstruction,
@@ -66,6 +73,7 @@ from app.ai.revision.retrieval import maybe_extend_context
 from app.ai.session.focus import DraftVersion
 from app.ai.verification import (
     InfoQuestion,
+    RepairItem,
     VerificationReport,
     build_missing_info_request,
     judge_draft,
@@ -200,7 +208,11 @@ def _build_directive_prompt(
         scope_rule = (
             "### KURAL:\nAşağıdaki kullanıcı talimatına göre TÜM taslağı yeniden yaz. "
             "Brief'te olmayan hiçbir yeni bilgi (kişi, kurum, tarih, sayı, mevzuat maddesi) "
-            "ekleme; yalnızca istenen üslup/kapsam/uzunluk değişikliğini yap."
+            "ekleme; yalnızca istenen üslup/kapsam/uzunluk değişikliğini yap. "
+            "Talimatla ilgisi olmayan her cümleyi, önceki taslaktaki haliyle, KELİMESİ "
+            "KELİMESİNE ve EKSİKSİZ olarak yeniden üret. '...', '(değişmedi)', '[aynı]' "
+            "gibi kısaltma veya atlama ifadeleriyle hiçbir bölümü özetleme; zaten "
+            "doldurulmuş bilgileri (isim, kurum, tarih vb.) asla silme."
         )
 
     return (
@@ -238,7 +250,10 @@ def _build_repair_prompt(
         f"### DÜZELTİLMESİ GEREKEN KUSURLAR:\n{numbered or '(kusur listesi boş)'}\n\n"
         "### KURAL:\n"
         "Yalnızca listelenen kusurları düzelt. Başka hiçbir cümleyi değiştirme. "
-        "`[...]` yer tutucularını olduğu gibi bırak."
+        "`[...]` yer tutucularını olduğu gibi bırak. Listelenmeyen her cümleyi önceki "
+        "taslaktaki haliyle, KELİMESİ KELİMESİNE ve EKSİKSİZ olarak geri döndür -- "
+        "'...', '(değişmedi)', '[aynı]' gibi kısaltma veya atlama ifadeleriyle hiçbir "
+        "bölümü özetleme; zaten doldurulmuş bilgileri asla silme."
         f"{_format_style_examples_flat(style_examples)}"
     )
 
@@ -565,6 +580,34 @@ def create_revise_graph(
 
         combined = merge_verdicts(report, verdict, missing_information=missing_information)
 
+        # Neither of the two paths that can produce `draft_text` without
+        # splicing through `_merge` (a whole-draft rewrite with no located
+        # target, or any repair-loop pass -- see rewrite_node) had anything
+        # checking that the model actually reproduced what it wasn't asked
+        # to change. Compared against `active_draft.text` specifically (the
+        # turn's true starting point, not a possibly-already-elided repair
+        # attempt) so a loss introduced on attempt 1 is still caught on
+        # attempt 2's check, not laundered away as "no further loss".
+        content_loss = detect_content_loss(
+            active_draft.text, draft_text, state.get("instructions", "")
+        )
+        if content_loss is not None:
+            logger.warning("Revise rewrite dropped content: %s", content_loss.detail)
+            combined.repair_items.append(
+                RepairItem(
+                    kind="content_loss",
+                    source="deterministic",
+                    detail=content_loss.detail,
+                    suggested_fix=content_loss.suggested_fix,
+                )
+            )
+            combined.requires_revision = True
+            # Not just another automatic repair attempt: if the bounded
+            # repair loop runs out before this is actually fixed, the draft
+            # must not ship as a quiet COMPLETED -- silently dropped content
+            # is worse than a missing structural marker.
+            combined.requires_human_approval = True
+
         DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)
         if verdict is not None:
             DRAFT_SCORE.labels(source="judge").observe(verdict.score)
@@ -609,6 +652,8 @@ def create_revise_graph(
                 f"{evaluation_notes} Taslakta {len(pii_findings)} adet kişisel veri "
                 f"bulgusu tespit edildi ({kinds}); insan onayı gerekiyor."
             )
+        if content_loss is not None:
+            evaluation_notes = f"{evaluation_notes} {content_loss.detail}"
 
         update = {
             "confidence_score": combined.combined_score,
