@@ -2,8 +2,9 @@ import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, FileText, Histor
 import { useState, type FormEvent } from "react";
 import type { ConflictFinding, InterruptState } from "../../types/chat";
 import { Button } from "../../components/Button";
-import { Input, Textarea } from "../../components/FormControls";
+import { Textarea } from "../../components/FormControls";
 import { FormActions } from "../../components/LayoutPrimitives";
+import { PromptQuestionCard, type PromptAnswers } from "./PromptQuestionCard";
 
 const SEVERITY_LABEL: Record<ConflictFinding["severity"], string> = {
   critical: "Kritik",
@@ -20,22 +21,20 @@ export function InterruptPanel({
   loading: boolean;
   onResume: (
     action: "answer" | "approve" | "revise" | "reject",
-    answers: Record<string, string>,
+    answers: PromptAnswers,
     instructions: string,
     reason?: string,
   ) => Promise<void>;
 }) {
-  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [instructions, setInstructions] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
   const questions = Array.isArray(interrupt.payload.questions)
     ? interrupt.payload.questions
     : [];
-  const canSubmitAnswers = questions
-    .filter((question) => question.required !== false)
-    .every((question) => answers[question.key]?.trim());
   const isMissingInformation = interrupt.kind === "missing_information";
+  const isWritingBrief = interrupt.kind === "writing_brief";
+  const autoValue = interrupt.payload.auto_value ?? "__auto__";
 
   const conflicts = Array.isArray(interrupt.payload.conflicts)
     ? interrupt.payload.conflicts
@@ -46,28 +45,33 @@ export function InterruptPanel({
   const maxRevisionRounds = interrupt.payload.max_revision_rounds;
   const revisionExhausted = interrupt.payload.revision_exhausted ?? false;
 
-  const submitAnswers = (event: FormEvent) => {
-    event.preventDefault();
-    if (!canSubmitAnswers || loading) return;
-    void onResume("answer", answers, "");
-  };
-
   const submitReject = (event: FormEvent) => {
     event.preventDefault();
     if (!rejectReason.trim() || loading) return;
     void onResume("reject", {}, "", rejectReason.trim());
   };
 
+  const acceptAllDefaults = () => {
+    if (loading) return;
+    const answers: PromptAnswers = {};
+    for (const question of questions) answers[question.key] = autoValue;
+    void onResume("answer", answers, "");
+  };
+
   return (
     <section
       className={`interrupt-panel ${
-        isMissingInformation ? "interrupt-information" : "interrupt-approval"
+        isMissingInformation
+          ? "interrupt-information"
+          : isWritingBrief
+            ? "interrupt-brief"
+            : "interrupt-approval"
       }`}
       aria-labelledby="interrupt-title"
     >
       <header className="interrupt-header">
         <span className="interrupt-icon">
-          {isMissingInformation ? (
+          {isMissingInformation || isWritingBrief ? (
             <AlertCircle size={20} />
           ) : (
             <CheckCircle2 size={20} />
@@ -76,19 +80,24 @@ export function InterruptPanel({
         <div>
           <span className="eyebrow">İşlem sizden bilgi bekliyor</span>
           <h2 id="interrupt-title">
-            {isMissingInformation
-              ? "Devam etmek için birkaç bilgi gerekli"
-              : "Hazırlanan taslak onayınızı bekliyor"}
+            {isWritingBrief
+              ? (interrupt.payload.title ?? "Taslak öncesi birkaç nokta")
+              : isMissingInformation
+                ? "Devam etmek için birkaç bilgi gerekli"
+                : "Hazırlanan taslak onayınızı bekliyor"}
           </h2>
           <p>
-            {isMissingInformation
-              ? "Alanları tamamladığınızda çalışma kaldığı yerden devam edecek."
-              : "Taslağı inceleyip onaylayabilir veya değişiklik isteyebilirsiniz."}
+            {isWritingBrief
+              ? (interrupt.payload.intro ??
+                "Taslağı yazmadan önce netleştirmem gereken birkaç nokta var.")
+              : isMissingInformation
+                ? "Alanları tamamladığınızda çalışma kaldığı yerden devam edecek."
+                : "Taslağı inceleyip onaylayabilir veya değişiklik isteyebilirsiniz."}
           </p>
         </div>
       </header>
 
-      {!isMissingInformation && typeof revisionRound === "number" && (
+      {!isMissingInformation && !isWritingBrief && typeof revisionRound === "number" && (
         <p className="interrupt-revision-round">
           <History size={14} />
           Revizyon turu {revisionRound + 1}
@@ -152,40 +161,34 @@ export function InterruptPanel({
       )}
 
       {isMissingInformation ? (
-        <form className="interrupt-form" onSubmit={submitAnswers}>
-          <div className="interrupt-question-grid">
-            {questions.map((question) => (
-              <Input
-                  key={question.key}
-                  label={question.label}
-                  description={question.why}
-                  value={answers[question.key] ?? ""}
-                  placeholder={question.example ?? ""}
-                  required={question.required !== false}
-                  onChange={(event) =>
-                    setAnswers((previous) => ({
-                      ...previous,
-                      [question.key]: event.target.value,
-                    }))
-                  }
-                />
-            ))}
-          </div>
-          <div className="interrupt-actions">
-            <small>
-              {canSubmitAnswers
-                ? "Bilgiler hazır. İşleme devam edebilirsiniz."
-                : "Devam etmek için gerekli alanları doldurun."}
-            </small>
-            <Button
-              type="submit"
-              loading={loading}
-              disabled={!canSubmitAnswers}
-            >
-              {loading ? "Gönderiliyor…" : "Bilgileri gönder ve devam et"}
+        <PromptQuestionCard
+          questions={questions}
+          loading={loading}
+          submitLabel={loading ? "Gönderiliyor…" : "Bilgileri gönder ve devam et"}
+          onSubmit={(answers) => void onResume("answer", answers, "")}
+        />
+      ) : isWritingBrief ? (
+        <>
+          <PromptQuestionCard
+            questions={questions}
+            resolved={interrupt.payload.resolved}
+            loading={loading}
+            submitLabel={loading ? "Gönderiliyor…" : "Bilgileri gönder ve devam et"}
+            onSubmit={(answers) => void onResume("answer", answers, "")}
+          />
+          <FormActions className="interrupt-actions approval-actions">
+            <Button variant="secondary" disabled={loading} onClick={acceptAllDefaults}>
+              Sen karar ver, devam et
             </Button>
-          </div>
-        </form>
+            <Button
+              variant="destructive"
+              disabled={loading}
+              onClick={() => void onResume("reject", {}, "", "Kullanıcı taslağı iptal etti.")}
+            >
+              Vazgeç
+            </Button>
+          </FormActions>
+        </>
       ) : showRejectForm ? (
         <form className="interrupt-form form-stack" onSubmit={submitReject}>
           <Textarea

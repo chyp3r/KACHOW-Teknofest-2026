@@ -9,8 +9,24 @@ const missingInformation: InterruptState = {
   payload: {
     draft: "Hazırlanan resmî yazı taslağı",
     questions: [
-      { key: "organization", label: "Kurum adı", required: true },
-      { key: "document_count", label: "Belge sayısı", required: true },
+      {
+        key: "organization",
+        question: "'Kurum adı' bilgisi nedir?",
+        header: "Kurum adı",
+        options: [],
+        multi_select: false,
+        allow_free_text: true,
+        required: true,
+      },
+      {
+        key: "document_count",
+        question: "'Belge sayısı' bilgisi nedir?",
+        header: "Belge sayısı",
+        options: [],
+        multi_select: false,
+        allow_free_text: true,
+        required: true,
+      },
     ],
   },
 };
@@ -111,5 +127,41 @@ describe("InterruptPanel", () => {
       />,
     );
     expect(screen.getByRole("button", { name: "Gönderiliyor…" })).toBeDisabled();
+  });
+
+  it("lets the writing-brief gate fall back to the system's own choice for every slot", () => {
+    const onResume = vi.fn().mockResolvedValue(undefined);
+    render(
+      <InterruptPanel
+        interrupt={{
+          kind: "writing_brief",
+          interruptId: "interrupt-brief",
+          payload: {
+            questions: [
+              {
+                key: "muhatap",
+                question: "Yazı kime gidiyor?",
+                header: "Muhatap",
+                options: [
+                  { value: "teknofest", label: "TEKNOFEST Komitesi" },
+                  { value: "__auto__", label: "Sen karar ver" },
+                ],
+                multi_select: false,
+                allow_free_text: true,
+                required: true,
+              },
+            ],
+            resolved: { yazan_taraf: { value: "KACMAK Ekibi", source: "user_text" } },
+            auto_value: "__auto__",
+          },
+        }}
+        loading={false}
+        onResume={onResume}
+      />,
+    );
+
+    expect(screen.getByText("Bilinenler")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sen karar ver, devam et" }));
+    expect(onResume).toHaveBeenCalledWith("answer", { muhatap: "__auto__" }, "");
   });
 });

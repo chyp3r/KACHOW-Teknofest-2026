@@ -7,7 +7,7 @@ import type {
   GuardrailEvent,
   InterruptState,
   PersistedChatMessage,
-  QuestionOption,
+  PromptQuestion,
   ToolCallEvent,
   WorkflowEvent,
   WorkflowLog,
@@ -67,7 +67,7 @@ export function useChatWorkflow(
   // next "final_result" (the clarify step's own reply) and cleared -- a
   // question is always answered by the turn that asked it, so nothing else
   // should ever attach these options to an unrelated later message.
-  const pendingQuestionOptions = useRef<QuestionOption[] | null>(null);
+  const pendingQuestions = useRef<PromptQuestion[] | null>(null);
 
   const sessionsQuery = useQuery({
     queryKey: queryKeys.chatSessions(),
@@ -144,7 +144,7 @@ export function useChatWorkflow(
     setGuardrailEvents([]);
     logsRef.current = [];
     setLogs([]);
-    pendingQuestionOptions.current = null;
+    pendingQuestions.current = null;
   }, []);
 
   const refreshServerState = useCallback(
@@ -232,7 +232,19 @@ export function useChatWorkflow(
           appendLog(`Bilgilendirme: ${event.title}`);
           break;
         case "question":
-          pendingQuestionOptions.current = event.options;
+          pendingQuestions.current =
+            event.questions && event.questions.length > 0
+              ? event.questions
+              : [
+                  {
+                    key: event.node,
+                    question: event.question,
+                    options: event.options,
+                    multi_select: false,
+                    allow_free_text: event.allow_free_text,
+                    required: true,
+                  },
+                ];
           appendLog("Netleştirme sorusu soruldu.");
           break;
         case "interrupt":
@@ -245,8 +257,8 @@ export function useChatWorkflow(
         case "final_result": {
           setStreamingText("");
           setPendingInterrupt(null);
-          const questionOptions = pendingQuestionOptions.current ?? undefined;
-          pendingQuestionOptions.current = null;
+          const questions = pendingQuestions.current ?? undefined;
+          pendingQuestions.current = null;
           setMessages((previous) => [
             ...previous,
             {
@@ -255,7 +267,7 @@ export function useChatWorkflow(
               status: event.workflow_status,
               logs: logsRef.current,
               details: event.details,
-              questionOptions,
+              questions,
             },
           ]);
           if (threadIdRef.current) refreshServerState(threadIdRef.current);
@@ -289,7 +301,7 @@ export function useChatWorkflow(
     }
   }, [clientId, handleEvent, loading, resetFlow, selectedDocument]);
 
-  const resume = useCallback(async (action: "answer" | "approve" | "revise" | "reject", answers: Record<string, string>, instructions: string, reason?: string) => {
+  const resume = useCallback(async (action: "answer" | "approve" | "revise" | "reject", answers: Record<string, string | string[]>, instructions: string, reason?: string) => {
     if (!threadId || !pendingInterrupt || loading || activeRequest.current) return;
     setLoading(true);
     const controller = new AbortController();

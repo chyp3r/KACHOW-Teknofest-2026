@@ -5,6 +5,7 @@ import type { ChatMessage, WorkflowLog } from "../../types/chat";
 import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
 import { Spinner } from "../../components/Surface";
+import { PromptQuestionCard } from "./PromptQuestionCard";
 
 export function MessageList({
   messages,
@@ -24,7 +25,7 @@ export function MessageList({
   // Answers a clarify question's option the same way typing its label would
   // -- see app.ai.workflows.planner._try_resolve_pending_clarification.
   // Optional: a caller that doesn't wire clarify options simply never
-  // passes questionOptions on a message, so this is never invoked.
+  // passes questions on a message, so this is never invoked.
   onSelectOption?: (label: string) => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
@@ -77,20 +78,21 @@ export function MessageList({
               <div className="markdown-content">
                 <ReactMarkdown>{message.text}</ReactMarkdown>
               </div>
-              {message.questionOptions?.length ? (
-                <div className="message-options" role="group" aria-label="Yanıt seçenekleri">
-                  {message.questionOptions.map((option) => (
-                    <Button
-                      key={option.value}
-                      variant="secondary"
-                      size="sm"
-                      disabled={loading}
-                      onClick={() => onSelectOption?.(option.label)}
-                    >
-                      {option.label}
-                    </Button>
-                  ))}
-                </div>
+              {message.questions?.length ? (
+                <PromptQuestionCard
+                  questions={message.questions}
+                  loading={loading}
+                  submitLabel="Gönder"
+                  onSubmit={(answers) => {
+                    const [question] = message.questions ?? [];
+                    if (!question) return;
+                    const selected = answers[question.key];
+                    const value = Array.isArray(selected) ? selected[0] : selected;
+                    const label =
+                      question.options.find((option) => option.value === value)?.label ?? value ?? "";
+                    onSelectOption?.(label);
+                  }}
+                />
               ) : null}
               {message.logs?.length ? (
                 <details className="message-logs">

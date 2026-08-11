@@ -46,11 +46,12 @@ export interface ChatMessage {
   // revision that was already applied, never a decision the user has to
   // make. Absent (ordinary assistant reply) is the default.
   kind?: "notice";
-  // Present on a clarify turn's own message -- clickable shortcuts for
-  // app.ai.workflows.planner._try_resolve_pending_clarification's options,
-  // resolved by sending the option's label back as the next message (the
-  // same thing typing it out by hand would do).
-  questionOptions?: QuestionOption[];
+  // Present on a clarify turn's own message -- rendered through the same
+  // PromptQuestionCard every HITL gate uses. Resolved by sending the
+  // selected option's label back as the next message (the same thing
+  // typing it out by hand would do), per
+  // app.ai.workflows.planner._try_resolve_pending_clarification.
+  questions?: PromptQuestion[];
 }
 
 export interface ChatSession {
@@ -252,7 +253,9 @@ export interface ChatRequest {
 export interface ResumeRequest {
   session_id: string;
   action: "answer" | "approve" | "revise" | "reject";
-  answers: Record<string, string>;
+  // A multi_select PromptQuestion answers with a list; every other question
+  // shape (including the "__auto__" sentinel) answers with a single string.
+  answers: Record<string, string | string[]>;
   instructions: string;
   reason?: string;
   reasoning_level?: ReasoningLevel;

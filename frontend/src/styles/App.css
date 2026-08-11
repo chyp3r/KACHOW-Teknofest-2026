@@ -849,7 +849,7 @@ textarea { min-height: 105px; resize: vertical; }
 .chat-message.notice-message > div { background: color-mix(in srgb, var(--status-running) 9%, var(--surface-panel)); border-color: color-mix(in srgb, var(--status-running) 45%, var(--border-default)); }
 .chat-message.notice-message .message-avatar { color: var(--text-warning); background: color-mix(in srgb, var(--status-running) 15%, transparent); }
 .chat-message.notice-message header { color: var(--text-warning); }
-.message-options { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.chat-message .prompt-question-card { margin-top: var(--space-3); }
 .processing-line { display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); }
 .streaming-caret { display: inline-block; width: 7px; height: 16px; margin-left: var(--space-1); vertical-align: text-bottom; background: var(--accent-blue); animation: blink .8s infinite; }
 @keyframes blink { 50% { opacity: 0; } }
@@ -875,11 +875,34 @@ textarea { min-height: 105px; resize: vertical; }
 .interrupt-draft summary { display: flex; justify-content: space-between; cursor: pointer; }
 .draft-preview, .draft-document { margin-top: var(--space-3); padding: var(--space-4); max-height: 420px; overflow: auto; white-space: pre-wrap; color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-primary); }
 .interrupt-form { margin-top: var(--space-4); }
-.interrupt-question-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
-.interrupt-question-grid label { display: grid; gap: var(--space-1); color: var(--text-secondary); }
 .required-mark { margin-left: var(--space-2); color: #f87171; }
 .interrupt-actions { justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); }
 .interrupt-actions > small { margin-right: auto; color: var(--text-muted); }
+
+.interrupt-brief { border-color: color-mix(in srgb, var(--accent-blue) 40%, transparent); }
+
+/* PromptQuestionCard: the single card missing-information, the pre-draft
+   writing brief, and clarify's intent question all render through.
+   Typography (size/weight/tracking/transform) for these selectors lives in
+   typography.css, per this file's "no arbitrary typography" contract. */
+.prompt-question-card { display: grid; gap: var(--space-4); margin-top: var(--space-3); }
+.prompt-question-card-header h3 { margin: 0 0 var(--space-1); }
+.prompt-question-card-header p { margin: 0; color: var(--text-secondary); }
+.prompt-question-resolved { display: grid; gap: var(--space-1); padding: var(--space-3); border: 1px dashed var(--border-default); border-radius: var(--radius-md); background: var(--bg-primary); }
+.prompt-question-resolved-title { color: var(--text-muted); }
+.prompt-question-resolved ul { display: grid; gap: var(--space-1); margin: 0; padding: 0 0 0 var(--space-3); color: var(--text-secondary); }
+.prompt-question-list { display: grid; gap: var(--space-4); }
+.prompt-question { display: grid; gap: var(--space-2); }
+.prompt-question-chip { display: inline-flex; align-self: start; padding: 2px var(--space-2); border-radius: var(--radius-sm); color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 12%, transparent); }
+.prompt-question-text { margin: 0; color: var(--text-primary); }
+.prompt-question-help { margin: 0; color: var(--text-muted); }
+.prompt-question-options { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.prompt-question-option { display: grid; gap: 2px; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); background: var(--bg-secondary); text-align: left; cursor: pointer; }
+.prompt-question-option:hover { border-color: var(--border-glass-focus); }
+.prompt-question-option.is-selected { border-color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 12%, var(--bg-secondary)); }
+.prompt-question-option-description { color: var(--text-muted); }
+.prompt-question-option-other { font-style: italic; }
+.prompt-question-actions { justify-content: flex-end; margin-top: 0; }
 
 .interrupt-revision-round { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-1) 0 0; color: var(--text-muted); }
 .interrupt-revision-exhausted { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 0; color: #fbbf24; }
@@ -1145,7 +1168,7 @@ td > span { color: var(--text-secondary); margin-top: var(--space-1); }
   .page, .chat-page { padding: calc(var(--touch-target) + var(--space-5)) var(--space-4) var(--space-4); }
   .page-header { align-items: flex-start; flex-direction: column; }
   .composer-controls, .invite-panel { align-items: stretch; flex-direction: column; }
-  .interrupt-question-grid, .metadata-grid { grid-template-columns: 1fr; }
+  .metadata-grid { grid-template-columns: 1fr; }
   .invite-form { grid-template-columns: 1fr; width: 100%; }
   .search-field { min-width: 0; }
   .workflow-signal-grid { grid-template-columns: 1fr; }
