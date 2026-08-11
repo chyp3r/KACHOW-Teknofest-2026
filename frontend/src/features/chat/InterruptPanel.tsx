@@ -1,6 +1,6 @@
 import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, FileText, History } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import type { ConflictFinding, InterruptState } from "../../types/chat";
+import type { ConflictFinding, InterruptState, PromptQuestion } from "../../types/chat";
 import { Button } from "../../components/Button";
 import { Textarea } from "../../components/FormControls";
 import { FormActions } from "../../components/LayoutPrimitives";
@@ -11,6 +11,63 @@ const SEVERITY_LABEL: Record<ConflictFinding["severity"], string> = {
   major: "Önemli",
   minor: "Küçük",
 };
+
+// Quick-pick revision shortcuts shown above the free-text note. Each
+// option's label is itself a complete Turkish instruction fragment, so
+// compiling a selection is just joining the chosen labels -- these ride
+// the existing free-text `instructions` field of onResume("revise", ...),
+// not a new resume contract.
+const REVISION_QUICK_PICKS: PromptQuestion[] = [
+  {
+    key: "uslup",
+    header: "Üslup",
+    question: "Üslupta hazır bir değişiklik ister misiniz?",
+    options: [
+      { value: "daha_resmi", label: "Daha resmi bir üslup kullan" },
+      { value: "daha_samimi", label: "Daha sıcak/samimi bir üslup kullan" },
+    ],
+    multi_select: true,
+    allow_free_text: false,
+    required: false,
+  },
+  {
+    key: "hitap",
+    header: "Hitap / Yön",
+    question: "Hitap veya yönle ilgili hazır bir değişiklik ister misiniz?",
+    options: [
+      { value: "yazan_taraf", label: "Yazan tarafı (göndereni) değiştir" },
+      { value: "muhatap", label: "Muhatabı değiştir" },
+    ],
+    multi_select: true,
+    allow_free_text: false,
+    required: false,
+  },
+  {
+    key: "kapanis",
+    header: "Kapanış",
+    question: "Kapanış ifadesini değiştirmek ister misiniz?",
+    options: [
+      { value: "arz", label: "Kapanışı 'Arz ederim' yap" },
+      { value: "rica", label: "Kapanışı 'Rica ederim' yap" },
+      { value: "bilgi", label: "Kapanışı 'Bilgilerinize sunulur' yap" },
+    ],
+    multi_select: true,
+    allow_free_text: false,
+    required: false,
+  },
+  {
+    key: "kapsam",
+    header: "Kapsam",
+    question: "Metnin kapsamında hazır bir değişiklik ister misiniz?",
+    options: [
+      { value: "kisalt", label: "Metni kısalt" },
+      { value: "detaylandir", label: "Metni detaylandır" },
+    ],
+    multi_select: true,
+    allow_free_text: false,
+    required: false,
+  },
+];
 
 export function InterruptPanel({
   interrupt,
@@ -29,6 +86,7 @@ export function InterruptPanel({
   const [instructions, setInstructions] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
+  const [quickPicks, setQuickPicks] = useState<PromptAnswers>({});
   const questions = Array.isArray(interrupt.payload.questions)
     ? interrupt.payload.questions
     : [];
@@ -56,6 +114,21 @@ export function InterruptPanel({
     if (!rejectReason.trim() || loading) return;
     void onResume("reject", {}, "", rejectReason.trim());
   };
+
+  // Turns the quick-pick selections back into the Turkish instruction
+  // fragments they're labeled with, combined with anything typed by hand --
+  // both ride the same free-text `instructions` field gate_revise_node
+  // already runs through, so no resume-contract change was needed for this.
+  const compiledInstructions = (() => {
+    const picked = REVISION_QUICK_PICKS.flatMap((question) => {
+      const selected = quickPicks[question.key];
+      const values = Array.isArray(selected) ? selected : [];
+      return question.options
+        .filter((option) => values.includes(option.value))
+        .map((option) => option.label);
+    });
+    return [...picked, instructions.trim()].filter(Boolean).join(". ");
+  })();
 
   const acceptAllDefaults = () => {
     if (loading) return;
@@ -242,11 +315,48 @@ export function InterruptPanel({
         </form>
       ) : (
         <div className="interrupt-form form-stack">
+          <div className="prompt-question-list quick-pick-list">
+            {REVISION_QUICK_PICKS.map((question) => {
+              const selected = Array.isArray(quickPicks[question.key])
+                ? (quickPicks[question.key] as string[])
+                : [];
+              return (
+                <div className="prompt-question" key={question.key}>
+                  <span className="prompt-question-chip">{question.header}</span>
+                  <div className="prompt-question-options" role="group">
+                    {question.options.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`prompt-question-option ${
+                          selected.includes(option.value) ? "is-selected" : ""
+                        }`}
+                        disabled={revisionExhausted}
+                        onClick={() =>
+                          setQuickPicks((previous) => {
+                            const current = Array.isArray(previous[question.key])
+                              ? (previous[question.key] as string[])
+                              : [];
+                            const next = current.includes(option.value)
+                              ? current.filter((value) => value !== option.value)
+                              : [...current, option.value];
+                            return { ...previous, [question.key]: next };
+                          })
+                        }
+                      >
+                        <span className="prompt-question-option-label">{option.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
           <Textarea
               label="Revizyon notu"
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
-              placeholder="Revizyon istiyorsanız talimatınızı yazın."
+              placeholder="Yukarıdaki hazır seçeneklere ek olarak, isterseniz talimatınızı yazın."
               disabled={revisionExhausted}
             />
           {revisionExhausted && (
@@ -264,8 +374,8 @@ export function InterruptPanel({
             </Button>
             <Button
               variant="secondary"
-              disabled={loading || !instructions.trim() || revisionExhausted}
-              onClick={() => void onResume("revise", {}, instructions)}
+              disabled={loading || !compiledInstructions.trim() || revisionExhausted}
+              onClick={() => void onResume("revise", {}, compiledInstructions)}
             >
               Revizyon iste
             </Button>

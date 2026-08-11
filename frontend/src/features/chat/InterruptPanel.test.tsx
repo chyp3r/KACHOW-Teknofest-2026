@@ -129,6 +129,28 @@ describe("InterruptPanel", () => {
     expect(screen.getByRole("button", { name: "Gönderiliyor…" })).toBeDisabled();
   });
 
+  it("compiles quick-pick revision selections with the free-text note into one instruction", () => {
+    const onResume = vi.fn().mockResolvedValue(undefined);
+    render(
+      <InterruptPanel
+        interrupt={{ kind: "draft_approval", interruptId: "interrupt-quickpick", payload: { draft: "Taslak" } }}
+        loading={false}
+        onResume={onResume}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Daha resmi bir üslup kullan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Kapanışı 'Arz ederim' yap" }));
+    fireEvent.change(screen.getByLabelText("Revizyon notu"), { target: { value: "Tarihi düzelt" } });
+    fireEvent.click(screen.getByRole("button", { name: "Revizyon iste" }));
+
+    expect(onResume).toHaveBeenCalledWith(
+      "revise",
+      {},
+      "Daha resmi bir üslup kullan. Kapanışı 'Arz ederim' yap. Tarihi düzelt",
+    );
+  });
+
   it("lets the writing-brief gate fall back to the system's own choice for every slot", () => {
     const onResume = vi.fn().mockResolvedValue(undefined);
     render(
