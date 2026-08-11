@@ -83,3 +83,62 @@ def test_explicit_arz_and_rica_resolves_the_combined_closing():
 def test_bare_dilekce_without_a_collective_noun_infers_first_person_singular():
     resolution = resolve_brief("izin almak için bir dilekçe yazmak istiyorum")
     assert resolution.resolved["anlatim"].value == "birinci_tekil"
+
+
+def _question(resolution, key):
+    return next(question for question in resolution.questions if question["key"] == key)
+
+
+def _option(question, value):
+    return next(option for option in question["options"] if option["value"] == value)
+
+
+def test_a_weak_name_signal_is_suggested_not_silently_resolved():
+    resolution = resolve_brief("Ahmet Yılmaz olarak izin talep ediyorum.")
+
+    # Not confident enough to skip the question outright...
+    assert "yazan_taraf" not in resolution.resolved
+    # ...but the guess rides along as the question's own suggested option.
+    question = _question(resolution, "yazan_taraf")
+    option = _option(question, "Ahmet Yılmaz")
+    assert "Önerilen" in option["label"]
+    # And "Sen karar ver" is still offered alongside it -- a slot with no
+    # catalog options of its own must never lose the auto option either.
+    assert any(option["value"] == AUTO_ANSWER for option in question["options"])
+
+
+def test_a_dative_marked_proper_noun_suggests_the_addressee():
+    # Not in the curated institution vocabulary -- otherwise this would
+    # resolve confidently via that lookup instead of exercising the weak
+    # dative-suffix pattern this test targets. Lowercase sentence start on
+    # purpose: a leading capital would itself match the name-token pattern
+    # and get swept into the match, which is a known sharp edge of a
+    # "suggestion, not authoritative" heuristic -- see the module docstring.
+    resolution = resolve_brief("başvurumuzu Fen Fakültesi'ne iletmek istiyoruz.")
+
+    assert "muhatap" not in resolution.resolved
+    question = _question(resolution, "muhatap")
+    option = _option(question, "Fen Fakültesi")
+    assert "Önerilen" in option["label"]
+
+
+def test_kapanis_suggests_arz_from_an_authority_muhatap_without_an_explicit_word():
+    resolution = resolve_brief("Rektörlük onayına ihtiyacımız var, bir yazı hazırla.")
+
+    # muhatap resolved confidently from the curated vocabulary...
+    assert resolution.resolved["muhatap"].value == "Rektörlük"
+    # ...and kapanis, seeing no explicit "arz"/"rica", still asks -- but
+    # recommends "Arz ederim" instead of listing all four options flatly.
+    assert "kapanis" not in resolution.resolved
+    question = _question(resolution, "kapanis")
+    assert "Önerilen" in question["options"][0]["label"]
+    assert question["options"][0]["value"] == "arz_ederim"
+    # The recommended option replaces, not duplicates, the catalog's own
+    # "arz_ederim" entry.
+    assert sum(1 for option in question["options"] if option["value"] == "arz_ederim") == 1
+
+
+def test_a_genuinely_unknown_slot_has_no_option_marked_as_a_suggestion():
+    resolution = resolve_brief("bir yazı hazırla")
+    question = _question(resolution, "kapanis")
+    assert not any("Önerilen" in option["label"] for option in question["options"])

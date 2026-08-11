@@ -17,6 +17,21 @@ document's own classification, asked about only when unresolved, and never
 by a model -- see :func:`resolve_brief`'s docstring for why. Same two-piece
 shape as ``app.ai.workflows.correspondence``: a resolver
 (``resolve_brief``) and a prompt renderer (``format_writing_brief``).
+
+Every resolver call lands in one of three tiers, not two:
+
+* **Confident** -- a strong, specific signal (an explicit "X ekibi olarak",
+  a document's own header field). Never asked about at all.
+* **Suggested** -- a weaker signal (a bare capitalized phrase, an inferred
+  hierarchy guess) worth surfacing, but not worth silently trusting. Still
+  asked about, but the guess rides along as the question's first option,
+  labelled "(Önerilen)" -- a click confirms it instead of retyping it.
+* **Unknown** -- nothing to go on. Asked plainly, no option pre-favoured.
+
+Only the confident tier ever suppresses a question; a suggestion never
+counts as "resolved" for :attr:`BriefResolution.resolved` (the "Bilinenler"
+strip), because it was never actually resolved from anything -- showing a
+guess there would misrepresent it as a known fact.
 """
 
 import re
@@ -50,6 +65,18 @@ _AUTO_OPTION = AnswerOption(value=AUTO_ANSWER, label="Sen karar ver")
 
 
 @dataclass(frozen=True)
+class SlotResolution:
+    value: str
+    source: SlotSource
+    label: str = ""
+    #: False marks a low-confidence guess: the slot is still asked about
+    #: (see the module docstring's three-tier split), with this value
+    #: offered as the question's suggested option rather than applied
+    #: outright.
+    confident: bool = True
+
+
+@dataclass(frozen=True)
 class BriefSlotSpec:
     """One writing-style fact the brief either resolves or asks about."""
 
@@ -64,14 +91,46 @@ class BriefSlotSpec:
     #: and to render the resolved brief in a predictable order.
     priority: int = 0
 
-    def to_prompt_question(self) -> dict[str, Any]:
-        options = [*self.options, _AUTO_OPTION] if self.options else []
+    def to_prompt_question(self, suggestion: Optional[SlotResolution] = None) -> dict[str, Any]:
+        """Render this slot as a PromptQuestion, folding in a suggestion if any.
+
+        A suggestion whose value matches one of this slot's own catalog
+        options (e.g. ``kapanis``'s "arz_ederim") promotes that option to
+        the front and marks it recommended, rather than duplicating it. A
+        suggestion with no catalog match (a guessed name/institution) is
+        prepended as its own synthetic option instead.
+        """
+        options = list(self.options)
+        if suggestion is not None:
+            matched_index = next(
+                (index for index, option in enumerate(options) if option.value == suggestion.value),
+                None,
+            )
+            if matched_index is not None:
+                matched = options[matched_index]
+                recommended = AnswerOption(
+                    value=matched.value,
+                    label=f"{matched.label} (Önerilen)",
+                    description=matched.description,
+                )
+                options = [recommended, *options[:matched_index], *options[matched_index + 1 :]]
+            else:
+                recommended = AnswerOption(
+                    value=suggestion.value,
+                    label=f"{suggestion.label or suggestion.value} (Önerilen)",
+                    description="Sistemin önerisi",
+                )
+                options = [recommended, *options]
+        # Always present, even for a slot with no catalog options
+        # (yazan_taraf/muhatap) -- every slot offers "Sen karar ver".
+        options = [*options, _AUTO_OPTION]
+
         return {
             "key": self.key,
             "question": self.question,
             "header": self.header,
             "help": "",
-            "example": None,
+            "example": suggestion.value if suggestion is not None and not self.options else None,
             "options": [
                 {"value": option.value, "label": option.label, "description": option.description}
                 for option in options
@@ -80,13 +139,6 @@ class BriefSlotSpec:
             "allow_free_text": self.allow_free_text,
             "required": self.required,
         }
-
-
-@dataclass(frozen=True)
-class SlotResolution:
-    value: str
-    source: SlotSource
-    label: str = ""
 
 
 @dataclass(frozen=True)
@@ -99,10 +151,14 @@ class BriefEvidence:
 
 @dataclass(frozen=True)
 class BriefResolution:
-    #: Slots resolved without asking, keyed by slot key.
+    #: Confidently-resolved slots, keyed by slot key -- what the
+    #: "Bilinenler" strip shows. A suggestion never lands here (see the
+    #: module docstring): it was never resolved *from* anything, only
+    #: guessed, so surfacing it as a known fact would misrepresent it.
     resolved: dict[str, SlotResolution] = field(default_factory=dict)
     #: PromptQuestion-shaped dicts for unresolved slots, priority-ordered and
-    #: capped at MAX_BRIEF_QUESTIONS.
+    #: capped at MAX_BRIEF_QUESTIONS. A slot with a low-confidence guess
+    #: still appears here, with the guess folded in as a suggested option.
     questions: tuple[dict[str, Any], ...] = ()
 
 
@@ -196,16 +252,27 @@ _COLLECTIVE_SUFFIX = (
 #: ("Hacettepe Bilişim Kulübü") still matches whole.
 _NAME_TOKEN = r"[A-ZÇĞİÖŞÜ]\w*"
 
-_YAZAN_TARAF_PATTERNS: tuple[re.Pattern, ...] = (
+#: Confident: a collective noun ("... ekibi olarak") or an explicit "adına"
+#: -- both name the sender unambiguously.
+_YAZAN_TARAF_STRONG_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(
         rf"((?:{_NAME_TOKEN}\s+){{0,3}}{_NAME_TOKEN}\s+(?i:{_COLLECTIVE_SUFFIX}))\s+(?i:olarak)\b"
     ),
     re.compile(rf"((?:{_NAME_TOKEN}\s+){{0,3}}{_NAME_TOKEN})\s+(?i:ad[ıi]na)\b"),
 )
 
-#: Curated institution vocabulary for guessing an addressee from free text.
-#: Conservative on purpose -- see ``resolve_brief``'s module docstring: no
-#: hit means "ask", which is the safe outcome for a slot this consequential.
+#: Suggested only: any capitalized phrase directly followed by "olarak",
+#: without the collective-noun requirement above -- catches a personal
+#: name ("Ahmet Yılmaz olarak") the strong pattern doesn't, but is loose
+#: enough (any sentence-initial capital + "olarak") to be worth a guess
+#: rather than a silent resolution.
+_YAZAN_TARAF_WEAK_PATTERN = re.compile(
+    rf"((?:{_NAME_TOKEN}\s+){{0,3}}{_NAME_TOKEN})\s+(?i:olarak)\b"
+)
+
+#: Curated institution vocabulary for confidently guessing an addressee.
+#: Conservative on purpose -- see the module docstring: no hit falls
+#: through to the weak pattern below rather than guessing wrong outright.
 _INSTITUTION_VOCABULARY: dict[str, str] = {
     "rektorluk": "Rektörlük",
     "dekanlik": "Dekanlık",
@@ -221,9 +288,29 @@ _INSTITUTION_VOCABULARY: dict[str, str] = {
     "tubitak": "TÜBİTAK",
 }
 
+#: Suggested only: a capitalized proper noun in the Turkish dative case,
+#: apostrophe-marked ("TEKNOFEST'e", "KACMAK'a") -- the orthographic
+#: convention for a proper noun taking a case suffix, and a reasonable
+#: (not certain) signal that this is who the letter is addressed to.
+_MUHATAP_WEAK_PATTERN = re.compile(
+    rf"((?:{_NAME_TOKEN}\s+){{0,2}}{_NAME_TOKEN})'(?:e|a|ye|ya|ne|na)\b"
+)
 
-def _resolve_yazan_taraf(evidence: BriefEvidence) -> Optional[SlotResolution]:
-    for pattern in _YAZAN_TARAF_PATTERNS:
+#: Institution keywords that usually sit above the sender in the
+#: correspondence hierarchy -- back a weak "Arz ederim" guess for
+#: `kapanis` when the resolved/suggested `muhatap` names one of these and
+#: neither "arz" nor "rica" was said explicitly.
+_AUTHORITY_KEYWORDS = (
+    "rektorluk", "dekanlik", "valilik", "kaymakamlik", "bakanlik",
+    "baskanlik", "genel mudurluk",
+)
+
+
+def _resolve_yazan_taraf(
+    evidence: BriefEvidence, known: dict[str, SlotResolution]
+) -> Optional[SlotResolution]:
+    del known
+    for pattern in _YAZAN_TARAF_STRONG_PATTERNS:
         match = pattern.search(evidence.raw_text)
         if match:
             value = match.group(1).strip(" ,.-")
@@ -233,10 +320,18 @@ def _resolve_yazan_taraf(evidence: BriefEvidence) -> Optional[SlotResolution]:
     if document_muhatap:
         value = str(document_muhatap).strip()
         return SlotResolution(value=value, source="document_reply", label=value)
+    weak_match = _YAZAN_TARAF_WEAK_PATTERN.search(evidence.raw_text)
+    if weak_match:
+        value = weak_match.group(1).strip(" ,.-")
+        if value:
+            return SlotResolution(value=value, source="user_text", label=value, confident=False)
     return None
 
 
-def _resolve_muhatap(evidence: BriefEvidence) -> Optional[SlotResolution]:
+def _resolve_muhatap(
+    evidence: BriefEvidence, known: dict[str, SlotResolution]
+) -> Optional[SlotResolution]:
+    del known
     document_sender = evidence.fields.get("gonderen_kurum")
     if document_sender:
         value = str(document_sender).strip()
@@ -244,11 +339,19 @@ def _resolve_muhatap(evidence: BriefEvidence) -> Optional[SlotResolution]:
     for surface, label in _INSTITUTION_VOCABULARY.items():
         if re.search(rf"\b{re.escape(surface)}\w*\b", evidence.normalized_text):
             return SlotResolution(value=label, source="user_text", label=label)
+    weak_match = _MUHATAP_WEAK_PATTERN.search(evidence.raw_text)
+    if weak_match:
+        value = weak_match.group(1).strip(" ,.-")
+        if value:
+            return SlotResolution(value=value, source="user_text", label=value, confident=False)
     return None
 
 
-def _resolve_anlatim(evidence: BriefEvidence) -> Optional[SlotResolution]:
-    if any(pattern.search(evidence.raw_text) for pattern in _YAZAN_TARAF_PATTERNS):
+def _resolve_anlatim(
+    evidence: BriefEvidence, known: dict[str, SlotResolution]
+) -> Optional[SlotResolution]:
+    del known
+    if any(pattern.search(evidence.raw_text) for pattern in _YAZAN_TARAF_STRONG_PATTERNS):
         return SlotResolution(value="birinci_cogul", source="user_text", label="Biz dili")
     if "dilekce" in evidence.normalized_text and not evidence.fields.get("gonderen_kurum"):
         return SlotResolution(value="birinci_tekil", source="user_text", label="Ben dili")
@@ -257,7 +360,9 @@ def _resolve_anlatim(evidence: BriefEvidence) -> Optional[SlotResolution]:
     return None
 
 
-def _resolve_kapanis(evidence: BriefEvidence) -> Optional[SlotResolution]:
+def _resolve_kapanis(
+    evidence: BriefEvidence, known: dict[str, SlotResolution]
+) -> Optional[SlotResolution]:
     has_arz = bool(re.search(r"\barz\b", evidence.normalized_text))
     has_rica = bool(re.search(r"\brica\b", evidence.normalized_text))
     if has_arz and has_rica:
@@ -268,14 +373,28 @@ def _resolve_kapanis(evidence: BriefEvidence) -> Optional[SlotResolution]:
         return SlotResolution(value="arz_ederim", source="user_text", label="Arz ederim")
     if has_rica:
         return SlotResolution(value="rica_ederim", source="user_text", label="Rica ederim")
+
+    # No explicit closing word -- fall back to a weak hierarchy guess from
+    # whatever muhatap already resolved or was suggested this same pass
+    # (kapanis's priority puts it after muhatap, see SLOT_CATALOG).
+    muhatap = known.get("muhatap")
+    if muhatap and any(
+        keyword in normalize(muhatap.value) for keyword in _AUTHORITY_KEYWORDS
+    ):
+        return SlotResolution(value="arz_ederim", source="user_text", label="Arz ederim", confident=False)
     return None
 
 
 #: One resolver per slot, tried only when the prior-brief carry-forward
 #: (checked first, uniformly, in ``resolve_brief``) didn't already answer
 #: it. Absent from this map -- imza/sayi_tarih -- means "never inferred,
-#: only ever answered by the user or left to Sen karar ver".
-_SLOT_RESOLVERS: dict[str, Callable[[BriefEvidence], Optional[SlotResolution]]] = {
+#: only ever answered by the user or left to Sen karar ver". Each resolver
+#: also receives `known`, the slots already settled earlier this same pass
+#: (in `SLOT_CATALOG` priority order) -- `kapanis` reads `known["muhatap"]`
+#: for its hierarchy guess.
+_SLOT_RESOLVERS: dict[
+    str, Callable[[BriefEvidence, dict[str, SlotResolution]], Optional[SlotResolution]]
+] = {
     "yazan_taraf": _resolve_yazan_taraf,
     "muhatap": _resolve_muhatap,
     "anlatim": _resolve_anlatim,
@@ -313,7 +432,9 @@ def resolve_brief(
 
     Returns:
         Resolved slots plus the (priority-ordered, capped) list of
-        remaining questions.
+        remaining questions -- each carrying a suggested option when a
+        resolver had a low-confidence guess for it (see the module
+        docstring's three-tier split).
     """
     fields = _coerce_fields(classification or {})
     evidence = BriefEvidence(
@@ -324,17 +445,29 @@ def resolve_brief(
     )
 
     resolved: dict[str, SlotResolution] = {}
+    suggested: dict[str, SlotResolution] = {}
+    #: resolved ∪ suggested, in priority order, so a later resolver
+    #: (kapanis) can read an earlier slot's outcome either way.
+    known: dict[str, SlotResolution] = {}
+
     for spec in SLOT_CATALOG:
         prior_value = evidence.prior_brief.get(spec.key)
         if prior_value:
-            resolved[spec.key] = SlotResolution(
+            resolution = SlotResolution(
                 value=str(prior_value), source="prior_brief", label=str(prior_value)
             )
-            continue
-        resolver = _SLOT_RESOLVERS.get(spec.key)
-        resolution = resolver(evidence) if resolver else None
-        if resolution is not None:
             resolved[spec.key] = resolution
+            known[spec.key] = resolution
+            continue
+
+        resolver = _SLOT_RESOLVERS.get(spec.key)
+        resolution = resolver(evidence, known) if resolver else None
+        if resolution is not None and resolution.confident:
+            resolved[spec.key] = resolution
+            known[spec.key] = resolution
+        elif resolution is not None:
+            suggested[spec.key] = resolution
+            known[spec.key] = resolution
         elif not spec.required:
             # An optional slot with nothing to infer defaults straight to
             # "Sen karar ver" instead of competing for one of the
@@ -344,15 +477,15 @@ def resolve_brief(
             # all) would always be unresolved and could crowd out a
             # genuinely unknown required slot, or open the gate on a turn
             # where every required fact is already known.
-            resolved[spec.key] = SlotResolution(
-                value=AUTO_ANSWER, source="default", label="Sen karar ver"
-            )
+            default = SlotResolution(value=AUTO_ANSWER, source="default", label="Sen karar ver")
+            resolved[spec.key] = default
+            known[spec.key] = default
 
     unresolved = sorted(
         (spec for spec in SLOT_CATALOG if spec.key not in resolved),
         key=lambda spec: spec.priority,
     )[:MAX_BRIEF_QUESTIONS]
-    questions = tuple(spec.to_prompt_question() for spec in unresolved)
+    questions = tuple(spec.to_prompt_question(suggested.get(spec.key)) for spec in unresolved)
 
     return BriefResolution(resolved=resolved, questions=questions)
 
