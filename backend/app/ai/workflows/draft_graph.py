@@ -15,9 +15,11 @@ from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
 from app.ai.llms.base import BaseLLMClient
 from app.ai.retrieval.examples import ExampleRetriever
+from app.ai.revision.elision import detect_content_loss
 from app.ai.verification import (
     DraftJudgeVerdict,
     InfoQuestion,
+    RepairItem,
     build_missing_info_request,
     judge_draft,
     merge_verdicts,
@@ -703,6 +705,36 @@ def create_draft_graph(
 
         combined = merge_verdicts(report, verdict, missing_information=missing_information)
 
+        # Mirrors revise_graph.verify_node's content-loss check (see
+        # app.ai.revision.elision's module docstring). A repair pass here
+        # (writer_node's is_revision branch) hands the reviser's raw output
+        # through as `draft` with no splice guarantee, same failure mode: the
+        # model can stand in an ellipsis/shorthand for a paragraph it judges
+        # "unchanged" instead of reproducing it. Only meaningful once there is
+        # a `previous_draft` to compare against -- the first writer pass has
+        # nothing prior to have elided.
+        content_loss = None
+        previous_draft = state.get("previous_draft", "")
+        if previous_draft:
+            content_loss = detect_content_loss(
+                previous_draft, draft_text, state.get("instructions", "")
+            )
+        if content_loss is not None:
+            logger.warning("Draft repair pass dropped content: %s", content_loss.detail)
+            combined.repair_items.append(
+                RepairItem(
+                    kind="content_loss",
+                    source="deterministic",
+                    detail=content_loss.detail,
+                    suggested_fix=content_loss.suggested_fix,
+                )
+            )
+            combined.requires_revision = True
+            # Same rationale as revise_graph: if the bounded repair loop runs
+            # out before this is actually fixed, the draft must not ship as a
+            # quiet COMPLETED.
+            combined.requires_human_approval = True
+
         DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)
         if verdict is not None:
             DRAFT_SCORE.labels(source="judge").observe(verdict.score)
@@ -754,6 +786,8 @@ def create_draft_graph(
                 f"{evaluation_notes} Taslakta {len(pii_findings)} adet kişisel veri "
                 f"bulgusu tespit edildi ({kinds}); insan onayı gerekiyor."
             )
+        if content_loss is not None:
+            evaluation_notes = f"{evaluation_notes} {content_loss.detail}"
 
         update = {
             "confidence_score": combined.combined_score,
