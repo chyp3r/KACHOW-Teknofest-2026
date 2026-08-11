@@ -32,7 +32,7 @@ const missingInformation: InterruptState = {
 };
 
 describe("InterruptPanel", () => {
-  it("keeps the draft collapsed and requires missing information", () => {
+  it("keeps the draft collapsed and asks missing information one question at a time", () => {
     const onResume = vi.fn().mockResolvedValue(undefined);
     const { container } = render(
       <InterruptPanel
@@ -43,20 +43,31 @@ describe("InterruptPanel", () => {
     );
 
     expect(container.querySelector("details")).not.toHaveAttribute("open");
+
+    // Only the first question is on screen -- not a form with every field open.
+    expect(screen.getByLabelText(/kurum adı/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/belge sayısı/i)).not.toBeInTheDocument();
+    const next = screen.getByRole("button", { name: "İleri" });
+    expect(next).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/kurum adı/i), {
+      target: { value: "KACHOW" },
+    });
+    expect(next).toBeEnabled();
+    fireEvent.click(next);
+
+    expect(screen.queryByLabelText(/kurum adı/i)).not.toBeInTheDocument();
     const submit = screen.getByRole("button", {
       name: "Bilgileri gönder ve devam et",
     });
     expect(submit).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText(/kurum adı/i), {
-      target: { value: "KACHOW" },
-    });
     fireEvent.change(screen.getByLabelText(/belge sayısı/i), {
       target: { value: "24" },
     });
     expect(submit).toBeEnabled();
-
     fireEvent.click(submit);
+
     expect(onResume).toHaveBeenCalledWith(
       "answer",
       { organization: "KACHOW", document_count: "24" },

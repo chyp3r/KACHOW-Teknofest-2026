@@ -902,17 +902,27 @@ textarea { min-height: 105px; resize: vertical; }
 .prompt-question-resolved-title { color: var(--text-muted); }
 .prompt-question-resolved ul { display: grid; gap: var(--space-1); margin: 0; padding: 0 0 0 var(--space-3); color: var(--text-secondary); }
 .prompt-question-list { display: grid; gap: var(--space-4); }
-.prompt-question { display: grid; gap: var(--space-2); }
+.prompt-question,
+.prompt-question-step { display: grid; gap: var(--space-2); }
 .prompt-question-chip { display: inline-flex; align-self: start; padding: 2px var(--space-2); border-radius: var(--radius-sm); color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 12%, transparent); }
 .prompt-question-text { margin: 0; color: var(--text-primary); }
 .prompt-question-help { margin: 0; color: var(--text-muted); }
 .prompt-question-options { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .prompt-question-option { display: grid; gap: 2px; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); background: var(--bg-secondary); text-align: left; cursor: pointer; }
 .prompt-question-option:hover { border-color: var(--border-glass-focus); }
+.prompt-question-option:disabled { opacity: .6; cursor: default; }
 .prompt-question-option.is-selected { border-color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 12%, var(--bg-secondary)); }
 .prompt-question-option-description { color: var(--text-muted); }
 .prompt-question-option-other { font-style: italic; }
-.prompt-question-actions { justify-content: flex-end; margin-top: 0; }
+
+/* Step-wizard chrome: progress readout + per-step navigation row, shared by
+   the options branch and the free-text form branch. */
+.prompt-question-progress { display: grid; gap: var(--space-1); color: var(--text-muted); }
+.prompt-question-progress-bar { height: 4px; overflow: hidden; border-radius: var(--radius-full); background: var(--border-default); }
+.prompt-question-progress-fill { height: 100%; background: var(--accent-blue); transition: width .2s ease; }
+.prompt-question-freetext { display: grid; gap: var(--space-2); }
+.prompt-question-nav { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-1); }
+.prompt-question-nav > .button:last-child { margin-left: auto; }
 
 .interrupt-revision-round { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-1) 0 0; color: var(--text-muted); }
 .interrupt-revision-exhausted { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 0; color: #fbbf24; }

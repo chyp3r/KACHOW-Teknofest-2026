@@ -29,7 +29,7 @@ describe("PromptQuestionCard", () => {
     expect(onSubmit).toHaveBeenCalledWith({ organization: "KACMAK" });
   });
 
-  it("selects a single option by value on click", () => {
+  it("submits immediately on the last (and only) question when a single option is clicked", () => {
     const onSubmit = vi.fn();
     const questions: PromptQuestion[] = [
       {
@@ -49,8 +49,44 @@ describe("PromptQuestionCard", () => {
     render(<PromptQuestionCard questions={questions} loading={false} onSubmit={onSubmit} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Arz ederim" }));
-    fireEvent.click(screen.getByRole("button", { name: "Devam et" }));
     expect(onSubmit).toHaveBeenCalledWith({ kapanis: "arz_ederim" });
+  });
+
+  it("advances step by step through multiple questions instead of showing them all at once", () => {
+    const onSubmit = vi.fn();
+    const questions: PromptQuestion[] = [
+      {
+        key: "yazan_taraf",
+        question: "Yazıyı kim yazıyor?",
+        header: "Yazan taraf",
+        options: [{ value: "kacmak", label: "KACMAK Ekibi" }],
+        multi_select: false,
+        allow_free_text: false,
+        required: true,
+      },
+      {
+        key: "kapanis",
+        question: "Kapanış ifadesi",
+        header: "Kapanış",
+        options: [{ value: "arz_ederim", label: "Arz ederim" }],
+        multi_select: false,
+        allow_free_text: false,
+        required: true,
+      },
+    ];
+    render(<PromptQuestionCard questions={questions} loading={false} onSubmit={onSubmit} />);
+
+    expect(screen.getByText("Soru 1 / 2")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Arz ederim" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "KACMAK Ekibi" }));
+
+    expect(screen.getByText("Soru 2 / 2")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "KACMAK Ekibi" })).not.toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Arz ederim" }));
+    expect(onSubmit).toHaveBeenCalledWith({ yazan_taraf: "kacmak", kapanis: "arz_ederim" });
   });
 
   it("toggles multiple values for a multi-select question", () => {
