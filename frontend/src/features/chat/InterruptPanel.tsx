@@ -44,6 +44,12 @@ export function InterruptPanel({
   const revisionRound = interrupt.payload.revision_round;
   const maxRevisionRounds = interrupt.payload.max_revision_rounds;
   const revisionExhausted = interrupt.payload.revision_exhausted ?? false;
+  const combinedScore = interrupt.payload.combined_score;
+  const requiresApproval = interrupt.payload.requires_human_approval;
+  const evaluationNotes =
+    typeof interrupt.payload.verification?.evaluation_notes === "string"
+      ? interrupt.payload.verification.evaluation_notes
+      : "";
 
   const submitReject = (event: FormEvent) => {
     event.preventDefault();
@@ -97,12 +103,30 @@ export function InterruptPanel({
         </div>
       </header>
 
-      {!isMissingInformation && !isWritingBrief && typeof revisionRound === "number" && (
-        <p className="interrupt-revision-round">
-          <History size={14} />
-          Revizyon turu {revisionRound + 1}
-          {typeof maxRevisionRounds === "number" ? `/${maxRevisionRounds}` : ""}
-        </p>
+      {!isMissingInformation && !isWritingBrief && (
+        <>
+          {typeof revisionRound === "number" && (
+            <p className="interrupt-revision-round">
+              <History size={14} />
+              Revizyon turu {revisionRound + 1}
+              {typeof maxRevisionRounds === "number" ? `/${maxRevisionRounds}` : ""}
+            </p>
+          )}
+          {(typeof combinedScore === "number" || requiresApproval) && (
+            <div className="draft-meta-strip">
+              {typeof combinedScore === "number" && (
+                <span className="draft-meta-chip">Güven skoru: {combinedScore}/100</span>
+              )}
+              {requiresApproval && (
+                <span className="draft-meta-chip draft-meta-warning">
+                  <AlertCircle size={13} />
+                  İnsan onayı gerekiyor
+                  {evaluationNotes ? `: ${evaluationNotes}` : ""}
+                </span>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {conflicts.length > 0 && (

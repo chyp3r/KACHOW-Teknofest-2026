@@ -665,41 +665,19 @@ class ChatService:
 
         draft = final_output.get("draft") or {}
         if draft.get("draft"):
-            routing = final_output.get("routing") or {}
-            parts = [f"Resmî yazı taslağınız hazırlandı.\n\n{draft['draft']}"]
-            if routing.get("routed_unit"):
-                parts.append(f"\n\n**Önerilen Birim:** {routing['routed_unit']}")
-            if draft.get("status") == "REJECTED":
-                reason = draft.get("rejection_reason")
-                parts.append(
-                    f"\n\n_Bu taslak reddedildi (gerekçe: {reason})._"
-                    if reason
-                    else "\n\n_Bu taslak reddedildi._"
-                )
-            elif draft.get("status") == "REVISE_REQUESTED":
-                parts.append(
-                    "\n\n_Bu taslak için revizyon talep edildi, ancak revizyon turu "
-                    "sınırına ulaşıldığı için bu son sürüm korundu._"
-                )
-            elif draft.get("requires_human_approval"):
-                parts.append(
-                    "\n\n_Bu taslak insan onayı gerektiriyor: "
-                    f"{draft.get('evaluation_notes', '')}_"
-                )
-            # A conflict finding is *not* folded into this reply on the
-            # streaming path -- app.ai.workflows.revise_graph.audit_node
-            # already published it live as its own "notice" SSE event (see
-            # emit_notice), which the frontend renders as a separate chat
-            # message rather than appended text, precisely so it reads as
-            # "here's a separate heads-up" instead of a blocking popup or an
-            # inline aside bolted onto the actual answer. The structured
-            # finding is still available programmatically either way, via
-            # final_output["revision"]["conflicts"] (see
-            # _compile_final_output) -- only the free-text reply omits it.
-            changelog_summary = (draft.get("changelog") or {}).get("summary")
-            if changelog_summary:
-                parts.append(f"\n\n**Değişiklik özeti:** {changelog_summary}")
-            return "".join(parts)
+            # The reply is the draft text alone -- routing unit, confidence
+            # score, approval/rejection notes and the changelog summary all
+            # used to be appended here as free text, but they are structured
+            # data the frontend already receives via this same
+            # final_output (as ``details`` on the chat message: see
+            # ChatMessageResponse.details / the "final_result" SSE event)
+            # and renders as its own meta strip -- see
+            # frontend DraftMetaStrip. A conflict finding was never folded
+            # in here either, for the same reason (see
+            # app.ai.workflows.revise_graph.audit_node's "notice" event):
+            # a structured finding belongs in a dedicated surface, not
+            # concatenated onto the answer.
+            return f"Resmî yazı taslağınız hazırlandı.\n\n{draft['draft']}"
 
         if draft.get("error"):
             return f"Taslak oluşturulamadı: {draft['error']}"

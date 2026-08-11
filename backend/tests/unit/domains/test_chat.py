@@ -243,7 +243,12 @@ def test_resume_summary_renders_the_reject_reason():
     assert ChatService._resume_summary(request) == "reject: Üslup çok resmi değil."
 
 
-def test_select_reply_includes_the_rejection_reason():
+def test_select_reply_omits_the_rejection_reason_now_carried_as_structured_details():
+    """Rejection reason, approval notes, routing unit and the changelog
+    summary all used to be appended to the reply as free text; they are now
+    structured data the frontend reads off the same final_output (as
+    ``details`` on the chat message) and renders as its own meta strip (see
+    DraftMetaStrip) -- the reply itself is the draft text alone."""
     final_output = {
         "draft": {
             "draft": "Taslak metni",
@@ -254,8 +259,8 @@ def test_select_reply_includes_the_rejection_reason():
 
     reply = ChatService._select_reply(final_output)
 
-    assert "reddedildi" in reply
-    assert "Üslup çok resmi değil." in reply
+    assert reply == "Resmî yazı taslağınız hazırlandı.\n\nTaslak metni"
+    assert final_output["draft"]["rejection_reason"] == "Üslup çok resmi değil."
 
 
 def test_select_reply_omits_conflicts_now_delivered_as_a_separate_live_notice():
@@ -291,7 +296,7 @@ def test_select_reply_omits_conflicts_now_delivered_as_a_separate_live_notice():
     )
 
 
-def test_select_reply_includes_the_changelog_summary():
+def test_select_reply_omits_the_changelog_summary_now_carried_as_structured_details():
     final_output = {
         "draft": {
             "draft": "Taslak metni",
@@ -302,4 +307,5 @@ def test_select_reply_includes_the_changelog_summary():
 
     reply = ChatService._select_reply(final_output)
 
-    assert "1 bölüm değiştirildi." in reply
+    assert "1 bölüm değiştirildi." not in reply
+    assert final_output["draft"]["changelog"]["summary"] == "1 bölüm değiştirildi."

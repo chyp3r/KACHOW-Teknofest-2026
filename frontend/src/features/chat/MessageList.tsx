@@ -6,6 +6,7 @@ import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
 import { Spinner } from "../../components/Surface";
 import { PromptQuestionCard } from "./PromptQuestionCard";
+import { DraftMetaStrip } from "./DraftMetaStrip";
 
 export function MessageList({
   messages,
@@ -78,6 +79,7 @@ export function MessageList({
               <div className="markdown-content">
                 <ReactMarkdown>{message.text}</ReactMarkdown>
               </div>
+              <DraftMetaStrip details={message.details} />
               {message.questions?.length ? (
                 <PromptQuestionCard
                   questions={message.questions}

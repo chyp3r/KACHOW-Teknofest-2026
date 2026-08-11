@@ -881,6 +881,16 @@ textarea { min-height: 105px; resize: vertical; }
 
 .interrupt-brief { border-color: color-mix(in srgb, var(--accent-blue) 40%, transparent); }
 
+/* The score/approval/routing facts that used to be baked into the chat
+   reply as free text (see backend ChatService._select_reply) now render
+   as chips here instead -- inline on a completed draft message
+   (DraftMetaStrip) and inline on the approval gate (InterruptPanel). */
+.draft-meta-strip { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.draft-meta-chip { display: inline-flex; align-items: center; gap: var(--space-1); padding: 2px var(--space-2); border-radius: var(--radius-sm); color: var(--text-secondary); background: var(--bg-primary); border: 1px solid var(--border-default); }
+.draft-meta-chip.draft-meta-warning { color: #fbbf24; border-color: rgba(245, 158, 11, .4); }
+.draft-meta-chip.draft-meta-danger { color: #f87171; border-color: rgba(248, 113, 113, .4); }
+.draft-meta-chip.draft-meta-success { color: var(--status-completed); border-color: color-mix(in srgb, var(--status-completed) 40%, transparent); }
+
 /* PromptQuestionCard: the single card missing-information, the pre-draft
    writing brief, and clarify's intent question all render through.
    Typography (size/weight/tracking/transform) for these selectors lives in
