@@ -43,6 +43,10 @@ function isWorkflowEvent(value: unknown): value is WorkflowEvent {
       return strings("stage", "kind", "decision") && stringArray("reasons");
     case "interrupt":
       return strings("kind", "interrupt_id") && record("payload");
+    case "notice":
+      return strings("node", "level", "title", "message");
+    case "question":
+      return strings("node", "question") && Array.isArray(event.options);
     case "final_result":
       return strings("reply", "workflow_status");
     case "error":
