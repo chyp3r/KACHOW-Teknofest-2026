@@ -2,6 +2,19 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [1.53.0] - 2026-08-11
+### Eklendi
+- **Taslak Öncesi Yazım Briefi**: "…dilekçe yazmak istiyoruz KACMAK ekibi olarak" gibi bir sorgu, KACMAK'ı *muhatap* sanan yanlış yönlü bir taslak üretiyordu -- `_build_brief`'in şemasında kim yazıyor/kime yazıyor ayrımı hiç yoktu. Yeni `app.ai.workflows.writing_brief` modülü altı yazım-stili yuvasını (yazan taraf, muhatap, anlatım, kapanış, imza, sayı/tarih) deterministik ve LLM'siz biçimde çözüyor: kullanıcının kendi metninden ("X ekibi olarak", "X adına"), ekli belgenin sınıflandırmasından (bir cevap yazısı turunda gönderen/muhatap rolleri tersine çevrilerek) veya oturumun önceki briefinden. Yalnızca gerçekten bilinmeyen yuvalar sorulur (en fazla 4), her birinde "Sen karar ver" seçeneğiyle. Yeni bir `brief` plan adımı + taslak üretiminden **önce** duraklayan ayrı bir `brief_gate` düğümüyle bağlandı -- `human_gate_node`'un kendi ayrımıyla aynı sebeple: `interrupt()` düğümü resume'da baştan oynattığı için pahalı çözümleme işi replay yoluna hiç girmiyor. Cevaplar hem oturum boyunca (`SessionFocus.writing_brief`) hem sürüm bazında (`DraftVersion.writing_brief`, revize turlarının aynı yönü koruması için) taşınıyor.
+- **Claude Tarzı Tek Soru Kartı**: Eksik-bilgi kapısı, yazım briefi kapısı ve `clarify` netleştirme sorusu artık tek bir paylaşılan `PromptQuestion` şeması ve tek bir `PromptQuestionCard` bileşeni üzerinden render ediliyor -- serbest metin, tekli/çoklu seçim ve "Diğer…" serbest metin geri dönüşünü destekliyor. Onay kartına ayrıca üslup/hitap/kapanış/kapsam için hazır çok-seçimli revizyon kısayolları eklendi.
+- Onay kartına, sohbet metninden çıkarılan güven skoru/insan onayı/önerilen birim bilgilerini gösteren sessiz bir meta şerit (`DraftMetaStrip`) eklendi.
+
+### Düzeltildi
+- **`notice`/`question` SSE Olayları Sessizce Düşüyordu**: `chatService.ts`'teki `isWorkflowEvent` doğrulayıcısında bu iki olay için `case` eksikti; sisteme daha önce eklenen Claude-tarzı netleştirme kartı ve revizyon çelişki uyarıları bu yüzden hiç ekrana gelmiyordu.
+- `ChatService._select_reply` artık taslak yanıtına `**Önerilen Birim:**`, onay/red gerekçesi ve değişiklik özeti gibi serbest metinler eklemiyor -- yanıt yalnızca taslak metnidir; aynı bilgi zaten `details` üzerinden taşınan yapılandırılmış veriden onay kartı ve `DraftMetaStrip` tarafından render ediliyor.
+
+### Test
+- `writing_brief` çözümleyicisi, taslak öncesi kapı (duraklama/resume/reddetme/tam belirlenmiş turun atlaması), briefin revize turuna taşınması ve `PromptQuestionCard`/`DraftMetaStrip`/`InterruptPanel` için kapsamlı birim ve entegrasyon testleri eklendi.
+
 ## [1.52.0] - 2026-08-10
 ### Eklendi
 - **Görev Alanı Denetimi (Domain Admission Gate)**: `resolve_plan` şimdiye kadar yalnızca *hangi* akışın istendiğine karar veriyordu, isteğin sistemin görev alanına girip girmediğine hiç bakmıyordu -- "Çiğköfte kampanyası için bir metin yaz" `draft.explicit_request`'in kendi `"metni yaz"` yüzeyine tam uyduğu için sözlüksel katman, füzyon ve gerekirse model tie-breaker'ın tamamı bunu *niyet* olarak doğru şekilde `draft`'a çözüyor, ve alt akışların hiçbiri bunu sorgulamıyordu. Yeni `app.ai.workflows.scope` modülü niyet çözümlendikten *sonra*, herhangi bir adım çalışmadan önce ayrı bir kabul denetimi uyguluyor: deterministik katman isteği yüklü bir belgeye, açık bir taslağa veya resmî yazışma/mevzuat terminolojisine (`DOMAIN_SURFACES`) çapalanmış olarak arıyor; yalnızca çapasız üretim istekleri (draft/analyze/revise) hızlı katman modeline (`resolve_plan`'ın kendi tie-breaker'ıyla aynı istemci) yükseltiliyor. Kapsam dışı bir istek artık her zaman deterministik yeni bir `refuse` plan adımına çözülüyor: `CAPABILITY_MANIFEST`'ten **üretilmeden** (generate edilmeden) render edilen sabit bir yetenek listesi döndürüyor -- bir ret asla bir üretim değildir, aksi hâlde az önce reddedilen model aynı off-topic metni üretmek için bir şans daha bulurdu.
