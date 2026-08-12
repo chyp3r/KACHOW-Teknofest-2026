@@ -22,7 +22,8 @@ vi.mock("./hooks/useChatWorkflow", () => ({ useChatWorkflow: () => ({
   sessions: [], sessionsLoading: false, sessionsRefreshing: false, sessionsError: null,
   historyLoading: false, historyError: null,
   messages: [], loading: false, streamingText: "", pendingInterrupt: null,
-  nodeStatus: {}, nodeResults: {}, nodeMeta: {}, planSteps: [], logs: [],
+  nodeStatus: {}, nodeResults: {}, nodeMeta: {}, planSteps: [],
+  nodeLabels: {}, nodeOrder: [], planIntent: "", logs: [],
   toolCalls: [], guardrailEvents: [], send: vi.fn(), resume: vi.fn(), newChat: vi.fn(),
   cancel: vi.fn(), addUploadMessage: vi.fn(), retrySessions: vi.fn(), retryHistory: vi.fn(),
 }) }));

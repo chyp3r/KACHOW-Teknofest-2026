@@ -1,34 +1,100 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DecisionFlow } from "./DecisionFlow";
 
 describe("DecisionFlow", () => {
-  it("maps internal nodes to readable Turkish stages", () => {
+  it("renders only the stages this turn actually planned, not a fixed 5-stage list", () => {
     render(
       <DecisionFlow
         statuses={{ planning: "completed", classification: "running" }}
         results={{}}
         meta={{}}
-        planSteps={["classification", "draft"]}
+        planSteps={["classification"]}
+        nodeOrder={["planning", "classification"]}
       />,
     );
-    expect(screen.getByText("Evrak analizi")).toBeInTheDocument();
-    expect(screen.getByText("Taslak oluşturma")).toBeInTheDocument();
-    expect(screen.getByText("İnsan onayı")).toBeInTheDocument();
-    expect(screen.getByText("Çalışıyor")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Evrak analizi.*Çalışıyor/ })).toHaveAttribute(
+    const stepper = screen.getByRole("list", { name: "İş akışı adımları" });
+    expect(within(stepper).getAllByRole("button")).toHaveLength(2);
+    expect(within(stepper).getByText("Evrak Analizi")).toBeInTheDocument();
+    expect(within(stepper).queryByText("Taslak")).not.toBeInTheDocument();
+    expect(within(stepper).queryByText("İnsan Onayı")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Evrak Analizi.*Çalışıyor/ })).toHaveAttribute(
       "aria-current",
       "step",
     );
+  });
+
+  it("groups a draft plan's verify/judge nodes under the draft stage instead of giving them their own row", () => {
+    render(
+      <DecisionFlow
+        statuses={{ planning: "completed", draft: "completed", verify: "completed", judge: "completed" }}
+        results={{}}
+        meta={{}}
+        planSteps={["draft"]}
+        nodeOrder={["planning", "draft", "verify", "judge"]}
+      />,
+    );
+    const stepper = screen.getByRole("list", { name: "İş akışı adımları" });
+    expect(within(stepper).getAllByRole("button")).toHaveLength(2);
+    expect(within(stepper).getByText("Taslak")).toBeInTheDocument();
+    expect(within(stepper).getByText("Doğrulama")).toBeInTheDocument();
+    expect(within(stepper).getByText("Kalite Yargıcı")).toBeInTheDocument();
+  });
+
+  it("renders an assist turn's tool calls as sub-items of the assist stage", () => {
+    render(
+      <DecisionFlow
+        statuses={{ planning: "completed", assist: "running" }}
+        results={{}}
+        meta={{}}
+        planSteps={["assist"]}
+        nodeOrder={["planning", "assist"]}
+        toolCalls={[{ node: "assist", tool: "mevzuat_ara", args: {} }]}
+      />,
+    );
+    const stepper = screen.getByRole("list", { name: "İş akışı adımları" });
+    expect(within(stepper).getByText("Asistan")).toBeInTheDocument();
+    expect(within(stepper).getByText("mevzuat_ara")).toBeInTheDocument();
+  });
+
+  it("never drops a node the backend announces even when it isn't in the known registry", () => {
+    render(
+      <DecisionFlow
+        statuses={{ totally_new_node: "running" }}
+        results={{}}
+        meta={{}}
+        planSteps={[]}
+        nodeOrder={["totally_new_node"]}
+        nodeLabels={{ totally_new_node: "Yeni Adım" }}
+      />,
+    );
+    expect(screen.getByText("Yeni Adım")).toBeInTheDocument();
+  });
+
+  it("prefers the backend-supplied label over the frontend fallback", () => {
+    render(
+      <DecisionFlow
+        statuses={{ classification: "running" }}
+        results={{}}
+        meta={{}}
+        planSteps={["classification"]}
+        nodeOrder={["classification"]}
+        nodeLabels={{ classification: "Belge Taraması" }}
+      />,
+    );
+    const stepper = screen.getByRole("list", { name: "İş akışı adımları" });
+    expect(within(stepper).getByText("Belge Taraması")).toBeInTheDocument();
+    expect(within(stepper).queryByText("Evrak Analizi")).not.toBeInTheDocument();
   });
 
   it("keeps raw workflow data collapsed under technical details", () => {
     render(
       <DecisionFlow
         statuses={{ planning: "completed" }}
-        results={{ planning: { intent: "chat" } }}
+        results={{ planning: { intent: "assist" } }}
         meta={{}}
-        planSteps={["chat"]}
+        planSteps={["assist"]}
+        planIntent="assist"
       />,
     );
     expect(screen.queryByRole("img", { name: "Karar akışı düğüm grafiği" })).not.toBeInTheDocument();

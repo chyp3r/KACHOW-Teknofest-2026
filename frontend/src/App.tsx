@@ -118,6 +118,9 @@ function AuthenticatedApp({ userId }: { userId: string }) {
               results={chat.nodeResults}
               meta={chat.nodeMeta}
               planSteps={chat.planSteps}
+              nodeLabels={chat.nodeLabels}
+              nodeOrder={chat.nodeOrder}
+              planIntent={chat.planIntent}
               toolCalls={chat.toolCalls}
               guardrailEvents={chat.guardrailEvents}
               onClose={() => setWorkflowOpen(false)}
