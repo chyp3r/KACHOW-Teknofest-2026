@@ -4,6 +4,7 @@ import os
 from typing import Any, Optional
 from uuid import uuid4
 
+from app.ai.compliance.checker import check_required_fields
 from app.ai.compliance.evrak_field import EvrakField, MissingField
 from app.ai.documents.anchors import build_page_map
 from app.ai.guardrails.file_integrity import check_file_integrity
@@ -698,3 +699,75 @@ class DocumentService:
         except Exception:
             logger.exception("Cached analysis for %s failed to validate", storage_path)
             return None
+
+    async def update_document_fields(
+        self, storage_path: str, fields: EvrakField
+    ) -> Optional[DocumentAnalysisResponseSchema]:
+        """Apply a user-corrected field set and re-run compliance.
+
+        Backs the "edit extracted fields" UI on the document analysis panel
+        -- until this, an undetected/wrong field (``EvrakField``'s empty
+        slots) was permanently read-only. Re-checks the same deterministic
+        rule table the original analysis used
+        (``app.ai.compliance.checker.check_required_fields``, no model
+        call), so ``missing_fields``/``compliance_status`` reflect the
+        correction immediately instead of staying stuck at whatever the
+        extraction originally found.
+
+        Rewrites the same local cache file ``get_cached_analysis`` reads
+        back, preserving ``extracted_text``/``pages`` (the document Q&A
+        tools index into them, see ``_save_document_analysis_cache``) --
+        only ``fields``, ``missing_fields`` and ``compliance_status`` change.
+
+        Args:
+            storage_path: The document's storage key.
+            fields: The full corrected field set (replaces, not patches).
+
+        Returns:
+            The updated analysis, or None if no cache exists for
+            ``storage_path`` (or it fails to parse).
+        """
+        import json
+        from app.core.config import settings
+
+        cache_file = os.path.join(settings.LOCAL_STORAGE_DIR, f"{storage_path}_analysis.json")
+
+        def _read():
+            if not os.path.exists(cache_file):
+                return None
+            with open(cache_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+
+        try:
+            cache_data = await asyncio.to_thread(_read)
+        except Exception:
+            logger.exception("Failed to read cached analysis for %s", storage_path)
+            return None
+
+        if not cache_data or not cache_data.get("analysis"):
+            return None
+
+        try:
+            analysis = DocumentAnalysisResponseSchema(**cache_data["analysis"])
+        except Exception:
+            logger.exception("Cached analysis for %s failed to validate", storage_path)
+            return None
+
+        analysis.fields = fields
+        report = check_required_fields(analysis.document_type, fields)
+        analysis.missing_fields = report.missing_fields
+        analysis.compliance_status = report.status
+
+        await self._save_document_analysis_cache(
+            storage_path,
+            cache_data.get("extracted_text", ""),
+            cache_data.get("pages", []),
+            analysis,
+        )
+
+        if self.document_repository is not None:
+            document = await self.document_repository.get_by_id(storage_path)
+            if document is not None:
+                document.compliance_status = analysis.compliance_status.value
+
+        return analysis

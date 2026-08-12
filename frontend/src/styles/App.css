@@ -974,11 +974,13 @@ mark.diff-changed {
 .dropzone.is-dragging { background: rgba(59, 130, 246, .1); }
 .dropzone-icon { width: 45px; height: 45px; border-radius: var(--radius-lg); color: var(--accent-blue); background: rgba(59, 130, 246, .12); }
 .analysis-panel details { border-top: 1px solid var(--border-default); padding: var(--space-3) 0; }
-.analysis-panel summary { cursor: pointer; }
+.analysis-panel summary { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .metadata-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-3); }
 .metadata-grid > div { padding: var(--space-2); border-radius: var(--radius-md); background: rgba(148, 163, 184, .07); }
 .metadata-grid dt { color: var(--text-muted); }
 .metadata-grid dd { margin-top: var(--space-1); overflow-wrap: anywhere; }
+.metadata-edit-form { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
+.metadata-edit-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 .detail-list { display: grid; gap: var(--space-2); margin-top: var(--space-3); padding-left: var(--space-5); }
 .detail-list li span, .detail-list li strong { display: block; }
 .detail-list li span, .detail-empty { color: var(--text-secondary); }

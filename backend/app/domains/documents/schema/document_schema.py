@@ -98,6 +98,19 @@ class DocumentAnalysisResponseSchema(BaseModel):
     )
 
 
+class DocumentFieldsUpdateSchema(BaseModel):
+    """Payload for manually correcting a document's extracted fields.
+
+    The full ``EvrakField`` set is replaced wholesale rather than patched
+    key-by-key -- the frontend form always round-trips every field it
+    rendered (including ones already correctly detected), so a partial
+    payload would have no way to distinguish "leave this alone" from "the
+    user cleared it".
+    """
+
+    fields: EvrakField = Field(description="Kullanıcı tarafından düzeltilmiş üstveri alanları.")
+
+
 class DraftClassificationSchema(BaseModel):
     """The narrow slice of Görev 1's output the draft flow actually consumes.
 

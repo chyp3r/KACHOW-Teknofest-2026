@@ -1,15 +1,22 @@
 """Unit tests for the document analysis domain service."""
 
 import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.ai.compliance.evrak_field import EvrakField, MissingField
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
 from app.core.constants import MAX_FILE_SIZE_BYTES
 from app.core.enums.compliance_status import ComplianceStatus
 from app.core.enums.document_type import DocumentType
+from app.domains.documents.model.document_model import DocumentModel
+from app.domains.documents.schema.document_schema import (
+    DocumentAnalysisResponseSchema,
+    ExtractionInfoSchema,
+)
 from app.domains.documents.service import DocumentService
 from app.infrastructure.extractors.base import (
     BaseDocumentExtractor,
@@ -431,3 +438,93 @@ async def test_analyze_skips_registration_without_a_repository():
     )
 
     assert result.document_type is DocumentType.OFFICIAL_LETTER
+
+
+# ==========================================
+# Manually editing extracted fields
+# ==========================================
+def _write_cache(storage_dir, storage_path: str, analysis: DocumentAnalysisResponseSchema) -> None:
+    cache_file = storage_dir / f"{storage_path}_analysis.json"
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text(
+        json.dumps(
+            {
+                "extracted_text": "Sayı: E-123\nKonu: İzin",
+                "pages": ["Sayı: E-123\nKonu: İzin"],
+                "analysis": json.loads(analysis.model_dump_json()),
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_document_fields_reruns_compliance_and_persists_the_correction(
+    tmp_path, monkeypatch
+):
+    """Filling in a previously-missing required field (UI-driven correction,
+    not a fresh analysis) must clear it from missing_fields immediately --
+    no model call, same deterministic rule table the original analysis used."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
+    storage_path = "uploads/abc.pdf"
+    analysis = DocumentAnalysisResponseSchema(
+        file_name="evrak.pdf",
+        storage_path=storage_path,
+        extraction=ExtractionInfoSchema(
+            extractor="opendataloader", page_count=1, char_count=40, used_ocr=False
+        ),
+        document_type=DocumentType.OFFICIAL_LETTER,
+        document_type_label="Resmî Yazı",
+        summary="İzin talebi yazısı.",
+        fields=EvrakField(sayi="E-123", konu="İzin Talebi"),
+        missing_fields=[
+            MissingField(
+                key="muhatap",
+                label="Muhatap",
+                severity="zorunlu",
+                mevzuat="RYUEHY m.14",
+                reason="Muhatap belirtilmelidir.",
+            )
+        ],
+        compliance_status=ComplianceStatus.INCOMPLETE,
+    )
+    _write_cache(tmp_path, storage_path, analysis)
+
+    document_repository = AsyncMock()
+    document_repository.get_by_id.return_value = DocumentModel(
+        id=storage_path, file_name="evrak.pdf", compliance_status="incomplete"
+    )
+    service, _, _, _ = _build_service()
+    service.document_repository = document_repository
+
+    corrected = EvrakField(sayi="E-123", konu="İzin Talebi", muhatap="İlgili Makama")
+    result = await service.update_document_fields(storage_path, corrected)
+
+    assert result is not None
+    assert result.fields.muhatap == "İlgili Makama"
+    assert all(item.key != "muhatap" for item in result.missing_fields)
+    assert document_repository.get_by_id.await_args.args == (storage_path,)
+    assert document_repository.get_by_id.return_value.compliance_status == result.compliance_status.value
+
+    # The cache file on disk reflects the correction, and still carries the
+    # extracted_text/pages the document Q&A tools depend on.
+    cache_file = tmp_path / f"{storage_path}_analysis.json"
+    saved = json.loads(cache_file.read_text(encoding="utf-8"))
+    assert saved["analysis"]["fields"]["muhatap"] == "İlgili Makama"
+    assert saved["extracted_text"] == "Sayı: E-123\nKonu: İzin"
+    assert saved["pages"] == ["Sayı: E-123\nKonu: İzin"]
+
+
+@pytest.mark.asyncio
+async def test_update_document_fields_returns_none_when_nothing_is_cached(tmp_path, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
+    service, _, _, _ = _build_service()
+
+    result = await service.update_document_fields("uploads/missing.pdf", EvrakField())
+
+    assert result is None

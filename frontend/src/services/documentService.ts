@@ -6,6 +6,7 @@ import type {
   DocumentMetadata,
   DraftRequest,
   DraftResult,
+  EvrakFields,
 } from "../types/documents";
 import { collectPages } from "./pagination";
 
@@ -26,6 +27,13 @@ export const documentService = {
   getAnalysis(storagePath: string): Promise<DocumentAnalysis> {
     const safePath = storagePath.split("/").map(encodeURIComponent).join("/");
     return apiRequest(`/api/v1/documents/${safePath}`);
+  },
+  updateFields(storagePath: string, fields: EvrakFields): Promise<DocumentAnalysis> {
+    const safePath = storagePath.split("/").map(encodeURIComponent).join("/");
+    return apiRequest(`/api/v1/documents/${safePath}/fields`, {
+      method: "PATCH",
+      body: JSON.stringify({ fields }),
+    });
   },
   correspondenceTypes(): Promise<CorrespondenceType[]> {
     return apiRequest("/api/v1/documents/correspondence-types");

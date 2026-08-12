@@ -19,7 +19,10 @@ from app.core.permissions.role_checker import assert_clearance, bypasses_ownersh
 from app.domains.documents.service import DocumentService
 from app.domains.documents.draft_service import DraftService
 from app.domains.documents.repository import DocumentRepository
-from app.domains.documents.schema.document_schema import DraftRequestSchema
+from app.domains.documents.schema.document_schema import (
+    DocumentFieldsUpdateSchema,
+    DraftRequestSchema,
+)
 from app.domains.users.model.user_model import UserModel
 from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 from app.shared.validator.storage_path_validator import validate_storage_path
@@ -229,6 +232,63 @@ async def list_correspondence_types():
             for correspondence_type, label in CORRESPONDENCE_TYPE_LABELS.items()
         ]
     )
+
+
+@router.patch("/{storage_path:path}/fields", response_model=None)
+async def update_document_fields(
+    storage_path: str,
+    payload: DocumentFieldsUpdateSchema,
+    service: DocumentService = Depends(get_document_analysis_service),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+):
+    """Manually correct a document's extracted fields.
+
+    UI-driven fix for fields the extraction missed or got wrong (see
+    ``DocumentAnalysisPanel`` -- previously read-only). Re-runs the same
+    deterministic compliance check the original analysis used
+    (``app.ai.compliance.checker.check_required_fields``, no LLM call), so
+    ``missing_fields``/``compliance_status`` reflect the correction
+    immediately instead of staying stuck at whatever the extraction found.
+
+    Args:
+        storage_path: The document's storage key.
+        payload: The full corrected field set.
+        service: Injected document analysis service.
+        document_repository: Ownership registry, checked before the update
+            when a real user is attached to the request.
+        current_user: The authenticated caller, when ``REQUIRE_AUTH`` is on.
+
+    Returns:
+        The updated analysis, in the same shape as ``GET /documents/{storage_path}``.
+
+    Raises:
+        HTTPException: 400 if storage_path is malformed, 404 if no analysis
+            is cached for it.
+        AuthorizationException: 403 if the document belongs to a different
+            user, or the requester's clearance doesn't cover the document's
+            confidentiality level.
+    """
+    try:
+        validate_storage_path(storage_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if (
+        current_user is not None
+        and not bypasses_ownership(current_user)
+        and not await document_repository.is_owned_by(storage_path, current_user.id)
+    ):
+        raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+
+    result = await service.update_document_fields(storage_path, payload.fields)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Bu evrak için bir analiz bulunamadı.")
+
+    if current_user is not None:
+        assert_clearance(current_user, result.guardrail.sensitivity_level)
+
+    return SuccessResponse(data=result.model_dump(mode="json"))
 
 
 @router.get("/{storage_path:path}", response_model=None)

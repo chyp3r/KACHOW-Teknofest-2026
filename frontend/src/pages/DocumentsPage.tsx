@@ -3,7 +3,7 @@ import { useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { DocumentTable } from "../features/documents/DocumentTable";
 import { DocumentUploader } from "../features/documents/DocumentUploader";
-import type { DocumentAnalysis, DocumentMetadata } from "../types/documents";
+import type { DocumentAnalysis, DocumentMetadata, EvrakFields } from "../types/documents";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Surface";
 
@@ -13,8 +13,10 @@ export function DocumentsPage({
   analysis,
   loading,
   uploading,
+  updatingFields,
   error,
   onUpload,
+  onUpdateFields,
   onSelect,
   onCloseDocument,
 }: {
@@ -23,8 +25,10 @@ export function DocumentsPage({
   analysis: DocumentAnalysis | null;
   loading: boolean;
   uploading: boolean;
+  updatingFields?: boolean;
   error: string | null;
   onUpload: (file: File) => Promise<void>;
+  onUpdateFields?: (storagePath: string, fields: EvrakFields) => Promise<void>;
   onSelect: (document: DocumentMetadata) => void;
   onCloseDocument?: () => void;
 }) {
@@ -67,8 +71,10 @@ export function DocumentsPage({
         selected={selected}
         analysis={analysis}
         loading={loading}
+        updatingFields={updatingFields}
         onSelect={onSelect}
         onClose={onCloseDocument}
+        onUpdateFields={onUpdateFields}
       />
     </div>
   );

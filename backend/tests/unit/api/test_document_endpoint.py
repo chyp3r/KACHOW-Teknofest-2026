@@ -152,3 +152,47 @@ def test_endpoint_is_registered_in_the_openapi_schema():
     spec = app.openapi()
     assert ENDPOINT in spec["paths"]
     assert "post" in spec["paths"][ENDPOINT]
+
+
+# ==========================================
+# PATCH /documents/{storage_path}/fields
+# ==========================================
+_FIELDS_STORAGE_PATH = f"uploads/{'a' * 32}.pdf"
+_FIELDS_ENDPOINT = f"/api/v1/documents/{_FIELDS_STORAGE_PATH}/fields"
+
+
+def test_update_fields_returns_the_recomputed_analysis():
+    service = AsyncMock()
+    updated = ANALYSIS_RESULT.model_copy(
+        update={
+            "fields": EvrakField(sayi="E-123", konu="İzin Talebi", muhatap="İlgili Makama"),
+            "missing_fields": [],
+            "compliance_status": ComplianceStatus.COMPLIANT,
+        }
+    )
+    service.update_document_fields.return_value = updated
+    _override(service)
+
+    response = client.patch(
+        _FIELDS_ENDPOINT,
+        json={"fields": {"sayi": "E-123", "konu": "İzin Talebi", "muhatap": "İlgili Makama"}},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["fields"]["muhatap"] == "İlgili Makama"
+    assert body["data"]["missing_fields"] == []
+    assert body["data"]["compliance_status"] == "compliant"
+    kwargs = service.update_document_fields.await_args.args
+    assert kwargs[0] == _FIELDS_STORAGE_PATH
+    assert kwargs[1].muhatap == "İlgili Makama"
+
+
+def test_update_fields_returns_404_when_nothing_is_cached():
+    service = AsyncMock()
+    service.update_document_fields.return_value = None
+    _override(service)
+
+    response = client.patch(_FIELDS_ENDPOINT, json={"fields": {}})
+
+    assert response.status_code == 404

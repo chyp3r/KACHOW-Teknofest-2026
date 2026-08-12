@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { EmptyState } from "../../components/EmptyState";
-import type { DocumentAnalysis, DocumentMetadata } from "../../types/documents";
+import type { DocumentAnalysis, DocumentMetadata, EvrakFields } from "../../types/documents";
 import { DocumentAnalysisPanel } from "./DocumentAnalysisPanel";
 import { Button } from "../../components/Button";
 import { Input, Select } from "../../components/FormControls";
@@ -18,15 +18,19 @@ export function DocumentTable({
   selected,
   analysis,
   loading,
+  updatingFields,
   onSelect,
   onClose,
+  onUpdateFields,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
   analysis: DocumentAnalysis | null;
   loading: boolean;
+  updatingFields?: boolean;
   onSelect: (document: DocumentMetadata) => void;
   onClose?: () => void;
+  onUpdateFields?: (storagePath: string, fields: EvrakFields) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
@@ -127,7 +131,15 @@ export function DocumentTable({
                     {loading && !analysis ? (
                       <div className="centered-state"><Spinner label="Analiz ayrıntıları yükleniyor" />Analiz ayrıntıları yükleniyor…</div>
                     ) : (
-                      <DocumentAnalysisPanel analysis={analysis} />
+                      <DocumentAnalysisPanel
+                        analysis={analysis}
+                        saving={updatingFields}
+                        onSave={
+                          onUpdateFields && analysis
+                            ? (fields) => onUpdateFields(analysis.storage_path, fields)
+                            : undefined
+                        }
+                      />
                     )}
                   </div>
                 )}
