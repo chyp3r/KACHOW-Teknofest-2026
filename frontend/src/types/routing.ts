@@ -1,6 +1,6 @@
 export interface RoutingSuggestionRequest {
   draft: string;
-  confidence_score: number;
+  confidence_score?: number;
   document_type?: string;
 }
 

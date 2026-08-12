@@ -23,4 +23,24 @@ describe("WorkflowStepper", () => {
     fireEvent.click(screen.getByRole("button", { name: /İnsan onayı/ }));
     expect(onSelect).toHaveBeenCalledWith("human_gate");
   });
+
+  it("renders sub-items under their owning stage, with a status badge when given one", () => {
+    const stagesWithSubItems: WorkflowStageItem[] = [
+      {
+        id: "drafting",
+        label: "Taslak oluşturma",
+        description: "Resmî yazı ve gerekli revizyonlar.",
+        status: "completed",
+        target: "draft",
+        subItems: [
+          { id: "verify", label: "Taslak Doğrulama", status: "completed" },
+          { id: "tool:mevzuat_ara", label: "mevzuat_ara ×2" },
+        ],
+      },
+    ];
+    render(<WorkflowStepper stages={stagesWithSubItems} onSelect={vi.fn()} />);
+
+    expect(screen.getByText("Taslak Doğrulama")).toBeInTheDocument();
+    expect(screen.getByText("mevzuat_ara ×2")).toBeInTheDocument();
+  });
 });

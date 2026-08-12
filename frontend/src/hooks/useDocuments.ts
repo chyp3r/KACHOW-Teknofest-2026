@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../query/queryKeys";
 import { documentService } from "../services/documentService";
-import type { DocumentAnalysis, DocumentMetadata } from "../types/documents";
+import type { DocumentAnalysis, DocumentMetadata, EvrakFields } from "../types/documents";
 
 export function useDocuments(
   _userId: string,
@@ -37,6 +37,35 @@ export function useDocuments(
       onUploaded?.(analysis);
     },
   });
+  const updateFieldsMutation = useMutation({
+    mutationFn: ({ storagePath, fields }: { storagePath: string; fields: EvrakFields }) =>
+      documentService.updateFields(storagePath, fields),
+    onSuccess: (analysis) => {
+      queryClient.setQueryData<DocumentMetadata[]>(queryKeys.documents(), (current = []) =>
+        (current ?? []).map((item) =>
+          item.storage_path === analysis.storage_path
+            ? { ...item, compliance_status: analysis.compliance_status, summary: analysis.summary }
+            : item,
+        ),
+      );
+      queryClient.setQueryData(queryKeys.documentAnalysis(analysis.storage_path), analysis);
+      setSelectedDocument((current) =>
+        current && current.storage_path === analysis.storage_path
+          ? { ...current, compliance_status: analysis.compliance_status }
+          : current,
+      );
+    },
+  });
+  const removeMutation = useMutation({
+    mutationFn: (storagePath: string) => documentService.remove(storagePath),
+    onSuccess: (_result, storagePath) => {
+      queryClient.setQueryData<DocumentMetadata[]>(queryKeys.documents(), (current = []) =>
+        current.filter((item) => item.storage_path !== storagePath),
+      );
+      queryClient.removeQueries({ queryKey: queryKeys.documentAnalysis(storagePath) });
+      void queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+  });
 
   useEffect(() => {
     if (
@@ -61,12 +90,20 @@ export function useDocuments(
     loading: documentsQuery.isLoading || analysisQuery.isLoading,
     refreshing: documentsQuery.isFetching && !documentsQuery.isLoading,
     uploading: uploadMutation.isPending,
+    updatingFields: updateFieldsMutation.isPending,
+    deleting: removeMutation.isPending,
     error: error instanceof Error ? error.message : null,
     refresh: async () => {
       await documentsQuery.refetch();
     },
     upload: async (file: File) => {
       await uploadMutation.mutateAsync(file);
+    },
+    updateFields: async (storagePath: string, fields: EvrakFields) => {
+      await updateFieldsMutation.mutateAsync({ storagePath, fields });
+    },
+    deleteDocument: async (storagePath: string) => {
+      await removeMutation.mutateAsync(storagePath);
     },
   };
 }

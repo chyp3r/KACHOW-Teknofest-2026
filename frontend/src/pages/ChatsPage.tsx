@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { AlertCircle, GitBranch, History, Plus, RotateCcw, Square } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { ChatComposer } from "../features/chat/ChatComposer";
+import { ChatDropZone } from "../features/chat/ChatDropZone";
 import { ConversationHistoryDrawer } from "../features/chat/ConversationHistoryDrawer";
 import { InterruptPanel } from "../features/chat/InterruptPanel";
 import { MessageList } from "../features/chat/MessageList";
@@ -46,6 +47,8 @@ export function ChatsPage({
   onRetryHistory,
   onCancel,
   onToggleWorkflow,
+  onUploadDocument,
+  documentUploading = false,
 }: {
   documents: DocumentMetadata[];
   sessions: ChatSession[];
@@ -84,11 +87,13 @@ export function ChatsPage({
   onRetryHistory: () => Promise<void>;
   onCancel: () => void;
   onToggleWorkflow: () => void;
+  onUploadDocument?: (file: File) => Promise<void>;
+  documentUploading?: boolean;
 }) {
   const [promptTemplate, setPromptTemplate] = useState<string | null>(null);
   const historyTriggerRef = useRef<HTMLButtonElement>(null);
 
-  return (
+  const page = (
     <div className="chat-page">
       <PageHeader
         title="Karar Destek Sohbeti"
@@ -141,15 +146,19 @@ export function ChatsPage({
           <Alert variant="error" icon={<AlertCircle />} action={<Button variant="ghost" size="sm" leadingIcon={<RotateCcw />} onClick={() => void onRetryHistory()}>Tekrar dene</Button>}>{historyError}</Alert>
         )}
         {historyLoading && <div className="processing-line"><Spinner label="Sohbet yükleniyor" />Sohbet yükleniyor…</div>}
-        {guardrailEvents.map((guardrail, index) => (
-          <Alert
-            variant={guardrail.decision === "blocked" ? "error" : "warning"}
-            title={`Güvenlik kontrolü: ${guardrail.decision}`}
-            key={`${guardrail.stage}-${guardrail.kind}-${index}`}
-          >
-            <span>{guardrail.reasons.join(" · ")}</span>
-          </Alert>
-        ))}
+        {guardrailEvents.length > 0 && (
+          <div className="chat-guardrail-stack">
+            {guardrailEvents.map((guardrail, index) => (
+              <Alert
+                variant={guardrail.decision === "blocked" ? "error" : "warning"}
+                title={`Güvenlik kontrolü: ${guardrail.decision}`}
+                key={`${guardrail.stage}-${guardrail.kind}-${index}`}
+              >
+                <span>{guardrail.reasons.join(" · ")}</span>
+              </Alert>
+            ))}
+          </div>
+        )}
         {interrupt && (
           <InterruptPanel
             interrupt={interrupt}
@@ -189,5 +198,12 @@ export function ChatsPage({
         </div>
       </div>
     </div>
+  );
+
+  if (!onUploadDocument) return page;
+  return (
+    <ChatDropZone uploading={documentUploading} onUpload={onUploadDocument}>
+      {page}
+    </ChatDropZone>
   );
 }

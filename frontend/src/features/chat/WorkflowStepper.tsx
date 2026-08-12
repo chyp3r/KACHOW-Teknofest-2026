@@ -4,12 +4,19 @@ import { StatusBadge, type StatusTone } from "../../components/StatusBadge";
 
 export type WorkflowStageStatus = WorkflowNodeStatus | "interrupted";
 
+export interface WorkflowSubStepItem {
+  id: string;
+  label: string;
+  status?: WorkflowStageStatus;
+}
+
 export interface WorkflowStageItem {
   id: string;
   label: string;
   description: string;
   status: WorkflowStageStatus;
   target: string;
+  subItems?: WorkflowSubStepItem[];
 }
 
 const STATUS_LABELS: Record<WorkflowStageStatus, string> = {
@@ -63,6 +70,18 @@ export function WorkflowStepper({
                 <StatusBadge tone={tone(stage.status)}>{STATUS_LABELS[stage.status]}</StatusBadge>
               </span>
               <span className="workflow-step-description">{stage.description}</span>
+              {stage.subItems && stage.subItems.length > 0 && (
+                <ul className="workflow-step-substeps">
+                  {stage.subItems.map((subItem) => (
+                    <li key={subItem.id}>
+                      <span>{subItem.label}</span>
+                      {subItem.status && (
+                        <StatusBadge tone={tone(subItem.status)}>{STATUS_LABELS[subItem.status]}</StatusBadge>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </span>
           </button>
         </li>

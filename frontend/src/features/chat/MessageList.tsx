@@ -1,5 +1,6 @@
 import { Bot, FilePenLine, FileSearch, Info, MessageSquare, Route, UserRound } from "lucide-react";
 import { useEffect, useRef } from "react";
+import type { UIEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import type { ChatMessage, WorkflowLog } from "../../types/chat";
 import { Button } from "../../components/Button";
@@ -30,12 +31,22 @@ export function MessageList({
   // passes questions on a message, so this is never invoked.
   onSelectOption?: (label: string) => void;
 }) {
-  const endRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const pinnedRef = useRef(true);
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingText, logs]);
+    const container = containerRef.current;
+    if (!container || !pinnedRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [messages, streamingText]);
+  const handleScroll = (event: UIEvent<HTMLDivElement>) => {
+    const el = event.currentTarget;
+    pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 96;
+  };
   return (
-    <div className="messages-area">
+    <div className="messages-area" ref={containerRef} onScroll={handleScroll}>
       {messages.length === 0 && !streamingText ? (
         <EmptyState className="chat-empty-state" icon={MessageSquare} title="Nasıl yardımcı olabilirim?" description="Bir evrak üzerinde çalışın veya resmî yazışma süreciniz için destek alın." primaryAction={
           <div className="suggested-actions" aria-label="Önerilen başlangıçlar">
@@ -136,7 +147,6 @@ export function MessageList({
           {logs[logs.length - 1]?.text ?? "İstek işleniyor…"}
         </div>
       )}
-      <div ref={endRef} />
     </div>
   );
 }

@@ -6,13 +6,16 @@ from app.domains.drafts.repository import DraftRepository
 
 
 class DraftService:
-    """Read-side business logic for the drafts API.
+    """Business logic for the drafts API.
 
-    Writes happen through `app.domains.drafts.draft_recorder`, called from
-    `app.domains.documents.draft_service.DraftService.generate_draft_and_route`
-    and from `ChatService` -- both run outside a request-scoped session (the
-    latter during SSE streaming), so they own their own session/repository
-    instead of going through this service. This class only ever reads.
+    Creation happens through `app.domains.drafts.draft_recorder`, called
+    from `app.domains.documents.draft_service.DraftService.
+    generate_draft_and_route` and from `ChatService` -- both run outside a
+    request-scoped session (the latter during SSE streaming), so they own
+    their own session/repository instead of going through this service.
+    `delete_draft` is the one write this service does own: it runs inside
+    the request-scoped session the drafts router already has, with no
+    SSE-streaming concern to route around.
     """
 
     def __init__(self, repository: DraftRepository) -> None:
@@ -61,3 +64,18 @@ class DraftService:
         return await self.repository.count_drafts(
             session_id=session_id, document_id=document_id, user_id=user_id
         )
+
+    async def delete_draft(self, draft_id: str) -> None:
+        """Soft-delete a draft, and the whole version chain it belongs to.
+
+        Raises:
+            NotFoundException: If `draft_id` doesn't exist (or is already
+                deleted -- `get_by_id` filters `is_deleted`, so a second
+                delete call is reported the same as a missing draft rather
+                than silently succeeding).
+        """
+        draft = await self.get_draft(draft_id)
+        if draft.session_id is None:
+            await self.repository.soft_delete(draft_id)
+        else:
+            await self.repository.soft_delete_session(draft.session_id)

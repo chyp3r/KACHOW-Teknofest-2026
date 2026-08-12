@@ -144,6 +144,60 @@ describe("useChatWorkflow", () => {
     expect(mocks.state).toHaveBeenCalledWith("user-1:web:client");
   });
 
+  it("records each node's backend label and first-seen order, then clears both on the next send", async () => {
+    mocks.send.mockImplementationOnce(async (_request, onEvent) => {
+      onEvent({ event: "session", thread_id: "user-1:web:thread" });
+      onEvent({ event: "node_start", node: "classification", label: "Evrak Analizi", message: "" });
+      onEvent({ event: "node_end", node: "classification", label: "Evrak Analizi", message: "" });
+      onEvent({ event: "node_start", node: "examples", label: "Üslup Örnekleri", message: "" });
+      onEvent({ event: "node_end", node: "examples", label: "Üslup Örnekleri", message: "" });
+      onEvent({ event: "final_result", reply: "tamam", workflow_status: "COMPLETED" });
+    });
+    const { result } = renderHook(() => useChatWorkflow(null, "user-1"), { wrapper });
+
+    await act(() => result.current.send("bir evrakı analiz et", "balanced", true));
+
+    expect(result.current.nodeOrder).toEqual(["classification", "examples"]);
+    expect(result.current.nodeLabels).toEqual({
+      classification: "Evrak Analizi",
+      examples: "Üslup Örnekleri",
+    });
+
+    await act(() => result.current.send("ikinci istek", "balanced", true));
+    expect(result.current.nodeOrder).toEqual([]);
+    expect(result.current.nodeLabels).toEqual({});
+  });
+
+  it("rehydrates plan_steps/intent from the last persisted message's final_output details", async () => {
+    mocks.messages.mockResolvedValue({
+      items: [{
+        id: "message-1",
+        role: "assistant",
+        content: "Taslak hazır",
+        workflow_status: "COMPLETED",
+        details: { plan_steps: ["classification", "draft", "routing"], intent: "draft" },
+        created_at: "2026-08-09T10:00:00Z",
+      }],
+      total: 1,
+      page: 1,
+      page_size: 50,
+    });
+
+    const { result } = renderHook(
+      () => useChatWorkflow(null, "user-1", "user-1:web:client"),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.planSteps).toEqual(["classification", "draft", "routing"]));
+    expect(result.current.planIntent).toBe("draft");
+    expect(result.current.nodeOrder).toEqual(["classification", "draft", "routing"]);
+    expect(result.current.nodeStatus).toEqual({
+      classification: "completed",
+      draft: "completed",
+      routing: "completed",
+    });
+  });
+
   it("aborts an active stream without rendering a workflow failure", async () => {
     let receivedSignal: AbortSignal | undefined;
     mocks.send.mockImplementation((_request, _onEvent, signal: AbortSignal) => {

@@ -100,6 +100,8 @@ function AuthenticatedApp({ userId }: { userId: string }) {
       onRetryHistory={chat.retryHistory}
       onCancel={chat.cancel}
       onToggleWorkflow={() => setWorkflowOpen((open) => !open)}
+      onUploadDocument={uploadDocument}
+      documentUploading={documents.uploading}
     />
   );
 
@@ -118,6 +120,9 @@ function AuthenticatedApp({ userId }: { userId: string }) {
               results={chat.nodeResults}
               meta={chat.nodeMeta}
               planSteps={chat.planSteps}
+              nodeLabels={chat.nodeLabels}
+              nodeOrder={chat.nodeOrder}
+              planIntent={chat.planIntent}
               toolCalls={chat.toolCalls}
               guardrailEvents={chat.guardrailEvents}
               onClose={() => setWorkflowOpen(false)}
@@ -130,8 +135,8 @@ function AuthenticatedApp({ userId }: { userId: string }) {
         <Routes>
           <Route path="/chats" element={chatsPage} />
           <Route path="/chats/:sessionId" element={chatsPage} />
-          <Route path="/documents" element={<DocumentsPage documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} loading={documents.loading} uploading={documents.uploading} error={documents.error} onUpload={uploadDocument} onSelect={(document) => { selectDocument(document); navigate(`/documents/${encodeURIComponent(document.storage_path)}`); }} onCloseDocument={() => { documents.setSelectedDocument(null); navigate("/documents"); }} />} />
-          <Route path="/documents/:storagePath" element={<DocumentsPage documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} loading={documents.loading} uploading={documents.uploading} error={documents.error} onUpload={uploadDocument} onSelect={(document) => { selectDocument(document); navigate(`/documents/${encodeURIComponent(document.storage_path)}`); }} onCloseDocument={() => { documents.setSelectedDocument(null); navigate("/documents"); }} />} />
+          <Route path="/documents" element={<DocumentsPage documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} loading={documents.loading} uploading={documents.uploading} updatingFields={documents.updatingFields} deletingDocument={documents.deleting} error={documents.error} onUpload={uploadDocument} onUpdateFields={documents.updateFields} onDeleteDocument={documents.deleteDocument} onSelect={(document) => { selectDocument(document); navigate(`/documents/${encodeURIComponent(document.storage_path)}`); }} onCloseDocument={() => { documents.setSelectedDocument(null); navigate("/documents"); }} />} />
+          <Route path="/documents/:storagePath" element={<DocumentsPage documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} loading={documents.loading} uploading={documents.uploading} updatingFields={documents.updatingFields} deletingDocument={documents.deleting} error={documents.error} onUpload={uploadDocument} onUpdateFields={documents.updateFields} onDeleteDocument={documents.deleteDocument} onSelect={(document) => { selectDocument(document); navigate(`/documents/${encodeURIComponent(document.storage_path)}`); }} onCloseDocument={() => { documents.setSelectedDocument(null); navigate("/documents"); }} />} />
           <Route path="/drafts" element={<DraftsPage documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} onSelect={selectDocument} onOpenDraft={(draftId) => navigate(`/drafts/${encodeURIComponent(draftId)}`)} onCloseDraft={() => navigate("/drafts")} />} />
           <Route path="/drafts/:draftId" element={<DraftsPage documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} activeDraftId={activeDraftId} onSelect={selectDocument} onOpenDraft={(draftId) => navigate(`/drafts/${encodeURIComponent(draftId)}`)} onCloseDraft={() => navigate("/drafts")} />} />
           <Route path="/routing" element={<RoutingPage />} />

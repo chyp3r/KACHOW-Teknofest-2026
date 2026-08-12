@@ -56,6 +56,14 @@ export function useChatWorkflow(
   const [nodeResults, setNodeResults] = useState<NodeResults>({});
   const [nodeMeta, setNodeMeta] = useState<NodeResults>({});
   const [planSteps, setPlanSteps] = useState<string[]>([]);
+  // Backend-supplied Turkish label per node id (from node_start/end/error/
+  // skipped's own `label`), plus the order nodes were first seen in -- the
+  // dynamic workflow stepper (DecisionFlow) derives its stage list from
+  // these instead of a hardcoded stage set, so a run only ever shows the
+  // steps it actually took.
+  const [nodeLabels, setNodeLabels] = useState<Record<string, string>>({});
+  const [nodeOrder, setNodeOrder] = useState<string[]>([]);
+  const [planIntent, setPlanIntent] = useState("");
   const [logs, setLogs] = useState<WorkflowLog[]>([]);
   const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([]);
   const [guardrailEvents, setGuardrailEvents] = useState<GuardrailEvent[]>([]);
@@ -115,10 +123,44 @@ export function useChatWorkflow(
     seenInterrupts.current.clear();
   }, [activeSessionId, userId]);
 
+  // Records a node's backend-supplied label and its first-seen order --
+  // idempotent, since a node can re-enter (e.g. "revise" runs once per
+  // repair round) without moving in the order or losing its label.
+  const noteNode = useCallback((node: string, label: string) => {
+    setNodeLabels((previous) => (previous[node] === label ? previous : { ...previous, [node]: label }));
+    setNodeOrder((previous) => (previous.includes(node) ? previous : [...previous, node]));
+  }, []);
+
   useEffect(() => {
     if (messagesQuery.data && !activeRequest.current) {
       setMessages(messagesQuery.data.items.map(toChatMessage));
     }
+  }, [messagesQuery.data]);
+
+  // Rehydrates the workflow stepper's plan/order from the last persisted
+  // assistant message when a session is loaded from history (page reload,
+  // opening an old conversation) -- there is no live SSE stream to derive it
+  // from in that case, only final_result.details (see
+  // event_schema.FinalResultEvent / planning_graph._compile_final_output).
+  useEffect(() => {
+    if (!messagesQuery.data || activeRequest.current) return;
+    const items = messagesQuery.data.items;
+    const lastAssistant = [...items].reverse().find((item) => item.role === "assistant");
+    const details = lastAssistant?.details;
+    const steps = details?.plan_steps;
+    if (!Array.isArray(steps) || steps.length === 0) return;
+    const normalizedSteps = steps.filter((step): step is string => typeof step === "string").map((step) => step.toLowerCase());
+    if (normalizedSteps.length === 0) return;
+    const failed = lastAssistant?.workflow_status === "FAILED";
+    setPlanSteps(normalizedSteps);
+    setPlanIntent(typeof details?.intent === "string" ? details.intent : "");
+    setNodeOrder(normalizedSteps);
+    setNodeStatus((previous) => {
+      if (Object.keys(previous).length > 0) return previous;
+      const seeded: Record<string, WorkflowNodeStatus> = {};
+      for (const step of normalizedSteps) seeded[step] = failed ? "failed" : "completed";
+      return seeded;
+    });
   }, [messagesQuery.data]);
 
   useEffect(() => {
@@ -131,7 +173,8 @@ export function useChatWorkflow(
     const recoveredId = `recovered:${threadId}`;
     setPendingInterrupt({ kind, interruptId: recoveredId, payload });
     setNodeStatus((previous) => ({ ...previous, human_gate: "running" }));
-  }, [stateQuery.data, threadId]);
+    noteNode("human_gate", "İnsan Onayı");
+  }, [noteNode, stateQuery.data, threadId]);
 
   useEffect(() => () => activeRequest.current?.abort(), []);
 
@@ -148,6 +191,9 @@ export function useChatWorkflow(
     setNodeResults({});
     setNodeMeta({});
     setPlanSteps([]);
+    setNodeLabels({});
+    setNodeOrder([]);
+    setPlanIntent("");
     setToolCalls([]);
     setGuardrailEvents([]);
     logsRef.current = [];
@@ -175,6 +221,7 @@ export function useChatWorkflow(
           onSessionResolved?.(event.thread_id);
           break;
         case "node_start":
+          noteNode(event.node, event.label);
           setNodeStatus((previous) => ({ ...previous, [event.node]: "running" }));
           if (event.meta) setNodeMeta((previous) => ({ ...previous, [event.node]: event.meta ?? {} }));
           // Only the three nodes that actually emit_token (see backend
@@ -197,20 +244,24 @@ export function useChatWorkflow(
           break;
         case "planning_completed":
           setPlanSteps(event.plan_steps.map((step) => step.toLowerCase()));
+          setPlanIntent(event.intent);
           setNodeStatus((previous) => ({ ...previous, planning: "completed" }));
           appendLog(`İşlem planı belirlendi: ${event.plan_steps.join(" → ") || "genel sohbet"}.`);
           break;
         case "node_end":
+          noteNode(event.node, event.label);
           setNodeStatus((previous) => ({ ...previous, [event.node]: "completed" }));
           if (event.result) setNodeResults((previous) => ({ ...previous, [event.node]: { ...(previous[event.node] ?? {}), ...event.result } }));
           if (event.meta) setNodeMeta((previous) => ({ ...previous, [event.node]: event.meta ?? {} }));
           appendLog(`${event.label} tamamlandı.`);
           break;
         case "node_error":
+          noteNode(event.node, event.label);
           setNodeStatus((previous) => ({ ...previous, [event.node]: event.fatal ? "failed" : (previous[event.node] ?? "completed") }));
           appendLog(`${event.fatal ? "Hata" : "Uyarı"} (${event.label}): ${event.message}`);
           break;
         case "node_skipped":
+          noteNode(event.node, event.label);
           setNodeStatus((previous) => ({ ...previous, [event.node]: "skipped" }));
           appendLog(`${event.label} atlandı: ${event.reason}`);
           break;
@@ -311,7 +362,7 @@ export function useChatWorkflow(
           break;
       }
     },
-    [appendLog, onSessionResolved, refreshServerState],
+    [appendLog, noteNode, onSessionResolved, refreshServerState],
   );
 
   const send = useCallback(async (text: string, reasoningLevel: ReasoningLevel, useDocument: boolean) => {
@@ -387,6 +438,9 @@ export function useChatWorkflow(
     nodeResults,
     nodeMeta,
     planSteps,
+    nodeLabels,
+    nodeOrder,
+    planIntent,
     logs,
     toolCalls,
     guardrailEvents,

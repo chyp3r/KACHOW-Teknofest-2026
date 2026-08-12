@@ -219,6 +219,17 @@ class QuestionEvent(BaseModel):
 
 
 class FinalResultEvent(BaseModel):
+    """The terminal event of a turn.
+
+    ``details`` is free-form (see ``planning_graph._compile_final_output``),
+    but always carries at least ``status``, ``plan_steps`` (the resolved
+    step ids for this turn, e.g. ``["classification", "draft", "routing"]``)
+    and ``intent`` -- the same fields the ``planning_completed`` SSE event
+    carries live, persisted here so a session reopened from history (which
+    only ever replays stored messages, never the SSE stream that produced
+    them) can still reconstruct the workflow stepper.
+    """
+
     event: Literal["final_result"] = "final_result"
     reply: str
     workflow_status: str

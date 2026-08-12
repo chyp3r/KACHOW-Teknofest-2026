@@ -6,18 +6,19 @@ import {
   FileText,
   History,
   Plus,
+  Trash2,
   X,
 } from "lucide-react";
 import { useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorNotice } from "../components/ApiErrorNotice";
-import { Button } from "../components/Button";
+import { Button, IconButton } from "../components/Button";
+import { ConfirmationDialog } from "../components/ConfirmationDialog";
 import { FormActions, Grid } from "../components/LayoutPrimitives";
 import { EmptyState } from "../components/EmptyState";
 import { Select, Textarea } from "../components/FormControls";
 import { PageHeader } from "../components/PageHeader";
 import { SectionHeader } from "../components/SectionHeader";
-import { StatusBadge } from "../components/StatusBadge";
 import { Card, Spinner } from "../components/Surface";
 import { useDraftCreation } from "../hooks/useDraftCreation";
 import { useDrafts } from "../hooks/useDrafts";
@@ -87,6 +88,15 @@ export function DraftsPage({
   const [level, setLevel] = useState<ReasoningLevel>("balanced");
   const [instructions, setInstructions] = useState("");
   const [copiedDraftId, setCopiedDraftId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
+    const deletingActive = pendingDeleteId === activeDraftId;
+    await drafts.deleteDraft(pendingDeleteId);
+    setPendingDeleteId(null);
+    if (deletingActive) onCloseDraft?.();
+  };
 
   const create = async () => {
     if (!selected || !analysis) return;
@@ -122,7 +132,7 @@ export function DraftsPage({
     return document?.file_name ?? documentId.split(/[\\/]/).pop() ?? documentId;
   };
 
-  const draftTitle = (draft: PersistedDraft) => {
+  const correspondenceTypeLabel = (draft: PersistedDraft) => {
     const knownType = creation.correspondenceTypes.find(
       (item) => item.value === draft.correspondence_type,
     );
@@ -130,6 +140,9 @@ export function DraftsPage({
     if (!draft.correspondence_type) return "Resmî taslak";
     return draft.correspondence_type.replace(/_/g, " ");
   };
+
+  const draftTitle = (draft: PersistedDraft) =>
+    `${documentName(draft.document_id)} - ${correspondenceTypeLabel(draft)}`;
 
   const expandedVersions = drafts.versions.length > 0
     ? sortVersionsNewestFirst(drafts.versions)
@@ -238,11 +251,19 @@ export function DraftsPage({
             drafts={drafts.drafts}
             activeDraftId={activeDraftId}
             titleFor={draftTitle}
-            sourceFor={(draft) => documentName(draft.document_id)}
             onToggle={(draft, expanded) => {
               if (expanded) onCloseDraft?.();
               else onOpenDraft(draft.id);
             }}
+            renderRowActions={(draft) => (
+              <IconButton
+                icon={<Trash2 />}
+                aria-label="Taslağı sil"
+                variant="ghost"
+                className="danger-text"
+                onClick={() => setPendingDeleteId(draft.id)}
+              />
+            )}
             renderDetail={(_draft, detailId) => (
                     <div id={detailId} className="draft-table-detail" role="row">
                       {drafts.detailLoading ? (
@@ -265,11 +286,6 @@ export function DraftsPage({
                                 <strong>{drafts.activeDraft.attempts ?? "—"}</strong>
                               </span>
                             </div>
-                            <StatusBadge
-                              tone={drafts.activeDraft.requires_human_approval ? "warning" : "success"}
-                            >
-                              {drafts.activeDraft.requires_human_approval ? "Onay gerekli" : "Hazır"}
-                            </StatusBadge>
                           </div>
 
                           <div className="draft-detail-actions">
@@ -318,6 +334,16 @@ export function DraftsPage({
           />
         )}
       </Card>
+
+      <ConfirmationDialog
+        open={pendingDeleteId !== null}
+        title="Taslağı sil"
+        description="Bu taslak ve tüm sürüm geçmişi kalıcı olarak listeden kaldırılacak. Bu işlem geri alınamaz."
+        confirmLabel="Sil"
+        busy={drafts.deleting}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

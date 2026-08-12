@@ -1,6 +1,7 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../query/queryKeys";
 import { draftService } from "../services/draftService";
+import type { PaginatedResponse } from "../types/api";
 import type { PersistedDraft } from "../types/drafts";
 
 export function useDrafts(activeDraftId?: string) {
@@ -25,6 +26,23 @@ export function useDrafts(activeDraftId?: string) {
     queryClient.setQueryData(queryKeys.draft(created.id), created);
     void queryClient.invalidateQueries({ queryKey: ["drafts"] });
   };
+  const removeMutation = useMutation({
+    mutationFn: (draftId: string) => draftService.remove(draftId),
+    onSuccess: (_result, draftId) => {
+      queryClient.setQueryData<PaginatedResponse<PersistedDraft>>(
+        queryKeys.drafts(),
+        (current) =>
+          current
+            ? {
+                ...current,
+                items: current.items.filter((item) => item.id !== draftId),
+                total: Math.max(0, current.total - 1),
+              }
+            : current,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["drafts"] });
+    },
+  });
   const errorObject = listQuery.error ?? detailQuery.error ?? versionsQuery.error;
 
   return {
@@ -46,5 +64,9 @@ export function useDrafts(activeDraftId?: string) {
     errorObject,
     refresh: () => listQuery.refetch(),
     registerCreatedDraft,
+    deleting: removeMutation.isPending,
+    deleteDraft: async (draftId: string) => {
+      await removeMutation.mutateAsync(draftId);
+    },
   };
 }

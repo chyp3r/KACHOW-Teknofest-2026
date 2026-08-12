@@ -4,8 +4,9 @@ import {
   Search,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { EmptyState } from "../../components/EmptyState";
-import type { DocumentAnalysis, DocumentMetadata } from "../../types/documents";
+import type { DocumentAnalysis, DocumentMetadata, EvrakFields } from "../../types/documents";
 import { DocumentAnalysisPanel } from "./DocumentAnalysisPanel";
 import { Button } from "../../components/Button";
 import { Input, Select } from "../../components/FormControls";
@@ -18,17 +19,26 @@ export function DocumentTable({
   selected,
   analysis,
   loading,
+  updatingFields,
   onSelect,
   onClose,
+  onUpdateFields,
+  onDeleteDocument,
+  deletingDocument,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
   analysis: DocumentAnalysis | null;
   loading: boolean;
+  updatingFields?: boolean;
   onSelect: (document: DocumentMetadata) => void;
   onClose?: () => void;
+  onUpdateFields?: (storagePath: string, fields: EvrakFields) => Promise<void>;
+  onDeleteDocument?: (storagePath: string) => Promise<void>;
+  deletingDocument?: boolean;
 }) {
   const [query, setQuery] = useState("");
+  const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
   const [type, setType] = useState("all");
   const [ascending, setAscending] = useState(false);
   const types = useMemo(
@@ -119,6 +129,9 @@ export function DocumentTable({
                     if (expanded) onClose?.();
                     else onSelect(item);
                   }}
+                  onDelete={
+                    onDeleteDocument ? () => setPendingDeletePath(item.storage_path) : undefined
+                  }
                 />
 
                 {expanded && (
@@ -127,7 +140,15 @@ export function DocumentTable({
                     {loading && !analysis ? (
                       <div className="centered-state"><Spinner label="Analiz ayrıntıları yükleniyor" />Analiz ayrıntıları yükleniyor…</div>
                     ) : (
-                      <DocumentAnalysisPanel analysis={analysis} />
+                      <DocumentAnalysisPanel
+                        analysis={analysis}
+                        saving={updatingFields}
+                        onSave={
+                          onUpdateFields && analysis
+                            ? (fields) => onUpdateFields(analysis.storage_path, fields)
+                            : undefined
+                        }
+                      />
                     )}
                   </div>
                 )}
@@ -136,6 +157,21 @@ export function DocumentTable({
           })}
         </ul>
       )}
+
+      <ConfirmationDialog
+        open={pendingDeletePath !== null}
+        title="Evrakı sil"
+        description="Bu evrak, analiz sonuçları ve dizinlenmiş içerikleri kalıcı olarak silinecek. Bu işlem geri alınamaz."
+        confirmLabel="Sil"
+        busy={deletingDocument}
+        onConfirm={async () => {
+          if (!pendingDeletePath || !onDeleteDocument) return;
+          if (selected?.storage_path === pendingDeletePath) onClose?.();
+          await onDeleteDocument(pendingDeletePath);
+          setPendingDeletePath(null);
+        }}
+        onCancel={() => setPendingDeletePath(null)}
+      />
     </Card>
   );
 }
