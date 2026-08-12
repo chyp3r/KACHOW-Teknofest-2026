@@ -99,3 +99,15 @@ async def test_is_owned_by_false_for_an_unregistered_document(repo, mock_session
     mock_session.execute.return_value = mock_result
 
     assert await repo.is_owned_by("uploads/ghost.pdf", "user-1") is False
+
+
+@pytest.mark.asyncio
+async def test_delete_removes_the_row_and_flushes(repo, mock_session):
+    await repo.delete("uploads/a.pdf")
+
+    mock_session.execute.assert_awaited_once()
+    statement = mock_session.execute.await_args.args[0]
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "documents" in compiled
+    assert "uploads/a.pdf" in compiled
+    mock_session.flush.assert_awaited_once()

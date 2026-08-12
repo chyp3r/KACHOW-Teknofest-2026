@@ -14,9 +14,11 @@ export function DocumentsPage({
   loading,
   uploading,
   updatingFields,
+  deletingDocument,
   error,
   onUpload,
   onUpdateFields,
+  onDeleteDocument,
   onSelect,
   onCloseDocument,
 }: {
@@ -26,9 +28,11 @@ export function DocumentsPage({
   loading: boolean;
   uploading: boolean;
   updatingFields?: boolean;
+  deletingDocument?: boolean;
   error: string | null;
   onUpload: (file: File) => Promise<void>;
   onUpdateFields?: (storagePath: string, fields: EvrakFields) => Promise<void>;
+  onDeleteDocument?: (storagePath: string) => Promise<void>;
   onSelect: (document: DocumentMetadata) => void;
   onCloseDocument?: () => void;
 }) {
@@ -72,9 +76,11 @@ export function DocumentsPage({
         analysis={analysis}
         loading={loading}
         updatingFields={updatingFields}
+        deletingDocument={deletingDocument}
         onSelect={onSelect}
         onClose={onCloseDocument}
         onUpdateFields={onUpdateFields}
+        onDeleteDocument={onDeleteDocument}
       />
     </div>
   );

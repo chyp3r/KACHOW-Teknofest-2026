@@ -528,3 +528,67 @@ async def test_update_document_fields_returns_none_when_nothing_is_cached(tmp_pa
     result = await service.update_document_fields("uploads/missing.pdf", EvrakField())
 
     assert result is None
+
+
+# ==========================================
+# Permanent document deletion
+# ==========================================
+@pytest.mark.asyncio
+async def test_delete_document_removes_the_row_file_cache_and_vectors(tmp_path, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
+    storage_path = "uploads/abc.pdf"
+    cache_file = tmp_path / f"{storage_path}_analysis.json"
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text("{}", encoding="utf-8")
+
+    service, storage, _, _ = _build_service()
+    document_repository = AsyncMock()
+    vector_store = AsyncMock()
+    service.document_repository = document_repository
+    service.vector_store = vector_store
+
+    await service.delete_document(storage_path)
+
+    document_repository.delete.assert_awaited_once_with(storage_path)
+    storage.delete_file.assert_awaited_once_with(storage_path)
+    vector_store.delete_by_filter.assert_awaited_once()
+    args = vector_store.delete_by_filter.await_args.args
+    assert args[1] == {"storage_path": storage_path}
+    assert not cache_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_document_survives_a_storage_failure(tmp_path, monkeypatch):
+    """Best-effort past the registry row -- once that's gone the document no
+    longer appears in GET /documents regardless of what fails below it."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
+    service, storage, _, _ = _build_service()
+    storage.delete_file.side_effect = Exception("storage exploded")
+    document_repository = AsyncMock()
+    service.document_repository = document_repository
+
+    await service.delete_document("uploads/abc.pdf")
+
+    document_repository.delete.assert_awaited_once_with("uploads/abc.pdf")
+
+
+@pytest.mark.asyncio
+async def test_delete_document_skips_repository_and_vector_cleanup_when_absent(
+    tmp_path, monkeypatch
+):
+    """No repository/vector_store injected (the minimal service shape most
+    other tests in this file use) -- delete must still succeed."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
+    service, storage, _, _ = _build_service()
+    assert service.document_repository is None
+    assert service.vector_store is None
+
+    await service.delete_document("uploads/abc.pdf")
+
+    storage.delete_file.assert_awaited_once_with("uploads/abc.pdf")

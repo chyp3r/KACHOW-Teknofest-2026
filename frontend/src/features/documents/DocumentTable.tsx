@@ -4,6 +4,7 @@ import {
   Search,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { EmptyState } from "../../components/EmptyState";
 import type { DocumentAnalysis, DocumentMetadata, EvrakFields } from "../../types/documents";
 import { DocumentAnalysisPanel } from "./DocumentAnalysisPanel";
@@ -22,6 +23,8 @@ export function DocumentTable({
   onSelect,
   onClose,
   onUpdateFields,
+  onDeleteDocument,
+  deletingDocument,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
@@ -31,8 +34,11 @@ export function DocumentTable({
   onSelect: (document: DocumentMetadata) => void;
   onClose?: () => void;
   onUpdateFields?: (storagePath: string, fields: EvrakFields) => Promise<void>;
+  onDeleteDocument?: (storagePath: string) => Promise<void>;
+  deletingDocument?: boolean;
 }) {
   const [query, setQuery] = useState("");
+  const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
   const [type, setType] = useState("all");
   const [ascending, setAscending] = useState(false);
   const types = useMemo(
@@ -123,6 +129,9 @@ export function DocumentTable({
                     if (expanded) onClose?.();
                     else onSelect(item);
                   }}
+                  onDelete={
+                    onDeleteDocument ? () => setPendingDeletePath(item.storage_path) : undefined
+                  }
                 />
 
                 {expanded && (
@@ -148,6 +157,21 @@ export function DocumentTable({
           })}
         </ul>
       )}
+
+      <ConfirmationDialog
+        open={pendingDeletePath !== null}
+        title="Evrakı sil"
+        description="Bu evrak, analiz sonuçları ve dizinlenmiş içerikleri kalıcı olarak silinecek. Bu işlem geri alınamaz."
+        confirmLabel="Sil"
+        busy={deletingDocument}
+        onConfirm={async () => {
+          if (!pendingDeletePath || !onDeleteDocument) return;
+          if (selected?.storage_path === pendingDeletePath) onClose?.();
+          await onDeleteDocument(pendingDeletePath);
+          setPendingDeletePath(null);
+        }}
+        onCancel={() => setPendingDeletePath(null)}
+      />
     </Card>
   );
 }

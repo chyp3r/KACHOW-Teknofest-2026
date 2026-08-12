@@ -346,3 +346,51 @@ async def get_document_analysis(
         assert_clearance(current_user, result.guardrail.sensitivity_level)
 
     return SuccessResponse(data=result.model_dump(mode="json"))
+
+
+@router.delete("/{storage_path:path}", response_model=None)
+async def delete_document(
+    storage_path: str,
+    service: DocumentService = Depends(get_document_analysis_service),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+):
+    """Permanently delete a document: registry row, raw file, analysis
+    cache, and any indexed Q&A chunks.
+
+    Args:
+        storage_path: The document's storage key.
+        service: Injected document analysis service.
+        document_repository: Ownership/listing registry, checked before the
+            delete when a real user is attached to the request.
+        current_user: The authenticated caller, when ``REQUIRE_AUTH`` is on.
+
+    Returns:
+        ``{"deleted": true}`` inside the unified success envelope. Succeeds
+        even if ``storage_path`` was already gone -- delete is idempotent.
+
+    Raises:
+        HTTPException: 400 if storage_path is malformed.
+        AuthorizationException: 403 if the document belongs to a different
+            user than ``current_user`` (and it isn't an ADMIN/MANAGER), or
+            ``current_user``'s clearance doesn't cover the document's
+            confidentiality level.
+    """
+    try:
+        validate_storage_path(storage_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if current_user is not None:
+        document = await document_repository.get_by_id(storage_path)
+        if document is not None:
+            if document.owner_id != current_user.id and not bypasses_ownership(current_user):
+                raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+            try:
+                document_level = SensitivityLevel(document.sensitivity_level)
+            except ValueError:
+                document_level = SensitivityLevel.UNMARKED
+            assert_clearance(current_user, document_level)
+
+    await service.delete_document(storage_path)
+    return SuccessResponse(data={"deleted": True})

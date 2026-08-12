@@ -81,3 +81,21 @@ class BaseVectorStore(ABC):
         """
         pass
 
+    @abstractmethod
+    async def delete_by_filter(
+        self, collection_name: str, filter_dict: Dict[str, Any]
+    ) -> bool:
+        """Delete every point matching a filter, without dropping the collection.
+
+        The narrower counterpart to `delete_collection` -- removes one
+        document's chunks (e.g. `{"storage_path": "uploads/x.pdf"}`) out of
+        a shared collection other documents still live in.
+
+        Args:
+            collection_name: The name of the collection.
+            filter_dict: This module's filter convention (see
+                `QdrantStore._build_qdrant_filter`); must be non-empty --
+                an empty filter would delete the entire collection's points.
+        """
+        pass
+

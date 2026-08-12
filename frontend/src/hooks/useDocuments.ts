@@ -56,6 +56,16 @@ export function useDocuments(
       );
     },
   });
+  const removeMutation = useMutation({
+    mutationFn: (storagePath: string) => documentService.remove(storagePath),
+    onSuccess: (_result, storagePath) => {
+      queryClient.setQueryData<DocumentMetadata[]>(queryKeys.documents(), (current = []) =>
+        current.filter((item) => item.storage_path !== storagePath),
+      );
+      queryClient.removeQueries({ queryKey: queryKeys.documentAnalysis(storagePath) });
+      void queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+  });
 
   useEffect(() => {
     if (
@@ -81,6 +91,7 @@ export function useDocuments(
     refreshing: documentsQuery.isFetching && !documentsQuery.isLoading,
     uploading: uploadMutation.isPending,
     updatingFields: updateFieldsMutation.isPending,
+    deleting: removeMutation.isPending,
     error: error instanceof Error ? error.message : null,
     refresh: async () => {
       await documentsQuery.refetch();
@@ -90,6 +101,9 @@ export function useDocuments(
     },
     updateFields: async (storagePath: string, fields: EvrakFields) => {
       await updateFieldsMutation.mutateAsync({ storagePath, fields });
+    },
+    deleteDocument: async (storagePath: string) => {
+      await removeMutation.mutateAsync(storagePath);
     },
   };
 }

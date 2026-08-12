@@ -771,3 +771,43 @@ class DocumentService:
                 document.compliance_status = analysis.compliance_status.value
 
         return analysis
+
+    async def delete_document(self, storage_path: str) -> None:
+        """Permanently remove a document: registry row, raw file, analysis
+        cache, and any indexed Q&A chunks.
+
+        Best-effort past the registry row -- once that row is gone the
+        document no longer appears in `GET /documents` regardless of
+        whether the remaining cleanup steps below succeed, so a
+        storage/cache/vector-store hiccup is logged and swallowed here
+        rather than surfaced as a failed delete the caller would retry.
+
+        Args:
+            storage_path: The document's storage key.
+        """
+        if self.document_repository is not None:
+            await self.document_repository.delete(storage_path)
+
+        try:
+            await self.storage.delete_file(storage_path)
+        except Exception:
+            logger.exception("Failed to delete stored file for %s", storage_path)
+
+        cache_file = os.path.join(settings.LOCAL_STORAGE_DIR, f"{storage_path}_analysis.json")
+
+        def _remove_cache():
+            if os.path.exists(cache_file):
+                os.remove(cache_file)
+
+        try:
+            await asyncio.to_thread(_remove_cache)
+        except Exception:
+            logger.exception("Failed to delete cached analysis for %s", storage_path)
+
+        if self.vector_store is not None:
+            try:
+                await self.vector_store.delete_by_filter(
+                    QA_COLLECTION_NAME, {"storage_path": storage_path}
+                )
+            except Exception:
+                logger.exception("Failed to delete indexed chunks for %s", storage_path)

@@ -98,3 +98,36 @@ async def test_delete_collection_success(store):
 async def test_delete_collection_exception(store):
     store.client.collection_exists.side_effect = Exception("error")
     assert await store.delete_collection("col1") is False
+
+
+@pytest.mark.asyncio
+async def test_delete_by_filter_success(store):
+    store.client.collection_exists.return_value = True
+    assert await store.delete_by_filter("col1", {"storage_path": "uploads/x.pdf"}) is True
+    store.client.delete.assert_called_once()
+    _, kwargs = store.client.delete.call_args
+    assert kwargs["collection_name"] == "col1"
+
+
+@pytest.mark.asyncio
+async def test_delete_by_filter_missing_collection_is_a_noop_success(store):
+    """No collection yet (nothing was ever indexed) is not a failure --
+    there is simply nothing to delete."""
+    store.client.collection_exists.return_value = False
+    assert await store.delete_by_filter("col1", {"storage_path": "uploads/x.pdf"}) is True
+    store.client.delete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_by_filter_refuses_an_empty_filter(store):
+    """An empty filter would delete every point in the collection -- refuse
+    outright rather than let a caller's bug wipe out other documents."""
+    assert await store.delete_by_filter("col1", {}) is False
+    store.client.delete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_by_filter_exception(store):
+    store.client.collection_exists.return_value = True
+    store.client.delete.side_effect = Exception("error")
+    assert await store.delete_by_filter("col1", {"storage_path": "uploads/x.pdf"}) is False

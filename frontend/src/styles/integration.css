@@ -850,12 +850,15 @@
 }
 .document-list-toolbar .search-field { width: 100%; }
 .document-list-toolbar .form-field:nth-child(2) { min-width: 0; }
+.document-list-item-shell { display: flex; align-items: center; }
+.document-list-item-delete { flex: 0 0 auto; margin-right: var(--space-3); }
 .document-list-item {
   display: grid;
   grid-template-columns: var(--icon-container-md) minmax(16rem, 1fr) minmax(24rem, auto);
   align-items: center;
   gap: var(--space-4);
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   min-height: 5rem;
   padding: var(--space-3) var(--space-5);
   border: 0;

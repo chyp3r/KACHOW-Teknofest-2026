@@ -408,3 +408,32 @@ class QdrantStore(BaseVectorStore):
             )
             return False
 
+    async def delete_by_filter(
+        self, collection_name: str, filter_dict: Dict[str, Any]
+    ) -> bool:
+        """Delete every point matching a filter (e.g. one document's chunks)
+        without dropping the rest of the collection."""
+        if not filter_dict:
+            logger.error(
+                f"delete_by_filter refused an empty filter for '{collection_name}' "
+                "-- would have deleted every point in the collection."
+            )
+            return False
+        try:
+            exists = await self.client.collection_exists(collection_name)
+            if not exists:
+                return True
+            await self.client.delete(
+                collection_name=collection_name,
+                points_selector=models.FilterSelector(
+                    filter=_build_qdrant_filter(filter_dict)
+                ),
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                f"Qdrant delete_by_filter failed for '{collection_name}': {e}",
+                exc_info=True,
+            )
+            return False
+

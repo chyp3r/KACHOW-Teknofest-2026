@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { DocumentAnalysis, DocumentMetadata } from "../types/documents";
 import { DocumentsPage } from "./DocumentsPage";
@@ -80,5 +80,71 @@ describe("DocumentsPage", () => {
 
     fireEvent.click(row);
     expect(onCloseDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it("deletes a document after confirmation and closes it if it was open", async () => {
+    const onDeleteDocument = vi.fn().mockResolvedValue(undefined);
+    const onCloseDocument = vi.fn();
+    render(
+      <DocumentsPage
+        documents={[document]}
+        selected={document}
+        analysis={analysis}
+        loading={false}
+        uploading={false}
+        error={null}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+        onSelect={vi.fn()}
+        onCloseDocument={onCloseDocument}
+        onDeleteDocument={onDeleteDocument}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Evrakı sil" }));
+    expect(screen.getByRole("alertdialog", { name: "Evrakı sil" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sil" }));
+
+    await waitFor(() => expect(onDeleteDocument).toHaveBeenCalledWith(document.storage_path));
+    expect(onCloseDocument).toHaveBeenCalled();
+  });
+
+  it("does not delete anything when the confirmation is cancelled", () => {
+    const onDeleteDocument = vi.fn();
+    render(
+      <DocumentsPage
+        documents={[document]}
+        selected={null}
+        analysis={null}
+        loading={false}
+        uploading={false}
+        error={null}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+        onSelect={vi.fn()}
+        onDeleteDocument={onDeleteDocument}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Evrakı sil" }));
+    fireEvent.click(screen.getByRole("button", { name: "Vazgeç" }));
+
+    expect(onDeleteDocument).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("hides the delete button when no onDeleteDocument is wired", () => {
+    render(
+      <DocumentsPage
+        documents={[document]}
+        selected={null}
+        analysis={null}
+        loading={false}
+        uploading={false}
+        error={null}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Evrakı sil" })).not.toBeInTheDocument();
   });
 });

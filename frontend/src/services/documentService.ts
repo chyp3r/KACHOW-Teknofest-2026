@@ -35,6 +35,10 @@ export const documentService = {
       body: JSON.stringify({ fields }),
     });
   },
+  remove(storagePath: string): Promise<{ deleted: boolean }> {
+    const safePath = storagePath.split("/").map(encodeURIComponent).join("/");
+    return apiRequest(`/api/v1/documents/${safePath}`, { method: "DELETE" });
+  },
   correspondenceTypes(): Promise<CorrespondenceType[]> {
     return apiRequest("/api/v1/documents/correspondence-types");
   },

@@ -488,3 +488,84 @@ def test_delete_draft_allows_an_admin_that_does_not_own_it():
 
     assert response.status_code == 200
     service.delete_draft.assert_awaited_once_with("draft-1")
+
+
+# ==========================================
+# DELETE /documents/{storage_path} -- ownership
+# ==========================================
+def test_delete_document_refuses_a_document_owned_by_another_user():
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user("user-b")
+    document_repository = AsyncMock()
+    document_repository.get_by_id.return_value = DocumentModel(
+        id=_STORAGE_PATH, owner_id="user-a", file_name="gizli.pdf"
+    )
+    app.dependency_overrides[get_document_repository] = lambda: document_repository
+    service = AsyncMock()
+    app.dependency_overrides[get_document_analysis_service] = lambda: service
+
+    response = client.delete(f"/api/v1/documents/{_STORAGE_PATH}")
+
+    assert response.status_code == 403
+    service.delete_document.assert_not_called()
+
+
+def test_delete_document_allows_the_owner():
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user("user-a")
+    document_repository = AsyncMock()
+    document_repository.get_by_id.return_value = DocumentModel(
+        id=_STORAGE_PATH, owner_id="user-a", file_name="mine.pdf"
+    )
+    app.dependency_overrides[get_document_repository] = lambda: document_repository
+    service = AsyncMock()
+    app.dependency_overrides[get_document_analysis_service] = lambda: service
+
+    response = client.delete(f"/api/v1/documents/{_STORAGE_PATH}")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["deleted"] is True
+    service.delete_document.assert_awaited_once_with(_STORAGE_PATH)
+
+
+def test_delete_document_refuses_a_document_above_the_callers_clearance():
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user("user-a")
+    document_repository = AsyncMock()
+    document_repository.get_by_id.return_value = DocumentModel(
+        id=_STORAGE_PATH, owner_id="user-a", file_name="mine.pdf", sensitivity_level="gizli"
+    )
+    app.dependency_overrides[get_document_repository] = lambda: document_repository
+    service = AsyncMock()
+    app.dependency_overrides[get_document_analysis_service] = lambda: service
+
+    response = client.delete(f"/api/v1/documents/{_STORAGE_PATH}")
+
+    assert response.status_code == 403
+    service.delete_document.assert_not_called()
+
+
+def test_delete_document_allows_an_admin_that_does_not_own_it():
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user("admin-x", role="admin")
+    document_repository = AsyncMock()
+    document_repository.get_by_id.return_value = DocumentModel(
+        id=_STORAGE_PATH, owner_id="user-a", file_name="mine.pdf"
+    )
+    app.dependency_overrides[get_document_repository] = lambda: document_repository
+    service = AsyncMock()
+    app.dependency_overrides[get_document_analysis_service] = lambda: service
+
+    response = client.delete(f"/api/v1/documents/{_STORAGE_PATH}")
+
+    assert response.status_code == 200
+    service.delete_document.assert_awaited_once_with(_STORAGE_PATH)
+
+
+def test_delete_document_skips_ownership_check_when_unauthenticated():
+    document_repository = AsyncMock()
+    app.dependency_overrides[get_document_repository] = lambda: document_repository
+    service = AsyncMock()
+    app.dependency_overrides[get_document_analysis_service] = lambda: service
+
+    response = client.delete(f"/api/v1/documents/{_STORAGE_PATH}")
+
+    assert response.status_code == 200
+    document_repository.get_by_id.assert_not_called()
+    service.delete_document.assert_awaited_once_with(_STORAGE_PATH)
