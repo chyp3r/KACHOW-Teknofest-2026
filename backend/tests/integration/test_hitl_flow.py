@@ -177,6 +177,14 @@ async def test_answering_resumes_without_regenerating_the_draft(monkeypatch):
     assert "[MUHATAP]" not in result["final_output"]["draft"]["draft"]
     assert result["final_output"]["routing"]["routed_unit"] == "İnsan Kaynakları Daire Başkanlığı"
 
+    # plan_steps/intent must survive the human_gate pause+resume so the
+    # frontend can rebuild the workflow stepper for a session reopened from
+    # history, where only the persisted final_output is available (not the
+    # live SSE stream that produced it).
+    assert result["final_output"]["plan_steps"]
+    assert "draft" in result["final_output"]["plan_steps"]
+    assert result["final_output"]["intent"] == "draft"
+
     snapshot = await graph.aget_state(config)
     assert not snapshot.next  # run completed; nothing left pending
 

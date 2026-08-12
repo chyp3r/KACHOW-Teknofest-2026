@@ -1574,6 +1574,8 @@ def create_planning_graph(
 
         output: dict[str, Any] = {
             "status": final_status,
+            "plan_steps": list(updates.get("plan_steps") or state.get("plan_steps") or []),
+            "intent": updates.get("plan_intent") or state.get("plan_intent") or "",
             "classification": _pick("classification_result"),
             "draft": draft_result,
             "routing": _pick("routing_result"),
