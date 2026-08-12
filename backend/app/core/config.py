@@ -125,6 +125,13 @@ class Settings(BaseSettings):
     SEED_EMPLOYEE_EMAIL: str = "employee@kachow.local"
     SEED_EMPLOYEE_PASSWORD: str = "Employee123!"
 
+    #: Create the default routable units on startup if the `units` table is
+    #: empty of them (see app.domains.units.seeder). Same idempotent,
+    #: best-effort, test-disabled convention as SEED_DEFAULT_USERS -- without
+    #: it a fresh environment has no units to route to until an admin
+    #: creates one through `POST /units`.
+    SEED_DEFAULT_UNITS: bool = True
+
     # Ollama Configuration
     # Note: When running inside Docker, set OLLAMA_BASE_URL to http://host.docker.internal:11434
     OLLAMA_BASE_URL: str = "http://localhost:11434"

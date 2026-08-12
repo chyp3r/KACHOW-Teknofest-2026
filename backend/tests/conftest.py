@@ -263,6 +263,17 @@ def _disable_default_user_seeding(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _disable_default_unit_seeding(monkeypatch):
+    """Turn off app.domains.units.seeder's DB writes for every test.
+
+    Same reasoning as `_disable_default_user_seeding` above.
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "SEED_DEFAULT_UNITS", False)
+
+
+@pytest.fixture(autouse=True)
 def _reset_redis_cache_between_tests():
     """Drop the process-wide Redis client reference after every test.
 

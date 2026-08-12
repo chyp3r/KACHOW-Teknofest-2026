@@ -22,7 +22,6 @@ show -- which is exactly what these assert.
 import re
 from dataclasses import replace
 from pathlib import Path
-from typing import get_args
 
 import pytest
 
@@ -169,22 +168,6 @@ def test_a_malformed_reasoning_level_resolves_to_balanced():
     assert node_budget("analyze", None) == balanced
 
 
-def test_the_routing_unit_list_and_its_literal_cannot_drift():
-    """The `Literal` on RouteOutput.destination duplicates the unit tuple; a
-    comment used to be the only thing keeping them in step."""
-    literal_units = get_args(
-        routing_graph.RouteOutput.model_fields["destination"].annotation
-    )
-
-    assert set(literal_units) == set(get_policy().routing.units)
-
-
-def test_the_human_approval_unit_is_one_of_the_routing_units():
-    policy = get_policy()
-
-    assert policy.routing.human_approval_unit in policy.routing.units
-
-
 def test_consuming_modules_read_their_constants_from_the_policy():
     policy = get_policy()
 
@@ -194,7 +177,6 @@ def test_consuming_modules_read_their_constants_from_the_policy():
     assert draft_verifier.TOKEN_OVERLAP_THRESHOLD == policy.verification.token_overlap_threshold
     assert llm_judge._ECHO_OVERLAP_THRESHOLD == policy.verification.judge_echo_overlap_threshold
     assert routing_graph.HUMAN_APPROVAL_SCORE_THRESHOLD == policy.routing.human_approval_score_threshold
-    assert routing_graph.ROUTING_UNITS == policy.routing.units
     assert intent_scorer.DECISIVE_MARGIN == policy.intent.decisive_margin
     assert intent_scorer.PRESENCE_FLOOR == policy.intent.presence_floor
     assert intent_scorer.COMPOUND_FLOOR == policy.intent.compound_floor

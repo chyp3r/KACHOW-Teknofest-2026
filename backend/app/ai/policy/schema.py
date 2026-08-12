@@ -74,29 +74,26 @@ class VerificationPolicy:
 
 @dataclass(frozen=True)
 class RoutingPolicy:
-    """The unit list and the score below which nothing may be routed.
+    """The score below which nothing may be routed automatically.
+
+    The unit list itself is no longer policy -- units are managed at runtime
+    through the ``units`` domain (``POST/PATCH/DELETE /units``, admin/manager
+    only) and read fresh on every routing decision by ``routing_graph`` via
+    ``app.domains.units.provider.get_active_units_for_routing``. There is no
+    "İnsan Onayı Gerekli" pseudo-unit anymore: when routing can't confidently
+    pick a real unit (empty draft, low score, an LLM failure, or a unit name
+    outside the current list), no unit is assigned and the existing
+    ``requires_human_approval`` flag is set instead -- the same flag the
+    draft-quality gate already uses, not a special unit value.
 
     Attributes:
         human_approval_score_threshold: Below this a draft is not trustworthy
             enough to route anywhere but a human. The *lower* of the two
             thresholds -- see :func:`Policy.check_invariants` for why the
             relationship matters.
-        units: The routing targets. Single source of truth; the ``Literal`` in
-            ``routing_graph.RouteOutput`` is checked against it by test.
-        human_approval_unit: The escape hatch inside ``units``.
     """
 
     human_approval_score_threshold: float = 50.0
-    human_approval_unit: str = "İnsan Onayı Gerekli"
-    units: tuple[str, ...] = (
-        "İnsan Kaynakları",
-        "Hukuk Müşavirliği",
-        "Mali İşler",
-        "Vatandaş İlişkileri",
-        "Bilgi İşlem Dairesi",
-        "Destek Hizmetleri",
-        "İnsan Onayı Gerekli",
-    )
 
 
 @dataclass(frozen=True)
@@ -423,9 +420,6 @@ class Policy:
                     f"budget for node {node!r} ({seconds}s) exceeds the workflow "
                     f"ceiling ({ceiling}s)"
                 )
-
-        if routing.human_approval_unit not in routing.units:
-            raise ValueError("routing.human_approval_unit must be one of routing.units")
 
         guardrail = self.guardrail
         for name, value in (

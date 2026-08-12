@@ -37,17 +37,25 @@ skorunu okur, hızlı katmanda çalışır.
     "routed_unit": "İnsan Kaynakları",
     "priority": "Normal",
     "reasoning": "Personel izin talebiyle ilgili.",
-    "justification": "Personel izin talebiyle ilgili."
+    "justification": "Personel izin talebiyle ilgili.",
+    "requires_human_approval": false
   },
   "error": null,
   "meta": { "timestamp": "2026-08-01T12:00:00Z" }
 }
 ```
 
-`routed_unit`, `ROUTING_UNITS` listesindeki bir birim veya `"İnsan Onayı Gerekli"`
-olur (boş taslak, düşük güven skoru veya bir model hatası durumunda).
-`priority`, `"İnsan Onayı Gerekli"` seçildiğinde `"Yüksek"`, aksi halde
-`"Normal"`dir.
+Birimler artık statik değil: `GET /units` ile listelenen, yöneticilerin
+(`POST`/`PATCH`/`DELETE /units`, bkz. [`units.md`](./units.md)) tanımladığı
+aktif birimler arasından seçilir -- `routed_unit`, o an aktif olan birimlerden
+biridir.
+
+`routed_unit`, boş taslak, düşük güven skoru (`HUMAN_APPROVAL_SCORE_THRESHOLD`
+altı, 50.0), tanımlı hiçbir aktif birim yokken, ya da bir model hatası/geçersiz
+yanıtı durumunda `null` olur -- bu artık ayrı bir "İnsan Onayı Gerekli" birimi
+**değil**; bunun yerine `requires_human_approval` alanı `true` olur (taslak
+kalite kapısının kullandığı bayrakla aynı alan). `priority`,
+`requires_human_approval` true olduğunda `"Yüksek"`, aksi halde `"Normal"`dir.
 
 ## Hata durumları
 

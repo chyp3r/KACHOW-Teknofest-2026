@@ -166,6 +166,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     await seed_default_users()
 
+    from app.domains.units.seeder import seed_default_units
+
+    await seed_default_units()
+
     await _startup()
     logger.info("Startup complete; accepting requests.")
     try:

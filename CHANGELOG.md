@@ -2,6 +2,21 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [2.0.0] - 2026-08-12
+### Eklendi
+- **Dinamik Birim Yönetimi API'si (`units` domain'i)**: Yönlendirme yapılabilecek birimler artık kod içinde sabit bir liste değil; şirket yöneticileri (`ADMIN`/`MANAGER`) `POST /api/v1/units` ile yeni birim tanımlayabiliyor, `PATCH /api/v1/units/{id}` ile adını/açıklamasını/aktiflik durumunu güncelleyebiliyor, `DELETE /api/v1/units/{id}` ile kalıcı olarak silebiliyor; `GET /api/v1/units` herkese (auth açıksa kimlik doğrulamalı) tüm birimleri listeliyor. Yeni `units` tablosu ve `0008_units` migration'ı eklendi; mevcut 6 birim (`app.domains.units.seeder`) ilk açılışta geriye dönük uyumluluk için otomatik tohumlanıyor.
+- **`docs/api/units.md`**: Yeni birim yönetimi API dokümantasyonu.
+
+### Değiştirildi
+- **"İnsan Onayı Gerekli" artık bir birim değil**: `routing_graph.py`, yönlendirme kararını artık `app.domains.units.provider.get_active_units_for_routing` üzerinden veritabanından her çağrıda taze okunan aktif birim listesine göre veriyor (`RoutingPolicy.units`/`human_approval_unit` ve `RouteOutput.destination`'daki sabit `Literal` kaldırıldı -- dinamik bir liste sabit bir tipe sığmadığı için `str` oldu, geçerlilik kontrolü çağrı anında yapılıyor). Yönlendirme belirsiz kaldığında (boş taslak, düşük güven skoru, tanımlı aktif birim yokluğu, model hatası veya listede olmayan bir birim adı) artık sahte bir "İnsan Onayı Gerekli" birimi atanmıyor; bunun yerine `routed_unit=null` döner ve taslak-kalite kapısının zaten kullandığı `requires_human_approval` bayrağı `true` olur -- iki mekanizma artık aynı, tek bir sinyali paylaşıyor. `router.md` prompt şablonundaki sabit 6 birim listesi ve "İnsan Onayı Değerlendirmesi" adımı kaldırıldı; birim listesi + açıklamaları artık her çağrıda kullanıcı promptuna dinamik olarak enjekte ediliyor. `POST /api/v1/routing/suggest` yanıtına `requires_human_approval` alanı eklendi. `POLICY_VERSION` `1.6.0 -> 2.0.0` (bir parametrenin kaldırılması, modülün kendi kuralı gereği major bump).
+
+**Not — kapsam yalnızca backend'i içerir.** Birim yönetimi ekranı ve routing sayfasındaki eski "İnsan Onayı Gerekli" özel durumunun kaldırılması gibi frontend değişiklikleri bu sürüme dahil değildir; ayrı bir işte yapılacaktır.
+
+### Test
+- `units` domain'i için repository/service/router/seeder birim testleri eklendi (admin/manager yetkilendirmesi dahil, employee için 403 kilidi). `routing_graph`/`test_routing_endpoint`/`test_policy` testleri dinamik birim listesine (fake `units_provider`), birim atanamama + `requires_human_approval` davranışına ve kaldırılan `İnsan Onayı Gerekli`/`ROUTING_UNITS` referanslarına göre güncellendi. `draft_service` testine, yönlendirmenin başarısız olduğu durumda `requires_human_approval`'ın taslak-kalite bayrağıyla OR'landığını doğrulayan bir senaryo eklendi.
+
+Refs: [#164](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/164)
+
 ## [1.55.0] - 2026-08-12
 ### Düzeltildi
 - **Sohbetten Başlatılan Her Taslak "Cevap Yazısı" Çıkıyordu**: `_run_draft` kullanıcının mesajını sabit bir orkestratör kalıbına gömüyordu (`"...resmî ve kurumsal bir Türkçe **yanıt** taslağı oluştur."`), ve `resolve_correspondence_type` bu birleşik metni tarıyordu -- "yanıt" `RESPONSE_LETTER`'ın alias'ı olduğu için kullanıcının gerçek isteği hiç değerlendirilmiyordu. Kullanıcının ham mesajı artık ayrı bir `user_request` alanında taşınıyor ve tür çözümlemesi yalnızca bunun üzerinden yapılıyor; orkestratör boilerplate'i tür eşleştirmesine hiç girmiyor.
