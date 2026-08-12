@@ -1,23 +1,26 @@
 ---
-id: VAL-003
-kategori: bilgilendirme_metni
-niyet: duyuru
-baslik: Antalya Valiliği Mavi Akdeniz İnisiyatifi Dumansız Plaj Uygulama Genelgesi
-kurum: T.C. Antalya Valiliği
-kaynak_url: https://www.antalya.gov.tr/antalya-mavi-akdeniz-inisiyatifi-dumansiz-plaj-uygulama-genelgesi
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "VAL-003"
+kategori: "bilgilendirme_metni"
+alt_kategori: "duyuru"
+niyet: "duyuru"
+baslik: "Antalya Valiliği Mavi Akdeniz İnisiyatifi Dumansız Plaj Uygulama Genelgesi"
+kurum: "T.C. Antalya Valiliği"
+kaynak: "https://www.antalya.gov.tr/antalya-mavi-akdeniz-inisiyatifi-dumansiz-plaj-uygulama-genelgesi"
+kaynak_url: "https://www.antalya.gov.tr/antalya-mavi-akdeniz-inisiyatifi-dumansiz-plaj-uygulama-genelgesi"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Antalya Valiliği Mavi Akdeniz İnisiyatifi Dumansız Plaj Uygulama Genelgesi
 
-**T.C.**  
-**ANTALYA VALİLİĞİ**  
+**T.C.**
+**ANTALYA VALİLİĞİ**
 **İl Sağlık Müdürlüğü & Çevre Şehircilik ve İklim Değişikliği İl Müdürlüğü**
 
-**Genelge No:** 2026/06  
-**Tarih:** 24.07.2026  
+**Genelge No:** 2026/06
+**Tarih:** 24.07.2026
 
 Antalya Mavi Akdeniz İnisiyatifi (2026-2030) vizyonu doğrultusunda, kıyı şeridimizin ve deniz ekosistemimizin korunması, plajlarda sigara izmariti kirliliğinin önlenmesi ve halk sağlığının geliştirilmesi amacıyla ilimiz sınırlarındaki kamu ve özel işletme plajlarında "Dumansız Plaj Uygulaması" başlatılmıştır.
 
@@ -30,5 +33,5 @@ Antalya Mavi Akdeniz İnisiyatifi (2026-2030) vizyonu doğrultusunda, kıyı şe
 
 Tüm belediyelerimize, kolluk kuvvetlerimize ve plaj işletmecilerine önemle duyurulur.
 
-[SİLİNMİŞTİR]  
-Antalya Valisi  
+[KİŞİSEL BİLGİ]
+Antalya Valisi

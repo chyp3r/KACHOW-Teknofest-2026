@@ -1,25 +1,53 @@
 ---
-id: DY-028
-kategori: diger_resmi_yazisma
-niyet: 06_koordinasyon
-belge_turu: resmi_sablon
+id: "DY-028"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "06_koordinasyon"
+niyet: "06_koordinasyon"
+baslik: "| --- | --- | --- | --- |"
 kurum: "Düzce Üniversitesi Fen Edebiyat Fakültesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-028_bakim-onarim-istek-formu.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-028_bakim-onarim-istek-formu.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Bakım Onarım İstek Formu
+# | --- | --- | --- | --- |
 
-- Resmî kaynak: https://fef.duzce.edu.tr/sayfa/0468/sablon-yazilar
-- Doğrudan belge: https://cdn.duzce.edu.tr/File/GetFile/0dfb9fd1-4209-4b3c-8130-27e8aa91b8b6
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-028_bakim-onarim-istek-formu.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+| A) Arıza Bildirimini Yapan Personel Tarafından Doldurulacaktır. | A) Arıza Bildirimini Yapan Personel Tarafından Doldurulacaktır. | A) Arıza Bildirimini Yapan Personel Tarafından Doldurulacaktır. | A) Arıza Bildirimini Yapan Personel Tarafından Doldurulacaktır. |
 
-## Veri kümesinde kullanım
+| --- | --- | --- | --- |
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+| Arıza Bildirimini Yapan Bölüm: | | | Tarih: |
 
-## Doğrulama notu
+| Arıza Bildirimini Yapan Personelin Adı-Soyadı: | | | Dahili: |
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+| Açıklama (arıza tanımı kısaca yazılacaktır): | Açıklama (arıza tanımı kısaca yazılacaktır): | Açıklama (arıza tanımı kısaca yazılacaktır): | Açıklama (arıza tanımı kısaca yazılacaktır): |
+
+| Elektrik Elektronik Mekanik İnşaat Diğer | Elektrik Elektronik Mekanik İnşaat Diğer | Elektrik Elektronik Mekanik İnşaat Diğer | Elektrik Elektronik Mekanik İnşaat Diğer |
+
+| Yukarıda bilgileri yazılı olan arıza bildirimi …/…/202.. tarihi ve ..… : ..… saatinde teknik hizmetler birimine tebliğ edilmiştir. | Yukarıda bilgileri yazılı olan arıza bildirimi …/…/202.. tarihi ve ..… : ..… saatinde teknik hizmetler birimine tebliğ edilmiştir. | Yukarıda bilgileri yazılı olan arıza bildirimi …/…/202.. tarihi ve ..… : ..… saatinde teknik hizmetler birimine tebliğ edilmiştir. | Yukarıda bilgileri yazılı olan arıza bildirimi …/…/202.. tarihi ve ..… : ..… saatinde teknik hizmetler birimine tebliğ edilmiştir. |
+
+| Arıza Bildiriminde Bulunan Bölüm Yetkilisi: | | | |
+
+| B) Arızayı Onaran Personel Tarafından Doldurulacaktır. | B) Arızayı Onaran Personel Tarafından Doldurulacaktır. | B) Arızayı Onaran Personel Tarafından Doldurulacaktır. | B) Arızayı Onaran Personel Tarafından Doldurulacaktır. |
+
+| Arızayı Onaran Personelin Adı-Soyadı: | | Tarih: | Saat: |
+
+| Arıza Hakkında Açıklama: | Arıza Hakkında Açıklama: | Arıza Hakkında Açıklama: | Arıza Hakkında Açıklama: |
+
+| Arıza Onarımında Kullanılan Malzeme: | Arıza Onarımında Kullanılan Malzeme: | Arıza Onarımında Kullanılan Malzeme: | Arıza Onarımında Kullanılan Malzeme: |
+
+| Arıza Onarılamamışsa Nedeni: | Arıza Onarılamamışsa Nedeni: | Arıza Onarılamamışsa Nedeni: | Arıza Onarılamamışsa Nedeni: |
+
+| Yukarıda bilgileri yazılı olan arızaya …/…/202.. tarihi ve ..… : ..… saatinde müdahale edilmiştir. | Yukarıda bilgileri yazılı olan arızaya …/…/202.. tarihi ve ..… : ..… saatinde müdahale edilmiştir. | Yukarıda bilgileri yazılı olan arızaya …/…/202.. tarihi ve ..… : ..… saatinde müdahale edilmiştir. | Yukarıda bilgileri yazılı olan arızaya …/…/202.. tarihi ve ..… : ..… saatinde müdahale edilmiştir. |
+
+| Arızayı Onaran Personel: | | | |
+
+| Birim Amiri: | | | |

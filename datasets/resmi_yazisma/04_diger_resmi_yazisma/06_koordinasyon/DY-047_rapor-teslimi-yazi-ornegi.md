@@ -1,11 +1,15 @@
 ---
-id: DY-047
-kategori: diger_resmi_yazisma
-niyet: 06_koordinasyon
-belge_turu: resmi_sablon
+id: "DY-047"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "06_koordinasyon"
+niyet: "06_koordinasyon"
+baslik: "Rapor Teslimi Yazı Örneği"
 kurum: "Ankara Hacı Bayram Veli Üniversitesi Hukuk Müşavirliği"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynak_sayfasi_dogrulandi
+kaynak: "datasets/resmi_yazisma/04_diger_resmi_yazisma/06_koordinasyon/DY-047_rapor-teslimi-yazi-ornegi.md"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynak_sayfasi_dogrulandi"
+rag_status: "candidate"
 ---
 
 # Rapor Teslimi Yazı Örneği

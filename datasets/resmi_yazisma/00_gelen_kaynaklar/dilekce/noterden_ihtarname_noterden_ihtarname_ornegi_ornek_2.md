@@ -1,27 +1,28 @@
 ---
-id: DILEKCE-3F7C0C4C
-kategori: dilekce
-alt_kategori: noterden_ihtarname
+id: "DILEKCE-3F7C0C4C"
+kategori: "dilekce"
+alt_kategori: "noterden_ihtarname"
 baslik: "Noterden İhtarname Örneği (Ornek 2)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Noterden İhtarname Örneği (Ornek 2)
 
 İHTARNAME
 
-İHTAR EDEN: Burak Sahin (T.C.: 25416901730)
-Adres: Kizilay Mah. 171. Sok. No:15 Konya
+İHTAR EDEN: Burak Sahin (T.C.: [T.C. KİMLİK NO])
+Adres: [ADRES]
 
-MUHATAP: Hasan Arslan
-Adres: Ataturk Mah. Izmir
+MUHATAP: [KİŞİ ADI]
+Adres: [ADRES]
 
 KONU: Kira borcunun ödenmesi ihtarıdır.
 
 AÇIKLAMALAR:
 Sayın Muhatap,
 
-Kizilay Mah. 171. Sok. No:15 Konya adresindeki taşınmazımı 24.10.2024 tarihli kira sözleşmesi ile aylık 20330 TL bedelle tarafınıza kiraya vermiş bulunmaktayım. Ancak Ocak, Mayis ve Temmuz aylarına ait toplam 56892 TL kira bedelini ödememiş bulunmaktasınız.
+[KURUM ADRESİ]
 
 6098 sayılı Türk Borçlar Kanunu'nun 315. maddesi gereğince, işbu ihtarnamenin tarafınıza tebliğinden itibaren 30 gün içinde birikmiş kira borçlarınızı ödemenizi, aksi takdirde tahliye davası açılacağını ve alacağın yasal faiziyle birlikte tahsili için icra takibi başlatılacağını ihtar ederim.
 

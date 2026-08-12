@@ -1,25 +1,55 @@
 ---
-id: DY-022
-kategori: diger_resmi_yazisma
-niyet: 01_gorus
-belge_turu: resmi_sablon
+id: "DY-022"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "01_gorus"
+niyet: "01_gorus"
+baslik: "Yeniden Atanma Talebi …../ ….. / 20…"
 kurum: "Düzce Üniversitesi Fen Edebiyat Fakültesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-022_dr-ogretim-uyesi-yeniden-atama-teklif-yazisi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-022_dr-ogretim-uyesi-yeniden-atama-teklif-yazisi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Dr. Öğretim Üyesi Yeniden Atama Teklif Yazısı
+# Yeniden Atanma Talebi …../ ….. / 20…
 
-- Resmî kaynak: https://fef.duzce.edu.tr/sayfa/0468/sablon-yazilar
-- Doğrudan belge: https://cdn.duzce.edu.tr/File/GetFile/b446d5ee-1f47-4c21-bced-d393c43d885e
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-022_dr-ogretim-uyesi-yeniden-atama-teklif-yazisi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+DÜZCE ÜNİVERSİTESİ
 
-## Veri kümesinde kullanım
+FEN EDEBİYAT FAKÜLTESİ
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+………………………………………….. BÖLÜM BAŞKANLIĞI
 
-## Doğrulama notu
+**Sayı:** [EVRAK SAYISI]
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Konu: Yeniden Atanma Talebi …../ ….. / 20…
+
+FEN EDEBİYAT FAKÜLTESİ DEKANLIĞINA
+
+Bölümümüz ……………………..………………. Programı öğretim üyelerinden Dr.Öğr.Üyesi ……………….. , …./…./20… tarihinde yeniden atanması talebiyle bölüm başkanlığımıza başvurmuştur.
+
+Adı geçen öğretim üyesinin, anılan kadroya yeniden atanıp atanamayacağına esas teşkil etmek üzere hazırlanan bilimsel çalışmalarını içeren dosyası, 2547 sayılı Yükseköğretim Kanununun 23/a maddesi, Öğretim Üyeliğine Yükseltilme ve Atanma Yönetmeliğinin 8. maddesi ile Üniversitemiz Akademik Yükseltilme Ve Atama Kriterleri doğrultusunda incelenmek üzere ekte sunulmaktadır.
+
+Dr.Öğr.Üyesi ……………………. ‘un yeniden atanabilmesi için gereğini ve bilgilerinizi arz ederim.
+
+Ad Soyad
+
+……….. Bölüm Başkanı
+
+Eklerin aslı elden teslim edilecektir.
+
+EKLER : Dr.Öğr.Üyesi ………’a ait:
+
+1-Başvuru Dilekçesi
+
+2- Özgeçmiş (….Sayfa)
+
+3- Bilimsel Çalışma Dosyası (4 Adet CD)
+
+4- Dört (4) Aday Etkinlik Puan Listesi (…. Sayfa)

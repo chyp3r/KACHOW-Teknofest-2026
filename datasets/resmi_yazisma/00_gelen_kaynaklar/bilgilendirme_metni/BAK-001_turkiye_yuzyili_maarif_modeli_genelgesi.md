@@ -1,24 +1,27 @@
 ---
-id: BAK-001
-kategori: bilgilendirme_metni
-niyet: egitim_mufredat_duyurusu
-baslik: Türkiye Yüzyılı Maarif Modeli'ne İlişkin İş ve İşlemler Genelgesi (2024/54)
-kurum: T.C. Millî Eğitim Bakanlığı
-kaynak_url: https://mevzuat.meb.gov.tr/dosyalar/genelge/2024_54.pdf
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "BAK-001"
+kategori: "bilgilendirme_metni"
+alt_kategori: "egitim_mufredat_duyurusu"
+niyet: "egitim_mufredat_duyurusu"
+baslik: "Türkiye Yüzyılı Maarif Modeli'ne İlişkin İş ve İşlemler Genelgesi (2024/54)"
+kurum: "T.C. Millî Eğitim Bakanlığı"
+kaynak: "https://mevzuat.meb.gov.tr/dosyalar/genelge/2024_54.pdf"
+kaynak_url: "https://mevzuat.meb.gov.tr/dosyalar/genelge/2024_54.pdf"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Türkiye Yüzyılı Maarif Modeli'ne İlişkin İş ve İşlemler (Genelge No: 2024/54)
 
-**T.C.**  
-**MİLLÎ EĞİTİM BAKANLIĞI**  
-**Temel Eğitim Genel Müdürlüğü**  
+**T.C.**
+**MİLLÎ EĞİTİM BAKANLIĞI**
+**Temel Eğitim Genel Müdürlüğü**
 
-**Sayı:** E-43769022-10.07.01-10549211  
-**Konu:** Türkiye Yüzyılı Maarif Modeli Uygulama Esasları  
-**Genelge No:** 2024/54  
+**Sayı:** [EVRAK SAYISI]
+**Konu:** Türkiye Yüzyılı Maarif Modeli Uygulama Esasları
+**Genelge No:** 2024/54
 
 **DAĞITIM YERLERİNE**
 
@@ -38,11 +41,11 @@ Bakanlığımızca yürütülen müfredat yenileme ve geliştirme çalışmalar�
 
 Bilgilerini ve genelge esaslarının il/ilçe millî eğitim müdürlükleri ile okul müdürlüklerince titizlikle takibini ve uygulanmasını önemle rica ederim.
 
-[SİLİNMİŞTİR]  
-Bakan a.  
-Bakan Yardımcısı  
+[KİŞİSEL BİLGİ]
+Bakan a.
+Bakan Yardımcısı
 
-**İletişim Bilgileri:**  
-Adres: Atatürk Bulvarı No:98 Bakanlıklar / ANKARA  
-Telefon: [SİLİNMİŞTİR]  
-E-posta: [SİLİNMİŞTİR]  
+**İletişim Bilgileri:**
+Adres: [ADRES]
+Telefon: [TELEFON]
+E-posta: [E-POSTA]

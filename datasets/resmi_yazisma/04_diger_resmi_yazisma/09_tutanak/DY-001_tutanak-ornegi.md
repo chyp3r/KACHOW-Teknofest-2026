@@ -1,25 +1,37 @@
 ---
-id: DY-001
-kategori: diger_resmi_yazisma
-niyet: 09_tutanak
-belge_turu: resmi_sablon
+id: "DY-001"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "09_tutanak"
+niyet: "09_tutanak"
+baslik: "Tutanak Örneği"
 kurum: "Erzincan Binali Yıldırım Üniversitesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-001_tutanak-ornegi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-001_tutanak-ornegi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
 # Tutanak Örneği
 
-- Resmî kaynak: https://ogrenciisleri.ebyu.edu.tr/disiplin-sorusturma-rehberi/
-- Doğrudan belge: https://ogrenciisleri.ebyu.edu.tr/Dosyalar/Mevzuat/disiplin%20sorusturma%20rehberi/TutanakOrnegi.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-001_tutanak-ornegi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+Tutanak Örneği;
 
-## Veri kümesinde kullanım
+…./…./2024
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+TUTANAK
 
-## Doğrulama notu
+...../…../2024 tarihinde ….. nolu sınıfta saat …….’de başlatılan “”
+dersi yarıyıl içi/yarıyıl sonu sınavı sırasında ……… numaralı öğrenci (………...’)nın sıra altındaki kağıttan yararlanarak kopya çektiği/çekmeye teşebbüs ettiği saat tespit edilerek öğrencinin yararlandığı kopya kağıdı ve cevap kağıdına el konulmuş, öğrencinin yoklama listesine imza atması sağlanmış ve öğrenci sınıftan çıkarılarak iş bu tutanak tutulmuştur.
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Gözetmen
+
+(imza)
+
+Ek:
+1-) Öğrenci cevap kağıdı 2-) Kopya evrakı

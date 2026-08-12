@@ -1,25 +1,55 @@
 ---
-id: CY-006
-kategori: cevap_yazisi
-niyet: 03_bilgi_edinme
-belge_turu: tamamlanmis_resmi_cevap
+id: "CY-006"
+kategori: "cevap_yazisi"
+alt_kategori: "03_bilgi_edinme"
+niyet: "03_bilgi_edinme"
+baslik: "Yazılı Soru Önergesi"
 kurum: "Türkiye Büyük Millet Meclisinde yayımlanan kurum cevabı"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/cevap_yazisi/CY-006_7-42533-abd-ve-israil-in-iran-a-yonelik-saldirilarinin-bolgesel-bir-cati.pdf"
+yerel_orijinal: "00_gelen_kaynaklar/cevap_yazisi/CY-006_7-42533-abd-ve-israil-in-iran-a-yonelik-saldirilarinin-bolgesel-bir-cati.pdf"
+kaynak_turu: "pdf"
+belge_turu: "tamamlanmis_resmi_cevap"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "tesseract"
+used_ocr: "true"
+page_count: "1"
+quality_score: "0.797"
+rag_status: "candidate"
 ---
 
-# 7/42533 - ABD ve İsrail'in İran'a yönelik saldırılarının bölgesel bir çatışmaya dönmesi ihtimaline karşı Türkiye'nin askeri hazırlık seviyesine ilişkin
+# Yazılı Soru Önergesi
 
-- Resmî kaynak: https://www.tbmm.gov.tr/Denetim/Yazili-Soru-Onergesi-Detay/1855355e-6255-49f5-aed6-019d3ef46465
-- Doğrudan belge: https://cdn.tbmm.gov.tr/KKBSPublicFile/D28/Y4/T7/WebOnergeMetni/249c00e1-87d5-4f8a-8dc0-2c640e4a7bdd.pdf
-- Yerel asıl belge: 00_gelen_kaynaklar/cevap_yazisi/CY-006_7-42533-abd-ve-israil-in-iran-a-yonelik-saldirilarinin-bolgesel-bir-cati.pdf
-- Tarih bilgisi: 27/03/2026
-- Sayfa/bölüm: Belgenin tamamı
+ii , T.C. ğ
+4 Gi MILLI SAVUNMA BAKANLIĞI
+* * Hukuk Hizmetleri Genel Müdürlüğü
+A 4
+*x*
+**Sayı:** [EVRAK SAYISI]
+Konu : Yazılı Soru Önergesi
+m e agi ak N 1142533
+TÜRKİYE BUYUK MİLLET MECLİSİ BAŞKANLIĞINA
+İlgi o: 03.04.2026 tarihli ve E-43452547-120.07.04-1829485 sayılı yazınız.
 
-## Veri kümesinde kullanım
+Diyarbakır Milletvekili Mustafa Sezgin TANRIKULU tarafından TBMM Başkanlığına verilen ve
+Milli Savunma Bakanı tarafından cevap verilmesi talep edilen, 7/42533 sayılı yazılı soru önergesinin cevabı
+aşağıda sunulmuştur.
 
-Cevabın soru, ilgi, açıklama ve sonuç örgüsü örneklenebilir. Milletvekili ve olay adları eğitim girdisinde anonimleştirilmelidir.
+Sınırlarımızdaki tedbirler, komşu ülkelerimizdeki gelişmelere ve sınırlarımıza yönelen tehdit
+durumuna göre gerek birlik takviyesi yönünden gerekse teknolojik yönden sürekli güncellenip
+geliştirilmektedir. Hudut güvenliğimiz; ülkemizin sınırlarını korumak, terörist faaliyetleri önlemek
+amacıyla “Hudut Namustur” anlayışıyla 7 gün 24 saat, Cumhuriyet tarihimizin en yoğun teknolojisi, en
+etkili ve kademeli tedbirleri ile sağlanmaktadır.
 
-## Doğrulama notu
+Ülke hava savunması dinamik bir süreç olup tehdit değerlendirmeleri kapsamında şekillenmektedir.
+Türk Silahlı Kuvvetleri her türlü tehdide karşı her zaman hazır ve görevinin başındadır.
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Arz ederim.
+
+— .
+[İMZA SAHİBİ]
+Bakan
+Mevzuat Daire Başkanlığı Soru Önergeleri Şube Müdürlüğü Bilgi için: [KİŞİ ADI]
+[KURUM ADRESİ]
+[KURUM İLETİŞİM BİLGİLERİ]
+İntemet Adresi:www.msb.gov.ir

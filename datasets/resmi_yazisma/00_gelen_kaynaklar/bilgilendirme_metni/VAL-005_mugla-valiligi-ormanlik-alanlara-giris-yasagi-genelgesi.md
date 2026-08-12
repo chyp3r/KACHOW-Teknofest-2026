@@ -1,23 +1,26 @@
 ---
-id: VAL-005
-kategori: bilgilendirme_metni
-niyet: duyuru
-baslik: Muğla Valiliği Ormanlık Alanlara Giriş Yasağı ve Yangın Tedbirleri Genelgesi
-kurum: T.C. Muğla Valiliği
-kaynak_url: https://www.mugla.gov.tr/orman-yanginlari-ile-mucadele-komisyonu-tarafindan-alinan-kararlar
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "VAL-005"
+kategori: "bilgilendirme_metni"
+alt_kategori: "duyuru"
+niyet: "duyuru"
+baslik: "Muğla Valiliği Ormanlık Alanlara Giriş Yasağı ve Yangın Tedbirleri Genelgesi"
+kurum: "T.C. Muğla Valiliği"
+kaynak: "https://www.mugla.gov.tr/orman-yanginlari-ile-mucadele-komisyonu-tarafindan-alinan-kararlar"
+kaynak_url: "https://www.mugla.gov.tr/orman-yanginlari-ile-mucadele-komisyonu-tarafindan-alinan-kararlar"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Muğla Valiliği Ormanlık Alanlara Giriş Yasağı ve Yangın Tedbirleri Genelgesi
 
-**T.C.**  
-**MUĞLA VALİLİĞİ**  
+**T.C.**
+**MUĞLA VALİLİĞİ**
 **İl Orman Yangınlarıyla Mücadele Komisyonu**
 
-**Tarih:** 20.06.2026  
-**Karar No:** 2026/02  
+**Tarih:** 20.06.2026
+**Karar No:** 2026/02
 
 Muğla il genelinde yüksek hava sıcaklığı, düşük nem ve kuvvetli rüzgâr beklentisi nedeniyle orman yangınlarının önlenmesine ilişkin olarak aşağıdaki tedbirler ilan edilmiştir:
 
@@ -30,5 +33,5 @@ Muğla il genelinde yüksek hava sıcaklığı, düşük nem ve kuvvetli rüzgâ
 
 Kamuoyuna saygıyla duyurulur.
 
-[SİLİNMİŞTİR]  
-Muğla Valisi  
+[KİŞİSEL BİLGİ]
+Muğla Valisi

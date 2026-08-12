@@ -1,23 +1,26 @@
 ---
-id: VAL-007
-kategori: bilgilendirme_metni
-niyet: duyuru
-baslik: Trabzon Valiliği Suda Boğulma Olaylarının Önlenmesi ve Deniz Güvenliği Genelgesi
-kurum: T.C. Trabzon Valiliği
-kaynak_url: https://www.trabzon.gov.tr/suda-bogulma-olaylarinin-onlenmesi-genelgesi
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "VAL-007"
+kategori: "bilgilendirme_metni"
+alt_kategori: "duyuru"
+niyet: "duyuru"
+baslik: "Trabzon Valiliği Suda Boğulma Olaylarının Önlenmesi ve Deniz Güvenliği Genelgesi"
+kurum: "T.C. Trabzon Valiliği"
+kaynak: "https://www.trabzon.gov.tr/suda-bogulma-olaylarinin-onlenmesi-genelgesi"
+kaynak_url: "https://www.trabzon.gov.tr/suda-bogulma-olaylarinin-onlenmesi-genelgesi"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Trabzon Valiliği Suda Boğulma Olaylarının Önlenmesi ve Deniz Güvenliği Genelgesi
 
-**T.C.**  
-**TRABZON VALİLİĞİ**  
+**T.C.**
+**TRABZON VALİLİĞİ**
 **Sahil Güvenlik Doğu Karadeniz Grup Komutanlığı & İl Emniyet Müdürlüğü**
 
-**Genelge No:** 2026/05  
-**Tarih:** 10.06.2026  
+**Genelge No:** 2026/05
+**Tarih:** 10.06.2026
 
 Karadeniz kıyı yapısı nedeniyle oluşan rip (çeken) akıntısı ve olumsuz hava şartları sonucu yaşanabilecek suda boğulma olaylarının önlenmesi amacıyla ilimiz genelinde aşağıdaki tedbirler yürürlüğe konulmuştur:
 
@@ -30,5 +33,5 @@ Karadeniz kıyı yapısı nedeniyle oluşan rip (çeken) akıntısı ve olumsuz 
 
 Vatandaşlarımızın can güvenliği açısından uyarı levhalarına ve görevlilerin talimatlarına uyması gerekmektedir.
 
-[SİLİNMİŞTİR]  
-Trabzon Valisi  
+[KİŞİSEL BİLGİ]
+Trabzon Valisi

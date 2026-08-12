@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-2DEF1FD6
-kategori: dilekce
-alt_kategori: belediye_imar_itiraz
+id: "DILEKCE-2DEF1FD6"
+kategori: "dilekce"
+alt_kategori: "belediye_imar_itiraz"
 baslik: "Belediye İmar Planı İtiraz Dilekçesi (Ornek 2)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Belediye İmar Planı İtiraz Dilekçesi (Ornek 2)
@@ -25,6 +26,6 @@ Gereğini arz ederim.
 
 19.01.2022
 Ali Erdogan
-T.C. Kimlik No: 70001994954
-Adres: Yeni Mah. 63. Sok. No:17 Antalya
-Tel: 0544 368 48 13
+T.C. Kimlik No: [T.C. KİMLİK NO]
+Adres: [ADRES]
+Tel: [TELEFON]

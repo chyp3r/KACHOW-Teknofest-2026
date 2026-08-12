@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-D45F4436
-kategori: dilekce
-alt_kategori: iskur_ise_kayit
+id: "DILEKCE-D45F4436"
+kategori: "dilekce"
+alt_kategori: "iskur_ise_kayit"
 baslik: "İŞKUR İşsizlik Maaşı Başvuru Dilekçesi (Ornek 1)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # İŞKUR İşsizlik Maaşı Başvuru Dilekçesi (Ornek 1)
@@ -16,7 +17,7 @@ Sahin A.S. işyerinden 06.01.2021 tarihinde işten çıkarılmış bulunmaktayı
 
 Kişisel Bilgilerim:
 - Adı Soyadı: Zeynep Koc
-- T.C. Kimlik No: 17668506584
+- T.C. Kimlik No: [T.C. KİMLİK NO]
 - SGK Sicil No: 8475984
 - Son Çalışılan İşyeri: Sahin A.S.
 - İşten Ayrılma Tarihi: 06.01.2021
@@ -27,9 +28,9 @@ Kişisel Bilgilerim:
 
 06.01.2021
 Zeynep Koc
-T.C. Kimlik No: 17668506584
-Adres: Bahcelievler Mah. 78. Sok. No:36 Gaziantep
-Tel: 0551 170 88 79
+T.C. Kimlik No: [T.C. KİMLİK NO]
+Adres: [ADRES]
+Tel: [TELEFON]
 
 EKLER:
 1- İşten çıkış belgesi / SGK işten ayrılış bildirgesi

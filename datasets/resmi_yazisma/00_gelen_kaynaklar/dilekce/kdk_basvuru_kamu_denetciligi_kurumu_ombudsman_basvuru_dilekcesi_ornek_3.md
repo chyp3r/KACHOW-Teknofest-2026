@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-75054F5F
-kategori: dilekce
-alt_kategori: kdk_basvuru
+id: "DILEKCE-75054F5F"
+kategori: "dilekce"
+alt_kategori: "kdk_basvuru"
 baslik: "Kamu Denetçiliği Kurumu (Ombudsman) Başvuru Dilekçesi (Ornek 3)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Kamu Denetçiliği Kurumu (Ombudsman) Başvuru Dilekçesi (Ornek 3)
@@ -11,10 +12,10 @@ kaynak: "sentetik-sablon"
 KAMU DENETÇİLİĞİ KURUMU'NA
 
 Başvuru Sahibi: Ayse Demir
-T.C. Kimlik No: 18189868804
-Adres: Cumhuriyet Mah. 93. Sok. No:35 Konya
-Telefon: 0542 849 97 23
-E-posta: ali@email.com
+T.C. Kimlik No: [T.C. KİMLİK NO]
+Adres: [ADRES]
+Telefon: [TELEFON]
+E-posta: [E-POSTA]
 
 Şikayet Edilen İdare: Il Saglik Mudurlugu
 Şikayet Konusu: İdari işlem/eylem hakkında

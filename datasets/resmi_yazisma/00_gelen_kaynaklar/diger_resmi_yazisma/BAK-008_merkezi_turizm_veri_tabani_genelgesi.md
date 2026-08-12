@@ -1,26 +1,29 @@
 ---
-id: BAK-008
-kategori: diger_resmi_yazisma
-niyet: turizm_veri_tabani_duzenlemesi
-baslik: Merkezi Turizm Veri Tabanı Projesi Genelgesi (2026/1)
-kurum: T.C. Kültür ve Turizm Bakanlığı
-kaynak_url: https://www.ktb.gov.tr/mevzuat/genelgeler/2026-1
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "BAK-008"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "turizm_veri_tabani_duzenlemesi"
+niyet: "turizm_veri_tabani_duzenlemesi"
+baslik: "Merkezi Turizm Veri Tabanı Projesi Genelgesi (2026/1)"
+kurum: "T.C. Kültür ve Turizm Bakanlığı"
+kaynak: "https://www.ktb.gov.tr/mevzuat/genelgeler/2026-1"
+kaynak_url: "https://www.ktb.gov.tr/mevzuat/genelgeler/2026-1"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Merkezi Turizm Veri Tabanı Uygulamaları Hakkında Genelge (Genelge No: 2026/1)
 
-**T.C.**  
-**KÜLTÜR VE TURİZM BAKANLIĞI**  
-**Yatırım ve İşletmeler Genel Müdürlüğü**  
+**T.C.**
+**KÜLTÜR VE TURİZM BAKANLIĞI**
+**Yatırım ve İşletmeler Genel Müdürlüğü**
 
-**Sayı:** E-78102941-010.05-1049281  
-**Konu:** Merkezi Turizm Veri Tabanı Veri Giriş Esasları  
-**Genelge No:** 2026/1  
+**Sayı:** [EVRAK SAYISI]
+**Konu:** Merkezi Turizm Veri Tabanı Veri Giriş Esasları
+**Genelge No:** 2026/1
 
-**81 İL VALİLİĞİNE**  
+**81 İL VALİLİĞİNE**
 **(İl Kültür ve Turizm Müdürlüğü)**
 
 Ülkemiz turizm potansiyelinin izlenmesi, veriye dayalı politikaların geliştirilmesi ve turizm tesislerinin standartlarının denetlenmesi amacıyla hayata geçirilen "Merkezi Turizm Veri Tabanı" (MTVT) sistemine ilişkin esaslar aşağıda açıklanmıştır:
@@ -33,10 +36,10 @@ dogrulama: acik_kaynaktan_kazindi
 
 Bilgilerini ve ilinizdeki tüm konaklama tesislerine gerekli tebligatın yapılarak takibinin sağlanmasını rica ederim.
 
-[SİLİNMİŞTİR]  
-Bakan a.  
-Bakan Yardımcısı  
+[KİŞİSEL BİLGİ]
+Bakan a.
+Bakan Yardımcısı
 
-**DAĞITIM:**  
-81 İl Kültür ve Turizm Müdürlüğüne  
-Türkiye Otelciler Federasyonuna (TÜROFED)  
+**DAĞITIM:**
+81 İl Kültür ve Turizm Müdürlüğüne
+Türkiye Otelciler Federasyonuna (TÜROFED)

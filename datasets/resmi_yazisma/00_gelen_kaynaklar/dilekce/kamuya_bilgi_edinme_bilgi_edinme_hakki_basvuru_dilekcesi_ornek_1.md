@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-AAC7130A
-kategori: dilekce
-alt_kategori: kamuya_bilgi_edinme
+id: "DILEKCE-AAC7130A"
+kategori: "dilekce"
+alt_kategori: "kamuya_bilgi_edinme"
 baslik: "Bilgi Edinme Hakkı Başvuru Dilekçesi (Ornek 1)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Bilgi Edinme Hakkı Başvuru Dilekçesi (Ornek 1)
@@ -11,10 +12,10 @@ kaynak: "sentetik-sablon"
 Sosyal Guvenlik Kurumu
 BİLGİ EDİNME BİRİMİ'NE
 
-Başvuru Sahibi: Ahmet Yilmaz
-T.C. Kimlik No: 47469607245
-Adres: Kizilay Mah. 44. Sok. No:15 Samsun
-Telefon: 0554 764 19 65
+Başvuru Sahibi: [KİŞİ ADI]
+T.C. Kimlik No: [T.C. KİMLİK NO]
+Adres: [ADRES]
+Telefon: [TELEFON]
 
 KONU: 4982 sayılı Bilgi Edinme Hakkı Kanunu kapsamında bilgi/belge talebi
 
@@ -29,5 +30,5 @@ Kanun'un 11. maddesi gereğince başvuruma 15 iş günü içinde cevap verilmesi
 Gereğini saygılarımla arz ederim.
 
 01.10.2020
-Ahmet Yilmaz
+[KİŞİ ADI]
 İmza

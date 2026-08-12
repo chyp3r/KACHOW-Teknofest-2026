@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-F8514B54
-kategori: dilekce
-alt_kategori: vergi_itiraz
+id: "DILEKCE-F8514B54"
+kategori: "dilekce"
+alt_kategori: "vergi_itiraz"
 baslik: "Vergi Dairesi İdari Para Cezası İtiraz Dilekçesi (Ornek 3)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Vergi Dairesi İdari Para Cezası İtiraz Dilekçesi (Ornek 3)
@@ -20,15 +21,15 @@ Müdürlüğünüzün 20.05.2025 tarih ve 76473 sayılı yazısı ile tarafıma 
 3. 213 sayılı Vergi Usul Kanunu'nun ilgili maddeleri gereğince cezanın kaldırılmasını talep ediyorum.
 
 Mükellef Bilgileri:
-- Adı Soyadı: Ahmet Yilmaz
-- T.C. Kimlik No: 74051217976
-- Vergi Kimlik No: 5209335683
-- Adres: Fatih Mah. 68. Sok. No:38 Eskisehir
+- Adı Soyadı: [KİŞİ ADI]
+- T.C. Kimlik No: [T.C. KİMLİK NO]
+- Vergi Kimlik No: [TELEFON]
+[KURUM ADRESİ]
 
 Yukarıda arz ettiğim nedenlerle, haksız yere kesilen para cezasının iptal edilmesini saygılarımla arz ve talep ederim.
 
 20.05.2025
-Ahmet Yilmaz
+[KİŞİ ADI]
 İmza
 
 EKLER:

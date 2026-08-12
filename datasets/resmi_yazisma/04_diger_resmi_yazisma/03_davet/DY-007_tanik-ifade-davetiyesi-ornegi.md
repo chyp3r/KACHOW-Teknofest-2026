@@ -1,25 +1,36 @@
 ---
-id: DY-007
-kategori: diger_resmi_yazisma
-niyet: 03_davet
-belge_turu: resmi_sablon
+id: "DY-007"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "03_davet"
+niyet: "03_davet"
+baslik: "Tanık İfade Davetiyesi örneği"
 kurum: "Erzincan Binali Yıldırım Üniversitesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-007_tanik-ifade-davetiyesi-ornegi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-007_tanik-ifade-davetiyesi-ornegi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Tanık İfade Davetiyesi Örneği
+# Tanık İfade Davetiyesi örneği
 
-- Resmî kaynak: https://ogrenciisleri.ebyu.edu.tr/disiplin-sorusturma-rehberi/
-- Doğrudan belge: https://ogrenciisleri.ebyu.edu.tr/Dosyalar/Mevzuat/disiplin%20sorusturma%20rehberi/TanikifadeDavetiyesiOrnegi.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-007_tanik-ifade-davetiyesi-ornegi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+Tanık İfade Davetiyesi örneği;
 
-## Veri kümesinde kullanım
+Sayın (öğrenci/öğretim elamanı)
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+İlgi : … makamının … gün ve … sayılı yazısı.
 
-## Doğrulama notu
+İlgi yazı ile …../…../2024 günü, saat …….’de ……. nolu sınıfta yapılan ….… sınavında, ………...isimli öğrencinin…………. suretiyle kopya çektiği iddiası ile başlatılan disiplin soruşturmasında soruşturmacı olarak görevlendirildim. Bu davetiye ile yürütülen bu disiplin soruşturmasında konuya ilişkin tanık olarak ifadenizin alınması gerektiğinden, ….. tarihine kadar ifadenizi yazılı olarak vermeniz (veya…….günü, …..saat ……’daifade
+yerinde bulunmanız) gerektiğini bildiririm.
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Soruşturmacı
+
+(İmza)
+
+…./…./2024

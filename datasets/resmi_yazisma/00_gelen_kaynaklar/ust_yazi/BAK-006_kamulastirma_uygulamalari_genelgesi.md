@@ -1,24 +1,27 @@
 ---
-id: BAK-006
-kategori: ust_yazi
-niyet: kamulastirma_ve_malkuliyet_talimati
-baslik: Kamulaştırma Uygulamaları Genelgesi (2024/3)
-kurum: T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı - Tapu ve Kadastro Genel Müdürlüğü
-kaynak_url: https://www.tkgm.gov.tr/mevzuat/genelgeler/2024-3
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "BAK-006"
+kategori: "ust_yazi"
+alt_kategori: "kamulastirma_ve_malkuliyet_talimati"
+niyet: "kamulastirma_ve_malkuliyet_talimati"
+baslik: "Kamulaştırma Uygulamaları Genelgesi (2024/3)"
+kurum: "T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı - Tapu ve Kadastro Genel Müdürlüğü"
+kaynak: "https://www.tkgm.gov.tr/mevzuat/genelgeler/2024-3"
+kaynak_url: "https://www.tkgm.gov.tr/mevzuat/genelgeler/2024-3"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Kamulaştırma İşlemlerinde Tapu ve Kadastro Uygulamaları (Genelge No: 2024/3)
 
-**T.C.**  
-**ÇEVRE, ŞEHİRCİLİK VE İKLİM DEĞİŞİKLİĞİ BAKANLIĞI**  
-**Tapu ve Kadastro Genel Müdürlüğü (Kadastro Dairesi Başkanlığı)**  
+**T.C.**
+**ÇEVRE, ŞEHİRCİLİK VE İKLİM DEĞİŞİKLİĞİ BAKANLIĞI**
+**Tapu ve Kadastro Genel Müdürlüğü (Kadastro Dairesi Başkanlığı)**
 
-**Sayı:** E-36029104-115.01-1092841  
-**Konu:** 2942 Sayılı Kamulaştırma Kanunu Kapsamındaki Harita ve Tescil İşlemleri  
-**Genelge No:** 2024/3 (1832)  
+**Sayı:** [EVRAK SAYISI]
+**Konu:** 2942 Sayılı Kamulaştırma Kanunu Kapsamındaki Harita ve Tescil İşlemleri
+**Genelge No:** 2024/3 (1832)
 
 **TAPU VE KADASTRO BÖLGE MÜDÜRLÜKLERİNE**
 
@@ -34,9 +37,9 @@ dogrulama: acik_kaynaktan_kazindi
 
 Gereğini rica ederim.
 
-[SİLİNMİŞTİR]  
-Genel Müdür  
+[İMZA SAHİBİ]
+Genel Müdür
 
-**DAĞITIM:**  
-24 Tapu ve Kadastro Bölge Müdürlüğüne  
-İlgili Kamu Kurum ve Kuruluşlarına  
+**DAĞITIM:**
+24 Tapu ve Kadastro Bölge Müdürlüğüne
+İlgili Kamu Kurum ve Kuruluşlarına

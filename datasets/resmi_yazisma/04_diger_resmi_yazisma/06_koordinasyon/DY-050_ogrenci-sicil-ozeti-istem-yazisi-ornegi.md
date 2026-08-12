@@ -1,11 +1,15 @@
 ---
-id: DY-050
-kategori: diger_resmi_yazisma
-niyet: 06_koordinasyon
-belge_turu: resmi_sablon
+id: "DY-050"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "06_koordinasyon"
+niyet: "06_koordinasyon"
+baslik: "Öğrenci Sicil Özeti İstem Yazısı Örneği"
 kurum: "Ankara Hacı Bayram Veli Üniversitesi Hukuk Müşavirliği"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynak_sayfasi_dogrulandi
+kaynak: "datasets/resmi_yazisma/04_diger_resmi_yazisma/06_koordinasyon/DY-050_ogrenci-sicil-ozeti-istem-yazisi-ornegi.md"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynak_sayfasi_dogrulandi"
+rag_status: "candidate"
 ---
 
 # Öğrenci Sicil Özeti İstem Yazısı Örneği

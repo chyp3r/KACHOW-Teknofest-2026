@@ -1,25 +1,27 @@
 ---
-id: BM-030
-kategori: bilgilendirme_metni
-niyet: 01_islem_sureci
-belge_turu: yayimlanmis_resmi_bilgilendirme
+id: "BM-030"
+kategori: "bilgilendirme_metni"
+alt_kategori: "01_islem_sureci"
+niyet: "01_islem_sureci"
+baslik: "DUYURU"
 kurum: "Ulaştırma ve Altyapı Bakanlığı"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/bilgilendirme_metni/BM-030_karayollari-genel-mudurlugu-osym-merkezi-yerlestirme-duyurusu.html"
+yerel_orijinal: "00_gelen_kaynaklar/bilgilendirme_metni/BM-030_karayollari-genel-mudurlugu-osym-merkezi-yerlestirme-duyurusu.html"
+kaynak_turu: "html"
+belge_turu: "yayimlanmis_resmi_bilgilendirme"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "beautifulsoup"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
+
+# DUYURU
+
+## DUYURU
 
 # Karayolları Genel Müdürlüğü - ÖSYM Merkezi Yerleştirme Duyurusu
 
-- Resmî kaynak: https://www.uab.gov.tr/duyurular/karayollari-genel-mueduerluegue-oesym-merkezi-yerlestirme-duyurusu/
-- Doğrudan belge: Kaynak sayfasında
-- Yerel asıl belge: 00_gelen_kaynaklar/bilgilendirme_metni/BM-030_karayollari-genel-mudurlugu-osym-merkezi-yerlestirme-duyurusu.html
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
-
-## Veri kümesinde kullanım
-
-Başlık, hedef kitle, açıklama, tarih/son başvuru ve yönlendirme bölümleri şablon özellikleri olarak çıkarılabilir.
-
-## Doğrulama notu
-
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Karayolları Genel Müdürlüğü Avukat kadrosuna 657 sayılı Devlet Memurları Kanunu’nun 4/A maddesi kapsamında istihdam edilmek üzere ÖSYM tarafından yerleştirme yapılacaktır. Adaylar tercihlerini 9-16 Temmuz 2026 tarihleri arasında yapabilecektir. Tercih işlemleri 9 Temmuz 2026 saat 09.00’da başlayacak ve 16 Temmuz 2026 tarihinde saat 23.59’da sona erecektir. Tercih işlemleri ÖSYM’nin https://ais.osym.gov.tr adresinden T.C. kimlik numaraları ve aday şifresi kullanılarak bireysel olarak yapılacaktır. Adayların tercih işlemleri için Kılavuz’u dikkatle incelemeleri gerekmektedir. Posta yoluyla gönderilen veya elden verilen tercih listeleri geçerli olmayacaktır.

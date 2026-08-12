@@ -1,25 +1,81 @@
 ---
-id: UY-037
-kategori: ust_yazi
-niyet: 04_gorevlendirme_personel
-belge_turu: resmi_sablon
+id: "UY-037"
+kategori: "ust_yazi"
+alt_kategori: "04_gorevlendirme_personel"
+niyet: "04_gorevlendirme_personel"
+baslik: "Dr………………….. ‘in Tıpta Uzmanlık Eğitimi Bitirme Sınavı Jüri Üyeleri"
 kurum: "Sağlık Bilimleri Üniversitesi Hamidiye Tıp Fakültesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/ust_yazi/UY-037_uzmanlik-egitimi-bitirme-sinav-jurisi-ust-yazi-ornegi.doc"
+yerel_orijinal: "00_gelen_kaynaklar/ust_yazi/UY-037_uzmanlik-egitimi-bitirme-sinav-jurisi-ust-yazi-ornegi.doc"
+kaynak_turu: "doc"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "antiword"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Uzmanlık Eğitimi Bitirme Sınav Jürisi Üst Yazı Örneği
+# Dr………………….. ‘in Tıpta Uzmanlık Eğitimi Bitirme Sınavı Jüri Üyeleri
 
-- Resmî kaynak: https://tip.sbu.edu.tr/mevzuat-ve-formlar/mezuniyet-sonrasi-tip-egitimi/formlar/
-- Doğrudan belge: https://www.sbu.edu.tr/FileFolder/Dosyalar/226a44f5/2023_4/suamuzmanlikyazisi-d0cac1db.doc
-- Yerel asıl belge: 00_gelen_kaynaklar/ust_yazi/UY-037_uzmanlik-egitimi-bitirme-sinav-jurisi-ust-yazi-ornegi.doc
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+T.C.
 
-## Veri kümesinde kullanım
+SAĞLIK BİLİMLERİ ÜNİVERSİTESİ
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+Hamidiye Tıp Fakültesi Dekanlığı
 
-## Doğrulama notu
+**Sayı:** [EVRAK SAYISI]
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Konu : Dr………………….. ‘in Tıpta Uzmanlık Eğitimi Bitirme Sınavı Jüri Üyeleri
+
+…………
+
+……………….. SAĞLIK UYGULAMA VE ARAŞTIRMA
+
+MERKEZİ MÜDÜRLÜĞÜNE
+
+……………………. Kliniği tıpta uzmanlık öğrencilerinden Dr. ………………..'in tıpta
+uzmanlık eğitimi bitirme sınavı sınav jürisi, yeri, tarihi ve saati;
+…………….tarih ve ………………. sayılı akademik kurul kararına göre belirlenmiş olup
+Ek’te yer almaktadır. Sınav jürinin davet yazılarının yazılması, jüri
+üyelerinin kurum izinlerinin alınması, sınav şartlarının oluşturulması
+kurumunuz sorumluluğundadır.
+
+Tıpta ve Diş Hekimliğinde uzmanlık eğitimi yönetmenliğinin 20.
+Maddesine göre uzmanlık eğitimi bitirme sınavının yapılmasını, sınavdan
+sonra sınav tutanakları ile Bakanlığın istediği diğer evrakların Bakanlığa
+iletilmek üzere Dekanlığa gönderilmesini, öğrencinin dosyasının kurumunuzda
+muhafaza edilmesini rica ederim.
+
+| |Doç. Dr. Güven BEKTEMÜR |
+| |Dekan a. |
+| |Dekan Yardımcısı |
+
+EK. Uzmanlık Eğitimi Bitirme Sınavı Yer, Tarih ve Jüri Tespit Formu
+
+EK. Uzmanlık Eğitimi Tez Savunma Sınavı Yer, Tarih ve Jüri Formu
+
+|Uzmanlık Öğrencisinin Adı Soyadı | |
+|Eğitim Aldığı Klinik - Ana Dal/Yan Dal | |
+|Sınav Yeri | |
+|Sınav Tarihi | |
+|Sınav Saati | |
+|Tez Danışmanı-1 | |
+|Tez Danışmanı-2 (varsa) | |
+|Klinik Eğitim Sorumlusu | |
+
+|Sınav |Ünvan / Ad Soyad |Kurum |Branş |
+|Jürisi | | | |
+|(Asil) | | | |
+|1 | | | |
+|2 | | | |
+|3 | | | |
+|4 | | | |
+|5 | | | |
+|Sınav | | | |
+|Jürisi | | | |
+|(Yedek) | | | |
+|1 | | | |
+|2 | | | |

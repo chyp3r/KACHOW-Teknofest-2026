@@ -1,25 +1,29 @@
 ---
-id: BM-046
-kategori: bilgilendirme_metni
-niyet: 05_kamuoyu_aciklamasi
-belge_turu: yayimlanmis_resmi_bilgilendirme
+id: "BM-046"
+kategori: "bilgilendirme_metni"
+alt_kategori: "05_kamuoyu_aciklamasi"
+niyet: "05_kamuoyu_aciklamasi"
+baslik: "DUYURU"
 kurum: "Ulaştırma ve Altyapı Bakanlığı"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/bilgilendirme_metni/BM-046_2026-yili-performans-programi-kamuoyunun-bilgisine-sunulmustur.html"
+yerel_orijinal: "00_gelen_kaynaklar/bilgilendirme_metni/BM-046_2026-yili-performans-programi-kamuoyunun-bilgisine-sunulmustur.html"
+kaynak_turu: "html"
+belge_turu: "yayimlanmis_resmi_bilgilendirme"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "beautifulsoup"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
+
+# DUYURU
+
+## DUYURU
 
 # 2026 Yılı Performans Programı kamuoyunun bilgisine sunulmuştur
 
-- Resmî kaynak: https://www.uab.gov.tr/duyurular/2026-yili-performans-programi-kamuoyunun-bilgisine-sunulmustur/
-- Doğrudan belge: Kaynak sayfasında
-- Yerel asıl belge: 00_gelen_kaynaklar/bilgilendirme_metni/BM-046_2026-yili-performans-programi-kamuoyunun-bilgisine-sunulmustur.html
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+“Kamu İdarelerince Hazırlanacak Stratejik Planlar ve Performans Programları ile Faaliyet Raporlarına İlişkin Usul ve Esaslar Hakkında Yönetmelik” in 19/3. maddesi gereğince Bakanlığımız 2026 YILI PERFORMANS PROGRAMI Kamuoyunun bilgisine sunulmuştur.
 
-## Veri kümesinde kullanım
-
-Başlık, hedef kitle, açıklama, tarih/son başvuru ve yönlendirme bölümleri şablon özellikleri olarak çıkarılabilir.
-
-## Doğrulama notu
-
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+- 2026 Yılı Performans Programı İndir

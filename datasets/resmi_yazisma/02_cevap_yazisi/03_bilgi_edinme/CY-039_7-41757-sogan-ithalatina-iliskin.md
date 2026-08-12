@@ -1,25 +1,70 @@
 ---
-id: CY-039
-kategori: cevap_yazisi
-niyet: 03_bilgi_edinme
-belge_turu: tamamlanmis_resmi_cevap
+id: "CY-039"
+kategori: "cevap_yazisi"
+alt_kategori: "03_bilgi_edinme"
+niyet: "03_bilgi_edinme"
+baslik: "Soru Önergesi (7/41757)"
 kurum: "Türkiye Büyük Millet Meclisinde yayımlanan kurum cevabı"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/cevap_yazisi/CY-039_7-41757-sogan-ithalatina-iliskin.pdf"
+yerel_orijinal: "00_gelen_kaynaklar/cevap_yazisi/CY-039_7-41757-sogan-ithalatina-iliskin.pdf"
+kaynak_turu: "pdf"
+belge_turu: "tamamlanmis_resmi_cevap"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "tesseract"
+used_ocr: "true"
+page_count: "2"
+quality_score: "0.727"
+rag_status: "candidate"
 ---
 
-# 7/41757 - Soğan ithalatına ilişkin
+# Soru Önergesi (7/41757)
 
-- Resmî kaynak: https://www.tbmm.gov.tr/Denetim/Yazili-Soru-Onergesi-Detay/d3eb8c2f-8821-41d4-ac7f-019cc32b3372
-- Doğrudan belge: https://cdn.tbmm.gov.tr/KKBSPublicFile/D28/Y4/T7/WebOnergeMetni/5487e4ec-26f5-40eb-b678-e220e85befe1.pdf
-- Yerel asıl belge: 00_gelen_kaynaklar/cevap_yazisi/CY-039_7-41757-sogan-ithalatina-iliskin.pdf
-- Tarih bilgisi: 05/03/2026
-- Sayfa/bölüm: Belgenin tamamı
+»
+* y me *
+' 5 og
+yi > T.C.
+aa 77 TİCARET BAKANLIĞI
+#4
+>> 7 2 i
+**Sayı:** [EVRAK SAYISI]
+Konu : Soru Önergesi (7/41757)
+UR ML A Wi : 7İy17ST-
+TURKİYE BUYUK MİLLET MECLİSİ BAŞKANLIĞINA
+İlgi (o : 12.03.2026 tarihli ve 43452547-120.07.04-E.18162259 sayılı yazınız.
+İlgide kayıtlı yazıları ekinde yer alan, Niğde Milletvekili Sayın [KİŞİ ADI] tarafından
+verilen 7/41757 sayılı yazılı soru önergesinin cevabı hazırlanarak ekte sunulmuştur.
+Bilgilerini ve gereğini arz ederim.
+ç ğ Ğ
+[İMZA SAHİBİ]
+Bakan
+Ek : Soru Önergesi Cevabı (1 sayfa)
+Bu belge güvenli elektronik imza ile imzalanmıştır.
+Belge Doğrulama Kodu: ABOF22F7-36BA-4A9D-83E5-6E21D2A067E9 https://www.turkiye. gov.tr/ticaret-bakanligi-ebys
+Adres: [ADRES]
+[KURUM İLETİŞİM BİLGİLERİ]
+ar atejisoruonergeleri(diicaret gov. Veri Hazırlama ve Kontrol İşletmeni ağ: ayi
+nternet Adresi: www.ticaret.gov ir ei li İİİ
+[KURUM İLETİŞİM BİLGİLERİ]
+1/1
 
-## Veri kümesinde kullanım
+vey
+»
+T.C.
+TİCARET BAKANLIĞI
+Niğde Milletvekili Sayın [KİŞİ ADI]”e Ait 7/41757 Sayılı Yazılı Soru Önergesine
+İlişkin Cevaplar:
+Bakanlığımız görev ve yetki alanına giren hususlar itibarıyla, önergenize ilişkin cevaplarımıza
+aşağıda yer verilmiştir:
+1-6) 0703.10.11.00.000 Gümrük Tarife İstatistik Pozisyonlu (GTİP) arpacık soğanı,
+0703.10.19.00.11 GTİP'li kuru soğan ve 0703.10.19.00.12 GTİP'li taze soğan ithalatında
+uluslararası taahhütlerimizin en üst seviyesi olan 9049,5 oranında gümrük vergisi
+uygulanmaktadır. Ayrıca anılan ürünlerin ithalatında Tarım ve Orman Bakanlığınca düzenlenen
+uygunluk yazısı aranmaktadır.
 
-Cevabın soru, ilgi, açıklama ve sonuç örgüsü örneklenebilir. Milletvekili ve olay adları eğitim girdisinde anonimleştirilmelidir.
-
-## Doğrulama notu
-
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Bununla birlikte, 5429 sayılı Türkiye İstatistik Kanunu kapsamında istatistiksel
+bilgilerin saklanması, kullanıcıya sunulması, söz konusu alanlara ilişkin sistemlerin
+geliştirilmesi ve bu amaçla ulusal ve uluslararası bir bilgi ağı ve bilgi akış sisteminin
+oluşturulmasını koordine etme görevi Türkiye İstatistik Kurumu (TÜİK)Y'nun uhdesinde
+bulunmaktadır. Bu veriler TÜİK tarafından aylık ve yıllık bazda düzenli olarak ve şeffaf bir
+şekilde tüm kamuoyunun bilgisine açıktır.

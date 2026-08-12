@@ -1,25 +1,89 @@
 ---
-id: UY-024
-kategori: ust_yazi
-niyet: 06_rapor_sunum
-belge_turu: resmi_sablon
+id: "UY-024"
+kategori: "ust_yazi"
+alt_kategori: "06_rapor_sunum"
+niyet: "06_rapor_sunum"
+baslik: "T.C. SAĞLIK BAKANLIĞI"
 kurum: "Kahramanmaraş Sütçü İmam Üniversitesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/ust_yazi/UY-024_yurt-disi-susar-sirali-liste-bildirimi-ust-yazisi-ksu.docx"
+yerel_orijinal: "00_gelen_kaynaklar/ust_yazi/UY-024_yurt-disi-susar-sirali-liste-bildirimi-ust-yazisi-ksu.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Yurt Dışı SUSAR Sıralı Liste Bildirimi Üst Yazısı - KSÜ
+# T.C. SAĞLIK BAKANLIĞI
 
-- Resmî kaynak: https://etikkurul.ksu.edu.tr/Default?SId=33776
-- Doğrudan belge: https://etikkurul.ksu.edu.tr/depo/belgeler/15-Yurt%20d%C4%B1%C5%9F%C4%B1%20SUSAR%20S%C4%B1ral%C4%B1%20Liste%20Bildirimi%20%C3%9Cst%20Yaz%C4%B1%20%C3%96rne%C4%9Fi_2512181407090343.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/ust_yazi/UY-024_yurt-disi-susar-sirali-liste-bildirimi-ust-yazisi-ksu.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+T.C. SAĞLIK BAKANLIĞI
 
-## Veri kümesinde kullanım
+TÜRKİYE İLAÇ VE TIBBİ CİHAZ KURUMU
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+Klinik Araştırmalar Dairesi Başkanlığı
 
-## Doğrulama notu
+Güvenlilik Bildirimleri Değerlendirme Birimi
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+| Konu: | Yurt dışı SUSAR Sıralı Liste Bildirimi |
+
+| --- | --- |
+
+| İlgi: | “Bildirime ait önceki takip no.ların ilgi tutulması gerekmektedir” |
+
+“     ” isimli araştırma ürününe ait aşağıda bilgisi sunulan araştırmalara ait SUSAR’lara ilişkin sıralı liste ve bu listede yer alan SUSAR’lara ait özet rapor bilgilerinize sunulmaktadır.
+
+| Araştırmanın açık adı | |
+
+| --- | --- |
+
+| Araştırma kodu (TİTCK kodu) | |
+
+| Protokol kodu | |
+
+| Destekleyici | |
+
+| Destekleyicinin yasal temsilcisi | |
+
+| Bildirimden sorumlu yasal temsilci: | |
+
+| Kapsadığı dönem | - |
+
+(Başvurunun içeriğini yazınız)
+
+Başvuru dosyasına eklenen tüm dokümanların aslı ile birebir aynı olduğunu ve arama yapılabilir pdf olarak hazırlandığını,
+
+Başvuruda sağlanan bilgilerin doğru olduğunu kabul ve taahhüt ederim.
+
+Yukarıda detayları verilen başvurunun değerlendirilmesini ve gereğini saygılarımla arz ederim.
+
+(ıslak imzalı üst yazılarda)
+
+…./…./….
+
+İmza/Kaşe
+
+Adı Soyadı
+
+| Başvuru için iletişime geçilecek kişi: | |
+
+| --- | --- |
+
+| Adres: | |
+
+| Telefon: | |
+
+| E-posta: | |
+
+Ekler:
+
+| Doküman | Doküman | Tarih / Versiyon Açıklama |
+
+| --- | --- | --- |
+
+| 1. | Özet rapor | (sayfa sayısı belirtilmelidir) (kapsadığı dönem belirtilmelidir) |
+
+| 2. | Sıralama listesi | (sayfa sayısı belirtilmelidir) (kapsadığı dönem belirtilmelidir) |

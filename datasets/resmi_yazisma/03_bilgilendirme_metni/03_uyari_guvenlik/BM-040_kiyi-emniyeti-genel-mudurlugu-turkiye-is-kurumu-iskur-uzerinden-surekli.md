@@ -1,25 +1,33 @@
 ---
-id: BM-040
-kategori: bilgilendirme_metni
-niyet: 03_uyari_guvenlik
-belge_turu: yayimlanmis_resmi_bilgilendirme
+id: "BM-040"
+kategori: "bilgilendirme_metni"
+alt_kategori: "03_uyari_guvenlik"
+niyet: "03_uyari_guvenlik"
+baslik: "DUYURU"
 kurum: "Ulaştırma ve Altyapı Bakanlığı"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/bilgilendirme_metni/BM-040_kiyi-emniyeti-genel-mudurlugu-turkiye-is-kurumu-iskur-uzerinden-surekli.html"
+yerel_orijinal: "00_gelen_kaynaklar/bilgilendirme_metni/BM-040_kiyi-emniyeti-genel-mudurlugu-turkiye-is-kurumu-iskur-uzerinden-surekli.html"
+kaynak_turu: "html"
+belge_turu: "yayimlanmis_resmi_bilgilendirme"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "beautifulsoup"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
+
+# DUYURU
+
+## DUYURU
 
 # Kıyı Emniyeti Genel Müdürlüğü Türkiye İş Kurumu (İŞKUR) Üzerinden Sürekli İşçi Alım Duyurusu
 
-- Resmî kaynak: https://www.uab.gov.tr/duyurular/kiyi-emniyeti-genel-mueduerluegue-tuerkiye-is-kurumu-iskur-uezerinden-suerekli-isci-alim-duyurusu-3/
-- Doğrudan belge: Kaynak sayfasında
-- Yerel asıl belge: 00_gelen_kaynaklar/bilgilendirme_metni/BM-040_kiyi-emniyeti-genel-mudurlugu-turkiye-is-kurumu-iskur-uzerinden-surekli.html
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+09/08/2009 tarihli ve 27314 sayılı Resmi Gazetede yayımlanan Kamu Kurum ve Kuruluşlarına İşçi Alınmasında Uygulanacak Usul ve Esasları Hakkında Yönetmelik hükümleri çerçevesinde ekli dosyada belirtilen sayıda ve ünvanda personel alınacaktır.
 
-## Veri kümesinde kullanım
+Aşağıda belirtilen personel alımına dair ilan 9-13 MART 2026 tarihleri arasında Türkiye İş Kurumu web sayfası duyurular bölümünde ilan edilmiştir.
 
-Başlık, hedef kitle, açıklama, tarih/son başvuru ve yönlendirme bölümleri şablon özellikleri olarak çıkarılabilir.
+İlanda belirtilen şartlara sahip adaylar , başvurularını Türkiye İş Kurumu Hizmet Merkezlerine şahsen ya da Türkiye İş Kurumu web sayfasına elektronik ortamda yapabileceklerdir.
 
-## Doğrulama notu
-
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+- Kıyı Emniyeti Genel Müdürlüğü Türkiye İş Kurumu (İŞKUR) Üzerinden Sürekli İşçi Alımı.pdf İndir

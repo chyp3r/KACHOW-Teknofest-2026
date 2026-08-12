@@ -1,25 +1,70 @@
 ---
-id: UY-038
-kategori: ust_yazi
-niyet: 02_basvuru_talep
-belge_turu: resmi_sablon
+id: "UY-038"
+kategori: "ust_yazi"
+alt_kategori: "02_basvuru_talep"
+niyet: "02_basvuru_talep"
+baslik: "SAĞLIK BİLİMLERİ ÜNİVERSİTESİ"
 kurum: "Sağlık Bilimleri Üniversitesi Hamidiye Tıp Fakültesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/ust_yazi/UY-038_uzmanlik-egitimi-tescil-talebi-ust-yazi-ornegi.doc"
+yerel_orijinal: "00_gelen_kaynaklar/ust_yazi/UY-038_uzmanlik-egitimi-tescil-talebi-ust-yazi-ornegi.doc"
+kaynak_turu: "doc"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "antiword"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Uzmanlık Eğitimi Tescil Talebi Üst Yazı Örneği
+# SAĞLIK BİLİMLERİ ÜNİVERSİTESİ
 
-- Resmî kaynak: https://tip.sbu.edu.tr/mevzuat-ve-formlar/mezuniyet-sonrasi-tip-egitimi/formlar/
-- Doğrudan belge: https://www.sbu.edu.tr/FileFolder/Dosyalar/226a44f5/2023_5/bashekimligin-uzmanlik-egitimi-tescil-talebi-ve-ekleri-e0618ce9.doc
-- Yerel asıl belge: 00_gelen_kaynaklar/ust_yazi/UY-038_uzmanlik-egitimi-tescil-talebi-ust-yazi-ornegi.doc
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+SAĞLIK BİLİMLERİ ÜNİVERSİTESİ
+……………………………… Sağlık Uygulama ve Araştırma Merkezi
 
-## Veri kümesinde kullanım
+Hamidiye Tıp Fakültesi Dekanlığına
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+|Sayı |:|……………………………… |
+|Konu |:|Dr………………………….. Uzmanlık Tescili Hk. |
 
-## Doğrulama notu
+Sağlık Bilimleri Üniversitesi …………………………………………. Sağlık Uygulama ve
+Araştırma Merkezi …………………………….. Kliniği uzmanlık öğrencilerinden
+Dr. ………………………………………………………………. Tıpta Uzmanlık
+eğitim süresini ve rotasyonlarını usulüne uygun olarak tamamlamış, eğitim
+karnesinde belirlenmiş yetkinlikleri kazanmış ve görevleri yerine getirmiş,
+tezi jüri tarafından kabul edilmiş ve Tıpta ve Diş Hekimliğinde uzmanlık
+eğitimi yönetmenliğinin 20. Maddesine göre uzmanlık eğitimi bitirme
+sınavında …….. /…… / 202.. tarihinde başarılı olmuştur.
+Dr. ………………………………………………………………. ait EK’te yer alan uzmanlık eğitimi
+bitirme evraklarının tescil için Bakanlığa iletilmesini arz ederim.
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+| | |
+| |Başhekim |
+| | |
+
+Ekler:
+1. Uzmanlık tescil kontrol formu
+
+2. Vergi Dairesine yatırılan uzmanlık harcı (Maliye Bakanlığı tarafından
+o yıl için belirlenen miktar) alındı makbuzu
+
+3. Nüfus Cüzdanı fotokopisi
+
+4. TUS/YDUS/DUS yerleştirme sonuç belgesi
+
+5. Uzmanlık eğitimini bitirme sınav tutanakları (orijinal hali)
+
+6. Tez savunma tutanağı
+
+7. Süre uzatılması var ise uzatma ile ilgili evrak (uzatma var ise)
+
+8. Rotasyon eğitimlerinin başarıyla tamamlandığını gösterir belgeler
+
+9. Program yöneticisi kanaat formu (6 aylık gizli kanaat formları-Kapalı
+Zarf)
+
+10. 2 adet vesikalık fotoğraf
+
+11. Uzmanlık aldığı kurum (mazeretli veya mazeretsiz geçiş ile) değişmiş
+ise bununla ilgili resmi evrak

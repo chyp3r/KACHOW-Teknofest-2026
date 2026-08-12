@@ -1,25 +1,58 @@
 ---
-id: CY-022
-kategori: cevap_yazisi
-niyet: 03_bilgi_edinme
-belge_turu: tamamlanmis_resmi_cevap
+id: "CY-022"
+kategori: "cevap_yazisi"
+alt_kategori: "03_bilgi_edinme"
+niyet: "03_bilgi_edinme"
+baslik: "Soru Önergeleri-362"
 kurum: "Türkiye Büyük Millet Meclisinde yayımlanan kurum cevabı"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/cevap_yazisi/CY-022_7-42214-istanbul-teknik-universitesi-bunyesinde-kurulan-bir-ogrenci-kulu.pdf"
+yerel_orijinal: "00_gelen_kaynaklar/cevap_yazisi/CY-022_7-42214-istanbul-teknik-universitesi-bunyesinde-kurulan-bir-ogrenci-kulu.pdf"
+kaynak_turu: "pdf"
+belge_turu: "tamamlanmis_resmi_cevap"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "tesseract"
+used_ocr: "true"
+page_count: "1"
+quality_score: "0.789"
+rag_status: "candidate"
 ---
 
-# 7/42214 - İstanbul Teknik Üniversitesi bünyesinde kurulan bir öğrenci kulübüne ilişkin
+# Soru Önergeleri-362
 
-- Resmî kaynak: https://www.tbmm.gov.tr/Denetim/Yazili-Soru-Onergesi-Detay/92d5e764-17f0-49a8-89ab-019d1aa8c9dc
-- Doğrudan belge: https://cdn.tbmm.gov.tr/KKBSPublicFile/D28/Y4/T7/WebOnergeMetni/0dcd7b27-6de4-4604-9d40-f35125e1e203.pdf
-- Yerel asıl belge: 00_gelen_kaynaklar/cevap_yazisi/CY-022_7-42214-istanbul-teknik-universitesi-bunyesinde-kurulan-bir-ogrenci-kulu.pdf
-- Tarih bilgisi: 18/03/2026
-- Sayfa/bölüm: Belgenin tamamı
+Türkiye Büyük Mület Meclisi -
+Türkiye Büyük Millet Meclisi
+a, Başkanlığı
+ww Tarih: 13/04/2026 1037
+» ii, > Sayı: E-12007.03.1837680
+” A ; 1 KURAK AED EL
+T.C.
+CUMHURBAŞKANI YARDIMCISI
+GÜNLÜDÜR
+Sayı (o :E-48360949-610-375486
+[KURUM İLETİŞİM BİLGİLERİ]
+TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA
+İlgi O :01.04.2026 tarihli ve E-43452547-120.07.04-1827601 sayılı yazınız.
 
-## Veri kümesinde kullanım
+Anayasanın 98 inci maddesi uyarınca Başkanlığınızca tarafıma gönderilen yazılı soru
+önergelerinden, Cumhurbaşkanlığı Merkez Teşkilatı ile Cumhurbaşkanlığına Bağlı Kurum ve Kuruluşların
+görev alanına giren konulara ilişkin önergeler cevaplandırılmaktadır.
 
-Cevabın soru, ilgi, açıklama ve sonuç örgüsü örneklenebilir. Milletvekili ve olay adları eğitim girdisinde anonimleştirilmelidir.
+I sayılı Cumhurbaşkanlığı Teşkilatı Hakkında Cumhurbaşkanlığı Kararnamesi ile 4 sayılı
+Bakanlıklara Bağlı, İlgili, İlişkili Kurum ve Kuruluşlar ile Diğer Kurum ve Kuruluşların Teşkilatı
+Hakkında Cumhurbaşkanlığı Kararnamesi uyarınca bakanlıkların görev ve yetki alanına giren önergeler
+bakanlıklar tarafından cevaplandırılmaktadır.
 
-## Doğrulama notu
+Bu itibarla, Muş Milletvekili Sayın [KİŞİ ADI] tarafından verilen 7/42214 esas numaralı
+yazılı soru önergesinde bahsi geçen hususlar Milli Eğitim Bakanlığının görev ve yetki alanına girmektedir.
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Bilgilerini ve gereğini arz ederim.
+
+[İMZA SAHİBİ]
+Cumhurbaşkanı Yardımcısı
+Bu belge, güvenli elektrenik aya dde imzalanmıştır
+
+Doğrulama Kodu: 76B42910-B3F1-4185-8606-61Fok03aPCD6 Doğrulama Adresi; hüps//www.turkiye.gov.ir/tccb-ebys
+[KURUM İLETİŞİM BİLGİLERİ]
+İntermet Adresi: Www.tecb.gov.ir cl E Ci
+[KURUM İLETİŞİM BİLGİLERİ]

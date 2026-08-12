@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-C88C2902
-kategori: dilekce
-alt_kategori: belediye_imar_itiraz
+id: "DILEKCE-C88C2902"
+kategori: "dilekce"
+alt_kategori: "belediye_imar_itiraz"
 baslik: "Belediye İmar Planı İtiraz Dilekçesi (Ornek 1)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Belediye İmar Planı İtiraz Dilekçesi (Ornek 1)
@@ -24,7 +25,7 @@ Söz konusu plan değişikliği ile taşınmazımın bulunduğu alanın yapıla�
 Gereğini arz ederim.
 
 03.04.2022
-Elif Aydin
-T.C. Kimlik No: 85042278387
-Adres: Yeni Mah. 152. Sok. No:39 Izmir
-Tel: 0555 869 43 94
+[KİŞİ ADI]
+T.C. Kimlik No: [T.C. KİMLİK NO]
+Adres: [ADRES]
+Tel: [TELEFON]

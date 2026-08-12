@@ -1,25 +1,101 @@
 ---
-id: UY-026
-kategori: ust_yazi
-niyet: 01_ek_belge_iletimi
-belge_turu: resmi_sablon
+id: "UY-026"
+kategori: "ust_yazi"
+alt_kategori: "01_ek_belge_iletimi"
+niyet: "01_ek_belge_iletimi"
+baslik: "T.C. SAĞLIK BAKANLIĞI"
 kurum: "Kahramanmaraş Sütçü İmam Üniversitesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/ust_yazi/UY-026_olumle-sonuclanan-ciddi-advers-olay-bildirimi-ust-yazisi-ksu.docx"
+yerel_orijinal: "00_gelen_kaynaklar/ust_yazi/UY-026_olumle-sonuclanan-ciddi-advers-olay-bildirimi-ust-yazisi-ksu.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Ölümle Sonuçlanan Ciddi Advers Olay Bildirimi Üst Yazısı - KSÜ
+# T.C. SAĞLIK BAKANLIĞI
 
-- Resmî kaynak: https://etikkurul.ksu.edu.tr/Default?SId=33776
-- Doğrudan belge: https://etikkurul.ksu.edu.tr/depo/belgeler/18-%C3%96l%C3%BCmle%20Sonu%C3%A7lanan%20Ciddi%20Advers%20Olay%20%28CAO%29%20Bildirimi%20%C3%9Cst%20Yaz%C4%B1%20%C3%96rne%C4%9Fi_2512181407481144.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/ust_yazi/UY-026_olumle-sonuclanan-ciddi-advers-olay-bildirimi-ust-yazisi-ksu.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+T.C. SAĞLIK BAKANLIĞI
 
-## Veri kümesinde kullanım
+TÜRKİYE İLAÇ VE TIBBİ CİHAZ KURUMU
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+Klinik Araştırmalar Dairesi Başkanlığı
 
-## Doğrulama notu
+Güvenlilik Bildirimleri Değerlendirme Birimi
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+| Konu: | |
+
+| --- | --- |
+
+| İlgi: | “Bildirime ait önceki takip no.ların ilgi tutulması gerekmektedir” |
+
+Aşağıda detayları verilen klinik araştırmadan, tarafımıza ulaşan ciddi advers olay (CAO) formu ekte bilgilerinize sunulmaktadır.
+
+| Araştırmanın açık adı: | |
+
+| --- | --- |
+
+| Araştırma kodu (TİTCK kodu): | |
+
+| Protokol kodu: | |
+
+| Destekleyici: | |
+
+| Destekleyicinin yasal temsilcisi: | |
+
+| Bildirimden sorumlu yasal temsilci: | |
+
+| CAO’nun meydana geldiği ülke: | |
+
+| CAO’nun meydana geldiği merkez: | |
+
+| CAO’nun meydana geldiği gönüllü kodu: | |
+
+| Mfr Control No: | |
+
+| Takip bildirimi ise kaçıncı takip olduğu: | |
+
+(Başvurunun içeriğini yazınız)
+
+(İlgili bildirim eğer ilk bildirim değilse takip veya izleme raporuna ilişkin değişimleri özet olarak yazınız.)
+
+(Mfr Kontrol Numarası değişimi olduysa değişim gerekçesini yazınız.)
+
+Başvuru dosyasına eklenen tüm dokümanların aslı ile birebir aynı olduğunu ve arama yapılabilir pdf olarak hazırlandığını,
+
+Başvuruda sağlanan bilgilerin doğru olduğunu kabul ve taahhüt ederim.
+
+Yukarıda detayları verilen başvurunun değerlendirilmesini ve gereğini saygılarımla arz ederim.
+
+(ıslak imzalı üst yazılarda)
+
+…./…./….
+
+İmza/Kaşe
+
+Adı Soyadı
+
+| Başvuru için iletişime geçilecek kişi: | |
+
+| --- | --- |
+
+| Adres: | |
+
+| Telefon: | |
+
+| E-posta: | |
+
+Ekler:
+
+| Doküman | Doküman | Tarih / Versiyon Açıklama |
+
+| --- | --- | --- |
+
+| 1. | CAO formu | |
+
+| 2. | | |

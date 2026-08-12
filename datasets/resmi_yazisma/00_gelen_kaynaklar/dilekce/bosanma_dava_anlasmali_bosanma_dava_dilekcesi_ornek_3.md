@@ -1,20 +1,21 @@
 ---
-id: DILEKCE-EC25878D
-kategori: dilekce
-alt_kategori: bosanma_dava
+id: "DILEKCE-EC25878D"
+kategori: "dilekce"
+alt_kategori: "bosanma_dava"
 baslik: "Anlaşmalı Boşanma Dava Dilekçesi (Ornek 3)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Anlaşmalı Boşanma Dava Dilekçesi (Ornek 3)
 
 Kayseri AİLE MAHKEMESİ HAKİMLİĞİ'NE
 
-DAVACI: Ali Erdogan (T.C.: 65471882265)
-Adres: Ataturk Mah. 57. Sok. No:32 Ankara
+DAVACI: Ali Erdogan (T.C.: [T.C. KİMLİK NO])
+Adres: [ADRES]
 
-DAVALI: Ahmet Yilmaz (T.C.: 82274590037)
-Adres: Ataturk Mah. Adana
+DAVALI: [KİŞİ ADI] (T.C.: [T.C. KİMLİK NO])
+Adres: [ADRES]
 
 KONU: Anlaşmalı boşanma talebidir.
 HMK: 6100 sayılı Kanun

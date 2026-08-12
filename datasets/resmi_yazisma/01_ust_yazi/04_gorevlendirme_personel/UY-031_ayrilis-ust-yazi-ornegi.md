@@ -1,25 +1,61 @@
 ---
-id: UY-031
-kategori: ust_yazi
-niyet: 04_gorevlendirme_personel
-belge_turu: resmi_sablon
+id: "UY-031"
+kategori: "ust_yazi"
+alt_kategori: "04_gorevlendirme_personel"
+niyet: "04_gorevlendirme_personel"
+baslik: "| T.C. |"
 kurum: "Doğubayazıt İlçe Millî Eğitim Müdürlüğü"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/ust_yazi/UY-031_ayrilis-ust-yazi-ornegi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/ust_yazi/UY-031_ayrilis-ust-yazi-ornegi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Ayrılış Üst Yazı Örneği
+# | T.C. |
 
-- Resmî kaynak: https://dogubeyazit.meb.gov.tr/www/ozel-ogretim-kurumlari-icin-gerekli-dokumanlar/icerik/1654
-- Doğrudan belge: https://dogubeyazit.meb.gov.tr/meb_iys_dosyalar/2025_03/18143924_ayrilisustyaziornegi.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/ust_yazi/UY-031_ayrilis-ust-yazi-ornegi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+| T.C. |
 
-## Veri kümesinde kullanım
+| --- |
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+| DOĞUBAYAZIT KAYMAKAMLIĞI |
 
-## Doğrulama notu
+| ………………………….. Müdürlüğü |
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+| Sayı | : | .../…/20… |
+
+| --- | --- | --- |
+
+| Konu | : ………..’ nın Ayrılışı | |
+
+| | | |
+
+| DOĞUBAYAZIT İLÇE MİLLİ EĞİTİM MÜDÜRLÜĞÜNE (Özel Öğretim Kurumları Şubesi) |
+
+| --- |
+
+| İlgi : ………………………………….. ‘nın ……/……/20… Tarihli dilekçesi |
+
+Kurumumuzda (Diğer Personel, Öğretmen, Usta Öğretici,Uzman Öğretici, Kurum Müdür Yardımcısı, Kurum Müdürü) olarak görev yapmaktayken ……../……/20… tarihinde ………………………….. (Karşılıklı / Kurucu Tarafından / Çalışan tarafından / vs.) sözleşme feshinin iptal edildiğine dair ilgilinin ıslak imzalı dilekçesi ekte sunulmuştur.
+
+Adı geçen ……………………………. (TC Kimlik No:[T.C. KİMLİK NO]11) görevinden………………….. (Karşılıklı / Kurucu Tarafından / Çalışan tarafından / vs.) sözleşme feshi olarak ayrılması müdürlüğümüzce uygun görülmektedir.
+
+Bilgilerinizi ve gereğini arz ederim.
+
+| | …………………. |
+
+| --- | --- |
+
+| | Kurum Müdürü |
+
+| | |
+
+EK :
+
+Dilekçe

@@ -1,23 +1,26 @@
 ---
-id: KAY-003
-kategori: bilgilendirme_metni
-niyet: duyuru
-baslik: Osmangazi Kaymakamlığı SYDV Belirsiz Süreli Personel Alım İlanı Duyurusu
-kurum: T.C. Osmangazi Kaymakamlığı Sosyal Yardımlaşma ve Dayanışma Vakfı
-kaynak_url: https://www.osmangazi.gov.tr/sydv-personel-alim-duyurusu-2026
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "KAY-003"
+kategori: "bilgilendirme_metni"
+alt_kategori: "duyuru"
+niyet: "duyuru"
+baslik: "Osmangazi Kaymakamlığı SYDV Belirsiz Süreli Personel Alım İlanı Duyurusu"
+kurum: "T.C. Osmangazi Kaymakamlığı Sosyal Yardımlaşma ve Dayanışma Vakfı"
+kaynak: "https://www.osmangazi.gov.tr/sydv-personel-alim-duyurusu-2026"
+kaynak_url: "https://www.osmangazi.gov.tr/sydv-personel-alim-duyurusu-2026"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Osmangazi Kaymakamlığı SYDV Belirsiz Süreli Personel Alım İlanı Duyurusu
 
-**T.C.**  
-**OSMANGAZİ KAYMAKAMLIĞI**  
+**T.C.**
+**OSMANGAZİ KAYMAKAMLIĞI**
 **Sosyal Yardımlaşma ve Dayanışma Vakfı**
 
-**İlan Tarihi:** 02.05.2026  
-**Alınacak Unvan:** Sosyal Yardım ve İnceleme Görevlisi (2 Personel)  
+**İlan Tarihi:** 02.05.2026
+**Alınacak Unvan:** Sosyal Yardım ve İnceleme Görevlisi (2 Personel)
 
 Osmangazi SYDV bünyesinde belirsiz süreli iş sözleşmesi ile istihdam edilmek üzere Aile ve Sosyal Hizmetler Bakanlığı SYD Personelinin Çalışma Esaslarına Dair Esaslar doğrultusunda 2 (iki) adet Sosyal Yardım ve İnceleme Görevlisi alınacaktır.
 
@@ -29,10 +32,10 @@ Osmangazi SYDV bünyesinde belirsiz süreli iş sözleşmesi ile istihdam edilme
 4. Osmangazi ilçe sınırları içerisinde son 6 aydır ikamet ediyor olmak.
 
 ### Başvuru Tarihleri ve Adres:
-* **Başvuru Tarihleri:** 10 Mayıs 2026 - 20 Mayıs 2026  
+* **Başvuru Tarihleri:** 10 Mayıs 2026 - 20 Mayıs 2026
 * **Başvuru Adresi:** Aile ve Sosyal Hizmetler Bakanlığı Vakıf İlan Portalı (`vakifilan.aile.gov.tr`)
 
 İlgililere ilanen duyurulur.
 
-[SİLİNMİŞTİR]  
-Osmangazi Kaymakamı / Vakıf Başkanı  
+[KİŞİSEL BİLGİ]
+Osmangazi Kaymakamı / Vakıf Başkanı

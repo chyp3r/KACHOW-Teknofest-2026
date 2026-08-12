@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-44A43965
-kategori: dilekce
-alt_kategori: iski_abone_iptal
+id: "DILEKCE-44A43965"
+kategori: "dilekce"
+alt_kategori: "iski_abone_iptal"
 baslik: "İSKİ/ASKİ Su Aboneliği İptal Dilekçesi (Ornek 3)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # İSKİ/ASKİ Su Aboneliği İptal Dilekçesi (Ornek 3)
@@ -18,8 +19,8 @@ Abonelik Bilgileri:
 - Abone No: 330590
 - Sayaç No: 94900821
 - Abone Adı: Burak Sahin
-- T.C. Kimlik No: 94878068698
-- Abonelik Adresi: Bahcelievler Mah. 109. Sok. No:42 Konya
+- T.C. Kimlik No: [T.C. KİMLİK NO]
+[KURUM ADRESİ]
 
 İptal Gerekçesi: Taşınmazın satışı/kiracının değişmesi nedeniyle aboneliğin sonlandırılması.
 
@@ -29,8 +30,8 @@ IBAN: TR184019127474629540216368
 
 15.08.2025
 Burak Sahin
-T.C. Kimlik No: 94878068698
-Tel: 0542 769 39 86
+T.C. Kimlik No: [T.C. KİMLİK NO]
+Tel: [TELEFON]
 
 EKLER:
 1- Kimlik fotokopisi

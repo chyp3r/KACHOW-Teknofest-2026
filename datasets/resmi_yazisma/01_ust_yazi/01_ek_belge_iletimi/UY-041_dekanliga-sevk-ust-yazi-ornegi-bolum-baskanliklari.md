@@ -1,11 +1,15 @@
 ---
-id: UY-041
-kategori: ust_yazi
-niyet: 01_ek_belge_iletimi
-belge_turu: resmi_sablon
+id: "UY-041"
+kategori: "ust_yazi"
+alt_kategori: "01_ek_belge_iletimi"
+niyet: "01_ek_belge_iletimi"
+baslik: "Dekanlığa Sevk Üst Yazı Örneği (Bölüm Başkanlıkları)"
 kurum: "Erciyes Üniversitesi Güzel Sanatlar Fakültesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynak_sayfasi_dogrulandi
+kaynak: "datasets/resmi_yazisma/01_ust_yazi/01_ek_belge_iletimi/UY-041_dekanliga-sevk-ust-yazi-ornegi-bolum-baskanliklari.md"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynak_sayfasi_dogrulandi"
+rag_status: "candidate"
 ---
 
 # Dekanlığa Sevk Üst Yazı Örneği (Bölüm Başkanlıkları)

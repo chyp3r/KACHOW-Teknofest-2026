@@ -1,11 +1,15 @@
 ---
-id: DY-046
-kategori: diger_resmi_yazisma
-niyet: 09_tutanak
-belge_turu: resmi_sablon
+id: "DY-046"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "09_tutanak"
+niyet: "09_tutanak"
+baslik: "Disiplin Dosyası Dizi Pusulası Örneği"
 kurum: "Ankara Hacı Bayram Veli Üniversitesi Hukuk Müşavirliği"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynak_sayfasi_dogrulandi
+kaynak: "datasets/resmi_yazisma/04_diger_resmi_yazisma/09_tutanak/DY-046_disiplin-dosyasi-dizi-pusulasi-ornegi.md"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynak_sayfasi_dogrulandi"
+rag_status: "candidate"
 ---
 
 # Disiplin Dosyası Dizi Pusulası Örneği
