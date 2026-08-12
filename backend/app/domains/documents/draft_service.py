@@ -191,7 +191,15 @@ class DraftService:
                 details={"reason": str(e)},
             ) from e
 
-        destination = routing_state.get("final_destination", "HumanApproval")
+        destination = routing_state.get("final_destination") or ""
+        # Routing could not confidently assign a unit (empty draft, low
+        # score, an LLM failure, or a hallucinated unit name) -- same flag
+        # the draft-quality gate above already uses, OR'd in rather than
+        # overwritten, since either source is a legitimate reason a human
+        # needs to look at this draft before it goes anywhere.
+        common_fields["requires_human_approval"] = common_fields[
+            "requires_human_approval"
+        ] or routing_state.get("requires_human_approval", False)
         draft_id = await draft_recorder.record_draft(
             user_id=user_id,
             session_id=None,

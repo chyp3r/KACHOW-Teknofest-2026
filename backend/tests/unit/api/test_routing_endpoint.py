@@ -96,7 +96,7 @@ def test_suggest_routing_maps_a_graph_failure_to_502():
     assert body["error"]["code"] == "AI_EXECUTION_ERROR"
 
 
-def test_suggest_routing_falls_back_to_human_approval_label_when_the_graph_omits_it():
+def test_suggest_routing_defaults_to_no_unit_and_no_approval_flag_when_the_graph_omits_them():
     graph = AsyncMock()
     graph.ainvoke.return_value = {}
     _override(graph)
@@ -104,4 +104,24 @@ def test_suggest_routing_falls_back_to_human_approval_label_when_the_graph_omits
     response = client.post(ENDPOINT, json={"draft": "Bir taslak metni."})
 
     assert response.status_code == 200
-    assert response.json()["data"]["routed_unit"] == "İnsan Onayı Gerekli"
+    data = response.json()["data"]
+    assert data["routed_unit"] is None
+    assert data["requires_human_approval"] is False
+
+
+def test_suggest_routing_surfaces_requires_human_approval_when_no_unit_was_assigned():
+    graph = AsyncMock()
+    graph.ainvoke.return_value = {
+        "routed_unit": None,
+        "priority": "Yüksek",
+        "reasoning": "Tanımlı birim listesi dışında bir yanıt verildi.",
+        "requires_human_approval": True,
+    }
+    _override(graph)
+
+    response = client.post(ENDPOINT, json={"draft": "Belirsiz bir talep."})
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["routed_unit"] is None
+    assert data["requires_human_approval"] is True

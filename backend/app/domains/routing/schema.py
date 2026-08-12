@@ -25,7 +25,14 @@ class RoutingSuggestionRequest(BaseModel):
 class RoutingSuggestionResponse(BaseModel):
     """A unit-routing decision."""
 
-    routed_unit: str = Field(description="Önerilen birim.")
+    routed_unit: Optional[str] = Field(
+        default=None,
+        description="Önerilen birim; birim atanamadıysa (bkz. requires_human_approval) null.",
+    )
     priority: str = Field(description="Öncelik derecesi.")
     reasoning: str = Field(description="Karar gerekçesi.")
     justification: str = Field(description="Karar gerekçesi (API uyumluluğu için ikinci ad).")
+    requires_human_approval: bool = Field(
+        default=False,
+        description="True ise hiçbir birime güvenle yönlendirilemedi; bir insan birim seçmeli.",
+    )

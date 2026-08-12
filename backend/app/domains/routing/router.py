@@ -47,9 +47,10 @@ async def suggest_routing(
         ) from exc
 
     response = RoutingSuggestionResponse(
-        routed_unit=state.get("routed_unit", "İnsan Onayı Gerekli"),
+        routed_unit=state.get("routed_unit"),
         priority=state.get("priority", "Normal"),
         reasoning=state.get("reasoning", ""),
         justification=state.get("justification", state.get("reasoning", "")),
+        requires_human_approval=state.get("requires_human_approval", False),
     )
     return SuccessResponse(data=response.model_dump())

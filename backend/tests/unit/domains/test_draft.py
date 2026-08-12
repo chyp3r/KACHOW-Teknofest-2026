@@ -91,6 +91,27 @@ async def test_generate_draft_and_route_success(draft_service, mock_draft_graph,
 
 
 @pytest.mark.asyncio
+async def test_generate_draft_flags_human_approval_when_routing_cannot_assign_a_unit(
+    draft_service, mock_draft_graph, mock_routing_graph
+):
+    """Routing failing to confidently assign a unit (no more fake
+    "İnsan Onayı Gerekli" unit -- see routing_graph.py) must still surface as
+    requires_human_approval on the draft, OR'd with the draft-quality gate's
+    own verdict rather than overwriting it."""
+    mock_routing_graph.ainvoke.return_value = {
+        "final_destination": None,
+        "justification": "Model tanımlı birim listesi dışında bir yanıt verdi; insan onayına yönlendirildi.",
+        "requires_human_approval": True,
+    }
+    request = _request()
+
+    response = await draft_service.generate_draft_and_route(request)
+
+    assert response.destination == ""
+    assert response.requires_human_approval is True
+
+
+@pytest.mark.asyncio
 async def test_generate_draft_skips_routing_when_information_is_missing(
     draft_service, mock_draft_graph, mock_routing_graph
 ):

@@ -284,11 +284,18 @@ async def get_routing_graph() -> Any:
     """Compile the document routing workflow once per process.
 
     Uses the fast tier: the output is one unit label plus one sentence, so the
-    quality model buys nothing here but latency.
+    quality model buys nothing here but latency. `units_provider` is a plain
+    callable (not resolved once here) so every routing decision re-reads the
+    active unit list from the database, even though the graph itself is only
+    compiled once.
     """
     global _routing_graph
     if _routing_graph is None:
-        _routing_graph = create_routing_graph(llm_client=get_fast_llm_client())
+        from app.domains.units.provider import get_active_units_for_routing
+
+        _routing_graph = create_routing_graph(
+            llm_client=get_fast_llm_client(), units_provider=get_active_units_for_routing
+        )
     return _routing_graph
 
 
