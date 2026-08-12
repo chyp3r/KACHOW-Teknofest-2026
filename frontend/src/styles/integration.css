@@ -989,3 +989,30 @@
   .interactive-graph { grid-template-rows: auto minmax(24rem, 58vh) auto; }
   .graph-canvas { min-height: 24rem; }
 }
+
+.chat-dropzone-wrapper { display: contents; }
+.chat-dropzone-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: var(--space-8);
+  background: color-mix(in srgb, var(--accent-blue) 10%, rgba(8, 10, 14, .55));
+  backdrop-filter: blur(2px);
+}
+.chat-dropzone-overlay-content {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  max-width: 26rem;
+  padding: var(--space-8);
+  border: 2px dashed var(--border-glass-focus);
+  border-radius: var(--radius-xl);
+  text-align: center;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+.chat-dropzone-overlay-icon { display: inline-grid; place-items: center; width: var(--icon-container-md); height: var(--icon-container-md); border-radius: var(--radius-lg); color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 12%, transparent); }
+.chat-dropzone-overlay-content span { color: var(--text-secondary); }
+.chat-dropzone-dismiss { border: 0; background: transparent; color: var(--accent-blue); cursor: pointer; text-decoration: underline; }

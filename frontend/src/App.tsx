@@ -100,6 +100,8 @@ function AuthenticatedApp({ userId }: { userId: string }) {
       onRetryHistory={chat.retryHistory}
       onCancel={chat.cancel}
       onToggleWorkflow={() => setWorkflowOpen((open) => !open)}
+      onUploadDocument={uploadDocument}
+      documentUploading={documents.uploading}
     />
   );
 

@@ -3,18 +3,7 @@ import { CheckCircle2, UploadCloud } from "lucide-react";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/FormControls";
 import { Alert } from "../../components/Surface";
-
-const MAX_SIZE = 50 * 1024 * 1024;
-const ALLOWED_EXTENSIONS = [
-  "pdf",
-  "txt",
-  "doc",
-  "png",
-  "jpg",
-  "jpeg",
-  "tif",
-  "tiff",
-];
+import { validateUploadFile } from "./uploadConstraints";
 
 export function DocumentUploader({
   uploading,
@@ -29,13 +18,9 @@ export function DocumentUploader({
 
   const selectFile = async (file?: File) => {
     if (!file) return;
-    const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
-    if (!ALLOWED_EXTENSIONS.includes(extension)) {
-      setMessage("Bu dosya türü desteklenmiyor.");
-      return;
-    }
-    if (file.size > MAX_SIZE) {
-      setMessage("Dosya boyutu 50 MB sınırını aşıyor.");
+    const validationError = validateUploadFile(file);
+    if (validationError) {
+      setMessage(validationError);
       return;
     }
     setMessage(null);
