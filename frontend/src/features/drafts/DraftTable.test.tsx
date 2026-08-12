@@ -13,28 +13,36 @@ const draft: PersistedDraft = {
 };
 
 describe("DraftTable", () => {
-  it("keeps status, destination, source, version, and date in separate labeled cells", () => {
-    render(<DraftTable drafts={[draft]} titleFor={() => "Cevap yazısı"} sourceFor={() => "Kaynak yok"} onToggle={vi.fn()} renderDetail={() => null} />);
+  it("keeps destination, version, and date in separate labeled cells, without a status column", () => {
+    render(<DraftTable drafts={[draft]} titleFor={() => "dilekce.pdf - Cevap yazısı"} onToggle={vi.fn()} renderDetail={() => null} />);
 
-    expect(screen.getByRole("columnheader", { name: "Durum / onay" })).toBeInTheDocument();
-    expect(screen.getByText("İnsan onayı")).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Durum / onay" })).not.toBeInTheDocument();
+    expect(screen.queryByText("İnsan onayı")).not.toBeInTheDocument();
+    expect(screen.getByText("dilekce.pdf - Cevap yazısı")).toBeInTheDocument();
     expect(screen.getByText("İnsan Kaynakları")).toBeInTheDocument();
-    expect(screen.getByText("Kaynak yok")).toBeInTheDocument();
     expect(screen.getByText("v3")).toBeInTheDocument();
     expect(screen.getAllByText("Hedef birim").length).toBeGreaterThan(0);
   });
 
   it("supports keyboard activation of the record", () => {
     const onToggle = vi.fn();
-    render(<DraftTable drafts={[draft]} titleFor={() => "Cevap yazısı"} sourceFor={() => "Kaynak yok"} onToggle={onToggle} renderDetail={() => null} />);
+    render(<DraftTable drafts={[draft]} titleFor={() => "Cevap yazısı"} onToggle={onToggle} renderDetail={() => null} />);
     fireEvent.keyDown(screen.getByRole("row", { name: /Cevap yazısı/ }), { key: "Enter" });
     expect(onToggle).toHaveBeenCalledWith(draft, false);
   });
 
-  it("normalizes persisted status casing into a readable label", () => {
-    render(<DraftTable drafts={[{ ...draft, status: "COMPLETED", requires_human_approval: false }]} titleFor={() => "Cevap yazısı"} sourceFor={() => "Kaynak yok"} onToggle={vi.fn()} renderDetail={() => null} />);
-
-    expect(screen.getByText("Hazır")).toBeInTheDocument();
-    expect(screen.queryByText("COMPLETED")).not.toBeInTheDocument();
+  it("renders row actions passed via renderRowActions without triggering row toggle", () => {
+    const onToggle = vi.fn();
+    render(
+      <DraftTable
+        drafts={[draft]}
+        titleFor={() => "Cevap yazısı"}
+        onToggle={onToggle}
+        renderDetail={() => null}
+        renderRowActions={() => <button type="button" aria-label="Sil">Sil</button>}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sil" }));
+    expect(onToggle).not.toHaveBeenCalled();
   });
 });

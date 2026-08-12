@@ -885,7 +885,7 @@
 .draft-table-header,
 .draft-table-row {
   display: grid;
-  grid-template-columns: minmax(12rem, 1.35fr) minmax(8rem, .8fr) minmax(10rem, 1fr) minmax(10rem, 1fr) 4rem 6.5rem var(--touch-target);
+  grid-template-columns: minmax(12rem, 1.35fr) minmax(10rem, 1fr) 4rem 6.5rem minmax(4.5rem, auto);
   align-items: center;
   gap: var(--space-3);
 }
@@ -903,7 +903,7 @@
 .draft-table-icon { display: inline-grid; flex: 0 0 auto; place-items: center; width: var(--icon-container-sm); height: var(--icon-container-sm); border-radius: var(--radius-md); color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 10%, transparent); }
 .draft-table-icon svg { width: var(--icon-md); height: var(--icon-md); }
 .draft-cell-label { display: none; color: var(--text-muted); }
-.draft-table-action { display: inline-grid; place-items: center; width: var(--touch-target); height: var(--touch-target); color: var(--text-muted); }
+.draft-table-action { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--space-1); min-height: var(--touch-target); color: var(--text-muted); }
 .draft-table-action svg { width: var(--icon-md); height: var(--icon-md); }
 .draft-table-detail { padding: var(--space-5) var(--space-5) var(--space-6); border-top: 1px solid var(--border-default); }
 

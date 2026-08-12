@@ -50,7 +50,7 @@ describe("DraftsPage", () => {
     );
 
     expect(screen.getByLabelText("Oluşturulan taslaklar")).toBeInTheDocument();
-    expect(screen.getByText("izin-talebi.pdf")).toBeInTheDocument();
+    expect(screen.getByText("izin-talebi.pdf - resmi yazi")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Sürüm geçmişi" })).toBeInTheDocument();
     expect(screen.getByText("İlk sürüm")).toBeInTheDocument();
 

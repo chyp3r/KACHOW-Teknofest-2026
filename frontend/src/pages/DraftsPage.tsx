@@ -17,7 +17,6 @@ import { EmptyState } from "../components/EmptyState";
 import { Select, Textarea } from "../components/FormControls";
 import { PageHeader } from "../components/PageHeader";
 import { SectionHeader } from "../components/SectionHeader";
-import { StatusBadge } from "../components/StatusBadge";
 import { Card, Spinner } from "../components/Surface";
 import { useDraftCreation } from "../hooks/useDraftCreation";
 import { useDrafts } from "../hooks/useDrafts";
@@ -122,7 +121,7 @@ export function DraftsPage({
     return document?.file_name ?? documentId.split(/[\\/]/).pop() ?? documentId;
   };
 
-  const draftTitle = (draft: PersistedDraft) => {
+  const correspondenceTypeLabel = (draft: PersistedDraft) => {
     const knownType = creation.correspondenceTypes.find(
       (item) => item.value === draft.correspondence_type,
     );
@@ -130,6 +129,9 @@ export function DraftsPage({
     if (!draft.correspondence_type) return "Resmî taslak";
     return draft.correspondence_type.replace(/_/g, " ");
   };
+
+  const draftTitle = (draft: PersistedDraft) =>
+    `${documentName(draft.document_id)} - ${correspondenceTypeLabel(draft)}`;
 
   const expandedVersions = drafts.versions.length > 0
     ? sortVersionsNewestFirst(drafts.versions)
@@ -238,7 +240,6 @@ export function DraftsPage({
             drafts={drafts.drafts}
             activeDraftId={activeDraftId}
             titleFor={draftTitle}
-            sourceFor={(draft) => documentName(draft.document_id)}
             onToggle={(draft, expanded) => {
               if (expanded) onCloseDraft?.();
               else onOpenDraft(draft.id);
@@ -265,11 +266,6 @@ export function DraftsPage({
                                 <strong>{drafts.activeDraft.attempts ?? "—"}</strong>
                               </span>
                             </div>
-                            <StatusBadge
-                              tone={drafts.activeDraft.requires_human_approval ? "warning" : "success"}
-                            >
-                              {drafts.activeDraft.requires_human_approval ? "Onay gerekli" : "Hazır"}
-                            </StatusBadge>
                           </div>
 
                           <div className="draft-detail-actions">
