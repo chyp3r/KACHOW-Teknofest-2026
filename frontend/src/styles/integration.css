@@ -924,6 +924,9 @@
 .workflow-step-heading strong { min-width: 0; overflow-wrap: anywhere; }
 .workflow-step-heading .status-badge { flex: 0 0 auto; }
 .workflow-step-description { color: var(--text-secondary); overflow-wrap: anywhere; }
+.workflow-step-substeps { display: grid; gap: var(--space-1); margin-top: var(--space-2); padding-left: var(--space-3); list-style: none; }
+.workflow-step-substeps li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; color: var(--text-muted); }
+.workflow-step-substeps li span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .workflow-step-running .workflow-step-marker { border-color: var(--status-running); color: var(--status-running); }
 .workflow-step-running .workflow-step-marker svg { animation: spin 1s linear infinite; }
 .workflow-step-completed .workflow-step-marker { border-color: var(--status-completed); color: white; background: var(--status-completed); }
