@@ -1,25 +1,91 @@
 ---
-id: DY-026
-kategori: diger_resmi_yazisma
-niyet: 09_tutanak
-belge_turu: resmi_sablon
+id: "DY-026"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "09_tutanak"
+niyet: "09_tutanak"
+baslik: "| Toplantı Yapılan Kurum/Birim | | |"
 kurum: "Düzce Üniversitesi Fen Edebiyat Fakültesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-026_toplanti-tutanak-formu.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-026_toplanti-tutanak-formu.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Toplantı Tutanak Formu
+# | Toplantı Yapılan Kurum/Birim | | |
 
-- Resmî kaynak: https://fef.duzce.edu.tr/sayfa/0468/sablon-yazilar
-- Doğrudan belge: https://cdn.duzce.edu.tr/File/GetFile/0efdd5af-cd2c-4e25-af49-787f143aa4e2
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-026_toplanti-tutanak-formu.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+| Toplantı Yapılan Kurum/Birim | | |
 
-## Veri kümesinde kullanım
+| --- | --- | --- |
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+| Toplantı Başkanı | | |
 
-## Doğrulama notu
+| Toplantı Gündemi | | |
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+| Katılımcılar | | |
+
+| Toplantı Tarihi ve Saati | | |
+
+| Toplantı Yeri | | |
+
+| Toplantı İçeriği (Görüşmeler) | | |
+
+| Alınan Kararlar | | |
+
+| Ekler | | |
+
+| Adı ve Soyadı | Bölümü/Birimi | İmza |
+
+| --- | --- | --- |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |
+
+| | | |

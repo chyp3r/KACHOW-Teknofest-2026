@@ -1,23 +1,26 @@
 ---
-id: VAL-002
-kategori: diger_resmi_yazisma
-niyet: teblig_bildirim
-baslik: İstanbul Valiliği Sahipsiz Hayvanların Korunması ve Rehabilitasyonu Genelgesi
-kurum: T.C. İstanbul Valiliği
-kaynak_url: https://www.istanbul.gov.tr/sahipsiz-hayvanlarin-korunmasi-ve-rehabilitasyonu-genelgesi
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "VAL-002"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "teblig_bildirim"
+niyet: "teblig_bildirim"
+baslik: "İstanbul Valiliği Sahipsiz Hayvanların Korunması ve Rehabilitasyonu Genelgesi"
+kurum: "T.C. İstanbul Valiliği"
+kaynak: "https://www.istanbul.gov.tr/sahipsiz-hayvanlarin-korunmasi-ve-rehabilitasyonu-genelgesi"
+kaynak_url: "https://www.istanbul.gov.tr/sahipsiz-hayvanlarin-korunmasi-ve-rehabilitasyonu-genelgesi"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # İstanbul Valiliği Sahipsiz Hayvanların Korunması ve Rehabilitasyonu Genelgesi
 
-**T.C.**  
-**İSTANBUL VALİLİĞİ**  
+**T.C.**
+**İSTANBUL VALİLİĞİ**
 **İl Yazı İşleri Müdürlüğü**
 
-**Sayı:** 3400-2026/18  
-**Konu:** Sahipsiz Hayvanların Korunması, Bakımı ve Rehabilitasyonu  
+**Sayı:** [EVRAK SAYISI]
+**Konu:** Sahipsiz Hayvanların Korunması, Bakımı ve Rehabilitasyonu
 
 **GENELGE 2026/12**
 
@@ -32,5 +35,5 @@ dogrulama: acik_kaynaktan_kazindi
 
 Gereğini ve bilgilerinizi rica ederim.
 
-[SİLİNMİŞTİR]  
-İstanbul Valisi  
+[KİŞİSEL BİLGİ]
+İstanbul Valisi

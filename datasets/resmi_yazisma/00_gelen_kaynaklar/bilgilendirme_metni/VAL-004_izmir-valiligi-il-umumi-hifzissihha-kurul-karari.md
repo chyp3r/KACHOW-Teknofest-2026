@@ -1,25 +1,28 @@
 ---
-id: VAL-004
-kategori: diger_resmi_yazisma
-niyet: teblig_bildirim
-baslik: İzmir Valiliği İl Umumi Hıfzıssıhha Kurulu Kamusal Alan Güvenliği ve Sağlık Tedbirleri Kararı
-kurum: T.C. İzmir Valiliği
-kaynak_url: https://www.izmir.gov.tr/il-umumi-hifzissihha-kurul-karari-2026-04
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "VAL-004"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "teblig_bildirim"
+niyet: "teblig_bildirim"
+baslik: "İzmir Valiliği İl Umumi Hıfzıssıhha Kurulu Kamusal Alan Güvenliği ve Sağlık Tedbirleri Kararı"
+kurum: "T.C. İzmir Valiliği"
+kaynak: "https://www.izmir.gov.tr/il-umumi-hifzissihha-kurul-karari-2026-04"
+kaynak_url: "https://www.izmir.gov.tr/il-umumi-hifzissihha-kurul-karari-2026-04"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # İzmir Valiliği İl Umumi Hıfzıssıhha Kurulu Kamusal Alan Güvenliği ve Sağlık Tedbirleri Kararı
 
-**T.C.**  
-**İZMİR VALİLİĞİ**  
+**T.C.**
+**İZMİR VALİLİĞİ**
 **İl Sağlık Müdürlüğü / İl Umumi Hıfzıssıhha Kurulu**
 
-**Karar Tarihi:** 15.07.2026  
-**Karar No:** 2026/04  
+**Karar Tarihi:** 15.07.2026
+**Karar No:** 2026/04
 
-1593 sayılı Umumi Hıfzıssıhha Kanunu’nun 23. ve 26. maddeleri uyarınca İzmir İl Umumi Hıfzıssıhha Kurulu, Vali [SİLİNMİŞTİR] başkanlığında toplanarak il genelinde yaz sezonunda toplum sağlığının korunmasına yönelik aşağıdaki kararları almıştır:
+1593 sayılı Umumi Hıfzıssıhha Kanunu’nun 23. ve 26. maddeleri uyarınca İzmir İl Umumi Hıfzıssıhha Kurulu, Vali [EVRAK SAYISI] başkanlığında toplanarak il genelinde yaz sezonunda toplum sağlığının korunmasına yönelik aşağıdaki kararları almıştır:
 
 ### Alınan Kararlar:
 
@@ -29,5 +32,5 @@ dogrulama: acik_kaynaktan_kazindi
 
 Aykarı hareket eden kurum ve kişilere 1593 sayılı Kanun’un 282. maddesi gereğince idari para cezası verilecektir.
 
-**Kurul Başkanı:**  
-[SİLİNMİŞTİR] - İzmir Valisi  
+**Kurul Başkanı:**
+[KİŞİSEL BİLGİ] - İzmir Valisi

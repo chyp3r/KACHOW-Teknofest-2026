@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-D9798A9A
-kategori: dilekce
-alt_kategori: kamuya_bilgi_edinme
+id: "DILEKCE-D9798A9A"
+kategori: "dilekce"
+alt_kategori: "kamuya_bilgi_edinme"
 baslik: "Bilgi Edinme Hakkı Başvuru Dilekçesi (Ornek 2)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Bilgi Edinme Hakkı Başvuru Dilekçesi (Ornek 2)
@@ -11,10 +12,10 @@ kaynak: "sentetik-sablon"
 Il Saglik Mudurlugu
 BİLGİ EDİNME BİRİMİ'NE
 
-Başvuru Sahibi: Elif Aydin
-T.C. Kimlik No: 79498255889
-Adres: Yeni Mah. 5. Sok. No:7 Mersin
-Telefon: 0544 536 27 86
+Başvuru Sahibi: [KİŞİ ADI]
+T.C. Kimlik No: [T.C. KİMLİK NO]
+Adres: [ADRES]
+Telefon: [TELEFON]
 
 KONU: 4982 sayılı Bilgi Edinme Hakkı Kanunu kapsamında bilgi/belge talebi
 
@@ -29,5 +30,5 @@ Kanun'un 11. maddesi gereğince başvuruma 15 iş günü içinde cevap verilmesi
 Gereğini saygılarımla arz ederim.
 
 09.08.2022
-Elif Aydin
+[KİŞİ ADI]
 İmza

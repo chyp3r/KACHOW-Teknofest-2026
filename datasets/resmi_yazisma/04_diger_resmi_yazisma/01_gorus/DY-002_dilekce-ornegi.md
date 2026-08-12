@@ -1,25 +1,37 @@
 ---
-id: DY-002
-kategori: diger_resmi_yazisma
-niyet: 01_gorus
-belge_turu: resmi_sablon
+id: "DY-002"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "01_gorus"
+niyet: "01_gorus"
+baslik: "Dilekçe Örneği"
 kurum: "Erzincan Binali Yıldırım Üniversitesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-002_dilekce-ornegi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-002_dilekce-ornegi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
 # Dilekçe Örneği
 
-- Resmî kaynak: https://ogrenciisleri.ebyu.edu.tr/disiplin-sorusturma-rehberi/
-- Doğrudan belge: https://ogrenciisleri.ebyu.edu.tr/Dosyalar/Mevzuat/disiplin%20sorusturma%20rehberi/DilekceOrnegi.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-002_dilekce-ornegi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+Dilekçe Örneği;
 
-## Veri kümesinde kullanım
+…./…./2024
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+DEKANLIK/MÜDÜRLÜK/BÖLÜM BAŞKANLIĞI
 
-## Doğrulama notu
+…../…../2024 günü, saat ……’de ….. nolu sınıfta yapılan ….… sınavında ……….. numaralı, ……… isimli öğrencininkopya çektiği tespit edilmiş, hakkında tutanak düzenlenmiş ve tutanak ile kopya evrakı ekte sunulmuştur.
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Bilgilerinize arz ederim.
+
+Gözetmen (İmza)
+
+Ek:
+1-) Öğrenci cevap kağıdı 2-) Kopya evrakı
+3-) Kopya tutanağı

@@ -1,25 +1,56 @@
 ---
-id: UY-014
-kategori: ust_yazi
-niyet: 06_rapor_sunum
-belge_turu: resmi_sablon
+id: "UY-014"
+kategori: "ust_yazi"
+alt_kategori: "06_rapor_sunum"
+niyet: "06_rapor_sunum"
+baslik: "Yıllık bildirim"
 kurum: "Van Eğitim ve Araştırma Hastanesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/ust_yazi/UY-014_yillik-bildirim-ust-yazi-ornegi.doc"
+yerel_orijinal: "00_gelen_kaynaklar/ust_yazi/UY-014_yillik-bildirim-ust-yazi-ornegi.doc"
+kaynak_turu: "doc"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "antiword"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Yıllık Bildirim Üst Yazı Örneği
+# Yıllık bildirim
 
-- Resmî kaynak: https://vaneah.saglik.gov.tr/TR-59068/basvuru-ust-yazilari.html
-- Doğrudan belge: https://dosyahastane.saglik.gov.tr/Eklenti/4446/0/yillik-bildirim-ust-yazi-ornegidoc.doc
-- Yerel asıl belge: 00_gelen_kaynaklar/ust_yazi/UY-014_yillik-bildirim-ust-yazi-ornegi.doc
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+T.C. Sağlık Bakanlığı
+Türkiye İlaç ve Tıbbi Cihaz Kurumu
+İlaç, Biyolojik ve Tıbbi Ürünler Başkan Yardımcılığı
+Klinik İlaç Araştırmaları Daire Başkanlığı
+ANKARA Tarih
 
-## Veri kümesinde kullanım
+Konu: Yıllık bildirim
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+Aşağıda detayları verilen klinik araştırma için “Yıllık Bildirim Formu”
+yazımız ekinde sunulmaktadır.
 
-## Doğrulama notu
+|Araştırmanın kodu:      |
+|Araştırmanın açık adı:       |
+|Koordinatörün/sorumlu araştırmacının adı soyadı:      |
+|Koordinatör merkezin adresi:       |
+|Destekleyicinin adı:      |
+|Varsa destekleyicinin yasal temsilcisinin adı:       |
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Kurumumuza gönderilen evraklar ile sistemden eklenen dokümanların birebir
+aynı olduğunu ve gerekli elektronik dokümanların arama yapılabilir pdf
+olarak hazırlandığını taahhüt ederim.
+
+Gereğini saygılarımla arz ederim.
+
+İMZA
+AD-SOYAD
+
+EK:
+
+1. Yıllık bildirim formu
+
+2. İlk uygunluk yazısının bir örneği
+
+3. Etik kurul kararının aslı veya aslı gibidir örneği

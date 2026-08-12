@@ -1,11 +1,15 @@
 ---
-id: DY-036
-kategori: diger_resmi_yazisma
-niyet: 03_davet
-belge_turu: resmi_sablon
+id: "DY-036"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "03_davet"
+niyet: "03_davet"
+baslik: "İnceleme Yapılanı Savunmaya Davet Yazısı"
 kurum: "Amasya Üniversitesi Hukuk Müşavirliği"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/04_diger_resmi_yazisma/03_davet/DY-036_inceleme-yapilani-savunmaya-davet-yazisi.md"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+rag_status: "candidate"
 ---
 
 # İnceleme Yapılanı Savunmaya Davet Yazısı

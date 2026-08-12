@@ -58,6 +58,20 @@ def test_a_file_with_no_front_matter_returns_empty_meta_and_the_full_body():
     assert body == text
 
 
+def test_non_indexable_rag_status_is_skipped_before_length_checks():
+    meta = {"id": "BAD-1", "kategori": "cevap_yazisi", "rag_status": "rejected"}
+
+    assert curate._skip_reason(meta, "Uzun metin. " * 100) == "rag_status=rejected"
+
+
+def test_short_but_valid_information_notice_has_a_category_specific_limit():
+    meta = {"id": "BM-1", "kategori": "bilgilendirme_metni", "rag_status": "candidate"}
+    body = "Planlı kesinti nedeniyle sistem kullanılamayacaktır. " * 4
+
+    assert 160 <= len(body) < curate.MIN_CHARS
+    assert curate._skip_reason(meta, body) == ""
+
+
 def test_a_line_without_a_colon_inside_front_matter_is_skipped_not_raised():
     text = "---\nid: X-1\nbozuk satır\nkurum: Test Kurumu\n---\nGövde."
     meta, _ = curate._split_front_matter(text)
@@ -122,6 +136,43 @@ def test_build_record_surfaces_pii_findings():
     assert any(flag["kind"] == "telefon" for flag in record["pii_flags"])
     # A finding carries a masked preview, never the raw value.
     assert all("0532 123 45 67" not in flag["preview"] for flag in record["pii_flags"])
+
+
+def test_low_confidence_address_heuristic_is_not_reported_as_actionable_pii():
+    record = curate._build_record(
+        example_id="X-3",
+        correspondence_type="response_letter",
+        kategori="cevap_yazisi",
+        niyet="gorus",
+        baslik="Başlık",
+        kurum="Kurum",
+        belge_turu="ornek",
+        text="Mahalle muhtarlarına ilişkin Mahalle Muhtarlıkları Kanunu incelenmiştir.",
+        source_path="X-3.md",
+    )
+
+    assert record["pii_flags"] == []
+
+
+def test_pii_gate_does_not_add_a_record_to_the_output():
+    record = curate._build_record(
+        example_id="X-4",
+        correspondence_type="response_letter",
+        kategori="cevap_yazisi",
+        niyet="test",
+        baslik="Başlık",
+        kurum="Kurum",
+        belge_turu="gercek_acik_kaynak",
+        text="Başvuru sahibinin telefonu 0532 123 45 67 olarak kaydedilmiştir.",
+        source_path="X-4.md",
+    )
+    records: dict[str, dict] = {}
+    skipped: list[tuple[str, str]] = []
+
+    curate._add_record(records, record, skipped, overwrite=True)
+
+    assert records == {}
+    assert skipped == [("X-4.md", "pii=telefon")]
 
 
 # --- End-to-end over a small synthetic corpus ----------------------------------

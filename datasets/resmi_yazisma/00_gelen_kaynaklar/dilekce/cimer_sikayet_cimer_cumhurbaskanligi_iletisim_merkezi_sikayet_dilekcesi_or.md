@@ -1,19 +1,20 @@
 ---
-id: DILEKCE-4ABC5F33
-kategori: dilekce
-alt_kategori: cimer_sikayet
+id: "DILEKCE-4ABC5F33"
+kategori: "dilekce"
+alt_kategori: "cimer_sikayet"
 baslik: "CİMER (Cumhurbaşkanlığı İletişim Merkezi) Şikayet Dilekçesi (Ornek 1)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # CİMER (Cumhurbaşkanlığı İletişim Merkezi) Şikayet Dilekçesi (Ornek 1)
 
 CUMHURBAŞKANLIĞI İLETİŞİM MERKEZİ'NE (CİMER)
 
-Başvuru Sahibi: Cemre Yildiz
-T.C. Kimlik No: 82425360777
-Adres: Cumhuriyet Mah. 165. Sok. No:15 Antalya
-Telefon: 0547 851 24 88
+Başvuru Sahibi: [KİŞİ ADI]
+T.C. Kimlik No: [T.C. KİMLİK NO]
+Adres: [ADRES]
+Telefon: [TELEFON]
 
 Konu: Bursa ili Bornova ilçesindeki kamu hizmetine ilişkin şikayet
 
@@ -26,7 +27,7 @@ Bu konuda ilgili kuruma (Belediye Baskanligi) defalarca başvuruda bulunmama ra�
 Mağduriyetimin giderilmesi ve ilgili kamu kurumunun denetlenmesi hususunda gereğini saygılarımla arz ederim.
 
 24.06.2022
-Cemre Yildiz
+[KİŞİ ADI]
 İmza
 
 EKLER:

@@ -1,23 +1,26 @@
 ---
-id: VAL-006
-kategori: bilgilendirme_metni
-niyet: duyuru
-baslik: Bursa Valiliği Kış Mevsimi Karayolu Trafik Tedbirleri Genelgesi
-kurum: T.C. Bursa Valiliği
-kaynak_url: https://www.bursa.gov.tr/kis-mevsimi-karayolu-trafik-tedbirleri-genelgesi
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "VAL-006"
+kategori: "bilgilendirme_metni"
+alt_kategori: "duyuru"
+niyet: "duyuru"
+baslik: "Bursa Valiliği Kış Mevsimi Karayolu Trafik Tedbirleri Genelgesi"
+kurum: "T.C. Bursa Valiliği"
+kaynak: "https://www.bursa.gov.tr/kis-mevsimi-karayolu-trafik-tedbirleri-genelgesi"
+kaynak_url: "https://www.bursa.gov.tr/kis-mevsimi-karayolu-trafik-tedbirleri-genelgesi"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Bursa Valiliği Kış Mevsimi Karayolu Trafik Tedbirleri Genelgesi
 
-**T.C.**  
-**BURSA VALİLİĞİ**  
+**T.C.**
+**BURSA VALİLİĞİ**
 **İl Emniyet Müdürlüğü & İl Jandarma Komutanlığı**
 
-**Genelge No:** 2025/11  
-**Konu:** Kış Mevsimi Trafik Tedbirleri  
+**Genelge No:** 2025/11
+**Konu:** Kış Mevsimi Trafik Tedbirleri
 
 Kış mevsiminin olumsuz hava koşullarında (kar, buzlanma, sis) Bursa il sınırları içerisinde can ve mal güvenliğinin sağlanması, trafik akışının kesintisiz sürdürülmesi amacıyla aşağıdaki tedbirler alınmıştır:
 
@@ -30,5 +33,5 @@ Kış mevsiminin olumsuz hava koşullarında (kar, buzlanma, sis) Bursa il sın�
 
 Sürücülerimizin araçlarında çekme halatı, takoz ve zincir bulundurmaları önemle rica olunur.
 
-[SİLİNMİŞTİR]  
-Bursa Valisi  
+[KİŞİSEL BİLGİ]
+Bursa Valisi

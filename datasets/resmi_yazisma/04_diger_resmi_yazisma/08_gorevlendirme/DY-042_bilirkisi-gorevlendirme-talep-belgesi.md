@@ -1,11 +1,15 @@
 ---
-id: DY-042
-kategori: diger_resmi_yazisma
-niyet: 08_gorevlendirme
-belge_turu: resmi_sablon
+id: "DY-042"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "08_gorevlendirme"
+niyet: "08_gorevlendirme"
+baslik: "Bilirkişi Görevlendirme Talep Belgesi"
 kurum: "Amasya Üniversitesi Hukuk Müşavirliği"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/04_diger_resmi_yazisma/08_gorevlendirme/DY-042_bilirkisi-gorevlendirme-talep-belgesi.md"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+rag_status: "candidate"
 ---
 
 # Bilirkişi Görevlendirme Talep Belgesi

@@ -1,11 +1,15 @@
 ---
-id: DY-035
-kategori: diger_resmi_yazisma
-niyet: 07_toplanti
-belge_turu: resmi_sablon
+id: "DY-035"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "07_toplanti"
+niyet: "07_toplanti"
+baslik: "Kurul Toplantı Tutanağı"
 kurum: "Amasya Üniversitesi Hukuk Müşavirliği"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/04_diger_resmi_yazisma/07_toplanti/DY-035_kurul-toplanti-tutanagi.md"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+rag_status: "candidate"
 ---
 
 # Kurul Toplantı Tutanağı

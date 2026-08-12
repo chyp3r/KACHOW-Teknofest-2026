@@ -1,20 +1,21 @@
 ---
-id: DILEKCE-7734623F
-kategori: dilekce
-alt_kategori: bosanma_dava
+id: "DILEKCE-7734623F"
+kategori: "dilekce"
+alt_kategori: "bosanma_dava"
 baslik: "Anlaşmalı Boşanma Dava Dilekçesi (Ornek 2)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Anlaşmalı Boşanma Dava Dilekçesi (Ornek 2)
 
 Mersin AİLE MAHKEMESİ HAKİMLİĞİ'NE
 
-DAVACI: Selin Gunes (T.C.: 98523955253)
-Adres: Cumhuriyet Mah. 112. Sok. No:37 Kayseri
+DAVACI: Selin Gunes (T.C.: [T.C. KİMLİK NO])
+Adres: [ADRES]
 
-DAVALI: Elif Aydin (T.C.: 83308854613)
-Adres: Cumhuriyet Mah. Istanbul
+DAVALI: [KİŞİ ADI] (T.C.: [T.C. KİMLİK NO])
+Adres: [ADRES]
 
 KONU: Anlaşmalı boşanma talebidir.
 HMK: 6100 sayılı Kanun

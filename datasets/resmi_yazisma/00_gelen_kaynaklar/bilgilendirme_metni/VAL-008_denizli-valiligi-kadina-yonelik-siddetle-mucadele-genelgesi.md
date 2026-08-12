@@ -1,23 +1,26 @@
 ---
-id: VAL-008
-kategori: bilgilendirme_metni
-niyet: duyuru
-baslik: Denizli Valiliği Kadına Yönelik Şiddetle Mücadele İl Eylem Planı Genelgesi
-kurum: T.C. Denizli Valiliği
-kaynak_url: https://www.denizli.gov.tr/2026-01-sayili-valilik-genelgesi
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "VAL-008"
+kategori: "bilgilendirme_metni"
+alt_kategori: "duyuru"
+niyet: "duyuru"
+baslik: "Denizli Valiliği Kadına Yönelik Şiddetle Mücadele İl Eylem Planı Genelgesi"
+kurum: "T.C. Denizli Valiliği"
+kaynak: "https://www.denizli.gov.tr/2026-01-sayili-valilik-genelgesi"
+kaynak_url: "https://www.denizli.gov.tr/2026-01-sayili-valilik-genelgesi"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Denizli Valiliği Kadına Yönelik Şiddetle Mücadele İl Eylem Planı Genelgesi
 
-**T.C.**  
-**DENİZLİ VALİLİĞİ**  
+**T.C.**
+**DENİZLİ VALİLİĞİ**
 **Aile ve Sosyal Hizmetler İl Müdürlüğü**
 
-**Genelge No:** 2026/01  
-**Tarih:** 30.01.2026  
+**Genelge No:** 2026/01
+**Tarih:** 30.01.2026
 
 Kadına yönelik şiddetin önlenmesi, 6284 sayılı Kanun kapsamında sunulan koruyucu ve önleyici tedbirlerin etkinliğinin artırılması amacıyla Denizli İl Eylem Planı (2026-2030) çerçevesinde aşağıdaki hususlara tüm kamu kurum ve kuruluşlarınca riayet edilecektir:
 
@@ -30,5 +33,5 @@ Kadına yönelik şiddetin önlenmesi, 6284 sayılı Kanun kapsamında sunulan k
 
 Gereğini önemle rica ederim.
 
-[SİLİNMİŞTİR]  
-Denizli Valisi  
+[KİŞİSEL BİLGİ]
+Denizli Valisi

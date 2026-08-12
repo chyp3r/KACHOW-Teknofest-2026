@@ -1,25 +1,67 @@
 ---
-id: UY-003
-kategori: ust_yazi
-niyet: 02_basvuru_talep
-belge_turu: resmi_sablon
+id: "UY-003"
+kategori: "ust_yazi"
+alt_kategori: "02_basvuru_talep"
+niyet: "02_basvuru_talep"
+baslik: "Araştırma ürünü ithalatı"
 kurum: "Van Eğitim ve Araştırma Hastanesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/ust_yazi/UY-003_arastirma-urunu-ithalati-ust-yazi-ornegi.doc"
+yerel_orijinal: "00_gelen_kaynaklar/ust_yazi/UY-003_arastirma-urunu-ithalati-ust-yazi-ornegi.doc"
+kaynak_turu: "doc"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "antiword"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Araştırma Ürünü İthalatı Üst Yazı Örneği
+# Araştırma ürünü ithalatı
 
-- Resmî kaynak: https://vaneah.saglik.gov.tr/TR-59068/basvuru-ust-yazilari.html
-- Doğrudan belge: https://dosyahastane.saglik.gov.tr/Eklenti/4452/0/arastirma-urunu-ithalati-ust-yazi-ornegidoc.doc
-- Yerel asıl belge: 00_gelen_kaynaklar/ust_yazi/UY-003_arastirma-urunu-ithalati-ust-yazi-ornegi.doc
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+T.C. Sağlık Bakanlığı
+Türkiye İlaç ve Tıbbi Cihaz Kurumu
+İlaç, Biyolojik ve Tıbbi Ürünler Başkan Yardımcılığı
+Klinik İlaç Araştırmaları Daire Başkanlığı
+ANKARA Tarih
 
-## Veri kümesinde kullanım
+Konu: Araştırma ürünü ithalatı
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+Aşağıda detayları verilen klinik araştırmada kullanılmak üzere ithal
+edilecek olan araştırma ürünlerine ait bilgiler bilgilerinize
+sunulmaktadır.
 
-## Doğrulama notu
+|Araştırmanın açık adı:      |
+|Araştırmanın kodu:       |
+|Koordinatörün/sorumlu araştırmacının adı soyadı:      |
+|Koordinatör merkezin adresi:      |
+|Destekleyicinin adı:      |
+|Varsa destekleyicinin yasal temsilcisinin adı:       |
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Kurumumuza gönderilen evraklar ile sistemden eklenen dokümanların birebir
+aynı olduğunu ve gerekli elektronik dokümanların arama yapılabilir pdf
+olarak hazırlandığını taahhüt ederim.
+
+Yazımız ekinde yer alan proforma faturaya gerekli şerhin verilmesi için
+gereğini saygılarımla arz ederim.
+
+İMZA
+AD-SOYAD
+
+EK:
+
+1. İlk uygunluk yazısının bir örneği
+
+2. İthalat başvuru formu
+
+3. Varsa yetkilendirme belgesi
+
+4. Dekont (aslı ve bir örneği)
+
+5. Proforma fatura
+
+6. Varsa araştırma ürünlerinin depolanacağı yerin izin belgesinin bir
+örneği
+
+7. Gerekli ise başvuru formunda belirtilen diğer belgeler

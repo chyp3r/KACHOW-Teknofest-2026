@@ -1,0 +1,32 @@
+---
+id: "BOTAS_SIMULASYON_004"
+kategori: "bilgilendirme_metni"
+alt_kategori: "genel"
+baslik: "Doğal Gaz Tarifeleri Güncelleme Bildirimi - Belge No 4"
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/pdf/BOTAS_SIMULASYON_004.pdf"
+yerel_orijinal: "00_gelen_kaynaklar/pdf/BOTAS_SIMULASYON_004.pdf"
+kaynak_turu: "pdf"
+dogrulama: "yerel_kaynaktan_donusturuldu"
+extractor: "pdfium"
+used_ocr: "false"
+page_count: "1"
+quality_score: "0.832"
+rag_status: "candidate"
+---
+
+# Doğal Gaz Tarifeleri Güncelleme Bildirimi - Belge No 4
+
+BOTAŞ - BORU HATLARI İLE PETROL TAŞIMA A.Ş.
+Doğal Gaz İşletme ve Piyasa İşlemleri Bölge Müdürlüğü
+**Sayı:** [EVRAK SAYISI]
+Tarih: 22.01.2021
+Konu: Doğal Gaz Tarifeleri Güncelleme Bildirimi - Belge No 4
+İLGİLİ MAKAMA
+İlgi: EPDK'nın 21.08.2024 tarih ve 154 sayılı Kurul Kararı
+Enerji Piyasası Düzenleme Kurumu'nun ilgi kararı gereğince, İstanbul ili sınırlarındaki konut ve sanayi
+abonelerine uygulanan doğal gaz tarifelerinde güncelleme yapılmıştır. Konut aboneleri için birim fiyat 413
+kuruş/m³, sanayi aboneleri için 61 kuruş/m³ olarak belirlenmiştir. Yeni tarifeler 21.08.2024 tarihinden itibaren
+geçerli olacaktır. Abonelere faturalandırma döneminde bilgilendirme yapılması rica olunur.
+[İMZA SAHİBİ]
+Rektör Yardımcısı
+Sayfa 1

@@ -1,25 +1,63 @@
 ---
-id: CY-044
-kategori: cevap_yazisi
-niyet: 03_bilgi_edinme
-belge_turu: tamamlanmis_resmi_cevap
+id: "CY-044"
+kategori: "cevap_yazisi"
+alt_kategori: "03_bilgi_edinme"
+niyet: "03_bilgi_edinme"
+baslik: ", Â Sayı: E-12007 03-1$23865"
 kurum: "Türkiye Büyük Millet Meclisinde yayımlanan kurum cevabı"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/cevap_yazisi/CY-044_7-41778-turkiye-nin-avrupa-yerel-yonetimler-ozerklik-sarti-na-koydugu-ce.pdf"
+yerel_orijinal: "00_gelen_kaynaklar/cevap_yazisi/CY-044_7-41778-turkiye-nin-avrupa-yerel-yonetimler-ozerklik-sarti-na-koydugu-ce.pdf"
+kaynak_turu: "pdf"
+belge_turu: "tamamlanmis_resmi_cevap"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "tesseract"
+used_ocr: "true"
+page_count: "1"
+quality_score: "0.787"
+rag_status: "rejected"
+ret_nedeni: "ocr_karakter_bozulmasi"
 ---
 
-# 7/41778 - Türkiye'nin Avrupa Yerel Yönetimler Özerklik Şartı'na koyduğu çekinceleri kaldırması talebine ilişkin
+# , Â Sayı: E-12007 03-1$23865
 
-- Resmî kaynak: https://www.tbmm.gov.tr/Denetim/Yazili-Soru-Onergesi-Detay/8971bc1d-c4a2-4ad8-b92d-019cb3de56a4
-- Doğrudan belge: https://cdn.tbmm.gov.tr/KKBSPublicFile/D28/Y4/T7/WebOnergeMetni/95bf2916-fb43-4070-ac74-8bda3dadd4f3.pdf
-- Yerel asıl belge: 00_gelen_kaynaklar/cevap_yazisi/CY-044_7-41778-turkiye-nin-avrupa-yerel-yonetimler-ozerklik-sarti-na-koydugu-ce.pdf
-- Tarih bilgisi: 27/02/2026
-- Sayfa/bölüm: Belgenin tamamı
+Türkiye Büyük Millet Meclisi -
+Tütkiye Büyük Millet Meclisi
+#İ | Talih 251030026 08:59
+# , Â Sayı: E-12007 03-1$23865
+* İZ * ANL NM
+7 Me . Ni
+e AYAN a
+*y Nm #
+T.C.
+CUMHURBAŞKANI YARDIMCISI
+GÜNLÜDÜR
+Sayı (o: E-48360949-610-371845
+Konu : Soru Önergeleri-358
+41778
+TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA
+İlgi o : 17.03.2026 tarihli ve E-43452547-120.07.04-1817456 sayılı yazınız.
 
-## Veri kümesinde kullanım
+Anayasanın 98 inci maddesi uyarınca Başkanlığınızca tarafıma gönderilen yazılı soru
+önergelerinden, Cumhurbaşkanlığı Merkez Teşkilatı ile Cumhurbaşkanlığına Bağlı Kurum ve Kuruluşların
+görev alanına giren konulara ilişkin önergeler cevaplandırılmaktadır.
 
-Cevabın soru, ilgi, açıklama ve sonuç örgüsü örneklenebilir. Milletvekili ve olay adları eğitim girdisinde anonimleştirilmelidir.
+I sayılı Cumhurbaşkanlığı Teşkilatı Hakkında Cumhurbaşkanlığı Kararnamesi ile 4 sayılı
+Bakanlıklara Bağlı, İlgili, İlişkili Kurum ve Kuruluşlar ile Diğer Kurum ve Kuruluşların Teşkilatı
+Hakkında Cumhurbaşkanlığı Kararnamesi uyarınca bakanlıkların görev ve yetki alanına giren önergeler
+bakanlıklar tarafından cevaplandırılmaktadır.
 
-## Doğrulama notu
+Bu itibarla, Diyarbakır Milletvekili Sayın [KİŞİ ADI] tarafından verilen
+7/41778 esas numaralı yazılı soru önergesinde bahsi geçen hususlar Dışişleri Bakanlığının görev ve yetki
+alanına girmektedir.
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Bilgilerini ve gereğini arz ederim.
+
+[İMZA SAHİBİ]
+Cumhurbaşkanı Yardımcısı
+Bu belge, güvenli elektronik imza ile imzalanmıştır.
+
+Doğrulama Kodu: ASEB4DEA-CB21-439D-8ECE-D8D225E27DB3 — . Doğrulama Adresi: https://www.turkiye.gov.tr/tccb-ebys
+[KURUM İLETİŞİM BİLGİLERİ]
+İnternet Adresi: www.tccb. gov.tr ENER
+[KURUM İLETİŞİM BİLGİLERİ]

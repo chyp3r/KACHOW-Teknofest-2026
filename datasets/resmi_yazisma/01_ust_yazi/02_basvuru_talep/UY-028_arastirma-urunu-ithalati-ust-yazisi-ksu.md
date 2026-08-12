@@ -1,25 +1,81 @@
 ---
-id: UY-028
-kategori: ust_yazi
-niyet: 02_basvuru_talep
-belge_turu: resmi_sablon
+id: "UY-028"
+kategori: "ust_yazi"
+alt_kategori: "02_basvuru_talep"
+niyet: "02_basvuru_talep"
+baslik: "T.C. SAĞLIK BAKANLIĞI"
 kurum: "Kahramanmaraş Sütçü İmam Üniversitesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/ust_yazi/UY-028_arastirma-urunu-ithalati-ust-yazisi-ksu.docx"
+yerel_orijinal: "00_gelen_kaynaklar/ust_yazi/UY-028_arastirma-urunu-ithalati-ust-yazisi-ksu.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Araştırma Ürünü İthalatı Üst Yazısı - KSÜ
+# T.C. SAĞLIK BAKANLIĞI
 
-- Resmî kaynak: https://etikkurul.ksu.edu.tr/Default?SId=33776
-- Doğrudan belge: https://etikkurul.ksu.edu.tr/depo/belgeler/1-%C3%9Cst%20yaz%C4%B1-ara%C5%9Ft%C4%B1rma%20%C3%BCr%C3%BCn%C3%BC%20ithalat%C4%B1_2512181411355030.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/ust_yazi/UY-028_arastirma-urunu-ithalati-ust-yazisi-ksu.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+T.C. SAĞLIK BAKANLIĞI
 
-## Veri kümesinde kullanım
+TÜRKİYE İLAÇ VE TIBBİ CİHAZ KURUMU
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+Klinik Araştırmalar Dairesi Başkanlığı
 
-## Doğrulama notu
+Bilgilendirme ve Koordinasyon Birimi
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+| Konu: | Klinik Araştırmalarda Kullanılacak Araştırma Ürünlerinin İthalatı |
+
+| --- | --- |
+
+| İlgi: | |
+
+Aşağıda detayları verilen klinik araştırmada kullanılacak araştırma ürünlerinin ithalatına ilişkin gerekli bilgi ve belgeler sunulmaktadır.
+
+| Araştırmanın açık adı | |
+
+| --- | --- |
+
+| Araştırma kodu (TİTCK kodu) | |
+
+(Başvurunun içeriğini yazınız)
+
+Başvuru dosyasına eklenen tüm dokümanların aslı ile birebir aynı olduğunu ve arama yapılabilir pdf olarak hazırlandığını,
+
+Başvuruda sağlanan bilgilerin doğru olduğunu kabul ve taahhüt ederim.
+
+Yazımız ekinde yer alan proforma faturaya gerekli şerhin verilmesi için gereğini saygılarımla arz ederim.
+
+(ıslak imzalı üst yazılarda)
+
+…./…./….
+
+İmza/Kaşe
+
+Adı Soyadı
+
+| Başvuru için iletişime geçilecek kişi: | Başvuru için iletişime geçilecek kişi: |
+
+| --- | --- |
+
+| Adres: | |
+
+| Telefon: | |
+
+| E-posta: | |
+
+Ekler:
+
+| Doküman | Doküman | Tarih / Versiyon Açıklama |
+
+| --- | --- | --- |
+
+| 1. | Klinik Araştırmalarda Kullanılacak Araştırma Ürünlerinin İthalatı İçin Başvuru Formu | |
+
+| 2. | Proforma fatura (2 adet) | (Tarih ve numara belirtilmelidir) (Sayfa sayısı belirtilmelidir) |
+
+| 3. | | |

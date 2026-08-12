@@ -1,25 +1,42 @@
 ---
-id: DY-012
-kategori: diger_resmi_yazisma
-niyet: 06_koordinasyon
-belge_turu: resmi_sablon
+id: "DY-012"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "06_koordinasyon"
+niyet: "06_koordinasyon"
+baslik: "Soruşturma Raporu Dosya Teslimi Yazı örneği; (Soruşturmacı)"
 kurum: "Erzincan Binali Yıldırım Üniversitesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-012_sorusturma-raporu-dosya-teslimi-yazi-ornegi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-012_sorusturma-raporu-dosya-teslimi-yazi-ornegi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Soruşturma Raporu Dosya Teslimi Yazı Örneği
+# Soruşturma Raporu Dosya Teslimi Yazı örneği; (Soruşturmacı)
 
-- Resmî kaynak: https://ogrenciisleri.ebyu.edu.tr/disiplin-sorusturma-rehberi/
-- Doğrudan belge: https://ogrenciisleri.ebyu.edu.tr/Dosyalar/Mevzuat/disiplin%20sorusturma%20rehberi/SorusturmaRaporuDosyaTeslimiYaziOrnegi%28Sorusturmaci%29.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-012_sorusturma-raporu-dosya-teslimi-yazi-ornegi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+Soruşturma Raporu Dosya Teslimi Yazı örneği; (Soruşturmacı)
 
-## Veri kümesinde kullanım
+…../…../2024
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+……… DEKANLIĞINA/MÜDÜRLÜĞÜNE
 
-## Doğrulama notu
+İlgi:………… gün vesayılı yazınız.
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+İlgi yazı ile …../…../2024 günü, saat ……….’de ……… nolu sınıfta yapılan ….…
+sınavında, …….. numaralı ……… isimli öğrencinin .................suretiylekopyaçektiği iddiası ile başlatılan disiplin soruşturmasında soruşturmacı olarak görevlendirildim.
+
+Yükseköğretim Kurumları Öğrenci Disiplin Yönetmeliği hükümleri uyarınca ………..
+hakkında yürütülen disiplin soruşturması neticesinde hazırlanan dosya ve soruşturma raporu ekte sunulmuştur.
+Bilgilerinizi ve gereğini arz ederim.
+
+Soruşturmacı
+
+(İmza)
+
+Ek : Soruşturma Raporu ve dizi pusulasına bağlı soruşturma dosyası.(…Sayfa)

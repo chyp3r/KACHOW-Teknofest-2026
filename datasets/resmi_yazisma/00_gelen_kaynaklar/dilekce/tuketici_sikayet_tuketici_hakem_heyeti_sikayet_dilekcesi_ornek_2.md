@@ -1,21 +1,22 @@
 ---
-id: DILEKCE-794E2E36
-kategori: dilekce
-alt_kategori: tuketici_sikayet
+id: "DILEKCE-794E2E36"
+kategori: "dilekce"
+alt_kategori: "tuketici_sikayet"
 baslik: "Tüketici Hakem Heyeti Şikayet Dilekçesi (Ornek 2)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Tüketici Hakem Heyeti Şikayet Dilekçesi (Ornek 2)
 
 Diyarbakir İL TÜKETİCİ HAKEM HEYETİ BAŞKANLIĞI'NA
 
-ŞİKAYETÇİ: Ahmet Yilmaz (T.C.: 79864294709)
-Adres: Ataturk Mah. 98. Sok. No:19 Diyarbakir
-Tel: 0539 280 90 48
+ŞİKAYETÇİ: [KİŞİ ADI] (T.C.: [T.C. KİMLİK NO])
+Adres: [ADRES]
+Tel: [TELEFON]
 
 ŞİKAYET EDİLEN: Erdogan Ticaret Ltd. Sti.
-Adres: Bahcelievler Mah. Konya
+Adres: [ADRES]
 
 KONU: Ayıplı Mal/Hizmet Şikayeti
 
@@ -26,7 +27,7 @@ TALEBİM:
 Ürün bedelinin iadesi / ürünün değiştirilmesi / ücretsiz onarım yapılması hususunda gereğinin yapılmasını arz ederim.
 
 02.12.2023
-Ahmet Yilmaz
+[KİŞİ ADI]
 İmza
 
 EKLER:

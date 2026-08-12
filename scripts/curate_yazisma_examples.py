@@ -6,14 +6,14 @@ Reads full-text official letters from two places in the corpus:
    diger_resmi_yazisma}/*.md`` -- the primary pool. Each file's own front
    matter rarely carries a curated ``niyet``, so it is joined against
    ``kaynak-katalogu.jsonl`` by ``id`` (covers 873/873 non-dilekce records).
-2. The numbered taxonomy directories (``0[1-4]_*/*/*.md``) -- most files
-   there are link-only stub cards pointing at a PDF/HTML original (skipped
-   via the ``STUB_MARKER`` check), but ~60 are full synthetic documents
-   already carrying a canonical ``niyet`` in front matter.
+2. The numbered taxonomy directories (``0[1-4]_*/*/*.md``), including cards
+   whose PDF/HTML/Word source has been converted to full Markdown.
+3. ``00_gelen_kaynaklar/pdf/*.md`` -- same-stem cards generated for the
+   simulation PDFs that have no numbered catalog card.
 
 ``dilekce/`` is excluded: it holds incoming petitions, not the outgoing
 official letters this system drafts, so indexing it would teach the wrong
-register. PDF/HTML/DOC/DOCX sources are ignored for this pass.
+register.  Only Markdown is read; source binaries stay as provenance.
 
 Usage:
     python scripts/curate_yazisma_examples.py
@@ -40,8 +40,11 @@ DEFAULT_OUTPUT_PATH = os.path.join(CORPUS_ROOT, "ornekler.jsonl")
 
 RELEVANT_FOLDERS = ("ust_yazi", "cevap_yazisi", "bilgilendirme_metni", "diger_resmi_yazisma")
 
-MIN_CHARS = 400
+MIN_CHARS = 250
+INFORMATION_NOTICE_MIN_CHARS = 160
 MAX_CHARS = 6000
+INDEXABLE_RAG_STATUSES = {"candidate", "approved"}
+ADDRESS_REPORT_CONFIDENCE_FLOOR = 0.8
 
 #: Numbered-dir stub cards carry this exact sentence when the real text lives
 #: only in an external PDF/HTML, not in the card itself.
@@ -131,6 +134,7 @@ def _build_record(
     pii_flags = [
         {"kind": finding.kind, "confidence": finding.confidence, "preview": finding.preview}
         for finding in find_pii(text)
+        if finding.kind != "adres" or finding.confidence >= ADDRESS_REPORT_CONFIDENCE_FLOOR
     ]
     return {
         "id": example_id,
@@ -147,6 +151,45 @@ def _build_record(
     }
 
 
+def _skip_reason(meta: dict[str, Any], body: str) -> str:
+    """Return why a card must not enter RAG, or an empty string."""
+    status = meta.get("rag_status", "candidate")
+    if status not in INDEXABLE_RAG_STATUSES:
+        return f"rag_status={status}"
+    if STUB_MARKER in body or not meta.get("id"):
+        return "stub_or_no_id"
+    minimum = INFORMATION_NOTICE_MIN_CHARS if meta.get("kategori") == "bilgilendirme_metni" else MIN_CHARS
+    if not (minimum <= len(body) <= MAX_CHARS):
+        return f"length={len(body)}"
+    return ""
+
+
+def _pii_reason(record: dict[str, Any]) -> str:
+    """Return a fail-closed reason when a candidate still contains PII."""
+    if record["pii_flags"]:
+        kinds = sorted({finding["kind"] for finding in record["pii_flags"]})
+        return f"pii={','.join(kinds)}"
+    return ""
+
+
+def _add_record(
+    records: dict[str, dict[str, Any]],
+    record: dict[str, Any],
+    skipped: list[tuple[str, str]],
+    *,
+    overwrite: bool,
+) -> None:
+    """Add one record only after the final PII gate has passed."""
+    reason = _pii_reason(record)
+    if reason:
+        skipped.append((record["source_path"], reason))
+        return
+    if overwrite:
+        records[record["id"]] = record
+    else:
+        records.setdefault(record["id"], record)
+
+
 def _iter_gelen_kaynaklar_examples(
     folder_to_type: dict[str, str],
     catalog: dict[str, dict[str, Any]],
@@ -158,11 +201,9 @@ def _iter_gelen_kaynaklar_examples(
         for path in sorted(glob.glob(pattern)):
             meta, body = _split_front_matter(_read(path))
             example_id = meta.get("id")
-            if not example_id or STUB_MARKER in body:
-                skipped.append((path, "stub_or_no_id"))
-                continue
-            if not (MIN_CHARS <= len(body) <= MAX_CHARS):
-                skipped.append((path, f"length={len(body)}"))
+            reason = _skip_reason(meta, body)
+            if reason:
+                skipped.append((path, reason))
                 continue
             catalog_entry = catalog.get(example_id, {})
             yield _build_record(
@@ -188,11 +229,9 @@ def _iter_numbered_dir_examples(
             continue
         meta, body = _split_front_matter(_read(path))
         example_id = meta.get("id")
-        if not example_id or STUB_MARKER in body:
-            skipped.append((path, "stub_or_no_id"))
-            continue
-        if not (MIN_CHARS <= len(body) <= MAX_CHARS):
-            skipped.append((path, f"length={len(body)}"))
+        reason = _skip_reason(meta, body)
+        if reason:
+            skipped.append((path, reason))
             continue
         kategori = meta.get("kategori", "")
         correspondence_type = folder_to_type.get(kategori)
@@ -207,6 +246,39 @@ def _iter_numbered_dir_examples(
             niyet=niyet,
             baslik=meta.get("baslik", ""),
             kurum=meta.get("kurum", ""),
+            belge_turu=meta.get("belge_turu", ""),
+            text=body,
+            source_path=os.path.relpath(path, CORPUS_ROOT),
+        )
+
+
+def _iter_generated_pdf_examples(
+    folder_to_type: dict[str, str],
+    catalog: dict[str, dict[str, Any]],
+    skipped: list[tuple[str, str]],
+) -> Iterator[dict[str, Any]]:
+    """Yield same-stem Markdown cards created beside uncatalogued PDFs."""
+    pattern = os.path.join(GELEN_KAYNAKLAR_DIR, "pdf", "*.md")
+    for path in sorted(glob.glob(pattern)):
+        meta, body = _split_front_matter(_read(path))
+        reason = _skip_reason(meta, body)
+        if reason:
+            skipped.append((path, reason))
+            continue
+        kategori = meta.get("kategori", "")
+        correspondence_type = folder_to_type.get(kategori)
+        if correspondence_type is None:
+            skipped.append((path, f"unknown_kategori={kategori}"))
+            continue
+        example_id = meta["id"]
+        catalog_entry = catalog.get(example_id, {})
+        yield _build_record(
+            example_id=example_id,
+            correspondence_type=correspondence_type,
+            kategori=kategori,
+            niyet=meta.get("niyet") or catalog_entry.get("niyet"),
+            baslik=meta.get("baslik") or catalog_entry.get("baslik"),
+            kurum=meta.get("kurum") or catalog_entry.get("kurum"),
             belge_turu=meta.get("belge_turu", ""),
             text=body,
             source_path=os.path.relpath(path, CORPUS_ROOT),
@@ -235,9 +307,11 @@ def main() -> int:
     skipped: list[tuple[str, str]] = []
     records: dict[str, dict[str, Any]] = {}
     for record in _iter_gelen_kaynaklar_examples(folder_to_type, catalog, skipped):
-        records[record["id"]] = record
+        _add_record(records, record, skipped, overwrite=True)
     for record in _iter_numbered_dir_examples(folder_to_type, skipped):
-        records.setdefault(record["id"], record)
+        _add_record(records, record, skipped, overwrite=False)
+    for record in _iter_generated_pdf_examples(folder_to_type, catalog, skipped):
+        _add_record(records, record, skipped, overwrite=False)
 
     ordered = sorted(records.values(), key=lambda r: r["id"])
 
@@ -256,7 +330,7 @@ def main() -> int:
     print(f"Yazıldı: {len(ordered)} örnek -> {args.output}")
     for correspondence_type, count in sorted(by_type.items()):
         print(f"  {correspondence_type}: {count}")
-    print(f"PII bulgulu örnek sayısı: {pii_hits} (indekslemeden önce gözden geçirin)")
+    print(f"PII bulgulu örnek sayısı: {pii_hits} (çıktıya yazılması engellenir)")
     print(f"Elenen dosya sayısı: {len(skipped)}")
 
     if args.report and skipped:

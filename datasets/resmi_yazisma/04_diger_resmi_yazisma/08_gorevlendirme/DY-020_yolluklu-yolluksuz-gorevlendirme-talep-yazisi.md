@@ -1,25 +1,37 @@
 ---
-id: DY-020
-kategori: diger_resmi_yazisma
-niyet: 08_gorevlendirme
-belge_turu: resmi_sablon
+id: "DY-020"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "08_gorevlendirme"
+niyet: "08_gorevlendirme"
+baslik: "DÜZCE ÜNİVERSİTESİ"
 kurum: "Düzce Üniversitesi Fen Edebiyat Fakültesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-020_yolluklu-yolluksuz-gorevlendirme-talep-yazisi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-020_yolluklu-yolluksuz-gorevlendirme-talep-yazisi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Yolluklu/Yolluksuz Görevlendirme Talep Yazısı
+# DÜZCE ÜNİVERSİTESİ
 
-- Resmî kaynak: https://fef.duzce.edu.tr/sayfa/0468/sablon-yazilar
-- Doğrudan belge: https://cdn.duzce.edu.tr/File/GetFile/0efc4a61-5457-4bb0-b19a-c2bd093d49c9
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-020_yolluklu-yolluksuz-gorevlendirme-talep-yazisi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+DÜZCE ÜNİVERSİTESİ
 
-## Veri kümesinde kullanım
+FEN EDEBİYAT FAKÜLTESİ
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+……………………….. BÖLÜM BAŞKANLIĞINA
 
-## Doğrulama notu
+….-…. …….. ............. tarihleri arasında …………………….’da, ……………………….. tarafından düzenlenecek "……………………………………….." adlı kongreye “…………... …………………………………isimli sözel bildirim / bildirilerim ile katılacağımdan 2547 sayılı Kanunun 39. maddesi uyarınca anılan tarihlerde …..(…) gün süre ile yolluklu, yevmiyeli/ yolluksuz yevmiyesiz olarak görevlendirilebilmem hususunda gereğini bilgilerinize arz ederim.
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+…… /…... / 20….
+
+Ad Soyad
+
+Elektronik İmza
+
+Ek: Kongre/Panel Davet Mektubu

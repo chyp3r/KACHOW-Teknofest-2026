@@ -1,25 +1,65 @@
 ---
-id: UY-035
-kategori: ust_yazi
-niyet: 02_basvuru_talep
-belge_turu: resmi_sablon
+id: "UY-035"
+kategori: "ust_yazi"
+alt_kategori: "02_basvuru_talep"
+niyet: "02_basvuru_talep"
+baslik: "………………………………"
 kurum: "Sağlık Bilimleri Üniversitesi Hamidiye Tıp Fakültesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/ust_yazi/UY-035_tez-konusu-icin-suam-a-yazilacak-ust-yazi-ornegi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/ust_yazi/UY-035_tez-konusu-icin-suam-a-yazilacak-ust-yazi-ornegi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Tez Konusu İçin SUAM'a Yazılacak Üst Yazı Örneği
+# ………………………………
 
-- Resmî kaynak: https://tip.sbu.edu.tr/mevzuat-ve-formlar/mezuniyet-sonrasi-tip-egitimi/formlar/
-- Doğrudan belge: https://www.sbu.edu.tr/FileFolder/Dosyalar/226a44f5/2023_4/tez-konusu-ile-ilgili-suama-yazilacak-ust-yazi-ornegi-1578b24a.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/ust_yazi/UY-035_tez-konusu-icin-suam-a-yazilacak-ust-yazi-ornegi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+T.C.
 
-## Veri kümesinde kullanım
+SAĞLIK BİLİMLERİ ÜNİVERSİTESİ
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+Hamidiye Tıp Fakültesi
 
-## Doğrulama notu
+………………. Anabilim Dalı Başkanlığı
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+**Sayı:** [EVRAK SAYISI]
+
+Konu : ………………………………
+
+DAĞITIM YERLERİNE
+
+Aşağıda kimlik bilgileri belirtilen tıpta uzmanlık öğrencisinin tez konusu …………………tarih ve …………………. sayılı akademik kurul kararına istinaden ………………….................................................................................................................................................................... (Onaylanmış/Onaylanmamış/Açıklanan eksiklikler giderilmesi şartı ile tekrar değerlendirmeye gerek olmaksızın uygun bulunmuş /Açıklanan eksiklikler giderildikten sonra tez konusunun tekrar değerlendirilmesi uygun görülmüş) olup hakem raporları EK’te yer almaktadır.
+
+Gereğini bilgilerinize arz ederim.
+
+Anabilim Dalı Başkanı
+
+| UZMANLIK ÖĞRENCİSİ BİLGİLERİ | UZMANLIK ÖĞRENCİSİ BİLGİLERİ |
+
+| --- | --- |
+
+| T.C. Kimlik No | |
+
+| Adı Soyadı | |
+
+| Telefon No | |
+
+| Uzmanlık Alanı | |
+
+| Eğitim Kurumu | |
+
+EK 1: Tez Konusu Başvuru Formu
+
+EK 2: Tez Konusu Hakem Değerlendirme Formları
+
+Dağıtım:
+
+………………………….. ……………SUAM (Gereğine)
+
+Hamidiye Tıp Fakültesi Dekanlığına (Bilgisine)

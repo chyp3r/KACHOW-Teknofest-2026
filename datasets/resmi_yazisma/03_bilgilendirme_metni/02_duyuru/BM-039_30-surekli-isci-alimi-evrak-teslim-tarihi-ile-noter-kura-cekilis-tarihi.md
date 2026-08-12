@@ -1,25 +1,33 @@
 ---
-id: BM-039
-kategori: bilgilendirme_metni
-niyet: 02_duyuru
-belge_turu: yayimlanmis_resmi_bilgilendirme
+id: "BM-039"
+kategori: "bilgilendirme_metni"
+alt_kategori: "02_duyuru"
+niyet: "02_duyuru"
+baslik: "DUYURU"
 kurum: "Ulaştırma ve Altyapı Bakanlığı"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/bilgilendirme_metni/BM-039_30-surekli-isci-alimi-evrak-teslim-tarihi-ile-noter-kura-cekilis-tarihi.html"
+yerel_orijinal: "00_gelen_kaynaklar/bilgilendirme_metni/BM-039_30-surekli-isci-alimi-evrak-teslim-tarihi-ile-noter-kura-cekilis-tarihi.html"
+kaynak_turu: "html"
+belge_turu: "yayimlanmis_resmi_bilgilendirme"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "beautifulsoup"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
+
+# DUYURU
+
+## DUYURU
 
 # 30 Sürekli İşçi Alımı Evrak Teslim Tarihi ile Noter Kura Çekiliş Tarihi Hakkında Değişiklik Duyurusu
 
-- Resmî kaynak: https://www.uab.gov.tr/duyurular/30-suerekli-isci-alimi-evrak-teslim-tarihi-ile-noter-kura-cekilis-tarihi-hakkinda-degisiklik-duyurusu/
-- Doğrudan belge: Kaynak sayfasında
-- Yerel asıl belge: 00_gelen_kaynaklar/bilgilendirme_metni/BM-039_30-surekli-isci-alimi-evrak-teslim-tarihi-ile-noter-kura-cekilis-tarihi.html
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+Bakanlığımız taşra birimlerinde istihdam edilmek üzere 30 Sürekli İşçi alımına ilişkin İŞKUR üzerinden başvuru yapan adaylardan 06.03.2026 tarihli resmi internet sitesinde ( www.uab.gov.tr ) yayımlanan duyuru ile istenilen evrakların teslim süresi 27.03.2026 tarihi saat 17.00’ye kadar uzatılmıştır.
 
-## Veri kümesinde kullanım
+Adayların başvuru evrakları teslimi sonrasında kontrol edilecek olup şartları sağlayan adaylar arasından yapılacak olan noter kura çekiliş tarihi ise 10.04.2026 olarak değiştirilmiştir.
 
-Başlık, hedef kitle, açıklama, tarih/son başvuru ve yönlendirme bölümleri şablon özellikleri olarak çıkarılabilir.
+İlanen duyurulur.
 
-## Doğrulama notu
-
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+[KURUM İLETİŞİM BİLGİLERİ]

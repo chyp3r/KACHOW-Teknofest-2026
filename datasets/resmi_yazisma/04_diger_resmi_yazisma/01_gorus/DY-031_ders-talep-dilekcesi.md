@@ -1,25 +1,39 @@
 ---
-id: DY-031
-kategori: diger_resmi_yazisma
-niyet: 01_gorus
-belge_turu: resmi_sablon
+id: "DY-031"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "01_gorus"
+niyet: "01_gorus"
+baslik: "DÜZCE ÜNİVERSİTESİ"
 kurum: "Düzce Üniversitesi Fen Edebiyat Fakültesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-031_ders-talep-dilekcesi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-031_ders-talep-dilekcesi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Ders Talep Dilekçesi
+# DÜZCE ÜNİVERSİTESİ
 
-- Resmî kaynak: https://fef.duzce.edu.tr/sayfa/0468/sablon-yazilar
-- Doğrudan belge: https://cdn.duzce.edu.tr/File/GetFile/3de17bc4-2b29-4681-a1e7-9660af4ac2d1
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-031_ders-talep-dilekcesi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+DÜZCE ÜNİVERSİTESİ
 
-## Veri kümesinde kullanım
+FEN EDEBİYAT FAKÜLTESİ
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+………………………………………….. BÖLÜM BAŞKANLIĞINA
 
-## Doğrulama notu
+…/…/202....
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Yükseköğretim Kurulu Başkanlığının 36 maddesinde yer alan “Doktora çalışmalarını başarı ile tamamlamış, tıpta, diş hekimliğinde, eczacılıkta ve veteriner hekimlikte uzmanlık unvanını veya Üniversitelerarası Kurulun önerisi üzerine Yükseköğretim Kurulunca tespit edilen belli sanat dallarının birinde yeterlik kazanmış olan 22/2/2018 tarihli ve 7100 sayılı Yükseköğretim Kanunu ile Bazı Kanun ve Kanun Hükmünde Kararnamelerde Değişiklik Yapılması Hakkında Kanunun 34 üncü maddesinin ikinci fıkrası kapsamındakiler de dahil olmak üzere uygulamalı birimlerde görev yapan öğretim görevlileri ile araştırma görevlilerine talepleri üzerine ve üniversite yönetim kurulunun uygun görmesi halinde ders görevi verilebilir.” hükmü gereği 202.. - 202.. eğitim öğretim yılı ………. dönemi tarafıma ders görevlendirilmesi yapılması hususunda;
+
+Gereğini bilgilerinize arz ederim.
+
+İletişim: Ad Soyad
+
+Unvan
+
+İmza

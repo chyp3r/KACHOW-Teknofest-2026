@@ -1,25 +1,58 @@
 ---
-id: UY-002
-kategori: ust_yazi
-niyet: 04_gorevlendirme_personel
-belge_turu: resmi_sablon
+id: "UY-002"
+kategori: "ust_yazi"
+alt_kategori: "04_gorevlendirme_personel"
+niyet: "04_gorevlendirme_personel"
+baslik: "Araştırma hemşiresi görevlendirme"
 kurum: "Van Eğitim ve Araştırma Hastanesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/ust_yazi/UY-002_arastirma-hemsiresi-gorevlendirme-ust-yazi-ornegi.doc"
+yerel_orijinal: "00_gelen_kaynaklar/ust_yazi/UY-002_arastirma-hemsiresi-gorevlendirme-ust-yazi-ornegi.doc"
+kaynak_turu: "doc"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "antiword"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Araştırma Hemşiresi Görevlendirme Üst Yazı Örneği
+# Araştırma hemşiresi görevlendirme
 
-- Resmî kaynak: https://vaneah.saglik.gov.tr/TR-59068/basvuru-ust-yazilari.html
-- Doğrudan belge: https://dosyahastane.saglik.gov.tr/Eklenti/4443/0/arastirma-hemsiresi-gorevlendirme-ust-yazi-ornegidoc.doc
-- Yerel asıl belge: 00_gelen_kaynaklar/ust_yazi/UY-002_arastirma-hemsiresi-gorevlendirme-ust-yazi-ornegi.doc
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+T.C. Sağlık Bakanlığı
+Türkiye İlaç ve Tıbbi Cihaz Kurumu
+İlaç, Biyolojik ve Tıbbi Ürünler Başkan Yardımcılığı
+Klinik İlaç Araştırmaları Daire Başkanlığı
+ANKARA Tarih
 
-## Veri kümesinde kullanım
+Konu: Araştırma hemşiresi görevlendirme
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+Aşağıda detayları verilen klinik araştırmada, araştırma hemşiresi olarak
+görev alacak olan kişi ve merkezler bilgilerinize sunulmaktadır.
 
-## Doğrulama notu
+|Araştırmanın açık adı:      |
+|Araştırmanın kodu:       |
+|Koordinatörün/sorumlu araştırmacının adı soyadı:      |
+|Koordinatör merkezin adresi:      |
+|Destekleyicinin adı:      |
+|Varsa destekleyicinin yasal temsilcisinin adı:       |
+|Araştırma hemşiresi olarak görevlendirilen kişinin adı soyadı:      |
+|Merkezler:      |
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Kurumumuza gönderilen evraklar ile sistemden eklenen dokümanların birebir
+aynı olduğunu ve gerekli elektronik dokümanların arama yapılabilir pdf
+olarak hazırlandığını taahhüt ederim.
+
+Gereğini saygılarımla arz ederim.
+
+İMZA
+AD-SOYAD
+
+EK:
+
+1. Değişiklik başvuru formu
+
+2. İlk uygunluk yazısının bir örneği
+
+3. Özgeçmiş

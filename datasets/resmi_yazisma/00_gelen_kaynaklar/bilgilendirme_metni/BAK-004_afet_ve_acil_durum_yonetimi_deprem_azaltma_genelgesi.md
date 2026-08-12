@@ -1,26 +1,29 @@
 ---
-id: BAK-004
-kategori: bilgilendirme_metni
-niyet: afet_yonetimi_duyurusu
-baslik: Afet Risk Azaltma ve Önleme Çalışmaları Genelgesi (2024/6)
-kurum: T.C. İçişleri Bakanlığı
-kaynak_url: https://www.icisleri.gov.tr/genelgeler/2024-afet-yonetimi
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "BAK-004"
+kategori: "bilgilendirme_metni"
+alt_kategori: "afet_yonetimi_duyurusu"
+niyet: "afet_yonetimi_duyurusu"
+baslik: "Afet Risk Azaltma ve Önleme Çalışmaları Genelgesi (2024/6)"
+kurum: "T.C. İçişleri Bakanlığı"
+kaynak: "https://www.icisleri.gov.tr/genelgeler/2024-afet-yonetimi"
+kaynak_url: "https://www.icisleri.gov.tr/genelgeler/2024-afet-yonetimi"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Afet Risk Azaltma ve Önleme Çalışmaları Hakkında Genelge (Genelge No: 2024/6)
 
-**T.C.**  
-**İÇİŞLERİ BAKANLIĞI**  
-**Afet ve Acil Durum Yönetimi Başkanlığı (AFAD)**  
+**T.C.**
+**İÇİŞLERİ BAKANLIĞI**
+**Afet ve Acil Durum Yönetimi Başkanlığı (AFAD)**
 
-**Sayı:** E-89410291-010.07-551029  
-**Konu:** İl Afet Risk Azaltma Planları (İRAP) Takibi  
-**Genelge No:** 2024/6  
+**Sayı:** [EVRAK SAYISI]
+**Konu:** İl Afet Risk Azaltma Planları (İRAP) Takibi
+**Genelge No:** 2024/6
 
-**VALİLİKLERE (AFAD İl Müdürlüğü)**  
+**VALİLİKLERE (AFAD İl Müdürlüğü)**
 
 Ülkemiz genelinde afet öncesi risk azaltma çalışmalarının verimliliğini artırmak ve İl Afet Risk Azaltma Planlarında (İRAP) yer alan eylemlerin izlenmesini sağlamak amacıyla aşağıdaki düzenlemeler yapılmıştır:
 
@@ -34,10 +37,10 @@ dogrulama: acik_kaynaktan_kazindi
 
 Bilgilerini ve il düzeyinde gerekli tedbirlerin gecikmeksizin alınmasını rica ederim.
 
-[SİLİNMİŞTİR]  
-Bakan a.  
-İçişleri Bakan Yardımcısı  
+[KİŞİSEL BİLGİ]
+Bakan a.
+İçişleri Bakan Yardımcısı
 
-**DAĞITIM:**  
-81 İl Valiliğine  
-Afet ve Acil Durum Yönetimi Başkanlığı Birimlerine  
+**DAĞITIM:**
+81 İl Valiliğine
+Afet ve Acil Durum Yönetimi Başkanlığı Birimlerine

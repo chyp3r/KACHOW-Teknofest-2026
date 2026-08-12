@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-D95B41D6
-kategori: dilekce
-alt_kategori: kdk_basvuru
+id: "DILEKCE-D95B41D6"
+kategori: "dilekce"
+alt_kategori: "kdk_basvuru"
 baslik: "Kamu Denetçiliği Kurumu (Ombudsman) Başvuru Dilekçesi (Ornek 2)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Kamu Denetçiliği Kurumu (Ombudsman) Başvuru Dilekçesi (Ornek 2)
@@ -11,10 +12,10 @@ kaynak: "sentetik-sablon"
 KAMU DENETÇİLİĞİ KURUMU'NA
 
 Başvuru Sahibi: Mustafa Celik
-T.C. Kimlik No: 37085362308
-Adres: Ulus Mah. 178. Sok. No:38 Gaziantep
-Telefon: 0537 781 37 97
-E-posta: fatma@email.com
+T.C. Kimlik No: [T.C. KİMLİK NO]
+Adres: [ADRES]
+Telefon: [TELEFON]
+E-posta: [E-POSTA]
 
 Şikayet Edilen İdare: Il Saglik Mudurlugu
 Şikayet Konusu: İdari işlem/eylem hakkında

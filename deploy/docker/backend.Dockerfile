@@ -5,12 +5,14 @@ WORKDIR /workspace
 # Install system dependencies
 # default-jre-headless: required by opendataloader-pdf (Java 11+ CLI)
 # tesseract-ocr + tesseract-ocr-tur: Turkish OCR for scanned evrak
+# antiword: deterministic text extraction for the legacy binary .doc corpus
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     default-jre-headless \
     tesseract-ocr \
     tesseract-ocr-tur \
+    antiword \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Python requirements. -dev pulls in requirements.txt too, plus

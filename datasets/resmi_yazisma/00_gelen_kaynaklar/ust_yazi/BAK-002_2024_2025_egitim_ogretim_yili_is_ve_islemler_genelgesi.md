@@ -1,26 +1,29 @@
 ---
-id: BAK-002
-kategori: ust_yazi
-niyet: egitim_ogretim_yili_talimati
-baslik: 2024-2025 Eğitim ve Öğretim Yılına İlişkin İş ve İşlemler Genelgesi (2024/53)
-kurum: T.C. Millî Eğitim Bakanlığı
-kaynak_url: https://mevzuat.meb.gov.tr/dosyalar/genelge/2024_53.pdf
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "BAK-002"
+kategori: "ust_yazi"
+alt_kategori: "egitim_ogretim_yili_talimati"
+niyet: "egitim_ogretim_yili_talimati"
+baslik: "2024-2025 Eğitim ve Öğretim Yılına İlişkin İş ve İşlemler Genelgesi (2024/53)"
+kurum: "T.C. Millî Eğitim Bakanlığı"
+kaynak: "https://mevzuat.meb.gov.tr/dosyalar/genelge/2024_53.pdf"
+kaynak_url: "https://mevzuat.meb.gov.tr/dosyalar/genelge/2024_53.pdf"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # 2024-2025 Eğitim ve Öğretim Yılına İlişkin İş ve İşlemler (Genelge No: 2024/53)
 
-**T.C.**  
-**MİLLÎ EĞİTİM BAKANLIĞI**  
-**Personel Genel Müdürlüğü**  
+**T.C.**
+**MİLLÎ EĞİTİM BAKANLIĞI**
+**Personel Genel Müdürlüğü**
 
-**Sayı:** E-94182931-10.06.02-10523412  
-**Konu:** 2024-2025 Eğitim Öğretim Yılı Hazırlık Çalışmaları  
-**Genelge No:** 2024/53  
+**Sayı:** [EVRAK SAYISI]
+**Konu:** 2024-2025 Eğitim Öğretim Yılı Hazırlık Çalışmaları
+**Genelge No:** 2024/53
 
-**81 İL VALİLİĞİNE**  
+**81 İL VALİLİĞİNE**
 **(İl Millî Eğitim Müdürlüğü)**
 
 2024-2025 eğitim ve öğretim yılı 9 Eylül 2024 Pazartesi günü başlayacak olup okullarımızın eğitim ve öğretime hazır hale getirilmesi, öğrenci kayıtları, ders kitaplarının dağıtımı ve öğretmen görevlendirmelerine ilişkin hususlar aşağıda açıklanmıştır:
@@ -37,9 +40,9 @@ dogrulama: acik_kaynaktan_kazindi
 
 Gereğini ve bilgilerinizi önemle rica ederim.
 
-[SİLİNMİŞTİR]  
-Millî Eğitim Bakanı  
+[KİŞİSEL BİLGİ]
+Millî Eğitim Bakanı
 
-**DAĞITIM:**  
-81 İl Valiliğine  
-Merkez Teşkilatı Birimlerine  
+**DAĞITIM:**
+81 İl Valiliğine
+Merkez Teşkilatı Birimlerine

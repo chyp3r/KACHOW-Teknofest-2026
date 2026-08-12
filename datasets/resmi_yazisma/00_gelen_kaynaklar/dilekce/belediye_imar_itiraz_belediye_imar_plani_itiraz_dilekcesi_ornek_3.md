@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-670326FB
-kategori: dilekce
-alt_kategori: belediye_imar_itiraz
+id: "DILEKCE-670326FB"
+kategori: "dilekce"
+alt_kategori: "belediye_imar_itiraz"
 baslik: "Belediye İmar Planı İtiraz Dilekçesi (Ornek 3)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Belediye İmar Planı İtiraz Dilekçesi (Ornek 3)
@@ -25,6 +26,6 @@ Gereğini arz ederim.
 
 01.06.2020
 Ayse Demir
-T.C. Kimlik No: 10892147075
-Adres: Cumhuriyet Mah. 194. Sok. No:47 Konya
-Tel: 0539 198 25 21
+T.C. Kimlik No: [T.C. KİMLİK NO]
+Adres: [ADRES]
+Tel: [TELEFON]

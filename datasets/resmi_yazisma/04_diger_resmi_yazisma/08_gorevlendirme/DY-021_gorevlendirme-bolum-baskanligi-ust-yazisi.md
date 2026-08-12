@@ -1,25 +1,37 @@
 ---
-id: DY-021
-kategori: diger_resmi_yazisma
-niyet: 08_gorevlendirme
-belge_turu: resmi_sablon
+id: "DY-021"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "08_gorevlendirme"
+niyet: "08_gorevlendirme"
+baslik: "DÜZCE ÜNİVERSİTESİ"
 kurum: "Düzce Üniversitesi Fen Edebiyat Fakültesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-021_gorevlendirme-bolum-baskanligi-ust-yazisi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-021_gorevlendirme-bolum-baskanligi-ust-yazisi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Görevlendirme Bölüm Başkanlığı Üst Yazısı
+# DÜZCE ÜNİVERSİTESİ
 
-- Resmî kaynak: https://fef.duzce.edu.tr/sayfa/0468/sablon-yazilar
-- Doğrudan belge: https://cdn.duzce.edu.tr/File/GetFile/511e8e40-6a67-43aa-a809-f8e29f8a59ec
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-021_gorevlendirme-bolum-baskanligi-ust-yazisi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+DÜZCE ÜNİVERSİTESİ
 
-## Veri kümesinde kullanım
+FEN EDEBİYAT FAKÜLTESİ DEKANLIĞINA
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+Bölümümüz Öğretim Üyesi/Elemanı ………………..’nın ….-…. …….. ............. tarihleri arasında …………………….’da, ……………………….. tarafından düzenlenecek "……………………………………….." adlı kongreye “…………... …………………………………isimli sözel bildirim / bildirilerim kabul edildiğinden 2547 sayılı Kanunun 39. maddesi uyarınca anılan tarihlerde …..(…) gün süre ile Bölüm Başkanlığımızın uygun görüşü ile yolluklu, yevmiyeli/ yolluksuz yevmiyesiz olarak görevlendirilebilmesi hususunda gereğini bilgilerinize arz ederim.
 
-## Doğrulama notu
+E-İmza
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Bölüm Başkanı
+
+Ek:
+
+Dilekçe
+
+Kongre/Panel Davet Mektubu

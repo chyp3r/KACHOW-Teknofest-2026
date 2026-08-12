@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-8AED0309
-kategori: dilekce
-alt_kategori: kdk_basvuru
+id: "DILEKCE-8AED0309"
+kategori: "dilekce"
+alt_kategori: "kdk_basvuru"
 baslik: "Kamu Denetçiliği Kurumu (Ombudsman) Başvuru Dilekçesi (Ornek 1)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Kamu Denetçiliği Kurumu (Ombudsman) Başvuru Dilekçesi (Ornek 1)
@@ -11,10 +12,10 @@ kaynak: "sentetik-sablon"
 KAMU DENETÇİLİĞİ KURUMU'NA
 
 Başvuru Sahibi: Mehmet Ozturk
-T.C. Kimlik No: 35712971985
-Adres: Yeni Mah. 58. Sok. No:38 Gaziantep
-Telefon: 0542 770 40 87
-E-posta: burak@email.com
+T.C. Kimlik No: [T.C. KİMLİK NO]
+Adres: [ADRES]
+Telefon: [TELEFON]
+E-posta: [E-POSTA]
 
 Şikayet Edilen İdare: Valilik
 Şikayet Konusu: İdari işlem/eylem hakkında

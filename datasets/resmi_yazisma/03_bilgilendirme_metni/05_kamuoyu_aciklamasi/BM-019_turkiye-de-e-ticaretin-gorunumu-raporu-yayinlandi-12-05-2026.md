@@ -1,25 +1,23 @@
 ---
-id: BM-019
-kategori: bilgilendirme_metni
-niyet: 05_kamuoyu_aciklamasi
-belge_turu: yayimlanmis_resmi_bilgilendirme
+id: "BM-019"
+kategori: "bilgilendirme_metni"
+alt_kategori: "05_kamuoyu_aciklamasi"
+niyet: "05_kamuoyu_aciklamasi"
+baslik: "Türkiye'de E-Ticaretin Görünümü Raporu Yayınlandı- 12.05.2026"
 kurum: "Ticaret Bakanlığı"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/bilgilendirme_metni/BM-019_turkiye-de-e-ticaretin-gorunumu-raporu-yayinlandi-12-05-2026.html"
+yerel_orijinal: "00_gelen_kaynaklar/bilgilendirme_metni/BM-019_turkiye-de-e-ticaretin-gorunumu-raporu-yayinlandi-12-05-2026.html"
+kaynak_turu: "html"
+belge_turu: "yayimlanmis_resmi_bilgilendirme"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "beautifulsoup"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
 # Türkiye'de E-Ticaretin Görünümü Raporu Yayınlandı- 12.05.2026
 
-- Resmî kaynak: https://www.ticaret.gov.tr/duyurular/turkiyede-e-ticaretin-gorunumu-raporu-yayinlandi-12-05-2026
-- Doğrudan belge: Kaynak sayfasında
-- Yerel asıl belge: 00_gelen_kaynaklar/bilgilendirme_metni/BM-019_turkiye-de-e-ticaretin-gorunumu-raporu-yayinlandi-12-05-2026.html
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
-
-## Veri kümesinde kullanım
-
-Başlık, hedef kitle, açıklama, tarih/son başvuru ve yönlendirme bölümleri şablon özellikleri olarak çıkarılabilir.
-
-## Doğrulama notu
-
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Türkiye’nin 2025 yılı e-ticaret hacmi 4,5 trilyon Türk lirasını aştı. Ülkemizde e-ticaret hacmi 2025 yılında bir önceki yıla göre %52,2 artarak 4,57 trilyon Türk lirasını aştı. İşlem sayısı ise 5 milyar 940 milyon adet olarak gerçekleşti. Perakende e-ticaret hacmi 2025 yılında bir önceki yıla göre %51,8 artarak 2 trilyon 460 milyar Türk lirasına ulaştı. Perakende e-ticaret işlem sayısı ise 1 milyar 940 milyon adet olarak gerçekleşti. 2019-2025 yılları arasında genel e-ticaret hacminin yıllık bileşik büyüme oranı %79,6’ya ve aynı dönemde perakende e-ticaret hacminin yıllık bileşik büyüme oranı ise %83,7’ye ulaştı. ABD doları bazında e-ticaret hacmi 2019-2025 yılları arasında %382 artış gösterdi. 2019 yılında 23 milyar 940 milyon ABD doları olan e-ticaret hacmi, her yıl istikrarlı bir şekilde artarak 2024 yılında 89 milyar 580 milyon ABD dolarına , 2025 yılında ise bir önceki yıla göre %28,9’luk artış ile 115 milyar 430 milyon ABD dolarına ulaştı. 2019-2025 yılları arasında ABD doları bazında artış oranı %382 olarak gerçekleşti . 2025 yılında e-ticaretin GSYH içindeki payı %6,9 oldu. 2025 yılında yurt içinde gerçekleşen e-ticaret hacminin, Türkiye İstatistik Kurumu (TÜİK) tarafından 63 trilyon 20 milyar 905 milyon TL olarak açıklanan gayri safi yurt içi hasılamız (GSYH) içindeki payı %6,9 oldu. E-ticaretin genel ticarete oranı 2025 yılında %19,3 olarak gerçekleşti. E-ticaretin genel ticaret içindeki payı ilk çeyrekte yüksek, ikinci çeyrekte azalan, üçüncü çeyrekte durağan ve son çeyrekte ise kampanyaların etkisiyle tekrar yükselen ancak yılın son ayında düşen bir seyir izledi. 2025 yılında Türkiye genelinde 634 bin 611 işletme e-ticaret faaliyetinde bulundu. Ülkemizde 2024 yılında Türkiye genelinde 600.800 işletme e-ticaret faaliyetinde bulunurken 2025 yılı itibarıyla ise e-ticaret faaliyetinde bulunan işletme sayısı 634.611’e ulaştı. E-ticaret faaliyetinde bulunan işletmelerin %75’i şahıs işletmesi, %21’i limited şirket ve %4’ü anonim şirkettir. Türkiye’de e-ticaret faaliyetinde bulunan esnaf işletmesi sahiplerinin %72’si erkek, %28’i ise kadındır. Erkek ve kadın işletme sahiplerinin çoğunluğunun 30-34 yaş aralığında olduğu görüldü. E-ticaret işletmelerinin sektörlere göre dağılımında yemek sektörü ilk sırada yer aldı. E-ticaret ekosisteminde faaliyet gösteren işletmelerin sektörlere göre dağılımında, yemek sektörü %20,3 ile en yüksek orana sahip olurken bu sektörü %13,8 ile giyim, ayakkabı ve aksesuar sektörü, %11,9 ile elektronik ve %10,5 ile ev, bahçe, mobilya ve dekorasyon sektörleri takip etti. 2025 yılında giyim, ayakkabı ve aksesuar sektörü ilk sırada yer aldı. 2025 yılında e-ticaret hacminden en büyük payı alan sektör 428 milyar 700 milyon Türk lirası ile giyim, ayakkabı ve aksesuar sektörü olurken bu sektörü sırasıyla 304 milyar 340 milyon Türk lirası ile elektronik, 285 milyar 440 milyon Türk lirası ile havayolları ve 270 milyar 160 milyon Türk lirası ile yemek sektörleri izledi. E-ticarette en çok tercih edilen ödeme yöntemi %62,5 ile kartlı ödemeler oldu. E-ticarette kullanılan ödeme yöntemleri incelendiğinde %62,5 ile kartlı ödemeler ilk sırada yer alırken, bunu sırasıyla %29,2 ile havale/EFT ödemeleri, %3,5 ile kapıda ödeme ve %4,8 ile diğer ödeme türleri takip etti. Kartlı ödemelerin %64,1’i 3D secure güvenlik yöntemiyle yapıldı. Kampanya Döneminde e-ticaret hacmi %41,5 oranında artış gösterdi. 2025 yılı Kasım ayında e-ticaret hacmi 2024 yılının aynı dönemine göre %41,5 oranında artış gösterdi. Aynı dönemde satılan ürün ve hizmetlerin sayısında ise %11,6’lık bir artış gerçekleşti. Kampanya ayında bir önceki yılın aynı dönemine göre en yüksek hacim artışı sırasıyla; kitap ve dergi, yemek, eğlence ve sanat ile gıda ve süpermarket sektörlerinde gerçekleşti. Hızlı ticaret 2025 yılında bir önceki yıla göre %55,6 oranında büyüyerek 388,7 milyar Türk lirasına ulaştı. Tüketicilerin ihtiyaç duydukları ürünlere dakikalar içinde ulaşabildiği hızlı ticaret (Q-Commerce), 2025 yılında bir önceki yıla göre %55,6 oranında artış gösterirken, hızlı ticaret hacminin tüm e-ticaret hacmi içindeki payı %8,5 oldu. Hızlı ticarette yemek sektörü %69,5 ile diğer sektörlere kıyasla gözle görülür bir farkla listenin en üst sırasında yer aldı. Sürdürülebilirlik konusunda tüketiciden tüketiciye (C2C) e-ticaret dikkate değer bir potansiyel ortaya koydu. 2025 yılında tüketiciden tüketiciye (C2C) satışlarda işlem hacmi 21 milyar 800 milyon Türk lirasına ve işlem sayısı 23 milyon 600 bin adede ulaştı . Sürdürülebilir e-ticaret hacminin büyük kısmını %36,7 ile giyim, ayakkabı ve aksesuar sektörü oluştururken bu sektörü %29,5 ile elektronik sektörü izledi. Kamuoyuna saygıyla duyurulur. Türkiye'de E-Ticaretin Görünümü Raporu için tıklayınız.

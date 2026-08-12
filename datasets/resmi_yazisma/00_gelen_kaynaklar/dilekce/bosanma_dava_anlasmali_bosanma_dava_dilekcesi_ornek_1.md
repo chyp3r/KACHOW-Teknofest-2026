@@ -1,20 +1,21 @@
 ---
-id: DILEKCE-77CB6B8B
-kategori: dilekce
-alt_kategori: bosanma_dava
+id: "DILEKCE-77CB6B8B"
+kategori: "dilekce"
+alt_kategori: "bosanma_dava"
 baslik: "Anlaşmalı Boşanma Dava Dilekçesi (Ornek 1)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Anlaşmalı Boşanma Dava Dilekçesi (Ornek 1)
 
 Samsun AİLE MAHKEMESİ HAKİMLİĞİ'NE
 
-DAVACI: Elif Aydin (T.C.: 75800769096)
-Adres: Ulus Mah. 192. Sok. No:15 Eskisehir
+DAVACI: [KİŞİ ADI] (T.C.: [T.C. KİMLİK NO])
+Adres: [ADRES]
 
-DAVALI: Elif Aydin (T.C.: 56254160746)
-Adres: Ataturk Mah. Adana
+DAVALI: [KİŞİ ADI] (T.C.: [T.C. KİMLİK NO])
+Adres: [ADRES]
 
 KONU: Anlaşmalı boşanma talebidir.
 HMK: 6100 sayılı Kanun
@@ -38,5 +39,5 @@ Yukarıda arz edilen nedenlerle anlaşmalı boşanmamıza karar verilmesini sayg
 
 20.06.2021
 Davacı
-Elif Aydin
+[KİŞİ ADI]
 İmza

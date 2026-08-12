@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-8AB9066C
-kategori: dilekce
-alt_kategori: iskur_ise_kayit
+id: "DILEKCE-8AB9066C"
+kategori: "dilekce"
+alt_kategori: "iskur_ise_kayit"
 baslik: "İŞKUR İşsizlik Maaşı Başvuru Dilekçesi (Ornek 2)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # İŞKUR İşsizlik Maaşı Başvuru Dilekçesi (Ornek 2)
@@ -16,7 +17,7 @@ Kaya A.S. işyerinden 19.02.2023 tarihinde işten çıkarılmış bulunmaktayım
 
 Kişisel Bilgilerim:
 - Adı Soyadı: Zeynep Koc
-- T.C. Kimlik No: 30369091286
+- T.C. Kimlik No: [T.C. KİMLİK NO]
 - SGK Sicil No: 4043220
 - Son Çalışılan İşyeri: Kaya A.S.
 - İşten Ayrılma Tarihi: 19.02.2023
@@ -27,9 +28,9 @@ Kişisel Bilgilerim:
 
 19.02.2023
 Zeynep Koc
-T.C. Kimlik No: 30369091286
-Adres: Bahcelievler Mah. 190. Sok. No:1 Izmir
-Tel: 0550 585 11 78
+T.C. Kimlik No: [T.C. KİMLİK NO]
+Adres: [ADRES]
+Tel: [TELEFON]
 
 EKLER:
 1- İşten çıkış belgesi / SGK işten ayrılış bildirgesi

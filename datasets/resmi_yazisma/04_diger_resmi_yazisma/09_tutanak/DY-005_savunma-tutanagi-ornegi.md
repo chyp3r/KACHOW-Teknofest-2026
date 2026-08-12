@@ -1,25 +1,59 @@
 ---
-id: DY-005
-kategori: diger_resmi_yazisma
-niyet: 09_tutanak
-belge_turu: resmi_sablon
+id: "DY-005"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "09_tutanak"
+niyet: "09_tutanak"
+baslik: "SORUŞTURMACI :"
 kurum: "Erzincan Binali Yıldırım Üniversitesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-005_savunma-tutanagi-ornegi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-005_savunma-tutanagi-ornegi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Savunma Tutanağı Örneği
+# SORUŞTURMACI :
 
-- Resmî kaynak: https://ogrenciisleri.ebyu.edu.tr/disiplin-sorusturma-rehberi/
-- Doğrudan belge: https://ogrenciisleri.ebyu.edu.tr/Dosyalar/Mevzuat/disiplin%20sorusturma%20rehberi/SavunmaTutanagiOrnegi.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-005_savunma-tutanagi-ornegi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+Savunma Tutanağı örneği;
 
-## Veri kümesinde kullanım
+SAVUNMA TUTANAĞI
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+SORUŞTURMAYI AÇAN : Dekanlık/Müdürlük
 
-## Doğrulama notu
+# SORUŞTURMACI :
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+SORUŞTURMA ONAYI : ../…/.2024 tarih ve E….. sayılı yazı.
+
+# BAŞLAMA TARİHİ :
+
+İFADE VEREN : Nüfus kimlik ve son adres bilgileri yazılır.
+
+SORUŞTURMA KONUSU : Sınavında kopya çekilmesi.
+
+# İFADE TARİHİ VE YERİİ :
+
+İFADEYİ YAZAN :Yeminli Kâtip
+
+Öğrencinin nüfus cüzdanı ile kimliği kontrol edilerek soruşturma konusu anlatıldı. İddia edilen suçla ilgili açıklama yapmama, sorulara cevap vermeme hakkı bulunduğu ifade edildi ve olayla ilgili bildiklerini anlatması ve aşağıdaki soruları cevaplandırması istendi.
+
+Soru 1 :
+
+Cevap 1 :
+
+Soru 2 :
+
+Cevap 2 :
+
+(Savunma yapmak üzere gelen kişi, savunmasını sözlü olarak yapabileceği gibi yazılı olarak da sunabilir. (Madde 54/5) Yazılı savunma tutanağa yazılır.)
+
+Olayla ilgili başka bir söyleyeceği olup olmadığı soruldu. Başka bir söyleyeceğim yoktur dedi. Okundu, imzası alındı. (Tarih)
+
+# Soruşturmacı Soruşturulan Öğrenci Yeminli Kâtip
+
+(imza) (imza) (imza)

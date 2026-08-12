@@ -3,7 +3,7 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [1.55.0] - 2026-08-12
-### Düzeltildi
+### Düzeltildi (#161)
 - **Sohbetten Başlatılan Her Taslak "Cevap Yazısı" Çıkıyordu**: `_run_draft` kullanıcının mesajını sabit bir orkestratör kalıbına gömüyordu (`"...resmî ve kurumsal bir Türkçe **yanıt** taslağı oluştur."`), ve `resolve_correspondence_type` bu birleşik metni tarıyordu -- "yanıt" `RESPONSE_LETTER`'ın alias'ı olduğu için kullanıcının gerçek isteği hiç değerlendirilmiyordu. Kullanıcının ham mesajı artık ayrı bir `user_request` alanında taşınıyor ve tür çözümlemesi yalnızca bunun üzerinden yapılıyor; orkestratör boilerplate'i tür eşleştirmesine hiç girmiyor.
   - **Yön farkındalıklı yazışma-türü sözlüğü** (`correspondence.GENRE_SURFACES`) eklendi: "itiraz dilekçesi", "muvafakatname", "tutanak" gibi 4 ana türe (üst yazı/cevap yazısı/bilgilendirme metni/diğer resmî yazışma) girmeyen özel istekler artık `other_official`'a düşüp kullanıcının kendi ifadesini bir **alt-tür** (`correspondence_sub_genre`) olarak taşıyor; writer/reviser/yargıç promptlarına ayrıca enjekte ediliyor, çıktı gerçekten istenen türde oluyor (örn. gerçek bir itiraz dilekçesi, jenerik "diğer resmî yazışma" değil). "Dilekçeye cevap yaz" gibi karşıt-yönlü ifadeler ("reply to a petition") en uzun-eşleşme-önce kuralıyla bare "dilekçe" (author one) üzerinden doğru yöne çözülüyor.
   - **Belge türünden çıkarım artık yalnızca gerçek bir gelen evrak varken çalışıyor**: sohbet-yalnız akışta `_run_classification` kullanıcının kendi mesajını sınıflandırdığı için, "dilekçe" etiketi "bana dilekçe yaz" demekti, "dilekçeye cevap ver" değil -- bu adım artık `has_source_document=False` iken hiç tetiklenmiyor.
@@ -12,10 +12,25 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - **Doğrulanmamış Ara Model Çıktısı Ekrana Basılıyordu**: Taslak (`writer_node`) ve asistan (`_run_assist`) ajanları ham model token'larını `assert_no_prompt_leak`/doğrulama/çıktı güvenlik kapısı çalışmadan **önce** sohbete akıtıyordu; `final_result` geldiğinde bu metin silinip (genelde farklı, çünkü nihai yanıta "Resmî yazı taslağınız hazırlandı." öneki ekleniyordu) yenisiyle değiştiriliyordu -- hem kontrolden geçmemiş bilgi bir an için görünüyor hem de ekran "yazıp siliyor" gibi davranıyordu. Artık hiçbir ajan düğümü kendi ham çıktısını akıtmıyor (draft/assist/revise üçü de tamamen arabelleğe alıp doğruladıktan sonra sonucu döndürüyor); yeni `emit_reply_stream`, doğrulanmış nihai yanıtı `ChatService._enqueue_terminal_event`'ten, `final_result` olayından hemen önce, tek seferlik bir kaynaktan parça parça akıtıyor. Ekrana basılan her karakter artık yapısal olarak nihai yanıtla birebir aynı; frontend'deki kelime-diff/yeniden-yazma mantığı (`DiffRevealText`, `utils/textDiff.ts`) gereksiz hale geldiği için kaldırıldı.
 - **Taslak Onayı/Revizyon/Yazım Briefi Sohbeti Kesen Ayrı Bir Popup Gibi Görünüyordu**: `InterruptPanel`, `ChatsPage`'de mesaj listesinin **üzerinde**, kendi kartlaşmış çerçevesiyle (`.upload-card`/`.workflow-panel` ile aynı kutulu görünüm ailesi) sabit duran ayrı bir panel olarak render ediliyordu -- kaydırılabilir konuşmanın dışında, akışı bölen bir diyalog gibi hissettiriyordu. Artık `MessageList` içine taşındı: onay/eksik-bilgi/yazım briefi istekleri konuşmanın kendi kaydırılabilir alanında, diğer asistan mesajlarıyla aynı `.chat-message` balonu içinde, sırayla görünüyor. `InterruptPanel`'in kendi mantığı (soru formu, hızlı seçim çipleri, onayla/revize/reddet) değişmedi; yalnızca dış çerçevesi kaldırıldı ve balonun kendi arka planı/kenarlığını devralacak şekilde yeniden biçimlendirildi.
 
-### Test
+### Test (#161)
 - Yön farkındalıklı yazışma-türü/alt-tür çözümlemesi (orkestratör boilerplate'inin hiçbir türe eşleşmediği regresyon kilidi dahil), bireysel dilekçe için yapısal denetim istisnası, yazım briefi "Yazışma türü" yuvası, `emit_reply_stream`/akış-yalnız-nihai-yanıt davranışı ve `InterruptPanel`'in artık mesaj listesinin kaydırılabilir alanında (boş durumu bastırarak) bir sohbet balonu olarak render edildiği için kapsamlı birim ve entegrasyon testleri eklendi.
 
 Refs: [#161](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/161)
+### Eklendi (#162)
+- **Markdown-öncelikli veri hazırlama hattı**: 364 PDF, 50 resmî HTML, 57 DOCX ve 19 eski DOC kaynağı; üretimde kullanılan OpenDataLoader/PDFium/Tesseract zinciri, Beautiful Soup, `python-docx` ve `antiword` ile deterministik Markdown kartlarına dönüştürülüyor. Kuru çalışma, yalnız belirli uzantıları işleme ve yalnız mevcut Markdown'ı normalleştirme kipleri eklendi.
+- **İzlenebilir kalite raporu**: Her karta kaynak türü, kullanılan çıkarıcı, OCR bilgisi, sayfa sayısı, kalite puanı, `rag_status` ve eleme gerekçesi yazılıyor; özet `KALITE_RAPORU.md`, ayrıntılar `kalite-raporu.json` dosyasında tutuluyor.
+- **Bağlama duyarlı anonimleştirme**: Genel `[SİLİNMİŞTİR]` değerleri; evrak sayısı, kişi, imza sahibi, kimlik, adres, telefon ve kurum iletişim bilgisi gibi semantik yer tutuculara dönüştürülüyor. Final few-shot çıktısında yüksek güvenli PII bulgusu sıfırlandı; yeni fail-closed kapı, gelecekte PII bulunan bir kaydın `ornekler.jsonl` dosyasına yazılmasını engelliyor.
+
+### Değiştirildi (#162)
+- **RAG kalite kapısı**: `rag_status` değeri `candidate`/`approved` olmayan kartlar artık `ornekler.jsonl` dosyasına alınmıyor. Kısa bilgilendirme metinleri için kategoriye özel alt sınır eklendi, aynı şablonun tekrarları elendi ve güvenle düzeltilemeyen 5 OCR/karakter bozukluğu karantinaya alındı. Final havuz 80 üst yazı, 99 cevap, 115 bilgilendirme ve 90 diğer resmî yazışma olmak üzere 384 örnektir.
+- **Yanlış kaynak etiketleri düzeltildi**: 800 `OS-*` kaydın gerçek açık kaynak değil, otonom betikle üretilmiş sentetik örneklem olduğu açıkça işaretlendi; 225 başlık-gövde uyumsuzluğu ve 512 tekrar üretim RAG'ından çıkarıldı.
+- **Dilekçe sitesi kazıntıları karantinaya alındı**: 35 açıklayıcı makale ve 5 site/ilke sayfasının ham kopyaları özgün konumlarında değiştirilmeden korundu; temizlenmiş türevleri `99_reddedilenler/dilekce_makaleleri/` altına yazılıp yazım örneği havuzundan çıkarıldı.
+- Veri kataloğu artık kaynak/çıkarıcı/kalite/RAG durumu alanlarını taşıyor ve yinelenen `id` değerlerinde sessizce devam etmek yerine hata veriyor.
+
+### Test (#162)
+- Front matter, HTML ana içerik ve gerçek başlık seçimi, Word metin kutuları, eski silme işaretlerinin semantik dönüşümü, kurum iletişim bilgilerinin maskelenmesi, başlık-gövde uyumu, OCR karakter bozulması, fail-closed PII kapısı, kalite statüsü ve RAG eleme davranışı için birim testleri eklendi.
+
+Refs: [#162](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/162)
 
 ## [1.54.0] - 2026-08-12
 ### Eklendi

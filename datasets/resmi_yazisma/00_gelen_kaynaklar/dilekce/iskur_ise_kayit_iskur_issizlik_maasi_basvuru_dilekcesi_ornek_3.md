@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-D0E6DBEB
-kategori: dilekce
-alt_kategori: iskur_ise_kayit
+id: "DILEKCE-D0E6DBEB"
+kategori: "dilekce"
+alt_kategori: "iskur_ise_kayit"
 baslik: "İŞKUR İşsizlik Maaşı Başvuru Dilekçesi (Ornek 3)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # İŞKUR İşsizlik Maaşı Başvuru Dilekçesi (Ornek 3)
@@ -16,7 +17,7 @@ Arslan A.S. işyerinden 24.02.2025 tarihinde işten çıkarılmış bulunmaktay�
 
 Kişisel Bilgilerim:
 - Adı Soyadı: Burak Sahin
-- T.C. Kimlik No: 22454439537
+- T.C. Kimlik No: [T.C. KİMLİK NO]
 - SGK Sicil No: 5889390
 - Son Çalışılan İşyeri: Arslan A.S.
 - İşten Ayrılma Tarihi: 24.02.2025
@@ -27,9 +28,9 @@ Kişisel Bilgilerim:
 
 24.02.2025
 Burak Sahin
-T.C. Kimlik No: 22454439537
-Adres: Ataturk Mah. 134. Sok. No:33 Istanbul
-Tel: 0538 528 86 27
+T.C. Kimlik No: [T.C. KİMLİK NO]
+Adres: [ADRES]
+Tel: [TELEFON]
 
 EKLER:
 1- İşten çıkış belgesi / SGK işten ayrılış bildirgesi

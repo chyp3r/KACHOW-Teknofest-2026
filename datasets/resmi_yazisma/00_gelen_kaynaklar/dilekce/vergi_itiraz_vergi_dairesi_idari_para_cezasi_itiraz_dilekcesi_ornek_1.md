@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-BDB19C50
-kategori: dilekce
-alt_kategori: vergi_itiraz
+id: "DILEKCE-BDB19C50"
+kategori: "dilekce"
+alt_kategori: "vergi_itiraz"
 baslik: "Vergi Dairesi İdari Para Cezası İtiraz Dilekçesi (Ornek 1)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Vergi Dairesi İdari Para Cezası İtiraz Dilekçesi (Ornek 1)
@@ -21,9 +22,9 @@ Müdürlüğünüzün 14.08.2024 tarih ve 25003 sayılı yazısı ile tarafıma 
 
 Mükellef Bilgileri:
 - Adı Soyadı: Mustafa Celik
-- T.C. Kimlik No: 59326136498
-- Vergi Kimlik No: 4387384813
-- Adres: Yeni Mah. 85. Sok. No:29 Samsun
+- T.C. Kimlik No: [T.C. KİMLİK NO]
+[KURUM İLETİŞİM BİLGİLERİ]
+[KURUM ADRESİ]
 
 Yukarıda arz ettiğim nedenlerle, haksız yere kesilen para cezasının iptal edilmesini saygılarımla arz ve talep ederim.
 
