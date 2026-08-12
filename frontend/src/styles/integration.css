@@ -207,7 +207,7 @@
 }
 
 .app-main { min-width: 0; background: var(--bg-primary); }
-.workflow-region { min-width: 0; height: 100vh; }
+.workflow-region { min-width: 0; height: 100dvh; }
 
 .page-header { margin-bottom: var(--space-4); }
 .page-header h1 { }
@@ -367,6 +367,12 @@
 }
 .chat-layout { display: block; min-height: 0; }
 .messages-area { width: 100%; padding: var(--space-3) var(--space-1) var(--space-6); }
+.chat-guardrail-stack { display: grid; gap: var(--space-2); flex: 0 1 auto; min-height: 0; max-height: 22dvh; overflow-y: auto; }
+.chat-content > .interrupt-panel { flex: 0 1 auto; min-height: 0; max-height: 42dvh; overflow-y: auto; }
+.chat-content .interrupt-panel .draft-preview { max-height: none; overflow: visible; }
+.chat-content > .alert,
+.chat-content > .processing-line,
+.chat-content > .cancel-stream-button { flex: 0 0 auto; }
 .chat-message { width: min(100%, 820px); margin: var(--space-5) 0; }
 .chat-message > div { max-width: min(100%, 720px); border: 0; background: transparent; }
 .chat-message.assistant > div { padding: var(--space-1) 0 var(--space-1) var(--space-1); }

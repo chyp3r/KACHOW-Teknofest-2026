@@ -141,15 +141,19 @@ export function ChatsPage({
           <Alert variant="error" icon={<AlertCircle />} action={<Button variant="ghost" size="sm" leadingIcon={<RotateCcw />} onClick={() => void onRetryHistory()}>Tekrar dene</Button>}>{historyError}</Alert>
         )}
         {historyLoading && <div className="processing-line"><Spinner label="Sohbet yükleniyor" />Sohbet yükleniyor…</div>}
-        {guardrailEvents.map((guardrail, index) => (
-          <Alert
-            variant={guardrail.decision === "blocked" ? "error" : "warning"}
-            title={`Güvenlik kontrolü: ${guardrail.decision}`}
-            key={`${guardrail.stage}-${guardrail.kind}-${index}`}
-          >
-            <span>{guardrail.reasons.join(" · ")}</span>
-          </Alert>
-        ))}
+        {guardrailEvents.length > 0 && (
+          <div className="chat-guardrail-stack">
+            {guardrailEvents.map((guardrail, index) => (
+              <Alert
+                variant={guardrail.decision === "blocked" ? "error" : "warning"}
+                title={`Güvenlik kontrolü: ${guardrail.decision}`}
+                key={`${guardrail.stage}-${guardrail.kind}-${index}`}
+              >
+                <span>{guardrail.reasons.join(" · ")}</span>
+              </Alert>
+            ))}
+          </div>
+        )}
         {interrupt && (
           <InterruptPanel
             interrupt={interrupt}
