@@ -143,7 +143,7 @@ Sistemin tek orkestrasyon grafiğidir ve **tek checkpointer alan graf**budur (bk
 
 ### 4. Routing Graph (`routing_graph.py`)
 - **Node'lar**: `route`.
-- **Görev**: Taslak metni ve (hibrit) güven skorunu değerlendirerek yazıyı `ROUTING_UNITS` listesindeki birime yönlendirir veya güven skoru `HUMAN_APPROVAL_SCORE_THRESHOLD`'un altındaysa/hata oluştuysa doğrudan `İnsan Onayı Gerekli`'ye iletir. `POST /api/v1/routing/suggest` üzerinden, bir taslak üretmeden bağımsız olarak da çağrılabilir — insan bir taslağı elle düzenledikten sonra yeniden üretim ödemeden taze bir yönlendirme kararı almak için.
+- **Görev**: Taslak metni ve (hibrit) güven skorunu değerlendirerek yazıyı, `app.domains.units` domain'inin yönettiği (yöneticilerin `POST/PATCH/DELETE /units` ile tanımladığı) aktif birim listesinden birine yönlendirir -- liste her çağrıda `units_provider` (`get_active_units_for_routing`) üzerinden veritabanından taze okunur, artık sabit bir Python listesi değildir. Güven skoru `HUMAN_APPROVAL_SCORE_THRESHOLD`'un altındaysa, taslak boşsa, tanımlı hiçbir aktif birim yoksa, ya da model listede olmayan bir birim döndürürse, birim atanmaz (`routed_unit=None`) ve bunun yerine `requires_human_approval=True` işaretlenir -- eskiden sahte bir "İnsan Onayı Gerekli" birimi vardı, artık bu tamamen kaldırıldı; taslak-kalite kapısının kullandığı aynı bayrak yeniden kullanılıyor. `POST /api/v1/routing/suggest` üzerinden, bir taslak üretmeden bağımsız olarak da çağrılabilir — insan bir taslağı elle düzenledikten sonra yeniden üretim ödemeden taze bir yönlendirme kararı almak için.
 
 ---
 
