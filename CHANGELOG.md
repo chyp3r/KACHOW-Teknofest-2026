@@ -2,6 +2,26 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [1.54.0] - 2026-08-12
+### Eklendi
+- **Dinamik İş Akışı Paneli**: Sohbet ekranındaki iş akışı göstergesi artık her turda aynı sabit 5 aşamayı (analiz → taslak → doğrulama → onay → yönlendirme) çizmek yerine, backend'in SSE üzerinden zaten gönderdiği `plan_steps`/`intent` (`planning_completed`) ve her düğümün kendi Türkçe etiketini taşıyan `node_start`/`node_end`/`node_error`/`node_skipped` olaylarından türetiliyor -- sadece belge analizi yapan bir tur artık tek bir aşama gösteriyor, bir asistan turu araç çağrılarını kendi satırının altında listeliyor. `verify`/`judge`, revizyonun alt adımları ve `brief_gate` gibi düğümler okunabilirliği korumak için sahip oldukları adımın altına toplanıyor; backend'in hiç bilmediğimiz yeni bir düğüm eklemesi durumunda o düğüm sessizce kaybolmuyor, kendi satırı olarak beliriyor. Bir oturum geçmişten açıldığında (canlı SSE akışı olmadan) planı yeniden kurabilmek için `planning_graph._compile_final_output`'a `plan_steps`/`intent` eklendi.
+- **Evrak alanlarını elle düzenleme**: Analiz sırasında tespit edilemeyen veya yanlış çıkarılan üst veri alanları (Sayı, Tarih, Muhatap vb.) artık evrak analiz panelinden elle düzeltilebiliyor. Yeni `PATCH /api/v1/documents/{storage_path}/fields` uç noktası düzeltilen alan setini kaydediyor ve aynı deterministik kural tablosuyla (`check_required_fields`, model çağrısı yok) uygunluk kontrolünü anında yeniden çalıştırıyor.
+- **Taslak ve evrak silme**: Taslaklar sayfasından bir taslağı (ve tüm sürüm geçmişini) silme, Evraklar sayfasından bir evrakı (DB kaydı, ham dosya, analiz önbelleği ve dizinlenmiş Q&A parçaları dahil) kalıcı olarak silme eklendi. Taslak silme `DraftModel.is_deleted` üzerinden yumuşak silme (zaten var olan ama hiç yazılmayan bir alan); evrak silme geri alınamaz gerçek bir silme.
+- **Sohbet ekranına dosya sürükleyerek yükleme**: Sohbet ekranı açıkken bir dosya sürüklendiğinde tam ekran "dosyanızı buraya bırakın" katmanı beliriyor; bırakıldığında dosya doğrulanıp mevcut evrak yükleme/analiz akışına yönlendiriliyor, yeni evrak otomatik seçiliyor ve sohbete bilgilendirme mesajı düşüyor.
+
+### Değiştirildi
+- **Taslak adlandırması**: Taslaklar sayfasındaki satır başlığı artık yalnızca yazışma türünü ("Cevap yazısı") değil, "Belge Adı - Yazı Türü" biçimini (örn. "izin-talebi.pdf - Cevap yazısı") gösteriyor; ayrı "Kaynak evrak" sütunu kaldırıldı.
+- **Taslaklar sayfasındaki durum rozetleri kaldırıldı**: yeşil "Hazır" / sarı "İnsan onayı" rozetleri hem satırlarda hem genişletilmiş detay panelinde gösterilmiyor artık.
+- **Yönlendirme sayfasındaki güven skoru kaydırıcısı kaldırıldı**: serbest metinle öneri istenirken artık rastgele bir güven skoru gönderilmiyor (backend zaten 100 varsayıyor); kalıcı bir taslak seçildiğinde o taslağın gerçek güven skoru arka planda kullanılmaya devam ediyor.
+
+### Düzeltildi
+- **Uzun sohbette sayfa yarım kalması**: `.messages-area`/`.chat-workspace`'in sıfır-tabanlı flex ayarı (`flex:1` = `1 1 0%`) mesaj listesinin hiç küçülmemesine, tüm daralmanın küçülemeyen kardeşlerine (guardrail uyarıları, İnsan Onayı paneli) yıkılmasına ve konteynerin taşarak `overflow:hidden` tarafından sertçe kırpılmasına yol açıyordu; buna `scrollIntoView`'ın `overflow:hidden` atalarını da (scrollbar'ı olmadan) kaydırması ekleniyordu. Mesaj listesi artık kendi kabına göre kayıyor (`scrollTop` doğrudan yazılıyor, kullanıcı yukarı kaydırdıysa aşağı zorlanmıyor), guardrail listesi ve onay paneli kendi üst sınırlarıyla bağımsız kayıyor, ve `100vh` yerine `100dvh` kullanılarak mobil tarayıcı araç çubuğunun sayfayı kırpması önlendi.
+
+### Test
+- Dinamik iş akışı türetmesi (plan dışı düğümler, alt adım gruplama, araç çağrıları, bilinmeyen düğümler), evrak alan düzenleme formu, taslak/evrak silme akışları (onay diyaloğu dahil, backend'de sahiplik/yetki testleri), sohbet dosya sürükleme akışı ve mesaj listesi kaydırma davranışı için kapsamlı birim ve entegrasyon testleri eklendi.
+
+Refs: [#159](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/159)
+
 ## [1.53.0] - 2026-08-11
 ### Eklendi
 - **Taslak Öncesi Yazım Briefi**: "…dilekçe yazmak istiyoruz KACMAK ekibi olarak" gibi bir sorgu, KACMAK'ı *muhatap* sanan yanlış yönlü bir taslak üretiyordu -- `_build_brief`'in şemasında kim yazıyor/kime yazıyor ayrımı hiç yoktu. Yeni `app.ai.workflows.writing_brief` modülü altı yazım-stili yuvasını (yazan taraf, muhatap, anlatım, kapanış, imza, sayı/tarih) deterministik ve LLM'siz biçimde çözüyor: kullanıcının kendi metninden ("X ekibi olarak", "X adına"), ekli belgenin sınıflandırmasından (bir cevap yazısı turunda gönderen/muhatap rolleri tersine çevrilerek) veya oturumun önceki briefinden. Yalnızca gerçekten bilinmeyen yuvalar sorulur (en fazla 4), her birinde "Sen karar ver" seçeneğiyle. Yeni bir `brief` plan adımı + taslak üretiminden **önce** duraklayan ayrı bir `brief_gate` düğümüyle bağlandı -- `human_gate_node`'un kendi ayrımıyla aynı sebeple: `interrupt()` düğümü resume'da baştan oynattığı için pahalı çözümleme işi replay yoluna hiç girmiyor. Cevaplar hem oturum boyunca (`SessionFocus.writing_brief`) hem sürüm bazında (`DraftVersion.writing_brief`, revize turlarının aynı yönü koruması için) taşınıyor.
