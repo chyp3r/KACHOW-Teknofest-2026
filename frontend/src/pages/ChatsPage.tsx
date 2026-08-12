@@ -4,7 +4,6 @@ import { PageHeader } from "../components/PageHeader";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { ChatDropZone } from "../features/chat/ChatDropZone";
 import { ConversationHistoryDrawer } from "../features/chat/ConversationHistoryDrawer";
-import { InterruptPanel } from "../features/chat/InterruptPanel";
 import { MessageList } from "../features/chat/MessageList";
 import type {
   ChatMessage,
@@ -159,19 +158,14 @@ export function ChatsPage({
             ))}
           </div>
         )}
-        {interrupt && (
-          <InterruptPanel
-            interrupt={interrupt}
-            loading={loading}
-            onResume={onResume}
-          />
-        )}
         <MessageList
           messages={messages}
           streamingText={streamingText}
           loading={loading}
           logs={logs}
           hasSelectedDocument={Boolean(selectedDocument)}
+          interrupt={interrupt}
+          onResume={onResume}
           onSuggestion={setPromptTemplate}
           // A clarify option is answered the same way typing its label
           // would be -- balanced/no-forced-document mirrors the composer's

@@ -2,12 +2,14 @@ import { Bot, FilePenLine, FileSearch, Info, MessageSquare, Route, UserRound } f
 import { useEffect, useRef } from "react";
 import type { UIEvent } from "react";
 import ReactMarkdown from "react-markdown";
-import type { ChatMessage, WorkflowLog } from "../../types/chat";
+import type { ChatMessage, InterruptState, WorkflowLog } from "../../types/chat";
 import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
 import { Spinner } from "../../components/Surface";
 import { PromptQuestionCard } from "./PromptQuestionCard";
 import { DraftMetaStrip } from "./DraftMetaStrip";
+import { InterruptPanel } from "./InterruptPanel";
+import type { PromptAnswers } from "./PromptQuestionCard";
 
 export function MessageList({
   messages,
@@ -15,6 +17,8 @@ export function MessageList({
   loading,
   logs,
   hasSelectedDocument,
+  interrupt,
+  onResume,
   onSuggestion,
   onSelectOption,
 }: {
@@ -23,6 +27,18 @@ export function MessageList({
   loading: boolean;
   logs: WorkflowLog[];
   hasSelectedDocument: boolean;
+  // Rendered as the last bubble in the scrolling conversation (see the
+  // interrupt-message article below) rather than as a standalone panel
+  // pinned above it -- a routine approval/question/writing-brief ask is
+  // part of the exchange, not a modal breaking out of it. Optional: a
+  // caller with no human-in-the-loop gate wired up simply never passes one.
+  interrupt?: InterruptState | null;
+  onResume?: (
+    action: "answer" | "approve" | "revise" | "reject",
+    answers: PromptAnswers,
+    instructions: string,
+    reason?: string,
+  ) => Promise<void>;
   onSuggestion: (prompt: string) => void;
   // Answers a clarify question's option the same way typing its label would
   // -- see app.ai.workflows.planner._try_resolve_pending_clarification.
@@ -39,14 +55,14 @@ export function MessageList({
       container.scrollTop = container.scrollHeight;
     });
     return () => cancelAnimationFrame(frame);
-  }, [messages, streamingText]);
+  }, [messages, streamingText, interrupt]);
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
     const el = event.currentTarget;
     pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 96;
   };
   return (
     <div className="messages-area" ref={containerRef} onScroll={handleScroll}>
-      {messages.length === 0 && !streamingText ? (
+      {messages.length === 0 && !streamingText && !interrupt ? (
         <EmptyState className="chat-empty-state" icon={MessageSquare} title="Nasıl yardımcı olabilirim?" description="Bir evrak üzerinde çalışın veya resmî yazışma süreciniz için destek alın." primaryAction={
           <div className="suggested-actions" aria-label="Önerilen başlangıçlar">
             {hasSelectedDocument && (
@@ -133,6 +149,16 @@ export function MessageList({
               <ReactMarkdown>{streamingText}</ReactMarkdown>
               <span className="streaming-caret" />
             </div>
+          </div>
+        </article>
+      )}
+      {interrupt && onResume && (
+        <article className="chat-message assistant interrupt-message">
+          <span className="message-avatar">
+            <Bot size={17} />
+          </span>
+          <div>
+            <InterruptPanel interrupt={interrupt} loading={loading} onResume={onResume} />
           </div>
         </article>
       )}
