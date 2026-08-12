@@ -41,7 +41,6 @@ from app.ai.workflows.events import (
     emit_notice,
     emit_partial,
     emit_question,
-    emit_token,
 )
 from app.ai.workflows.intent_rules import RESET_SURFACES
 from app.ai.workflows.intent_scorer import normalize
@@ -783,11 +782,28 @@ def create_planning_graph(
 
         context = _mevzuat_context(classification)
 
+        # The brief gate's own "Yazışma türü" slot (priority 0, see
+        # app.ai.workflows.writing_brief.SLOT_CATALOG) is the most explicit
+        # signal available -- either the user's own words matched a genre
+        # surface, or a human confirmed it at the gate. AUTO_ANSWER means
+        # "let the system decide", not "response_letter", so it falls
+        # through to classification the same as an unset brief.
+        brief_answers = (state.get("brief_result") or {}).get("answers") or {}
+        brief_correspondence_type = brief_answers.get("yazisma_turu")
+        requested_correspondence_type = (
+            brief_correspondence_type
+            if brief_correspondence_type and brief_correspondence_type != AUTO_ANSWER
+            else _requested_correspondence_type(classification)
+        )
+
         return await draft_graph.ainvoke(
             {
                 "source_document": source_document,
                 "classification": classification,
-                "correspondence_type": _requested_correspondence_type(classification),
+                # The user's own message, never the boilerplate below --
+                # see draft_graph.validate_input_node / resolve_correspondence_type.
+                "user_request": state["input_text"],
+                "correspondence_type": requested_correspondence_type,
                 "context": context,
                 "instructions": (
                     f"Kullanıcı İsteği: {state['input_text']}\n\n"
@@ -796,7 +812,7 @@ def create_planning_graph(
                 ),
                 "attempts": 0,
                 "reasoning_level": state.get("reasoning_level", ReasoningLevel.BALANCED.value),
-                "writing_brief": (state.get("brief_result") or {}).get("answers") or {},
+                "writing_brief": brief_answers,
             },
             config=child_config(config),
         )
@@ -825,13 +841,6 @@ def create_planning_graph(
         requester_clearance = (
             SensitivityLevel(requester_clearance_raw) if requester_clearance_raw else None
         )
-        # Gizli/Çok Gizli per the resolved policy (`GuardrailPolicy.
-        # sensitivity_block_levels`, read via `requires_review` rather than
-        # a level comparison hardcoded here) -- buffer the whole reply and
-        # gate it before showing anything, instead of the ordinary
-        # token-by-token stream a post-hoc gate can't actually stop in time.
-        buffer_streaming = bool(sensitivity and sensitivity.requires_review)
-
         document_context = "(Bu turda yüklenmiş bir belge yok.)"
         if document_id:
             document_context = (
@@ -959,8 +968,6 @@ def create_planning_graph(
                     node="assist",
                 ):
                     chunks.append(chunk)
-                    if not buffer_streaming:
-                        await emit_token(config, "assist", chunk)
 
             raw_reply = "".join(chunks).strip()
             source_materials = "\n\n".join(
@@ -996,12 +1003,6 @@ def create_planning_graph(
             )
             reply = verdict.text
             flagged = verdict.action != "pass"
-
-            if buffer_streaming:
-                # Token-by-token streaming was withheld above specifically
-                # so this could be the gate's decision, not the model's raw
-                # output -- emit it once, now that the check has actually run.
-                await emit_token(config, "assist", reply)
 
             if flagged:
                 guardrail_kind = classify_reason_kind(verdict.reasons)

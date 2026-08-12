@@ -894,27 +894,6 @@ textarea { min-height: 105px; resize: vertical; }
 .draft-meta-chip.draft-meta-danger { color: #f87171; border-color: rgba(248, 113, 113, .4); }
 .draft-meta-chip.draft-meta-success { color: var(--status-completed); border-color: color-mix(in srgb, var(--status-completed) 40%, transparent); }
 
-/* One-time reveal of what a post-draft pass (guardrail redaction, a
-   repair) changed relative to the streamed preview -- see
-   DiffRevealText / useChatWorkflow's final_result handler. Plain text,
-   not markdown, so it needs its own whitespace handling. */
-.diff-reveal-text { margin: 0; white-space: pre-wrap; }
-mark.diff-changed {
-  padding: 0 2px;
-  margin: 0 -2px;
-  border-radius: 3px;
-  color: inherit;
-  background: transparent;
-  animation: diff-flash 1.8s ease-out forwards;
-}
-@keyframes diff-flash {
-  0% { background: color-mix(in srgb, var(--accent-blue) 45%, transparent); }
-  100% { background: transparent; }
-}
-@media (prefers-reduced-motion: reduce) {
-  mark.diff-changed { animation: none; background: color-mix(in srgb, var(--accent-blue) 20%, transparent); }
-}
-
 /* PromptQuestionCard: the single card missing-information, the pre-draft
    writing brief, and clarify's intent question all render through.
    Typography (size/weight/tracking/transform) for these selectors lives in

@@ -377,18 +377,35 @@ def _collect_claims(
     return claims
 
 
-def _check_structure(draft: str) -> tuple[list[str], float]:
+#: Structure keys that don't apply to an individually-signed petition (an
+#: itiraz/başvuru/şikayet dilekçesi, or any sub-genre resolving with
+#: "dilekçe" in its label -- see ``resolve_correspondence_type``). A
+#: petitioner never assigns their own case number, so requiring a "Sayı:"
+#: line here would force the writer to fabricate one or fail verification on
+#: every well-formed petition it produces. The other checks (Konu, Tarih,
+#: kapanış, imza) still apply -- a petition has all of those, just not an
+#: institutional case number.
+PETITION_EXEMPT_STRUCTURE_KEYS = frozenset({"sayi"})
+
+
+def _check_structure(
+    draft: str, *, skip_keys: frozenset[str] = frozenset()
+) -> tuple[list[str], float]:
     """Score the draft's structural completeness.
 
     Args:
         draft: The generated draft.
+        skip_keys: Structure check keys to exempt (see
+            ``PETITION_EXEMPT_STRUCTURE_KEYS``).
 
     Returns:
         The labels of missing elements and the total penalty incurred.
     """
     missing: list[str] = []
     penalty = 0.0
-    for _key, label, pattern, weight in STRUCTURE_CHECKS:
+    for key, label, pattern, weight in STRUCTURE_CHECKS:
+        if key in skip_keys:
+            continue
         if not pattern.search(draft):
             missing.append(label)
             penalty += weight
@@ -404,6 +421,7 @@ def verify_draft(
     instructions: str = "",
     strict: bool = True,
     style_examples: list[str] | None = None,
+    is_individual_petition: bool = False,
 ) -> VerificationReport:
     """Verify a draft's groundedness and structural completeness.
 
@@ -435,6 +453,12 @@ def verify_draft(
             forces human approval, independent of ``strict``: a leaked real
             fact is a confidentiality/integrity problem the correspondence
             type's leniency was never meant to cover.
+        is_individual_petition: True for a personal dilekçe-shaped sub-genre
+            (see ``PETITION_EXEMPT_STRUCTURE_KEYS``) -- exempts the "Sayı:"
+            structure check so a well-formed petition isn't flagged (and
+            forced into a repair loop trying to add institutional scaffolding
+            it should never have) for lacking a case number only the
+            receiving institution assigns.
 
     Returns:
         The verification report.
@@ -465,7 +489,8 @@ def verify_draft(
     auditable = _strip_placeholders(draft)
 
     claims = _collect_claims(auditable, haystack, canonical_index)
-    missing_structure, structure_penalty = _check_structure(draft)
+    skip_keys = PETITION_EXEMPT_STRUCTURE_KEYS if is_individual_petition else frozenset()
+    missing_structure, structure_penalty = _check_structure(draft, skip_keys=skip_keys)
 
     # Split out claims that are unsupported by source/mevzuat but *are*
     # present in the user's own instructions -- checked before example_leaks

@@ -139,6 +139,11 @@ def test_kapanis_suggests_arz_from_an_authority_muhatap_without_an_explicit_word
 
 
 def test_a_genuinely_unknown_slot_has_no_option_marked_as_a_suggestion():
-    resolution = resolve_brief("bir yazı hazırla")
+    # "cevap yazısı hazırla" resolves `yazisma_turu` confidently (see
+    # test_writing_brief_yazisma_turu.py's crowding-out test for the
+    # opposite case), so it doesn't compete for one of MAX_BRIEF_QUESTIONS --
+    # leaving room for yazan_taraf/muhatap/anlatim/kapanis, all four
+    # genuinely unknown here, to all be asked.
+    resolution = resolve_brief("cevap yazısı hazırla")
     question = _question(resolution, "kapanis")
     assert not any("Önerilen" in option["label"] for option in question["options"])

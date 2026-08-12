@@ -4,6 +4,7 @@ from typing import Any, AsyncIterator, Optional
 from uuid import uuid4
 
 from app.ai.reasoning_levels import get_reasoning_level_preset
+from app.ai.workflows.events import emit_reply_stream
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.authorization import AuthorizationException
 from app.core.config import settings
@@ -474,6 +475,11 @@ class ChatService:
         final_output = state.get("final_output", {}) or {}
         reply = self._select_reply(final_output)
         workflow_status = final_output.get("status", "FAILED")
+        # The only text ever streamed to the client this turn -- see
+        # emit_reply_stream's docstring. Streamed *before* final_result so
+        # the chat bubble fills in live rather than the whole reply
+        # appearing at once with the "typing" state ending abruptly.
+        await emit_reply_stream(queue, reply)
         await queue.put(
             {
                 "event": "final_result",

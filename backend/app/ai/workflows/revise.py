@@ -134,6 +134,7 @@ async def run_revise(
         return {
             "draft": active_draft.text,
             "correspondence_type": resolved_correspondence_type,
+            "correspondence_sub_genre": active_draft.correspondence_sub_genre,
             "confidence_score": 0.0,
             "combined_score": 0.0,
             "requires_human_approval": True,
@@ -150,6 +151,7 @@ async def run_revise(
         return {
             "draft": final_state.get("draft", active_draft.text),
             "correspondence_type": resolved_correspondence_type,
+            "correspondence_sub_genre": active_draft.correspondence_sub_genre,
             "confidence_score": 0.0,
             "combined_score": 0.0,
             "requires_human_approval": True,
@@ -193,6 +195,8 @@ async def run_revise(
         # verify_node depends on.
         "style_examples": [{"text": text} for text in active_draft.style_examples],
         "correspondence_type_source": active_draft.correspondence_type_source,
+        "correspondence_sub_genre": final_state.get("correspondence_sub_genre")
+        or active_draft.correspondence_sub_genre,
         "writing_brief": active_draft.writing_brief,
         "reasoning_level": preset.level.value,
         "instruction_origin": instruction_origin,

@@ -34,7 +34,6 @@ from app.ai.workflows.events import (
     emit_node_error,
     emit_node_skipped,
     emit_node_start,
-    emit_token,
 )
 from app.ai.workflows.resilience import IO_RETRY
 from app.ai.workflows.writing_brief import format_writing_brief
@@ -70,8 +69,16 @@ class DraftState(TypedDict, total=False):
 
     source_document: str
     classification: dict[str, Any]
+    #: The user's own drafting request, unmodified by orchestrator
+    #: boilerplate -- see ``resolve_correspondence_type``'s ``user_request``
+    #: argument for why this must be kept separate from ``instructions``.
+    user_request: str
     correspondence_type: str
     correspondence_type_source: str
+    #: Free-text genre label ("itiraz dilekçesi") when the user asked for a
+    #: specific genre outside the four spec'd CorrespondenceType values.
+    #: Empty for a core type. See ``correspondence.resolve_correspondence_type``.
+    correspondence_sub_genre: str
     context: str
     instructions: str
     draft: str
@@ -232,7 +239,7 @@ def _build_repair_prompt(state: DraftState) -> str:
         "gidererek düzelt. Listede olmayan hiçbir cümleyi değiştirme.\n\n"
         f"### BRIEF BELGESİ:\n{state.get('brief', '')}\n\n"
         f"### YAZIŞMA TÜRÜ PROFİLİ:\n"
-        f"{format_correspondence_profile(state.get('correspondence_type', 'other_official'))}\n\n"
+        f"{format_correspondence_profile(state.get('correspondence_type', 'other_official'), state.get('correspondence_sub_genre', ''))}\n\n"
         f"### ÖNCEKİ TASLAK:\n{state.get('previous_draft', '')}\n\n"
         f"### DÜZELTİLMESİ GEREKEN KUSURLAR:\n{numbered or '(kusur listesi boş)'}\n\n"
         "### KURAL:\n"
@@ -348,17 +355,27 @@ def create_draft_graph(
             (state.get("instructions") or "").strip()
             or "Gelen evraka uygun resmî ve kurumsal bir yazışma taslağı oluştur."
         )
-        correspondence_type, type_source = resolve_correspondence_type(
-            state.get("correspondence_type"), instructions, classification
+        # The user's own words, never the orchestrator's boilerplate framing
+        # above -- resolve_correspondence_type matches against this, not
+        # `instructions` (which always contains "yanıt taslağı oluştur" and
+        # would otherwise resolve every chat-initiated draft to
+        # RESPONSE_LETTER regardless of what was actually asked for).
+        user_request = (state.get("user_request") or "").strip() or instructions
+        source_document = (state.get("source_document") or "").strip()
+        correspondence_type, type_source, sub_genre = resolve_correspondence_type(
+            state.get("correspondence_type"),
+            user_request,
+            classification,
+            has_source_document=bool(source_document),
         )
 
-        source_document = (state.get("source_document") or "").strip()
         if not source_document:
             error = "Gelen evrak içeriği sağlanmadığı için taslak oluşturulamadı."
             logger.error(error)
             return {
                 "correspondence_type": correspondence_type.value,
                 "correspondence_type_source": type_source,
+                "correspondence_sub_genre": sub_genre,
                 "draft": "",
                 "confidence_score": 0.0,
                 "requires_human_approval": True,
@@ -374,6 +391,7 @@ def create_draft_graph(
             "classification": classification,
             "correspondence_type": correspondence_type.value,
             "correspondence_type_source": type_source,
+            "correspondence_sub_genre": sub_genre,
             "context": context,
             "instructions": instructions,
             "brief": _build_brief(
@@ -526,27 +544,33 @@ def create_draft_graph(
                 "Aşağıdaki brief doğrultusunda resmî ve kurumsal bir Türkçe yazı taslağı yaz.\n\n"
                 f"### BRIEF BELGESİ:\n{state['brief']}\n\n"
                 f"### YAZIŞMA TÜRÜ PROFİLİ:\n"
-                f"{format_correspondence_profile(state['correspondence_type'])}\n\n"
+                f"{format_correspondence_profile(state['correspondence_type'], state.get('correspondence_sub_genre', ''))}\n\n"
                 f"### KURALLAR:\n{rules}"
                 f"{_format_style_examples(state.get('style_examples'))}"
             )
             agent = WriterAgent(client)
             temperature = 0.4
 
-        # Streamed rather than awaited whole: the draft is the longest single
-        # generation in the system, and forwarding chunks is what makes the UI
-        # feel live instead of frozen behind a spinner. A revision streams
-        # under the same "draft" node id, so the frontend clears any
-        # in-progress streamingText on every node_start rather than only the
-        # first -- otherwise the two attempts would visually concatenate.
-        # The writer's budget is applied *inside* the node rather than by the
-        # @node_timeout decorator. A decorator would raise past the except
-        # clauses below and crash the draft graph; here a timeout becomes a
-        # FAILED result carrying whatever was streamed, which is what the rest
-        # of the graph already knows how to handle. This is also the first time
-        # the most expensive step in the ~90s draft budget has had any node-level
-        # protection at all -- resilience.py has carried a "writer" entry since
-        # it was written, and nothing ever read it.
+        # Called via .stream() rather than awaited whole -- not to forward
+        # chunks live (nothing is emitted here anymore; see the module-level
+        # note on final-reply streaming in app.domains.chat.chat_service),
+        # but because the timeout below still needs partial text to hand
+        # back on a budget overrun. The writer's budget is applied *inside*
+        # the node rather than by the @node_timeout decorator. A decorator
+        # would raise past the except clauses below and crash the draft
+        # graph; here a timeout becomes a FAILED result carrying whatever was
+        # generated so far, which is what the rest of the graph already
+        # knows how to handle. This is also the first time the most
+        # expensive step in the ~90s draft budget has had any node-level
+        # protection at all -- resilience.py has carried a "writer" entry
+        # since it was written, and nothing ever read it.
+        #
+        # Chunks are buffered, never emitted: .stream() cannot run
+        # BaseAgent.validators mid-stream (there is no single response to
+        # check before tokens would be on screen), so nothing reaches the
+        # user until assert_no_prompt_leak below has cleared the accumulated
+        # text -- see chat_service._enqueue_terminal_event, the one place a
+        # validated final reply is streamed to the client.
         budget = node_budget("writer", preset.level)
         chunks: list[str] = []
         try:
@@ -558,7 +582,6 @@ def create_draft_graph(
                     reasoning=preset.reasoning,
                 ):
                     chunks.append(chunk)
-                    await emit_token(config, "draft", chunk)
 
             draft = "".join(chunks).strip()
             if not draft:
@@ -624,6 +647,7 @@ def create_draft_graph(
 
         draft_text = state.get("draft", "")
         classification = state.get("classification") or {}
+        sub_genre = state.get("correspondence_sub_genre", "")
         strict = state.get("correspondence_type") != "other_official"
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
 
@@ -637,6 +661,7 @@ def create_draft_graph(
             style_examples=[
                 example.get("text", "") for example in state.get("style_examples") or []
             ],
+            is_individual_petition="dilekçe" in sub_genre.lower(),
         )
 
         # None means the level has no opinion; defer to the global setting.
@@ -671,6 +696,7 @@ def create_draft_graph(
                 correspondence_type=state.get("correspondence_type") or "other_official",
                 instructions=state.get("instructions", ""),
                 timeout_s=settings.DRAFT_JUDGE_TIMEOUT_SECONDS * preset.timeout_multiplier,
+                sub_genre=sub_genre,
             )
             if verdict is None:
                 await emit_node_error(

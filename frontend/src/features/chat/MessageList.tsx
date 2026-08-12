@@ -8,7 +8,6 @@ import { EmptyState } from "../../components/EmptyState";
 import { Spinner } from "../../components/Surface";
 import { PromptQuestionCard } from "./PromptQuestionCard";
 import { DraftMetaStrip } from "./DraftMetaStrip";
-import { DiffRevealText } from "./DiffRevealText";
 
 export function MessageList({
   messages,
@@ -89,11 +88,7 @@ export function MessageList({
                     : "Siz"}
               </header>
               <div className="markdown-content">
-                {message.diffSegments ? (
-                  <DiffRevealText segments={message.diffSegments} />
-                ) : (
-                  <ReactMarkdown>{message.text}</ReactMarkdown>
-                )}
+                <ReactMarkdown>{message.text}</ReactMarkdown>
               </div>
               <DraftMetaStrip details={message.details} />
               {message.questions?.length ? (
