@@ -96,6 +96,13 @@ DRAFT_RULES: tuple[EvidenceRule, ...] = (
             "kurgular misin", "tanzim et", "mukabelede bulun",
             "mukabele metni", "mukabele hazirla", "bildirim yapacak bir yazisma",
             "yazi cikar", "cevabi yaz",
+            # A specific document genre outside the four spec'd
+            # CorrespondenceType values (see app.ai.workflows.correspondence's
+            # GENRE_SURFACES) -- these previously fell through to weaker,
+            # generic hints (or nothing at all) and could lose to a
+            # competing intent instead of resolving to `draft`.
+            "dilekce yaz", "dilekce hazirla", "dilekcesi yaz", "dilekce olustur",
+            "itiraz et", "basvuru yaz", "tutanak tut",
         ),
     ),
     EvidenceRule(
@@ -105,6 +112,8 @@ DRAFT_RULES: tuple[EvidenceRule, ...] = (
         surfaces=(
             "taslak", "ust yazi", "resmi yazi", "bilgilendirme metni",
             "cevap yazisi", "tebligat metni", "muzekkere", "tezkere", "mukabele",
+            "dilekce", "itiraz dilekcesi", "muvafakatname", "taahhutname", "tutanak",
+            "olur yazisi",
         ),
     ),
     #: "metni düzenle"/"cevabı düzenle" mean *arrange/edit* the text, which

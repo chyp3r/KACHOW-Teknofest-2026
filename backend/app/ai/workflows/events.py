@@ -168,6 +168,58 @@ async def emit_token(config: Optional[RunnableConfig], node: str, text: str) -> 
     await emit(config, {"event": "token", "node": node, "text": text})
 
 
+#: Characters per chunk in :func:`emit_reply_stream`. Small enough to still
+#: read as a live stream, large enough that a long draft doesn't spend
+#: hundreds of queue round-trips on it.
+_REPLY_STREAM_CHUNK_SIZE = 48
+
+
+async def emit_reply_stream(
+    queue: Any, text: str, *, node: str = "reply", chunk_size: int = _REPLY_STREAM_CHUNK_SIZE
+) -> None:
+    """Stream a validated final reply to the client, chunk by chunk.
+
+    The *only* place a ``token`` event is emitted post the draft/assist/
+    revise validation rework (see ``draft_graph.writer_node``,
+    ``planning_graph._run_assist``, ``revise_graph.rewrite_node``, none of
+    which call ``emit_token`` anymore) -- called once, from
+    ``app.domains.chat.chat_service._enqueue_terminal_event``, on the exact
+    text ``final_result`` is about to carry. This is what makes "what
+    streamed into the chat bubble" and "the turn's final answer" the same
+    text by construction rather than by convention: nothing upstream of this
+    call ever reaches the client's token handler, so there is nothing for a
+    guardrail/verify pass to have silently changed out from under what the
+    user already saw.
+
+    Takes the raw queue directly, not a ``RunnableConfig`` -- this runs after
+    the graph invocation has already returned, so there is no node config in
+    scope, only the same ``asyncio.Queue`` that was attached to it as
+    ``status_queue``.
+
+    Args:
+        queue: The SSE progress queue, or None (a no-op, same as :func:`emit`).
+        text: The validated final reply.
+        node: Node id carried on each token event -- purely informational;
+            no node clears a live preview on its own ``node_start`` anymore
+            (there is nothing left upstream that would stream one).
+        chunk_size: Characters per emitted chunk.
+    """
+    if queue is None or not text:
+        return
+    try:
+        for start in range(0, len(text), chunk_size):
+            await queue.put(
+                {
+                    "event": "token",
+                    "node": node,
+                    "text": text[start : start + chunk_size],
+                    "seq": _next_seq(queue),
+                }
+            )
+    except Exception:
+        logger.warning("Could not stream final reply")
+
+
 async def emit_node_error(
     config: Optional[RunnableConfig],
     node: str,

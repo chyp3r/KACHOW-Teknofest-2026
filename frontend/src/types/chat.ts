@@ -1,5 +1,4 @@
 import type { ReasoningLevel } from "./documents";
-import type { DiffSegment } from "../utils/textDiff";
 
 export type WorkflowNodeStatus =
   | "todo"
@@ -53,13 +52,6 @@ export interface ChatMessage {
   // typing it out by hand would do), per
   // app.ai.workflows.planner._try_resolve_pending_clarification.
   questions?: PromptQuestion[];
-  // One-time reveal: which spans of `text` differ from what was streamed a
-  // moment ago (see useChatWorkflow's final_result handler / utils/textDiff).
-  // Present only when a post-draft pass (guardrail redaction, a repair)
-  // changed a small, targeted part of the streamed preview -- MessageList
-  // renders these instead of `text` directly, animating just the changed
-  // spans rather than the whole message silently swapping.
-  diffSegments?: DiffSegment[];
 }
 
 export interface ChatSession {

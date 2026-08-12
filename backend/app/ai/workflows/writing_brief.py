@@ -38,6 +38,10 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Optional
 
+from app.ai.workflows.correspondence import (
+    CORRESPONDENCE_TYPE_LABELS,
+    match_genre,
+)
 from app.ai.workflows.intent_scorer import normalize
 
 #: The "Sen karar ver" sentinel. Never blank: an empty string reads as
@@ -163,6 +167,22 @@ class BriefResolution:
 
 
 SLOT_CATALOG: tuple[BriefSlotSpec, ...] = (
+    #: Priority 0 (lowest number, asked first / never crowded out by the
+    #: MAX_BRIEF_QUESTIONS cap) -- getting the correspondence type wrong
+    #: shapes the entire draft, unlike a wrong anlatım/kapanış guess which a
+    #: revise turn can cheaply correct. See
+    #: app.ai.workflows.correspondence.resolve_correspondence_type: this
+    #: slot's resolved answer is what "explicit" precedence there refers to.
+    BriefSlotSpec(
+        key="yazisma_turu",
+        header="Yazışma türü",
+        question="Nasıl bir yazışma türü hazırlayayım?",
+        options=tuple(
+            AnswerOption(value=value.value, label=label)
+            for value, label in CORRESPONDENCE_TYPE_LABELS.items()
+        ),
+        priority=0,
+    ),
     BriefSlotSpec(
         key="yazan_taraf",
         header="Yazan taraf",
@@ -306,6 +326,18 @@ _AUTHORITY_KEYWORDS = (
 )
 
 
+def _resolve_yazisma_turu(
+    evidence: BriefEvidence, known: dict[str, SlotResolution]
+) -> Optional[SlotResolution]:
+    del known
+    match = match_genre(evidence.raw_text)
+    if match is None:
+        return None
+    correspondence_type, sub_genre = match
+    label = sub_genre or CORRESPONDENCE_TYPE_LABELS[correspondence_type]
+    return SlotResolution(value=correspondence_type.value, source="user_text", label=label)
+
+
 def _resolve_yazan_taraf(
     evidence: BriefEvidence, known: dict[str, SlotResolution]
 ) -> Optional[SlotResolution]:
@@ -395,6 +427,7 @@ def _resolve_kapanis(
 _SLOT_RESOLVERS: dict[
     str, Callable[[BriefEvidence, dict[str, SlotResolution]], Optional[SlotResolution]]
 ] = {
+    "yazisma_turu": _resolve_yazisma_turu,
     "yazan_taraf": _resolve_yazan_taraf,
     "muhatap": _resolve_muhatap,
     "anlatim": _resolve_anlatim,

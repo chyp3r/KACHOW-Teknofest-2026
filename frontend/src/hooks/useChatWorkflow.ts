@@ -14,7 +14,6 @@ import type {
   WorkflowNodeStatus,
 } from "../types/chat";
 import type { DocumentMetadata, ReasoningLevel } from "../types/documents";
-import { diffWords, isTargetedDiff } from "../utils/textDiff";
 
 type NodeResults = Record<string, Record<string, unknown>>;
 
@@ -224,22 +223,14 @@ export function useChatWorkflow(
           noteNode(event.node, event.label);
           setNodeStatus((previous) => ({ ...previous, [event.node]: "running" }));
           if (event.meta) setNodeMeta((previous) => ({ ...previous, [event.node]: event.meta ?? {} }));
-          // Only the three nodes that actually emit_token (see backend
-          // app.ai.workflows.events.emit_token call sites: "draft",
-          // "revise", "assist") clear the in-progress preview -- each of
-          // their own node_start events means a fresh generation is about
-          // to stream in (a revise round re-enters the same "revise" node
-          // per repair/multi-directive pass, and each pass's tokens must
-          // replace the last, not append onto it). Every other node
-          // (verify, guardrail checks, routing, the writing brief, ...)
-          // never streams anything, so clearing on those too used to blank
-          // the screen for the whole gap between the draft finishing and
-          // final_result arriving -- the streamed draft should stay
-          // visible as a preview through that gap instead of vanishing.
-          if (event.node === "draft" || event.node === "revise" || event.node === "assist") {
-            streamingTextRef.current = "";
-            setStreamingText("");
-          }
+          // No node clears streamingText here anymore -- draft/revise/assist
+          // no longer stream their own raw output (see backend
+          // app.ai.workflows.events.emit_reply_stream's docstring: the
+          // validated final reply is the only thing ever streamed, once,
+          // from chat_service._enqueue_terminal_event). The progress
+          // stepper (nodeStatus/nodeOrder) is what shows live progress
+          // while a turn is in flight; the chat bubble stays empty until
+          // the "token" case below starts filling in the real answer.
           appendLog(`${event.label} işlemi başlatıldı.`);
           break;
         case "planning_completed":
@@ -325,29 +316,22 @@ export function useChatWorkflow(
           appendLog(event.kind === "missing_information" ? "Eksik bilgi bekleniyor." : "İnsan onayı bekleniyor.");
           break;
         case "final_result": {
-          // What the user was actually looking at a moment ago -- if a
-          // post-draft guardrail/verify pass changed the text (a redaction,
-          // a repaired sentence), diffing against it lets MessageList
-          // animate just the changed span instead of the streamed preview
-          // silently vanishing and the final text popping in already edited.
-          const previousPreview = streamingTextRef.current;
+          // The "token" case above already streamed this exact text in (see
+          // emit_reply_stream's docstring) -- streamingText and event.reply
+          // are the same string by construction, so there is nothing left
+          // to diff. Clearing the preview and appending the real message is
+          // a plain hand-off, not a replace.
           streamingTextRef.current = "";
           setStreamingText("");
           setPendingInterrupt(null);
           const questions = pendingQuestions.current ?? undefined;
           pendingQuestions.current = null;
-          const diffSegments =
-            previousPreview && previousPreview !== event.reply
-              ? diffWords(previousPreview, event.reply)
-              : undefined;
           setMessages((previous) => [
             ...previous,
             {
               sender: "assistant",
               text: event.reply,
               status: event.workflow_status,
-              diffSegments:
-                diffSegments && isTargetedDiff(diffSegments) ? diffSegments : undefined,
               logs: logsRef.current,
               details: event.details,
               questions,

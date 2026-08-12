@@ -802,7 +802,7 @@ button:disabled, select:disabled, input:disabled, textarea:disabled { cursor: no
 .page-header h1 { }
 .page-header p, .section-heading p, .card p { color: var(--text-secondary); margin-top: var(--space-1); }
 .page-actions { display: flex; gap: var(--space-2); }
-.upload-card, .interrupt-panel, .workflow-panel, .chat-composer {
+.upload-card, .workflow-panel, .chat-composer {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-xl);
   background: var(--surface-panel);
@@ -867,9 +867,12 @@ textarea { min-height: 105px; resize: vertical; }
 .selected-document > .icon-button { flex: 0 0 auto; }
 .compact-select { grid-template-columns: auto 110px; align-items: center; }
 
-/* Claude-style compact card, not a dashboard alert panel -- a routine
-   question isn't a warning, so no amber alarm border/badge. */
-.interrupt-panel { padding: var(--space-3) var(--space-4); border-color: var(--border-default); }
+/* Rendered inline as the last bubble in the scrolling conversation (see
+   MessageList's "interrupt-message" article), not as a standalone panel
+   pinned above it -- a routine approval/question/writing-brief ask is part
+   of the exchange, not a modal breaking out of it. No border/background of
+   its own: it inherits the surrounding .chat-message bubble's. */
+.interrupt-panel { padding: 0; }
 .interrupt-header { align-items: center; gap: var(--space-2); }
 .interrupt-header h2 { margin: 0; }
 .interrupt-icon { width: var(--icon-container-sm); height: var(--icon-container-sm); border-radius: var(--radius-md); color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 12%, transparent); }
@@ -882,7 +885,10 @@ textarea { min-height: 105px; resize: vertical; }
 .interrupt-actions { justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); }
 .interrupt-actions > small { margin-right: auto; color: var(--text-muted); }
 
-.interrupt-brief { border-color: color-mix(in srgb, var(--accent-blue) 40%, transparent); }
+/* An inset left accent bar stands in for the old panel's border-color --
+   distinguishes a writing-brief ask from an ordinary assistant message
+   without boxing it in its own separate card. */
+.interrupt-brief { padding-left: var(--space-3); border-left: 2px solid color-mix(in srgb, var(--accent-blue) 45%, transparent); }
 
 /* The score/approval/routing facts that used to be baked into the chat
    reply as free text (see backend ChatService._select_reply) now render
@@ -893,27 +899,6 @@ textarea { min-height: 105px; resize: vertical; }
 .draft-meta-chip.draft-meta-warning { color: #fbbf24; border-color: rgba(245, 158, 11, .4); }
 .draft-meta-chip.draft-meta-danger { color: #f87171; border-color: rgba(248, 113, 113, .4); }
 .draft-meta-chip.draft-meta-success { color: var(--status-completed); border-color: color-mix(in srgb, var(--status-completed) 40%, transparent); }
-
-/* One-time reveal of what a post-draft pass (guardrail redaction, a
-   repair) changed relative to the streamed preview -- see
-   DiffRevealText / useChatWorkflow's final_result handler. Plain text,
-   not markdown, so it needs its own whitespace handling. */
-.diff-reveal-text { margin: 0; white-space: pre-wrap; }
-mark.diff-changed {
-  padding: 0 2px;
-  margin: 0 -2px;
-  border-radius: 3px;
-  color: inherit;
-  background: transparent;
-  animation: diff-flash 1.8s ease-out forwards;
-}
-@keyframes diff-flash {
-  0% { background: color-mix(in srgb, var(--accent-blue) 45%, transparent); }
-  100% { background: transparent; }
-}
-@media (prefers-reduced-motion: reduce) {
-  mark.diff-changed { animation: none; background: color-mix(in srgb, var(--accent-blue) 20%, transparent); }
-}
 
 /* PromptQuestionCard: the single card missing-information, the pre-draft
    writing brief, and clarify's intent question all render through.

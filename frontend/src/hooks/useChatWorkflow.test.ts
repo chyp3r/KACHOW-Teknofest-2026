@@ -198,6 +198,60 @@ describe("useChatWorkflow", () => {
     });
   });
 
+  it("appends the streamed reply as one message with no diff artifact, since token text and final reply are always the same string", async () => {
+    // Mirrors the backend invariant (see app.ai.workflows.events.
+    // emit_reply_stream): the only text ever streamed is the exact final
+    // reply, chunked, emitted once from the terminal event -- never a raw
+    // per-agent generation that final_result could later diverge from.
+    mocks.send.mockImplementationOnce(async (_request, onEvent) => {
+      onEvent({ event: "session", thread_id: "user-1:web:thread" });
+      onEvent({ event: "node_start", node: "draft", label: "Taslak Oluşturma", message: "" });
+      onEvent({ event: "token", node: "reply", text: "Resmî yazı taslağınız hazırlandı.\n\n" });
+      onEvent({ event: "token", node: "reply", text: "Sayın Makam, ..." });
+      onEvent({
+        event: "final_result",
+        reply: "Resmî yazı taslağınız hazırlandı.\n\nSayın Makam, ...",
+        workflow_status: "COMPLETED",
+      });
+    });
+    const { result } = renderHook(() => useChatWorkflow(null, "user-1"), { wrapper });
+
+    await act(() => result.current.send("itiraz dilekçesi yaz", "balanced", false));
+
+    const assistantMessage = result.current.messages.find((message) => message.sender === "assistant");
+    expect(assistantMessage?.text).toBe(
+      "Resmî yazı taslağınız hazırlandı.\n\nSayın Makam, ...",
+    );
+    expect(assistantMessage).not.toHaveProperty("diffSegments");
+    expect(result.current.streamingText).toBe("");
+  });
+
+  it("does not blank an in-progress stream on a node_start, since no per-agent node streams its own raw output anymore", async () => {
+    let emitToken: (() => void) | undefined;
+    mocks.send.mockImplementationOnce(async (_request, onEvent) => {
+      onEvent({ event: "session", thread_id: "user-1:web:thread" });
+      onEvent({ event: "token", node: "reply", text: "Merhaba" });
+      onEvent({ event: "node_start", node: "verify", label: "Taslak Doğrulama", message: "" });
+      await new Promise<void>((resolve) => {
+        emitToken = resolve;
+      });
+      onEvent({ event: "final_result", reply: "Merhaba", workflow_status: "COMPLETED" });
+    });
+    const { result } = renderHook(() => useChatWorkflow(null, "user-1"), { wrapper });
+
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.send("selam", "balanced", false);
+    });
+
+    await waitFor(() => expect(result.current.streamingText).toBe("Merhaba"));
+
+    await act(async () => {
+      emitToken?.();
+      await pending;
+    });
+  });
+
   it("aborts an active stream without rendering a workflow failure", async () => {
     let receivedSignal: AbortSignal | undefined;
     mocks.send.mockImplementation((_request, _onEvent, signal: AbortSignal) => {

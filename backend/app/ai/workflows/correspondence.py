@@ -63,6 +63,64 @@ CORRESPONDENCE_TYPE_ALIASES = {
     },
 }
 
+#: Direction-aware genre surfaces, matched against the user's own drafting
+#: request (never against orchestrator boilerplate -- see
+#: ``resolve_correspondence_type``'s ``user_request`` argument). Each entry
+#: is ``(surface, type, sub_genre_label)``. A sub_genre label is a specific
+#: document genre ("itiraz dilekçesi") that isn't one of the four spec'd
+#: CorrespondenceType values -- it still resolves to OTHER_OFFICIAL, but the
+#: label itself is carried into the writer prompt (see
+#: ``format_correspondence_profile``) so the output is actually shaped like
+#: that genre instead of a generic "diğer resmî yazışma".
+#:
+#: Includes counter-direction surfaces ("dilekçeye cevap") that outrank a
+#: bare genre noun ("dilekçe") by being longer and more specific --
+#: "dilekçeye cevap yaz" means *reply to* a petition (a response_letter),
+#: the opposite of "dilekçe yaz" (author one, an other_official sub-genre).
+#: Matching tries every surface longest-first (see ``match_genre``) so the
+#: more specific phrase always wins over the substring it contains, with no
+#: separate "counter-signal" bookkeeping needed.
+GENRE_SURFACES: tuple[tuple[str, CorrespondenceType, str], ...] = (
+    # Counter-direction: "reply to a petition/objection/application" is a
+    # response_letter, not the petition itself.
+    ("dilekceye cevap", CorrespondenceType.RESPONSE_LETTER, ""),
+    ("dilekceyi yanitla", CorrespondenceType.RESPONSE_LETTER, ""),
+    ("itiraza cevap", CorrespondenceType.RESPONSE_LETTER, ""),
+    ("basvuruya cevap", CorrespondenceType.RESPONSE_LETTER, ""),
+    ("talebe cevap", CorrespondenceType.RESPONSE_LETTER, ""),
+    # Core-type genre nouns (kept in sync with CORRESPONDENCE_TYPE_ALIASES;
+    # listed again here so they participate in the same longest-first pass
+    # as the sub-genres below instead of a separate lookup with different
+    # precedence rules).
+    ("cevap yazisi", CorrespondenceType.RESPONSE_LETTER, ""),
+    ("yanit yazisi", CorrespondenceType.RESPONSE_LETTER, ""),
+    ("cevabini yaz", CorrespondenceType.RESPONSE_LETTER, ""),
+    ("ust yazi", CorrespondenceType.COVER_LETTER, ""),
+    ("bilgilendirme metni", CorrespondenceType.INFORMATION_NOTICE, ""),
+    ("bilgi notu", CorrespondenceType.INFORMATION_NOTICE, ""),
+    ("duyuru metni", CorrespondenceType.INFORMATION_NOTICE, ""),
+    # Sub-genres: outside the four spec'd types, carried as free-text.
+    ("itiraz dilekcesi", CorrespondenceType.OTHER_OFFICIAL, "itiraz dilekçesi"),
+    ("basvuru dilekcesi", CorrespondenceType.OTHER_OFFICIAL, "başvuru dilekçesi"),
+    ("sikayet dilekcesi", CorrespondenceType.OTHER_OFFICIAL, "şikayet dilekçesi"),
+    ("muvafakatname", CorrespondenceType.OTHER_OFFICIAL, "muvafakatname"),
+    ("taahhutname", CorrespondenceType.OTHER_OFFICIAL, "taahhütname"),
+    ("vekaletname", CorrespondenceType.OTHER_OFFICIAL, "vekâletname"),
+    ("muzekkere", CorrespondenceType.OTHER_OFFICIAL, "müzekkere"),
+    ("olur yazisi", CorrespondenceType.OTHER_OFFICIAL, "olur yazısı"),
+    ("gorus yazisi", CorrespondenceType.OTHER_OFFICIAL, "görüş yazısı"),
+    ("davet yazisi", CorrespondenceType.OTHER_OFFICIAL, "davet yazısı"),
+    ("teblig yazisi", CorrespondenceType.OTHER_OFFICIAL, "tebliğ yazısı"),
+    ("tutanak", CorrespondenceType.OTHER_OFFICIAL, "tutanak"),
+    ("dilekce", CorrespondenceType.OTHER_OFFICIAL, "dilekçe"),
+)
+
+#: ``GENRE_SURFACES`` pre-sorted longest-surface-first, computed once at
+#: import time rather than resorted on every call.
+_GENRE_SURFACES_BY_LENGTH = tuple(
+    sorted(GENRE_SURFACES, key=lambda entry: len(entry[0]), reverse=True)
+)
+
 
 def _normalize_text(value: Any) -> str:
     """Normalize correspondence labels for deterministic alias matching."""
@@ -110,6 +168,29 @@ def _match_type(value: Any) -> CorrespondenceType | None:
     return None
 
 
+def match_genre(user_request: str) -> tuple[CorrespondenceType, str] | None:
+    """Match the user's own drafting request against ``GENRE_SURFACES``.
+
+    Tries every surface longest-first, so a more specific phrase ("dilekçeye
+    cevap") always wins over a shorter one it contains ("dilekçe").
+
+    Args:
+        user_request: The user's own message, unmodified by orchestrator
+            boilerplate.
+
+    Returns:
+        The matched type and its sub-genre label (empty for a core type), or
+        None when nothing matches.
+    """
+    normalized = _normalize_text(user_request)
+    if not normalized:
+        return None
+    for surface, correspondence_type, sub_genre in _GENRE_SURFACES_BY_LENGTH:
+        if re.search(rf"\b{re.escape(surface)}\b", normalized):
+            return correspondence_type, sub_genre
+    return None
+
+
 def _classification_type(
     classification: dict[str, Any],
 ) -> CorrespondenceType | None:
@@ -130,7 +211,15 @@ def _classification_type(
 def _infer_from_document_type(
     classification: dict[str, Any],
 ) -> CorrespondenceType | None:
-    """Infer the safest output type from the incoming document classification."""
+    """Infer the safest output type from the incoming document classification.
+
+    Only meaningful when there is an actual incoming document to answer --
+    see ``resolve_correspondence_type``'s ``has_source_document`` gate. Without
+    it, "dilekce" showing up in classification means the *user's own message*
+    reads like a petition (a request to draft one), not that an inbound
+    petition exists to reply to, and inferring RESPONSE_LETTER from that
+    reverses the requested direction.
+    """
     document_type = classification.get("doc_type") or classification.get(
         "document_type"
     )
@@ -157,53 +246,80 @@ def _infer_from_document_type(
 
 def resolve_correspondence_type(
     requested_type: Any,
-    instructions: str,
+    user_request: str,
     classification: dict[str, Any],
-) -> tuple[CorrespondenceType, str]:
-    """Resolve the output type with explicit and deterministic precedence.
+    has_source_document: bool = True,
+) -> tuple[CorrespondenceType, str, str]:
+    """Resolve the output type and sub-genre with explicit, deterministic precedence.
 
     Args:
-        requested_type: Explicit type supplied by the workflow caller.
-        instructions: User or orchestrator drafting instructions.
+        requested_type: Explicit type supplied by the workflow caller (an
+            API selection, or a resolved writing-brief answer).
+        user_request: The user's own drafting request, never orchestrator
+            boilerplate -- matching that instead of this is what previously
+            made every chat-initiated draft resolve to RESPONSE_LETTER, since
+            the boilerplate itself ("... resmî ve kurumsal bir Türkçe yanıt
+            taslağı oluştur.") contains the word "yanıt".
         classification: Classification Graph result and metadata.
+        has_source_document: Whether an actual inbound document exists to
+            reply to. False in most chat-only drafting turns; gates
+            ``_infer_from_document_type`` off in that case, since without an
+            inbound document, "dilekce" in the classification is a reading
+            of the user's own request, not of something to reply to.
 
     Returns:
-        Resolved type and its resolution source. A fallback result requires review.
+        Resolved type, its resolution source, and a free-text sub-genre
+        label ("itiraz dilekçesi") when the user asked for a specific genre
+        outside the four spec'd types -- empty string otherwise. A fallback
+        result requires review.
     """
     if requested_type is not None:
         matched = _match_type(requested_type)
-        return (
-            (matched, "explicit")
-            if matched
-            else (CorrespondenceType.OTHER_OFFICIAL, "fallback")
-        )
+        if matched:
+            return matched, "explicit", ""
+        return CorrespondenceType.OTHER_OFFICIAL, "fallback", ""
+
+    genre_match = match_genre(user_request)
+    if genre_match:
+        matched_type, sub_genre = genre_match
+        return matched_type, "user_request", sub_genre
 
     classified = _classification_type(classification)
     if classified:
-        return classified, "classification"
+        return classified, "classification", ""
 
-    instructed = _match_type(instructions)
-    if instructed:
-        return instructed, "instructions"
+    if has_source_document:
+        inferred = _infer_from_document_type(classification)
+        if inferred:
+            return inferred, "document_type", ""
 
-    inferred = _infer_from_document_type(classification)
-    if inferred:
-        return inferred, "document_type"
-
-    return CorrespondenceType.OTHER_OFFICIAL, "fallback"
+    return CorrespondenceType.OTHER_OFFICIAL, "fallback", ""
 
 
-def format_correspondence_profile(correspondence_type: str) -> str:
+def format_correspondence_profile(
+    correspondence_type: str, sub_genre: str = ""
+) -> str:
     """Format the resolved type and its drafting rules for agent prompts.
 
     Args:
         correspondence_type: A supported CorrespondenceType value.
+        sub_genre: A free-text genre label ("itiraz dilekçesi") when the
+            user asked for something more specific than the resolved type's
+            generic guidance covers.
 
     Returns:
-        Turkish type label and the type-specific drafting guidance.
+        Turkish type label and the type-specific drafting guidance, with an
+        extra sub-genre line when one is set.
     """
     resolved = CorrespondenceType(correspondence_type)
-    return (
+    profile = (
         f"{CORRESPONDENCE_TYPE_LABELS[resolved]} (`{resolved.value}`)\n"
         f"Tür Kuralları: {CORRESPONDENCE_TYPE_GUIDANCE[resolved]}"
     )
+    if sub_genre:
+        profile += (
+            f"\nÖzel Tür: {sub_genre} -- bu türün yerleşik yapı, hitap ve kapanış "
+            "kalıplarını uygula; genel 'diğer resmî yazışma' şablonuna değil, "
+            f"özellikle {sub_genre} biçimine sadık kal."
+        )
+    return profile

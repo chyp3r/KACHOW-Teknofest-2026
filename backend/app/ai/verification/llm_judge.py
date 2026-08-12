@@ -130,6 +130,7 @@ async def judge_draft(
     correspondence_type: str,
     instructions: str,
     timeout_s: float | None = None,
+    sub_genre: str = "",
 ) -> DraftJudgeVerdict | None:
     """Ask the fast-tier judge to assess a draft. Never raises.
 
@@ -140,6 +141,9 @@ async def judge_draft(
         correspondence_type: The resolved :class:`CorrespondenceType` value.
         instructions: The user's drafting instructions.
         timeout_s: Hard timeout; defaults to ``settings.DRAFT_JUDGE_TIMEOUT_SECONDS``.
+        sub_genre: Free-text genre label ("itiraz dilekçesi") when the draft
+            targets a specific genre outside the four spec'd types -- see
+            ``app.ai.workflows.correspondence.format_correspondence_profile``.
 
     Returns:
         The verdict, or ``None`` on timeout, a schema failure, a provider
@@ -151,7 +155,7 @@ async def judge_draft(
         "### BRIEF BELGESİ:\n"
         f"{brief}\n\n"
         "### YAZIŞMA TÜRÜ:\n"
-        f"{format_correspondence_profile(correspondence_type)}\n\n"
+        f"{format_correspondence_profile(correspondence_type, sub_genre)}\n\n"
         "### KULLANICI TALİMATLARI:\n"
         f"{instructions or '(talimat verilmedi)'}\n\n"
         "### DEĞERLENDİRİLECEK TASLAK:\n"

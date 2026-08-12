@@ -179,12 +179,15 @@ async def test_a_scaffold_echoing_completion_fails_the_revision_instead_of_leaki
 
 
 @pytest.mark.asyncio
-async def test_revise_never_emits_a_per_chunk_token_only_one_validated_text(fake_llm):
-    """Regression for the concatenation bug: the old implementation emitted
-    one "token" event per streamed chunk, live and unvalidated. rewrite_node
-    now buffers fully and emits exactly one token event carrying the final,
-    validated text -- see app.ai.workflows.events.emit_token's call site in
-    rewrite_node."""
+async def test_revise_never_emits_a_raw_token_the_graph_only_returns_the_draft(fake_llm):
+    """Regression for the concatenation bug (old: one live, unvalidated
+    "token" event per streamed chunk) and its own follow-up (old: a single
+    post-validation token event from inside rewrite_node). Neither happens
+    anymore -- rewrite_node buffers fully and returns the validated draft in
+    its result; the client only ever sees it once, streamed from
+    app.domains.chat.chat_service._enqueue_terminal_event after the whole
+    turn (verify, any repair pass, guardrails) has settled. No node inside
+    the revise graph ever reaches the SSE queue's "token" event at all."""
     fake_llm.stream_chunks = [
         "Konu: Yıllık İzin Talebi\nSayı: E-1\nTarih: 30.07.2026\n\nSayın Makam,\n\n",
         "İlgi yazı kapsamında personelimizin izin talebi tarafımıza iletilmiştir.\n\n",
@@ -195,7 +198,7 @@ async def test_revise_never_emits_a_per_chunk_token_only_one_validated_text(fake
     queue = asyncio.Queue()
     config = {"configurable": {"status_queue": queue}}
 
-    await graph.ainvoke(
+    final_state = await graph.ainvoke(
         {
             "active_draft": _active_draft(),
             "instructions": "Bunu daha iyi yap.",
@@ -207,11 +210,11 @@ async def test_revise_never_emits_a_per_chunk_token_only_one_validated_text(fake
     tokens = []
     while not queue.empty():
         event = queue.get_nowait()
-        if event.get("event") == "token" and event.get("node") == "revise":
+        if event.get("event") == "token":
             tokens.append(event["text"])
 
-    assert len(tokens) == 1
-    assert "Sayın Makam" in tokens[0]
+    assert tokens == []
+    assert "Sayın Makam" in final_state["draft"]
 
 
 @pytest.mark.asyncio

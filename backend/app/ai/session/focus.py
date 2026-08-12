@@ -100,6 +100,12 @@ class DraftVersion:
             see ``resolve_correspondence_type``). Carried forward so a
             revise turn's approval gate applies the same "a guessed type
             needs a human" rule ``draft_graph.verify_node`` always has.
+        correspondence_sub_genre: A free-text genre label ("itiraz
+            dilekçesi") when this version targets a specific genre outside
+            the four spec'd CorrespondenceType values -- empty for a core
+            type. Carried forward so a later `revise` turn keeps writing in
+            the same genre instead of drifting back to generic
+            "diğer resmî yazışma" phrasing (see ``resolve_correspondence_type``).
         status: The ``draft_result`` status this version was recorded
             under (e.g. ``"COMPLETED"``, ``"NEEDS_HUMAN_APPROVAL"``,
             ``"REJECTED"``). Informational -- nothing here re-derives
@@ -126,6 +132,7 @@ class DraftVersion:
     source_document: str = ""
     style_examples: tuple[str, ...] = ()
     correspondence_type_source: str = ""
+    correspondence_sub_genre: str = ""
     #: The pre-draft writing brief this version was written under (see
     #: app.ai.workflows.writing_brief) -- who's writing, who it's going to,
     #: anlatım/kapanış. Carried forward for the same reason
@@ -249,6 +256,7 @@ def _draft_version_from_result(
             for example in (draft_result.get("style_examples") or [])
         ),
         correspondence_type_source=draft_result.get("correspondence_type_source") or "",
+        correspondence_sub_genre=draft_result.get("correspondence_sub_genre") or "",
         writing_brief=draft_result.get("writing_brief") or {},
         status=str(draft_result.get("status") or ""),
         conflicts=tuple(draft_result.get("conflicts") or ()),

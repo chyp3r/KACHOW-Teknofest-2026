@@ -87,7 +87,6 @@ from app.ai.workflows.events import (
     emit_node_skipped,
     emit_node_start,
     emit_notice,
-    emit_token,
 )
 from app.ai.workflows.resilience import IO_RETRY
 from app.ai.workflows.writing_brief import format_writing_brief
@@ -116,6 +115,7 @@ class ReviseState(TypedDict, total=False):
     multi_directive_ok: bool
     correspondence_type: str
     correspondence_type_source: str
+    correspondence_sub_genre: str
 
     #: Set by `retrieve_context`.
     context: str
@@ -193,7 +193,7 @@ def _format_style_examples_flat(texts: tuple[str, ...]) -> str:
 
 def _build_directive_prompt(
     *, source_draft: str, target: Optional[TargetSpan], directive: EditDirective,
-    brief: str, correspondence_type: str, style_examples: tuple[str, ...],
+    brief: str, correspondence_type: str, sub_genre: str, style_examples: tuple[str, ...],
 ) -> str:
     """Compose the reviser's prompt for one directive, scoped to its target
     span when one was found."""
@@ -219,7 +219,7 @@ def _build_directive_prompt(
         "### GÖREV:\n"
         "Kullanıcı, mevcut bir resmî yazı taslağında hedefli bir değişiklik istiyor.\n\n"
         f"### BRIEF BELGESİ:\n{brief}\n\n"
-        f"### YAZIŞMA TÜRÜ PROFİLİ:\n{format_correspondence_profile(correspondence_type)}\n\n"
+        f"### YAZIŞMA TÜRÜ PROFİLİ:\n{format_correspondence_profile(correspondence_type, sub_genre)}\n\n"
         f"### MEVCUT TASLAK:\n{source_draft}\n\n"
         f"{scope_rule}\n\n"
         f"### KULLANICI TALİMATI:\n{directive.raw}\n\n"
@@ -230,7 +230,7 @@ def _build_directive_prompt(
 
 
 def _build_repair_prompt(
-    *, brief: str, correspondence_type: str, previous_draft: str,
+    *, brief: str, correspondence_type: str, sub_genre: str, previous_draft: str,
     repair_items: list[dict[str, Any]], style_examples: tuple[str, ...],
 ) -> str:
     """Compose the repair prompt for a second-plus attempt, after `verify`
@@ -245,7 +245,7 @@ def _build_repair_prompt(
         "Aşağıdaki önceki taslağı, YALNIZCA numaralı kusur listesindeki maddeleri "
         "gidererek düzelt. Listede olmayan hiçbir cümleyi değiştirme.\n\n"
         f"### BRIEF BELGESİ:\n{brief}\n\n"
-        f"### YAZIŞMA TÜRÜ PROFİLİ:\n{format_correspondence_profile(correspondence_type)}\n\n"
+        f"### YAZIŞMA TÜRÜ PROFİLİ:\n{format_correspondence_profile(correspondence_type, sub_genre)}\n\n"
         f"### ÖNCEKİ TASLAK:\n{previous_draft}\n\n"
         f"### DÜZELTİLMESİ GEREKEN KUSURLAR:\n{numbered or '(kusur listesi boş)'}\n\n"
         "### KURAL:\n"
@@ -303,6 +303,7 @@ def create_revise_graph(
 
         correspondence_type = active_draft.correspondence_type
         correspondence_type_source = getattr(active_draft, "correspondence_type_source", "")
+        correspondence_sub_genre = getattr(active_draft, "correspondence_sub_genre", "")
 
         await emit_node_end(
             config, "revise_parse", "Talimat Ayrıştırma",
@@ -318,6 +319,7 @@ def create_revise_graph(
             "multi_directive_ok": multi_directive_ok,
             "correspondence_type": correspondence_type,
             "correspondence_type_source": correspondence_type_source,
+            "correspondence_sub_genre": correspondence_sub_genre,
             "context": active_draft.context,
             "draft": active_draft.text,
             "attempts": 0,
@@ -416,6 +418,9 @@ def create_revise_graph(
         client = _resolve_free_text_client(preset, llm_client, fast_llm_client)
         brief = _build_brief(active_draft, state.get("context", ""))
         correspondence_type = state.get("correspondence_type") or active_draft.correspondence_type
+        sub_genre = state.get("correspondence_sub_genre") or getattr(
+            active_draft, "correspondence_sub_genre", ""
+        )
         style_examples = active_draft.style_examples
 
         await emit_node_start(
@@ -430,6 +435,7 @@ def create_revise_graph(
                 if is_repair:
                     prompt = _build_repair_prompt(
                         brief=brief, correspondence_type=correspondence_type,
+                        sub_genre=sub_genre,
                         previous_draft=state.get("previous_draft", ""),
                         repair_items=state.get("repair_items") or [],
                         style_examples=style_examples,
@@ -458,6 +464,7 @@ def create_revise_graph(
                                 source_draft=active_draft.text, target=targets[i],
                                 directive=directives[i], brief=brief,
                                 correspondence_type=correspondence_type,
+                                sub_genre=sub_genre,
                                 style_examples=style_examples,
                             )
                             rewritten = await _generate_validated(agent, prompt, preset)
@@ -473,6 +480,7 @@ def create_revise_graph(
                         prompt = _build_directive_prompt(
                             source_draft=active_draft.text, target=target, directive=directive,
                             brief=brief, correspondence_type=correspondence_type,
+                            sub_genre=sub_genre,
                             style_examples=style_examples,
                         )
                         rewritten = await _generate_validated(agent, prompt, preset)
@@ -503,12 +511,10 @@ def create_revise_graph(
                 "error": f"Revizyon üretilemedi: {exc}",
             }
 
-        # One shot, after validation -- see _generate_validated's docstring.
-        # Mirrors planning_graph._run_assist's own buffered-streaming branch:
-        # a "typed all at once" bubble is a strictly better outcome than a
-        # live per-chunk stream that might have shown scaffold-echo garbage
-        # before this point was ever reached.
-        await emit_token(config, "revise", merged_draft)
+        # No token is emitted here -- see _generate_validated's docstring.
+        # The validated text is only ever streamed to the client once, from
+        # chat_service._enqueue_terminal_event, after the whole turn (verify,
+        # any repair pass, guardrails) has settled on its final reply.
         await emit_node_end(
             config, "revise", "Taslak Revizyonu", "Revizyon tamamlandı.", {"draft": merged_draft},
         )
@@ -521,6 +527,9 @@ def create_revise_graph(
         active_draft = state["active_draft"]
         draft_text = state.get("draft", "")
         correspondence_type = state.get("correspondence_type") or active_draft.correspondence_type
+        sub_genre = state.get("correspondence_sub_genre") or getattr(
+            active_draft, "correspondence_sub_genre", ""
+        )
         strict = correspondence_type != "other_official"
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
 
@@ -537,6 +546,7 @@ def create_revise_graph(
             instructions=state.get("instructions", ""),
             strict=strict,
             style_examples=list(active_draft.style_examples),
+            is_individual_petition="dilekçe" in sub_genre.lower(),
         )
 
         judge_on = (
@@ -555,6 +565,7 @@ def create_revise_graph(
                 correspondence_type=correspondence_type,
                 instructions=state.get("instructions", ""),
                 timeout_s=settings.DRAFT_JUDGE_TIMEOUT_SECONDS * preset.timeout_multiplier,
+                sub_genre=sub_genre,
             )
             if verdict is None:
                 await emit_node_error(
