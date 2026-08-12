@@ -86,6 +86,19 @@ async def get_draft(
     return SuccessResponse(data=DraftResponse.model_validate(draft).model_dump(mode="json"))
 
 
+@router.delete("/{draft_id}", response_model=None)
+async def delete_draft(
+    draft_id: str,
+    service: DraftService = Depends(get_draft_history_service),
+    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+):
+    """Soft-delete a draft and its whole version chain."""
+    draft = await service.get_draft(draft_id)
+    _assert_owns_draft(draft, current_user)
+    await service.delete_draft(draft_id)
+    return SuccessResponse(data={"deleted": True})
+
+
 @router.get("/{draft_id}/versions", response_model=None)
 async def list_draft_versions(
     draft_id: str,

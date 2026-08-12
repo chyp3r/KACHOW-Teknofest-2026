@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { DraftsPage } from "./DraftsPage";
@@ -23,10 +23,12 @@ const sourceDocument = {
   summary: "İzin talebi",
 };
 
+const deleteDraft = vi.fn().mockResolvedValue(undefined);
 vi.mock("../hooks/useDrafts", () => ({ useDrafts: () => ({
   drafts: [draft], total: 1, activeDraft: draft,
   versions: [{ ...draft, id: "draft-1", version: 1, content: "İlk sürüm" }, draft],
   loading: false, detailLoading: false, refreshing: false, error: null,
+  deleteDraft, deleting: false,
 }) }));
 vi.mock("../hooks/useDraftCreation", () => ({ useDraftCreation: () => ({
   correspondenceTypes: [], typesLoading: false, draft: null, creating: false,
@@ -81,5 +83,51 @@ describe("DraftsPage", () => {
 
     fireEvent.click(screen.getByRole("row", { name: /Hukuk Birimi/ }));
     expect(onOpenDraft).toHaveBeenCalledWith("draft-2");
+  });
+
+  it("deletes a draft after confirmation and closes it if it was open", async () => {
+    deleteDraft.mockClear();
+    const onCloseDraft = vi.fn();
+    render(
+      <MemoryRouter>
+        <DraftsPage
+          documents={[sourceDocument]}
+          selected={null}
+          analysis={null}
+          activeDraftId="draft-2"
+          onSelect={vi.fn()}
+          onOpenDraft={vi.fn()}
+          onCloseDraft={onCloseDraft}
+        />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Taslağı sil" }));
+    expect(screen.getByRole("alertdialog", { name: "Taslağı sil" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sil" }));
+
+    await waitFor(() => expect(onCloseDraft).toHaveBeenCalled());
+    expect(deleteDraft).toHaveBeenCalledWith("draft-2");
+  });
+
+  it("does not delete anything when the confirmation is cancelled", () => {
+    deleteDraft.mockClear();
+    render(
+      <MemoryRouter>
+        <DraftsPage
+          documents={[sourceDocument]}
+          selected={null}
+          analysis={null}
+          onSelect={vi.fn()}
+          onOpenDraft={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Taslağı sil" }));
+    fireEvent.click(screen.getByRole("button", { name: "Vazgeç" }));
+
+    expect(deleteDraft).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 });

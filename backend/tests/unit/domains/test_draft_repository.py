@@ -1,0 +1,53 @@
+import pytest
+from unittest.mock import AsyncMock
+from sqlalchemy import update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.domains.drafts.model.draft_model import DraftModel
+from app.domains.drafts.repository import DraftRepository
+
+
+@pytest.fixture
+def mock_session():
+    return AsyncMock(spec=AsyncSession)
+
+
+@pytest.fixture
+def repo(mock_session):
+    return DraftRepository(mock_session)
+
+
+@pytest.mark.asyncio
+async def test_soft_delete_session_marks_every_version_in_the_chain(repo, mock_session):
+    """`list_drafts` only ever shows a session's latest version -- soft-deleting
+    just that one row would resurrect the previous version as the new listing,
+    so the whole chain must be marked in one statement."""
+    await repo.soft_delete_session("session-1")
+
+    mock_session.execute.assert_awaited_once()
+    statement = mock_session.execute.await_args.args[0]
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "drafts" in compiled
+    assert "session-1" in compiled
+    assert "is_deleted" in compiled
+    mock_session.flush.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_soft_delete_marks_a_single_draft(repo, mock_session):
+    await repo.soft_delete("draft-1")
+
+    mock_session.execute.assert_awaited_once()
+    statement = mock_session.execute.await_args.args[0]
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "draft-1" in compiled
+    assert "is_deleted" in compiled
+    mock_session.flush.assert_awaited_once()
+
+
+def test_soft_delete_statement_shape_matches_the_model():
+    """Sanity check that the update() target/column names used above are
+    real DraftModel attributes, not typo'd strings that would only fail at
+    runtime against a live database."""
+    statement = update(DraftModel).where(DraftModel.session_id == "x").values(is_deleted=True)
+    assert statement.table.name == "drafts"

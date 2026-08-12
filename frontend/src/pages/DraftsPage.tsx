@@ -6,12 +6,14 @@ import {
   FileText,
   History,
   Plus,
+  Trash2,
   X,
 } from "lucide-react";
 import { useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorNotice } from "../components/ApiErrorNotice";
-import { Button } from "../components/Button";
+import { Button, IconButton } from "../components/Button";
+import { ConfirmationDialog } from "../components/ConfirmationDialog";
 import { FormActions, Grid } from "../components/LayoutPrimitives";
 import { EmptyState } from "../components/EmptyState";
 import { Select, Textarea } from "../components/FormControls";
@@ -86,6 +88,15 @@ export function DraftsPage({
   const [level, setLevel] = useState<ReasoningLevel>("balanced");
   const [instructions, setInstructions] = useState("");
   const [copiedDraftId, setCopiedDraftId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
+    const deletingActive = pendingDeleteId === activeDraftId;
+    await drafts.deleteDraft(pendingDeleteId);
+    setPendingDeleteId(null);
+    if (deletingActive) onCloseDraft?.();
+  };
 
   const create = async () => {
     if (!selected || !analysis) return;
@@ -244,6 +255,15 @@ export function DraftsPage({
               if (expanded) onCloseDraft?.();
               else onOpenDraft(draft.id);
             }}
+            renderRowActions={(draft) => (
+              <IconButton
+                icon={<Trash2 />}
+                aria-label="Taslağı sil"
+                variant="ghost"
+                className="danger-text"
+                onClick={() => setPendingDeleteId(draft.id)}
+              />
+            )}
             renderDetail={(_draft, detailId) => (
                     <div id={detailId} className="draft-table-detail" role="row">
                       {drafts.detailLoading ? (
@@ -314,6 +334,16 @@ export function DraftsPage({
           />
         )}
       </Card>
+
+      <ConfirmationDialog
+        open={pendingDeleteId !== null}
+        title="Taslağı sil"
+        description="Bu taslak ve tüm sürüm geçmişi kalıcı olarak listeden kaldırılacak. Bu işlem geri alınamaz."
+        confirmLabel="Sil"
+        busy={drafts.deleting}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

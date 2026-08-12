@@ -12,4 +12,8 @@ export const draftService = {
     apiRequest<PersistedDraft>(`/api/v1/drafts/${encodeURIComponent(draftId)}`),
   versions: (draftId: string) =>
     apiRequest<PersistedDraft[]>(`/api/v1/drafts/${encodeURIComponent(draftId)}/versions`),
+  remove: (draftId: string) =>
+    apiRequest<{ deleted: boolean }>(`/api/v1/drafts/${encodeURIComponent(draftId)}`, {
+      method: "DELETE",
+    }),
 };
