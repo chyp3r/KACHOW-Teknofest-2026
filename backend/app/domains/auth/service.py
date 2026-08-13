@@ -61,7 +61,16 @@ class AuthService:
         logger.info(f"Refreshing access token for user ID: {user.id}")
         new_access_token = create_access_token(
             subject=user.id,
-            extra_claims={"role": user.role, "username": user.username}
+            # company_id must match authenticate_user's claim set: as of
+            # Faz 3, app.api.middleware.tenant.TenantContextMiddleware reads
+            # this claim to set the Postgres GUC row-level security keys
+            # off of (see app.infrastructure.database.session.get_db).
+            # Omitting it here was harmless before RLS existed -- a token
+            # refreshed through this path would silently lose its tenant
+            # scope and every subsequent RLS'd read would return zero rows,
+            # surfacing as a spurious "User not found" on the very next
+            # request.
+            extra_claims={"role": user.role, "username": user.username, "company_id": user.company_id}
         )
         new_refresh_token = create_refresh_token(subject=user.id)
 

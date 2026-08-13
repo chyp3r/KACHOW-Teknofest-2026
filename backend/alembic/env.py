@@ -26,9 +26,12 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Read the connection string from application settings rather than
-# alembic.ini, so migrations always target the same database the app itself
-# connects to.
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# alembic.ini. Deliberately the schema-owner connection
+# (effective_alembic_database_url), not settings.DATABASE_URL directly: from
+# Faz 3 (Postgres RLS) onward the app itself connects as a restricted,
+# non-owner role that cannot run DDL -- see DATABASE_URL/ALEMBIC_DATABASE_URL's
+# own docstrings in app.core.config.
+config.set_main_option("sqlalchemy.url", settings.effective_alembic_database_url)
 
 target_metadata = Base.metadata
 
@@ -51,7 +54,7 @@ def include_object(object_, name, type_, reflected, compare_to):
 def run_migrations_offline() -> None:
     """Emit SQL to stdout without a live database connection."""
     context.configure(
-        url=settings.DATABASE_URL,
+        url=settings.effective_alembic_database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},

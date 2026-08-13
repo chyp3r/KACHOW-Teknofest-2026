@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Body, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infrastructure.database.session import get_db
+from app.infrastructure.database.session import get_owner_db
 from app.api.responses import APIResponse, SuccessResponse
 from app.domains.auth.schema.auth_schema import LoginRequest, TokenResponse, RefreshRequest
 from app.domains.users.repository import UserRepository
@@ -25,12 +25,18 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 async def login(
     schema: LoginRequest,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_owner_db),
     _: None = Depends(rate_limit(max_requests=5, window_seconds=60, key_prefix="auth:login")),
 ):
     """Authenticate user credentials and issue access + refresh tokens.
-    
+
     Rate limit: max 5 requests per minute per IP.
+
+    Uses ``get_owner_db``, not ``get_db``: ``username``/``email`` are unique
+    system-wide, not per company, so looking a caller up by either one is
+    inherently cross-tenant -- there is no company to scope a row-level
+    -security policy by until this call resolves who they are (see
+    ``get_owner_db``'s own docstring).
     """
     user_repository = UserRepository(db)
     service = AuthService(user_repository)
@@ -41,17 +47,23 @@ async def login(
 async def refresh(
     schema: RefreshRequest,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_owner_db),
     _: None = Depends(rate_limit(max_requests=20, window_seconds=60, key_prefix="auth:refresh")),
 ):
     """Exchange a valid refresh token for a new access + refresh token pair.
-    
+
     Rate limit: max 20 requests per minute per IP.
     The refresh token is validated against:
     - JWT signature and expiry
     - Token type (must be 'refresh', not 'access')
     - Redis blacklist (invalidated on logout)
     - Active user status
+
+    Uses ``get_owner_db``, not ``get_db``: a refresh token carries no
+    ``company_id`` claim (only an access token does -- see
+    ``AuthService.refresh_access_token``), so there is no tenant context
+    available yet to scope a row-level-security policy by (same reasoning
+    as ``login`` above).
     """
     cache = get_cache()
     if await cache.exists(f"token_blacklist:{schema.refresh_token}"):

@@ -17,7 +17,7 @@ instead, the same way `llm_client` is.
 from typing import List, Tuple
 
 from app.domains.units.repository import UnitRepository
-from app.infrastructure.database.session import AsyncSessionLocal
+from app.infrastructure.database.session import tenant_session
 
 
 async def get_active_units_for_routing(company_id: str) -> List[Tuple[str, str]]:
@@ -35,7 +35,7 @@ async def get_active_units_for_routing(company_id: str) -> List[Tuple[str, str]]
     """
     if not company_id:
         return []
-    async with AsyncSessionLocal() as session:
+    async with tenant_session(company_id) as session:
         repository = UnitRepository(session)
         units = await repository.list_active(company_id)
         return [(unit.name, unit.description) for unit in units]

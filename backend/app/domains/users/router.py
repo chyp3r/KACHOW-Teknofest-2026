@@ -2,7 +2,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infrastructure.database.session import get_db
+from app.infrastructure.database.session import get_db, get_owner_db
 from app.api.responses import APIResponse, SuccessResponse
 from app.domains.users.schema.user_schema import UserCreate, UserUpdate, PasswordChangeRequest, UserResponse
 from app.domains.users.schema.invited_email import InvitedEmailCreate, InvitedEmailResponse
@@ -22,12 +22,18 @@ from app.api.exceptions.not_found import NotFoundException
 router = APIRouter(prefix="/users", tags=["users"])
 
 @router.post("", response_model=APIResponse[UserResponse])
-async def register(schema: UserCreate, db: AsyncSession = Depends(get_db)):
+async def register(schema: UserCreate, db: AsyncSession = Depends(get_owner_db)):
     """Register a new user account in the system, validating the email invitation whitelist.
 
     Unauthenticated by design -- registration is invite-gated instead (see
     `UserService.register_user`), and the invite is what determines both
     the new account's role and its company, never the request body.
+
+    Uses `get_owner_db`, not `get_db`: the invite lookup is by `email`,
+    unique system-wide (`InvitedEmailModel.email`, not per company), so
+    there is no tenant context yet to scope a row-level-security policy by
+    until the invite (and the company it belongs to) is found -- same
+    reasoning as `auth/router.py::login`.
     """
     repository = UserRepository(db)
     service = UserService(repository)

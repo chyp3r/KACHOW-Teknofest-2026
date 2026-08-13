@@ -49,9 +49,19 @@ services:
       - DRAFT_JUDGE_TIMEOUT_SECONDS=${DRAFT_JUDGE_TIMEOUT_SECONDS:-30}
       - GUARDRAIL_JUDGE_TIMEOUT_SECONDS=${GUARDRAIL_JUDGE_TIMEOUT_SECONDS:-15}
       - MEVZUAT_MCP_TIMEOUT_SECONDS=${MEVZUAT_MCP_TIMEOUT_SECONDS:-25}
+      # The app's runtime connection: the restricted kachow_app role, not
+      # the schema owner -- Postgres row-level security (migration
+      # 0013_rls) never applies to a table's owner, so the app must not
+      # connect as one. See app.core.config.Settings.DATABASE_URL's own
+      # docstring.
+      - DATABASE_URL=postgresql+asyncpg://kachow_app:${KACHOW_APP_DB_PASSWORD:-kachow_app_dev_only}@db:5432/${POSTGRES_DB:-kachow}
+      # The schema-owner connection: Alembic migrations (DDL) and the
+      # narrow pre-tenant identity lookups in app.infrastructure.database.
+      # session.get_owner_db (login/refresh/registration) still need this.
       # Derived from the same POSTGRES_* values as the db service below, so
       # the two can never drift out of sync with each other.
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-kachow}
+      - ALEMBIC_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-kachow}
+      - KACHOW_APP_DB_PASSWORD=${KACHOW_APP_DB_PASSWORD:-kachow_app_dev_only}
       - QDRANT_URL=http://qdrant:6333
       - REDIS_URL=redis://redis:6379/0
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-1234567890}
@@ -73,6 +83,10 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-kachow}
+      # Read by scripts/init-db.sh (docker-entrypoint-initdb.d, fresh
+      # volumes only) to create the kachow_app role -- must match the
+      # backend service's KACHOW_APP_DB_PASSWORD above.
+      - KACHOW_APP_DB_PASSWORD=${KACHOW_APP_DB_PASSWORD:-kachow_app_dev_only}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh

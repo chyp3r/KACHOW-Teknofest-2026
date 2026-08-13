@@ -11,7 +11,29 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "supersecretkeychangeinproduction"
 
     # Database Configuration
+    #: The app's own runtime connection. From Faz 3 (Postgres RLS) onward
+    #: this is expected to be a restricted, non-owner role (``kachow_app`` --
+    #: see migration ``0013_rls``): row-level security is only a real
+    #: defense when the connection making the request cannot bypass it by
+    #: virtue of owning the tables, which a superuser/owner connection
+    #: always can regardless of any `ENABLE ROW LEVEL SECURITY` statement.
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+    #: The schema-owner connection: Alembic migrations (DDL), and the
+    #: narrow set of pre-tenant identity lookups (login, token refresh,
+    #: invite-gated registration) that must search `users`/`invited_emails`
+    #: by a globally-unique `username`/`email` *before* any company context
+    #: exists to scope a row-level-security policy by -- see
+    #: `app.infrastructure.database.session.get_owner_db`. Empty by default,
+    #: which makes `effective_alembic_database_url` fall back to
+    #: `DATABASE_URL` -- so a deployment that hasn't adopted the Faz 3 role
+    #: split yet (both settings pointing at the same owner connection) keeps
+    #: working exactly as before.
+    ALEMBIC_DATABASE_URL: str = ""
+    #: Password for the restricted `kachow_app` Postgres role migration
+    #: `0013_rls` creates. Dev-only default, matching this repo's existing
+    #: `POSTGRES_PASSWORD=postgres` convention (see `compose.yml`) -- never
+    #: meant to be this value in a real deployment.
+    KACHOW_APP_DB_PASSWORD: str = "kachow_app_dev_only"
 
     #: LangGraph's AsyncPostgresSaver, backing HITL (missing-info requests and
     #: draft approval) on the planning graph. Best-effort at startup: when
@@ -304,14 +326,36 @@ class Settings(BaseSettings):
     )
 
     @property
+    def effective_alembic_database_url(self) -> str:
+        """``ALEMBIC_DATABASE_URL``, or ``DATABASE_URL`` when unset.
+
+        The one place that resolves the fallback -- every other reader
+        (``alembic/env.py``, ``checkpointer_dsn`` below, ``app.infrastructure.
+        database.session.get_owner_db``) uses this property, never the raw
+        setting, so the fallback logic exists in exactly one place.
+        """
+        return self.ALEMBIC_DATABASE_URL or self.DATABASE_URL
+
+    @property
     def checkpointer_dsn(self) -> str:
-        """``DATABASE_URL`` adapted for psycopg3, the checkpointer's driver.
+        """The schema-owner connection, adapted for psycopg3, the checkpointer's driver.
+
+        Deliberately ``effective_alembic_database_url``, not ``DATABASE_URL``:
+        ``AsyncPostgresSaver.setup()`` runs ``CREATE TABLE IF NOT EXISTS`` for
+        its own checkpoint tables on every boot, which a restricted,
+        non-owner ``DATABASE_URL`` role (see that setting's own docstring)
+        has no privilege to do. The checkpoint tables are already excluded
+        from Alembic/RLS entirely (see ``alembic/env.py``'s
+        ``_CHECKPOINT_TABLE_PREFIX`` exclusion) -- they were always meant to
+        be self-managed outside the tenancy model, so owning their own
+        connection independent of the app's row-level-security posture is
+        consistent, not a workaround.
 
         SQLAlchemy's asyncpg URL scheme (``postgresql+asyncpg://``) isn't a
         driver psycopg recognises; stripping the suffix lets both drivers
         share one connection string instead of keeping two in sync.
         """
-        return self.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+        return self.effective_alembic_database_url.replace("postgresql+asyncpg://", "postgresql://")
 
     @property
     def mevzuat_mcp_args(self) -> list[str]:

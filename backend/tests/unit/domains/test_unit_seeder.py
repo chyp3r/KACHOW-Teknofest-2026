@@ -2,7 +2,7 @@
 
 SEED_DEFAULT_UNITS is off globally in tests (see conftest.py's
 `_disable_default_unit_seeding`), so every test here explicitly re-enables
-it and stands in for `AsyncSessionLocal` with a mock session rather than
+it and stands in for `tenant_session` with a mock session rather than
 hitting a real database -- same approach as test_user_seeder.py.
 """
 
@@ -44,7 +44,9 @@ def enabled_session(monkeypatch, mock_session):
 
     monkeypatch.setattr(settings, "SEED_DEFAULT_UNITS", True)
     monkeypatch.setattr(
-        seeder, "AsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
+        seeder,
+        "tenant_session",
+        lambda company_id, is_root=False: _FakeSessionContext(mock_session),
     )
     return mock_session
 
@@ -92,7 +94,9 @@ async def test_seed_default_units_is_a_noop_when_disabled(monkeypatch, mock_sess
 
     monkeypatch.setattr(settings, "SEED_DEFAULT_UNITS", False)
     monkeypatch.setattr(
-        seeder, "AsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
+        seeder,
+        "tenant_session",
+        lambda company_id, is_root=False: _FakeSessionContext(mock_session),
     )
 
     await seeder.seed_default_units("company-1")
