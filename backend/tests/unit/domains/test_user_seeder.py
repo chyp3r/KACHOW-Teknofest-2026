@@ -51,7 +51,7 @@ def enabled_session(monkeypatch, mock_session):
 
 _ACCOUNT = seeder._SeedAccount(
     username="admin",
-    email="admin@kachow.local",
+    email="admin@kachow.example",
     password="Admin123!",
     role="admin",
     company_id="company-1",
@@ -100,7 +100,7 @@ async def test_seed_one_creates_the_account_when_missing(enabled_session):
     user = enabled_session.add.call_args.args[0]
     assert isinstance(user, UserModel)
     assert user.username == "admin"
-    assert user.email == "admin@kachow.local"
+    assert user.email == "admin@kachow.example"
     assert user.role == "admin"
     assert user.is_active is True
     assert user.is_deleted is False
@@ -114,7 +114,7 @@ async def test_seed_one_skips_when_email_already_exists(enabled_session):
     existing = UserModel(
         id="u1",
         username="someone-else",
-        email="admin@kachow.local",
+        email="admin@kachow.example",
         role="admin",
         is_active=True,
         is_deleted=False,

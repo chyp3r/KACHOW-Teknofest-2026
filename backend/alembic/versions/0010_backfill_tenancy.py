@@ -48,7 +48,10 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 _LEGACY_COMPANY_SLUG = "legacy-pre-tenancy"
-_LEGACY_USER_EMAIL = "legacy-owner@kachow.local"
+#: `.example` (RFC 2606), not `.local` -- see `settings.SEED_ROOT_EMAIL`'s
+#: docstring for why `.local` fails `EmailStr` validation the moment this
+#: row round-trips through a real API response.
+_LEGACY_USER_EMAIL = "legacy-owner@kachow.example"
 #: bcrypt hash of a random, never-used string -- this account exists only
 #: as an FK target for orphaned pre-tenancy documents, not to be logged
 #: into. Rotating/removing SECRET_KEY does not help here anyway, so a

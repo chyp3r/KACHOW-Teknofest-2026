@@ -124,14 +124,23 @@ class Settings(BaseSettings):
     #: also attempt real database writes. The passwords below are
     #: development/demo defaults -- override every SEED_* value for any
     #: deployment reachable outside a trusted demo environment.
+    #:
+    #: Domain is `.example` (RFC 2606, reserved for documentation), not
+    #: `.local` -- `.local` is on `email_validator`'s SPECIAL_USE_DOMAIN_NAMES
+    #: block-list (it's an mDNS reserved TLD, RFC 6762), so every
+    #: `UserResponse` a seeded account round-trips through (e.g. `GET /users/
+    #: me`) fails Pydantic's `EmailStr` validation with a 500 the instant a
+    #: real HTTP request exercises it -- unit tests never caught this because
+    #: they mock the service layer and never construct a real `UserResponse`
+    #: from a seeded row.
     SEED_DEFAULT_USERS: bool = True
-    SEED_ROOT_EMAIL: str = "root@kachow.local"
+    SEED_ROOT_EMAIL: str = "root@kachow.example"
     SEED_ROOT_PASSWORD: str = "Root123!"
-    SEED_ADMIN_EMAIL: str = "admin@kachow.local"
+    SEED_ADMIN_EMAIL: str = "admin@kachow.example"
     SEED_ADMIN_PASSWORD: str = "Admin123!"
-    SEED_MANAGER_EMAIL: str = "manager@kachow.local"
+    SEED_MANAGER_EMAIL: str = "manager@kachow.example"
     SEED_MANAGER_PASSWORD: str = "Manager123!"
-    SEED_EMPLOYEE_EMAIL: str = "employee@kachow.local"
+    SEED_EMPLOYEE_EMAIL: str = "employee@kachow.example"
     SEED_EMPLOYEE_PASSWORD: str = "Employee123!"
 
     #: Create the default routable units on startup, within the demo
