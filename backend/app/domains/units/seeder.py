@@ -63,8 +63,8 @@ def _seed_units() -> list[_SeedUnit]:
     ]
 
 
-async def _seed_one(unit: _SeedUnit) -> bool:
-    """Create one unit if it doesn't already exist.
+async def _seed_one(unit: _SeedUnit, company_id: str) -> bool:
+    """Create one unit for `company_id` if it doesn't already exist.
 
     Returns:
         True if a new row was created, False if a unit with that name
@@ -72,12 +72,13 @@ async def _seed_one(unit: _SeedUnit) -> bool:
     """
     async with AsyncSessionLocal() as session:
         repository = UnitRepository(session)
-        if await repository.get_by_name(unit.name) is not None:
+        if await repository.get_by_name(unit.name, company_id) is not None:
             return False
 
         await repository.create(
             UnitModel(
                 id=str(uuid4()),
+                company_id=company_id,
                 name=unit.name,
                 description=unit.description,
                 is_active=True,
@@ -87,11 +88,18 @@ async def _seed_one(unit: _SeedUnit) -> bool:
         return True
 
 
-async def seed_default_units() -> None:
-    """Create the default routable units, skipping any that already exist.
+async def seed_default_units(company_id: str) -> None:
+    """Create the default routable units for `company_id`, skipping any that
+    already exist.
 
     A no-op when `settings.SEED_DEFAULT_UNITS` is off. Safe to call on every
     startup.
+
+    Args:
+        company_id: The company to seed units into -- units are
+            company-scoped, so this must run once per company that wants
+            the default set (today, only the demo company; see
+            `app.domains.companies.seeder`).
     """
     if not settings.SEED_DEFAULT_UNITS:
         return
@@ -99,10 +107,10 @@ async def seed_default_units() -> None:
     created = []
     for unit in _seed_units():
         try:
-            if await _seed_one(unit):
+            if await _seed_one(unit, company_id):
                 created.append(unit.name)
         except Exception:
             logger.exception("Failed to seed default unit %s", unit.name)
 
     if created:
-        logger.info("Seeded default units: %s", ", ".join(created))
+        logger.info("Seeded default units for company %s: %s", company_id, ", ".join(created))

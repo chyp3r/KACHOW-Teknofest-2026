@@ -30,16 +30,17 @@ class DraftService:
         self.routing_graph = routing_graph
 
     async def generate_draft_and_route(
-        self, request: DraftRequestSchema, user_id: Optional[str] = None
+        self, request: DraftRequestSchema, user_id: str, company_id: str
     ) -> DraftResponseSchema:
         """Execute the drafting and routing workflows sequentially.
 
         Args:
             request: The drafting request.
-            user_id: The authenticated caller's id, when known -- attached
-                to the persisted draft version (see
-                ``app.domains.drafts.draft_recorder``). ``None`` in the open
-                demo/dev path.
+            user_id: The authenticated caller's id -- attached to the
+                persisted draft version (see
+                ``app.domains.drafts.draft_recorder``).
+            company_id: The authenticated caller's company -- scopes the
+                unit list the routing workflow chooses from.
         """
         
         # 1. Fetch raw document and extract text
@@ -174,6 +175,7 @@ class DraftService:
                     {
                         "draft": draft_content,
                         "confidence_score": confidence,
+                        "company_id": company_id,
                     },
                     config=self._trace_config()
                 ),

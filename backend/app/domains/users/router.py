@@ -17,7 +17,12 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.post("", response_model=APIResponse[UserResponse])
 async def register(schema: UserCreate, db: AsyncSession = Depends(get_db)):
-    """Register a new user account in the system, validating the email invitation whitelist."""
+    """Register a new user account in the system, validating the email invitation whitelist.
+
+    Unauthenticated by design -- registration is invite-gated instead (see
+    `UserService.register_user`), and the invite is what determines both
+    the new account's role and its company, never the request body.
+    """
     repository = UserRepository(db)
     service = UserService(repository)
     user = await service.register_user(schema)
@@ -30,10 +35,11 @@ async def invite_user(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
-    """Invite/whitelist an email address with a predefined role for registration (Admin/Manager only)."""
+    """Invite/whitelist an email address with a predefined role, into the
+    caller's own company (Admin/Manager only)."""
     repository = UserRepository(db)
     service = UserService(repository)
-    invite = await service.invite_user_email(schema)
+    invite = await service.invite_user_email(schema, current_user.company_id)
     response_data = InvitedEmailResponse.model_validate(invite)
     return SuccessResponse(data=response_data)
 
@@ -45,11 +51,11 @@ async def list_users(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
-    """Retrieve multiple users with pagination and role filters (Admin/Manager only)."""
+    """Retrieve the caller's own company's users, paginated and role-filtered (Admin/Manager only)."""
     repository = UserRepository(db)
     service = UserService(repository)
     role_str = role.value if role else None
-    users = await service.get_users(skip=skip, limit=limit, role=role_str)
+    users = await service.get_users(current_user.company_id, skip=skip, limit=limit, role=role_str)
     response_data = [UserResponse.model_validate(u) for u in users]
     return SuccessResponse(data=response_data)
 
@@ -65,14 +71,21 @@ async def get_user(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Retrieve details of a specific user. Authenticated user can only retrieve themselves, unless they are Admin/Manager."""
-    is_admin_or_manager = current_user.role in [UserRole.ADMIN.value, UserRole.MANAGER.value]
-    if not is_admin_or_manager and current_user.id != user_id:
-        raise AuthorizationException(message="You are not authorized to view this user's details.")
-
+    """Retrieve details of a specific user. Authenticated user can only
+    retrieve themselves, unless they are Admin/Manager of that user's own
+    company (ROOT is not implicitly cross-company here -- see the
+    `/companies` routes for root's company-scoped views)."""
     repository = UserRepository(db)
     service = UserService(repository)
-    user = await service.get_user_by_id(user_id)
+
+    if current_user.id == user_id:
+        user = await service.get_user_by_id(user_id)
+    else:
+        is_admin_or_manager = current_user.role in [UserRole.ADMIN.value, UserRole.MANAGER.value]
+        if not is_admin_or_manager:
+            raise AuthorizationException(message="You are not authorized to view this user's details.")
+        user = await service.get_user_by_id_in_company(user_id, current_user.company_id)
+
     response_data = UserResponse.model_validate(user)
     return SuccessResponse(data=response_data)
 
@@ -100,7 +113,7 @@ async def update_user(
 
     repository = UserRepository(db)
     service = UserService(repository)
-    updated_user = await service.update_user(user_id, schema)
+    updated_user = await service.update_user(user_id, schema, current_user.company_id)
     response_data = UserResponse.model_validate(updated_user)
     return SuccessResponse(data=response_data)
 
@@ -122,10 +135,10 @@ async def soft_delete(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db)
 ):
-    """Soft delete user account by setting is_deleted flag (Admin only)."""
+    """Soft delete user account by setting is_deleted flag (Admin only, own company)."""
     repository = UserRepository(db)
     service = UserService(repository)
-    await service.soft_delete_user(user_id)
+    await service.soft_delete_user(user_id, current_user.company_id)
     return SuccessResponse(data=None)
 
 @router.delete("/{user_id}/hard", response_model=APIResponse[None])
@@ -134,8 +147,8 @@ async def hard_delete(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db)
 ):
-    """Permanently delete user record from database (Admin only)."""
+    """Permanently delete user record from database (Admin only, own company)."""
     repository = UserRepository(db)
     service = UserService(repository)
-    await service.hard_delete_user(user_id)
+    await service.hard_delete_user(user_id, current_user.company_id)
     return SuccessResponse(data=None)

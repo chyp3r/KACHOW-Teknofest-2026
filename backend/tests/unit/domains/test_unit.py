@@ -16,7 +16,7 @@ async def test_create_unit_success():
     service = UnitService(repository)
     schema = UnitCreate(name="Mali İşler", description="Bütçe ve ödemeler.")
 
-    unit = await service.create_unit(schema)
+    unit = await service.create_unit(schema, "company-1")
 
     assert unit.name == "Mali İşler"
     assert unit.description == "Bütçe ve ödemeler."
@@ -32,7 +32,7 @@ async def test_create_unit_rejects_duplicate_name():
     schema = UnitCreate(name="Mali İşler", description="Bütçe ve ödemeler.")
 
     with pytest.raises(ConflictException):
-        await service.create_unit(schema)
+        await service.create_unit(schema, "company-1")
 
 
 @pytest.mark.asyncio
@@ -43,7 +43,7 @@ async def test_get_unit_by_id_not_found():
     service = UnitService(repository)
 
     with pytest.raises(NotFoundException):
-        await service.get_unit_by_id("no-such-id")
+        await service.get_unit_by_id("no-such-id", "company-1")
 
 
 @pytest.mark.asyncio
@@ -52,7 +52,7 @@ async def test_list_units():
     repository.list_all = AsyncMock(return_value=[MagicMock(), MagicMock()])
 
     service = UnitService(repository)
-    result = await service.list_units()
+    result = await service.list_units("company-1")
 
     assert len(result) == 2
     repository.list_all.assert_called_once()
@@ -69,7 +69,7 @@ async def test_update_unit_success():
     service = UnitService(repository)
     schema = UnitUpdate(description="Yeni açıklama", is_active=False)
 
-    await service.update_unit("unit-1", schema)
+    await service.update_unit("unit-1", schema, "company-1")
 
     repository.update.assert_called_once()
     call_args = repository.update.call_args[0][1]
@@ -89,7 +89,7 @@ async def test_update_unit_rejects_renaming_to_an_existing_name():
     schema = UnitUpdate(name="Destek Hizmetleri")
 
     with pytest.raises(ConflictException):
-        await service.update_unit("unit-1", schema)
+        await service.update_unit("unit-1", schema, "company-1")
 
 
 @pytest.mark.asyncio
@@ -103,7 +103,7 @@ async def test_update_unit_allows_keeping_the_same_name():
     service = UnitService(repository)
     schema = UnitUpdate(name="Mali İşler", description="Güncellendi")
 
-    await service.update_unit("unit-1", schema)
+    await service.update_unit("unit-1", schema, "company-1")
 
     repository.get_by_name.assert_not_called()
     repository.update.assert_called_once()
@@ -115,8 +115,8 @@ async def test_delete_unit_success():
     repository.delete = AsyncMock(return_value=True)
 
     service = UnitService(repository)
-    await service.delete_unit("unit-1")
-    repository.delete.assert_called_once_with("unit-1")
+    await service.delete_unit("unit-1", "company-1")
+    repository.delete.assert_called_once_with("unit-1", "company-1")
 
 
 @pytest.mark.asyncio
@@ -126,4 +126,4 @@ async def test_delete_unit_not_found():
 
     service = UnitService(repository)
     with pytest.raises(NotFoundException):
-        await service.delete_unit("unit-1")
+        await service.delete_unit("unit-1", "company-1")

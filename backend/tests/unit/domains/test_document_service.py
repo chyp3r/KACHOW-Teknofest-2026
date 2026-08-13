@@ -115,6 +115,8 @@ async def test_analyze_returns_full_first_review_result():
     service, storage, _, _ = _build_service()
 
     result = await service.analyze_document(
+        owner_id="user-1",
+        company_id="company-1",
         file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
     )
 
@@ -148,6 +150,8 @@ async def test_analyze_propagates_ocr_flag_into_the_workflow():
     service, _, _, graph = _build_service(extracted=extracted)
 
     result = await service.analyze_document(
+        owner_id="user-1",
+        company_id="company-1",
         file_name="evrak.png", content=PNG_BYTES, content_type="image/png"
     )
 
@@ -166,6 +170,8 @@ async def test_analyze_publishes_upload_and_analyzed_events():
     with patch("app.domains.documents.service.event_bus") as mock_bus:
         mock_bus.publish = AsyncMock(side_effect=capture)
         await service.analyze_document(
+            owner_id="user-1",
+            company_id="company-1",
             file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
         )
 
@@ -179,6 +185,8 @@ async def test_analyze_survives_event_listener_failure():
     with patch("app.domains.documents.service.event_bus") as mock_bus:
         mock_bus.publish = AsyncMock(side_effect=Exception("listener exploded"))
         result = await service.analyze_document(
+            owner_id="user-1",
+            company_id="company-1",
             file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
         )
     assert result.document_type is DocumentType.OFFICIAL_LETTER
@@ -191,7 +199,9 @@ async def test_analyze_survives_event_listener_failure():
 async def test_analyze_rejects_empty_file():
     service, _, _, _ = _build_service()
     with pytest.raises(ValidationException) as exc_info:
-        await service.analyze_document(file_name="evrak.pdf", content=b"")
+        await service.analyze_document(
+            owner_id="user-1", company_id="company-1", file_name="evrak.pdf", content=b""
+        )
     assert exc_info.value.status_code == 422
 
 
@@ -200,6 +210,8 @@ async def test_analyze_rejects_oversize_file():
     service, _, _, _ = _build_service()
     with pytest.raises(ValidationException) as exc_info:
         await service.analyze_document(
+            owner_id="user-1",
+            company_id="company-1",
             file_name="evrak.pdf",
             content=b"\0" * (MAX_FILE_SIZE_BYTES + 1),
             content_type="application/pdf",
@@ -212,6 +224,8 @@ async def test_analyze_rejects_unsupported_type():
     service, _, _, _ = _build_service()
     with pytest.raises(ValidationException) as exc_info:
         await service.analyze_document(
+            owner_id="user-1",
+            company_id="company-1",
             file_name="virus.exe",
             content=b"MZ" + b"x" * 100,
             content_type="application/octet-stream",
@@ -224,6 +238,8 @@ async def test_analyze_accepts_file_with_allowed_extension_and_no_mime():
     """Some clients omit content-type; the extension must still let it through."""
     service, _, _, _ = _build_service()
     result = await service.analyze_document(
+        owner_id="user-1",
+        company_id="company-1",
         file_name="evrak.pdf", content=PDF_BYTES, content_type=None
     )
     assert result.document_type is DocumentType.OFFICIAL_LETTER
@@ -239,6 +255,8 @@ async def test_analyze_translates_extraction_failure_to_validation_error():
     )
     with pytest.raises(ValidationException) as exc_info:
         await service.analyze_document(
+            owner_id="user-1",
+            company_id="company-1",
             file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
         )
     assert exc_info.value.details["reason"] == "Java yok"
@@ -251,6 +269,8 @@ async def test_analyze_rejects_document_with_no_usable_text():
     )
     with pytest.raises(ValidationException) as exc_info:
         await service.analyze_document(
+            owner_id="user-1",
+            company_id="company-1",
             file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
         )
     assert exc_info.value.details["char_count"] == 2
@@ -261,6 +281,8 @@ async def test_analyze_wraps_workflow_failure_in_ai_exception():
     service, _, _, _ = _build_service(graph_error=RuntimeError("ollama down"))
     with pytest.raises(AIException) as exc_info:
         await service.analyze_document(
+            owner_id="user-1",
+            company_id="company-1",
             file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
         )
     assert exc_info.value.error_code == "AI_EXECUTION_ERROR"
@@ -272,6 +294,8 @@ async def test_analyze_wraps_timeout_in_ai_exception():
     service, _, _, _ = _build_service(graph_error=asyncio.TimeoutError())
     with pytest.raises(AIException) as exc_info:
         await service.analyze_document(
+            owner_id="user-1",
+            company_id="company-1",
             file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
         )
     assert "zaman aşımına" in exc_info.value.message
@@ -283,6 +307,8 @@ async def test_analyze_falls_back_when_workflow_returns_unknown_enum_values():
         graph_state={"document_type": "uydurma_tur", "compliance_status": "belirsiz"}
     )
     result = await service.analyze_document(
+        owner_id="user-1",
+        company_id="company-1",
         file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
     )
     assert result.document_type is DocumentType.OTHER
@@ -319,6 +345,8 @@ async def test_analyze_scrubs_and_persists_pages_alongside_the_joined_text():
         DocumentService, "_save_document_analysis_cache", new=AsyncMock()
     ) as save_cache:
         await service.analyze_document(
+            owner_id="user-1",
+            company_id="company-1",
             file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
         )
 
@@ -382,32 +410,19 @@ async def test_analyze_registers_the_document_with_its_owner():
     service.document_repository = document_repository
 
     await service.analyze_document(
+        owner_id="user-1",
+        company_id="company-1",
         file_name="evrak.pdf",
         content=PDF_BYTES,
         content_type="application/pdf",
-        owner_id="user-1",
     )
 
     document_repository.create.assert_awaited_once()
     registered = document_repository.create.await_args.args[0]
     assert registered.owner_id == "user-1"
+    assert registered.company_id == "company-1"
     assert registered.id == "uploads/abc.pdf"
     assert registered.file_name == "evrak.pdf"
-
-
-@pytest.mark.asyncio
-async def test_analyze_registers_the_document_ownerless_when_unauthenticated():
-    """The REQUIRE_AUTH=False demo/dev path: no owner_id, visible to everyone."""
-    document_repository = AsyncMock()
-    service, _, _, _ = _build_service()
-    service.document_repository = document_repository
-
-    await service.analyze_document(
-        file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
-    )
-
-    registered = document_repository.create.await_args.args[0]
-    assert registered.owner_id is None
 
 
 @pytest.mark.asyncio
@@ -420,6 +435,8 @@ async def test_analyze_survives_a_registration_failure():
     service.document_repository = document_repository
 
     result = await service.analyze_document(
+        owner_id="user-1",
+        company_id="company-1",
         file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
     )
 
@@ -434,6 +451,8 @@ async def test_analyze_skips_registration_without_a_repository():
     assert service.document_repository is None
 
     result = await service.analyze_document(
+        owner_id="user-1",
+        company_id="company-1",
         file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
     )
 
@@ -501,12 +520,12 @@ async def test_update_document_fields_reruns_compliance_and_persists_the_correct
     service.document_repository = document_repository
 
     corrected = EvrakField(sayi="E-123", konu="İzin Talebi", muhatap="İlgili Makama")
-    result = await service.update_document_fields(storage_path, corrected)
+    result = await service.update_document_fields(storage_path, corrected, "company-1")
 
     assert result is not None
     assert result.fields.muhatap == "İlgili Makama"
     assert all(item.key != "muhatap" for item in result.missing_fields)
-    assert document_repository.get_by_id.await_args.args == (storage_path,)
+    assert document_repository.get_by_id.await_args.args == (storage_path, "company-1")
     assert document_repository.get_by_id.return_value.compliance_status == result.compliance_status.value
 
     # The cache file on disk reflects the correction, and still carries the
@@ -525,7 +544,7 @@ async def test_update_document_fields_returns_none_when_nothing_is_cached(tmp_pa
     monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
     service, _, _, _ = _build_service()
 
-    result = await service.update_document_fields("uploads/missing.pdf", EvrakField())
+    result = await service.update_document_fields("uploads/missing.pdf", EvrakField(), "company-1")
 
     assert result is None
 
@@ -549,9 +568,9 @@ async def test_delete_document_removes_the_row_file_cache_and_vectors(tmp_path, 
     service.document_repository = document_repository
     service.vector_store = vector_store
 
-    await service.delete_document(storage_path)
+    await service.delete_document(storage_path, "company-1")
 
-    document_repository.delete.assert_awaited_once_with(storage_path)
+    document_repository.delete.assert_awaited_once_with(storage_path, "company-1")
     storage.delete_file.assert_awaited_once_with(storage_path)
     vector_store.delete_by_filter.assert_awaited_once()
     args = vector_store.delete_by_filter.await_args.args
@@ -571,9 +590,9 @@ async def test_delete_document_survives_a_storage_failure(tmp_path, monkeypatch)
     document_repository = AsyncMock()
     service.document_repository = document_repository
 
-    await service.delete_document("uploads/abc.pdf")
+    await service.delete_document("uploads/abc.pdf", "company-1")
 
-    document_repository.delete.assert_awaited_once_with("uploads/abc.pdf")
+    document_repository.delete.assert_awaited_once_with("uploads/abc.pdf", "company-1")
 
 
 @pytest.mark.asyncio
@@ -589,6 +608,6 @@ async def test_delete_document_skips_repository_and_vector_cleanup_when_absent(
     assert service.document_repository is None
     assert service.vector_store is None
 
-    await service.delete_document("uploads/abc.pdf")
+    await service.delete_document("uploads/abc.pdf", "company-1")
 
     storage.delete_file.assert_awaited_once_with("uploads/abc.pdf")

@@ -414,6 +414,40 @@ Backend aşağıdaki güvenlik prensiplerini uygular.
 
 Hiçbir gizli bilgi kaynak kodunda tutulmaz.
 
+## Çok kiracılılık (Multi-Tenancy)
+
+Sistem `root` / `admin` / `manager` / `employee` olmak üzere dört rollü,
+şirket (`company`) bazlı çok kiracılı bir mimari kullanır (bkz.
+`docs/api/companies.md`). Kimlik doğrulama zorunludur (`settings.
+REQUIRE_AUTH`); açık/kimliksiz erişim modu yoktur.
+
+Dört sabit denetim katmanı, bu sırayla:
+
+1. **Kiracı kapsamı** -- her repository metodu açık bir `company_id`
+   parametresi alır ve ona göre filtreler (bkz. `app.domains.documents.
+   repository.DocumentRepository`'nin kendi docstring'i). Postgres Row-Level
+   Security ile ikinci savunma hattı sonraki bir fazda eklenecektir.
+2. **Sahiplik/rol** -- `app.core.permissions.role_checker.bypasses_ownership`:
+   ADMIN/MANAGER/ROOT bir kaynağı sahibi olmasalar bile görebilir, ama
+   yalnızca **kendi şirketleri içinde** (kiracı kapsamı asla atlanmaz).
+3. **Gizlilik derecesi** -- `role_checker.clearance_for`/`assert_clearance`,
+   şirket sınırından bağımsız, ortogonal bir merdiven (`SensitivityLevel`).
+4. **Guardrail'ler** -- `app.ai.guardrails.output_gate`,
+   `app.ai.tools.document_tools`'un retrieval-anında red mekanizması.
+
+`users.company_id` yalnızca `role='root'` için NULL'dur (bir CHECK
+constraint ile zorlanır) -- root herhangi bir şirkete bağlı değildir ve
+şirket verisine yalnızca açık bir scope-switch akışıyla erişir (bkz.
+`docs/api/companies.md`).
+
+**Bilinen kapsam dışı**: `chat_sessions`/`chat_messages`/`drafts`/`runs`/
+`run_steps`/`guardrail_events` tabloları `company_id` kolonunu taşır ama bu
+alan henüz zorunlu değildir -- bu satırlar LangGraph orkestrasyon katmanının
+derinlerinden (`PlanningState` üzerinden, `user_id`'nin bugün taşındığı
+şekilde) yazılır ve `company_id`'nin oraya taşınması ayrı bir faz olarak
+planlanmıştır (bkz. `app.observability.model.run_model.RunModel.company_id`
+docstring'i).
+
 ---
 
 # Test Yapısı

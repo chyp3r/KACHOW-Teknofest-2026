@@ -67,18 +67,15 @@ class Settings(BaseSettings):
     #: app.domains.chat.chat_service.ORCHESTRATION_TIMEOUT_SECONDS).
     AI_WORKFLOW_TIMEOUT_SECONDS: int = 480
 
-    #: On by default: /documents/* and /chat/* require a JWT bearer token,
-    #: and the RBAC guardrail layer (app.core.permissions.role_checker,
-    #: app.ai.guardrails.output_gate, document_tools.py's deny-at-retrieval
-    #: check) only has a real requester to enforce clearance against when
-    #: this is on. Set to False for local/offline demos with no frontend
-    #: login flow -- REQUIRE_AUTH=False is a genuine "fully open" dev mode:
-    #: ownership and clearance checks skip entirely rather than denying
-    #: everything (see _verify_document_access / build_assistant_tools'
-    #: own docstrings for the precise "None means skip" convention this
-    #: relies on), so local testing isn't blocked, but nothing in that mode
-    #: is protected -- never point it at a network reachable outside a
-    #: trusted demo/dev environment.
+    #: Mandatory as of the multi-tenancy work: every request to every
+    #: router requires a JWT bearer token, and every row in the system now
+    #: carries a `company_id` -- there is no longer an "unauthenticated
+    #: demo/dev path" for a request to fall back to, since there would be
+    #: no company to scope its reads/writes to. Kept as a settable flag
+    #: only so `_require_auth_in_production` (app.lifespan) can still
+    #: refuse to boot a misconfigured deployment; flipping it to False is
+    #: not a supported mode and most routes will simply reject every
+    #: request without one.
     REQUIRE_AUTH: bool = True
 
     #: Off by default. `rate_limit()` (app.api.rate_limit) keys its Redis
@@ -110,26 +107,47 @@ class Settings(BaseSettings):
     #: test-disabled convention as RUN_RECORDING_ENABLED.
     DRAFT_HISTORY_ENABLED: bool = True
 
-    #: Create one ADMIN, one MANAGER and one EMPLOYEE account on startup if
-    #: they don't already exist (see app.domains.users.seeder). Idempotent
-    #: and best-effort like RUN_RECORDING_ENABLED; tests disable it globally
-    #: (conftest.py's `_disable_default_user_seeding`) so a full-lifespan
-    #: test doesn't also attempt real database writes. The passwords below
-    #: are development/demo defaults -- override every SEED_* value for any
+    #: Create one demo company on startup if it doesn't already exist (see
+    #: app.domains.companies.seeder) -- the tenant every other seeded row
+    #: below is anchored to, so this must run first. Same idempotent,
+    #: best-effort, test-disabled convention as the other SEED_* flags.
+    SEED_DEMO_COMPANY: bool = True
+    SEED_DEMO_COMPANY_SLUG: str = "demo"
+    SEED_DEMO_COMPANY_NAME: str = "Demo Kurum"
+
+    #: Create one ROOT, one ADMIN, one MANAGER and one EMPLOYEE account on
+    #: startup if they don't already exist (see app.domains.users.seeder).
+    #: ROOT has no company (see UserModel.company_id); the other three are
+    #: bound to the seeded demo company. Idempotent and best-effort like
+    #: RUN_RECORDING_ENABLED; tests disable it globally (conftest.py's
+    #: `_disable_default_user_seeding`) so a full-lifespan test doesn't
+    #: also attempt real database writes. The passwords below are
+    #: development/demo defaults -- override every SEED_* value for any
     #: deployment reachable outside a trusted demo environment.
+    #:
+    #: Domain is `.example` (RFC 2606, reserved for documentation), not
+    #: `.local` -- `.local` is on `email_validator`'s SPECIAL_USE_DOMAIN_NAMES
+    #: block-list (it's an mDNS reserved TLD, RFC 6762), so every
+    #: `UserResponse` a seeded account round-trips through (e.g. `GET /users/
+    #: me`) fails Pydantic's `EmailStr` validation with a 500 the instant a
+    #: real HTTP request exercises it -- unit tests never caught this because
+    #: they mock the service layer and never construct a real `UserResponse`
+    #: from a seeded row.
     SEED_DEFAULT_USERS: bool = True
-    SEED_ADMIN_EMAIL: str = "admin@kachow.local"
+    SEED_ROOT_EMAIL: str = "root@kachow.example"
+    SEED_ROOT_PASSWORD: str = "Root123!"
+    SEED_ADMIN_EMAIL: str = "admin@kachow.example"
     SEED_ADMIN_PASSWORD: str = "Admin123!"
-    SEED_MANAGER_EMAIL: str = "manager@kachow.local"
+    SEED_MANAGER_EMAIL: str = "manager@kachow.example"
     SEED_MANAGER_PASSWORD: str = "Manager123!"
-    SEED_EMPLOYEE_EMAIL: str = "employee@kachow.local"
+    SEED_EMPLOYEE_EMAIL: str = "employee@kachow.example"
     SEED_EMPLOYEE_PASSWORD: str = "Employee123!"
 
-    #: Create the default routable units on startup if the `units` table is
-    #: empty of them (see app.domains.units.seeder). Same idempotent,
-    #: best-effort, test-disabled convention as SEED_DEFAULT_USERS -- without
-    #: it a fresh environment has no units to route to until an admin
-    #: creates one through `POST /units`.
+    #: Create the default routable units on startup, within the demo
+    #: company, if it has none yet (see app.domains.units.seeder). Same
+    #: idempotent, best-effort, test-disabled convention as
+    #: SEED_DEFAULT_USERS -- without it a fresh environment has no units to
+    #: route to until an admin creates one through `POST /units`.
     SEED_DEFAULT_UNITS: bool = True
 
     # Ollama Configuration

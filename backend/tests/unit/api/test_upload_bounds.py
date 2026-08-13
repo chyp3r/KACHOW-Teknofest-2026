@@ -7,16 +7,33 @@ configured 50MB limit, since the limit was only ever checked afterwards.
 total crosses the limit, so worst-case memory stays bounded.
 """
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.dependency import get_document_analysis_service
+from app.api.dependency import get_document_analysis_service, require_auth_if_enabled
 from app.api.exceptions.validation import ValidationException
+from app.core.enums.user_role import UserRole
 from app.domains.documents import router as documents_router
 from app.domains.documents.router import _READ_CHUNK_BYTES, _read_bounded
+from app.domains.users.model.user_model import UserModel
 from app.main import app
+
+_CURRENT_USER = UserModel(
+    id="admin-1",
+    company_id="company-1",
+    username="admin",
+    email="a@a.com",
+    role=UserRole.ADMIN.value,
+    clearance_level="cok_gizli",
+    is_active=True,
+    is_deleted=False,
+    hashed_password="pw",
+    created_at=datetime.now(timezone.utc),
+    updated_at=datetime.now(timezone.utc),
+)
 
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -88,6 +105,7 @@ def test_analyze_endpoint_rejects_an_oversized_declared_content_length(monkeypat
     monkeypatch.setattr(documents_router, "MAX_FILE_SIZE_BYTES", 5)
     service = AsyncMock()
     app.dependency_overrides[get_document_analysis_service] = lambda: service
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _CURRENT_USER
 
     response = client.post(
         "/api/v1/documents/analyze",

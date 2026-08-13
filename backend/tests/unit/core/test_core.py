@@ -40,7 +40,7 @@ class TestUserRole:
 
     def test_all_roles_present(self):
         roles = {r.value for r in UserRole}
-        assert roles == {"admin", "manager", "employee"}
+        assert roles == {"root", "admin", "manager", "employee"}
 
 
 class TestDocumentStatus:

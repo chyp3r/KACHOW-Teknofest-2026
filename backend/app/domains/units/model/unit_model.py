@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, String, Text
+from sqlalchemy import Boolean, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base
@@ -11,12 +11,20 @@ class UnitModel(Base, TimestampMixin):
     Replaces the formerly hardcoded ``RoutingPolicy.units`` tuple -- managers
     define and describe units here at runtime, and ``routing_graph`` reads
     them fresh on every routing decision (see ``app.domains.units.provider``).
+
+    Company-scoped: two different companies may both have an "İnsan
+    Kaynakları" unit, so uniqueness is ``(company_id, name)``, not a bare
+    global ``name``.
     """
 
     __tablename__ = "units"
+    __table_args__ = (UniqueConstraint("company_id", "name", name="uq_units_company_name"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    name: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
+    company_id: Mapped[str] = mapped_column(
+        String, ForeignKey("companies.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String, index=True, nullable=False)
     #: What the unit handles, in Turkish -- interpolated straight into the
     #: routing prompt so the AI can tell units apart. Required: a unit with
     #: no description gives the router nothing to match content against.
