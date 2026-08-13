@@ -1,21 +1,22 @@
 ---
-id: DILEKCE-3F99AF6B
-kategori: dilekce
-alt_kategori: tuketici_sikayet
+id: "DILEKCE-3F99AF6B"
+kategori: "dilekce"
+alt_kategori: "tuketici_sikayet"
 baslik: "Tüketici Hakem Heyeti Şikayet Dilekçesi (Ornek 1)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Tüketici Hakem Heyeti Şikayet Dilekçesi (Ornek 1)
 
 Izmir İL TÜKETİCİ HAKEM HEYETİ BAŞKANLIĞI'NA
 
-ŞİKAYETÇİ: Ayse Demir (T.C.: 88547288118)
-Adres: Yeni Mah. 95. Sok. No:4 Diyarbakir
-Tel: 0541 620 50 90
+ŞİKAYETÇİ: Ayse Demir (T.C.: [T.C. KİMLİK NO])
+Adres: [ADRES]
+Tel: [TELEFON]
 
 ŞİKAYET EDİLEN: Yildiz Ticaret Ltd. Sti.
-Adres: Cumhuriyet Mah. Mersin
+Adres: [ADRES]
 
 KONU: Ayıplı Mal/Hizmet Şikayeti
 

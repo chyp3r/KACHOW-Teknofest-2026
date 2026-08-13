@@ -1,55 +1,35 @@
-import { Search, ShieldAlert, UserPlus } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Activity, Search, ShieldAlert, UserPlus } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { ConfirmationDialog } from "../components/ConfirmationDialog";
+import { ApiErrorNotice } from "../components/ApiErrorNotice";
 import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { useAuth } from "../hooks/useAuth";
-import { userService } from "../services/userService";
+import { useAdminUsers } from "../hooks/useAdminUsers";
 import {
   SENSITIVITY_LABELS,
   type SensitivityLevel,
 } from "../types/security";
-import type { User, UserRole } from "../types/users";
-
-const ROLE_LABELS: Record<UserRole, string> = {
-  admin: "Yönetici",
-  manager: "Yönetici yardımcısı",
-  employee: "Çalışan",
-};
+import { ROLE_LABELS, type User, type UserRole } from "../types/users";
+import { Button } from "../components/Button";
+import { Input, Select } from "../components/FormControls";
+import { SectionHeader } from "../components/SectionHeader";
+import { Alert, Card, Spinner } from "../components/Surface";
 
 export function AdminPage({ onLogin }: { onLogin: () => void }) {
   const { user, loading: sessionLoading } = useAuth();
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<UserRole>("employee");
   const [notice, setNotice] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<User | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [removeMode, setRemoveMode] = useState<"soft" | "hard">("soft");
   const canView = user?.role === "admin" || user?.role === "manager";
   const canManage = user?.role === "admin";
-
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setUsers(await userService.list());
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Kullanıcılar yüklenemedi.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (canView) void load();
-    else setLoading(false);
-  }, [canView]);
+  const admin = useAdminUsers(canView);
+  const { users, loading, error, busy } = admin;
 
   const filtered = useMemo(
     () =>
@@ -62,19 +42,11 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
   );
 
   const invite = async () => {
-    setBusy(true);
-    setError(null);
     try {
-      await userService.invite(inviteEmail, inviteRole);
+      await admin.invite(inviteEmail, inviteRole);
       setInviteEmail("");
       setNotice("E-posta adresi kayıt için yetkilendirildi.");
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Davet oluşturulamadı.",
-      );
-    } finally {
-      setBusy(false);
-    }
+    } catch { /* Mutation error is rendered by the hook. */ }
   };
 
   const update = async (
@@ -86,38 +58,23 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
     },
   ) => {
     if (!canManage) return;
-    setBusy(true);
-    setError(null);
     try {
-      const updated = await userService.update(target.id, changes);
-      setUsers((items) =>
-        items.map((item) => (item.id === updated.id ? updated : item)),
-      );
+      await admin.update(target, changes);
       setNotice("Kullanıcı erişimi güncellendi.");
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Kullanıcı güncellenemedi.",
-      );
-    } finally {
-      setBusy(false);
-    }
+    } catch { /* Mutation error is rendered by the hook. */ }
   };
 
   const remove = async () => {
     if (!removeTarget || !canManage) return;
-    setBusy(true);
     try {
-      await userService.removeAccess(removeTarget.id);
-      setUsers((items) => items.filter((item) => item.id !== removeTarget.id));
-      setNotice("Kullanıcının erişimi kaldırıldı.");
-      setRemoveTarget(null);
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Erişim kaldırılamadı.",
+      await admin.remove(removeTarget.id, removeMode === "hard");
+      setNotice(
+        removeMode === "hard"
+          ? "Kullanıcı kalıcı olarak silindi."
+          : "Kullanıcının erişimi kaldırıldı.",
       );
-    } finally {
-      setBusy(false);
-    }
+      setRemoveTarget(null);
+    } catch { /* Mutation error is rendered by the hook. */ }
   };
 
   if (sessionLoading)
@@ -129,10 +86,8 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
           icon={ShieldAlert}
           title="Oturum gerekli"
           description="Bu sayfayı görüntülemek için oturum açın."
+          primaryAction={<Button onClick={onLogin}>Oturum aç</Button>}
         />
-        <button className="button button-primary" onClick={onLogin}>
-          Oturum aç
-        </button>
       </div>
     );
   if (!canView)
@@ -151,14 +106,15 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
       <PageHeader
         title="Yönetim Paneli"
         description="Kullanıcı rollerini, erişimi ve gizlilik yetkilerini backend kurallarıyla yönetin."
+        secondaryActions={
+          <Link className="button button-secondary" to="/status">
+            <Activity size={16} /> Sistem durumu
+          </Link>
+        }
       />
-      {error && (
-        <div className="notice danger" role="alert">
-          {error}
-        </div>
-      )}
-      {notice && <div className="notice success">{notice}</div>}
-      <section className="surface invite-panel">
+      <ApiErrorNotice error={admin.errorObject ?? error} />
+      {notice && <Alert variant="success">{notice}</Alert>}
+      <Card className="invite-panel" padding="default">
         <div>
           <span className="eyebrow">
             <UserPlus size={14} />
@@ -168,14 +124,14 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
           <p>Kullanıcı davetten sonra kayıt akışını tamamlayabilir.</p>
         </div>
         <div className="invite-form">
-          <input
+          <Input
             type="email"
             value={inviteEmail}
             onChange={(event) => setInviteEmail(event.target.value)}
             placeholder="kullanici@kurum.gov.tr"
             aria-label="Davet e-posta adresi"
           />
-          <select
+          <Select
             value={inviteRole}
             onChange={(event) => setInviteRole(event.target.value as UserRole)}
             aria-label="Davet rolü"
@@ -185,33 +141,28 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
                 {label}
               </option>
             ))}
-          </select>
-          <button
-            className="button button-primary"
+          </Select>
+          <Button
             disabled={busy || !/^\S+@\S+\.\S+$/.test(inviteEmail)}
             onClick={() => void invite()}
           >
             Erişim daveti oluştur
-          </button>
+          </Button>
         </div>
-      </section>
-      <section className="surface users-panel">
-        <div className="section-heading">
-          <div>
-            <h2>Kullanıcı erişimleri</h2>
-            <p>{users.length} kayıt</p>
-          </div>
-          <label className="search-field">
-            <Search size={17} />
-            <input
+      </Card>
+      <Card className="users-panel">
+        <SectionHeader title="Kullanıcı erişimleri" description={`${users.length} kayıt`} action={
+          <Input
+              fieldClassName="search-field"
+              leadingIcon={<Search />}
+              aria-label="Kullanıcı ara"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Kullanıcı ara"
             />
-          </label>
-        </div>
+        } />
         {loading ? (
-          <div className="table-loading">Kullanıcılar yükleniyor…</div>
+          <div className="table-loading"><Spinner label="Kullanıcılar yükleniyor" />Kullanıcılar yükleniyor…</div>
         ) : (
           <div className="table-scroll">
             <table>
@@ -232,7 +183,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
                       <span>{item.email}</span>
                     </td>
                     <td>
-                      <select
+                      <Select
                         value={item.role}
                         disabled={!canManage || busy || item.id === user.id}
                         aria-label={`${item.username} rolü`}
@@ -247,10 +198,10 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
                             {label}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </td>
                     <td>
-                      <select
+                      <Select
                         value={item.clearance_level}
                         disabled={!canManage || busy || item.role !== "employee"}
                         aria-label={`${item.username} gizlilik yetkisi`}
@@ -268,7 +219,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
                             </option>
                           ),
                         )}
-                      </select>
+                      </Select>
                     </td>
                     <td>
                       <StatusBadge
@@ -286,22 +237,40 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
                     <td>
                       {canManage ? (
                         <div className="table-actions">
-                          <button
-                            className="button button-quiet"
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             disabled={busy || item.id === user.id}
                             onClick={() =>
                               void update(item, { is_active: !item.is_active })
                             }
                           >
                             {item.is_active ? "Devre dışı bırak" : "Etkinleştir"}
-                          </button>
-                          <button
-                            className="button button-quiet danger-text"
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="danger-text"
                             disabled={busy || item.id === user.id}
-                            onClick={() => setRemoveTarget(item)}
+                            onClick={() => {
+                              setRemoveMode("soft");
+                              setRemoveTarget(item);
+                            }}
                           >
                             Erişimi kaldır
-                          </button>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="danger-text"
+                            disabled={busy || item.id === user.id}
+                            onClick={() => {
+                              setRemoveMode("hard");
+                              setRemoveTarget(item);
+                            }}
+                          >
+                            Kalıcı sil
+                          </Button>
                         </div>
                       ) : (
                         <small>Yalnızca admin değiştirebilir</small>
@@ -313,12 +282,16 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
             </table>
           </div>
         )}
-      </section>
+      </Card>
       <ConfirmationDialog
         open={Boolean(removeTarget)}
-        title="Erişimi kaldır"
-        description={`${removeTarget?.email ?? "Bu kullanıcı"} artık sisteme erişemeyecek.`}
-        confirmLabel="Erişimi kaldır"
+        title={removeMode === "hard" ? "Kullanıcıyı kalıcı sil" : "Erişimi kaldır"}
+        description={
+          removeMode === "hard"
+            ? `${removeTarget?.email ?? "Bu kullanıcı"} ve ilişkili kullanıcı kaydı geri alınamayacak biçimde silinecek.`
+            : `${removeTarget?.email ?? "Bu kullanıcı"} artık sisteme erişemeyecek.`
+        }
+        confirmLabel={removeMode === "hard" ? "Kalıcı sil" : "Erişimi kaldır"}
         busy={busy}
         onCancel={() => setRemoveTarget(null)}
         onConfirm={() => void remove()}

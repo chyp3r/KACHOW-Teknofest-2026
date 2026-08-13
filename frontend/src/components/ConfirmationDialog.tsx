@@ -1,4 +1,6 @@
 import { AlertTriangle } from "lucide-react";
+import { Button } from "./Button";
+import { Dialog } from "./Overlay";
 
 export function ConfirmationDialog({
   open,
@@ -17,34 +19,14 @@ export function ConfirmationDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  if (!open) return null;
   return (
-    <div className="dialog-backdrop" role="presentation" onMouseDown={onCancel}>
-      <div
-        className="dialog"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="dialog-title"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <span className="dialog-icon">
-          <AlertTriangle size={20} />
+    <Dialog open={open} role="alertdialog" title={title} description={description} onClose={onCancel} footer={<>
+          <Button variant="secondary" onClick={onCancel}>Vazgeç</Button>
+          <Button variant="destructive" loading={busy} onClick={onConfirm}>{busy ? "İşleniyor…" : confirmLabel}</Button>
+        </>}>
+        <span className="dialog-icon" aria-hidden="true">
+          <AlertTriangle />
         </span>
-        <h2 id="dialog-title">{title}</h2>
-        <p>{description}</p>
-        <div className="dialog-actions">
-          <button className="button button-secondary" onClick={onCancel}>
-            Vazgeç
-          </button>
-          <button
-            className="button button-danger"
-            disabled={busy}
-            onClick={onConfirm}
-          >
-            {busy ? "İşleniyor…" : confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

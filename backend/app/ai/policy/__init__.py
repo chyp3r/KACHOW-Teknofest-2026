@@ -24,7 +24,9 @@ from app.ai.policy.schema import (
 
 #: Semantic version of the parameter set. Bump on any value change:
 #: patch for a threshold, minor for a new parameter, major for a removed one.
-POLICY_VERSION = "1.4.0"
+#: 2.0.0: removed RoutingPolicy.units/human_approval_unit -- units are now a
+#: runtime-managed domain (see app.domains.units), not a policy parameter.
+POLICY_VERSION = "2.0.0"
 
 _POLICY = Policy(version=POLICY_VERSION)
 

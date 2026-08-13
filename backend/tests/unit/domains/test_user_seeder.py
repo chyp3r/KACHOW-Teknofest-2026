@@ -2,8 +2,15 @@
 
 SEED_DEFAULT_USERS is off globally in tests (see conftest.py's
 `_disable_default_user_seeding`), so every test here explicitly re-enables
-it and stands in for `AsyncSessionLocal` with a mock session rather than
-hitting a real database -- same approach as test_run_recorder.py.
+it and stands in for `OwnerAsyncSessionLocal`/`tenant_session` with a mock
+session rather than hitting a real database -- same approach as
+test_run_recorder.py. Both session sources are pointed at the *same* mock
+(see `enabled_session` below): `_seed_one` opens one for its pre-existence
+check (schema-owner, sees every company -- see that function's own
+docstring) and a second, tenant-scoped one for the actual insert, but a
+single shared mock keeps `execute.side_effect`'s call ordering meaningful
+across both without the test needing to know or care which physical
+session each call went through.
 """
 
 from unittest.mock import AsyncMock, MagicMock
@@ -39,18 +46,27 @@ def mock_session():
 
 @pytest.fixture
 def enabled_session(monkeypatch, mock_session):
-    """Turn seeding on and point AsyncSessionLocal at a mock session."""
+    """Turn seeding on and point OwnerAsyncSessionLocal/tenant_session at a mock session."""
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "SEED_DEFAULT_USERS", True)
     monkeypatch.setattr(
-        seeder, "AsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
+        seeder, "OwnerAsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
+    )
+    monkeypatch.setattr(
+        seeder,
+        "tenant_session",
+        lambda company_id, is_root=False: _FakeSessionContext(mock_session),
     )
     return mock_session
 
 
 _ACCOUNT = seeder._SeedAccount(
-    username="admin", email="admin@kachow.local", password="Admin123!", role="admin"
+    username="admin",
+    email="admin@kachow.example",
+    password="Admin123!",
+    role="admin",
+    company_id="company-1",
 )
 
 
@@ -63,13 +79,23 @@ def test_seed_accounts_uses_configured_credentials(monkeypatch):
     monkeypatch.setattr(settings, "SEED_ADMIN_EMAIL", "custom-admin@x.com")
     monkeypatch.setattr(settings, "SEED_ADMIN_PASSWORD", "custom-pw")
 
-    accounts = seeder._seed_accounts()
+    accounts = seeder._seed_accounts("company-1")
 
-    assert {a.role for a in accounts} == {"admin", "manager", "employee"}
+    assert {a.role for a in accounts} == {"root", "admin", "manager", "employee"}
     admin = next(a for a in accounts if a.role == "admin")
     assert admin.username == "admin"
     assert admin.email == "custom-admin@x.com"
     assert admin.password == "custom-pw"
+    assert admin.company_id == "company-1"
+
+    root = next(a for a in accounts if a.role == "root")
+    assert root.company_id is None
+
+
+def test_seed_accounts_seeds_only_root_without_a_company():
+    accounts = seeder._seed_accounts(None)
+
+    assert {a.role for a in accounts} == {"root"}
 
 
 # ==========================================
@@ -86,7 +112,7 @@ async def test_seed_one_creates_the_account_when_missing(enabled_session):
     user = enabled_session.add.call_args.args[0]
     assert isinstance(user, UserModel)
     assert user.username == "admin"
-    assert user.email == "admin@kachow.local"
+    assert user.email == "admin@kachow.example"
     assert user.role == "admin"
     assert user.is_active is True
     assert user.is_deleted is False
@@ -100,7 +126,7 @@ async def test_seed_one_skips_when_email_already_exists(enabled_session):
     existing = UserModel(
         id="u1",
         username="someone-else",
-        email="admin@kachow.local",
+        email="admin@kachow.example",
         role="admin",
         is_active=True,
         is_deleted=False,
@@ -144,10 +170,15 @@ async def test_seed_default_users_is_a_noop_when_disabled(monkeypatch, mock_sess
 
     monkeypatch.setattr(settings, "SEED_DEFAULT_USERS", False)
     monkeypatch.setattr(
-        seeder, "AsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
+        seeder, "OwnerAsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
+    )
+    monkeypatch.setattr(
+        seeder,
+        "tenant_session",
+        lambda company_id, is_root=False: _FakeSessionContext(mock_session),
     )
 
-    await seeder.seed_default_users()
+    await seeder.seed_default_users("company-1")
 
     mock_session.execute.assert_not_called()
     mock_session.add.assert_not_called()
@@ -157,17 +188,17 @@ async def test_seed_default_users_is_a_noop_when_disabled(monkeypatch, mock_sess
 async def test_seed_default_users_creates_one_account_per_role(enabled_session):
     enabled_session.execute.return_value = _result(None)
 
-    await seeder.seed_default_users()
+    await seeder.seed_default_users("company-1")
 
-    assert enabled_session.add.call_count == 3
+    assert enabled_session.add.call_count == 4
     roles = {call.args[0].role for call in enabled_session.add.call_args_list}
-    assert roles == {"admin", "manager", "employee"}
-    assert enabled_session.commit.await_count == 3
+    assert roles == {"root", "admin", "manager", "employee"}
+    assert enabled_session.commit.await_count == 4
 
 
 @pytest.mark.asyncio
 async def test_seed_default_users_tolerates_one_account_failing(monkeypatch, enabled_session):
-    """One account's DB error must not stop the other two from being seeded."""
+    """One account's DB error must not stop the others from being seeded."""
     calls = []
 
     async def fake_seed_one(account):
@@ -178,6 +209,6 @@ async def test_seed_default_users_tolerates_one_account_failing(monkeypatch, ena
 
     monkeypatch.setattr(seeder, "_seed_one", fake_seed_one)
 
-    await seeder.seed_default_users()
+    await seeder.seed_default_users("company-1")
 
-    assert calls == ["admin", "manager", "employee"]
+    assert calls == ["root", "admin", "manager", "employee"]

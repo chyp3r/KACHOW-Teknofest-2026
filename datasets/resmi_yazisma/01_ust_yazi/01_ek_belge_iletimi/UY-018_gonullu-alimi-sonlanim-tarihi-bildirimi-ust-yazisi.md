@@ -1,25 +1,97 @@
 ---
-id: UY-018
-kategori: ust_yazi
-niyet: 01_ek_belge_iletimi
-belge_turu: resmi_sablon
+id: "UY-018"
+kategori: "ust_yazi"
+alt_kategori: "01_ek_belge_iletimi"
+niyet: "01_ek_belge_iletimi"
+baslik: "T.C. SAĞLIK BAKANLIĞI"
 kurum: "Kahramanmaraş Sütçü İmam Üniversitesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/ust_yazi/UY-018_gonullu-alimi-sonlanim-tarihi-bildirimi-ust-yazisi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/ust_yazi/UY-018_gonullu-alimi-sonlanim-tarihi-bildirimi-ust-yazisi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Gönüllü Alımı Sonlanım Tarihi Bildirimi Üst Yazısı
+# T.C. SAĞLIK BAKANLIĞI
 
-- Resmî kaynak: https://etikkurul.ksu.edu.tr/Default?SId=33776
-- Doğrudan belge: https://etikkurul.ksu.edu.tr/depo/belgeler/3-%C3%9Cst%20yaz%C4%B1-G%C3%B6n%C3%BCll%C3%BC%20Al%C4%B1m%C4%B1%20Sonlan%C4%B1m%20Tarihi%20Bildirimi_2512181403036749.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/ust_yazi/UY-018_gonullu-alimi-sonlanim-tarihi-bildirimi-ust-yazisi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+T.C. SAĞLIK BAKANLIĞI
 
-## Veri kümesinde kullanım
+TÜRKİYE İLAÇ VE TIBBİ CİHAZ KURUMU
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+Klinik Araştırmalar Dairesi Başkanlığı
 
-## Doğrulama notu
+İzleme ve Değerlendirme Birimi
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+| Konu: | |
+
+| --- | --- |
+
+| İlgi: | |
+
+Aşağıda detayları bulunan araştırmayla ilgili bilgi ve belgeler tarafınıza sunulmaktadır.
+
+| Araştırmanın açık adı: | |
+
+| --- | --- |
+
+| Araştırma kodu (TİTCK kodu): | |
+
+| Protokol kodu: | |
+
+| Destekleyici: | |
+
+| Destekleyicinin yasal temsilcisi: | |
+
+| Sözleşmeli araştırma kuruluşu: | |
+
+| Koordinatör: | |
+
+| Koordinatör merkez: | |
+
+(Başvurunun içeriğini yazınız)
+
+Başvuru dosyasına eklenen tüm dokümanların aslı ile birebir aynı olduğunu ve arama yapılabilir pdf olarak hazırlandığını,
+
+Başvuruda sağlanan bilgilerin doğru olduğunu kabul ve taahhüt ederim.
+
+Yukarıda detayları verilen başvurunun değerlendirilmesini ve gereğini saygılarımla arz ederim.
+
+(ıslak imzalı üst yazılarda)
+
+…./…./….
+
+İmza/Kaşe
+
+Adı Soyadı
+
+| Başvuru için iletişime geçilecek kişi: | |
+
+| --- | --- |
+
+| Adres: | |
+
+| Telefon: | |
+
+| E-posta: | |
+
+Ekler:
+
+| Doküman | Doküman | Tarih / Versiyon Açıklama |
+
+| --- | --- | --- |
+
+| 1. | | |
+
+| 2. | | |
+
+| 3. | | |
+
+| 4. | | |
+
+| 5. | | |

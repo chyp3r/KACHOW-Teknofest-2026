@@ -1,24 +1,27 @@
 ---
-id: BAK-005
-kategori: diger_resmi_yazisma
-niyet: gumruk_ve_ithalat_duzenlemesi
-baslik: TPS-Anne ve Bebek Ürünleri Uygunluk Belgesi Genelgesi (2024/1)
-kurum: T.C. Ticaret Bakanlığı
-kaynak_url: https://ticaret.gov.tr/mevzuat/genelgeler/2024-1
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "BAK-005"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "gumruk_ve_ithalat_duzenlemesi"
+niyet: "gumruk_ve_ithalat_duzenlemesi"
+baslik: "TPS-Anne ve Bebek Ürünleri Uygunluk Belgesi Genelgesi (2024/1)"
+kurum: "T.C. Ticaret Bakanlığı"
+kaynak: "https://ticaret.gov.tr/mevzuat/genelgeler/2024-1"
+kaynak_url: "https://ticaret.gov.tr/mevzuat/genelgeler/2024-1"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # TPS-Anne ve Bebek Ürünleri Uygunluk Belgesi Uygulaması (Genelge No: 2024/1)
 
-**T.C.**  
-**TİCARET BAKANLIĞI**  
-**Gümrükler Genel Müdürlüğü**  
+**T.C.**
+**TİCARET BAKANLIĞI**
+**Gümrükler Genel Müdürlüğü**
 
-**Sayı:** E-82910481-100.01-000912481  
-**Konu:** Tek Pencere Sistemi - Anne ve Bebek Ürünleri İthalat İzni  
-**Genelge No:** 2024/1  
+**Sayı:** [EVRAK SAYISI]
+**Konu:** Tek Pencere Sistemi - Anne ve Bebek Ürünleri İthalat İzni
+**Genelge No:** 2024/1
 
 **GÜMRÜK VE DIŞ TİCARET BÖLGE MÜDÜRLÜKLERİNE**
 
@@ -36,10 +39,10 @@ Bu kapsamda yürütülecek iş ve işlemler aşağıdaki şekilde gerçekleştir
 
 Bilgi ve gereğini rica ederim.
 
-[SİLİNMİŞTİR]  
-Bakan a.  
-Genel Müdür  
+[KİŞİSEL BİLGİ]
+Bakan a.
+Genel Müdür
 
-**DAĞITIM:**  
-Tüm Gümrük ve Dış Ticaret Bölge Müdürlüklerine  
-Türkiye Odalar ve Borsalar Birliğine (TOBB)  
+**DAĞITIM:**
+Tüm Gümrük ve Dış Ticaret Bölge Müdürlüklerine
+Türkiye Odalar ve Borsalar Birliğine (TOBB)

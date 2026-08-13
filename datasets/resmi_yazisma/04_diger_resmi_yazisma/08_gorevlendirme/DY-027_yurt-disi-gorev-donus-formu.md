@@ -1,25 +1,47 @@
 ---
-id: DY-027
-kategori: diger_resmi_yazisma
-niyet: 08_gorevlendirme
-belge_turu: resmi_sablon
+id: "DY-027"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "08_gorevlendirme"
+niyet: "08_gorevlendirme"
+baslik: "| --- | --- | --- | --- | --- | --- | --- | --- |"
 kurum: "Düzce Üniversitesi Fen Edebiyat Fakültesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-027_yurt-disi-gorev-donus-formu.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-027_yurt-disi-gorev-donus-formu.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Yurt Dışı Görev Dönüş Formu
+# | --- | --- | --- | --- | --- | --- | --- | --- |
 
-- Resmî kaynak: https://fef.duzce.edu.tr/sayfa/0468/sablon-yazilar
-- Doğrudan belge: https://cdn.duzce.edu.tr/File/GetFile/b1af637e-193b-43c7-b7f5-46bc9a690d9c
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-027_yurt-disi-gorev-donus-formu.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+| Görevlendirme Bilgileri | Görevlendirme Bilgileri | Görevlendirme Bilgileri | Görevlendirme Bilgileri | Görevlendirme Bilgileri | Görevlendirme Bilgileri | Görevlendirme Bilgileri | Görevlendirme Bilgileri |
 
-## Veri kümesinde kullanım
+| --- | --- | --- | --- | --- | --- | --- | --- |
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+| Unvanı – Adı Soyadı | | | | | | | |
 
-## Doğrulama notu
+| Onay Tarih ve Sayısı | | | | | | | |
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+| Başlama Tarihi | | | | | | | |
+
+| Bitiş Tarihi | | | | | | | |
+
+| Görevlendirme Süresi | | | | | | | |
+
+| Gidilen Kurum / Kuruluş | | | | | | | |
+
+| Gidilen | | Şehir | : | | Ülke | : | |
+
+| Görevlendirme Gerekçesi | | | | | | | |
+
+| Görevlendirme Konusu | | | | | | | |
+
+| SONUÇ RAPORU | SONUÇ RAPORU | SONUÇ RAPORU | SONUÇ RAPORU | SONUÇ RAPORU | SONUÇ RAPORU | SONUÇ RAPORU | SONUÇ RAPORU |
+
+| Rapor Sahibinin Unvanı – Adı Soyadı İmza | Rapor Sahibinin Unvanı – Adı Soyadı İmza | Rapor Sahibinin Unvanı – Adı Soyadı İmza | Rapor Sahibinin Unvanı – Adı Soyadı İmza | Rapor Sahibinin Unvanı – Adı Soyadı İmza | Rapor Sahibinin Unvanı – Adı Soyadı İmza | Rapor Sahibinin Unvanı – Adı Soyadı İmza | Rapor Sahibinin Unvanı – Adı Soyadı İmza |

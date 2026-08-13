@@ -1,0 +1,514 @@
+{
+  "meta": {
+    "drafts": {
+      "dataset": "drafts",
+      "started_at": "2026-08-07T16:18:05",
+      "total_ms": 4.991
+    },
+    "intents": {
+      "dataset": "intents",
+      "started_at": "2026-08-07T16:18:05",
+      "total_ms": 88.851
+    }
+  },
+  "policy_version": "1.6.0",
+  "suites": {
+    "drafts": {
+      "accuracy": 1.0,
+      "by_category": {
+        "grounded": {
+          "accuracy": 1.0,
+          "cases": 5,
+          "false_negative": 0,
+          "false_positive": 0
+        },
+        "hallucinated": {
+          "accuracy": 1.0,
+          "cases": 12,
+          "false_negative": 0,
+          "false_positive": 0
+        },
+        "other_official": {
+          "accuracy": 1.0,
+          "cases": 3,
+          "false_negative": 0,
+          "false_positive": 0
+        },
+        "paraphrased_grounded": {
+          "accuracy": 1.0,
+          "cases": 10,
+          "false_negative": 0,
+          "false_positive": 0
+        },
+        "placeholder": {
+          "accuracy": 1.0,
+          "cases": 4,
+          "false_negative": 0,
+          "false_positive": 0
+        },
+        "structural": {
+          "accuracy": 1.0,
+          "cases": 6,
+          "false_negative": 0,
+          "false_positive": 0
+        }
+      },
+      "cases": 40,
+      "claim_detection_gaps": [],
+      "counts": {
+        "false_negative": 0,
+        "false_positive": 0,
+        "true_negative": 17,
+        "true_positive": 23
+      },
+      "failures": [],
+      "false_negative_rate": 0.0,
+      "false_positive_rate": 0.0
+    },
+    "intents": {
+      "abstention_rate": 0.052,
+      "accuracy_over_all": 0.9191,
+      "accuracy_over_decided": 0.9695,
+      "by_category": {
+        "clarify_resolution": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 6
+        },
+        "compound": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 8
+        },
+        "continuation": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 8
+        },
+        "document_question": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 10
+        },
+        "escalation": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 10
+        },
+        "farewell": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 2
+        },
+        "greeting_mid_session": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 2
+        },
+        "heldout_paraphrase": {
+          "abstention_rate": 0.4091,
+          "accuracy_over_all": 0.3636,
+          "accuracy_over_decided": 0.6154,
+          "cases": 22
+        },
+        "inversion": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 8
+        },
+        "keyword_analyze": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 8
+        },
+        "keyword_assist": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 8
+        },
+        "keyword_draft": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 10
+        },
+        "memory_recall": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 10
+        },
+        "paraphrase_analyze": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 6
+        },
+        "paraphrase_draft": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 8
+        },
+        "paraphrase_memory": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 10
+        },
+        "precedence": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 6
+        },
+        "revise": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 17
+        },
+        "short_imperative": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 8
+        },
+        "short_message": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 6
+        }
+      },
+      "cases": 173,
+      "clarify_rate": 0.1098,
+      "confusion_matrix": {
+        "<abstain>": {
+          "<abstain>": 10
+        },
+        "analyze": {
+          "<abstain>": 1,
+          "analyze": 22,
+          "assist": 4
+        },
+        "assist": {
+          "<abstain>": 3,
+          "assist": 68
+        },
+        "draft": {
+          "<abstain>": 5,
+          "assist": 1,
+          "draft": 40
+        },
+        "revise": {
+          "revise": 19
+        }
+      },
+      "expected_calibration_error": 0.1206,
+      "failures": [
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "draft",
+          "id": "held_01",
+          "message": "Bu belgeye karşılık verecek bir şeyler yazsana.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "draft",
+          "id": "held_02",
+          "message": "Şu evraka dönüş yapacak bir metin çıkaralım.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "draft",
+          "id": "held_03",
+          "message": "Bunun cevabını sen yazar mısın?",
+          "observed": "assist",
+          "previous_intent": null,
+          "source": "fused"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "draft",
+          "id": "held_04",
+          "message": "İlgili makama sunulmak üzere bir yazı ihzar et.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "analyze",
+          "id": "held_05",
+          "message": "Şu belgeye bir göz atıp durumu anlatır mısın?",
+          "observed": "assist",
+          "previous_intent": null,
+          "source": "fused"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "analyze",
+          "id": "held_06",
+          "message": "Bu evrakta bir sorun var mı acaba?",
+          "observed": "assist",
+          "previous_intent": null,
+          "source": "fused"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "analyze",
+          "id": "held_08",
+          "message": "Belgenin durumunu bir çıkar bakalım.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": false,
+          "expected": "assist",
+          "id": "held_12",
+          "message": "Sen ne tür işler görebiliyorsun?",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": false,
+          "expected": "assist",
+          "id": "held_13",
+          "message": "Buradaki akış nasıl ilerliyor tam olarak?",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": false,
+          "expected": "assist",
+          "id": "held_15",
+          "message": "Şu ana kadar neler geçti aramızda?",
+          "observed": "<abstain>",
+          "previous_intent": "assist",
+          "source": "clarify"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "draft",
+          "id": "held_17",
+          "message": "Buna karşılık verecek resmi bir dönüş kurgulayalım.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": false,
+          "expected": "draft",
+          "id": "held_18",
+          "message": "Bu konuda ilgili makama iletilecek bir metin oluşturalım mı?",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "analyze",
+          "id": "held_19",
+          "message": "Bu belgenin sorunlu yanları var mı bakar mısın?",
+          "observed": "assist",
+          "previous_intent": null,
+          "source": "fused"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "analyze",
+          "id": "held_20",
+          "message": "Bu evrakın ne tür bir yazı olduğunu sen söyle.",
+          "observed": "assist",
+          "previous_intent": null,
+          "source": "fused"
+        }
+      ],
+      "macro_f1": 0.9545,
+      "per_label": [
+        {
+          "f1": 1.0,
+          "label": "<abstain>",
+          "precision": 1.0,
+          "recall": 1.0,
+          "support": 10
+        },
+        {
+          "f1": 0.8979591836734693,
+          "label": "analyze",
+          "precision": 1.0,
+          "recall": 0.8148148148148148,
+          "support": 27
+        },
+        {
+          "f1": 0.9444444444444444,
+          "label": "assist",
+          "precision": 0.9315068493150684,
+          "recall": 0.9577464788732394,
+          "support": 71
+        },
+        {
+          "f1": 0.9302325581395349,
+          "label": "draft",
+          "precision": 1.0,
+          "recall": 0.8695652173913043,
+          "support": 46
+        },
+        {
+          "f1": 1.0,
+          "label": "revise",
+          "precision": 1.0,
+          "recall": 1.0,
+          "support": 19
+        }
+      ],
+      "risk_coverage": [
+        {
+          "coverage": 0.9479768786127167,
+          "risk": 0.03048780487804878,
+          "threshold": 0.0
+        },
+        {
+          "coverage": 0.8728323699421965,
+          "risk": 0.033112582781456956,
+          "threshold": 0.05
+        },
+        {
+          "coverage": 0.8728323699421965,
+          "risk": 0.033112582781456956,
+          "threshold": 0.1
+        },
+        {
+          "coverage": 0.8728323699421965,
+          "risk": 0.033112582781456956,
+          "threshold": 0.15
+        },
+        {
+          "coverage": 0.8728323699421965,
+          "risk": 0.033112582781456956,
+          "threshold": 0.2
+        },
+        {
+          "coverage": 0.8728323699421965,
+          "risk": 0.033112582781456956,
+          "threshold": 0.25
+        },
+        {
+          "coverage": 0.8728323699421965,
+          "risk": 0.033112582781456956,
+          "threshold": 0.3
+        },
+        {
+          "coverage": 0.8728323699421965,
+          "risk": 0.033112582781456956,
+          "threshold": 0.35
+        },
+        {
+          "coverage": 0.8728323699421965,
+          "risk": 0.033112582781456956,
+          "threshold": 0.4
+        },
+        {
+          "coverage": 0.8439306358381503,
+          "risk": 0.03424657534246575,
+          "threshold": 0.45
+        },
+        {
+          "coverage": 0.8439306358381503,
+          "risk": 0.03424657534246575,
+          "threshold": 0.5
+        },
+        {
+          "coverage": 0.8439306358381503,
+          "risk": 0.03424657534246575,
+          "threshold": 0.55
+        },
+        {
+          "coverage": 0.8439306358381503,
+          "risk": 0.03424657534246575,
+          "threshold": 0.6
+        },
+        {
+          "coverage": 0.8439306358381503,
+          "risk": 0.03424657534246575,
+          "threshold": 0.65
+        },
+        {
+          "coverage": 0.8439306358381503,
+          "risk": 0.03424657534246575,
+          "threshold": 0.7
+        },
+        {
+          "coverage": 0.838150289017341,
+          "risk": 0.034482758620689655,
+          "threshold": 0.75
+        },
+        {
+          "coverage": 0.8265895953757225,
+          "risk": 0.027972027972027972,
+          "threshold": 0.8
+        },
+        {
+          "coverage": 0.7803468208092486,
+          "risk": 0.007407407407407408,
+          "threshold": 0.85
+        },
+        {
+          "coverage": 0.7398843930635838,
+          "risk": 0.0078125,
+          "threshold": 0.9
+        },
+        {
+          "coverage": 0.630057803468208,
+          "risk": 0.009174311926605505,
+          "threshold": 0.95
+        },
+        {
+          "coverage": 0.057803468208092484,
+          "risk": 0.0,
+          "threshold": 1.0
+        }
+      ],
+      "source_distribution": {
+        "clarification_resolved": 5,
+        "clarify": 19,
+        "compound": 8,
+        "fused": 141
+      }
+    }
+  }
+}

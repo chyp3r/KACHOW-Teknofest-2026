@@ -1,4 +1,4 @@
-import type { InfoQuestion, ReasoningLevel } from "./documents";
+import type { ReasoningLevel } from "./documents";
 
 export type WorkflowNodeStatus =
   | "todo"
@@ -12,24 +12,136 @@ export interface WorkflowLog {
   text: string;
 }
 
+export interface QuestionOption {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+// The canonical shape every "ask the user" surface publishes questions in --
+// the pre-draft writing brief, missing-information requests, and clarify's
+// intent question all render through one PromptQuestionCard component
+// keyed on this type. See backend app.ai.workflows.event_schema.PromptQuestion.
+export interface PromptQuestion {
+  key: string;
+  question: string;
+  header?: string;
+  help?: string;
+  example?: string | null;
+  options: QuestionOption[];
+  multi_select: boolean;
+  allow_free_text: boolean;
+  required: boolean;
+}
+
 export interface ChatMessage {
+  id?: string;
   sender: "user" | "assistant";
   text: string;
   status?: string;
   logs?: WorkflowLog[];
   details?: Record<string, unknown>;
+  // "notice" renders as a visually distinct, non-blocking aside (see backend
+  // app.ai.workflows.events.emit_notice) -- a conflict warning attached to a
+  // revision that was already applied, never a decision the user has to
+  // make. Absent (ordinary assistant reply) is the default.
+  kind?: "notice";
+  // Present on a clarify turn's own message -- rendered through the same
+  // PromptQuestionCard every HITL gate uses. Resolved by sending the
+  // selected option's label back as the next message (the same thing
+  // typing it out by hand would do), per
+  // app.ai.workflows.planner._try_resolve_pending_clarification.
+  questions?: PromptQuestion[];
+}
+
+export interface ChatSession {
+  session_id: string;
+  title: string | null;
+  document_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersistedChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  workflow_status: string | null;
+  details: Record<string, unknown> | null;
+  created_at: string;
+}
+
+// Kind of instruction<->mevzuat/source clash app.ai.revision.conflict can
+// find. The instruction is always applied first -- a finding here is a
+// warning attached to it, never a reason it was reverted or refused (see
+// ConflictReport.applied_anyway on the backend).
+export type ConflictKind =
+  | "mevzuat_dayanaksiz"
+  | "mevzuat_celiskisi"
+  | "kaynak_celiskisi"
+  | "yapisal_ihlal"
+  | "kisisel_veri"
+  | "belirsizlik";
+
+export interface ConflictFinding {
+  kind: ConflictKind;
+  severity: "critical" | "major" | "minor";
+  detail: string;
+  instruction_fragment?: string;
+  evidence?: string;
+  source?: "deterministic" | "llm";
+}
+
+export interface ChangeEntry {
+  directive: string;
+  scope: string;
+  before: string;
+  after: string;
+  char_delta: number;
+}
+
+export interface RevisionChangelog {
+  entries: ChangeEntry[];
+  summary: string;
 }
 
 export interface InterruptState {
-  kind: "missing_information" | "draft_approval";
+  kind: "missing_information" | "draft_approval" | "writing_brief";
   interruptId: string;
   payload: {
-    questions?: InfoQuestion[];
+    questions?: PromptQuestion[];
+    // Slots the writing-brief gate already resolved without asking --
+    // rendered as a read-only "bunları zaten biliyorum" strip. Only
+    // present on kind "writing_brief".
+    resolved?: Record<string, { value: string; label?: string; source?: string }>;
+    title?: string;
+    intro?: string;
+    // "answer" on every gate today -- carried explicitly so the card knows
+    // to POST /chat/resume rather than send an ordinary chat message (the
+    // clarify "question" event has no resume_action for that reason).
+    resume_action?: "answer";
+    // The "Sen karar ver" sentinel value -- see backend
+    // app.ai.workflows.writing_brief.AUTO_ANSWER. Blank is deliberately
+    // never used for this: an empty answer must still count as unanswered
+    // so a required-and-skipped slot gets re-asked.
+    auto_value?: string;
+    round?: number;
     draft?: string;
     verification?: Record<string, unknown>;
     judge?: Record<string, unknown>;
     combined_score?: number;
     requires_human_approval?: boolean;
+    conflicts?: ConflictFinding[];
+    conflict_notes?: string;
+    // Fresh drafts currently carry an empty object; revision entries only
+    // become available after a revision has actually been produced.
+    changelog?: Partial<RevisionChangelog>;
+    // The human approval gate's own "revizyon iste" loop -- see backend
+    // planning_graph.gate_revise_node/route_after_gate. Absent (not just
+    // zero) on the very first gate of a turn, before any round has run.
+    revision_round?: number;
+    max_revision_rounds?: number;
+    revision_exhausted?: boolean;
   };
 }
 
@@ -93,6 +205,12 @@ export type WorkflowEvent =
       intent: string;
       reasoning: string;
       reasoning_level?: ReasoningLevel;
+      // Which mechanism produced this decision (fused/fused_semantic/compound/
+      // clarification_resolved/model/model_failed/clarify) and how confident it
+      // was -- see backend app.ai.workflows.event_schema.PlanningCompletedEvent.
+      source?: string;
+      confidence?: number;
+      alternatives?: [string, number][];
     })
   | (EventBase & { event: "tool_call" } & ToolCallEvent)
   | (EventBase & { event: "guardrail" } & GuardrailEvent)
@@ -101,6 +219,21 @@ export type WorkflowEvent =
       kind: InterruptState["kind"];
       interrupt_id: string;
       payload: InterruptState["payload"];
+    })
+  | (EventBase & {
+      event: "notice";
+      node: string;
+      level: "info";
+      title: string;
+      message: string;
+    })
+  | (EventBase & {
+      event: "question";
+      node: string;
+      question: string;
+      options: QuestionOption[];
+      allow_free_text: boolean;
+      questions?: PromptQuestion[];
     })
   | (EventBase & {
       event: "final_result";
@@ -120,8 +253,11 @@ export interface ChatRequest {
 export interface ResumeRequest {
   session_id: string;
   action: "answer" | "approve" | "revise" | "reject";
-  answers: Record<string, string>;
+  // A multi_select PromptQuestion answers with a list; every other question
+  // shape (including the "__auto__" sentinel) answers with a single string.
+  answers: Record<string, string | string[]>;
   instructions: string;
+  reason?: string;
   reasoning_level?: ReasoningLevel;
 }
 

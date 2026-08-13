@@ -1,116 +1,184 @@
-import { Copy, FilePenLine } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  FilePenLine,
+  FileText,
+  History,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useId, useState } from "react";
+import { Link } from "react-router-dom";
+import { ApiErrorNotice } from "../components/ApiErrorNotice";
+import { Button, IconButton } from "../components/Button";
+import { ConfirmationDialog } from "../components/ConfirmationDialog";
+import { FormActions, Grid } from "../components/LayoutPrimitives";
 import { EmptyState } from "../components/EmptyState";
+import { Select, Textarea } from "../components/FormControls";
 import { PageHeader } from "../components/PageHeader";
-import { StatusBadge } from "../components/StatusBadge";
-import { DraftHistory } from "../features/drafts/DraftHistory";
-import type { DraftHistoryEntry } from "../hooks/useDraftHistory";
-import { documentService } from "../services/documentService";
-import type {
-  CorrespondenceType,
-  DocumentAnalysis,
-  DocumentMetadata,
-  DraftResult,
-  ReasoningLevel,
-} from "../types/documents";
+import { SectionHeader } from "../components/SectionHeader";
+import { Card, Spinner } from "../components/Surface";
+import { useDraftCreation } from "../hooks/useDraftCreation";
+import { useDrafts } from "../hooks/useDrafts";
+import type { PersistedDraft } from "../types/drafts";
+import type { DocumentAnalysis, DocumentMetadata, ReasoningLevel } from "../types/documents";
+import { DraftTable } from "../features/drafts/DraftTable";
 
-const FALLBACK_TYPES: CorrespondenceType[] = [
-  { value: "cover_letter", label: "Üst yazı" },
-  { value: "response_letter", label: "Cevap yazısı" },
-  { value: "information_notice", label: "Bilgilendirme metni" },
-  { value: "other_official", label: "Diğer resmî yazışma" },
-];
+const VERSION_PREVIEW_LIMIT = 420;
+
+function ExpandableDraftContent({ content }: { content: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const contentId = useId();
+  const hasMore = content.length > VERSION_PREVIEW_LIMIT;
+  const visibleContent = hasMore && !expanded
+    ? `${content.slice(0, VERSION_PREVIEW_LIMIT).trimEnd()}…`
+    : content;
+
+  return (
+    <div className="draft-version-content">
+      <pre id={contentId}>{visibleContent}</pre>
+      {hasMore && (
+        <Button
+          variant="ghost"
+          size="sm"
+          fullWidth
+          className="draft-content-toggle"
+          aria-controls={contentId}
+          aria-expanded={expanded}
+          onClick={() => setExpanded((current) => !current)}
+        >
+          {expanded ? (
+            <>Daha az göster<ChevronUp /></>
+          ) : (
+            <>Tümünü gör<ChevronDown /></>
+          )}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function sortVersionsNewestFirst(versions: PersistedDraft[]) {
+  return [...versions].sort((left, right) => right.version - left.version);
+}
 
 export function DraftsPage({
   documents,
   selected,
   analysis,
-  draft,
-  history,
+  activeDraftId,
   onSelect,
-  onDraftCreated,
-  onHistorySelect,
+  onOpenDraft,
+  onCloseDraft,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
   analysis: DocumentAnalysis | null;
-  draft: DraftResult | null;
-  history: DraftHistoryEntry[];
+  activeDraftId?: string;
   onSelect: (document: DocumentMetadata) => void;
-  onDraftCreated: (draft: DraftResult) => void;
-  onHistorySelect: (entry: DraftHistoryEntry) => void;
+  onOpenDraft: (draftId: string) => void;
+  onCloseDraft?: () => void;
 }) {
-  const [types, setTypes] = useState(FALLBACK_TYPES);
+  const drafts = useDrafts(activeDraftId);
+  const creation = useDraftCreation();
+  const [formOpen, setFormOpen] = useState(false);
   const [type, setType] = useState("");
   const [level, setLevel] = useState<ReasoningLevel>("balanced");
   const [instructions, setInstructions] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    documentService
-      .correspondenceTypes()
-      .then((items) => items.length && setTypes(items))
-      .catch(() => undefined);
-  }, []);
+  const [copiedDraftId, setCopiedDraftId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
+    const deletingActive = pendingDeleteId === activeDraftId;
+    await drafts.deleteDraft(pendingDeleteId);
+    setPendingDeleteId(null);
+    if (deletingActive) onCloseDraft?.();
+  };
+
   const create = async () => {
     if (!selected || !analysis) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      onDraftCreated(
-        await documentService.createDraft({
-          storage_path: selected.storage_path,
-          classification: {
-            document_type: analysis.document_type,
-            document_type_label: analysis.document_type_label,
-            summary: analysis.summary,
-            fields: analysis.fields,
-            missing_fields: analysis.missing_fields,
-            mevzuat_references: analysis.mevzuat_references,
-          },
-          instructions,
-          correspondence_type: type || null,
-          reasoning_level: level,
-        }),
-      );
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Taslak oluşturulamadı.",
-      );
-    } finally {
-      setSubmitting(false);
+    const result = await creation.create({
+      storage_path: selected.storage_path,
+      classification: {
+        document_type: analysis.document_type,
+        document_type_label: analysis.document_type_label,
+        summary: analysis.summary,
+        fields: analysis.fields,
+        missing_fields: analysis.missing_fields,
+        mevzuat_references: analysis.mevzuat_references,
+      },
+      instructions,
+      correspondence_type: type || null,
+      reasoning_level: level,
+    });
+    if (result.draft_id) {
+      setFormOpen(false);
+      onOpenDraft(result.draft_id);
     }
   };
-  const copy = async () => {
-    if (!draft) return;
-    await navigator.clipboard.writeText(draft.draft);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
+
+  const copy = async (draft: PersistedDraft) => {
+    await navigator.clipboard.writeText(draft.content);
+    setCopiedDraftId(draft.id);
+    window.setTimeout(() => setCopiedDraftId(null), 2000);
   };
+
+  const documentName = (documentId: string | null) => {
+    if (!documentId) return "Kaynak yok";
+    const document = documents.find((item) => item.storage_path === documentId);
+    return document?.file_name ?? documentId.split(/[\\/]/).pop() ?? documentId;
+  };
+
+  const correspondenceTypeLabel = (draft: PersistedDraft) => {
+    const knownType = creation.correspondenceTypes.find(
+      (item) => item.value === draft.correspondence_type,
+    );
+    if (knownType) return knownType.label;
+    if (!draft.correspondence_type) return "Resmî taslak";
+    return draft.correspondence_type.replace(/_/g, " ");
+  };
+
+  const draftTitle = (draft: PersistedDraft) =>
+    `${documentName(draft.document_id)} - ${correspondenceTypeLabel(draft)}`;
+
+  const expandedVersions = drafts.versions.length > 0
+    ? sortVersionsNewestFirst(drafts.versions)
+    : drafts.activeDraft
+      ? [drafts.activeDraft]
+      : [];
+
   return (
-    <div className="page page-scroll">
+    <div className="page page-scroll drafts-page">
       <PageHeader
         title="Taslaklar"
-        description="Seçili evrakın analizinden resmî yazı taslağı oluşturun ve sonucu inceleyin."
+        description="Oluşturulan taslakları, kaynak evraklarını ve sürüm geçmişlerini inceleyin."
+        primaryAction={(
+          <Button
+            variant={formOpen ? "outline" : "primary"}
+            aria-controls="draft-create-panel"
+            aria-expanded={formOpen}
+            onClick={() => setFormOpen((current) => !current)}
+            leadingIcon={formOpen ? <X /> : <Plus />}
+          >
+            {formOpen ? "Formu kapat" : "Yeni taslak"}
+          </Button>
+        )}
       />
-      <DraftHistory
-        entries={history}
-        activeDraft={draft}
-        onSelect={onHistorySelect}
+
+      <ApiErrorNotice
+        error={drafts.errorObject ?? creation.errorObject ?? drafts.error ?? creation.error}
       />
-      <div className="drafts-layout">
-        <section className="surface draft-form">
-          <div className="section-heading">
-            <div>
-              <h2>Yeni taslak oluştur</h2>
-              <p>Taslak üretimi mevcut evrak analizi üzerinden çalışır.</p>
-            </div>
-          </div>
-          <div className="form-stack">
-            <label>
-              Kaynak evrak
-              <select
+
+      {formOpen && (
+        <Card id="draft-create-panel" className="draft-create-panel" padding="prominent" role="region" aria-label="Yeni taslak oluştur">
+          <SectionHeader title="Yeni taslak oluştur" description="Bir kaynak evrak seçin; diğer ayarları yalnızca gerektiğinde değiştirin." />
+          <Grid className="draft-create-grid" min="15rem">
+            <Select
+                label="Kaynak evrak"
+                fieldClassName="draft-source-field"
                 value={selected?.storage_path ?? ""}
                 onChange={(event) => {
                   const item = documents.find(
@@ -121,111 +189,161 @@ export function DraftsPage({
               >
                 <option value="">Evrak seçin</option>
                 {documents.map((document) => (
-                  <option
-                    key={document.storage_path}
-                    value={document.storage_path}
-                  >
+                  <option key={document.storage_path} value={document.storage_path}>
                     {document.file_name}
                   </option>
                 ))}
-              </select>
-            </label>
-            <label>
-              Yazışma türü
-              <select
+              </Select>
+            <Select
+                label="Yazışma türü"
                 value={type}
+                disabled={creation.typesLoading}
                 onChange={(event) => setType(event.target.value)}
               >
                 <option value="">Otomatik belirle</option>
-                {types.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
+                {creation.correspondenceTypes.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
                 ))}
-              </select>
-            </label>
-            <label>
-              Düşünme seviyesi
-              <select
+              </Select>
+            <Select
+                label="Düşünme seviyesi"
                 value={level}
-                onChange={(event) =>
-                  setLevel(event.target.value as ReasoningLevel)
-                }
+                onChange={(event) => setLevel(event.target.value as ReasoningLevel)}
               >
                 <option value="fast">Hızlı</option>
                 <option value="balanced">Dengeli</option>
                 <option value="deep">Derin</option>
-              </select>
-            </label>
-            <label>
-              Ek talimat
-              <textarea
+              </Select>
+            <Textarea
+                label="Ek talimat"
+                counter={`${instructions.length}/4000`}
+                fieldClassName="draft-instructions-field"
                 value={instructions}
                 maxLength={4000}
+                rows={2}
+                placeholder="İsteğe bağlı kısa bir talimat ekleyin."
                 onChange={(event) => setInstructions(event.target.value)}
-                placeholder="Örnek: Talebi olumlu karşıla, ek süre 15 gün olsun."
               />
-            </label>
-            {error && <p className="feedback error">{error}</p>}
-            <button
-              className="button button-primary"
-              disabled={!selected || !analysis || submitting}
-              onClick={() => void create()}
-            >
-              {submitting ? "Taslak oluşturuluyor…" : "Taslak oluştur"}
-            </button>
-          </div>
-        </section>
-        <section className="surface draft-result">
-          {draft ? (
-            <>
-              <div className="section-heading">
-                <div>
-                  <h2>Oluşturulan taslak</h2>
-                  <p>{draft.destination || "Hedef birim henüz belirlenmedi"}</p>
-                </div>
-                <StatusBadge
-                  tone={draft.requires_human_approval ? "warning" : "success"}
-                >
-                  {draft.requires_human_approval ? "Onay gerekli" : "Hazır"}
-                </StatusBadge>
-              </div>
-              <div className="draft-metrics">
-                <span>
-                  <small>Güven skoru</small>
-                  <strong>%{Math.round(draft.confidence_score)}</strong>
-                </span>
-                <span>
-                  <small>Deneme</small>
-                  <strong>{draft.attempts}</strong>
-                </span>
-              </div>
-              {draft.missing_information.length > 0 && (
-                <div className="notice warning">
-                  Eksik bilgiler:{" "}
-                  {draft.missing_information
-                    .map((item) => item.label)
-                    .join(", ")}
-                </div>
-              )}
-              <pre className="draft-document">{draft.draft}</pre>
-              <button
-                className="button button-secondary"
-                onClick={() => void copy()}
-              >
-                <Copy size={16} />
-                {copied ? "Kopyalandı" : "Metni kopyala"}
-              </button>
-            </>
-          ) : (
-            <EmptyState
-              icon={FilePenLine}
-              title="Henüz taslak oluşturulmadı"
-              description="Bir kaynak evrak seçip formu tamamlayın veya geçmişten bir taslak açın."
-            />
-          )}
-        </section>
-      </div>
+            <FormActions className="draft-create-submit">
+              <Button
+                loading={creation.creating}
+                disabled={!selected || !analysis}
+                onClick={() => void create()}
+              >Taslak oluştur</Button>
+            </FormActions>
+          </Grid>
+        </Card>
+      )}
+
+      <Card className="draft-list-section" padding="default">
+        <SectionHeader title="Oluşturulan taslaklar" description={`${drafts.total} kalıcı taslak`} action={drafts.refreshing ? <small>Yenileniyor…</small> : undefined} />
+
+        {drafts.loading ? (
+          <div className="table-loading"><Spinner label="Taslaklar yükleniyor" />Taslaklar yükleniyor…</div>
+        ) : drafts.drafts.length === 0 ? (
+          <EmptyState
+            icon={FilePenLine}
+            title="Henüz taslak oluşturulmadı"
+            description="Sağ üstteki Yeni taslak düğmesiyle ilk taslağınızı oluşturabilirsiniz."
+          />
+        ) : (
+          <DraftTable
+            drafts={drafts.drafts}
+            activeDraftId={activeDraftId}
+            titleFor={draftTitle}
+            onToggle={(draft, expanded) => {
+              if (expanded) onCloseDraft?.();
+              else onOpenDraft(draft.id);
+            }}
+            renderRowActions={(draft) => (
+              <IconButton
+                icon={<Trash2 />}
+                aria-label="Taslağı sil"
+                variant="ghost"
+                className="danger-text"
+                onClick={() => setPendingDeleteId(draft.id)}
+              />
+            )}
+            renderDetail={(_draft, detailId) => (
+                    <div id={detailId} className="draft-table-detail" role="row">
+                      {drafts.detailLoading ? (
+                        <div className="centered-state"><Spinner label="Taslak sürümleri yükleniyor" />Taslak sürümleri yükleniyor…</div>
+                      ) : drafts.activeDraft ? (
+                        <>
+                          <div className="draft-detail-toolbar">
+                            <div className="draft-metrics">
+                              <span>
+                                <small>Güven skoru</small>
+                                <strong>
+                                  {typeof drafts.activeDraft.confidence_score === "number"
+                                    ? `%${Math.round(drafts.activeDraft.confidence_score)}`
+                                    : "—"}
+                                </strong>
+                              </span>
+                              <span><small>Sürüm</small><strong>{drafts.activeDraft.version}</strong></span>
+                              <span>
+                                <small>Deneme</small>
+                                <strong>{drafts.activeDraft.attempts ?? "—"}</strong>
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="draft-detail-actions">
+                            {drafts.activeDraft.document_id && (
+                              <Link
+                                className="button button-quiet"
+                                to={`/documents/${encodeURIComponent(drafts.activeDraft.document_id)}`}
+                              >
+                                <FileText size={15} /> Kaynak evraka git
+                              </Link>
+                            )}
+                            <Button
+                              variant="secondary"
+                              leadingIcon={<Copy />}
+                              onClick={() => void copy(drafts.activeDraft!)}
+                            >
+                              {copiedDraftId === drafts.activeDraft.id ? "Kopyalandı" : "Son sürümü kopyala"}
+                            </Button>
+                          </div>
+
+                          <div className="draft-versions-heading">
+                            <History size={17} />
+                            <h3>Sürüm geçmişi</h3>
+                            <span>{expandedVersions.length}</span>
+                          </div>
+                          <ol className="draft-version-list">
+                            {expandedVersions.map((version) => (
+                              <li key={version.id}>
+                                <header>
+                                  <strong>Sürüm {version.version}</strong>
+                                  {version.id === drafts.activeDraft?.id && <span>Güncel</span>}
+                                  <time dateTime={version.created_at}>
+                                    {new Date(version.created_at).toLocaleString("tr-TR")}
+                                  </time>
+                                </header>
+                                <ExpandableDraftContent content={version.content} />
+                              </li>
+                            ))}
+                          </ol>
+                        </>
+                      ) : (
+                        <p className="detail-empty">Taslak ayrıntısı yüklenemedi.</p>
+                      )}
+                    </div>
+            )}
+          />
+        )}
+      </Card>
+
+      <ConfirmationDialog
+        open={pendingDeleteId !== null}
+        title="Taslağı sil"
+        description="Bu taslak ve tüm sürüm geçmişi kalıcı olarak listeden kaldırılacak. Bu işlem geri alınamaz."
+        confirmLabel="Sil"
+        busy={drafts.deleting}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

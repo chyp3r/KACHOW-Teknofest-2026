@@ -1,25 +1,83 @@
 ---
-id: UY-027
-kategori: ust_yazi
-niyet: 04_gorevlendirme_personel
-belge_turu: resmi_sablon
+id: "UY-027"
+kategori: "ust_yazi"
+alt_kategori: "04_gorevlendirme_personel"
+niyet: "04_gorevlendirme_personel"
+baslik: "T.C. SAĞLIK BAKANLIĞI"
 kurum: "Kahramanmaraş Sütçü İmam Üniversitesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/ust_yazi/UY-027_personel-gorevlendirme-bildirimi-ust-yazisi-ksu.docx"
+yerel_orijinal: "00_gelen_kaynaklar/ust_yazi/UY-027_personel-gorevlendirme-bildirimi-ust-yazisi-ksu.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Personel Görevlendirme Bildirimi Üst Yazısı - KSÜ
+# T.C. SAĞLIK BAKANLIĞI
 
-- Resmî kaynak: https://etikkurul.ksu.edu.tr/Default?SId=33776
-- Doğrudan belge: https://etikkurul.ksu.edu.tr/depo/belgeler/19-%C3%9Cst%20yaz%C4%B1-Personel%20G%C3%B6revlendirme%20Bildirimleri_2512181407580206.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/ust_yazi/UY-027_personel-gorevlendirme-bildirimi-ust-yazisi-ksu.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+T.C. SAĞLIK BAKANLIĞI
 
-## Veri kümesinde kullanım
+TÜRKİYE İLAÇ VE TIBBİ CİHAZ KURUMU
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+Klinik Araştırmalar Dairesi Başkanlığı
 
-## Doğrulama notu
+Bilgilendirme ve Koordinasyon Birimi
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+| Konu: | Araştırma/Çalışmalarda Personel Görevlendirme |
+
+| --- | --- |
+
+| İlgi: | |
+
+Aşağıda detayları verilen klinik araştırmada görev alacak olan personel bilgilerinize sunulmaktadır.
+
+| Araştırmanın açık adı | |
+
+| --- | --- |
+
+| Araştırma kodu (TİTCK kodu) | |
+
+(Başvurunun içeriğini yazınız)
+
+Başvuru dosyasına eklenen tüm dokümanların aslı ile birebir aynı olduğunu ve arama yapılabilir pdf olarak hazırlandığını,
+
+Başvuruda sağlanan bilgilerin doğru olduğunu kabul ve taahhüt ederim.
+
+Araştırmacı eczacısı görevlendirmelerinde; araştırma eczacısı olarak görevlendirilen kişinin 984 sayılı Ecza Depoları ve Ecza Depolarında Bulundurulan Ürünler Hakkında Yönetmelik gereğince Ecza deposu mesul müdürü olmadığını, 6197 sayılı Eczaneler ve Eczacılar Hakkında Kanun gereğince serbest eczane sahip/mesul müdürü olmadığını taahhüt ederim.
+
+Yukarıda detayları verilen başvurunun değerlendirilmesini ve gereğini saygılarımla arz ederim.
+
+(ıslak imzalı üst yazılarda)
+
+…./…./….
+
+İmza/Kaşe
+
+Adı Soyadı
+
+| Başvuru için iletişime geçilecek kişi: | Başvuru için iletişime geçilecek kişi: |
+
+| --- | --- |
+
+| Adres: | |
+
+| Telefon: | |
+
+| E-posta: | |
+
+Ekler:
+
+| Doküman | Doküman | Açıklama |
+
+| --- | --- | --- |
+
+| 1. | Araştırma/Çalışmalarda Personel Görevlendirme Başvuru Formu | |
+
+| 2. | | |
+
+| 3. | | |

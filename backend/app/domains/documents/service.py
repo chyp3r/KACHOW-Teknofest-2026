@@ -4,6 +4,7 @@ import os
 from typing import Any, Optional
 from uuid import uuid4
 
+from app.ai.compliance.checker import check_required_fields
 from app.ai.compliance.evrak_field import EvrakField, MissingField
 from app.ai.documents.anchors import build_page_map
 from app.ai.guardrails.file_integrity import check_file_integrity
@@ -12,8 +13,8 @@ from app.domains.documents.model.document_model import DocumentModel
 from app.domains.documents.repository import DocumentRepository
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
+from app.core.config import settings
 from app.core.constants import (
-    AI_WORKFLOW_TIMEOUT_SECONDS,
     ALLOWED_DOCUMENT_EXTENSIONS,
     ALLOWED_FILE_TYPES,
     MAX_FILE_SIZE_BYTES,
@@ -95,7 +96,8 @@ class DocumentService:
         file_name: str,
         content: bytes,
         content_type: Optional[str] = None,
-        owner_id: Optional[str] = None,
+        owner_id: str,
+        company_id: str,
     ) -> DocumentAnalysisResponseSchema:
         """Store, extract and analyse an incoming official document.
 
@@ -103,10 +105,10 @@ class DocumentService:
             file_name: Original name of the uploaded file.
             content: Raw file bytes.
             content_type: Declared MIME type, when the client supplied one.
-            owner_id: The authenticated caller's id, when
-                `settings.REQUIRE_AUTH` is enabled. `None` in the open
-                demo/dev path -- the document is registered ownerless and
-                stays visible to everyone, matching today's behaviour.
+            owner_id: The authenticated caller's id -- registered as the
+                document's owner.
+            company_id: The authenticated caller's company -- registered as
+                the document's tenant.
 
         Returns:
             The full first-review result.
@@ -171,7 +173,7 @@ class DocumentService:
 
         state = await self._run_analysis(extracted.text, extracted.used_ocr)
         response = self._assemble(file_name, storage_path, extracted, state, scrubbed_markers)
-        await self._register_document(file_name, storage_path, owner_id, response)
+        await self._register_document(file_name, storage_path, owner_id, company_id, response)
         await self._save_document_analysis_cache(
             storage_path, extracted.text, extracted.pages, response
         )
@@ -182,7 +184,7 @@ class DocumentService:
             extracted.pages,
             sensitivity_level=response.guardrail.sensitivity_level,
         )
-        await self._record_sensitivity_assessment(storage_path, owner_id, response)
+        await self._record_sensitivity_assessment(storage_path, owner_id, company_id, response)
 
         await self._publish(
             DocumentAnalyzedEvent(
@@ -431,12 +433,12 @@ class DocumentService:
                     {"input_text": text, "is_ocr_text": used_ocr},
                     config=self._trace_config(),
                 ),
-                timeout=AI_WORKFLOW_TIMEOUT_SECONDS,
+                timeout=settings.AI_WORKFLOW_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError as exc:
             raise AIException(
                 message="Evrak analizi zaman aşımına uğradı.",
-                details={"timeout_seconds": AI_WORKFLOW_TIMEOUT_SECONDS},
+                details={"timeout_seconds": settings.AI_WORKFLOW_TIMEOUT_SECONDS},
             ) from exc
         except Exception as exc:
             logger.exception("Document analysis workflow failed")
@@ -560,7 +562,8 @@ class DocumentService:
         self,
         file_name: str,
         storage_path: str,
-        owner_id: Optional[str],
+        owner_id: str,
+        company_id: str,
         response: DocumentAnalysisResponseSchema,
     ) -> None:
         """Register the document's ownership + listing metadata in Postgres.
@@ -577,6 +580,7 @@ class DocumentService:
                 DocumentModel(
                     id=storage_path,
                     owner_id=owner_id,
+                    company_id=company_id,
                     file_name=file_name,
                     document_type=response.document_type.value,
                     document_type_label=response.document_type_label,
@@ -592,7 +596,8 @@ class DocumentService:
     @staticmethod
     async def _record_sensitivity_assessment(
         storage_path: str,
-        owner_id: Optional[str],
+        owner_id: str,
+        company_id: str,
         response: DocumentAnalysisResponseSchema,
     ) -> None:
         """Record the input-side guardrail audit event for one upload.
@@ -616,6 +621,7 @@ class DocumentService:
             kind="sensitivity",
             decision=decision,
             document_id=storage_path,
+            company_id=company_id,
             requester_user_id=owner_id,
             reasons=guardrail.reasons,
             related_document_ids=[storage_path],
@@ -698,3 +704,117 @@ class DocumentService:
         except Exception:
             logger.exception("Cached analysis for %s failed to validate", storage_path)
             return None
+
+    async def update_document_fields(
+        self, storage_path: str, fields: EvrakField, company_id: str
+    ) -> Optional[DocumentAnalysisResponseSchema]:
+        """Apply a user-corrected field set and re-run compliance.
+
+        Backs the "edit extracted fields" UI on the document analysis panel
+        -- until this, an undetected/wrong field (``EvrakField``'s empty
+        slots) was permanently read-only. Re-checks the same deterministic
+        rule table the original analysis used
+        (``app.ai.compliance.checker.check_required_fields``, no model
+        call), so ``missing_fields``/``compliance_status`` reflect the
+        correction immediately instead of staying stuck at whatever the
+        extraction originally found.
+
+        Rewrites the same local cache file ``get_cached_analysis`` reads
+        back, preserving ``extracted_text``/``pages`` (the document Q&A
+        tools index into them, see ``_save_document_analysis_cache``) --
+        only ``fields``, ``missing_fields`` and ``compliance_status`` change.
+
+        Args:
+            storage_path: The document's storage key.
+            fields: The full corrected field set (replaces, not patches).
+
+        Returns:
+            The updated analysis, or None if no cache exists for
+            ``storage_path`` (or it fails to parse).
+        """
+        import json
+        from app.core.config import settings
+
+        cache_file = os.path.join(settings.LOCAL_STORAGE_DIR, f"{storage_path}_analysis.json")
+
+        def _read():
+            if not os.path.exists(cache_file):
+                return None
+            with open(cache_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+
+        try:
+            cache_data = await asyncio.to_thread(_read)
+        except Exception:
+            logger.exception("Failed to read cached analysis for %s", storage_path)
+            return None
+
+        if not cache_data or not cache_data.get("analysis"):
+            return None
+
+        try:
+            analysis = DocumentAnalysisResponseSchema(**cache_data["analysis"])
+        except Exception:
+            logger.exception("Cached analysis for %s failed to validate", storage_path)
+            return None
+
+        analysis.fields = fields
+        report = check_required_fields(analysis.document_type, fields)
+        analysis.missing_fields = report.missing_fields
+        analysis.compliance_status = report.status
+
+        await self._save_document_analysis_cache(
+            storage_path,
+            cache_data.get("extracted_text", ""),
+            cache_data.get("pages", []),
+            analysis,
+        )
+
+        if self.document_repository is not None:
+            document = await self.document_repository.get_by_id(storage_path, company_id)
+            if document is not None:
+                document.compliance_status = analysis.compliance_status.value
+
+        return analysis
+
+    async def delete_document(self, storage_path: str, company_id: str) -> None:
+        """Permanently remove a document: registry row, raw file, analysis
+        cache, and any indexed Q&A chunks.
+
+        Best-effort past the registry row -- once that row is gone the
+        document no longer appears in `GET /documents` regardless of
+        whether the remaining cleanup steps below succeed, so a
+        storage/cache/vector-store hiccup is logged and swallowed here
+        rather than surfaced as a failed delete the caller would retry.
+
+        Args:
+            storage_path: The document's storage key.
+            company_id: The caller's company -- deletion is scoped to it,
+                same as every other document read/write.
+        """
+        if self.document_repository is not None:
+            await self.document_repository.delete(storage_path, company_id)
+
+        try:
+            await self.storage.delete_file(storage_path)
+        except Exception:
+            logger.exception("Failed to delete stored file for %s", storage_path)
+
+        cache_file = os.path.join(settings.LOCAL_STORAGE_DIR, f"{storage_path}_analysis.json")
+
+        def _remove_cache():
+            if os.path.exists(cache_file):
+                os.remove(cache_file)
+
+        try:
+            await asyncio.to_thread(_remove_cache)
+        except Exception:
+            logger.exception("Failed to delete cached analysis for %s", storage_path)
+
+        if self.vector_store is not None:
+            try:
+                await self.vector_store.delete_by_filter(
+                    QA_COLLECTION_NAME, {"storage_path": storage_path}
+                )
+            except Exception:
+                logger.exception("Failed to delete indexed chunks for %s", storage_path)

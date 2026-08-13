@@ -17,7 +17,7 @@ async def test_invite_email_success():
     service = UserService(repository)
     schema = InvitedEmailCreate(email="new_employee@company.com", role=UserRole.EMPLOYEE)
 
-    invite = await service.invite_user_email(schema)
+    invite = await service.invite_user_email(schema, "company-1")
     assert invite.email == "new_employee@company.com"
     assert invite.role == "employee"
     assert invite.is_used is False
@@ -32,7 +32,7 @@ async def test_invite_email_already_registered():
     schema = InvitedEmailCreate(email="existing@company.com", role=UserRole.EMPLOYEE)
 
     with pytest.raises(ConflictException) as exc:
-        await service.invite_user_email(schema)
+        await service.invite_user_email(schema, "company-1")
     assert "already registered" in str(exc.value.message)
 
 @pytest.mark.asyncio
@@ -45,7 +45,7 @@ async def test_invite_email_already_invited():
     schema = InvitedEmailCreate(email="invited@company.com", role=UserRole.EMPLOYEE)
 
     with pytest.raises(ConflictException) as exc:
-        await service.invite_user_email(schema)
+        await service.invite_user_email(schema, "company-1")
     assert "already been invited" in str(exc.value.message)
 
 @pytest.mark.asyncio

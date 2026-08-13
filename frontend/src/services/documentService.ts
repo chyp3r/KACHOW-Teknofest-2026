@@ -6,14 +6,18 @@ import type {
   DocumentMetadata,
   DraftRequest,
   DraftResult,
+  EvrakFields,
 } from "../types/documents";
+import { collectPages } from "./pagination";
 
 export const documentService = {
   async list(): Promise<DocumentMetadata[]> {
-    const result = await apiRequest<
-      PaginatedResponse<DocumentMetadata> | DocumentMetadata[]
-    >("/api/v1/documents");
-    return Array.isArray(result) ? result : result.items;
+    const result = await collectPages((page) =>
+      apiRequest<PaginatedResponse<DocumentMetadata>>(
+        `/api/v1/documents?page=${page}&size=100`,
+      ),
+    );
+    return result.items;
   },
   analyze(file: File): Promise<DocumentAnalysis> {
     const body = new FormData();
@@ -23,6 +27,17 @@ export const documentService = {
   getAnalysis(storagePath: string): Promise<DocumentAnalysis> {
     const safePath = storagePath.split("/").map(encodeURIComponent).join("/");
     return apiRequest(`/api/v1/documents/${safePath}`);
+  },
+  updateFields(storagePath: string, fields: EvrakFields): Promise<DocumentAnalysis> {
+    const safePath = storagePath.split("/").map(encodeURIComponent).join("/");
+    return apiRequest(`/api/v1/documents/${safePath}/fields`, {
+      method: "PATCH",
+      body: JSON.stringify({ fields }),
+    });
+  },
+  remove(storagePath: string): Promise<{ deleted: boolean }> {
+    const safePath = storagePath.split("/").map(encodeURIComponent).join("/");
+    return apiRequest(`/api/v1/documents/${safePath}`, { method: "DELETE" });
   },
   correspondenceTypes(): Promise<CorrespondenceType[]> {
     return apiRequest("/api/v1/documents/correspondence-types");

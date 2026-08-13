@@ -1,23 +1,26 @@
 ---
-id: KAY-002
-kategori: bilgilendirme_metni
-niyet: duyuru
-baslik: Kadıköy Kaymakamlığı SYDV Aşırı Sıcak Yardımı ve Sosyal İnceleme Duyurusu
-kurum: T.C. Kadıköy Kaymakamlığı Sosyal Yardımlaşma ve Dayanışma Vakfı
-kaynak_url: https://www.kadikoy.gov.tr/sydv-sosyal-yardim-basvuru-duyurusu
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "KAY-002"
+kategori: "bilgilendirme_metni"
+alt_kategori: "duyuru"
+niyet: "duyuru"
+baslik: "Kadıköy Kaymakamlığı SYDV Aşırı Sıcak Yardımı ve Sosyal İnceleme Duyurusu"
+kurum: "T.C. Kadıköy Kaymakamlığı Sosyal Yardımlaşma ve Dayanışma Vakfı"
+kaynak: "https://www.kadikoy.gov.tr/sydv-sosyal-yardim-basvuru-duyurusu"
+kaynak_url: "https://www.kadikoy.gov.tr/sydv-sosyal-yardim-basvuru-duyurusu"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Kadıköy Kaymakamlığı SYDV Aşırı Sıcak Yardımı ve Sosyal İnceleme Duyurusu
 
-**T.C.**  
-**KADIKÖY KAYMAKAMLIĞI**  
+**T.C.**
+**KADIKÖY KAYMAKAMLIĞI**
 **Sosyal Yardımlaşma ve Dayanışma Vakfı Mütevelli Heyeti**
 
-**Duyuru Tarihi:** 15.06.2026  
-**Konu:** Muhtaçlık Tespiti ve Yaz Dönemi Ayni/Nakdi Yardım Başvuruları  
+**Duyuru Tarihi:** 15.06.2026
+**Konu:** Muhtaçlık Tespiti ve Yaz Dönemi Ayni/Nakdi Yardım Başvuruları
 
 Kadıköy Kaymakamlığı Sosyal Yardımlaşma ve Dayanışma Vakfı (SYDV), 3294 sayılı Kanun kapsamında Kadıköy ilçesinde ikamet eden ihtiyaç sahibi, yaşlı, engelli ve dar gelirli vatandaşlarımıza yönelik yaz dönemi destek programını başlatmıştır.
 
@@ -29,5 +32,5 @@ Kadıköy Kaymakamlığı Sosyal Yardımlaşma ve Dayanışma Vakfı (SYDV), 329
 
 Vatandaşlarımızın bilgisine duyurulur.
 
-[SİLİNMİŞTİR]  
-Vakıf Başkanı / Kadıköy Kaymakamı  
+[KİŞİSEL BİLGİ]
+Vakıf Başkanı / Kadıköy Kaymakamı

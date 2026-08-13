@@ -1,21 +1,22 @@
 ---
-id: DILEKCE-946E39EB
-kategori: dilekce
-alt_kategori: tuketici_sikayet
+id: "DILEKCE-946E39EB"
+kategori: "dilekce"
+alt_kategori: "tuketici_sikayet"
 baslik: "Tüketici Hakem Heyeti Şikayet Dilekçesi (Ornek 3)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Tüketici Hakem Heyeti Şikayet Dilekçesi (Ornek 3)
 
 Gaziantep İL TÜKETİCİ HAKEM HEYETİ BAŞKANLIĞI'NA
 
-ŞİKAYETÇİ: Mehmet Ozturk (T.C.: 33837109036)
-Adres: Kizilay Mah. 76. Sok. No:38 Trabzon
-Tel: 0533 527 91 84
+ŞİKAYETÇİ: Mehmet Ozturk (T.C.: [T.C. KİMLİK NO])
+Adres: [ADRES]
+Tel: [TELEFON]
 
 ŞİKAYET EDİLEN: Yildiz Ticaret Ltd. Sti.
-Adres: Bahcelievler Mah. Samsun
+Adres: [ADRES]
 
 KONU: Ayıplı Mal/Hizmet Şikayeti
 

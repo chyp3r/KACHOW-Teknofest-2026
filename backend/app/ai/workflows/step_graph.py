@@ -45,7 +45,11 @@ class StepSpec:
 #: of state that silently drifts from what `PLAN_BY_INTENT` can produce.
 STEP_SPECS: dict[str, StepSpec] = {
     "classification": StepSpec(name="classification"),
-    "draft": StepSpec(name="draft", depends_on=("classification",)),
+    #: Deterministic, LLM-free -- see app.ai.workflows.writing_brief. Runs
+    #: after classification so a document-reply turn's role-inversion rule
+    #: has fields.gonderen_kurum/muhatap to resolve against.
+    "brief": StepSpec(name="brief", depends_on=("classification",)),
+    "draft": StepSpec(name="draft", depends_on=("classification", "brief")),
     "routing": StepSpec(name="routing", depends_on=("draft",)),
     "assist": StepSpec(name="assist"),
     #: No dependency on "classification": revise operates on
@@ -53,6 +57,10 @@ STEP_SPECS: dict[str, StepSpec] = {
     "revise": StepSpec(name="revise"),
     #: Deterministic, LLM-free -- see planner._build_clarify_decision.
     "clarify": StepSpec(name="clarify"),
+    #: Also deterministic and LLM-free: it renders
+    #: `app.ai.workflows.scope.CAPABILITY_MANIFEST` and ends the turn. It is
+    #: always the only step in its plan, so it has nothing to depend on.
+    "refuse": StepSpec(name="refuse"),
 }
 
 

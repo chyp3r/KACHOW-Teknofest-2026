@@ -1,4 +1,5 @@
 import glob
+import json
 import logging
 import os
 
@@ -93,3 +94,37 @@ async def load_mevzuat_corpus(
         len(paths),
     )
     return documents
+
+
+def load_yazisma_examples(examples_path: str) -> list[dict]:
+    """Read the curated few-shot draft examples JSONL.
+
+    Unlike ``load_mevzuat_corpus`` this performs no chunking: each record is
+    already a single full official letter, produced by
+    ``scripts/curate_yazisma_examples.py``. One record becomes one Qdrant
+    point.
+
+    Args:
+        examples_path: Path to the ``ornekler.jsonl`` file.
+
+    Returns:
+        The parsed records, in file order. Empty when the file is absent or
+        unreadable.
+    """
+    if not os.path.isfile(examples_path):
+        logger.warning(
+            "Yazışma örnekleri dosyası bulunamadı: %s; örnek getirimi sonuçsuz kalacak.",
+            examples_path,
+        )
+        return []
+
+    records: list[dict] = []
+    with open(examples_path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            records.append(json.loads(line))
+
+    logger.info("Loaded %d yazışma example(s) from %s.", len(records), examples_path)
+    return records

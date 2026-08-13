@@ -21,14 +21,14 @@ from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.guardrails.llm_nuance import judge_output_leakage
 from app.ai.guardrails.output_gate import classify_reason_kind, evaluate_response
 from app.ai.guardrails.sensitivity import SensitivityAssessment, assessment_from_analysis
-from app.ai.session.focus import SessionFocus, compute_focus_update, merge_focus
+from app.ai.session.focus import DraftVersion, SessionFocus, compute_focus_update, merge_focus
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.ai.semantic.prototype_matcher import PrototypeMatcher
 from app.ai.tools.document_tools import ToolResult, build_assistant_tools
-from app.ai.verification import apply_answers, verify_draft
+from app.ai.verification import InfoQuestion, apply_answers, verify_draft
 from app.ai.workflows.events import (
     child_config,
     emit,
@@ -38,19 +38,32 @@ from app.ai.workflows.events import (
     emit_node_error,
     emit_node_skipped,
     emit_node_start,
+    emit_notice,
     emit_partial,
-    emit_token,
+    emit_question,
 )
+from app.ai.workflows.intent_rules import RESET_SURFACES
+from app.ai.workflows.intent_scorer import normalize
 from app.ai.workflows.planner import resolve_plan
+from app.ai.workflows.relevance import build_unrelated_reply, resolve_relevance
 from app.ai.workflows.revise import run_revise
+from app.ai.workflows.scope import build_refusal_reply
+from app.ai.workflows.revise_graph import create_revise_graph
 from app.ai.workflows.step_graph import STEP_SPECS, StepSpec, all_steps_settled, ready_steps
+from app.ai.workflows.writing_brief import AUTO_ANSWER, resolve_brief
 from app.core.config import settings
 from app.core.enums.reasoning_level import ReasoningLevel
 from app.core.enums.sensitivity_level import SensitivityLevel
 from app.core.enums.step_status import StepStatus
 from app.infrastructure.vectorstore.base import BaseVectorStore
 from app.observability import guardrail_recorder
-from app.observability.ai_metrics import HITL_INTERRUPTS, NODE_DURATION
+from app.observability.ai_metrics import (
+    HITL_INTERRUPTS,
+    NODE_DURATION,
+    ROUTER_CONFIDENCE,
+    ROUTER_DECISIONS,
+    ROUTER_SEMANTIC_AVAILABLE,
+)
 from app.observability.run_recorder import end_run, record_step, start_run
 
 logger = logging.getLogger(__name__)
@@ -59,26 +72,32 @@ QA_RESULT_LIMIT = get_policy().memory.qa_result_limit
 
 STEP_LABELS = {
     "classification": "Evrak Analizi",
+    "brief": "Yazım Briefi",
     "draft": "Taslak Oluşturma",
     "routing": "Birim Yönlendirme",
     "assist": "Asistan",
     "revise": "Taslak Revizyonu",
     "clarify": "Açıklayıcı Soru",
+    "refuse": "Kapsam Denetimi",
+    "gate_revise": "Geri Bildirimli Revizyon",
 }
 
 STEP_MESSAGES = {
     "classification": "Belge sınıflandırılıyor ve üst veriler çıkarılıyor...",
+    "brief": "Taslak öncesi yazım briefi hazırlanıyor...",
     "draft": "Resmî cevap taslağı hazırlanıyor...",
     "routing": "Cevap taslağının iletileceği birim analiz ediliyor...",
     "assist": "Asistan yanıtı hazırlanıyor...",
     "revise": "Taslak talebe göre güncelleniyor...",
     "clarify": "İsteğinizi netleştirmek için bir soru hazırlanıyor...",
+    "refuse": "İstek sistemin görev alanına göre denetleniyor...",
+    "gate_revise": "Onay kapısındaki geri bildiriminize göre taslak güncelleniyor...",
 }
 
 def _dependency_failed(
     step: str, state: "PlanningState", updates: dict[str, Any]
 ) -> Optional[str]:
-    """Return the name of a failed dependency for ``step``, if any.
+    """Return the name of a failed-or-skipped dependency for ``step``, if any.
 
     A step whose dependency's own result carries status FAILED must not run
     on empty/garbage input. Without this a failed draft still let routing
@@ -88,6 +107,11 @@ def _dependency_failed(
     function is the other half -- *whether a failure* should skip the step,
     which is deliberately not `ready_steps`'s concern (see its docstring).
 
+    SKIPPED counts the same as FAILED here: a dependency that decided not to
+    produce output (e.g. ``_step_draft`` refusing an off-topic request via
+    ``app.ai.workflows.relevance``) leaves nothing for a dependent step to
+    run on either, even though nothing actually errored.
+
     Args:
         step: The plan step about to run.
         state: The graph state as of the start of this superstep.
@@ -95,13 +119,13 @@ def _dependency_failed(
             (a dependency that just ran this turn is not yet in ``state``).
 
     Returns:
-        The failed dependency's step name, or None when every dependency (if
-        any) succeeded or has not run yet.
+        The failed/skipped dependency's step name, or None when every
+        dependency (if any) settled successfully or has not run yet.
     """
     spec = STEP_SPECS.get(step, StepSpec(name=step))
     for dependency in spec.depends_on:
         result = updates.get(f"{dependency}_result") or state.get(f"{dependency}_result") or {}
-        if result.get("status") == StepStatus.FAILED:
+        if result.get("status") in (StepStatus.FAILED, StepStatus.SKIPPED):
             return dependency
     return None
 
@@ -116,6 +140,10 @@ HISTORY_WINDOW = get_policy().memory.history_window
 #: consolidate_memory_node always has the overflow available when it runs
 #: (it runs once per turn, after HISTORY_WINDOW turns are already appended).
 HISTORY_RAW_CAP = get_policy().memory.history_raw_cap
+
+#: `plan_evidence` ids that mark a turn as plain small talk -- see
+#: `_run_assist`'s `is_small_talk_turn`.
+_SMALL_TALK_EVIDENCE = frozenset({"assist.greeting", "assist.courtesy", "assist.farewell"})
 
 #: Tokens set aside for the assist step's own answer when budgeting its
 #: prompt against settings.OLLAMA_NUM_CTX -- a typical conversational reply
@@ -205,6 +233,14 @@ class PlanningState(TypedDict, total=False):
     reasoning_level: str
     plan_steps: list[str]
     plan_intent: str
+    #: Ids of the lexical rules that fired for this turn's decision (see
+    #: `PlanDecision.evidence`). Turn-scoped, like `plan_intent` itself --
+    #: reset every turn in `planning_node`. `_run_assist` reads it to tell a
+    #: message that resolved to `assist` *because* it looked like a greeting
+    #: or a farewell apart from one that landed there for any other reason
+    #: (a genuine question, an out-of-scope request), which needs its full
+    #: conversational context and must not be treated the same way.
+    plan_evidence: tuple[str, ...]
     #: Monotonic turn counter, no longer used to index into `plan_steps`
     #: (see `ready_steps`/`all_steps_settled` in `step_graph.py`) -- kept
     #: only as an ingredient of `human_gate_node`'s interrupt-id hash and
@@ -216,6 +252,17 @@ class PlanningState(TypedDict, total=False):
     _last_ran_step: Optional[str]
     cached_document: dict[str, Any]
     classification_result: dict[str, Any]
+    #: Deterministic pre-draft writing-style resolution -- see
+    #: app.ai.workflows.writing_brief. `{"status", "answers", "resolved",
+    #: "questions"}`; `answers` is what draft_graph._build_brief renders.
+    #: Reset every turn in planning_node, unlike focus.writing_brief (its
+    #: session-scoped carry-forward).
+    brief_result: dict[str, Any]
+    #: How many rounds brief_gate_node has re-asked this turn -- plays the
+    #: same role gate_revision_count plays for human_gate_node's hash: a
+    #: re-ask after a blank required answer must not collide with round 0's
+    #: interrupt_id.
+    brief_gate_round: int
     draft_result: dict[str, Any]
     routing_result: dict[str, Any]
     assist_result: dict[str, Any]
@@ -230,7 +277,20 @@ class PlanningState(TypedDict, total=False):
     #: field left both steps looking permanently unsettled and looping.
     revise_result: dict[str, Any]
     clarify_result: dict[str, Any]
+    #: Same arrangement as clarify: the out-of-scope refusal's real payload
+    #: goes into assist_result (it is a reply like any other), and this field
+    #: exists only so the scheduler can see the step settle.
+    refuse_result: dict[str, Any]
     final_output: dict[str, Any]
+    #: How many times the human approval gate's own "revizyon iste" action
+    #: has re-run the revise sub-graph *within this turn* (see
+    #: gate_revise_node/route_after_gate). Reset to 0 every turn in
+    #: planning_node, bounded by settings.HITL_MAX_GATE_REVISIONS.
+    gate_revision_count: int
+    #: The human's typed revision note from the gate's most recent
+    #: "revizyon iste" click, consumed by gate_revise_node and cleared
+    #: immediately after -- never read anywhere else.
+    gate_revision_note: str
     #: Persists across separate ainvoke() calls on the same checkpointer
     #: thread_id (see ChatService._thread_id) -- this is the whole memory
     #: story; there is no separate store to keep consistent with it. Holds up
@@ -346,6 +406,75 @@ def _prior_turns(state: PlanningState, limit: int) -> list[dict[str, str]]:
     return prior[-limit:] if limit > 0 else []
 
 
+def _summarize_step_outcome(
+    plan_intent: Optional[str],
+    draft_result: dict[str, Any],
+    assist_result: dict[str, Any],
+    classification_result: dict[str, Any],
+) -> Optional[str]:
+    """One short, honest sentence recording what a non-assist step did.
+
+    ``_run_assist`` appends its own reply to ``history`` already. Every other
+    step -- draft, revise, analyze, clarify -- settles a result the user sees
+    in ``final_output`` but that never reaches ``history`` or
+    ``history_summary``. A later turn that only has the summary to go on then
+    sees nothing but the *user's own request text* ("bu taslağı kısalt") with
+    no record of what actually happened to it -- and nothing to contradict a
+    plausible-sounding but false claim that it succeeded. This closes that
+    gap with a status marker, not the full draft text (already retained in
+    ``SessionFocus.draft_history`` for anything that needs the real content).
+
+    Args:
+        plan_intent: This turn's resolved intent.
+        draft_result: This turn's settled ``draft_result``.
+        assist_result: This turn's settled ``assist_result`` (carries
+            ``clarify``'s question -- see ``_step_clarify``).
+        classification_result: This turn's settled ``classification_result``.
+
+    Returns:
+        A short assistant-role note, or None for ``assist`` (already
+        self-recorded) and for an intent with nothing settled yet.
+    """
+    if plan_intent in (None, "assist"):
+        return None
+
+    if plan_intent in ("draft", "revise"):
+        status = draft_result.get("status")
+        label = "Taslak" if plan_intent == "draft" else "Taslak revizyonu"
+        if status in (
+            StepStatus.COMPLETED,
+            StepStatus.NEEDS_HUMAN_APPROVAL,
+            StepStatus.APPROVED,
+        ):
+            return f"[Sistem notu] {label} başarıyla hazırlandı (durum: {status})."
+        if status == StepStatus.NEEDS_INPUT:
+            return f"[Sistem notu] {label} için kullanıcıdan ek bilgi istendi, henüz tamamlanmadı."
+        if status == StepStatus.FAILED:
+            error = draft_result.get("error") or "bilinmeyen bir hata"
+            return f"[Sistem notu] {label} başarısız oldu: {error}"
+        if status == StepStatus.REJECTED:
+            reason = draft_result.get("rejection_reason")
+            return (
+                f"[Sistem notu] {label} reddedildi (gerekçe: {reason})."
+                if reason
+                else f"[Sistem notu] {label} reddedildi."
+            )
+        return None
+
+    if plan_intent == "analyze":
+        doc_type = classification_result.get("correspondence_type") or classification_result.get(
+            "type"
+        )
+        suffix = f" (tür: {doc_type})" if doc_type else ""
+        return f"[Sistem notu] Evrak analiz edildi{suffix}."
+
+    if plan_intent == "clarify":
+        question = assist_result.get("reply")
+        return f'[Sistem notu] Kullanıcıya açıklayıcı bir soru soruldu: "{question}"' if question else None
+
+    return None
+
+
 #: Turkish labels for SensitivityLevel, for the prompt-facing note only --
 #: the enum's own .value (e.g. "cok_gizli") is what every deterministic
 #: check compares against, this is purely what the model reads.
@@ -406,6 +535,7 @@ def create_planning_graph(
     embeddings_client: BaseEmbeddingsClient | None = None,
     fast_llm_client: Optional[BaseLLMClient] = None,
     checkpointer: Any = None,
+    mevzuat_retriever: Any = None,
 ):
     """Create and compile the master orchestration workflow.
 
@@ -426,6 +556,9 @@ def create_planning_graph(
             document search.
         fast_llm_client: Small model for intent classification on ambiguous
             messages. Falls back to ``llm_client``.
+        mevzuat_retriever: Optional retriever handed to the revise
+            sub-graph for conditional legislation re-retrieval (see
+            ``app.ai.revision.retrieval``). None always skips it.
         checkpointer: Optional LangGraph checkpointer (see
             ``app.infrastructure.checkpointing``). Required for the
             ``human_gate`` node's ``interrupt()`` calls to actually pause and
@@ -460,6 +593,12 @@ def create_planning_graph(
     # vector.
     qa_sparse_encoder = SparseBM25Encoder()
 
+    # Built once per graph, like draft_graph/routing_graph -- run_revise
+    # (both the plain "revise" step and the human approval gate's own
+    # "revizyon iste" loop, see gate_revise_node) invokes this compiled
+    # sub-graph rather than building a fresh one per call.
+    revise_graph = create_revise_graph(llm_client, fast_llm_client, mevzuat_retriever)
+
     # Layer 2 of the intent ladder. Built once per graph, and only when there is
     # an embeddings client to build it with -- without one the ladder simply
     # skips the rung, exactly as it behaved before the layer existed. The
@@ -472,6 +611,18 @@ def create_planning_graph(
             embeddings_client, model_name=settings.OLLAMA_EMBEDDING_MODEL
         )
         prototype_matcher = candidate if candidate.available else None
+
+    ROUTER_SEMANTIC_AVAILABLE.set(1.0 if prototype_matcher is not None else 0.0)
+    if prototype_matcher is None:
+        # Not a warning: every message the lexical layer abstains on skips
+        # straight past the semantic rung until someone notices and reruns
+        # scripts/build_prototypes.py. See ROUTER_SEMANTIC_AVAILABLE's
+        # docstring for why this must be loud rather than logged and forgotten.
+        logger.error(
+            "Semantic intent layer unavailable (missing or stale prototype "
+            "vectors) -- every lexically-abstained message will skip straight "
+            "to the model/clarify fallback. Run scripts/build_prototypes.py."
+        )
 
     async def planning_node(
         state: PlanningState, config: RunnableConfig
@@ -488,6 +639,11 @@ def create_planning_graph(
             previous_intent=state.get("plan_intent"),
             matcher=prototype_matcher,
             focus=state.get("focus") or SessionFocus(),
+            # The current turn is appended to `history` only after this node
+            # returns (see the `"history"` key below), so what's here is
+            # already exactly the prior turns -- no trailing duplicate to
+            # drop, unlike `_prior_turns`'s assumption for the assist step.
+            history=state.get("history"),
         )
         logger.info(
             "Plan: %s (intent=%s, source=%s)",
@@ -495,6 +651,8 @@ def create_planning_graph(
             decision.intent,
             decision.source,
         )
+        ROUTER_DECISIONS.labels(intent=decision.intent, source=decision.source).inc()
+        ROUTER_CONFIDENCE.labels(source=decision.source).observe(decision.confidence)
 
         await emit(
             config,
@@ -504,6 +662,9 @@ def create_planning_graph(
                 "intent": decision.intent,
                 "reasoning": decision.reasoning,
                 "reasoning_level": state.get("reasoning_level", ReasoningLevel.BALANCED.value),
+                "source": decision.source,
+                "confidence": decision.confidence,
+                "alternatives": list(decision.alternatives),
             },
         )
 
@@ -528,16 +689,22 @@ def create_planning_graph(
             "run_id": run_id,
             "plan_steps": decision.steps,
             "plan_intent": decision.intent,
+            "plan_evidence": decision.evidence,
             "current_step_idx": 0,
             "_last_ran_step": None,
             "cached_document": _load_cached_document(state.get("document_id")),
             "classification_result": {},
+            "brief_result": {},
+            "brief_gate_round": 0,
             "draft_result": {},
             "routing_result": {},
             "assist_result": {},
             "revise_result": {},
             "clarify_result": {},
+            "refuse_result": {},
             "final_output": {},
+            "gate_revision_count": 0,
+            "gate_revision_note": "",
             "history": [{"role": "user", "content": state["input_text"]}],
             # Always written, even to None: a decision of any other kind
             # supersedes and clears a stale open question rather than
@@ -615,11 +782,28 @@ def create_planning_graph(
 
         context = _mevzuat_context(classification)
 
+        # The brief gate's own "Yazışma türü" slot (priority 0, see
+        # app.ai.workflows.writing_brief.SLOT_CATALOG) is the most explicit
+        # signal available -- either the user's own words matched a genre
+        # surface, or a human confirmed it at the gate. AUTO_ANSWER means
+        # "let the system decide", not "response_letter", so it falls
+        # through to classification the same as an unset brief.
+        brief_answers = (state.get("brief_result") or {}).get("answers") or {}
+        brief_correspondence_type = brief_answers.get("yazisma_turu")
+        requested_correspondence_type = (
+            brief_correspondence_type
+            if brief_correspondence_type and brief_correspondence_type != AUTO_ANSWER
+            else _requested_correspondence_type(classification)
+        )
+
         return await draft_graph.ainvoke(
             {
                 "source_document": source_document,
                 "classification": classification,
-                "correspondence_type": _requested_correspondence_type(classification),
+                # The user's own message, never the boilerplate below --
+                # see draft_graph.validate_input_node / resolve_correspondence_type.
+                "user_request": state["input_text"],
+                "correspondence_type": requested_correspondence_type,
                 "context": context,
                 "instructions": (
                     f"Kullanıcı İsteği: {state['input_text']}\n\n"
@@ -628,6 +812,7 @@ def create_planning_graph(
                 ),
                 "attempts": 0,
                 "reasoning_level": state.get("reasoning_level", ReasoningLevel.BALANCED.value),
+                "writing_brief": brief_answers,
             },
             config=child_config(config),
         )
@@ -656,22 +841,33 @@ def create_planning_graph(
         requester_clearance = (
             SensitivityLevel(requester_clearance_raw) if requester_clearance_raw else None
         )
-        # Gizli/Çok Gizli per the resolved policy (`GuardrailPolicy.
-        # sensitivity_block_levels`, read via `requires_review` rather than
-        # a level comparison hardcoded here) -- buffer the whole reply and
-        # gate it before showing anything, instead of the ordinary
-        # token-by-token stream a post-hoc gate can't actually stop in time.
-        buffer_streaming = bool(sensitivity and sensitivity.requires_review)
-
         document_context = "(Bu turda yüklenmiş bir belge yok.)"
         if document_id:
             document_context = (
                 f"Bir belge yüklü. Özet: {analysis.get('summary') or 'Özet mevcut değil.'}\n"
                 "Detay veya belge içeriği gerekiyorsa ilgili aracı çağır."
             )
+
+        # A message that resolved to `assist` *because* it's plain small talk
+        # (a greeting, a courtesy, a sign-off) and nothing else -- not one
+        # that merely landed on assist for some other reason, like a genuine
+        # question or an out-of-scope request, both of which still need full
+        # conversational grounding to answer well. Withholding the rolling
+        # summary and the verbatim window here is what stops a bare "selam"
+        # from reading prior revise turns and describing them back to the
+        # user as if they were relevant to answering it.
+        plan_evidence = state.get("plan_evidence") or ()
+        is_small_talk_turn = bool(
+            _SMALL_TALK_EVIDENCE.intersection(plan_evidence)
+        ) and len(state.get("input_text", "").split()) <= 4
+
         history_summary_text = (
-            state.get("history_summary")
-            or "(Bu konuşmada henüz özetlenecek eski mesaj yok.)"
+            "(Bu tur küçük bir sohbet ifadesi -- geçmiş özeti bu yanıt için gerekli değil.)"
+            if is_small_talk_turn
+            else (
+                state.get("history_summary")
+                or "(Bu konuşmada henüz özetlenecek eski mesaj yok.)"
+            )
         )
 
         # Everything outside the two blocks below is fixed for this call --
@@ -717,7 +913,7 @@ def create_planning_graph(
             _prior_turns(state, HISTORY_RAW_CAP),
             remaining_for_history,
             llm_client.count_tokens,
-            min_turns=2,
+            min_turns=0 if is_small_talk_turn else 2,
             max_turns=HISTORY_WINDOW,
         )
         if assembled.dropped or assembled.compressed or len(history) < len(
@@ -772,8 +968,6 @@ def create_planning_graph(
                     node="assist",
                 ):
                     chunks.append(chunk)
-                    if not buffer_streaming:
-                        await emit_token(config, "assist", chunk)
 
             raw_reply = "".join(chunks).strip()
             source_materials = "\n\n".join(
@@ -809,12 +1003,6 @@ def create_planning_graph(
             )
             reply = verdict.text
             flagged = verdict.action != "pass"
-
-            if buffer_streaming:
-                # Token-by-token streaming was withheld above specifically
-                # so this could be the gate's decision, not the model's raw
-                # output -- emit it once, now that the check has actually run.
-                await emit_token(config, "assist", reply)
 
             if flagged:
                 guardrail_kind = classify_reason_kind(verdict.reasons)
@@ -866,17 +1054,40 @@ def create_planning_graph(
         not a mid-reflexion-loop snapshot. A separate node rather than folded
         into consolidate_memory_node, which stays focused on its own single
         concern (see its docstring).
+
+        Also records a short outcome note into ``history`` for whichever step
+        actually ran (see ``_summarize_step_outcome``) -- ``focus`` and
+        ``history`` are both "what actually happened this turn" bookkeeping,
+        and runs before ``consolidate_memory_node`` specifically so a note
+        landing right at the edge of the verbatim window still gets folded
+        into the summary the same turn it was produced.
         """
         focus = state.get("focus") or SessionFocus()
+        input_text = state.get("input_text", "")
+        normalized_input = normalize(input_text)
+        reset_requested = any(
+            f" {surface} " in f" {normalized_input} " for surface in RESET_SURFACES
+        )
         update = compute_focus_update(
             focus,
             document_id=state.get("document_id"),
             plan_intent=state.get("plan_intent"),
-            input_text=state.get("input_text", ""),
+            input_text=input_text,
             draft_result=state.get("draft_result") or {},
             assist_result=state.get("assist_result") or {},
+            reset_requested=reset_requested,
+            brief_answers=(state.get("brief_result") or {}).get("answers"),
         )
-        return {"focus": update} if update else {}
+        result: dict[str, Any] = {"focus": update} if update else {}
+        outcome_note = _summarize_step_outcome(
+            state.get("plan_intent"),
+            state.get("draft_result") or {},
+            state.get("assist_result") or {},
+            state.get("classification_result") or {},
+        )
+        if outcome_note:
+            result["history"] = [{"role": "assistant", "content": outcome_note}]
+        return result
 
     async def consolidate_memory_node(
         state: PlanningState, config: RunnableConfig
@@ -922,9 +1133,92 @@ def create_planning_graph(
     ) -> None:
         updates["classification_result"] = await _run_classification(state, config)
 
+    async def _step_brief(
+        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
+    ) -> None:
+        """Resolve the pre-draft writing brief -- deterministic, no interrupt().
+
+        Never pauses the run itself: that happens in brief_gate_node, a
+        separate node reached only via route_after_step, for the same
+        reason human_gate_node is split from the step that produces
+        draft_result -- interrupt() replays its own node from the top on
+        resume, and this resolution is cheap enough to replay but the point
+        of the split is to keep it that way as the resolver grows.
+
+        Wrapped in its own try/except and degrades to a zero-question
+        result (falling back to whatever the session's prior brief already
+        carries) on any failure: a bug in a hint-gatherer must never be
+        able to leave `brief_result` empty, which would leave `draft`
+        looking permanently unready to `step_graph.ready_steps`.
+        """
+        focus = state.get("focus") or SessionFocus()
+        try:
+            resolution = resolve_brief(state["input_text"], classification, focus.writing_brief)
+        except Exception:
+            logger.exception("Writing-brief resolution failed; continuing without one.")
+            updates["brief_result"] = {
+                "status": StepStatus.COMPLETED,
+                "answers": dict(focus.writing_brief or {}),
+                "resolved": {},
+                "questions": [],
+            }
+            return
+
+        updates["brief_result"] = {
+            "status": StepStatus.COMPLETED,
+            "answers": {key: item.value for key, item in resolution.resolved.items()},
+            # "default"-sourced entries are an optional slot silently
+            # defaulted to AUTO_ANSWER (see resolve_brief) -- they were
+            # never resolved *from* anything, so showing them in the
+            # "Bilinenler" strip as if they were a known fact ("Sen karar
+            # ver" appearing as something the system already knows) is
+            # backwards. Only genuinely resolved slots are worth surfacing.
+            "resolved": {
+                key: {"value": item.value, "label": item.label, "source": item.source}
+                for key, item in resolution.resolved.items()
+                if item.source != "default"
+            },
+            "questions": list(resolution.questions),
+        }
+
     async def _step_draft(
         state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
     ) -> None:
+        """Run the draft sub-graph, unless this document isn't what it's about.
+
+        The scope gate (``app.ai.workflows.scope``) already required *some*
+        anchor before this plan was even allowed to start -- for a document-
+        attached turn, an attached document counts as that anchor on its
+        own. This is the narrower check on top: does the request actually
+        concern *this* document, now that its classification (in particular
+        ``summary``) exists to compare against. Only runs when a document is
+        attached; a document-less draft request already had to clear
+        ``scope``'s own ``domain_vocabulary`` requirement to get this far, so
+        there is nothing further to check it against here.
+        """
+        document_id = state.get("document_id")
+        if document_id:
+            verdict = await resolve_relevance(
+                state["input_text"], classification, llm_client=intent_client
+            )
+            if not verdict.relevant:
+                logger.info(
+                    "Draft refused as unrelated to the attached document: "
+                    "reason=%s (%s)",
+                    verdict.reason,
+                    verdict.detail,
+                )
+                reason = "İstek yüklü belgeyle ilgili görünmüyor."
+                await emit_node_skipped(config, "draft", STEP_LABELS["draft"], reason)
+                reply = build_unrelated_reply(
+                    classification.get("summary", ""),
+                    classification.get("document_type_label", ""),
+                )
+                updates["assist_result"] = {"reply": reply, "status": StepStatus.COMPLETED}
+                updates["draft_result"] = {"status": StepStatus.SKIPPED, "reason": reason}
+                updates["history"] = [{"role": "assistant", "content": reply}]
+                return
+
         updates["draft_result"] = await _run_draft(state, classification, config)
 
     async def _step_routing(
@@ -935,7 +1229,15 @@ def create_planning_graph(
         if draft_result.get("requires_human_approval"):
             score = 0.0
         updates["routing_result"] = await routing_graph.ainvoke(
-            {"draft": draft_result.get("draft", ""), "confidence_score": score},
+            {
+                "draft": draft_result.get("draft", ""),
+                "confidence_score": score,
+                # Empty until Faz 3 threads company_id through PlanningState
+                # itself (see RoutingState.company_id's docstring) -- degrades
+                # to "no units configured, needs human approval" rather than
+                # leaking another company's units into this prompt.
+                "company_id": state.get("company_id") or "",
+            },
             config=child_config(config),
         )
 
@@ -983,7 +1285,9 @@ def create_planning_graph(
             fast_llm_client=fast_llm_client,
             reasoning_level=state.get("reasoning_level", ReasoningLevel.BALANCED.value),
             config=config,
-            emit_token_fn=emit_token,
+            mevzuat_retriever=mevzuat_retriever,
+            revise_graph=revise_graph,
+            instruction_origin="user_turn",
         )
         updates["draft_result"] = result
         updates["revise_result"] = {"status": result["status"]}
@@ -1002,11 +1306,53 @@ def create_planning_graph(
         focus = state.get("focus") or SessionFocus()
         pending = focus.pending_clarification or {}
         question = pending.get("question") or "Bu isteğinizi biraz açar mısınız?"
-        updates["assist_result"] = {"reply": question, "status": StepStatus.COMPLETED}
+        options = [
+            {"intent": option.get("intent", ""), "label": option.get("label", "")}
+            for option in (pending.get("options") or [])
+        ]
+        # A decision card, not a sentence the user has to answer in prose.
+        # The options carry the *same* Turkish labels
+        # `_try_resolve_pending_clarification` matches against, so clicking
+        # one and typing it out by hand resolve through exactly the same path
+        # next turn -- the card is a shortcut, never a second mechanism.
+        await emit_question(
+            config,
+            node="clarify",
+            question=question,
+            options=[
+                {"value": option["intent"], "label": option["label"]}
+                for option in options
+            ],
+            allow_free_text=True,
+        )
+        updates["assist_result"] = {
+            "reply": question,
+            "status": StepStatus.COMPLETED,
+            "question_options": options,
+        }
         # Same reason as _step_revise's marker: the scheduler keys readiness
         # on `clarify_result`, not on the `assist_result` key this step's
         # actual payload lives in.
         updates["clarify_result"] = {"status": StepStatus.COMPLETED}
+
+    async def _step_refuse(
+        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
+    ) -> None:
+        """Answer an out-of-domain request without running anything.
+
+        Deterministic by design (see ``PLAN_BY_INTENT``'s note on the
+        ``refuse`` plan): the reply is rendered from
+        ``scope.CAPABILITY_MANIFEST``, never generated, so the model that was
+        just declined the off-topic request never gets a turn in which to
+        fulfil it anyway.
+        """
+        cached = state.get("cached_document") or {}
+        analysis = classification or cached.get("analysis") or {}
+        summary = analysis.get("summary", "") if state.get("document_id") else ""
+        reply = build_refusal_reply(document_summary=summary)
+        updates["assist_result"] = {"reply": reply, "status": StepStatus.COMPLETED}
+        updates["refuse_result"] = {"status": StepStatus.COMPLETED}
+        updates["history"] = [{"role": "assistant", "content": reply}]
 
     #: One entry per dispatchable step name. Each runner reads whatever it
     #: needs from `state`/`classification` and writes its result(s) directly
@@ -1018,11 +1364,13 @@ def create_planning_graph(
         str, Callable[[PlanningState, RunnableConfig, dict[str, Any], dict[str, Any]], Awaitable[None]]
     ] = {
         "classification": _step_classification,
+        "brief": _step_brief,
         "draft": _step_draft,
         "routing": _step_routing,
         "assist": _step_assist,
         "revise": _step_revise,
         "clarify": _step_clarify,
+        "refuse": _step_refuse,
     }
 
     def _result_key(step: str) -> str:
@@ -1085,7 +1433,7 @@ def create_planning_graph(
         if failed_dependency is not None:
             reason = (
                 f"'{STEP_LABELS.get(failed_dependency, failed_dependency)}' adımı "
-                "başarısız olduğu için bu adım atlandı."
+                "tamamlanamadığı için bu adım atlandı."
             )
             logger.warning("Skipping plan step '%s': %s", step, reason)
             await emit_node_skipped(config, step, label, reason)
@@ -1166,7 +1514,15 @@ def create_planning_graph(
         """
         steps = state.get("plan_steps") or []
         if all_steps_settled(steps, state):
-            return {}
+            # Reached after the human approval gate's own loop (approve, or
+            # gate_revise_node settling without needing another gate round)
+            # resolves a plan with no step left to naturally recompute
+            # final_output -- "revise" is a single-step plan (see
+            # planner.PLAN_BY_INTENT), so nothing downstream of the gate
+            # would otherwise ever refresh it, and the turn's reply would
+            # silently reflect the stale pre-gate snapshot instead of what
+            # the gate actually decided.
+            return {"final_output": _compile_final_output(state, {})}
 
         ready = ready_steps(steps, state)
         if not ready:
@@ -1225,13 +1581,127 @@ def create_planning_graph(
             else StepStatus.COMPLETED
         )
 
-        return {
+        output: dict[str, Any] = {
             "status": final_status,
+            "plan_steps": list(updates.get("plan_steps") or state.get("plan_steps") or []),
+            "intent": updates.get("plan_intent") or state.get("plan_intent") or "",
             "classification": _pick("classification_result"),
             "draft": draft_result,
             "routing": _pick("routing_result"),
             "assist": _pick("assist_result"),
         }
+        if draft_result.get("conflicts") or draft_result.get("changelog"):
+            output["revision"] = {
+                "conflicts": draft_result.get("conflicts") or [],
+                "conflict_notes": draft_result.get("conflict_notes", ""),
+                "changelog": draft_result.get("changelog") or {},
+                "rounds": state.get("gate_revision_count", 0),
+            }
+        return output
+
+    async def brief_gate_node(state: PlanningState, config: RunnableConfig) -> dict[str, Any]:
+        """Pause the run for the writing brief's unanswered questions.
+
+        A separate node from `_step_brief` for the same reason `human_gate_node`
+        is separate from `execute_step_node`: `interrupt()` replays its own
+        node from the top on resume. `_step_brief`'s actual resolution work
+        already ran and is sitting in `brief_result` -- resuming here replays
+        only a hash and a couple of dict lookups, never `resolve_brief` itself.
+        """
+        brief_result = state.get("brief_result") or {}
+        questions = brief_result.get("questions") or []
+        brief_gate_round = state.get("brief_gate_round", 0)
+
+        payload = {
+            "kind": "writing_brief",
+            "title": "Yazım Briefi",
+            "intro": "Taslağı yazmadan önce netleştirmem gereken birkaç nokta var.",
+            "questions": questions,
+            "resolved": brief_result.get("resolved") or {},
+            "round": brief_gate_round,
+            "resume_action": "answer",
+            "auto_value": AUTO_ANSWER,
+        }
+        # Deterministic, not a fresh uuid4 -- same reason human_gate_node's
+        # hash is: interrupt() re-executes everything before it on resume,
+        # including this computation, and it must come out identical both
+        # times for the frontend's dedup to work. run_id (not
+        # current_step_idx, which brief always runs at index 0 or 1 well
+        # before draft) plus brief_gate_round is what gives a re-ask after a
+        # blank required answer a distinct id from round 0's.
+        interrupt_id = hashlib.sha256(
+            f"writing_brief:{'|'.join(sorted(question['key'] for question in questions))}:"
+            f"{state.get('run_id', '')}:{brief_gate_round}".encode("utf-8")
+        ).hexdigest()[:16]
+
+        HITL_INTERRUPTS.labels(kind="writing_brief").inc()
+        await emit_node_start(
+            config, "brief_gate", "Yazım Briefi", "Taslak öncesi yazım briefi bekleniyor..."
+        )
+        await emit_interrupt(
+            config, kind="writing_brief", interrupt_id=interrupt_id, payload=payload
+        )
+        answer = interrupt(payload)
+        answer = answer if isinstance(answer, dict) else {}
+        await emit_node_end(
+            config, "brief_gate", "Yazım Briefi", "Yazım briefi yanıtı alındı.", answer
+        )
+
+        if answer.get("action") == "reject":
+            reply = "Taslak talebi iptal edildi."
+            updates: dict[str, Any] = {
+                # Clears `questions` too -- route_after_brief_gate reads it
+                # to decide whether to re-pause, and without this the stale
+                # pre-reject question list would route straight back to
+                # "brief_gate" instead of "end".
+                "brief_result": {**brief_result, "questions": []},
+                "assist_result": {"reply": reply, "status": StepStatus.COMPLETED},
+                "draft_result": {
+                    "status": StepStatus.SKIPPED,
+                    "reason": "Kullanıcı taslağı iptal etti.",
+                },
+                "history": [{"role": "assistant", "content": reply}],
+            }
+            updates["final_output"] = _compile_final_output(state, updates)
+            return updates
+
+        raw_answers = answer.get("answers") or {}
+        merged_answers = dict(brief_result.get("answers") or {})
+        for key, value in raw_answers.items():
+            if isinstance(value, list):
+                merged_answers[key] = ", ".join(str(item) for item in value if item)
+            elif isinstance(value, str):
+                merged_answers[key] = value
+
+        required_keys = {
+            question["key"] for question in questions if question.get("required", True)
+        }
+        residual = [key for key in required_keys if not (merged_answers.get(key) or "").strip()]
+
+        if residual:
+            residual_questions = [question for question in questions if question["key"] in residual]
+            return {
+                "brief_result": {
+                    **brief_result,
+                    "answers": merged_answers,
+                    "questions": residual_questions,
+                },
+                "brief_gate_round": brief_gate_round + 1,
+            }
+
+        return {
+            "brief_result": {**brief_result, "answers": merged_answers, "questions": []},
+            "focus": {"writing_brief": merged_answers},
+        }
+
+    def route_after_brief_gate(state: PlanningState) -> str:
+        brief_result = state.get("brief_result") or {}
+        if brief_result.get("questions"):
+            return "brief_gate"
+        draft_result = state.get("draft_result") or {}
+        if draft_result.get("status") == StepStatus.SKIPPED:
+            return "end"
+        return "continue"
 
     async def human_gate_node(
         state: PlanningState, config: RunnableConfig
@@ -1248,22 +1718,45 @@ def create_planning_graph(
         missing_information = draft_result.get("missing_information") or []
         kind = "missing_information" if missing_information else "draft_approval"
 
+        # Emit-boundary conversion to the canonical PromptQuestion shape --
+        # InfoQuestion stays the internal type everywhere else (apply_answers
+        # and the resume contract key off it), this only widens what goes
+        # over the wire. Legacy label/why keys are kept alongside the new
+        # ones so the pre-existing frontend InfoQuestion[] parsing still
+        # works during the transition.
+        prompt_questions = [
+            {**question, **InfoQuestion(**question).to_prompt_question()}
+            for question in missing_information
+        ]
+
+        gate_revision_count = state.get("gate_revision_count", 0)
         payload = {
             "kind": kind,
-            "questions": missing_information,
+            "questions": prompt_questions,
             "draft": draft_result.get("draft", ""),
             "verification": draft_result.get("verification", {}),
             "judge": draft_result.get("judge", {}),
             "combined_score": draft_result.get("combined_score"),
             "requires_human_approval": draft_result.get("requires_human_approval"),
+            "conflicts": draft_result.get("conflicts") or [],
+            "conflict_notes": draft_result.get("conflict_notes", ""),
+            "changelog": draft_result.get("changelog") or {},
+            "revision_round": gate_revision_count,
+            "max_revision_rounds": settings.HITL_MAX_GATE_REVISIONS,
+            "revision_exhausted": gate_revision_count >= settings.HITL_MAX_GATE_REVISIONS,
         }
         # Deterministic, not a fresh uuid4: interrupt() re-executes everything
         # before it on resume, including this id's computation, and it must
         # come out identical both times for the frontend's dedup to work.
+        # gate_revision_count is part of the hash so a second gate round
+        # within the same turn gets a distinct id even when the model
+        # happens to produce byte-identical text -- without it the
+        # frontend's interrupt_id dedup would silently swallow the second
+        # round's interrupt and the run would hang waiting for an answer
+        # the client thinks it already gave.
         interrupt_id = hashlib.sha256(
-            f"{kind}:{draft_result.get('draft', '')}:{state.get('current_step_idx', 0)}".encode(
-                "utf-8"
-            )
+            f"{kind}:{draft_result.get('draft', '')}:{state.get('current_step_idx', 0)}:"
+            f"{gate_revision_count}".encode("utf-8")
         ).hexdigest()[:16]
 
         HITL_INTERRUPTS.labels(kind=kind).inc()
@@ -1326,24 +1819,46 @@ def create_planning_graph(
         # draft_approval
         action = answer.get("action")
         if action == "revise":
+            # Does NOT append to draft_result["instructions"] and does NOT
+            # set final_output -- the turn is not over. gate_revise_node
+            # (see route_after_gate) picks this note up and actually runs
+            # the revision in the same run, producing a real new draft
+            # before the gate is shown again. Previously this branch only
+            # tagged the status and ended the turn; the note was appended to
+            # "instructions" but nothing ever read it again (planning_node
+            # resets draft_result every turn, and REVISE_REQUESTED wasn't
+            # versionable), so "revizyon iste" silently discarded the draft
+            # and produced no revision at all.
             note = (answer.get("instructions") or "").strip()
-            existing = draft_result.get("instructions", "")
-            updated = {
-                **draft_result,
-                "instructions": f"{existing}\n\nEk talimat (insan geri bildirimi): {note}".strip(),
-                "status": StepStatus.REVISE_REQUESTED,
+            updates: dict[str, Any] = {
+                "gate_revision_note": note,
+                "draft_result": {**draft_result, "status": StepStatus.REVISE_REQUESTED},
             }
-            updates = {"draft_result": updated}
             # A resume may ask for a different reasoning level on the retry
             # (e.g. escalate to "deep" after a "fast" draft was rejected).
             # Omitted -> state's existing reasoning_level is left untouched.
             if answer.get("reasoning_level"):
                 updates["reasoning_level"] = answer["reasoning_level"]
-            updates["final_output"] = _compile_final_output(state, updates)
+            if state.get("gate_revision_count", 0) >= settings.HITL_MAX_GATE_REVISIONS:
+                # The round cap is already spent -- route_after_gate sends
+                # this straight to "end"/"focus" without ever visiting
+                # executor (unlike a clean approval, which loops back
+                # through it), so nothing else would compute final_output
+                # for this turn. draft_result["draft"] is unchanged by this
+                # branch, so this still reflects the last successful
+                # gate_revise round's real text, not a fresh attempt this
+                # click asked for but the cap won't allow.
+                updates["final_output"] = _compile_final_output(state, updates)
             return updates
 
         if action == "reject":
-            updated = {**draft_result, "status": StepStatus.REJECTED}
+            reason = (answer.get("reason") or answer.get("instructions") or "").strip()
+            updated = {
+                **draft_result,
+                "status": StepStatus.REJECTED,
+                "rejection_reason": reason,
+                "rejected_by": answer.get("user_id"),
+            }
             updates = {"draft_result": updated}
             updates["final_output"] = _compile_final_output(state, updates)
             return updates
@@ -1356,8 +1871,89 @@ def create_planning_graph(
         }
         return {"draft_result": updated}
 
+    async def gate_revise_node(state: PlanningState, config: RunnableConfig) -> dict[str, Any]:
+        """Actually perform the approval gate's "revizyon iste" request.
+
+        A separate node from ``human_gate_node`` for the same reason the
+        interrupt lives in its own node at all: resuming replays
+        ``human_gate_node`` from the top, and this node's revise sub-graph
+        call (a real, possibly multi-second LLM round trip) must not sit
+        inside that replay path.
+
+        Builds its own ``DraftVersion`` from ``draft_result`` -- this turn's
+        current settled draft -- rather than ``focus.active_draft``:
+        ``focus_node`` runs once, at the very end of the turn, so during a
+        multi-round gate loop ``focus.active_draft`` is still whatever it
+        was at the *start* of this turn. Reading it here would silently
+        revise a stale, one-round-older version on every round after the
+        first.
+        """
+        draft_result = state.get("draft_result") or {}
+        note = state.get("gate_revision_note", "")
+
+        active_draft = DraftVersion(
+            version=0,  # unused -- this DraftVersion is consumed by run_revise, never stored
+            text=draft_result.get("draft", ""),
+            correspondence_type=draft_result.get("correspondence_type") or "",
+            confidence_score=(
+                draft_result.get("combined_score") or draft_result.get("confidence_score") or 0.0
+            ),
+            created_from="draft",
+            classification=draft_result.get("classification") or {},
+            context=draft_result.get("context") or "",
+            source_document=draft_result.get("source_document") or "",
+            style_examples=tuple(
+                example.get("text", "") if isinstance(example, dict) else str(example)
+                for example in (draft_result.get("style_examples") or [])
+            ),
+            correspondence_type_source=draft_result.get("correspondence_type_source") or "",
+            writing_brief=draft_result.get("writing_brief") or {},
+        )
+
+        await emit_node_start(
+            config, "gate_revise", "Geri Bildirimli Revizyon",
+            "Onay kapısındaki geri bildiriminize göre taslak güncelleniyor...",
+        )
+        result = await run_revise(
+            active_draft=active_draft,
+            instructions=note,
+            correspondence_type=active_draft.correspondence_type,
+            llm_client=llm_client,
+            fast_llm_client=fast_llm_client,
+            reasoning_level=state.get("reasoning_level", ReasoningLevel.BALANCED.value),
+            config=config,
+            mevzuat_retriever=mevzuat_retriever,
+            revise_graph=revise_graph,
+            instruction_origin="human_gate",
+        )
+        if result.get("status") == StepStatus.FAILED:
+            await emit_node_error(
+                config, "gate_revise", "Geri Bildirimli Revizyon",
+                "Geri bildiriminize göre revizyon üretilemedi.", detail=result.get("error", ""),
+            )
+        else:
+            await emit_node_end(
+                config, "gate_revise", "Geri Bildirimli Revizyon",
+                "Geri bildiriminize göre taslak güncellendi.", result,
+            )
+
+        return {
+            "draft_result": result,
+            "revise_result": {"status": result.get("status")},
+            "gate_revision_count": state.get("gate_revision_count", 0) + 1,
+            "gate_revision_note": "",
+        }
+
     def route_after_step(state: PlanningState) -> str:
         steps = state.get("plan_steps") or []
+
+        if (
+            has_checkpointer
+            and settings.HITL_BRIEF_GATE_ENABLED
+            and state.get("_last_ran_step") == "brief"
+            and (state.get("brief_result") or {}).get("questions")
+        ):
+            return "brief_gate"
 
         if has_checkpointer and state.get("_last_ran_step") in {"draft", "revise"}:
             draft_result = state.get("draft_result") or {}
@@ -1377,14 +1973,44 @@ def create_planning_graph(
         status = draft_result.get("status")
         if status == StepStatus.NEEDS_INPUT:
             return "human_gate"
-        if status in {StepStatus.REVISE_REQUESTED, StepStatus.REJECTED}:
+        if status == StepStatus.REJECTED:
             return "end"
+        if status == StepStatus.REVISE_REQUESTED:
+            # Bounded: once the round cap is hit, the gate stops offering
+            # another automatic revision and the turn ends with whatever
+            # text the last successful round produced (see
+            # SessionFocus._VERSIONABLE_DRAFT_STATUSES's own docstring on
+            # why that is still safe to version).
+            if state.get("gate_revision_count", 0) < settings.HITL_MAX_GATE_REVISIONS:
+                return "gate_revise"
+            return "end"
+        return "continue"
+
+    def route_after_gate_revise(state: PlanningState) -> str:
+        draft_result = state.get("draft_result") or {}
+        status = draft_result.get("status")
+        if status == StepStatus.FAILED:
+            return "end"
+        if not has_checkpointer:
+            return "continue"
+        if status == StepStatus.NEEDS_INPUT:
+            return "human_gate"
+        # A conflict finding is never grounds for the gate on its own --
+        # app.ai.revision.conflict's audit_node already reports it as a
+        # non-blocking chat notice (applied_anyway is a hard invariant: the
+        # instruction was applied in full regardless). Only a genuine
+        # quality/PII/groundedness verdict from verify_node, reflected in
+        # `status` itself, opens the gate here.
+        if status == StepStatus.NEEDS_HUMAN_APPROVAL and settings.HITL_APPROVAL_GATE_ENABLED:
+            return "human_gate"
         return "continue"
 
     builder = StateGraph(PlanningState)
     builder.add_node("planning", planning_node)
     builder.add_node("executor", execute_step_node)
+    builder.add_node("brief_gate", brief_gate_node)
     builder.add_node("human_gate", human_gate_node)
+    builder.add_node("gate_revise", gate_revise_node)
     builder.add_node("focus", focus_node)
     builder.add_node("consolidate_memory", consolidate_memory_node)
 
@@ -1393,11 +2019,31 @@ def create_planning_graph(
     builder.add_conditional_edges(
         "executor",
         route_after_step,
-        {"continue": "executor", "human_gate": "human_gate", "end": "focus"},
+        {
+            "continue": "executor",
+            "brief_gate": "brief_gate",
+            "human_gate": "human_gate",
+            "end": "focus",
+        },
+    )
+    builder.add_conditional_edges(
+        "brief_gate",
+        route_after_brief_gate,
+        {"brief_gate": "brief_gate", "continue": "executor", "end": "focus"},
     )
     builder.add_conditional_edges(
         "human_gate",
         route_after_gate,
+        {
+            "human_gate": "human_gate",
+            "gate_revise": "gate_revise",
+            "continue": "executor",
+            "end": "focus",
+        },
+    )
+    builder.add_conditional_edges(
+        "gate_revise",
+        route_after_gate_revise,
         {"human_gate": "human_gate", "continue": "executor", "end": "focus"},
     )
     builder.add_edge("focus", "consolidate_memory")

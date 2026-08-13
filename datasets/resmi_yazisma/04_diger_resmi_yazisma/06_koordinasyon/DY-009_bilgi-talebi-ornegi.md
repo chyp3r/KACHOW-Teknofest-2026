@@ -1,25 +1,36 @@
 ---
-id: DY-009
-kategori: diger_resmi_yazisma
-niyet: 06_koordinasyon
-belge_turu: resmi_sablon
+id: "DY-009"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "06_koordinasyon"
+niyet: "06_koordinasyon"
+baslik: "Bilgi Talebi Örneği"
 kurum: "Erzincan Binali Yıldırım Üniversitesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-009_bilgi-talebi-ornegi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-009_bilgi-talebi-ornegi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
 # Bilgi Talebi Örneği
 
-- Resmî kaynak: https://ogrenciisleri.ebyu.edu.tr/disiplin-sorusturma-rehberi/
-- Doğrudan belge: https://ogrenciisleri.ebyu.edu.tr/Dosyalar/Mevzuat/disiplin%20sorusturma%20rehberi/BilgiTalebiOrnegi.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-009_bilgi-talebi-ornegi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+Bilgi Talebi Örneği;
 
-## Veri kümesinde kullanım
+…………..DEKANLIĞINA/MÜDÜRLÜĞÜNE
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+İlgi: ……….. Makamının ………. gün ve ……… sayılı yazısı.
 
-## Doğrulama notu
+İlgi kayıtlı yazı ile ………… hakkında açılan disiplin soruşturmasında soruşturmacı olarak görevlendirilmiş bulunmaktayım.
+Soruşturma kapsamında …………. Bölümü/Programıöğrencilerinden ………..
+numaralı’nın sicil özeti ve daha önce herhangi bir disiplin cezası alıp almadığı
+bilgisine ihtiyaç bulunmaktadır.
+Adı geçen öğrenciye ait bilgilerin ivedi olarak tarafıma bildirilmesini arz ederim.
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+(İmza) Soruşturmacı
+…/…/.2024

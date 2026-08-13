@@ -117,7 +117,7 @@ Tüm sistem, yöneticilik yapan 2 katman ve 5 asenkron iş akışından (workflo
 ## Yönetici Katman
 
 ### Planning Graph (`planning_graph.py`)
-Sistemin tek orkestrasyon grafiğidir ve **tek checkpointer alan graf**budur (bkz. HITL bölümü). `planner.py`'deki **deterministik planlayıcı** ile gelen mesajı/eki analiz eder ve çalıştırılacak alt adımları (`classification`, `rag`, `draft`, `routing`, `chat`, `document_qa`) bir plan olarak belirler — bu artık bir LLM çağrısı değil, bildirimsel bir kanıt tablosu üzerinde marj tabanlı bir skorlamadır (`resolve_plan_deterministic`, bkz. Planner bölümü); yalnızca kanıtı gerçekten dengeli ya da yok olan mesajlar hızlı-katman modele düşer. `executor` düğümü planı adım adım yürütür ve her adımın bağımlılığı başarısız olduysa (`_STEP_DEPENDENCIES`) o adımı hiç çalıştırmadan `SKIPPED` işaretler — başarısız bir taslağın üzerine boş girdiyle yönlendirme çalıştırılması buradan engellenir.
+Sistemin tek orkestrasyon grafiğidir ve **tek checkpointer alan graf**budur (bkz. HITL bölümü). `planner.py`'deki **`resolve_plan()`** ile gelen mesajı/eki analiz eder ve çalıştırılacak alt adımları (`classification`, `draft`, `routing`, `assist`, `revise`) bir plan olarak belirler — sözlüksel/semantik/bağlamsal sinyallerin kalibre bir füzyonuna dayanan bir olasılık bandı (bkz. Planner bölümü); yalnızca füzyonun gerçekten tartışmalı bıraktığı mesajlar hızlı-katman modele düşer. `executor` düğümü planı adım adım yürütür ve her adımın bağımlılığı başarısız olduysa (`_STEP_DEPENDENCIES`) o adımı hiç çalıştırmadan `SKIPPED` işaretler — başarısız bir taslağın üzerine boş girdiyle yönlendirme çalıştırılması buradan engellenir.
 
 ---
 
@@ -133,16 +133,17 @@ Sistemin tek orkestrasyon grafiğidir ve **tek checkpointer alan graf**budur (bk
 - **Görev**: `HybridRetriever` ile Qdrant native RRF (dense+sparse) araması yapar. Sorgu yeniden yazımı için ayrı bir LLM adımı yoktur — `document_analysis_graph`'ın `_build_mevzuat_query`'siyle aynı gerekçeyle: sparse yarı literal terimleri eşleştirir, bir model parafrazı daha kötü bir sorgu üretir.
 
 ### 3. Draft Graph (`draft_graph.py`) — Görev 2, hibrit kalite kapılı reflexion döngüsü
-- **Node'lar**: `validate_input → writer → verify → (revise → writer | needs_input=END | end)`.
+- **Node'lar**: `validate_input → retrieve_examples → writer → verify → (revise → writer | needs_input=END | end)`.
 - **Girdi**: Gelen evrakın brief'i (ham `source_document` writer'a hiç gitmez, yalnızca `_build_brief()`'in ürettiği özetlenmiş yapı gider), doğrulanmış RAG bağlamı, yazım yönergeleri ve isteğe bağlı `correspondence_type`.
 - **Yazışma Türleri**: `cover_letter`, `response_letter`, `information_notice`, `other_official`. Çözümleme sırası: açık istek → sınıflandırma metadata'sı → kullanıcı yönergesi → gelen belge türünden çıkarım → `other_official` (fallback, insan incelemesi zorunlu).
+- **Few-shot üslup örnekleri** (`retrieve_examples`): `writer`'dan önce çalışır, `ExampleRetriever` üzerinden ayrı bir `resmi_yazisma_ornek` Qdrant koleksiyonundan (`scripts/curate_yazisma_examples.py` + `scripts/index_yazisma_examples.py` ile `datasets/resmi_yazisma`'dan üretilir, chunk'lanmaz — her nokta tam bir yazı) `correspondence_type`'a sert filtrelenmiş, kurum çeşitliliği gözetilmiş 2 gerçek resmî yazı getirir ve writer/reviser promptuna "yalnızca üslup, bilgi kaynağı değil" sınırıyla enjekte eder. `DraftPolicy.style_examples_enabled=False`, retriever yapılandırılmamışsa ya da getirim başarısız/zaman aşımına uğrarsa `style_examples=[]` ile sessizce devam eder — düğüm `node_timeout` dekoratörü yerine kendi iç `asyncio.timeout`'unu kullanır ki bir zaman aşımı bütün taslağı değil yalnızca örnekleri düşürsün. `revise` bu listeye dokunmaz; bir onarım turu ilk taslakla aynı örnekleri görür.
 - **Reflexion döngüsü**: `verify` düğümü hibrit kalite kapısını çalıştırır (aşağıya bakınız). Düzeltilebilir kusurlar (eksik yapı, doğrulanamayan iddialar, düzeltilebilir yargıç bulguları) `revise` üzerinden `writer`'a döner — bu kez `ReviserAgent`, yalnızca numaralı kusur listesini hedef alan bir onarım promptuyla çalışır. En fazla `MAX_DRAFT_ATTEMPTS=2` deneme (bir ilk üretim + bir revizyon). `revise` düğümünün kendisi LLM çağrısı yapmaz; döngünün maliyeti her turda tam olarak bir üretimdir.
 - **Kaçış yolları**: Kalan bir `[...]` yer tutucusu (yazar zaten bilmediğini işaretlemiştir) veya çözülememiş bir yazışma türü/eksik RAG bağlamı aynı boşluğa tekrar denemek yerine sırasıyla `NEEDS_INPUT` (insan-cevabı bekleyen HITL kesintisi) veya `NEEDS_HUMAN_APPROVAL`'a gider.
 - **Güvenlik**: Gelen evrak eksikse veya writer/reviser güvenilir çıktı üretemezse akış sahte bir varsayılan taslak ya da başarı skoru döndürmez; durum `FAILED` olur.
 
 ### 4. Routing Graph (`routing_graph.py`)
 - **Node'lar**: `route`.
-- **Görev**: Taslak metni ve (hibrit) güven skorunu değerlendirerek yazıyı `ROUTING_UNITS` listesindeki birime yönlendirir veya güven skoru `HUMAN_APPROVAL_SCORE_THRESHOLD`'un altındaysa/hata oluştuysa doğrudan `İnsan Onayı Gerekli`'ye iletir. `POST /api/v1/routing/suggest` üzerinden, bir taslak üretmeden bağımsız olarak da çağrılabilir — insan bir taslağı elle düzenledikten sonra yeniden üretim ödemeden taze bir yönlendirme kararı almak için.
+- **Görev**: Taslak metni ve (hibrit) güven skorunu değerlendirerek yazıyı, `app.domains.units` domain'inin yönettiği (yöneticilerin `POST/PATCH/DELETE /units` ile tanımladığı) aktif birim listesinden birine yönlendirir -- liste her çağrıda `units_provider` (`get_active_units_for_routing`) üzerinden veritabanından taze okunur, artık sabit bir Python listesi değildir. Güven skoru `HUMAN_APPROVAL_SCORE_THRESHOLD`'un altındaysa, taslak boşsa, tanımlı hiçbir aktif birim yoksa, ya da model listede olmayan bir birim döndürürse, birim atanmaz (`routed_unit=None`) ve bunun yerine `requires_human_approval=True` işaretlenir -- eskiden sahte bir "İnsan Onayı Gerekli" birimi vardı, artık bu tamamen kaldırıldı; taslak-kalite kapısının kullandığı aynı bayrak yeniden kullanılıyor. `POST /api/v1/routing/suggest` üzerinden, bir taslak üretmeden bağımsız olarak da çağrılabilir — insan bir taslağı elle düzenledikten sonra yeniden üretim ödemeden taze bir yönlendirme kararı almak için.
 
 ---
 
@@ -150,7 +151,7 @@ Sistemin tek orkestrasyon grafiğidir ve **tek checkpointer alan graf**budur (bk
 
 Taslak kalite denetimi iki bağımsız mekanizmanın birleşimidir (`ai/verification/`):
 
-1. **Deterministik doğrulayıcı** (`draft_verifier.verify_draft`): regex ve küme-üyeliği ile çalışır, LLM çağırmaz. Taslaktaki her sayı/tarih/kurum/mevzuat atfının kaynak evrakta veya alınan mevzuat bağlamında karşılığı olup olmadığını denetler (kurum adları için ≥%75 önemli-token örtüşmesi paraphrase'e izin verir), beş zorunlu yapısal unsuru (Konu/Sayı/Tarih/Kapanış/İmza) kontrol eder ve doldurulmamış `[...]` yer tutucularını sayar.
+1. **Deterministik doğrulayıcı** (`draft_verifier.verify_draft`): regex ve küme-üyeliği ile çalışır, LLM çağırmaz. Taslaktaki her sayı/tarih/kurum/mevzuat atfının kaynak evrakta veya alınan mevzuat bağlamında karşılığı olup olmadığını denetler (kurum adları için ≥%75 önemli-token örtüşmesi paraphrase'e izin verir), beş zorunlu yapısal unsuru (Konu/Sayı/Tarih/Kapanış/İmza) kontrol eder ve doldurulmamış `[...]` yer tutucularını sayar. `style_examples` verildiğinde, kaynakla desteklenmeyen ama bir üslup örneğinde geçen değerleri ayrı bir `example_leaks` alanına ayırır ve `strict` bayrağından bağımsız olarak daima insan onayına düşürür — writer.md'nin "yalnızca üslup, bilgi kaynağı değil" kuralının prompt-ötesi, deterministik doğrulaması. Bilerek `unsupported_claims`/onarım listesinin dışında tutulur: bir revize turu aynı örnekleri gördüğü için sızıntıyı tekrarlama riski taşır.
 2. **Hızlı-katman LLM yargıcı** (`llm_judge.judge_draft`): regex'in göremediği şeyleri değerlendirir — talebe gerçekten cevap veriyor mu, arz/rica yönü muhatap hiyerarşisiyle uyumlu mu, resmî üslup korunuyor mu, muhatap/hitap/kapanış tutarlı mı. Yargıç asla taslak metnini tekrar üretmez (her alan uzunluk sınırlı) ve bir yankı-koruması (`_reject_draft_echo`) taslağı büyük ölçüde tekrar eden bir "değerlendirmeyi" geçersiz sayar. Yargıç zaman aşımına uğrarsa, şema hatası verirse veya sağlayıcı istisnası fırlatırsa akış **bloke olmaz** — deterministik skora düşer (`judge_available=False`).
 
 `merge_verdicts()` ikisini `0.6*deterministik + 0.4*yargıç` ile birleştirir; herhangi bir **kritik** yargıç bulgusu veya `addresses_request=false` kararı, ortalamayı ezip skoru otomasyon eşiğinin altına sabitler ve insan onayını zorunlu kılar.
@@ -201,79 +202,69 @@ Her agent yalnızca kendi görevinden sorumludur ve prompt şablonunu `get_promp
 
 # Planner
 
-`app/ai/workflows/planner.py` — sistemin dört sabit akışı vardır ve aralarındaki seçim çoğu mesaj için bir akıl yürütme değil, bir arama işidir.
+`app/ai/workflows/planner.py` — sistemin beş sabit akışı vardır (`draft`/`analyze`/`assist`/`revise`/`clarify`) ve aralarındaki seçim, 2026 başına kadar bir **merdivendi**: sözlüksel skor → semantik prototip → hızlı-katman model, hangisi önce karar verirse o kazanırdı. Merdiven, kendinden önceki sıralı anahtar-kelime şelalesinin "sıra kararı belirler" hatasını çözdü, ama kendi hatasını getirdi: sözlüksel katmanın **marj testi** her şeyi kapıyordu, açık bir emrin bile geçmesi gerektiği yerde. "Cevap yaz." mesajı `draft=3.0` (açık bir istek) karşısında `assist=2.0` (belge yokken kısa mesaj için jenerik yapısal ipucu) skorluyordu — marj 1.0, eski eşiğin (1.2) az altında — ve kullanıcıya gereksiz bir açıklayıcı soru sorduruyordu. Marj testi, aynı toplam skor içine önceden karıştırılmış bir açık emirle zayıf bir yapısal ipucunu ayırt edemiyordu; rungları yeniden sıralamak bunu düzeltmiyordu, tıpkı şelalenin kendi hatasının sıra değiştirmekle düzelmemesi gibi.
 
-* **`intent_rules.py`** — bildirimsel kanıt tablosu. Her kural bir `EvidenceRule` (id, niyet, ağırlık, yüzey ifadeleri, `requires_document`). Ayrı bir modülde olması, ifade eklemenin **veri değişikliği** olmasını sağlar; hiçbir kontrol akışı bağlı değildir.
-* **`intent_scorer.py`** — mesajı tabloya karşı skorlar. Kanıt **kısa devre yapmaz, birikir**: iki niyet içeren bir mesaj iki skor üretir ve aradaki fark görünür kalır. Üç karşı sinyal taşır — *tanım sorusu* ("Üst yazı ne demek?" taslaktan söz eder, talep etmez), *hafıza-hatırlama* (konuşmaya dair bir soruda belge ifadeleri kanıt değil, hatırlanan konudur) ve *veda* ("yarın devam ederiz" içindeki "devam" onay değildir). Bunlar daha büyük bir sayı değil, **geçersiz kanıtın kaldırılmasıdır**.
-* **`resolve_plan_deterministic()`** — kararı ilk eşleşen kural değil, **ilk iki niyet arasındaki marj** verir:
-  * `PRESENCE_FLOOR` altında hiçbir niyet aday sayılmaz → eskale.
-  * draft ve analyze'ın ikisi de `COMPOUND_FLOOR` üstündeyse → **bileşik plan** (adımlar kanonik sırayla birleştirilir). Bu kontrol marjdan *önce* yapılır: bileşik bir talep dengesiz skorlanabilir ve marj testi talebin bir yarısını sessizce düşürürdü.
-  * Marj `DECISIVE_MARGIN` üstündeyse → tek niyet.
-  * Aksi hâlde → eskale.
-* `PlanDecision` kararla birlikte `confidence`, `evidence` (tetiklenen kural id'leri) ve `alternatives` taşır; üretimdeki bir karar geriye dönük açıklanabilir.
-* Yalnızca gerçekten dengeli ya da kanıtsız mesajlar tek etiketlik hızlı-katman model çağrısına düşer (`classify_intent_with_model`); model de başarısız olursa güvenli varsayılan (belge varsa `document_qa`, yoksa `chat`) seçilir — hiçbir zaman en yavaş dört-adımlı boru hattına değil.
+Bugün merdiven yok; **sinyal → füzyon → karar politikası** var. Üç kanıt kaynağı (sözlüksel, semantik, bağlamsal) birbirini ezmiyor, tek bir kalibre olasılığa katkıda bulunuyor.
 
-Önceki tasarımda bu seçim, tam bir yapılandırılmış çıktı şeması bekleyen bir `OrchestratorAgent` çağrısıydı. Onun yerine gelen sıralı anahtar kelime şelalesi LLM çağrısını kaldırdı ama **sırayı** kararın kendisi hâline getirdi ve `evaluation/` ölçümünde iki kategoriyi 0.00 ile raporladı. Skorlama bunu çözer; planner hâlâ LLM'siz ve milisaniye altıdır.
+## Sinyal katmanı
+
+* **`intent_rules.py`** — bildirimsel kanıt tablosu. Her kural bir `EvidenceRule` (id, niyet, ağırlık, yüzey ifadeleri, `requires_document`/`requires_active_draft`). Ayrı bir modülde olması, ifade eklemenin **veri değişikliği** olmasını sağlar; hiçbir kontrol akışı bağlı değildir.
+* **`intent_scorer.py`** — mesajı tabloya karşı skorlar. Kanıt **kısa devre yapmaz, birikir**. Yüzey eşleşmesi sol kelime sınırı zorunlu kılar (`"uzat"`, `"uzatma"` içinde yanlış ateşlemez); sağ sınır Türkçe eklemeli yapı nedeniyle bilinçli olarak serbesttir. Üç karşı sinyal taşır — *tanım sorusu*, *hafıza-hatırlama*, *veda* — bunlar daha büyük bir sayı değil, **geçersiz kanıtın kaldırılmasıdır**.
+* **`router_features.py`** — sözlüksel skorları (her niyet için ayrı), semantik benzerlikleri (her niyet için ayrı), belge/aktif-taslak/önceki-niyet bayraklarını ve mesaj şekli ipuçlarını (soru mu, kaç kelime) **önceden toplamadan** ayrı özellik değerlerine çevirir. Merdivenin hatası tam olarak burada başlıyordu: sinyaller ayrı kalmadığı için hangi birinin ne kadar ağırlıklı olması gerektiğine füzyon değil, elle yazılmış sabitler karar veriyordu.
+
+## Füzyon
+
+* **`router_fusion.py`** — çok sınıflı lojistik regresyon (softmax), saf Python aritmetiği, yeni bağımlılık yok.
+* **`app/ai/policy/router_weights.py`** — `scripts/fit_router.py` tarafından `evaluation/datasets/intents.jsonl`'e karşı çevrimdışı fit edilmiş donmuş katsayılar (5 katlı çapraz doğrulama). `compound`/`clarify_resolution`/`escalation`/`heldout_paraphrase` kategorileri eğitimden bilinçli olarak dışlanır (gerekçe scriptin docstring'inde) — özellikle `compound`: softmax sınıfları yarıştırır, "her iki okuma da bağımsız güçlü" bilgisini temsil edemez.
+* **`resolve_plan()`** iki geçişlidir: önce yalnız sözlüksel özelliklerle füzyon çalışır (bir mesaj sözlüksel kanıtla zaten kararlıysa gömme çağrısına hiç gerek yok); `tau_high` karşılanmazsa semantik benzerlik eklenip füzyon tekrarlanır (`source="fused_semantic"`).
+
+## Karar politikası
+
+Füzyonun kazanan olasılığı üzerinde basit bir bant:
+
+* `tau_high` üstü → doğrudan karar (`source="fused"`/`"fused_semantic"`).
+* `tau_low` ile `tau_high` arası → hızlı-katman model çağrısı tartışmayı çözer (`source="model"`; model de kararsızsa -- `IntentOutput.intent="unclear"` -- ya da çağrının kendisi başarısız olursa (`"model_failed"`) kullanıcıya sorulur).
+* `tau_low` altı → model çağrısına bile değmez, doğrudan sorulur (`source="clarify"`).
+
+İki şey füzyona hiç girmez: **bileşik istek** tespiti (`draft`+`analyze` ikisi de bağımsız güçlüyse), ham toplamsal sözlüksel skor üzerinde füzyondan *önce* kontrol edilir; **açık bir açıklayıcı sorunun yanıtı**, mesaj hiç skorlanmadan, bekleyen sorunun kendi seçenekleriyle çözülür.
+
+`PlanDecision` kararla birlikte `confidence` (her kaynakta artık aynı ölçek: füzyonun kalibre olasılığı — eski üç uyumsuz ölçek yerine), `evidence` (tetiklenen sözlüksel kural id'leri) ve `alternatives` (olasılığa göre sıralı) taşır; üretimdeki bir karar geriye dönük açıklanabilir.
+
+## Ölçülen etki
+
+`evaluation/reports/all-fusion-live.md`, füzyon öncesi temel çizgiye (`all-baseline.md`) karşı:
+
+| Metrik | Öncesi | Sonrası |
+|---|---|---|
+| Macro F1 | 0.8311 | **0.9452** |
+| Kalibrasyon hatası (ECE) | 0.2736 | **0.1139** |
+| `short_imperative` kategorisi (açık kısa emirler) | 0.00 doğruluk / 1.00 eskalasyon | **1.00 / 0.00** |
+| `revise` kategorisi | 0.30 | **1.00** |
+
+`heldout_paraphrase` (kurallar/ağırlıklar ayarlandıktan **sonra** yazılan, hiçbir fit'e girmeyen parafrazlar) bilinçli olarak zayıf kalıyor (~0.32) — ama artık yanlış kararların çoğu `clarify`'a dönüşüyor, sessizce yanlış tahmin etmiyor.
 
 ---
 
 # Semantik Katman
 
-`app/ai/semantic/` — karar merdiveninin **2. basamağı**, sözlüksel kurallar ile hızlı katman modeli arasında.
+`app/ai/semantic/` — füzyonun ikinci geçişini besleyen semantik benzerlik kaynağı. Artık bağımsız bir "basamak" değil: kendi başına karar vermez, `router_features.py` aracılığıyla füzyonun özellik vektörüne katkıda bulunur (bkz. "Planner").
 
-```
-Katman 0/1  Sözlüksel kanıt skorlaması   ~0 ms       intent_rules + intent_scorer
-Katman 2    Semantik prototip eşleşmesi  ~50-150 ms  semantic/prototype_matcher   <- YENİ
-Katman 3    Hızlı katman modeli          ~1-3 sn     classify_intent_with_model
-```
+## Neden hâlâ koşullu
 
-Her basamak yalnızca bir altının **reddettiğini** görür. Kuralların çözdüğü bir mesaj hiç gömme maliyeti ödemez.
-
-## Neden bir basamak etmeye değer
-
-Kısa bir mesaj için tek `embed_query`, zaten bellekte duran bir modelde ~50-150 ms. Hızlı katmanın tek etiketlik yapılandırılmış çağrısı ~1-3 sn. Burada çözülen bir parafraz, bir üst basamağın **yüzde birkaçına** mal olur.
-
-## Neden tek başına asla karar vermez
-
-Aynı resmî registerdeki kısa Türkçe cümleler arasındaki kosinüs benzerliği sıkışıktır; alakasız cümleler rutin olarak 0.6 civarında oturur. Bu yüzden bir eşleşme **iki eşiği birden** geçmelidir:
-
-* `semantic.decisive_similarity` — kazanan sınıfa mutlak benzerlik
-* `semantic.decisive_margin` — ikinci sınıfa fark
-
-Tek başına mutlak eşik sürekli tetiklenir; tek başına marj, eşit derecede kötü iki eşleşmenin rastlantısal farkında tetiklenir. Herhangi biri sağlanmazsa modele düşülür — belirsiz bir mesaj için doğru sonuç budur.
+Kısa bir mesaj için tek `embed_query`, zaten bellekte duran bir modelde ~20-30 ms. Sözlüksel-only füzyon zaten `tau_high`'ı geçen bir mesaj bu maliyeti hiç ödemez — `resolve_plan()`'ın iki geçişli yapısı tam olarak bunun için var.
 
 ## Bayatlık
 
 Vektör dosyaları gömme modeli, boyut ve `POLICY_VERSION` ile damgalıdır. Damga tutmazsa matcher kendini **devre dışı bırakır**: farklı bir modelle üretilmiş vektörlerden karar vermek, bir model çağrısı ödemekten kötüdür — yavaş değil, eminden yanlış olur. Eksik dizin, bozuk dosya ve gömme kesintisi de aynı no-op'a düşer.
 
+Bu artık **sessiz** değil: `ROUTER_SEMANTIC_AVAILABLE` Prometheus gauge'u ve `/system/health?deep=true`'nun `router_semantic` alanı katmanın gerçekten yüklü olup olmadığını gösterir; matcher `None`'a düştüğünde `logger.error` ile loglanır. Bu güvenceyi haftalarca stale bir prototip dosyasının fark edilmeden üretimde durmuş olması sağladı (bkz. `backend/tests/unit/ai/test_prototype_freshness.py`).
+
 ```bash
 docker compose run --rm --no-deps backend python scripts/build_prototypes.py
+docker compose run --rm --no-deps backend python scripts/fit_router.py
 ```
 
-`app/ai/policy/prototypes.py` değiştiğinde, gömme modeli değiştiğinde veya `POLICY_VERSION` arttığında yeniden çalıştırılmalıdır.
-
-## Ölçülen katkı
-
-Canlı `nomic-embed-text` ile, sözlüksel katmanın çekimser kaldığı 15 mesaj üzerinde:
-
-| | |
-|---|---|
-| Çözülen | **2 / 130 mesaj** |
-| Yanlış karar | 0 |
-| Hâlâ eskale | 13 |
-| Gecikme | p50 **19.7 ms**, p95 **22.0 ms** |
-
-**Beklenenden çok daha az.** Neden sayılarda görünüyor: resmî registerdeki Türkçe cümleler karşılıklı benzer olduğu için tamamen belirsiz bir mesaj bile alakasız prototiplere karşı 0.60–0.74 alıyor. Kullanılabilir bant, bu gürültü tabanının (`0.740`) üstünde kalan dar aralık. Eşik `0.80` — güvenli bandın (`0.758 → 0.859`) ortası.
-
-Bu, katmanın yanlış olduğu anlamına gelmiyor: 0 yanlış kararla, ödediği ~20 ms karşılığında iki model çağrısını kaldırıyor. Ama planın varsaydığı "eskalasyonların çoğunu soğurur" beklentisi **doğrulanmadı**.
-
-## Bilinen sınırı
-
-Semantik katman yalnızca **çekimserlik** üzerinde çalışır. Sözlüksel katmanın *eminden yanlış* karar verdiği bir mesajı hiç görmez.
-
-Held-out ölçümü (CHANGELOG 1.28.0) bu sınıfın gerçek olduğunu göstermişti: 16 parafrazın 5'i eminden yanlış, 4'ü `document_qa`'ya düşüyordu. CHANGELOG 1.32.0 bu 5'i sözlüksel katmanın kendisinde ele aldı — `document_qa.question_with_document` sezgisel kuralı, belge ekliyken *herhangi* bir soru işaretini içerik sorgusu sayıyordu, kibarlık ekiyle ("mısın/misin") söylenmiş bir eylem isteğini ayırt etmeden. Sonuç: 5 yanlış-kesin karardan 4'ü artık dürüst bir çekimserliğe düşüyor (semantik/model katmanına eskale edilebilir hale geliyor); kalan tek vaka ("bir sorun var mı" ile "gizlilik derecesi var mı" arasındaki fark) sözlüksel olarak gerçekten ayırt edilemez ve bilinen sınır olarak kalıyor.
-
-Bu, semantik katmanın kapsamını **genişletmiyor** — hâlâ yalnızca çekimserlik üzerinde çalışıyor. Ama artık ona ulaşan çekimserlik sayısı, sözlüksel katmanın kendi kalibrasyon hatalarıyla şişirilmiş değil.
+`app/ai/policy/prototypes.py` değiştiğinde, gömme modeli değiştiğinde veya `POLICY_VERSION` arttığında **her ikisi de** yeniden çalıştırılmalıdır — füzyon ağırlıkları da `POLICY_VERSION` ile damgalanır (uyuşmazlıkta import zamanında `logger.warning`, yapısal bir hata değil bu yüzden süreç düşürülmez — bkz. `router_weights.py`'nin `version` alanı docstring'i).
 
 ---
 

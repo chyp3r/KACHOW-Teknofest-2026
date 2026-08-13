@@ -66,6 +66,22 @@ class RedisCache:
             logger.error(f"Redis delete failed for key={key}: {e}")
             return False
 
+    async def incr(self, key: str) -> Optional[int]:
+        """Atomically increment a key (creating it at 1 if absent) and return the new value.
+
+        Used for epoch-bump cache invalidation (see
+        ``app.core.authz.cache.AuthzDecisionCache``): incrementing a
+        namespace's epoch counter is O(1) and touches nothing else, unlike
+        scanning and deleting every cached decision key under that
+        namespace.
+        """
+        await self.connect()
+        try:
+            return await self.client.incr(key)
+        except Exception as e:
+            logger.error(f"Redis incr failed for key={key}: {e}")
+            return None
+
     async def exists(self, key: str) -> bool:
         """Check if a key exists in the cache."""
         await self.connect()

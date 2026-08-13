@@ -216,3 +216,96 @@ async def test_get_session_state_refuses_a_thread_belonging_to_a_different_user(
 
     with pytest.raises(AuthorizationException):
         await chat_service.get_session_state("user-1:abc", user_id="user-2")
+
+
+# ==========================================
+# Revision pipeline: reject reason, conflicts, changelog surfaced to the user
+# ==========================================
+def test_resume_payload_carries_the_reject_reason():
+    from app.domains.chat.schema.chat_schema import ChatResumeRequest
+
+    request = ChatResumeRequest(
+        session_id="s", action="reject", reason="Üslup çok resmi değil."
+    )
+
+    payload = ChatService._resume_payload(request)
+
+    assert payload["reason"] == "Üslup çok resmi değil."
+
+
+def test_resume_summary_renders_the_reject_reason():
+    from app.domains.chat.schema.chat_schema import ChatResumeRequest
+
+    request = ChatResumeRequest(
+        session_id="s", action="reject", reason="Üslup çok resmi değil."
+    )
+
+    assert ChatService._resume_summary(request) == "reject: Üslup çok resmi değil."
+
+
+def test_select_reply_omits_the_rejection_reason_now_carried_as_structured_details():
+    """Rejection reason, approval notes, routing unit and the changelog
+    summary all used to be appended to the reply as free text; they are now
+    structured data the frontend reads off the same final_output (as
+    ``details`` on the chat message) and renders as its own meta strip (see
+    DraftMetaStrip) -- the reply itself is the draft text alone."""
+    final_output = {
+        "draft": {
+            "draft": "Taslak metni",
+            "status": "REJECTED",
+            "rejection_reason": "Üslup çok resmi değil.",
+        }
+    }
+
+    reply = ChatService._select_reply(final_output)
+
+    assert reply == "Resmî yazı taslağınız hazırlandı.\n\nTaslak metni"
+    assert final_output["draft"]["rejection_reason"] == "Üslup çok resmi değil."
+
+
+def test_select_reply_omits_conflicts_now_delivered_as_a_separate_live_notice():
+    """A conflict finding is no longer folded into the merged reply text --
+    app.ai.workflows.revise_graph.audit_node now publishes it live as its own
+    "notice" SSE event instead (rendered as a separate chat message, never a
+    blocking popup). The structured finding itself is untouched, still
+    reachable via final_output["draft"]["conflicts"] for any caller that
+    wants it programmatically (e.g. the non-streaming REST path, which has
+    no notice channel) -- only the free-text reply omits it, to avoid
+    showing the same warning twice on the streaming path."""
+    final_output = {
+        "draft": {
+            "draft": "Taslak metni",
+            "status": "NEEDS_HUMAN_APPROVAL",
+            "requires_human_approval": True,
+            "evaluation_notes": "not",
+            "conflicts": [
+                {
+                    "kind": "mevzuat_dayanaksiz",
+                    "severity": "major",
+                    "detail": "4982 sayılı atıf mevzuat bağlamında yok.",
+                }
+            ],
+        }
+    }
+
+    reply = ChatService._select_reply(final_output)
+
+    assert "4982 sayılı atıf mevzuat bağlamında yok." not in reply
+    assert final_output["draft"]["conflicts"][0]["detail"] == (
+        "4982 sayılı atıf mevzuat bağlamında yok."
+    )
+
+
+def test_select_reply_omits_the_changelog_summary_now_carried_as_structured_details():
+    final_output = {
+        "draft": {
+            "draft": "Taslak metni",
+            "status": "COMPLETED",
+            "changelog": {"summary": "1 bölüm değiştirildi."},
+        }
+    }
+
+    reply = ChatService._select_reply(final_output)
+
+    assert "1 bölüm değiştirildi." not in reply
+    assert final_output["draft"]["changelog"]["summary"] == "1 bölüm değiştirildi."

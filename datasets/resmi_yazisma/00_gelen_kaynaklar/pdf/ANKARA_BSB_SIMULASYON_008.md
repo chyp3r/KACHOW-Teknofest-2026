@@ -1,0 +1,33 @@
+---
+id: "ANKARA_BSB_SIMULASYON_008"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "genel"
+baslik: "Zabıta Müdürlüğü İşyeri Denetim Raporu - Belge No 8"
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/pdf/ANKARA_BSB_SIMULASYON_008.pdf"
+yerel_orijinal: "00_gelen_kaynaklar/pdf/ANKARA_BSB_SIMULASYON_008.pdf"
+kaynak_turu: "pdf"
+dogrulama: "yerel_kaynaktan_donusturuldu"
+extractor: "pdfium"
+used_ocr: "false"
+page_count: "1"
+quality_score: "0.84"
+rag_status: "rejected"
+ret_nedeni: "tekrar_simulasyon_sablonu"
+---
+
+# Zabıta Müdürlüğü İşyeri Denetim Raporu - Belge No 8
+
+T.C. ANKARA BÜYÜKŞEHİR BELEDİYE BAŞKANLIĞI
+Belediye Meclisi Kararı
+**Sayı:** [EVRAK SAYISI]
+Tarih: 07.11.2025
+Konu: Zabıta Müdürlüğü İşyeri Denetim Raporu - Belge No 8
+İLGİLİ MAKAMA
+İlgi: 1608 sayılı Umuru Belediyeye Müteallik Ahkâmı Cezaiye Kanunu ve Belediye Zabıta Yönetmeliği
+09.11.2025 tarihinde Ankara ili Çankaya ilçesinde yapılan olağan denetimde, [KİŞİ ADI] (TCKN:
+[T.C. KİMLİK NO]) adına işletilen gıda satış yerinde hijyen kurallarına aykırılık tespit edilmiştir. İşyerinde son
+kullanma tarihi geçmiş 12 kalem ürün bulunmuş, soğuk zincir koşullarının sağlanmadığı ve personelin hijyen
+eğitim belgesinin bulunmadığı belirlenmiştir. İşletmeye 855 TL para cezası uygulanmıştır.
+[İMZA SAHİBİ]
+İl Müdürü
+Sayfa 1

@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-515C0388
-kategori: dilekce
-alt_kategori: iski_abone_iptal
+id: "DILEKCE-515C0388"
+kategori: "dilekce"
+alt_kategori: "iski_abone_iptal"
 baslik: "İSKİ/ASKİ Su Aboneliği İptal Dilekçesi (Ornek 1)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # İSKİ/ASKİ Su Aboneliği İptal Dilekçesi (Ornek 1)
@@ -18,8 +19,8 @@ Abonelik Bilgileri:
 - Abone No: 562964
 - Sayaç No: 27649458
 - Abone Adı: Burak Sahin
-- T.C. Kimlik No: 89133012641
-- Abonelik Adresi: Fatih Mah. 108. Sok. No:41 Mersin
+- T.C. Kimlik No: [T.C. KİMLİK NO]
+[KURUM ADRESİ]
 
 İptal Gerekçesi: Taşınmazın satışı/kiracının değişmesi nedeniyle aboneliğin sonlandırılması.
 
@@ -29,8 +30,8 @@ IBAN: TR448719559607070846223664
 
 13.01.2022
 Burak Sahin
-T.C. Kimlik No: 89133012641
-Tel: 0535 938 18 26
+T.C. Kimlik No: [T.C. KİMLİK NO]
+Tel: [TELEFON]
 
 EKLER:
 1- Kimlik fotokopisi

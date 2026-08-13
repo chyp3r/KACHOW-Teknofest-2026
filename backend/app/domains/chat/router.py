@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 async def _verify_document_access(
     document_id: Optional[str],
-    current_user: Optional[UserModel],
+    current_user: UserModel,
     document_repository: DocumentRepository,
 ) -> None:
     """Refuse a chat turn that attaches a document the caller doesn't own or
@@ -38,11 +38,11 @@ async def _verify_document_access(
     A document being attached only changes which tools the assistant can
     call (see app.ai.tools.document_tools's module docstring) -- nothing
     upstream of that previously checked whether the caller was allowed to
-    attach it in the first place. ``current_user=None`` (``REQUIRE_AUTH``
-    disabled) skips both checks entirely, matching the open demo/dev path.
-    ADMIN/MANAGER skip only the ownership half (see ``bypasses_ownership``)
-    -- they see every document company-wide, but clearance still applies
-    (though it never actually binds for them: see ``clearance_for``).
+    attach it in the first place. ADMIN/MANAGER/ROOT skip only the
+    ownership half (see ``bypasses_ownership``) -- they see every document
+    company-wide, but clearance still applies (though it never actually
+    binds for them: see ``clearance_for``), and the company boundary itself
+    is never skipped for anyone.
 
     This is the coarse, turn-level gate (may this caller even attach this
     document at all); ``document_tools.py``'s own deny-at-retrieval check is
@@ -51,13 +51,13 @@ async def _verify_document_access(
 
     Raises:
         AuthorizationException: If the document is registered to a
-            different owner than ``current_user`` (and it isn't an
-            ADMIN/MANAGER), or ``current_user``'s clearance doesn't cover
-            the document's confidentiality level.
+            different company, or a different owner than ``current_user``
+            (and it isn't ADMIN/MANAGER/ROOT), or ``current_user``'s
+            clearance doesn't cover the document's confidentiality level.
     """
-    if not document_id or current_user is None:
+    if not document_id:
         return
-    document = await document_repository.get_by_id(document_id)
+    document = await document_repository.get_by_id(document_id, current_user.company_id)
     if document is None:
         raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
     if document.owner_id != current_user.id and not bypasses_ownership(current_user):
@@ -68,8 +68,8 @@ async def _verify_document_access(
         document_level = SensitivityLevel.UNMARKED
     assert_clearance(current_user, document_level)
 
-# See require_auth_if_enabled / settings.REQUIRE_AUTH: a no-op by default so
-# the demo works without the frontend implementing a login flow.
+# Authentication is mandatory (see require_auth_if_enabled) -- every route in
+# this router carries a real, tenant-bound current_user.
 router = APIRouter(
     prefix="/chat", tags=["chat"], dependencies=[Depends(require_auth_if_enabled)]
 )
@@ -161,7 +161,7 @@ async def send_chat_message(
     request: ChatMessageRequest,
     service: ChatService = Depends(get_chat_service),
     document_repository: DocumentRepository = Depends(get_document_repository),
-    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+    current_user: UserModel = Depends(require_auth_if_enabled),
 ):
     """Orchestrate a chat interaction and return the completed result.
 
@@ -174,7 +174,7 @@ async def send_chat_message(
     clearance = clearance_for(current_user)
     result = await service.handle_message(
         request,
-        user_id=current_user.id if current_user else None,
+        user_id=current_user.id,
         requester_clearance=clearance.value if clearance else None,
     )
     return SuccessResponse(data=make_serializable(result.model_dump()))
@@ -186,7 +186,7 @@ async def stream_chat_message(
     http_request: Request,
     service: ChatService = Depends(get_chat_service),
     document_repository: DocumentRepository = Depends(get_document_repository),
-    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+    current_user: UserModel = Depends(require_auth_if_enabled),
     _: None = Depends(rate_limit(max_requests=20, window_seconds=60, key_prefix="chat:stream")),
 ):
     """Orchestrate a chat interaction and stream progress events over SSE.
@@ -203,7 +203,7 @@ async def stream_chat_message(
     # a denied request gets a normal 403 instead of a stream that opens and
     # then immediately reports a generic error.
     await _verify_document_access(request.document_id, current_user, document_repository)
-    user_id = current_user.id if current_user else None
+    user_id = current_user.id
     clearance = clearance_for(current_user)
     return _sse_response(
         service.handle_message_stream(
@@ -218,7 +218,7 @@ async def resume_chat_stream(
     request: ChatResumeRequest,
     http_request: Request,
     service: ChatService = Depends(get_chat_service),
-    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+    current_user: UserModel = Depends(require_auth_if_enabled),
     _: None = Depends(rate_limit(max_requests=30, window_seconds=60, key_prefix="chat:resume")),
 ):
     """Resume a run paused at the human-in-the-loop gate, streaming over SSE.
@@ -227,7 +227,7 @@ async def resume_chat_stream(
     without regenerating it. ``action="approve"|"revise"|"reject"`` resolves a
     draft that needed a human's sign-off before unit routing.
     """
-    user_id = current_user.id if current_user else None
+    user_id = current_user.id
     ChatService._verify_thread_ownership(request.session_id, user_id)
     return _sse_response(
         service.resume_stream(request.session_id, request, user_id=user_id), http_request
@@ -238,11 +238,11 @@ async def resume_chat_stream(
 async def resume_chat_sync(
     request: ChatResumeRequest,
     service: ChatService = Depends(get_chat_service),
-    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+    current_user: UserModel = Depends(require_auth_if_enabled),
 ):
     """Resume a paused run and return the completed (or re-paused) result."""
     result = await service.resume(
-        request.session_id, request, user_id=current_user.id if current_user else None
+        request.session_id, request, user_id=current_user.id
     )
     return SuccessResponse(data=make_serializable(result.model_dump()))
 
@@ -258,17 +258,20 @@ def _paginated(items: list, total: int, pagination: PaginationParam) -> Paginate
 async def list_chat_sessions(
     pagination: PaginationParam = Depends(),
     session_repository: ChatSessionRepository = Depends(get_chat_session_repository),
-    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+    current_user: UserModel = Depends(require_auth_if_enabled),
 ):
     """List the caller's chat sessions, most recently active first.
 
-    ``user_id=None`` (``REQUIRE_AUTH`` off, or an ADMIN/MANAGER -- see
-    ``bypasses_ownership``) lists every session, matching
-    ``GET /documents``'s convention.
+    ``user_id=None`` (an ADMIN/MANAGER/ROOT -- see ``bypasses_ownership``)
+    lists every session, matching ``GET /documents``'s convention. Note:
+    unlike the documents listing, this is not yet company-scoped at the
+    query level (``chat_sessions.company_id`` is only populated once Faz 3
+    threads it through -- see ``ChatSessionModel.company_id``'s docstring),
+    so an ADMIN/MANAGER/ROOT bypass here currently sees every session
+    system-wide, not just their own company's. Narrow scope, tracked
+    alongside the rest of the Faz 3 recorder work.
     """
-    user_id = (
-        current_user.id if current_user and not bypasses_ownership(current_user) else None
-    )
+    user_id = None if bypasses_ownership(current_user) else current_user.id
     sessions = await session_repository.list_for_user(
         user_id, skip=pagination.offset, limit=pagination.limit
     )
@@ -291,7 +294,7 @@ async def list_chat_session_messages(
     session_id: str,
     pagination: PaginationParam = Depends(),
     message_repository: ChatMessageRepository = Depends(get_chat_message_repository),
-    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+    current_user: UserModel = Depends(require_auth_if_enabled),
 ):
     """List a session's messages in conversation order (oldest first).
 
@@ -304,7 +307,7 @@ async def list_chat_session_messages(
             user than ``current_user``.
     """
     ChatService._verify_thread_ownership(
-        session_id, current_user.id if current_user else None
+        session_id, current_user.id
     )
     messages = await message_repository.list_for_session(
         session_id, skip=pagination.offset, limit=pagination.limit
@@ -328,7 +331,7 @@ async def list_chat_session_messages(
 async def get_session_state(
     session_id: str,
     service: ChatService = Depends(get_chat_service),
-    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+    current_user: UserModel = Depends(require_auth_if_enabled),
 ):
     """Report whether a session is idle, running, or paused on an interrupt.
 
@@ -339,6 +342,6 @@ async def get_session_state(
     if not session_id:
         raise HTTPException(status_code=422, detail="session_id is required.")
     state = await service.get_session_state(
-        session_id, user_id=current_user.id if current_user else None
+        session_id, user_id=current_user.id
     )
     return SuccessResponse(data=state)

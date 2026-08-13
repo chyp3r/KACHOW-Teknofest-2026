@@ -145,6 +145,8 @@ documents/
 
 routing/
 
+units/
+
 users/
 
 system/
@@ -411,6 +413,205 @@ Backend aşağıdaki güvenlik prensiplerini uygular.
 * Audit Logging
 
 Hiçbir gizli bilgi kaynak kodunda tutulmaz.
+
+## Çok kiracılılık (Multi-Tenancy)
+
+Sistem `root` / `admin` / `manager` / `employee` olmak üzere dört rollü,
+şirket (`company`) bazlı çok kiracılı bir mimari kullanır (bkz.
+`docs/api/companies.md`). Kimlik doğrulama zorunludur (`settings.
+REQUIRE_AUTH`); açık/kimliksiz erişim modu yoktur.
+
+Dört sabit denetim katmanı, bu sırayla:
+
+1. **Kiracı kapsamı** -- her repository metodu açık bir `company_id`
+   parametresi alır ve ona göre filtreler (bkz. `app.domains.documents.
+   repository.DocumentRepository`'nin kendi docstring'i). Faz 3'ten itibaren
+   Postgres Row-Level Security bunun **gerçek** bir ikinci savunma hattı --
+   bkz. aşağıdaki "Postgres Row-Level Security (RLS)" bölümü.
+2. **ABAC kararı** -- `app.core.authz.engine.authorize` (bkz. aşağıdaki "ABAC
+   Yetkilendirme Motoru" bölümü). `role_checker.bypasses_ownership` hâlâ
+   var ve list/filtre kararlarında (`GET /documents` gibi) kullanılıyor, ama
+   tekil kaynak erişim kontrolleri artık bu motora taşındı: ADMIN/MANAGER/
+   ROOT bir kaynağı sahibi olmasalar bile görebilir, ama yalnızca **kendi
+   şirketleri içinde** (kiracı kapsamı asla atlanmaz).
+3. **Gizlilik derecesi** -- `role_checker.clearance_for`/`assert_clearance`,
+   şirket sınırından bağımsız, ortogonal bir merdiven (`SensitivityLevel`).
+4. **Guardrail'ler** -- `app.ai.guardrails.output_gate`,
+   `app.ai.tools.document_tools`'un retrieval-anında red mekanizması.
+
+`users.company_id` yalnızca `role='root'` için NULL'dur (bir CHECK
+constraint ile zorlanır) -- root herhangi bir şirkete bağlı değildir ve
+şirket verisine yalnızca açık bir scope-switch akışıyla erişir (bkz.
+`docs/api/companies.md`).
+
+**Bilinen kapsam dışı**: `chat_sessions`/`chat_messages`/`drafts`/`runs`/
+`run_steps`/`guardrail_events` tabloları `company_id` kolonunu taşır ama bu
+alan henüz zorunlu değildir -- bu satırlar LangGraph orkestrasyon katmanının
+derinlerinden (`PlanningState` üzerinden, `user_id`'nin bugün taşındığı
+şekilde) yazılır ve `company_id`'nin oraya taşınması ayrı bir faz olarak
+planlanmıştır (bkz. `app.observability.model.run_model.RunModel.company_id`
+docstring'i). Bu tablolar henüz RLS'e de dahil değil -- bir tablo, kolonu her
+satırda gerçekten dolu olmadan RLS'e alınmaz (aksi hâlde meşru satırlar bile
+kimseye görünmez hâle gelir; bkz. migration `0013_rls`'in kendi docstring'i).
+
+## Postgres Row-Level Security (RLS)
+
+**Önce şunu oku**: RLS, bir tablonun **sahibi** için tamamen no-op'tur --
+`ENABLE ROW LEVEL SECURITY` fark etmez. Backend ilk migration'dan beri
+Postgres'e `postgres` (bu veritabanının sahibi, superuser) olarak
+bağlanıyordu; bağlantı rolünü ayırmadan yalnızca policy eklemek hiçbir şeyi
+korumayan saf tiyatro olurdu. Migration `0013_rls` bu yüzden ikisini birden
+yapar:
+
+1. **`kachow_app` rolü** -- `NOSUPERUSER`, tablo sahipliği yok, yalnızca
+   `SELECT`/`INSERT`/`UPDATE`/`DELETE` yetkisi (+ `ALTER DEFAULT PRIVILEGES`,
+   böylece sonraki her migration'ın yarattığı tablo da otomatik yetki alır).
+   `settings.DATABASE_URL` artık bu role bağlanıyor (`compose.yml`).
+   İdempotent (`DO $$ ... IF NOT EXISTS ...`) -- mevcut bir Postgres
+   volume'ü `scripts/init-db.sh`'ı yeniden çalıştırmaz, o yüzden rol
+   yaratımı hem orada (taze volume'ler için) hem migration'da (mevcut
+   volume'ler için) tekrarlanır.
+2. **`ENABLE`+`FORCE ROW LEVEL SECURITY`** ve tek bir `tenant_isolation`
+   policy'si, Faz 1'in zaten `company_id NOT NULL` yaptığı tablolarda:
+   `users`, `units`, `documents`, `invited_emails`, `permission_grants`
+   (Faz 2). `FORCE` şart -- onsuz RLS tablo sahibi için zaten atlanıyor
+   *ve* `BYPASSRLS` yetkili herhangi bir rol için de atlanır; `kachow_app`
+   ikisi de değil, ama `FORCE` bunu gelecekte de öyle kalmaya zorluyor.
+
+Policy: `company_id = current_setting('app.current_company_id', true) OR
+current_setting('app.is_root', true) = 'on'`. `current_setting(key, true)`
+GUC set edilmemişse hata fırlatmak yerine NULL döner -- `company_id = NULL`
+SQL'in üçlü mantığında NULL'dır, TRUE değil, yani GUC'u hiç set etmemiş bir
+oturum (unutulmuş bir middleware, başıboş bir ham SQL bağlantısı) her RLS'li
+tabloda sıfır satır görür: `role_checker.clearance_for`'ın "bilinmeyen
+gizlilik hiçbir şeyi açmaz" ile aynı fail-secure varsayılan.
+
+### GUC mekaniği
+
+`SET LOCAL` transaction kapsamlıdır ve bağlantılar havuzdan geldiği için her
+transaction'da yeniden set edilmesi gerekir:
+
+```python
+await session.execute(
+    text("SELECT set_config('app.current_company_id', :cid, true)"),
+    {"cid": company_id or ""},
+)
+```
+
+Üç çağrı yeri:
+
+1. **İstek kapsamı** -- `app.api.middleware.tenant.TenantContextMiddleware`
+   JWT'yi (zaten `company_id`/`role` claim'lerini taşıyor) request'e hiçbir
+   dependency çalışmadan **önce** decode edip `app.core.context.
+   current_tenant_var`'a yazıyor; `app.infrastructure.database.session.
+   get_db` oturumu açar açmaz, ilk statement olarak bu değerleri GUC'a
+   basıyor. "İlk statement" önemli: `AsyncSession` transaction'ı tembel
+   başlatıyor, `SET LOCAL` de yalnızca kendi transaction'ında yaşıyor --
+   GUC'u geç basmak, ondan önce başka bir statement'ın kendi transaction'ını
+   başlatıp (request'in geri kalanında) GUC'suz bitirmesi riski taşırdı.
+2. **Kiracısı bilinen istek-dışı yazıcılar** -- `app.domains.units.provider.
+   get_active_units_for_routing`, `app.domains.users.seeder`, `app.domains.
+   units.seeder`. Yeni `app.infrastructure.database.session.tenant_session
+   (company_id, is_root)` context manager'ı, aynı GUC mantığını
+   `current_tenant_var` yerine açık argümanlardan uyguluyor.
+3. **Kiracı-öncesi kimlik çözümleme** -- `POST /auth/login`, `POST
+   /auth/refresh`, `POST /users` (davet-kapılı kayıt). `username`/`email`
+   sistem genelinde benzersiz (şirket bazında değil), yani bu üç uç nokta
+   "hangi şirket" sorusu cevaplanmadan **önce** çalışmak zorunda -- RLS'in
+   scope'layacağı bir kiracı henüz yok. Bu üçü `app.infrastructure.database.
+   session.get_owner_db`'yi kullanıyor: şema sahibi bağlantısı, RLS'i
+   tanım gereği atlıyor. Alembic de aynı bağlantıyı (`ALEMBIC_DATABASE_URL`,
+   boşsa `DATABASE_URL`'e düşer) kullanıyor -- DDL zaten sahip gerektirir.
+
+**Canlı doğrulama sırasında bulunan iki gerçek hata** (ikisi de bu değişiklik
+öncesinde zaten vardı, RLS onları *ortaya çıkardı*, yaratmadı):
+`app.domains.users.seeder._seed_one`'ın var-olma kontrolü başta
+`tenant_session` (şirket-scope'lu) kullanıyordu -- `username`/`email` global
+benzersiz olduğu için iki farklı şirkete aynı "admin" kullanıcı adıyla
+seed atmaya çalışmak, kontrolü değil global unique constraint'i tetikliyordu.
+Kontrol artık `get_owner_db` ile aynı gerekçeyle şema-sahibi bağlantısında
+çalışıyor. Ayrı olarak, `AuthService.refresh_access_token`'ın ürettiği yeni
+access token `company_id` claim'ini hiç taşımıyordu (yalnızca `authenticate_
+user`'ınki taşıyordu) -- RLS öncesi zararsızdı, RLS sonrası bu token'la
+yapılan her sonraki istek "User not found" ile patlıyordu (GUC boş kalıyor).
+İkisi de düzeltildi ve gerçek, çalışan Docker yığınına karşı doğrulandı.
+
+### Dürüst uyarı
+
+RLS **ikinci** savunma hattıdır, birincisi değil: (a) diskteki analiz
+blob'u ve Qdrant hiç RLS kapsamında değil, (b) `drafts`/`chat_sessions`/
+`runs`/... hâlâ RLS dışı (yukarıdaki "bilinen kapsam dışı"), (c) alembic ve
+`scripts/` şema-sahibi tarafında çalışıyor, RLS'ten etkilenmiyor. Asıl doğru
+olması gereken şey hâlâ repository katmanındaki zorunlu `company_id`
+filtresi -- `tests/integration/test_tenant_repository_scoping.py` bunu RLS
+tamamen kapalıyken (şema-sahibi bağlantısıyla) doğruluyor, `tests/
+integration/test_rls_isolation.py` de RLS'in kendisini `kachow_app` üzerinden.
+
+## ABAC Yetkilendirme Motoru (`app.core.authz`)
+
+Kendi PDP'imiz -- OPA/Casbin gibi harici bir policy engine değil.
+`app.ai.policy.schema.Policy`'nin frozen/import-time-doğrulanan dataclass
+deseniyle aynı: kurallar `app.core.authz.rules.BUILTIN_RULES` içinde
+donmuş bir Python tuple'ı, saf fonksiyon değerlendirici `app.core.authz.
+engine.authorize`. Neden harici bir motor değil: repo'nun test altyapısı
+neredeyse tamamen mock tabanlı -- DB/ağ bağımlılığı olmayan saf bir
+fonksiyon, gerçek Postgres/Redis'e ihtiyaç duymadan tamamen unit-test
+edilebiliyor (bkz. `tests/unit/core/authz/test_engine.py`).
+
+**Katmanlar**:
+
+* `attributes.py` -- `Subject`/`Resource`/`Environment` dataclass'ları ve
+  `Action` sabitleri (`"document:read"`, `"draft:send"`, ...).
+* `rules.py` -- yerleşik rol/eylem kuralları. ROOT sınırsız (`"*"`);
+  ADMIN/MANAGER her `Action` için şirket geneli (`scope="any"`); EMPLOYEE
+  yalnızca kendi sahip olduğu kaynaklarda (`scope="own"`).
+* `engine.py::authorize(subject, action, resource, env, grants)` -- karar
+  algoritması: (0) kiracı kapısı, (1) açık `deny` yetkisi kazanır, (2) en
+  yüksek `priority`'li `permit` yetkisi, (3) yerleşik kurallar, (4) örtük
+  red. `grants` boş bırakılırsa (çoğu router çağrısı böyle yapar) yalnızca
+  0/3/4 adımları çalışır -- DB'ye hiç gidilmez.
+* `permission_grants` tablosu (`model/permission_grant_model.py` +
+  `repository.py`) -- PAP (Policy Administration Point) deposu. Bir yönetici
+  bir çalışana rol dışı bir yetki devrettiğinde (örn. `document:delete`,
+  yalnızca kendi yüklediği evraklar üzerinde) burada bir satır oluşur.
+  `valid_from`/`valid_until` aynı şema üzerinden süreli
+  yetki/delegasyon/break-glass'i verir -- ayrı bir tablo yok.
+* `cache.py::AuthzDecisionCache` -- Redis epoch-tabanlı karar önbelleği.
+  Geçersizleştirme `INCR authz:epoch:{company_id}` ile -- asla `SCAN`/`DEL`
+  değil (bkz. modülün kendi docstring'i). Zaman sınırlı (time-boxed) bir
+  yetkiye dayanan kararlar hiç önbelleğe alınmaz.
+* `service.py::AuthzService` -- önbellek + DB `permission_grants` + saf
+  motoru saran async orkestrasyon katmanı. Yalnızca gerçekten
+  `permission_grants`'a ihtiyaç duyan tüketiciler bunu kullanır (bugün:
+  yetki yönetimi uçları) -- `documents`/`drafts` router'larındaki sahiplik
+  kontrolleri saf `engine.authorize`'ı DB'siz çağırır (bkz. aşağıda).
+* `dependency.py::require_permission` -- PEP #1, FastAPI dependency
+  factory'si. `api/dependency.py::require_roles` artık bu paketin
+  `engine.role_permitted`'ine ince bir shim -- davranış değişmedi, tek
+  kaynak burada.
+
+**İki tüketim şekli, kasıtlı olarak**:
+
+1. **DB'siz (hot path)** -- `documents/router.py::_authorize_document`,
+   `drafts/router.py::_assert_owns_draft`: `engine.authorize`'ı `grants=()`
+   ile çağırır. `bypasses_ownership`'in eski davranışını birebir üretir,
+   sıfır ek DB/Redis round-trip'i ile. Beş ayrı yerde tekrarlanan
+   `if resource.owner_id != current_user.id and not bypasses_ownership(...)`
+   deseni tek bir çağrıya indi.
+2. **DB destekli** -- `AuthzService` üzerinden, yetki yönetimi uçlarında
+   (`POST/GET /users/{id}/permissions`, `DELETE /users/permissions/{id}`).
+   Yetki devri sırasında **ayrıcalık yükseltmesi önlenir**: devreden
+   (granter) `authz.authorize()` ile kendi kimliğiyle aynı kontrolden
+   geçirilir -- sahip olmadığı bir yetkiyi kimseye devredemez.
+
+Gizlilik derecesi (`role_checker.clearance_for`/`assert_clearance`) bu
+motora **katılmaz** -- yukarıdaki dört katman listesinin 3. maddesi olarak
+ayrı, sıralı bir kapı olarak kalır. Sebep: `app.ai.tools.document_tools`
+clearance'ı doğrudan karşılaştırıp modele bir red string'i döndürüyor
+(exception fırlatmıyor) ve derlenmiş bir LangGraph node'unun içinden
+çağrılıyor -- `app.ai.*`'nin `app.domains.*` import edemeyeceği katman
+kuralı gereği oraya DB destekli bir PDP enjekte etmek bu kuralı ihlal
+ederdi (bkz. `app.core.authz`'in kendi paket docstring'i).
 
 ---
 

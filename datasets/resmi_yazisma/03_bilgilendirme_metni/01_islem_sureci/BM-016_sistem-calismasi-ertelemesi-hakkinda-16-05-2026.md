@@ -1,25 +1,23 @@
 ---
-id: BM-016
-kategori: bilgilendirme_metni
-niyet: 01_islem_sureci
-belge_turu: yayimlanmis_resmi_bilgilendirme
+id: "BM-016"
+kategori: "bilgilendirme_metni"
+alt_kategori: "01_islem_sureci"
+niyet: "01_islem_sureci"
+baslik: "Sistem Çalışması Ertelemesi Hakkında -16.05.2026"
 kurum: "Ticaret Bakanlığı"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/bilgilendirme_metni/BM-016_sistem-calismasi-ertelemesi-hakkinda-16-05-2026.html"
+yerel_orijinal: "00_gelen_kaynaklar/bilgilendirme_metni/BM-016_sistem-calismasi-ertelemesi-hakkinda-16-05-2026.html"
+kaynak_turu: "html"
+belge_turu: "yayimlanmis_resmi_bilgilendirme"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "beautifulsoup"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
 # Sistem Çalışması Ertelemesi Hakkında -16.05.2026
 
-- Resmî kaynak: https://www.ticaret.gov.tr/duyurular/sistem-calismasi-ertelemesi-hakkinda-16-05-2026
-- Doğrudan belge: Kaynak sayfasında
-- Yerel asıl belge: 00_gelen_kaynaklar/bilgilendirme_metni/BM-016_sistem-calismasi-ertelemesi-hakkinda-16-05-2026.html
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
-
-## Veri kümesinde kullanım
-
-Başlık, hedef kitle, açıklama, tarih/son başvuru ve yönlendirme bölümleri şablon özellikleri olarak çıkarılabilir.
-
-## Doğrulama notu
-
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Bakanlığımız Söğütözü Yerleşkesi Veri Merkezi sistemlerinde 16.05.2026 Cumartesi günü 20:00 – 23:59 saatleri arasında gerçekleştirileceği duyurulan teknik çalışma iptal edilmiştir. Söz konusu çalışma için belirlenecek yeni tarih ve saat bilgisi ayrıca paylaşılacaktır. Bilgilerinize sunulur.

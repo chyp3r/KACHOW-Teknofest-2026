@@ -101,6 +101,59 @@ def scrub_extracted_text(text: str) -> tuple[str, list[str]]:
     return "\n".join(kept_lines), markers
 
 
+#: This app's own prompt-scaffold section headers -- the numbered brief
+#: markers (``_build_brief`` in ``app.ai.workflows.revise_graph``/
+#: ``draft_graph``), the writer/reviser prompt's own section headings
+#: ("### GÖREV", "### BRIEF BELGESİ", ...). A smaller local model
+#: occasionally echoes fragments of its own instructions back as if they
+#: were content, especially under a heavily-numbered prompt like the revise
+#: repair prompt -- distinct from ``_INJECTION_PATTERNS`` above, which
+#: catches a user *trying* to hijack the model, not the model regurgitating
+#: its own scaffolding unprompted. Matched narrowly against this
+#: application's own literal section labels rather than a generic "looks
+#: like a prompt" heuristic, so a legitimate draft that happens to discuss
+#: e.g. "görev tanımı" in its own official prose is never caught by it.
+_SCAFFOLD_ECHO_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"###\s*(gorev|brief\s+belgesi|yazisma\s+turu\s+profili|degistirilecek\s+bolum|"
+        r"mevcut\s+taslak|kullanici\s+talimati|kural|cikti|onceki\s+taslak)\b",
+        r"\bbrief\s+belgesi\s*:",
+        r"\bonceki\s+taslak\s+surumu\s*:",
+        r"\bdogrulanmis\s+siniflandirma\s*:",
+        r"\bdogrulanmis\s+mevzuat\s+baglami\s*:",
+        r"\byazisma\s+turu\s+profili\s*:",
+        r"\buslup\s+referans\s+ornekleri\s*:",
+        r"\bnumarali\s+kusur\s+listesindeki\b",
+    )
+)
+
+
+def assert_no_scaffold_echo(response: str) -> None:
+    """Validator: raise if a generated response echoes this app's own
+    prompt-scaffold headers (the numbered brief, the writer/reviser
+    prompt's section markers) instead of producing plain draft prose.
+
+    Wired into the revise flow's ``rewrite_node`` (see
+    ``app.ai.workflows.revise_graph``), which builds prompts around a
+    heavily-structured numbered brief -- exactly the shape a smaller local
+    model is most prone to imitating in its own completion.
+
+    Args:
+        response: The agent's generated text.
+
+    Raises:
+        GuardrailViolation: If a scaffold-echo pattern is detected.
+    """
+    folded = _fold(response or "")
+    for pattern in _SCAFFOLD_ECHO_PATTERNS:
+        if pattern.search(folded):
+            raise GuardrailViolation(
+                "Üretilen yanıt, talimat şablonunun kendisini (brief/prompt "
+                "iskeleti) içeriyor -- gerçek bir taslak metni değil."
+            )
+
+
 def assert_no_prompt_leak(response: str) -> None:
     """Validator: raise if a generated response echoes an override instruction
     or reads like a system-prompt leak rather than the agent's actual output.

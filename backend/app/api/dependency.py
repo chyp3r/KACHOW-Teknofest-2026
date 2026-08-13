@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.embeddings.models import get_embeddings_client
 from app.ai.embeddings.service import EmbeddingService
 from app.ai.llms import get_fast_llm_client, get_llm_client
+from app.ai.retrieval.examples import ExampleRetriever
 from app.ai.retrieval.hybrid import HybridRetriever
 from app.ai.retrieval.mcp_mevzuat import FallbackMevzuatRetriever, McpMevzuatRetriever
 from app.ai.workflows.document_analysis_graph import create_document_analysis_graph
@@ -35,6 +36,13 @@ from app.domains.users.service import UserService
 from app.api.exceptions.authentication import AuthenticationException
 from app.api.exceptions.authorization import AuthorizationException
 from app.infrastructure.cache import get_cache
+# Re-exported so every router keeps importing its dependency callables from
+# this one module -- see app.core.authz.dependency's own docstring.
+from app.core.authz.dependency import (  # noqa: F401
+    get_authz_service,
+    require_permission,
+    subject_from_user,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,10 +80,23 @@ async def get_current_user(
 
 
 def require_roles(*allowed_roles: UserRole):
-    """Dependency factory that enforces role-based access control on a route."""
+    """Dependency factory that enforces role-based access control on a route.
+
+    A thin shim over the ABAC PDP's ``role_permitted`` (see
+    ``app.core.authz.engine``), per the tenancy plan's ABAC design -- so the
+    role-membership check every route already relied on lives in one place
+    alongside the rest of the engine, rather than being reimplemented here.
+    Behaviour is unchanged: same membership test, same exception on a
+    mismatch, so no existing route or test changes.
+    """
+    from app.core.authz.engine import role_permitted
 
     async def _check_role(current_user: UserModel = Depends(get_current_user)) -> UserModel:
-        if current_user.role not in [role.value for role in allowed_roles]:
+        try:
+            role = UserRole(current_user.role)
+        except ValueError:
+            raise AuthorizationException(message="You do not have permission to perform this action.")
+        if not role_permitted(role, allowed_roles):
             raise AuthorizationException(message="You do not have permission to perform this action.")
         return current_user
 
@@ -85,19 +106,21 @@ def require_roles(*allowed_roles: UserRole):
 async def require_auth_if_enabled(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
-) -> Optional[UserModel]:
-    """Enforce authentication only when ``settings.REQUIRE_AUTH`` is True.
+) -> UserModel:
+    """Require an authenticated, tenant-bound user.
 
-    A single conditional dependency rather than two different router wirings,
-    so flipping ``REQUIRE_AUTH`` doesn't need a redeploy with different route
-    registrations -- see the setting's docstring for why /documents/* and
-    /chat/* default to open.
+    Multi-tenancy made authentication mandatory everywhere: every row in the
+    system now carries a ``company_id`` (see the tenancy plan's Faz 1), so
+    there is no longer an "unauthenticated demo/dev path" for a request to
+    fall back to -- there would be no company to scope its reads/writes to.
+    The name is kept (rather than renamed to e.g. ``require_authenticated_
+    user``) purely to avoid touching every router's import and
+    ``Depends(...)`` call site in this same change; a rename is a fine
+    follow-up with no behavioural stakes.
 
     Returns:
-        The authenticated user when ``REQUIRE_AUTH`` is True, otherwise None.
+        The authenticated, active user.
     """
-    if not settings.REQUIRE_AUTH:
-        return None
     return await get_current_user(token=token, db=db)
 
 
@@ -134,6 +157,32 @@ async def get_mevzuat_retriever() -> HybridRetriever:
             ),
         )
     return _mevzuat_retriever
+
+
+_example_retriever: Optional[ExampleRetriever] = None
+
+
+async def get_example_retriever() -> ExampleRetriever:
+    """Build the draft few-shot style-example retriever once per process.
+
+    Same idiom and same native Qdrant hybrid search as
+    ``get_mevzuat_retriever`` above, targeting the separate
+    ``resmi_yazisma_ornek`` collection built by
+    ``scripts/index_yazisma_examples.py`` instead of the legislation corpus.
+    """
+    global _example_retriever
+    if _example_retriever is None:
+        import os
+        hybrid = HybridRetriever(
+            vector_store=get_vector_store(),
+            embeddings_client=get_embeddings_client(),
+            collection_name=settings.RESMI_YAZISMA_COLLECTION_NAME,
+            sparse_vocab_path=os.path.join(
+                os.path.dirname(settings.RESMI_YAZISMA_EXAMPLES_PATH), "sparse_vocab.json"
+            ),
+        )
+        _example_retriever = ExampleRetriever(hybrid)
+    return _example_retriever
 
 
 async def get_document_analysis_mevzuat_retriever(
@@ -246,7 +295,9 @@ async def get_draft_graph() -> Any:
     global _draft_graph
     if _draft_graph is None:
         _draft_graph = create_draft_graph(
-            llm_client=get_llm_client(), fast_llm_client=get_fast_llm_client()
+            llm_client=get_llm_client(),
+            fast_llm_client=get_fast_llm_client(),
+            example_retriever=await get_example_retriever(),
         )
     return _draft_graph
 
@@ -255,11 +306,18 @@ async def get_routing_graph() -> Any:
     """Compile the document routing workflow once per process.
 
     Uses the fast tier: the output is one unit label plus one sentence, so the
-    quality model buys nothing here but latency.
+    quality model buys nothing here but latency. `units_provider` is a plain
+    callable (not resolved once here) so every routing decision re-reads the
+    active unit list from the database, even though the graph itself is only
+    compiled once.
     """
     global _routing_graph
     if _routing_graph is None:
-        _routing_graph = create_routing_graph(llm_client=get_fast_llm_client())
+        from app.domains.units.provider import get_active_units_for_routing
+
+        _routing_graph = create_routing_graph(
+            llm_client=get_fast_llm_client(), units_provider=get_active_units_for_routing
+        )
     return _routing_graph
 
 
@@ -321,6 +379,7 @@ async def get_planning_graph(
     rag_graph: Any = Depends(get_rag_graph),
     draft_graph: Any = Depends(get_draft_graph),
     routing_graph: Any = Depends(get_routing_graph),
+    mevzuat_retriever: Any = Depends(get_document_analysis_mevzuat_retriever),
 ) -> Any:
     """Compile the master planning graph once per process.
 
@@ -341,6 +400,7 @@ async def get_planning_graph(
             embeddings_client=get_embeddings_client(),
             fast_llm_client=get_fast_llm_client(),
             checkpointer=get_checkpointer(),
+            mevzuat_retriever=mevzuat_retriever,
         )
     return _planning_graph
 

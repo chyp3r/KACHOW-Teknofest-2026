@@ -182,10 +182,10 @@ def test_the_draft_version_carries_its_grounding_forward():
     assert version.source_document == "Sayı: E-1, ..."
 
 
-def test_a_revise_requested_or_rejected_draft_does_not_become_a_version():
+def test_a_failed_or_in_progress_draft_does_not_become_a_version():
     focus = SessionFocus()
 
-    for status in ("REVISE_REQUESTED", "REJECTED", "FAILED", "IN_PROGRESS"):
+    for status in ("FAILED", "IN_PROGRESS"):
         update = compute_focus_update(
             focus,
             document_id=None,
@@ -194,6 +194,101 @@ def test_a_revise_requested_or_rejected_draft_does_not_become_a_version():
             draft_result={"status": status, "draft": "..."},
         )
         assert "active_draft" not in update, status
+
+
+def test_a_revise_requested_draft_is_still_versioned():
+    """Unintuitive but correct: REVISE_REQUESTED only ever reaches here as a
+    turn's *final* status when the human approval gate's revision-round cap
+    was hit (see focus.py's own docstring on _VERSIONABLE_DRAFT_STATUSES) --
+    by then draft_result["draft"] is real text from the last completed
+    gate_revise round, not a request with nothing behind it."""
+    focus = SessionFocus()
+
+    update = compute_focus_update(
+        focus,
+        document_id=None,
+        plan_intent="revise",
+        input_text="Bir kez daha revize et.",
+        draft_result={
+            "status": "REVISE_REQUESTED",
+            "draft": "son revize edilmiş metin",
+            "correspondence_type": "cover_letter",
+            "combined_score": 75.0,
+            "instruction_origin": "human_gate",
+        },
+    )
+
+    version = update["active_draft"]
+    assert version.text == "son revize edilmiş metin"
+    assert version.created_from == "gate_revise"
+    assert update["draft_history"] == (version,)
+
+
+def test_a_rejected_draft_is_archived_without_staying_active():
+    first = DraftVersion(
+        version=1, text="v1", correspondence_type="cover_letter",
+        confidence_score=70.0, created_from="draft",
+    )
+    focus = SessionFocus(active_draft=first, draft_history=(first,))
+
+    update = compute_focus_update(
+        focus,
+        document_id=None,
+        plan_intent="revise",
+        input_text="Bu olmadı, reddediyorum.",
+        draft_result={"status": "REJECTED", "rejection_reason": "Üslup çok resmi değil."},
+    )
+
+    assert update["active_draft"] is None
+    assert len(update["draft_history"]) == 1
+    archived = update["draft_history"][0]
+    assert archived.version == 1
+    assert archived.text == "v1"
+    assert archived.created_from == "rejected"
+    assert archived.rejection_reason == "Üslup çok resmi değil."
+    assert update["last_rejection"] == {
+        "version": 1, "reason": "Üslup çok resmi değil.", "draft": "v1",
+    }
+
+
+def test_a_rejection_with_no_prior_active_draft_still_archives_the_real_text():
+    """The ordinary case, not an edge case: a draft created and rejected
+    within the same turn never became `focus.active_draft` first -- the
+    gate interrupts before `focus_node` ever runs (see its own docstring).
+    `draft_result["draft"]` still carries the real text and must not be
+    dropped just because there was no prior version to annotate."""
+    focus = SessionFocus()
+
+    update = compute_focus_update(
+        focus, document_id=None, plan_intent="draft", input_text="x",
+        draft_result={
+            "status": "REJECTED", "rejection_reason": "Üslup uygun değil.",
+            "draft": "reddedilen ilk taslak",
+        },
+    )
+
+    assert update["active_draft"] is None
+    archived = update["draft_history"][0]
+    assert archived.version == 1
+    assert archived.text == "reddedilen ilk taslak"
+    assert archived.created_from == "rejected"
+    assert archived.rejection_reason == "Üslup uygun değil."
+    assert update["last_rejection"]["draft"] == "reddedilen ilk taslak"
+
+
+def test_a_rejection_with_neither_active_draft_nor_text_is_a_no_op():
+    """Not reachable through the router today (reject only fires from the
+    approval gate, which requires a draft_result to exist) -- defensive."""
+    focus = SessionFocus()
+
+    update = compute_focus_update(
+        focus, document_id=None, plan_intent="revise", input_text="x",
+        draft_result={"status": "REJECTED", "rejection_reason": "..."},
+    )
+
+    assert "active_draft" not in update
+    assert "draft_history" not in update
+    assert "last_rejection" not in update
 
 
 def test_no_draft_step_this_turn_leaves_the_draft_fields_untouched():

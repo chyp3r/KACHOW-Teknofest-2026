@@ -1,11 +1,15 @@
 ---
-id: DY-033
-kategori: diger_resmi_yazisma
-niyet: 09_tutanak
-belge_turu: resmi_sablon
+id: "DY-033"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "09_tutanak"
+niyet: "09_tutanak"
+baslik: "İnceleme İşlemleri Hazırlık Tutanağı"
 kurum: "Amasya Üniversitesi Hukuk Müşavirliği"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/04_diger_resmi_yazisma/09_tutanak/DY-033_inceleme-islemleri-hazirlik-tutanagi.md"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+rag_status: "candidate"
 ---
 
 # İnceleme İşlemleri Hazırlık Tutanağı

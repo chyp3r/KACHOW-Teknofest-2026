@@ -1,33 +1,36 @@
 ---
-id: BEL-007
-kategori: bilgilendirme_metni
-niyet: iklim_eylem_plani
-baslik: Kadıköy Belediyesi Meclis Kararı - Sürdürülebilir Enerji ve İklim Eylem Planı (Karar No: 2024/18)
-kurum: T.C. Kadıköy Belediye Başkanlığı
-kaynak_url: https://www.kadikoy.bel.tr/meclis-kararlari/2024-18
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "BEL-007"
+kategori: "bilgilendirme_metni"
+alt_kategori: "iklim_eylem_plani"
+niyet: "iklim_eylem_plani"
+baslik: "Kadıköy Belediyesi Meclis Kararı - Sürdürülebilir Enerji ve İklim Eylem Planı (Karar No: 2024/18)"
+kurum: "T.C. Kadıköy Belediye Başkanlığı"
+kaynak: "https://www.kadikoy.bel.tr/meclis-kararlari/2024-18"
+kaynak_url: "https://www.kadikoy.bel.tr/meclis-kararlari/2024-18"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # T.C. Kadıköy Belediye Meclis Kararı (Karar No: 2024/18)
 
-**T.C.**  
-**KADIKÖY BELEDİYE BAŞKANLIĞI**  
-**İklim Değişikliği ve Sıfır Atık Müdürlüğü**  
+**T.C.**
+**KADIKÖY BELEDİYE BAŞKANLIĞI**
+**İklim Değişikliği ve Sıfır Atık Müdürlüğü**
 
-**Karar Tarihi:** 15.05.2024  
-**Karar No:** 2024/18  
-**Birleşim:** 1  
-**Oturum:** 2  
+**Karar Tarihi:** 15.05.2024
+**Karar No:** 2024/18
+**Birleşim:** 1
+**Oturum:** 2
 
-**MECLİS BAŞKANI:** Belediye Başkanı  
-**KATİP ÜYELER:** [SİLİNMİŞTİR], [SİLİNMİŞTİR]  
+**MECLİS BAŞKANI:** Belediye Başkanı
+**KATİP ÜYELER:** [KİŞİ ADI], [KİŞİ ADI]
 
-**TEKLİFİN ÖZETİ:**  
+**TEKLİFİN ÖZETİ:**
 Çevre ve İklim Değişikliği Komisyonu'nun Kadıköy Belediyesi Sürdürülebilir Enerji ve İklim Eylem Planı (SECAP) güncellenmesi ve yerel düzeyde sera gazı salımının %40 azaltılması hedeflerinin kabulü hakkındaki raporu.
 
-**KARAR:**  
+**KARAR:**
 Kadıköy Belediye Meclisi 15.05.2024 tarihli birleşiminde gündemin ilgili maddesini görüşmüştür.
 
 Yapılan müzakereler sonucunda;
@@ -35,12 +38,12 @@ Yapılan müzakereler sonucunda;
 2. Belediye hizmet binalarında ve tesislerinde yenilenebilir enerji kaynaklarının (Güneş Enerjisi Sistemleri - GES) kullanımının yaygınlaştırılmasına,
 3. Yağmur suyu hasadı ve gri su geri kazanım sistemlerinin yeni kamu yapılarında zorunlu hale getirilmesine oy birliği ile karar verilmiştir.
 
-Meclis Başkanı  
-[SİLİNMİŞTİR]  
-Belediye Başkanı  
+Meclis Başkanı
+[KİŞİSEL BİLGİ]
+Belediye Başkanı
 
-Katip Üye  
-[SİLİNMİŞTİR]  
+Katip Üye
+[KİŞİSEL BİLGİ]
 
-Katip Üye  
-[SİLİNMİŞTİR]  
+Katip Üye
+[KİŞİSEL BİLGİ]

@@ -2,10 +2,13 @@ import os
 import json
 import csv
 import re
+from collections import Counter
 from pathlib import Path
 
 # Config
 DATASET_ROOT = Path(__file__).parent.parent / "datasets" / "resmi_yazisma"
+PETITION_SOURCE_ROOT = DATASET_ROOT / "00_gelen_kaynaklar" / "dilekce"
+PETITION_REJECTED_ROOT = DATASET_ROOT / "99_reddedilenler" / "dilekce_makaleleri"
 ALLOWED_DIRS = ["01_ust_yazi", "02_cevap_yazisi", "03_bilgilendirme_metni", "04_diger_resmi_yazisma", "00_gelen_kaynaklar"]
 
 JSONL_OUT = DATASET_ROOT / "kaynak-katalogu.jsonl"
@@ -60,10 +63,23 @@ def main():
                 
             data = parse_md_file(md_file)
             if data and "id" in data:
+                # Raw scraped petitions are immutable provenance.  Their
+                # cleaned quarantine copies carry the RAG decision, so mirror
+                # that decision into the derived catalog without rewriting
+                # the source Markdown file itself.
+                if md_file.parent == PETITION_SOURCE_ROOT:
+                    rejected_copy = PETITION_REJECTED_ROOT / md_file.name
+                    if rejected_copy.exists():
+                        rejected_data = parse_md_file(rejected_copy)
+                        data["rag_status"] = rejected_data.get("rag_status", "rejected")
+                        data["ret_nedeni"] = rejected_data.get(
+                            "ret_nedeni", "aciklayici_makale_tekil_dilekce_degil"
+                        )
                 # Add default fields for the catalog format if not present
                 record = {
                     "id": data.get("id", ""),
                     "kategori": data.get("kategori", allowed),
+                    "alt_kategori": data.get("alt_kategori", ""),
                     "niyet": data.get("niyet", ""),
                     "baslik": data.get("baslik", ""),
                     "kurum": data.get("kurum", ""),
@@ -76,6 +92,13 @@ def main():
                     "erisim_tarihi": data.get("erisim_tarihi", ""),
                     "dogrulama": data.get("dogrulama", ""),
                     "rag_notu": data.get("rag_notu", ""),
+                    "kaynak": data.get("kaynak", ""),
+                    "kaynak_turu": data.get("kaynak_turu", ""),
+                    "extractor": data.get("extractor", ""),
+                    "used_ocr": data.get("used_ocr", ""),
+                    "quality_score": data.get("quality_score", ""),
+                    "rag_status": data.get("rag_status", "candidate"),
+                    "ret_nedeni": data.get("ret_nedeni", ""),
                     "kart": data["kart"]
                 }
                 records.append(record)
@@ -83,6 +106,11 @@ def main():
 
     # Sort records by ID
     records.sort(key=lambda x: x["id"])
+
+    id_counts = Counter(record["id"] for record in records)
+    duplicate_ids = sorted(record_id for record_id, count in id_counts.items() if count > 1)
+    if duplicate_ids:
+        raise ValueError(f"Yinelenen veri kimlikleri bulundu: {', '.join(duplicate_ids)}")
 
     # 1. Write kaynak-katalogu.jsonl
     with open(JSONL_OUT, "w", encoding="utf-8") as f:

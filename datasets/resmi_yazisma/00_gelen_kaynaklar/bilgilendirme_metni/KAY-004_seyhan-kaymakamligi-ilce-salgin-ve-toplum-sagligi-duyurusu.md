@@ -1,22 +1,25 @@
 ---
-id: KAY-004
-kategori: bilgilendirme_metni
-niyet: duyuru
-baslik: Seyhan Kaymakamlığı İlçe Sağlık Müdürlüğü Aşırı Sıcaklar Sağlık Tedbirleri Duyurusu
-kurum: T.C. Seyhan Kaymakamlığı
-kaynak_url: https://www.seyhan.gov.tr/asiri-sicaklar-ve-saglik-tedbirleri-duyurusu
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "KAY-004"
+kategori: "bilgilendirme_metni"
+alt_kategori: "duyuru"
+niyet: "duyuru"
+baslik: "Seyhan Kaymakamlığı İlçe Sağlık Müdürlüğü Aşırı Sıcaklar Sağlık Tedbirleri Duyurusu"
+kurum: "T.C. Seyhan Kaymakamlığı"
+kaynak: "https://www.seyhan.gov.tr/asiri-sicaklar-ve-saglik-tedbirleri-duyurusu"
+kaynak_url: "https://www.seyhan.gov.tr/asiri-sicaklar-ve-saglik-tedbirleri-duyurusu"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Seyhan Kaymakamlığı İlçe Sağlık Müdürlüğü Aşırı Sıcaklar Sağlık Tedbirleri Duyurusu
 
-**T.C.**  
-**SEYHAN KAYMAKAMLIĞI**  
+**T.C.**
+**SEYHAN KAYMAKAMLIĞI**
 **İlçe Sağlık Müdürlüğü**
 
-**Duyuru Tarihi:** 12.07.2026  
+**Duyuru Tarihi:** 12.07.2026
 
 Adana ili Seyhan ilçesinde mevsim normallerinin üzerinde seyreden hava sıcaklıkları ve yüksek nem oranı nedeniyle oluşabilecek güneş çarpması ve sıvı kaybı risklerine karşı vatandaşlarımızın dikkat etmesi gereken hususlar aşağıda açıklanmıştır:
 
@@ -28,5 +31,5 @@ Adana ili Seyhan ilçesinde mevsim normallerinin üzerinde seyreden hava sıcakl
 
 Sağlıklı günler dileriz.
 
-[SİLİNMİŞTİR]  
-Seyhan İlçe Sağlık Müdürü  
+[KİŞİSEL BİLGİ]
+Seyhan İlçe Sağlık Müdürü

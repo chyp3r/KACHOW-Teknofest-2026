@@ -250,6 +250,19 @@ def _disable_draft_history_recording(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _disable_demo_company_seeding(monkeypatch):
+    """Turn off app.domains.companies.seeder's DB writes for every test.
+
+    Same reasoning as `_disable_default_user_seeding` below -- and it must
+    run before that fixture matters at all, since the user/unit seeders
+    depend on a company id this one would otherwise produce.
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "SEED_DEMO_COMPANY", False)
+
+
+@pytest.fixture(autouse=True)
 def _disable_default_user_seeding(monkeypatch):
     """Turn off app.domains.users.seeder's DB writes for every test.
 
@@ -260,6 +273,17 @@ def _disable_default_user_seeding(monkeypatch):
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "SEED_DEFAULT_USERS", False)
+
+
+@pytest.fixture(autouse=True)
+def _disable_default_unit_seeding(monkeypatch):
+    """Turn off app.domains.units.seeder's DB writes for every test.
+
+    Same reasoning as `_disable_default_user_seeding` above.
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "SEED_DEFAULT_UNITS", False)
 
 
 @pytest.fixture(autouse=True)

@@ -5,21 +5,39 @@ after it was generated should get a fresh routing decision without paying for
 a new generation.
 """
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.dependency import get_routing_graph
+from app.api.dependency import get_routing_graph, require_auth_if_enabled
+from app.core.enums.user_role import UserRole
+from app.domains.users.model.user_model import UserModel
 from app.main import app
 
 ENDPOINT = "/api/v1/routing/suggest"
 
 client = TestClient(app, raise_server_exceptions=False)
 
+_CURRENT_USER = UserModel(
+    id="user-1",
+    company_id="company-1",
+    username="user1",
+    email="u1@example.com",
+    role=UserRole.EMPLOYEE.value,
+    clearance_level="hizmete_ozel",
+    is_active=True,
+    is_deleted=False,
+    hashed_password="pw",
+    created_at=datetime.now(timezone.utc),
+    updated_at=datetime.now(timezone.utc),
+)
+
 
 def _override(graph):
     app.dependency_overrides[get_routing_graph] = lambda: graph
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _CURRENT_USER
 
 
 @pytest.fixture(autouse=True)
@@ -96,7 +114,7 @@ def test_suggest_routing_maps_a_graph_failure_to_502():
     assert body["error"]["code"] == "AI_EXECUTION_ERROR"
 
 
-def test_suggest_routing_falls_back_to_human_approval_label_when_the_graph_omits_it():
+def test_suggest_routing_defaults_to_no_unit_and_no_approval_flag_when_the_graph_omits_them():
     graph = AsyncMock()
     graph.ainvoke.return_value = {}
     _override(graph)
@@ -104,4 +122,24 @@ def test_suggest_routing_falls_back_to_human_approval_label_when_the_graph_omits
     response = client.post(ENDPOINT, json={"draft": "Bir taslak metni."})
 
     assert response.status_code == 200
-    assert response.json()["data"]["routed_unit"] == "İnsan Onayı Gerekli"
+    data = response.json()["data"]
+    assert data["routed_unit"] is None
+    assert data["requires_human_approval"] is False
+
+
+def test_suggest_routing_surfaces_requires_human_approval_when_no_unit_was_assigned():
+    graph = AsyncMock()
+    graph.ainvoke.return_value = {
+        "routed_unit": None,
+        "priority": "Yüksek",
+        "reasoning": "Tanımlı birim listesi dışında bir yanıt verildi.",
+        "requires_human_approval": True,
+    }
+    _override(graph)
+
+    response = client.post(ENDPOINT, json={"draft": "Belirsiz bir talep."})
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["routed_unit"] is None
+    assert data["requires_human_approval"] is True

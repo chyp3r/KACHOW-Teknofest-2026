@@ -162,9 +162,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # prevent the API from booting. Placed after the checkpointer (so the
     # database is known-reachable) and outside _startup()'s warm-up budget,
     # same reasoning as init_checkpointer() itself.
+    #
+    # Order matters: the demo company must exist before the users and units
+    # seeded below it can reference its id (see
+    # app.domains.companies.seeder's own docstring).
+    from app.domains.companies.seeder import seed_demo_company
+
+    demo_company_id = await seed_demo_company()
+
     from app.domains.users.seeder import seed_default_users
 
-    await seed_default_users()
+    await seed_default_users(demo_company_id)
+
+    if demo_company_id is not None:
+        from app.domains.units.seeder import seed_default_units
+
+        await seed_default_units(demo_company_id)
 
     await _startup()
     logger.info("Startup complete; accepting requests.")

@@ -1,25 +1,59 @@
 ---
-id: CY-004
-kategori: cevap_yazisi
-niyet: 02_sikayet
-belge_turu: tamamlanmis_resmi_cevap
+id: "CY-004"
+kategori: "cevap_yazisi"
+alt_kategori: "02_sikayet"
+niyet: "02_sikayet"
+baslik: "Soru Önergeleri-365"
 kurum: "Türkiye Büyük Millet Meclisinde yayımlanan kurum cevabı"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/cevap_yazisi/CY-004_7-42570-dicle-universitesi-hastanesinde-gorev-yapan-bir-kisi-ile-ilgili.pdf"
+yerel_orijinal: "00_gelen_kaynaklar/cevap_yazisi/CY-004_7-42570-dicle-universitesi-hastanesinde-gorev-yapan-bir-kisi-ile-ilgili.pdf"
+kaynak_turu: "pdf"
+belge_turu: "tamamlanmis_resmi_cevap"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "tesseract"
+used_ocr: "true"
+page_count: "1"
+quality_score: "0.794"
+rag_status: "candidate"
 ---
 
-# 7/42570 - Dicle Üniversitesi Hastanesinde görev yapan bir kişi ile ilgili bazı iddialara ilişkin
+# Soru Önergeleri-365
 
-- Resmî kaynak: https://www.tbmm.gov.tr/Denetim/Yazili-Soru-Onergesi-Detay/6aff0fdd-ee16-48bd-b257-019d430d0317
-- Doğrudan belge: https://cdn.tbmm.gov.tr/KKBSPublicFile/D28/Y4/T7/WebOnergeMetni/25d43339-f05d-4c1d-8797-3b12d4c53ff0.pdf
-- Yerel asıl belge: 00_gelen_kaynaklar/cevap_yazisi/CY-004_7-42570-dicle-universitesi-hastanesinde-gorev-yapan-bir-kisi-ile-ilgili.pdf
-- Tarih bilgisi: 30/03/2026
-- Sayfa/bölüm: Belgenin tamamı
+Türkiye Büyük Millet Meclisi -
+Türkiye Büyük Millet Meclisi
+. Başkanlığı
+wan , Tarih: 13/04/2026 1042
+e i Ni Sayı E-12007 03.1837712
+; sa ş LL LL
+T.C.
+CUMHURBAŞKANI YARDIMCISI
+GÜNLÜDÜR
+Sayı (o :E-48360949-610-375522
+[KURUM İLETİŞİM BİLGİLERİ]
+TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA
+İlgi : 07.04.2026 tarihli ve E-43452547-120.07.04-1830748 sayılı yazınız.
 
-## Veri kümesinde kullanım
+Anayasanın 98 inci maddesi uyarınca Başkanlığınızca tarafıma gönderilen yazıh soru
+önergelerinden, Cumhurbaşkanlığı Merkez Teşkilatı ile Cumhurbaşkanlığına Bağlı Kurum ve Kuruluşların
+görev alanına giren konulara ilişkin önergeler cevaplandırılmaktadır.
 
-Cevabın soru, ilgi, açıklama ve sonuç örgüsü örneklenebilir. Milletvekili ve olay adları eğitim girdisinde anonimleştirilmelidir.
+| sayılı Cumhurbaşkanlığı Teşkilatı Hakkında Cumhurbaşkanlığı Kararnamesi ile 4 sayılı
+Bakanlıklara Bağlı, İlgili, İlişkili Kurum ve Kuruluşlar ile Diğer Kurum ve Kuruluşların Teşkilatı
+Hakkında Cumhurbaşkanlığı Kararnamesi uyarınca bakanlıkların görev ve yetki alanına giren önergeler
+bakanlıklar tarafından cevaplandırılmaktadır.
 
-## Doğrulama notu
+Bu itibarla, Diyarbakır Milletvekili Sayın [KİŞİ ADI] tarafından verilen 7/42570 esas
+numaralı yazılı soru önergesinde bahsi geçen hususlar Milli Eğitim Bakanlığının görev ve yetki alanına
+girmektedir.
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Bilgilerini ve gereğini arz ederim.
+
+[İMZA SAHİBİ]
+Cumhurbaşkanı Yardımcısı
+Bu belge, süvenii elektronik imza de imalanmıştır
+
+Doğrulama Kodu: 4399B$4D-CAFE-AT2A-SALB-|CCFASDOCFSB, Doğrulama Adresi: hüps/www.turkiye gov irhtecb-ebys
+[KURUM İLETİŞİM BİLGİLERİ]
+İnternet Adresi: Www.tccb. gov.tr MİDYE İN
+[KURUM İLETİŞİM BİLGİLERİ]

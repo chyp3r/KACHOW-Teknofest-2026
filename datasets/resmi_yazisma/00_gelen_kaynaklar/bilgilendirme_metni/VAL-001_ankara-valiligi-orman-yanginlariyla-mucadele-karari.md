@@ -1,23 +1,26 @@
 ---
-id: VAL-001
-kategori: bilgilendirme_metni
-niyet: duyuru
-baslik: Ankara Valiliği Orman Yangınlarıyla Mücadele Komisyon Kararı
-kurum: T.C. Ankara Valiliği
-kaynak_url: https://www.ankara.gov.tr/orman-yanginlariyla-mucadele-komisyon-karari
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "VAL-001"
+kategori: "bilgilendirme_metni"
+alt_kategori: "duyuru"
+niyet: "duyuru"
+baslik: "Ankara Valiliği Orman Yangınlarıyla Mücadele Komisyon Kararı"
+kurum: "T.C. Ankara Valiliği"
+kaynak: "https://www.ankara.gov.tr/orman-yanginlariyla-mucadele-komisyon-karari"
+kaynak_url: "https://www.ankara.gov.tr/orman-yanginlariyla-mucadele-komisyon-karari"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Ankara Valiliği Orman Yangınlarıyla Mücadele Komisyon Kararı
 
-**T.C.**  
-**ANKARA VALİLİĞİ**  
+**T.C.**
+**ANKARA VALİLİĞİ**
 **İl Orman Yangınlarıyla Mücadele Komisyonu**
 
-**Karar Tarihi:** 01.08.2026  
-**Karar No:** 2026/03  
+**Karar Tarihi:** 01.08.2026
+**Karar No:** 2026/03
 
 Ankara il sınırları dâhilinde yer alan ormanlık alanlarda çıkabilecek orman yangınlarının önlenmesi, yangın riskinin en aza indirilmesi ve meydana gelebilecek yangınlara zamanında müdahale edilebilmesi amacıyla 6831 sayılı Orman Kanunu’nun 69. maddesi ile 5442 sayılı İl İdaresi Kanunu’nun 11/C maddesi uyarınca İl Orman Yangınlarıyla Mücadele Komisyonu toplanarak aşağıdaki kararları almıştır:
 
@@ -29,11 +32,11 @@ Ankara il sınırları dâhilinde yer alan ormanlık alanlarda çıkabilecek orm
 4. **Cezai İşlemler:** Yasaklara aykırı hareket eden şahıslar hakkında 6831 sayılı Orman Kanunu, 5326 sayılı Kabahatler Kanunu ve 5442 sayılı İl İdaresi Kanunu hükümleri gereğince idari para cezası ve adli işlem uygulanacaktır.
 5. **İletişim ve İhbar:** Vatandaşlarımızın ormanlık alanlarda duman veya ateş görmeleri halinde 112 Acil Çağrı Merkezine derhal bilgi vermeleri önemle rica olunur.
 
-**Komisyon Başkanı:**  
-[SİLİNMİŞTİR] - Ankara Valisi  
+**Komisyon Başkanı:**
+[KİŞİSEL BİLGİ] - Ankara Valisi
 
-**Üyeler:**  
-İl Emniyet Müdürü [SİLİNMİŞTİR]  
-İl Jandarma Komutanı [SİLİNMİŞTİR]  
-Orman Bölge Müdürü [SİLİNMİŞTİR]  
-İl Tarım ve Orman Müdürü [SİLİNMİŞTİR]  
+**Üyeler:**
+İl Emniyet Müdürü [KİŞİSEL BİLGİ]
+İl Jandarma Komutanı [KİŞİSEL BİLGİ]
+Orman Bölge Müdürü [KİŞİSEL BİLGİ]
+İl Tarım ve Orman Müdürü [KİŞİSEL BİLGİ]

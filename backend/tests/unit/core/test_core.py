@@ -14,8 +14,8 @@ from app.api.exceptions import (
     validation_exception_handler,
 )
 from app.api.middleware import ResponseTimeMiddleware, StructuredLoggingMiddleware
+from app.core.config import settings
 from app.core.constants import (
-    AI_WORKFLOW_TIMEOUT_SECONDS,
     ALLOWED_FILE_TYPES,
     CACHE_TTL_SECONDS,
     CORS_ORIGINS,
@@ -40,7 +40,7 @@ class TestUserRole:
 
     def test_all_roles_present(self):
         roles = {r.value for r in UserRole}
-        assert roles == {"admin", "manager", "employee"}
+        assert roles == {"root", "admin", "manager", "employee"}
 
 
 class TestDocumentStatus:
@@ -79,7 +79,7 @@ class TestSystemConstants:
         assert CACHE_TTL_SECONDS > 0
 
     def test_ai_timeout_is_positive(self):
-        assert AI_WORKFLOW_TIMEOUT_SECONDS > 0
+        assert settings.AI_WORKFLOW_TIMEOUT_SECONDS > 0
 
     def test_max_retry_attempts_is_positive(self):
         assert MAX_RETRY_ATTEMPTS > 0

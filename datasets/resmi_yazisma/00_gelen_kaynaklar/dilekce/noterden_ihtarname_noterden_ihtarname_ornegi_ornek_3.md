@@ -1,27 +1,28 @@
 ---
-id: DILEKCE-3CA042AA
-kategori: dilekce
-alt_kategori: noterden_ihtarname
+id: "DILEKCE-3CA042AA"
+kategori: "dilekce"
+alt_kategori: "noterden_ihtarname"
 baslik: "Noterden İhtarname Örneği (Ornek 3)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Noterden İhtarname Örneği (Ornek 3)
 
 İHTARNAME
 
-İHTAR EDEN: Zeynep Koc (T.C.: 49415601342)
-Adres: Bahcelievler Mah. 55. Sok. No:3 Trabzon
+İHTAR EDEN: Zeynep Koc (T.C.: [T.C. KİMLİK NO])
+Adres: [ADRES]
 
 MUHATAP: Zeynep Koc
-Adres: Ataturk Mah. Bursa
+Adres: [ADRES]
 
 KONU: Kira borcunun ödenmesi ihtarıdır.
 
 AÇIKLAMALAR:
 Sayın Muhatap,
 
-Bahcelievler Mah. 55. Sok. No:3 Trabzon adresindeki taşınmazımı 10.02.2021 tarihli kira sözleşmesi ile aylık 15106 TL bedelle tarafınıza kiraya vermiş bulunmaktayım. Ancak Ocak, Nisan ve Agustos aylarına ait toplam 22933 TL kira bedelini ödememiş bulunmaktasınız.
+[KURUM ADRESİ]
 
 6098 sayılı Türk Borçlar Kanunu'nun 315. maddesi gereğince, işbu ihtarnamenin tarafınıza tebliğinden itibaren 30 gün içinde birikmiş kira borçlarınızı ödemenizi, aksi takdirde tahliye davası açılacağını ve alacağın yasal faiziyle birlikte tahsili için icra takibi başlatılacağını ihtar ederim.
 

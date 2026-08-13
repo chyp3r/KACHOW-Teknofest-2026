@@ -1,25 +1,95 @@
 ---
-id: UY-043
-kategori: ust_yazi
-niyet: 06_rapor_sunum
-belge_turu: resmi_sablon
+id: "UY-043"
+kategori: "ust_yazi"
+alt_kategori: "06_rapor_sunum"
+niyet: "06_rapor_sunum"
+baslik: "T.C. SAĞLIK BAKANLIĞI"
 kurum: "Afyonkarahisar İl Sağlık Müdürlüğü"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/ust_yazi/UY-043_baslama-ilk-gonullu-gonullu-sonlanimi-yillik-ve-sonuc-raporu-ust-yazilar.docx"
+yerel_orijinal: "00_gelen_kaynaklar/ust_yazi/UY-043_baslama-ilk-gonullu-gonullu-sonlanimi-yillik-ve-sonuc-raporu-ust-yazilar.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Başlama, İlk Gönüllü, Gönüllü Sonlanımı, Yıllık ve Sonuç Raporu Üst Yazıları Paketi
+# T.C. SAĞLIK BAKANLIĞI
 
-- Resmî kaynak: https://afyonism.saglik.gov.tr/TR-360686/3-bildirimler.html
-- Doğrudan belge: https://dosyaism.saglik.gov.tr/Eklenti/255812/0/baslama-tarihiilk-gonullu-alimi-gonullu-alimi-sonlanimyillik-bildirimarastirma-sonuc-raporu-bildirimi-ust-yazi-ornegidocx.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/ust_yazi/UY-043_baslama-ilk-gonullu-gonullu-sonlanimi-yillik-ve-sonuc-raporu-ust-yazilar.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+T.C. SAĞLIK BAKANLIĞI
 
-## Veri kümesinde kullanım
+AFYONKARAHİSAR İL SAĞLIK MÜDÜRLÜĞÜ
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+Klinik Araştırmalar Etik Kurulu
 
-## Doğrulama notu
+| Konu: | |
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+| --- | --- |
+
+| | |
+
+Aşağıda detayları bulunan araştırmayla ilgili bilgi ve belgeler tarafınıza sunulmaktadır.
+
+| Araştırmanın açık adı: | |
+
+| --- | --- |
+
+| Araştırma kodu (TİTCK kodu): | |
+
+| Protokol kodu: | |
+
+| Destekleyici: | |
+
+| Destekleyicinin yasal temsilcisi: | |
+
+| Sözleşmeli araştırma kuruluşu: | |
+
+| Koordinatör: | |
+
+| Koordinatör merkez: | |
+
+(Başvurunun içeriğini yazınız)
+
+Başvuru dosyasına eklenen tüm dokümanların aslı ile birebir aynı olduğunu ve arama yapılabilir pdf olarak hazırlandığını,
+
+Başvuruda sağlanan bilgilerin doğru olduğunu kabul ve taahhüt ederim.
+
+Yukarıda detayları verilen başvurunun değerlendirilmesini ve gereğini saygılarımla arz ederim.
+
+(ıslak imzalı üst yazılarda)
+
+…./…./….
+
+İmza/Kaşe
+
+Adı Soyadı
+
+| Başvuru için iletişime geçilecek kişi: | |
+
+| --- | --- |
+
+| Adres: | |
+
+| Telefon: | |
+
+| E-posta: | |
+
+Ekler:
+
+| Doküman | Doküman | Tarih / Versiyon Açıklama |
+
+| --- | --- | --- |
+
+| 1. | | |
+
+| 2. | | |
+
+| 3. | | |
+
+| 4. | | |
+
+| 5. | | |

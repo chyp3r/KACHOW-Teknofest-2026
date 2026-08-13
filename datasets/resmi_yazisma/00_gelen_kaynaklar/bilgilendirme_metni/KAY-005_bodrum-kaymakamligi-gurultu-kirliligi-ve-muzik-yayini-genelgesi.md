@@ -1,23 +1,26 @@
 ---
-id: KAY-005
-kategori: diger_resmi_yazisma
-niyet: teblig_bildirim
-baslik: Bodrum Kaymakamlığı Çevresel Gürültü ve Canlı Müzik Yayın Usul ve Esasları Genelgesi
-kurum: T.C. Bodrum Kaymakamlığı
-kaynak_url: https://www.bodrum.gov.tr/cevresel-gurultu-ve-canli-muzik-yayin-esaslari-genelgesi
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "KAY-005"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "teblig_bildirim"
+niyet: "teblig_bildirim"
+baslik: "Bodrum Kaymakamlığı Çevresel Gürültü ve Canlı Müzik Yayın Usul ve Esasları Genelgesi"
+kurum: "T.C. Bodrum Kaymakamlığı"
+kaynak: "https://www.bodrum.gov.tr/cevresel-gurultu-ve-canli-muzik-yayin-esaslari-genelgesi"
+kaynak_url: "https://www.bodrum.gov.tr/cevresel-gurultu-ve-canli-muzik-yayin-esaslari-genelgesi"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Bodrum Kaymakamlığı Çevresel Gürültü ve Canlı Müzik Yayın Usul ve Esasları Genelgesi
 
-**T.C.**  
-**BODRUM KAYMAKAMLIĞI**  
+**T.C.**
+**BODRUM KAYMAKAMLIĞI**
 **İlçe Yazı İşleri Müdürlüğü**
 
-**Genelge No:** 2026/04  
-**Tarih:** 01.06.2026  
+**Genelge No:** 2026/04
+**Tarih:** 01.06.2026
 
 Bodrum ilçemizde turizm sezonunun huzur ve güvenlik içinde geçmesi, konaklayan yerli/yabancı misafirlerin ve bölge halkının gürültü kirliliğinden korunması amacıyla Çevresel Gürültü Kontrol Yönetmeliği çerçevesinde aşağıdaki düzenlemeler getirilmiştir:
 
@@ -30,5 +33,5 @@ Bodrum ilçemizde turizm sezonunun huzur ve güvenlik içinde geçmesi, konaklay
 
 Tüm işletmecilere tebliğ olunur.
 
-[SİLİNMİŞTİR]  
-Bodrum Kaymakamı  
+[KİŞİSEL BİLGİ]
+Bodrum Kaymakamı

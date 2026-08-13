@@ -1,25 +1,45 @@
 ---
-id: DY-025
-kategori: diger_resmi_yazisma
-niyet: 02_onay_olur
-belge_turu: resmi_sablon
+id: "DY-025"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "02_onay_olur"
+niyet: "02_onay_olur"
+baslik: "| | GERÇEKLEŞTİRME GÖREVLİSİ YETKİLİĞİNE VEKALET İMZA SİRKÜSÜ | Doküman No | FEF-FR-016 |"
 kurum: "Düzce Üniversitesi Fen Edebiyat Fakültesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-025_gerceklestirme-gorevlisi-vekalet-imza-sirkusu.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-025_gerceklestirme-gorevlisi-vekalet-imza-sirkusu.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Gerçekleştirme Görevlisi Vekâlet İmza Sirküsü
+# | | GERÇEKLEŞTİRME GÖREVLİSİ YETKİLİĞİNE VEKALET İMZA SİRKÜSÜ | Doküman No | FEF-FR-016 |
 
-- Resmî kaynak: https://fef.duzce.edu.tr/sayfa/0468/sablon-yazilar
-- Doğrudan belge: https://cdn.duzce.edu.tr/File/GetFile/7ca0b419-6cb4-405c-884f-9ed08b874cd4
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-025_gerceklestirme-gorevlisi-vekalet-imza-sirkusu.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+| | GERÇEKLEŞTİRME GÖREVLİSİ YETKİLİĞİNE VEKALET İMZA SİRKÜSÜ | Doküman No | FEF-FR-016 |
 
-## Veri kümesinde kullanım
+| --- | --- | --- | --- |
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+| | GERÇEKLEŞTİRME GÖREVLİSİ YETKİLİĞİNE VEKALET İMZA SİRKÜSÜ | İlk Yayın Tarihi | 15.06.2020 |
 
-## Doğrulama notu
+| | GERÇEKLEŞTİRME GÖREVLİSİ YETKİLİĞİNE VEKALET İMZA SİRKÜSÜ | Revizyon Tarihi | 17.05.2024 |
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+| | GERÇEKLEŞTİRME GÖREVLİSİ YETKİLİĞİNE VEKALET İMZA SİRKÜSÜ | Revizyon No | 2 |
+
+İMZA SİRKÜLERİ
+
+....-….. …….. 20… tarihlerinde Fakülte Sekreterliğine ve Gerçekleştirme Yetkililiğine vekâlet edecek ………………………’ un tatbiki imzası aşağıda sunulmuştur.
+
+Bilgilerine arz ederim.
+
+GERÇEKLEŞTİRME YETKİLİSİ
+
+| Vekâlet Edecek Kişi | Unvanı | İmza Tatbiki |
+
+| --- | --- | --- |
+
+| | | |

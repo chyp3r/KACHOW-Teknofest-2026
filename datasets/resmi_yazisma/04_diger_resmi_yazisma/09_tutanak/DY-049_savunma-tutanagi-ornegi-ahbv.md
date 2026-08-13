@@ -1,11 +1,15 @@
 ---
-id: DY-049
-kategori: diger_resmi_yazisma
-niyet: 09_tutanak
-belge_turu: resmi_sablon
+id: "DY-049"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "09_tutanak"
+niyet: "09_tutanak"
+baslik: "Savunma Tutanağı Örneği - AHBV"
 kurum: "Ankara Hacı Bayram Veli Üniversitesi Hukuk Müşavirliği"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynak_sayfasi_dogrulandi
+kaynak: "datasets/resmi_yazisma/04_diger_resmi_yazisma/09_tutanak/DY-049_savunma-tutanagi-ornegi-ahbv.md"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynak_sayfasi_dogrulandi"
+rag_status: "candidate"
 ---
 
 # Savunma Tutanağı Örneği - AHBV

@@ -1,21 +1,44 @@
-import { ArrowDownAZ, FileText, Search } from "lucide-react";
+import {
+  ArrowDownAZ,
+  FileText,
+  Search,
+} from "lucide-react";
 import { useMemo, useState } from "react";
+import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { EmptyState } from "../../components/EmptyState";
-import { StatusBadge } from "../../components/StatusBadge";
-import type { DocumentMetadata } from "../../types/documents";
+import type { DocumentAnalysis, DocumentMetadata, EvrakFields } from "../../types/documents";
+import { DocumentAnalysisPanel } from "./DocumentAnalysisPanel";
+import { Button } from "../../components/Button";
+import { Input, Select } from "../../components/FormControls";
+import { SectionHeader } from "../../components/SectionHeader";
+import { Card, Spinner } from "../../components/Surface";
+import { DocumentListItem } from "./DocumentListItem";
 
 export function DocumentTable({
   documents,
   selected,
+  analysis,
   loading,
+  updatingFields,
   onSelect,
+  onClose,
+  onUpdateFields,
+  onDeleteDocument,
+  deletingDocument,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
+  analysis: DocumentAnalysis | null;
   loading: boolean;
+  updatingFields?: boolean;
   onSelect: (document: DocumentMetadata) => void;
+  onClose?: () => void;
+  onUpdateFields?: (storagePath: string, fields: EvrakFields) => Promise<void>;
+  onDeleteDocument?: (storagePath: string) => Promise<void>;
+  deletingDocument?: boolean;
 }) {
   const [query, setQuery] = useState("");
+  const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
   const [type, setType] = useState("all");
   const [ascending, setAscending] = useState(false);
   const types = useMemo(
@@ -49,24 +72,18 @@ export function DocumentTable({
   );
 
   return (
-    <section className="surface document-list-card">
-      <div className="section-heading">
-        <div>
-          <h2>Kayıtlı evraklar</h2>
-          <p>{documents.length} evrak kütüphanede bulunuyor.</p>
-        </div>
-      </div>
-      <div className="table-toolbar">
-        <label className="search-field">
-          <Search size={17} />
-          <input
+    <Card className="document-list-card" role="region" aria-label="Kayıtlı evraklar">
+      <SectionHeader className="document-list-heading" title="Kayıtlı evraklar" description={`${documents.length} evrak kütüphanede bulunuyor.`} />
+      <div className="table-toolbar document-list-toolbar">
+        <Input
+            fieldClassName="search-field"
+            leadingIcon={<Search />}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Evraklarda ara"
             aria-label="Evraklarda ara"
           />
-        </label>
-        <select
+        <Select
           value={type}
           onChange={(event) => setType(event.target.value)}
           aria-label="Dosya türüne göre filtrele"
@@ -75,17 +92,18 @@ export function DocumentTable({
           {types.map((item) => (
             <option key={item}>{item}</option>
           ))}
-        </select>
-        <button
-          className="button button-secondary"
+        </Select>
+        <Button
+          variant="secondary"
+          leadingIcon={<ArrowDownAZ />}
           onClick={() => setAscending((value) => !value)}
         >
-          <ArrowDownAZ size={16} />
           {ascending ? "Eskiden yeniye" : "Yeniden eskiye"}
-        </button>
+        </Button>
       </div>
-      {loading ? (
-        <div className="table-loading">Evraklar yükleniyor…</div>
+
+      {loading && documents.length === 0 ? (
+        <div className="table-loading"><Spinner label="Evraklar yükleniyor" />Evraklar yükleniyor…</div>
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={FileText}
@@ -93,72 +111,67 @@ export function DocumentTable({
           description={
             query || type !== "all"
               ? "Arama veya filtre ölçütlerini değiştirin."
-              : "İlk evrakınızı yukarıdaki alandan yükleyin."
+              : "Sağ üstteki Evrak yükle düğmesiyle ilk evrakınızı yükleyin."
           }
         />
       ) : (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Evrak</th>
-                <th>Tür</th>
-                <th>Durum</th>
-                <th>Yüklenme tarihi</th>
-                <th>
-                  <span className="sr-only">İşlem</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((item) => (
-                <tr
-                  key={item.storage_path}
-                  className={
-                    selected?.storage_path === item.storage_path
-                      ? "selected-row"
-                      : ""
+        <ul className="document-accordion-list">
+          {filtered.map((item) => {
+            const expanded = selected?.storage_path === item.storage_path;
+            const detailId = `document-detail-${item.storage_path.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+            return (
+              <li key={item.storage_path} className={expanded ? "is-expanded" : undefined}>
+                <DocumentListItem
+                  document={item}
+                  detailId={detailId}
+                  expanded={expanded}
+                  onToggle={() => {
+                    if (expanded) onClose?.();
+                    else onSelect(item);
+                  }}
+                  onDelete={
+                    onDeleteDocument ? () => setPendingDeletePath(item.storage_path) : undefined
                   }
-                >
-                  <td>
-                    <strong>{item.file_name}</strong>
-                    <span>{item.summary || "Özet bulunmuyor."}</span>
-                  </td>
-                  <td>{item.document_type_label || item.document_type}</td>
-                  <td>
-                    <StatusBadge
-                      tone={
-                        item.compliance_status === "COMPLIANT"
-                          ? "success"
-                          : "warning"
-                      }
-                    >
-                      {item.compliance_status === "COMPLIANT"
-                        ? "Uygun"
-                        : "Kontrol gerekli"}
-                    </StatusBadge>
-                  </td>
-                  <td>
-                    {new Intl.DateTimeFormat("tr-TR", {
-                      dateStyle: "medium",
-                    }).format(new Date(item.upload_time))}
-                  </td>
-                  <td>
-                    <button
-                      className="button button-quiet"
-                      onClick={() => onSelect(item)}
-                    >
-                      {selected?.storage_path === item.storage_path
-                        ? "Seçili"
-                        : "Seç"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                />
+
+                {expanded && (
+                  <div id={detailId} className="document-accordion-detail">
+                    <p className="document-expanded-summary"><strong>Özet</strong><span>{item.summary || "Özet bulunmuyor."}</span></p>
+                    {loading && !analysis ? (
+                      <div className="centered-state"><Spinner label="Analiz ayrıntıları yükleniyor" />Analiz ayrıntıları yükleniyor…</div>
+                    ) : (
+                      <DocumentAnalysisPanel
+                        analysis={analysis}
+                        saving={updatingFields}
+                        onSave={
+                          onUpdateFields && analysis
+                            ? (fields) => onUpdateFields(analysis.storage_path, fields)
+                            : undefined
+                        }
+                      />
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       )}
-    </section>
+
+      <ConfirmationDialog
+        open={pendingDeletePath !== null}
+        title="Evrakı sil"
+        description="Bu evrak, analiz sonuçları ve dizinlenmiş içerikleri kalıcı olarak silinecek. Bu işlem geri alınamaz."
+        confirmLabel="Sil"
+        busy={deletingDocument}
+        onConfirm={async () => {
+          if (!pendingDeletePath || !onDeleteDocument) return;
+          if (selected?.storage_path === pendingDeletePath) onClose?.();
+          await onDeleteDocument(pendingDeletePath);
+          setPendingDeletePath(null);
+        }}
+        onCancel={() => setPendingDeletePath(null)}
+      />
+    </Card>
   );
 }

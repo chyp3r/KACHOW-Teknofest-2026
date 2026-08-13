@@ -1,25 +1,59 @@
 ---
-id: CY-019
-kategori: cevap_yazisi
-niyet: 03_bilgi_edinme
-belge_turu: tamamlanmis_resmi_cevap
+id: "CY-019"
+kategori: "cevap_yazisi"
+alt_kategori: "03_bilgi_edinme"
+niyet: "03_bilgi_edinme"
+baslik: "Soru Önergeleri-362"
 kurum: "Türkiye Büyük Millet Meclisinde yayımlanan kurum cevabı"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/cevap_yazisi/CY-019_7-42217-adalet-bakani-nin-atanma-surecine-iliskin.pdf"
+yerel_orijinal: "00_gelen_kaynaklar/cevap_yazisi/CY-019_7-42217-adalet-bakani-nin-atanma-surecine-iliskin.pdf"
+kaynak_turu: "pdf"
+belge_turu: "tamamlanmis_resmi_cevap"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "tesseract"
+used_ocr: "true"
+page_count: "1"
+quality_score: "0.804"
+rag_status: "candidate"
 ---
 
-# 7/42217 - Adalet Bakanı'nın atanma sürecine ilişkin
+# Soru Önergeleri-362
 
-- Resmî kaynak: https://www.tbmm.gov.tr/Denetim/Yazili-Soru-Onergesi-Detay/6cacdefd-c78f-4778-adb3-019d1ed1aec4
-- Doğrudan belge: https://cdn.tbmm.gov.tr/KKBSPublicFile/D28/Y4/T7/WebOnergeMetni/9124b1c7-b72c-47e5-afcb-ae93ffa03a8e.pdf
-- Yerel asıl belge: 00_gelen_kaynaklar/cevap_yazisi/CY-019_7-42217-adalet-bakani-nin-atanma-surecine-iliskin.pdf
-- Tarih bilgisi: 19/03/2026
-- Sayfa/bölüm: Belgenin tamamı
+Türkiye Büyük Millet Meclisi -
+Türkiye Büyük Millet Meclisi
+m Başkanlığı
+NE e Tarih. 13/04/2026 1032
+P , “ Sayı E-120.0703-1837684
+; al lr. # HU LAİK BONA EKA S0) ŞI BU
+T.C.
+CUMHURBAŞKANI YARDIMCISI
+Sayı (o :E-48360949-610-375498
+Konu : Soru Önergeleri-362
+HY2217
+TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA
+İlgi : 01.04.2026 tarihli ve E-43452547-120.07.04-1827601 sayılı yazınız.
 
-## Veri kümesinde kullanım
+Anayasanın 98 inci maddesi uyarınca Başkanlığınızca tarafıma gönderilen yazılı soru
+önergelerinden, Cumhurbaşkanlığı Merkez Teşkilatı ile Cumhurbaşkanlığına Bağlı Kurum ve Kuruluşların
+görev alanına giren konulara ilişkin önergeler cevaplandırılmaktadır.
 
-Cevabın soru, ilgi, açıklama ve sonuç örgüsü örneklenebilir. Milletvekili ve olay adları eğitim girdisinde anonimleştirilmelidir.
+I sayılı Cumhurbaşkanlığı Teşkilatı Hakkında Cumhurbaşkanlığı Kararnamesi ile 4 sayılı
+Bakanlıklara Bağlı, İlgili, İlişkili Kurum ve Kuruluşlar ile Diğer Kurum ve Kuruluşların Teşkilatı
+Hakkında Cumhurbaşkanlığı Kararnamesi uyarınca bakanlıkların görev ve yetki alanına giren önergeler
+bakanlıklar tarafından cevaplandırılmaktadır.
 
-## Doğrulama notu
+Bu itibarla, Diyarbakır Milletvekili Sayın [KİŞİ ADI] tarafından verilen
+7142217 esas numaralı yazılı soru önergesinde bahsi geçen hususlar Adalet Bakanlığının görev ve yetki
+alanına girmektedir.
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Bilgilerini ve gereğini arz ederim.
+
+[İMZA SAHİBİ]
+Cumhurbaşkanı Yardımcısı
+Bu belge, güvenli elektronik imza He imralanmışar
+
+Doğrulama Kodu: 7B4542B3-178B-4C34-A03B-541 8PB965E8& Doğrulama Adresi: https.//www.turkiye.gov.irtceb-ebys
+[KURUM İLETİŞİM BİLGİLERİ]
+İntemet Adresi: Www.tecb.gov.tr e
+[KURUM İLETİŞİM BİLGİLERİ]

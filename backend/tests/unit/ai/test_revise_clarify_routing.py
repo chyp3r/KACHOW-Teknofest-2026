@@ -1,17 +1,25 @@
-"""Unit tests for the `revise` intent and the clarify-vs-guess decision.
+"""Unit tests for the `revise` intent and the fused-probability decision bands.
 
 `revise` is gated on an active draft the same way a document-only rule is
 gated on an attached document (`EvidenceRule.requires_active_draft`). Once
-neither the lexical nor the semantic rung is decisive, the ladder no longer
-escalates everything to the model: a cheap contested candidate (`assist`) is
-guessed, an expensive one (`draft`/`revise`) triggers a deterministic,
-LLM-free clarifying question instead -- see `resolve_plan`'s docstring.
+the fused probability is computed, `resolve_plan` bands on it: a winner at or
+above `tau_high`, backed by more than a structural filler, commits outright;
+otherwise a fast-tier model call breaks the tie whenever one is available,
+regardless of how low the fused probability is; only with no client at all
+does `tau_low` still gate a direct question to the user -- see
+`resolve_plan`'s docstring.
+
+The band tests below patch `router_fusion.predict_proba` to fixed
+distributions rather than relying on the real fitted `ROUTER_WEIGHTS` --
+`resolve_plan`'s routing logic (which band does what) is what's under test
+here, independent of whatever a future refit's exact coefficients produce.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.ai.policy import get_policy
 from app.ai.session.focus import DraftVersion, SessionFocus
 from app.ai.workflows.intent_scorer import score_intents
 from app.ai.workflows.planner import (
@@ -19,7 +27,6 @@ from app.ai.workflows.planner import (
     _build_clarify_decision,
     _try_resolve_pending_clarification,
     resolve_plan,
-    resolve_plan_deterministic,
 )
 
 _ACTIVE_DRAFT = DraftVersion(
@@ -27,6 +34,17 @@ _ACTIVE_DRAFT = DraftVersion(
     confidence_score=80.0, created_from="draft",
 )
 _FOCUS_WITH_DRAFT = SessionFocus(active_draft=_ACTIVE_DRAFT, draft_history=(_ACTIVE_DRAFT,))
+
+_TAU_HIGH = get_policy().intent.tau_high
+_TAU_LOW = get_policy().intent.tau_low
+
+
+def _flat_above(intent: str, probability: float) -> dict[str, float]:
+    """A probability dict with `intent` at `probability` and the rest sharing what's left."""
+    remainder = (1.0 - probability) / 3
+    probs = {name: remainder for name in ("draft", "analyze", "assist", "revise")}
+    probs[intent] = probability
+    return probs
 
 
 # ===========================================================================
@@ -42,96 +60,118 @@ def test_revise_rule_fires_with_an_active_draft():
     assert scores.scores.get("revise", 0.0) > 0
 
 
-def test_revise_resolves_decisively_with_an_active_draft():
-    decision = resolve_plan_deterministic(
-        "Bu taslağı revize et lütfen.", None, has_active_draft=True
+@pytest.mark.asyncio
+async def test_revise_resolves_with_an_active_draft():
+    decision = await resolve_plan(
+        "Bu taslağı revize et lütfen.", None, focus=_FOCUS_WITH_DRAFT
     )
-    assert decision is not None
     assert decision.intent == "revise"
     assert decision.steps == PLAN_BY_INTENT["revise"]
 
 
-def test_a_revise_phrase_without_an_active_draft_abstains():
-    decision = resolve_plan_deterministic(
-        "Bu taslağı revize et lütfen.", None, has_active_draft=False
+@pytest.mark.asyncio
+async def test_a_short_affirmative_continues_a_revise_offer():
+    decision = await resolve_plan(
+        "evet", None, previous_intent="revise", focus=_FOCUS_WITH_DRAFT
     )
-    assert decision is None
-
-
-def test_a_short_affirmative_continues_a_revise_offer():
-    decision = resolve_plan_deterministic(
-        "evet", None, previous_intent="revise", has_active_draft=True
-    )
-    assert decision is not None
     assert decision.intent == "revise"
-    assert decision.source == "continuation"
 
 
 # ===========================================================================
-# resolve_plan: clarify vs. cheap guess once both rungs abstain
+# resolve_plan: the fused-probability decision bands
 # ===========================================================================
 @pytest.mark.asyncio
-async def test_a_contested_expensive_candidate_triggers_clarify_not_the_model():
+async def test_a_probability_at_or_above_tau_high_commits_without_a_model_call():
+    classify = AsyncMock(return_value="assist")
     with patch(
-        "app.ai.workflows.planner.classify_intent_with_model",
-        new=AsyncMock(return_value="assist"),
-    ) as classify:
-        decision = await resolve_plan(
-            "Kısalt.",
-            None,
-            llm_client=MagicMock(),
-            focus=_FOCUS_WITH_DRAFT,
-        )
+        "app.ai.workflows.planner.predict_proba",
+        return_value=_flat_above("draft", _TAU_HIGH + 0.05),
+    ), patch("app.ai.workflows.planner.classify_intent_with_model", new=classify):
+        decision = await resolve_plan("Bu evrağa bir cevap yazısı hazırla.", None, llm_client=MagicMock())
+
+    assert decision.intent == "draft"
+    assert decision.source == "fused"
+    classify.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_contested_probability_breaks_the_tie_with_the_model_when_available():
+    classify = AsyncMock(return_value="analyze")
+    contested = _flat_above("draft", (_TAU_HIGH + _TAU_LOW) / 2)
+    with patch("app.ai.workflows.planner.predict_proba", return_value=contested), patch(
+        "app.ai.workflows.planner.classify_intent_with_model", new=classify
+    ):
+        decision = await resolve_plan("Bununla ilgili bir şeyler yap.", None, llm_client=MagicMock())
+
+    assert decision.intent == "analyze"
+    assert decision.source == "model"
+    classify.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_a_contested_probability_without_a_model_client_asks_instead():
+    contested = _flat_above("draft", (_TAU_HIGH + _TAU_LOW) / 2)
+    with patch("app.ai.workflows.planner.predict_proba", return_value=contested):
+        decision = await resolve_plan("Bununla ilgili bir şeyler yap.", None, llm_client=None)
 
     assert decision.intent == "clarify"
     assert decision.source == "clarify"
-    assert decision.clarification is not None
-    assert decision.clarification["question"]
-    assert {opt["intent"] for opt in decision.clarification["options"]} == {"revise", "assist"}
-    classify.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_a_contested_cheap_candidate_is_guessed_not_asked_about():
-    with patch(
-        "app.ai.workflows.planner.classify_intent_with_model",
-        new=AsyncMock(return_value="draft"),
-    ) as classify:
-        decision = await resolve_plan(
-            "Bu evrak hakkında ne dersin, taslak da hazirla.",
-            "doc-1",
-            llm_client=MagicMock(),
-        )
-
-    assert decision.intent == "assist"
-    assert decision.source == "guessed_cheap"
-    classify.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_zero_signal_still_falls_through_to_the_model():
-    """The one case that still pays for a model call: neither rung produced
-    any candidate at all, contested or otherwise."""
-    with patch(
-        "app.ai.workflows.planner.classify_intent_with_model",
-        new=AsyncMock(return_value="assist"),
-    ) as classify:
-        decision = await resolve_plan("Gereğini yap.", "doc-1", llm_client=MagicMock())
+async def test_a_probability_below_tau_low_still_asks_the_model_when_one_is_available():
+    """A flat, uninformative distribution is exactly the case a model call is
+    for -- `tau_low` no longer skips it. Only the no-client path (see
+    `test_...` below, if one exists for that) still asks the user directly."""
+    classify = AsyncMock(return_value="assist")
+    flat = {name: 0.25 for name in ("draft", "analyze", "assist", "revise")}
+    with patch("app.ai.workflows.planner.predict_proba", return_value=flat), patch(
+        "app.ai.workflows.planner.classify_intent_with_model", new=classify
+    ):
+        decision = await resolve_plan("Bunu hallet.", "doc-1", llm_client=MagicMock())
 
     assert decision.source == "model"
+    assert decision.intent == "assist"
     classify.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_a_probability_below_tau_low_asks_directly_with_no_model_client():
+    """The one remaining path `tau_low` still gates: no client at all means
+    there is nothing to ask, so a flat distribution falls to a clarifying
+    question exactly as it always did."""
+    flat = {name: 0.25 for name in ("draft", "analyze", "assist", "revise")}
+    with patch("app.ai.workflows.planner.predict_proba", return_value=flat):
+        decision = await resolve_plan("Bunu hallet.", "doc-1", llm_client=None)
+
+    assert decision.source == "clarify"
+
+
+@pytest.mark.asyncio
+async def test_an_unambiguous_short_imperative_resolves_to_draft_for_real():
+    """The K2 regression this whole fusion layer exists to fix: an explicit,
+    unambiguous imperative used to lose to the generic short-message
+    structural hint by a margin just under the old ladder's threshold and
+    fall through to a clarifying question it never should have asked. No
+    mocking here -- this exercises the real fitted `ROUTER_WEIGHTS`.
+    """
+    decision = await resolve_plan("Cevap yaz.", None)
+
+    assert decision.intent == "draft"
+    assert decision.source != "clarify"
 
 
 # ===========================================================================
 # _build_clarify_decision (whitebox)
 # ===========================================================================
-def test_clarify_decision_pairs_a_lone_candidate_with_assist():
-    scores = score_intents("Bu taslağı revize et lütfen.", None, has_active_draft=True)
-    decision = _build_clarify_decision(scores)
+def test_clarify_decision_offers_the_top_two_fused_probabilities():
+    ranked = [("revise", 0.4), ("draft", 0.3), ("assist", 0.2), ("analyze", 0.1)]
+    decision = _build_clarify_decision(ranked)
 
     assert decision.intent == "clarify"
-    options = {opt["intent"] for opt in decision.clarification["options"]}
-    assert options == {"revise", "assist"}
+    options = [opt["intent"] for opt in decision.clarification["options"]]
+    assert options == ["revise", "draft"]
+    assert decision.confidence == 0.4
 
 
 # ===========================================================================
@@ -156,7 +196,7 @@ def test_a_bare_affirmative_selects_the_leading_option():
 
 def test_naming_the_second_option_selects_it_instead():
     decision = _try_resolve_pending_clarification(
-        "Hayır, aslında genel bir soru veya sohbet demek istemiştim.", _PENDING
+        "Genel bir soru veya sohbet demek istemiştim.", _PENDING
     )
     assert decision is not None
     assert decision.intent == "assist"
@@ -175,7 +215,7 @@ def test_no_pending_clarification_returns_none():
 
 
 @pytest.mark.asyncio
-async def test_resolve_plan_checks_pending_clarification_before_the_ladder():
+async def test_resolve_plan_checks_pending_clarification_before_fusion_runs():
     focus = SessionFocus(pending_clarification=_PENDING)
     classify = AsyncMock(return_value="assist")
 

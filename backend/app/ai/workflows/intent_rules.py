@@ -90,12 +90,19 @@ DRAFT_RULES: tuple[EvidenceRule, ...] = (
             "cevap yaz", "cevap hazirla", "cevabi hazirla", "cevap olustur",
             "cevap yazisi olustur", "cevabini yaz", "cevabini hazirla",
             "yanit yaz", "yanit hazirla", "yanitini hazirla",
-            "kaleme al", "metni yaz", "metni olustur", "metni duzenle",
+            "kaleme al", "metni yaz", "metni olustur",
             "metni uret", "metnini uret", "yazisma hazirla", "yazisma kurgula",
             "dilekceye cevap", "yaziya dok", "kaleme alinmasini",
-            "duzenlemeni", "kurgular misin", "tanzim et", "mukabelede bulun",
+            "kurgular misin", "tanzim et", "mukabelede bulun",
             "mukabele metni", "mukabele hazirla", "bildirim yapacak bir yazisma",
-            "yazi cikar", "cevabi duzenle", "cevabini duzenle", "cevabi yaz",
+            "yazi cikar", "cevabi yaz",
+            # A specific document genre outside the four spec'd
+            # CorrespondenceType values (see app.ai.workflows.correspondence's
+            # GENRE_SURFACES) -- these previously fell through to weaker,
+            # generic hints (or nothing at all) and could lose to a
+            # competing intent instead of resolving to `draft`.
+            "dilekce yaz", "dilekce hazirla", "dilekcesi yaz", "dilekce olustur",
+            "itiraz et", "basvuru yaz", "tutanak tut",
         ),
     ),
     EvidenceRule(
@@ -105,7 +112,23 @@ DRAFT_RULES: tuple[EvidenceRule, ...] = (
         surfaces=(
             "taslak", "ust yazi", "resmi yazi", "bilgilendirme metni",
             "cevap yazisi", "tebligat metni", "muzekkere", "tezkere", "mukabele",
+            "dilekce", "itiraz dilekcesi", "muvafakatname", "taahhutname", "tutanak",
+            "olur yazisi",
         ),
+    ),
+    #: "metni düzenle"/"cevabı düzenle" mean *arrange/edit* the text, which
+    #: reads as a fresh drafting request only when nothing is open yet to
+    #: edit. Split out of `draft.explicit_request` and gated so it stops
+    #: firing once a draft exists -- `revise.arrange_request` below is its
+    #: mirror image. Without the split, "Az önce yazdığın metni düzenler
+    #: misin?" (a revision request) scored this rule at full weight and the
+    #: message resolved to a fresh `draft` instead of `revise`.
+    EvidenceRule(
+        id="draft.arrange_request",
+        intent="draft",
+        weight=WEIGHT_EXPLICIT,
+        surfaces=("metni duzenle", "duzenlemeni", "cevabi duzenle", "cevabini duzenle"),
+        requires_active_draft=False,
     ),
 )
 
@@ -124,11 +147,46 @@ REVISE_RULES: tuple[EvidenceRule, ...] = (
             "yeniden yaz", "tekrar yaz", "taslagi guncelle", "taslagi degistir",
             "metni degistir", "duzeltir misin", "tekrar duzenler misin",
             "daha resmi yap", "daha resmi olsun", "daha samimi yap",
-            "daha kisa yap", "kisalt", "uzat", "sadelestir",
+            "daha kisa yap", "kisa tut", "kisalt", "uzat", "sadelestir",
             "tonunu degistir", "uslubunu degistir", "bu kismi degistir",
             "su kismi degistir", "paragrafi degistir", "cumleyi degistir",
             "kapanisi degistir", "imzayi degistir", "konuyu degistir",
+            # "az önce yazdığın X" collides with assist.memory_recall's "az
+            # once" (which means "what did we talk about", not "the thing
+            # you just produced") -- these longer, more specific phrases
+            # co-fire alongside it and are weighted to win the sum outright,
+            # rather than trying to make "az once" itself context-aware.
+            "yazdigin metni", "yazdigin taslagi", "yazdigin yaziyi",
+            "yazdigin cevabi", "az once yazdigin", "biraz once yazdigin",
+            # Targeted edits an open draft's own surfaces (an addition, a
+            # tone change, a section-specific complaint) rather than a
+            # generic verb -- previously unattested, so a four-word instance
+            # of any of these ("giriş kısmını yumuşat") had nothing but
+            # `assist.short_message`'s brevity hint to score against, and
+            # brevity alone routinely outscored an unscored revise reading.
+            "sonuna ekle", "sonuna bir", "imza blogu", "sert geldi",
+            "yumusat", "resmilestir", "farkli ele al", "biraz farkli ele",
         ),
+        requires_active_draft=True,
+    ),
+    #: Mirror of `draft.arrange_request` -- same surfaces, opposite gate.
+    #: "Metni düzenler misin?" with a draft already open means edit *that*
+    #: draft, not author a new one.
+    EvidenceRule(
+        id="revise.arrange_request",
+        intent="revise",
+        weight=WEIGHT_EXPLICIT,
+        surfaces=("metni duzenle", "duzenlemeni", "cevabi duzenle", "cevabini duzenle"),
+        requires_active_draft=True,
+    ),
+    #: Mirror of `analyze.review_request` (below) -- "gözden geçir" reads as
+    #: "review/revise the draft" once one is open, not "analyze the
+    #: document". Same surface, opposite gate.
+    EvidenceRule(
+        id="revise.review_request",
+        intent="revise",
+        weight=WEIGHT_EXPLICIT,
+        surfaces=("gozden gecir",),
         requires_active_draft=True,
     ),
 )
@@ -141,7 +199,7 @@ ANALYZE_RULES: tuple[EvidenceRule, ...] = (
         surfaces=(
             "analiz et", "incele", "inceleyip", "siniflandir", "turunu belirle",
             "ozetle", "ozet cikar", "degerlendir", "kontrol et", "denetle",
-            "gozden gecir", "irdele", "tespit et", "tespit etmeni",
+            "irdele", "tespit et", "tespit etmeni",
             "uygunlugunu", "uygunluk denetimi", "mevzuata uygun", "kurallara uy",
             "eksik alan", "eksik bilgi", "eksiklikleri", "bir bak",
             "olup olmadigina", "hangi kategoriye", "bulgularini raporla",
@@ -152,6 +210,17 @@ ANALYZE_RULES: tuple[EvidenceRule, ...] = (
         intent="analyze",
         weight=WEIGHT_DOMAIN,
         surfaces=("uygunluk", "evrak analizi", "belge analizi"),
+    ),
+    #: "gözden geçir" ("review/look over") is ambiguous between "analyze this
+    #: document" and "revise this draft" -- see `revise.review_request`'s
+    #: mirror. Split out and gated so it only argues for `analyze` when
+    #: there's nothing open to revise instead.
+    EvidenceRule(
+        id="analyze.review_request",
+        intent="analyze",
+        weight=WEIGHT_EXPLICIT,
+        surfaces=("gozden gecir",),
+        requires_active_draft=False,
     ),
 )
 
@@ -184,6 +253,22 @@ ASSIST_RULES: tuple[EvidenceRule, ...] = (
         surfaces=(
             "tesekkur", "tesekkurler", "sagol", "sag ol", "eyvallah",
             "cok iyi oldu", "yardimci oldun",
+        ),
+    ),
+    #: A sign-off, not a continuation -- "yarın devam ederiz" contains
+    #: "devam" (a `CONTINUATION_SURFACES` entry) but means the opposite of
+    #: consenting to continue now. Distinct from `assist.greeting`/
+    #: `assist.courtesy` because those are about *this* turn's own content;
+    #: this one exists specifically to be checked by the continuation rule's
+    #: `signing_off` guard in `intent_scorer.score_intents`.
+    EvidenceRule(
+        id="assist.farewell",
+        intent="assist",
+        weight=WEIGHT_EXPLICIT,
+        surfaces=(
+            "yarin devam", "sonra devam ederiz", "sonra bakariz",
+            "simdilik bu kadar", "yarin bakariz", "simdilik yeterli",
+            "gorusmek uzere", "bu kadar yeterli",
         ),
     ),
     EvidenceRule(
@@ -284,15 +369,33 @@ ALL_RULES: tuple[EvidenceRule, ...] = (
 )
 
 #: A short affirmative continues whatever the previous turn was about.
+#: "peki" is deliberately absent: it opens as many questions ("peki sence bu
+#: yeterli mi") as it does confirmations, and unlike the others here is not
+#: itself a plausible one-word reply on its own -- it needs what follows it
+#: to mean anything, which `score_intents`'s `looks_like_question` guard
+#: already checks for separately rather than this table trying to.
 CONTINUATION_SURFACES: tuple[str, ...] = (
     "evet", "olur", "tamam", "tamamdir", "onayliyorum", "onaylıyorum",
     "devam", "devam et", "devam edebilirsin", "hazirla", "yap", "lutfen",
-    "peki", "elbette",
+    "elbette",
 )
 
 #: Only these intents make sense to silently continue; a bare "evet" after a
 #: chat or document_qa turn has no unambiguous follow-up action.
 CONTINUABLE_INTENTS = frozenset({"draft", "analyze", "revise"})
+
+#: Phrases that explicitly abandon the currently open draft rather than ask
+#: for it to be phrased differently -- "yeni bir taslak" after one is already
+#: open means "a different, unrelated one", not "revise this one again".
+#: Read by ``app.ai.workflows.planning_graph``'s ``focus_node`` to clear
+#: ``SessionFocus.active_draft`` immediately instead of waiting out
+#: ``app.ai.session.focus.ACTIVE_DRAFT_IDLE_LIMIT`` idle turns -- a user who
+#: says this is not idling, they are actively moving on.
+RESET_SURFACES: tuple[str, ...] = (
+    "yeni bir taslak", "yeni bir yazi", "yeni bir belge", "yeni bir cevap",
+    "farkli bir yazi", "bastan baslayalim", "en bastan baslayalim",
+    "bu taslagi birak", "bunu birak", "vazgectim",
+)
 
 #: Question markers, used as a shape hint rather than a routing decision.
 #: Bare "ne" is deliberately absent: "ne gerekiyorsa onu uygula" is an

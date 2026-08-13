@@ -1,9 +1,10 @@
 ---
-id: DILEKCE-0A27FBF4
-kategori: dilekce
-alt_kategori: vergi_itiraz
+id: "DILEKCE-0A27FBF4"
+kategori: "dilekce"
+alt_kategori: "vergi_itiraz"
 baslik: "Vergi Dairesi İdari Para Cezası İtiraz Dilekçesi (Ornek 2)"
 kaynak: "sentetik-sablon"
+rag_status: "candidate"
 ---
 
 # Vergi Dairesi İdari Para Cezası İtiraz Dilekçesi (Ornek 2)
@@ -21,9 +22,9 @@ Müdürlüğünüzün 09.08.2022 tarih ve 22630 sayılı yazısı ile tarafıma 
 
 Mükellef Bilgileri:
 - Adı Soyadı: Ayse Demir
-- T.C. Kimlik No: 86086285568
-- Vergi Kimlik No: 2326700259
-- Adres: Fatih Mah. 23. Sok. No:30 Diyarbakir
+- T.C. Kimlik No: [T.C. KİMLİK NO]
+[KURUM İLETİŞİM BİLGİLERİ]
+[KURUM ADRESİ]
 
 Yukarıda arz ettiğim nedenlerle, haksız yere kesilen para cezasının iptal edilmesini saygılarımla arz ve talep ederim.
 

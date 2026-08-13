@@ -1,25 +1,55 @@
 ---
-id: DY-010
-kategori: diger_resmi_yazisma
-niyet: 09_tutanak
-belge_turu: resmi_sablon
+id: "DY-010"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "09_tutanak"
+niyet: "09_tutanak"
+baslik: "…/…/2024"
 kurum: "Erzincan Binali Yıldırım Üniversitesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-010_sorusturma-raporu-ornegi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-010_sorusturma-raporu-ornegi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Soruşturma Raporu Örneği
+# …/…/2024
 
-- Resmî kaynak: https://ogrenciisleri.ebyu.edu.tr/disiplin-sorusturma-rehberi/
-- Doğrudan belge: https://ogrenciisleri.ebyu.edu.tr/Dosyalar/Mevzuat/disiplin%20sorusturma%20rehberi/SorusturmaRaporuOrnegi.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-010_sorusturma-raporu-ornegi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+Soruşturma Raporu Örneği;
 
-## Veri kümesinde kullanım
+SORUŞTURMA RAPORU
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+SORUŞTURMACI : Soruşturmacı
 
-## Doğrulama notu
+SORUŞTURMA ONAYI : Dekanlık Makamının …/…/2024 tarih ve E…. sayılı yazısı.
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+ÖĞRENİLME TARİHİ : …/. /2024
+
+BAŞLAMA TARİHİ : …/. /2024
+
+SORUŞTURULANIN KİMLİĞİ : ……….. Bölümü ……. Sınıf öğrencisi numaralı
+
+…………., ………..
+
+SUÇ KONUSU: Sınavda kopya çekmek.
+
+SUÇ TARİHİ VE YERİ : …/.../2024, ……………….. Fakültesi ……. numaralı sınıf.
+
+SORUŞTURMA SAFHALARI : Hazırlık tutanağı ve diğer süreç özetlenir.
+
+DELİLLER, TANIK İFADELERİ : Tanık ifadeleri, tutanak, kopya delili kâğıtların sınavı yapılan derste sorulan sorulardan hangileri ile ilgili olduğu, bu bilgilerden ne kadarının cevap kâğıdına aktarıldığı, öğrencinin ceza ve ödül durumu bu kısımda incelenir.
+
+SAVUNMA ÖZETİ: Alınan savunma özetlenir.
+
+DEĞERLENDİRME : Bu bölümde kopya çekmek fiilinin tam olarak işlendiği ya da suçunun teşebbüs aşamasında kalıp kalmadığı değerlendirilir.
+
+SONUÇ : Soruşturmaya konu olaylar ve deliller ayrı ayrı tahlil edilir. Delillere göre suçun sabit olup olmadığı tartışılır. Tekerrür şartına bakılır. Öğrencinin ceza ve ödül durumuna bakılarak ceza indiriminden yararlandırılması önerisi bu kısımda yapılır. Öğrencinin kopya çektiği kanaatine varılırsa, bu suça uygun cezanı adı, ve bent madde numarası açık olarak belirtilir.
+
+# …/…/2024
+
+Soruşturmacı (İmza)

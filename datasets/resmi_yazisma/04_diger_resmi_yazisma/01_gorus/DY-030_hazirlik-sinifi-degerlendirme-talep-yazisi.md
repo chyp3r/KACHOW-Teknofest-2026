@@ -1,25 +1,39 @@
 ---
-id: DY-030
-kategori: diger_resmi_yazisma
-niyet: 01_gorus
-belge_turu: resmi_sablon
+id: "DY-030"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "01_gorus"
+niyet: "01_gorus"
+baslik: "DÜZCE ÜNİVERSİTESİ"
 kurum: "Düzce Üniversitesi Fen Edebiyat Fakültesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-030_hazirlik-sinifi-degerlendirme-talep-yazisi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-030_hazirlik-sinifi-degerlendirme-talep-yazisi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Hazırlık Sınıfı Değerlendirme Talep Yazısı
+# DÜZCE ÜNİVERSİTESİ
 
-- Resmî kaynak: https://fef.duzce.edu.tr/sayfa/0468/sablon-yazilar
-- Doğrudan belge: https://cdn.duzce.edu.tr/File/GetFile/e994a417-5e2f-48b4-8431-31f32a51d2e2
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-030_hazirlik-sinifi-degerlendirme-talep-yazisi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+DÜZCE ÜNİVERSİTESİ
 
-## Veri kümesinde kullanım
+FEN EDEBİYAT FAKÜLTESİ
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+………………………………………….. BÖLÜM BAŞKANLIĞINA
 
-## Doğrulama notu
+…/…/20.....
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+………… Lisesi’nde hazırlık sınıfı okumuş olduğuma ilişkin belge ekte sunulmuş olup, 657 Sayılı Devlet Memurları Kanunu'nun ilgili maddeleri gereğince kademe terfi değerlendirilmesinin yapılması hususunda gereğini ve bilgilerinizi arz ederim.
+
+İletişim: Ad Soyad
+
+Unvan
+
+İmza
+
+Ek: Belge

@@ -1,7 +1,7 @@
 from typing import List, Optional
 from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.drafts.model.draft_model import DraftModel
@@ -131,3 +131,27 @@ class DraftRepository:
         self.db.add(draft)
         await self.db.flush()
         return draft
+
+    async def soft_delete_session(self, session_id: str) -> None:
+        """Mark every version in a session's revision chain as deleted.
+
+        `list_drafts` collapses a session down to just its latest version
+        (see the `max(version)` subquery above) -- soft-deleting only that
+        one row would "resurrect" the previous version as the session's new
+        listing, which is not what deleting the draft from the UI means.
+        """
+        await self.db.execute(
+            update(DraftModel)
+            .where(DraftModel.session_id == session_id)
+            .values(is_deleted=True)
+        )
+        await self.db.flush()
+
+    async def soft_delete(self, draft_id: str) -> None:
+        """Mark a single draft as deleted -- for a `session_id=None` draft
+        (a direct `POST /documents/draft` call), where there is no chain to
+        collapse."""
+        await self.db.execute(
+            update(DraftModel).where(DraftModel.id == draft_id).values(is_deleted=True)
+        )
+        await self.db.flush()

@@ -1,23 +1,26 @@
 ---
-id: MERK-002
-kategori: bilgilendirme_metni
-niyet: iskur_toplum_yararina_program
-baslik: Toplum Yararına Programlar (TYP) Uygulama Esasları ve Katılım Şartları Genelgesi
-kurum: T.C. Türkiye İş Kurumu Genel Müdürlüğü
-kaynak_url: https://www.iskur.gov.tr/mevzuat/genelgeler/typ_genelge_2024.pdf
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "MERK-002"
+kategori: "bilgilendirme_metni"
+alt_kategori: "iskur_toplum_yararina_program"
+niyet: "iskur_toplum_yararina_program"
+baslik: "Toplum Yararına Programlar (TYP) Uygulama Esasları ve Katılım Şartları Genelgesi"
+kurum: "T.C. Türkiye İş Kurumu Genel Müdürlüğü"
+kaynak: "https://www.iskur.gov.tr/mevzuat/genelgeler/typ_genelge_2024.pdf"
+kaynak_url: "https://www.iskur.gov.tr/mevzuat/genelgeler/typ_genelge_2024.pdf"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Toplum Yararına Programlar (TYP) Uygulama Esasları ve Katılım Şartları Genelgesi
 
-**T.C.**  
-**TÜRKİYE İŞ KURUMU GENEL MÜDÜRLÜĞÜ**  
-**Aktif İşgücü Hizmetleri Dairesi Başkanlığı**  
+**T.C.**
+**TÜRKİYE İŞ KURUMU GENEL MÜDÜRLÜĞÜ**
+**Aktif İşgücü Hizmetleri Dairesi Başkanlığı**
 
-**Sayı:** E-95240182-302.04-110293  
-**Konu:** Toplum Yararına Programlar (TYP) Uygulaması  
+**Sayı:** [EVRAK SAYISI]
+**Konu:** Toplum Yararına Programlar (TYP) Uygulaması
 
 ### 1. AMAÇ VE KAPSAM
 İşsizliğin yoğun olduğu dönemlerde veya afet, salgın, acil durum hallerinde işsizlerin çalışma alışkanlık ve disiplininden uzaklaşmalarını engellemek, geçici gelir desteği sağlamak ve kamu hizmetlerini desteklemek amacıyla yürütülen Toplum Yararına Programların (TYP) yürütümüne dair esaslar aşağıda açıklanmıştır.
@@ -38,10 +41,10 @@ TYP'ye başvuracak adayların aşağıdaki şartları taşıması zorunludur:
 
 Gereğini rica ederim.
 
-[SİLİNMİŞTİR]  
-Genel Müdür  
+[İMZA SAHİBİ]
+Genel Müdür
 
-**İletişim Bilgileri:**  
-Emniyet Mahallesi Mevlana Bulvarı No:42 Yenimahalle / ANKARA  
-Tel: [SİLİNMİŞTİR]  
-E-posta: [SİLİNMİŞTİR]  
+**İletişim Bilgileri:**
+[KURUM ADRESİ]
+Tel: [TELEFON]
+E-posta: [E-POSTA]

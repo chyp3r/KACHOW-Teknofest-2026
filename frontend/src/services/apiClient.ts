@@ -4,6 +4,7 @@ import type { TokenPair } from "../types/users";
 const ACCESS_TOKEN_KEY = "kachow.accessToken";
 const REFRESH_TOKEN_KEY = "kachow.refreshToken";
 export const AUTH_EXPIRED_EVENT = "kachow:auth-expired";
+const SESSION_NOTICE_KEY = "kachow.sessionNotice";
 
 interface ApiFetchOptions {
   authenticated?: boolean;
@@ -15,8 +16,16 @@ export class ApiError extends Error {
     message: string,
     public readonly status: number,
     public readonly details?: unknown,
+    public readonly code?: string,
+    public readonly requestId?: string,
+    public readonly retryAfter?: number,
   ) {
     super(message);
+    this.name = "ApiError";
+  }
+
+  get isPermissionDenied(): boolean {
+    return this.status === 403;
   }
 }
 
@@ -38,9 +47,23 @@ export function getRefreshToken(): string | null {
   return sessionStorage.getItem(REFRESH_TOKEN_KEY);
 }
 
-function notifyExpiredSession(): void {
+function notifyExpiredSession(path: string): void {
+  // Any 401 anywhere logs the whole app out (see AuthProvider's listener),
+  // so when that happens unexpectedly this is the fastest way to see which
+  // request actually caused it.
+  void path;
+  sessionStorage.setItem(
+    SESSION_NOTICE_KEY,
+    "Oturumunuzun süresi doldu. Lütfen yeniden giriş yapın.",
+  );
   clearTokens();
   window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+}
+
+export function consumeSessionNotice(): string | null {
+  const notice = sessionStorage.getItem(SESSION_NOTICE_KEY);
+  sessionStorage.removeItem(SESSION_NOTICE_KEY);
+  return notice;
 }
 
 function responseMessage(envelope: ApiEnvelope<unknown> | undefined): string {
@@ -132,7 +155,7 @@ export async function apiFetch(
   }
 
   if (!(await ensureRefreshed())) {
-    notifyExpiredSession();
+    notifyExpiredSession(path);
     return response;
   }
 
@@ -140,16 +163,23 @@ export async function apiFetch(
     ...init,
     headers: requestHeaders(init, authenticated),
   });
-  if (response.status === 401) notifyExpiredSession();
+  if (response.status === 401) notifyExpiredSession(path);
   return response;
 }
 
 export async function apiErrorFromResponse(response: Response): Promise<ApiError> {
   const envelope = await parseEnvelope<unknown>(response);
+  const retryAfterHeader = response.headers.get("Retry-After");
+  const retryAfter = retryAfterHeader ? Number.parseInt(retryAfterHeader, 10) : undefined;
   return new ApiError(
     responseMessage(envelope),
     response.status,
     envelope?.error?.details ?? envelope?.detail,
+    envelope?.error?.code,
+    response.headers.get("X-Correlation-ID") ??
+      response.headers.get("X-Request-ID") ??
+      undefined,
+    Number.isFinite(retryAfter) ? retryAfter : undefined,
   );
 }
 
@@ -164,10 +194,11 @@ export async function apiRequest<T>(
     throw new ApiError("Sunucudan geçersiz bir yanıt alındı.", response.status);
   }
   if (!response.ok || envelope.success === false) {
-    throw new ApiError(
-      responseMessage(envelope),
-      response.status,
-      envelope.error?.details ?? envelope.detail,
+    throw await apiErrorFromResponse(
+      new Response(JSON.stringify(envelope), {
+        status: response.status,
+        headers: response.headers,
+      }),
     );
   }
   return envelope.data;

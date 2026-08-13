@@ -40,6 +40,7 @@ class PasswordChangeRequest(BaseModel):
 class UserResponse(BaseModel):
     """Pydantic schema for user account details output."""
     id: str = Field(description="Unique user ID")
+    company_id: Optional[str] = Field(default=None, description="Owning company (NULL for root)")
     username: str = Field(description="Unique username")
     email: EmailStr = Field(description="Unique email address")
     role: UserRole = Field(description="Assigned authorization role")

@@ -1,25 +1,35 @@
 ---
-id: BM-034
-kategori: bilgilendirme_metni
-niyet: 02_duyuru
-belge_turu: yayimlanmis_resmi_bilgilendirme
+id: "BM-034"
+kategori: "bilgilendirme_metni"
+alt_kategori: "02_duyuru"
+niyet: "02_duyuru"
+baslik: "DUYURU"
 kurum: "Ulaştırma ve Altyapı Bakanlığı"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/bilgilendirme_metni/BM-034_surekli-isci-alimina-iliskin-noter-cekilisi-sonuclari-ve-sozlu-ve-sozlu.html"
+yerel_orijinal: "00_gelen_kaynaklar/bilgilendirme_metni/BM-034_surekli-isci-alimina-iliskin-noter-cekilisi-sonuclari-ve-sozlu-ve-sozlu.html"
+kaynak_turu: "html"
+belge_turu: "yayimlanmis_resmi_bilgilendirme"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "beautifulsoup"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
+
+# DUYURU
+
+## DUYURU
 
 # Sürekli İşçi Alımına İlişkin Noter Çekilişi Sonuçları ve Sözlü ve Sözlü/Uygulamalı Sınava Katılacak Adaylar Hakkında Duyuru
 
-- Resmî kaynak: https://www.uab.gov.tr/duyurular/suerekli-isci-alimina-iliskin-noter-cekilisi-sonuclari-ve-soezlue-ve-soezlueuygulamali-sinava-katilacak-adaylar-hakkinda-duyuru/
-- Doğrudan belge: Kaynak sayfasında
-- Yerel asıl belge: 00_gelen_kaynaklar/bilgilendirme_metni/BM-034_surekli-isci-alimina-iliskin-noter-cekilisi-sonuclari-ve-sozlu-ve-sozlu.html
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+Bakanlığımız 30 (otuz) sürekli işçi alımına ilişkin noter kura çekilişi sonucunda asıl ve yedek adaylara ilişkin liste ve doğrudan sözlü ve sözlü/uygulamalı sınava katılacak adaylara ait liste Ek-1’de yer almaktadır.
 
-## Veri kümesinde kullanım
+Sözlü ve sözlü/uygulamalı sınava katılacak adaylara ilişkin duyuru metni ve noter kura çekilişiyle belirlenen asıl adaylar ile doğrudan sözlü ve sözlü/uygulamalı sınava katılacak adaylara ait liste Ek-2’de yer almaktadır.
 
-Başlık, hedef kitle, açıklama, tarih/son başvuru ve yönlendirme bölümleri şablon özellikleri olarak çıkarılabilir.
+İlanen duyurulur.
 
-## Doğrulama notu
+- EK-1 (Liste).pdf İndir
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+- EK-2 (Duyuru ve Liste).pdf İndir

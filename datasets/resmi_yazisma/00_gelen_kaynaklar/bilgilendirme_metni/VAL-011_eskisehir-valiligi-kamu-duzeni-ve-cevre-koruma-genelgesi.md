@@ -1,23 +1,26 @@
 ---
-id: VAL-011
-kategori: diger_resmi_yazisma
-niyet: teblig_bildirim
-baslik: Eskişehir Valiliği Kamu Düzeninin Korunması ve Çevresel Temizlik Genelgesi
-kurum: T.C. Eskişehir Valiliği
-kaynak_url: https://www.eskisehir.gov.tr/kamu-duzeninin-korunmasi-ve-cevre-temizligi-genelgesi
-belge_turu: gercek_acik_kaynak
-erisim_tarihi: 2026-08-03
-dogrulama: acik_kaynaktan_kazindi
+id: "VAL-011"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "teblig_bildirim"
+niyet: "teblig_bildirim"
+baslik: "Eskişehir Valiliği Kamu Düzeninin Korunması ve Çevresel Temizlik Genelgesi"
+kurum: "T.C. Eskişehir Valiliği"
+kaynak: "https://www.eskisehir.gov.tr/kamu-duzeninin-korunmasi-ve-cevre-temizligi-genelgesi"
+kaynak_url: "https://www.eskisehir.gov.tr/kamu-duzeninin-korunmasi-ve-cevre-temizligi-genelgesi"
+belge_turu: "gercek_acik_kaynak"
+erisim_tarihi: "2026-08-03"
+dogrulama: "acik_kaynaktan_kazindi"
+rag_status: "candidate"
 ---
 
 # Eskişehir Valiliği Kamu Düzeninin Korunması ve Çevresel Temizlik Genelgesi
 
-**T.C.**  
-**ESKİŞEHİR VALİLİĞİ**  
+**T.C.**
+**ESKİŞEHİR VALİLİĞİ**
 **İl Yazı İşleri Müdürlüğü**
 
-**Genelge No:** 2026/03  
-**Tarih:** 14.04.2026  
+**Genelge No:** 2026/03
+**Tarih:** 14.04.2026
 
 Eskişehir il genelinde kamusal alanların, parkların, bahçelerin ve Porsuk Çayı çevresinin korunması, vatandaşlarımızın huzur ve güvenliğinin temini amacıyla 5442 sayılı İl İdaresi Kanunu’nun 11/C maddesi gereğince aşağıdaki kararlar alınmıştır:
 
@@ -29,5 +32,5 @@ Eskişehir il genelinde kamusal alanların, parkların, bahçelerin ve Porsuk Ç
 
 Bilgi ve gereğini rica ederim.
 
-[SİLİNMİŞTİR]  
-Eskişehir Valisi  
+[KİŞİSEL BİLGİ]
+Eskişehir Valisi

@@ -1,25 +1,57 @@
 ---
-id: BM-032
-kategori: bilgilendirme_metni
-niyet: 02_duyuru
-belge_turu: yayimlanmis_resmi_bilgilendirme
+id: "BM-032"
+kategori: "bilgilendirme_metni"
+alt_kategori: "02_duyuru"
+niyet: "02_duyuru"
+baslik: "DUYURU"
 kurum: "Ulaştırma ve Altyapı Bakanlığı"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/bilgilendirme_metni/BM-032_30-otuz-surekli-isci-alimi-sozlu-ve-sozlu-uygulamali-sinav-sonucu-hakkin.html"
+yerel_orijinal: "00_gelen_kaynaklar/bilgilendirme_metni/BM-032_30-otuz-surekli-isci-alimi-sozlu-ve-sozlu-uygulamali-sinav-sonucu-hakkin.html"
+kaynak_turu: "html"
+belge_turu: "yayimlanmis_resmi_bilgilendirme"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "beautifulsoup"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
+
+# DUYURU
+
+## DUYURU
 
 # 30 (Otuz) Sürekli İşçi Alımı Sözlü ve Sözlü/Uygulamalı Sınav Sonucu Hakkında Duyuru
 
-- Resmî kaynak: https://www.uab.gov.tr/duyurular/30-otuz-suerekli-isci-alimi-soezlue-ve-soezlueuygulamali-sinav-sonucu-hakkinda-duyuru/
-- Doğrudan belge: Kaynak sayfasında
-- Yerel asıl belge: 00_gelen_kaynaklar/bilgilendirme_metni/BM-032_30-otuz-surekli-isci-alimi-sozlu-ve-sozlu-uygulamali-sinav-sonucu-hakkin.html
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+Bakanlığımız tarafından 04-05.05.2026 tarihlerinde yapılan 30 (Otuz) Sürekli İşçi Alımı Sözlü ve Sözlü/Uygulamalı Sınav sonucunda belirlenen Asıl ve Yedek adayların listesi ekte yer almaktadır.
 
-## Veri kümesinde kullanım
+[KURUM ADRESİ]
 
-Başlık, hedef kitle, açıklama, tarih/son başvuru ve yönlendirme bölümleri şablon özellikleri olarak çıkarılabilir.
+Adaylara ayrıca tebligat yapılmayacak olup bu duyuru tebligat niteliğindedir.
 
-## Doğrulama notu
+İSTENİLEN BELGELER:
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+1. Dilekçe, ( Belge için tıklayınız )
+
+2. T.C. Kimlik Numarasının bulunduğu Nüfus Cüzdanı/Kimlik Kartının fotokopisi,
+
+3. Diploma ya da mezuniyet belgesinin aslı veya onaylı örneği (Yükseköğretim Kurulu tarafından kabul edilen yurtdışındaki öğretim kurumlarından mezun olanlar için diploma denklik belgesinin aslı veya onaylı örneği, www.turkiye.gov.tr e-devlet kapısı üzerinden çıktısı alınmış barkodlu mezun belgesi).
+
+4. Askerliğini yapmış olan adaylar için terhis belgesi ,
+
+5. 1 adet vesikalık fotoğraf (Kamu Kurum ve Kuruluşlarında Çalışan Personelin Kılık ve Kıyafetine Dair Yönetmelik hükümlerine uygun olarak son 6 ay içerisinde çekilmiş),
+
+6. Kamu Görevlileri Etik Sözleşmesi, ( Sözleşme için tıklayınız )
+
+7. Sağlık Beyanı, ( Beyan için tıklayınız )
+
+8. Güvenlik Soruşturması ve Arşiv Araştırması Formu ( Bilgisayar ortamında doldurularak ıslak imzalı olarak 1 nüsha gönderilecektir), ( Form için tıklayınız )
+
+9. SGK Tescil ve Hizmet Döküm Belgesi (E-devlet kapısı üzerinden barkodlu çıktı)
+
+İlanen duyurulur.
+
+Ek: Liste ( Tıklayınız )
+
+[KURUM İLETİŞİM BİLGİLERİ]

@@ -21,6 +21,7 @@ never be the reason the API fails to boot.
 
 import logging
 from dataclasses import dataclass
+from typing import Optional
 from uuid import uuid4
 
 from app.core.config import settings
@@ -28,7 +29,7 @@ from app.core.enums.user_role import UserRole
 from app.core.security import hash_password
 from app.domains.users.model.user_model import UserModel
 from app.domains.users.repository import UserRepository
-from app.infrastructure.database.session import AsyncSessionLocal
+from app.infrastructure.database.session import OwnerAsyncSessionLocal, tenant_session
 
 logger = logging.getLogger(__name__)
 
@@ -39,43 +40,79 @@ class _SeedAccount:
     email: str
     password: str
     role: str
+    #: None only for root -- see UserModel.company_id's CHECK constraint.
+    company_id: Optional[str]
 
 
-def _seed_accounts() -> list[_SeedAccount]:
-    return [
+def _seed_accounts(company_id: Optional[str]) -> list[_SeedAccount]:
+    accounts = [
         _SeedAccount(
-            username="admin",
-            email=settings.SEED_ADMIN_EMAIL,
-            password=settings.SEED_ADMIN_PASSWORD,
-            role=UserRole.ADMIN.value,
-        ),
-        _SeedAccount(
-            username="manager",
-            email=settings.SEED_MANAGER_EMAIL,
-            password=settings.SEED_MANAGER_PASSWORD,
-            role=UserRole.MANAGER.value,
-        ),
-        _SeedAccount(
-            username="employee",
-            email=settings.SEED_EMPLOYEE_EMAIL,
-            password=settings.SEED_EMPLOYEE_PASSWORD,
-            role=UserRole.EMPLOYEE.value,
+            username="root",
+            email=settings.SEED_ROOT_EMAIL,
+            password=settings.SEED_ROOT_PASSWORD,
+            role=UserRole.ROOT.value,
+            company_id=None,
         ),
     ]
+    if company_id is not None:
+        accounts.extend(
+            [
+                _SeedAccount(
+                    username="admin",
+                    email=settings.SEED_ADMIN_EMAIL,
+                    password=settings.SEED_ADMIN_PASSWORD,
+                    role=UserRole.ADMIN.value,
+                    company_id=company_id,
+                ),
+                _SeedAccount(
+                    username="manager",
+                    email=settings.SEED_MANAGER_EMAIL,
+                    password=settings.SEED_MANAGER_PASSWORD,
+                    role=UserRole.MANAGER.value,
+                    company_id=company_id,
+                ),
+                _SeedAccount(
+                    username="employee",
+                    email=settings.SEED_EMPLOYEE_EMAIL,
+                    password=settings.SEED_EMPLOYEE_PASSWORD,
+                    role=UserRole.EMPLOYEE.value,
+                    company_id=company_id,
+                ),
+            ]
+        )
+    return accounts
 
 
 async def _seed_one(account: _SeedAccount) -> bool:
     """Create one account if it doesn't already exist.
 
+    The existence check runs on the schema-owner connection
+    (`OwnerAsyncSessionLocal`), not a tenant-scoped one: `username`/`email`
+    are unique *system-wide* (`UserModel`'s own `unique=True` columns), not
+    per company, so "does this already exist" has to see every company, the
+    same reasoning as `app.infrastructure.database.session.get_owner_db`.
+    Checking it under a single company's row-level-security scope instead
+    was tried first and broke exactly this way: two different companies can
+    each be seeded with a user named "admin", the per-company-scoped check
+    can't see the other one, and the insert then fails on the *global*
+    unique constraint anyway -- just later, and as an unhandled
+    `IntegrityError` instead of a clean "already exists, skip".
+
+    The insert itself does use `tenant_session` -- `users` is under
+    row-level security (migration `0013_rls`) and this write has no request
+    to read a tenant `ContextVar` from, so it must supply the target
+    company_id (or `is_root=True` for the root account, which has none)
+    explicitly.
+
     Returns:
         True if a new row was created, False if it already existed (by
         email or by username) and nothing was done.
     """
-    async with AsyncSessionLocal() as session:
-        repository = UserRepository(session)
-        if await repository.get_by_email(account.email) is not None:
+    async with OwnerAsyncSessionLocal() as check_session:
+        check_repository = UserRepository(check_session)
+        if await check_repository.get_by_email(account.email) is not None:
             return False
-        if await repository.get_by_username(account.username) is not None:
+        if await check_repository.get_by_username(account.username) is not None:
             logger.warning(
                 "Seed account username '%s' is already taken by a different "
                 "email; skipping.",
@@ -83,8 +120,12 @@ async def _seed_one(account: _SeedAccount) -> bool:
             )
             return False
 
+    is_root = account.role == UserRole.ROOT.value
+    async with tenant_session(account.company_id, is_root=is_root) as session:
+        repository = UserRepository(session)
         user = UserModel(
             id=str(uuid4()),
+            company_id=account.company_id,
             username=account.username,
             email=account.email,
             hashed_password=hash_password(account.password),
@@ -97,18 +138,25 @@ async def _seed_one(account: _SeedAccount) -> bool:
         return True
 
 
-async def seed_default_users() -> None:
-    """Create the default ADMIN/MANAGER/EMPLOYEE accounts, skipping any that
-    already exist.
+async def seed_default_users(company_id: Optional[str]) -> None:
+    """Create the default ROOT/ADMIN/MANAGER/EMPLOYEE accounts, skipping any
+    that already exist.
 
     A no-op when `settings.SEED_DEFAULT_USERS` is off. Safe to call on every
     startup.
+
+    Args:
+        company_id: The demo company to bind ADMIN/MANAGER/EMPLOYEE to (see
+            `app.domains.companies.seeder.seed_demo_company`, which must run
+            first). ROOT is seeded regardless, since it has no company.
+            When `None` (demo company seeding is off and none exists yet),
+            only ROOT is seeded.
     """
     if not settings.SEED_DEFAULT_USERS:
         return
 
     created = []
-    for account in _seed_accounts():
+    for account in _seed_accounts(company_id):
         try:
             if await _seed_one(account):
                 created.append(f"{account.email} ({account.role})")

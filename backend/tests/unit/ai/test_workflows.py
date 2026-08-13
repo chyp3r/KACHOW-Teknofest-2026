@@ -7,7 +7,7 @@ failed at collection and took the rest of the workflow test suite down with
 it. Per the Phase 11 implementation plan, its coverage now lives split by
 sub-graph instead of in one file:
 
-- ``test_correspondence.py``   -- resolve_correspondence_type's 5-tier precedence
+- ``test_correspondence.py``   -- resolve_correspondence_type's precedence and genre/sub-genre matching
 - ``test_draft_verifier.py``   -- the deterministic groundedness/structure verifier
 - ``test_llm_judge.py``        -- judge_draft() and merge_verdicts()
 - ``test_draft_loop.py``       -- the draft graph's reflexion loop end-to-end

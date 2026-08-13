@@ -5,34 +5,45 @@ from fastapi import APIRouter, Depends
 from app.api.dependency import get_draft_history_service, require_auth_if_enabled
 from app.api.exceptions.authorization import AuthorizationException
 from app.api.responses import SuccessResponse
-from app.core.permissions.role_checker import bypasses_ownership
+from app.core.authz.attributes import Action, Resource
+from app.core.authz.dependency import subject_from_user
+from app.core.authz.engine import authorize
 from app.domains.drafts.model.draft_model import DraftModel
 from app.domains.drafts.schema.draft_schema import DraftResponse
 from app.domains.drafts.service import DraftService
 from app.domains.users.model.user_model import UserModel
 from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 
-# See require_auth_if_enabled / settings.REQUIRE_AUTH: a no-op by default so
-# the demo works without the frontend implementing a login flow.
+# Authentication is mandatory (see require_auth_if_enabled) -- every route in
+# this router carries a real, tenant-bound current_user.
 router = APIRouter(
     prefix="/drafts", tags=["drafts"], dependencies=[Depends(require_auth_if_enabled)]
 )
 
 
-def _assert_owns_draft(draft: DraftModel, current_user: Optional[UserModel]) -> None:
+def _assert_owns_draft(draft: DraftModel, current_user: UserModel) -> None:
     """Refuse to hand back a draft the caller doesn't own.
 
-    ``current_user=None`` (``REQUIRE_AUTH`` off) skips the check entirely,
-    matching every other route in this codebase. ADMIN/MANAGER see every
-    draft company-wide, the same as ``bypasses_ownership`` everywhere else.
+    Single ABAC decision (bare, grant-less ``engine.authorize`` -- see
+    ``documents/router.py::_authorize_document``'s docstring for why no DB
+    round trip here) replacing the old ``draft.user_id``/
+    ``bypasses_ownership`` check. ADMIN/MANAGER/ROOT see every draft
+    company-wide, EMPLOYEE only its own -- same outcome as before. Note:
+    not yet company-scoped at the query level -- see
+    ``ChatSessionModel.company_id``'s docstring for why (``drafts.
+    company_id`` has the same Faz 3-deferred population); ``engine.
+    authorize``'s tenant gate is a no-op while ``draft.company_id`` is
+    ``None``, same as this check doing no company comparison at all today.
 
     Raises:
         AuthorizationException: If ``draft.user_id`` belongs to a different
-            user than ``current_user`` (and it isn't an ADMIN/MANAGER).
+            user than ``current_user`` (and it isn't ADMIN/MANAGER/ROOT).
     """
-    if current_user is None:
-        return
-    if draft.user_id != current_user.id and not bypasses_ownership(current_user):
+    resource = Resource(
+        type="draft", id=draft.id, company_id=draft.company_id, owner_id=draft.user_id
+    )
+    decision = authorize(subject_from_user(current_user), Action.DRAFT_READ, resource)
+    if not decision.permit:
         raise AuthorizationException(message="Bu taslağa erişim izniniz yok.")
 
 
@@ -42,7 +53,7 @@ async def list_drafts(
     document_id: Optional[str] = None,
     pagination: PaginationParam = Depends(),
     service: DraftService = Depends(get_draft_history_service),
-    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+    current_user: UserModel = Depends(require_auth_if_enabled),
 ):
     """List drafts, one row per session (its latest version), newest first.
 
@@ -50,9 +61,7 @@ async def list_drafts(
     resolved from the caller and is not a query parameter, same as
     ``GET /documents``/``GET /chat/sessions``.
     """
-    user_id = (
-        current_user.id if current_user and not bypasses_ownership(current_user) else None
-    )
+    user_id = None if bypasses_ownership(current_user) else current_user.id
     drafts = await service.list_drafts(
         session_id=session_id,
         document_id=document_id,
@@ -78,7 +87,7 @@ async def list_drafts(
 async def get_draft(
     draft_id: str,
     service: DraftService = Depends(get_draft_history_service),
-    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+    current_user: UserModel = Depends(require_auth_if_enabled),
 ):
     """Fetch one draft version by id."""
     draft = await service.get_draft(draft_id)
@@ -86,11 +95,24 @@ async def get_draft(
     return SuccessResponse(data=DraftResponse.model_validate(draft).model_dump(mode="json"))
 
 
+@router.delete("/{draft_id}", response_model=None)
+async def delete_draft(
+    draft_id: str,
+    service: DraftService = Depends(get_draft_history_service),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+):
+    """Soft-delete a draft and its whole version chain."""
+    draft = await service.get_draft(draft_id)
+    _assert_owns_draft(draft, current_user)
+    await service.delete_draft(draft_id)
+    return SuccessResponse(data={"deleted": True})
+
+
 @router.get("/{draft_id}/versions", response_model=None)
 async def list_draft_versions(
     draft_id: str,
     service: DraftService = Depends(get_draft_history_service),
-    current_user: Optional[UserModel] = Depends(require_auth_if_enabled),
+    current_user: UserModel = Depends(require_auth_if_enabled),
 ):
     """List every version in this draft's revision chain, oldest first."""
     draft = await service.get_draft(draft_id)

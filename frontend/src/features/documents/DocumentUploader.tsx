@@ -1,17 +1,9 @@
 import { useRef, useState, type DragEvent } from "react";
 import { CheckCircle2, UploadCloud } from "lucide-react";
-
-const MAX_SIZE = 50 * 1024 * 1024;
-const ALLOWED_EXTENSIONS = [
-  "pdf",
-  "txt",
-  "doc",
-  "png",
-  "jpg",
-  "jpeg",
-  "tif",
-  "tiff",
-];
+import { Button } from "../../components/Button";
+import { Input } from "../../components/FormControls";
+import { Alert } from "../../components/Surface";
+import { validateUploadFile } from "./uploadConstraints";
 
 export function DocumentUploader({
   uploading,
@@ -26,13 +18,9 @@ export function DocumentUploader({
 
   const selectFile = async (file?: File) => {
     if (!file) return;
-    const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
-    if (!ALLOWED_EXTENSIONS.includes(extension)) {
-      setMessage("Bu dosya türü desteklenmiyor.");
-      return;
-    }
-    if (file.size > MAX_SIZE) {
-      setMessage("Dosya boyutu 50 MB sınırını aşıyor.");
+    const validationError = validateUploadFile(file);
+    if (validationError) {
+      setMessage(validationError);
       return;
     }
     setMessage(null);
@@ -81,14 +69,13 @@ export function DocumentUploader({
           </strong>
           <span>PDF, TXT, DOC veya görsel • En fazla 50 MB</span>
         </div>
-        <button
-          className="button button-primary"
-          disabled={uploading}
+        <Button
+          loading={uploading}
           onClick={() => inputRef.current?.click()}
         >
-          {uploading ? "Yükleniyor…" : "Dosya seç"}
-        </button>
-        <input
+          Dosya seç
+        </Button>
+        <Input
           ref={inputRef}
           className="sr-only"
           type="file"
@@ -99,14 +86,7 @@ export function DocumentUploader({
         />
       </div>
       {message && (
-        <p
-          className={
-            message.startsWith("Evrak") ? "feedback success" : "feedback error"
-          }
-        >
-          <CheckCircle2 size={15} />
-          {message}
-        </p>
+        <Alert variant={message.startsWith("Evrak") ? "success" : "error"} icon={<CheckCircle2 />}>{message}</Alert>
       )}
     </section>
   );

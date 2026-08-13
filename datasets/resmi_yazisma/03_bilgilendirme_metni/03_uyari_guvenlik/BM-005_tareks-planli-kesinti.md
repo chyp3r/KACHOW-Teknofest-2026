@@ -1,25 +1,23 @@
 ---
-id: BM-005
-kategori: bilgilendirme_metni
-niyet: 03_uyari_guvenlik
-belge_turu: yayimlanmis_resmi_bilgilendirme
+id: "BM-005"
+kategori: "bilgilendirme_metni"
+alt_kategori: "03_uyari_guvenlik"
+niyet: "03_uyari_guvenlik"
+baslik: "TAREKS Planlı Kesinti"
 kurum: "Ticaret Bakanlığı"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/bilgilendirme_metni/BM-005_tareks-planli-kesinti.html"
+yerel_orijinal: "00_gelen_kaynaklar/bilgilendirme_metni/BM-005_tareks-planli-kesinti.html"
+kaynak_turu: "html"
+belge_turu: "yayimlanmis_resmi_bilgilendirme"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "beautifulsoup"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
 # TAREKS Planlı Kesinti
 
-- Resmî kaynak: https://www.ticaret.gov.tr/duyurular/tareks-planli-kesinti
-- Doğrudan belge: Kaynak sayfasında
-- Yerel asıl belge: 00_gelen_kaynaklar/bilgilendirme_metni/BM-005_tareks-planli-kesinti.html
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
-
-## Veri kümesinde kullanım
-
-Başlık, hedef kitle, açıklama, tarih/son başvuru ve yönlendirme bölümleri şablon özellikleri olarak çıkarılabilir.
-
-## Doğrulama notu
-
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Sayın TAREKS (Dış Ticarette Risk Esaslı Kontrol Sistemi) Kullanıcıları, Bakanlığımız tarafından yürütülecek teknik altyapı çalışmaları kapsamında, TAREKS sisteminde planlı bir kesinti gerçekleştirilecektir. Bu kapsamda; 18-19 Temmuz 2026 tarihlerinde sistem hizmet vermeyecek olup söz konusu zaman aralığında TAREKS üzerinden herhangi bir işlem gerçekleştirilemeyecektir. İşlemlerinizde herhangi bir aksaklık yaşanmaması adına planlamalarınızı bu doğrultuda yapmanız önemle rica olunur.

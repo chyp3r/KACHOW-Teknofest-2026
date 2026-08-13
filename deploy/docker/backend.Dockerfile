@@ -5,6 +5,7 @@ WORKDIR /workspace
 # Install system dependencies
 # default-jre-headless: required by opendataloader-pdf (Java 11+ CLI)
 # tesseract-ocr + tesseract-ocr-tur: Turkish OCR for scanned evrak
+# antiword: deterministic text extraction for the legacy binary .doc corpus
 # git: needed below to pip-install mevzuat-mcp straight from its GitHub
 #   source -- it has no PyPI release with the search_mevzuat/get_mevzuat_content
 #   pair this project's legislation lookup needs (see
@@ -15,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     default-jre-headless \
     tesseract-ocr \
     tesseract-ocr-tur \
+    antiword \
     git \
     && rm -rf /var/lib/apt/lists/*
 

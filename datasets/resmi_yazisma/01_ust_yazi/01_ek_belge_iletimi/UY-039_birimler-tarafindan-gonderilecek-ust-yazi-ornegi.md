@@ -1,11 +1,15 @@
 ---
-id: UY-039
-kategori: ust_yazi
-niyet: 01_ek_belge_iletimi
-belge_turu: resmi_sablon
+id: "UY-039"
+kategori: "ust_yazi"
+alt_kategori: "01_ek_belge_iletimi"
+niyet: "01_ek_belge_iletimi"
+baslik: "Birimler Tarafından Gönderilecek Üst Yazı Örneği"
 kurum: "Sinop Üniversitesi KOSGEB-TEKMER Koordinasyon Birimi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynak_sayfasi_dogrulandi
+kaynak: "datasets/resmi_yazisma/01_ust_yazi/01_ek_belge_iletimi/UY-039_birimler-tarafindan-gonderilecek-ust-yazi-ornegi.md"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynak_sayfasi_dogrulandi"
+rag_status: "candidate"
 ---
 
 # Birimler Tarafından Gönderilecek Üst Yazı Örneği

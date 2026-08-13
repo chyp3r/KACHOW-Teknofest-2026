@@ -1,25 +1,59 @@
 ---
-id: UY-006
-kategori: ust_yazi
-niyet: 06_rapor_sunum
-belge_turu: resmi_sablon
+id: "UY-006"
+kategori: "ust_yazi"
+alt_kategori: "06_rapor_sunum"
+niyet: "06_rapor_sunum"
+baslik: "Ciddi Beklenmeyen Şüpheli Advers Olay (SUSAR) 6 aylık sıralı liste"
 kurum: "Van Eğitim ve Araştırma Hastanesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/ust_yazi/UY-006_susar-alti-aylik-sirali-liste-bildirimi-ust-yazi-ornegi.doc"
+yerel_orijinal: "00_gelen_kaynaklar/ust_yazi/UY-006_susar-alti-aylik-sirali-liste-bildirimi-ust-yazi-ornegi.doc"
+kaynak_turu: "doc"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "antiword"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# SUSAR Altı Aylık Sıralı Liste Bildirimi Üst Yazı Örneği
+# Ciddi Beklenmeyen Şüpheli Advers Olay (SUSAR) 6 aylık sıralı liste
 
-- Resmî kaynak: https://vaneah.saglik.gov.tr/TR-59068/basvuru-ust-yazilari.html
-- Doğrudan belge: https://dosyahastane.saglik.gov.tr/Eklenti/4444/0/ciddi-beklenmeyen-supheli-advers-olay-susar-6-aylik-sirali-liste-bildirimi-ust-yazi-ornegidoc.doc
-- Yerel asıl belge: 00_gelen_kaynaklar/ust_yazi/UY-006_susar-alti-aylik-sirali-liste-bildirimi-ust-yazi-ornegi.doc
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+T.C. Sağlık Bakanlığı
+Türkiye İlaç ve Tıbbi Cihaz Kurumu
+İlaç, Biyolojik ve Tıbbi Ürünler Başkan Yardımcılığı
+Klinik İlaç Araştırmaları Daire Başkanlığı
+ANKARA Tarih
 
-## Veri kümesinde kullanım
+Konu: Ciddi Beklenmeyen Şüpheli Advers Olay (SUSAR) 6 aylık sıralı liste
+bildirimi
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+isimli araştırma ürününe ait aşağıda bilgisi sunulan araştırmalara
+ait SUSAR’lara ilişkin sıralama listesi ve bu listede yer alan SUSAR’lara
+ait özet rapor yazımız ekinde sunulmaktadır.
 
-## Doğrulama notu
+Ülkemizde bu araştırma ürünü ile ilgili aşağıdaki araştırma
+yürütülmektedir:
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+|Araştırmanın kodu:      |
+|Araştırmanın açık adı:       |
+|Koordinatörün/sorumlu araştırmacının adı soyadı:      |
+|Destekleyicinin adı:      |
+|Varsa destekleyicinin yasal temsilcisinin adı:       |
+
+Kurumumuza gönderilen evraklar ile sistemden eklenen dokümanların birebir
+aynı olduğunu ve gerekli elektronik dokümanların arama yapılabilir pdf
+olarak hazırlandığını taahhüt ederim.
+
+Gereğini saygılarımla arz ederim.
+
+İMZA
+AD-SOYAD
+
+EK:
+
+1- Özet rapor (kapsadığı dönem belirtilmelidir)
+2- Sıralama listesi
+3- Etik kurul kararının aslı veya aslı gibidir onaylı örneği
+4- İlk uygunluk yazısının bir örneği

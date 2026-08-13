@@ -1,0 +1,32 @@
+---
+id: "MEB_SIMULASYON_013"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "genel"
+baslik: "Hizmetiçi Eğitim Faaliyetleri - Belge No 13"
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/pdf/MEB_SIMULASYON_013.pdf"
+yerel_orijinal: "00_gelen_kaynaklar/pdf/MEB_SIMULASYON_013.pdf"
+kaynak_turu: "pdf"
+dogrulama: "yerel_kaynaktan_donusturuldu"
+extractor: "pdfium"
+used_ocr: "false"
+page_count: "1"
+quality_score: "0.792"
+rag_status: "candidate"
+---
+
+# Hizmetiçi Eğitim Faaliyetleri - Belge No 13
+
+T.C.
+MİLLÎ EĞİTİM BAKANLIĞI
+**Sayı:** [EVRAK SAYISI]
+Tarih: 28.10.2022
+Konu: Hizmetiçi Eğitim Faaliyetleri - Belge No 13
+İLGİLİ MAKAMA
+İlgi: Öğretmen Yetiştirme ve Geliştirme Genel Müdürlüğü'nün 02.09.2021 tarih ve 50 sayılı yazısı
+Ankara ili genelinde görev yapan branş öğretmenlerine yönelik 'Dijital Okuryazarlık ve Eğitim Teknolojileri'
+konulu hizmetiçi eğitim programı düzenlenecektir. Eğitim programı 02.09.2021 ile sonraki hafta arasında
+toplam 40 saat olarak planlanmış olup, Ankara Öğretmenevi'nde gerçekleştirilecektir. Katılımcı listesinin en
+geç 10 iş günü içinde Müdürlüğümüze bildirilmesi hususunda gereğini rica ederim.
+[İMZA SAHİBİ]
+Rektör Yardımcısı
+Sayfa 1

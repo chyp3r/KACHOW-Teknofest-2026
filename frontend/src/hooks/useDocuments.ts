@@ -1,146 +1,109 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../query/queryKeys";
 import { documentService } from "../services/documentService";
-import type { DocumentAnalysis, DocumentMetadata } from "../types/documents";
-
-const MAX_CACHED_DOCUMENTS = 50;
-
-function documentCacheKey(userId: string): string {
-  return `kachow.documents.${userId}`;
-}
-
-function readCachedDocuments(key: string): DocumentMetadata[] {
-  try {
-    const stored = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown;
-    if (!Array.isArray(stored)) return [];
-    return stored
-      .filter(
-        (item): item is DocumentMetadata =>
-          typeof item === "object" &&
-          item !== null &&
-          "storage_path" in item &&
-          typeof item.storage_path === "string" &&
-          "file_name" in item &&
-          typeof item.file_name === "string",
-      )
-      .slice(0, MAX_CACHED_DOCUMENTS);
-  } catch {
-    return [];
-  }
-}
-
-function mergeDocuments(
-  preferred: DocumentMetadata[],
-  fallback: DocumentMetadata[],
-): DocumentMetadata[] {
-  const seen = new Set<string>();
-  return [...preferred, ...fallback]
-    .filter((document) => {
-      if (seen.has(document.storage_path)) return false;
-      seen.add(document.storage_path);
-      return true;
-    })
-    .slice(0, MAX_CACHED_DOCUMENTS);
-}
+import type { DocumentAnalysis, DocumentMetadata, EvrakFields } from "../types/documents";
 
 export function useDocuments(
-  userId: string,
+  _userId: string,
   onUploaded?: (analysis: DocumentAnalysis) => void,
 ) {
-  const storageKey = documentCacheKey(userId);
-  const [documents, setDocuments] = useState<DocumentMetadata[]>(() =>
-    readCachedDocuments(storageKey),
-  );
+  const queryClient = useQueryClient();
   const [selectedDocument, setSelectedDocument] =
     useState<DocumentMetadata | null>(null);
-  const [analysis, setAnalysis] = useState<DocumentAnalysis | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const remoteDocuments = await documentService.list();
-      setDocuments((cachedDocuments) =>
-        mergeDocuments(remoteDocuments, cachedDocuments),
+  const documentsQuery = useQuery({
+    queryKey: queryKeys.documents(),
+    queryFn: () => documentService.list(),
+    staleTime: 30_000,
+  });
+  const analysisQuery = useQuery({
+    queryKey: queryKeys.documentAnalysis(selectedDocument?.storage_path ?? ""),
+    queryFn: () => documentService.getAnalysis(selectedDocument!.storage_path),
+    enabled: Boolean(selectedDocument),
+    staleTime: 60_000,
+  });
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => documentService.analyze(file),
+    onSuccess: (analysis) => {
+      queryClient.setQueryData<DocumentMetadata[]>(queryKeys.documents(), (current = []) => [
+        analysis,
+        ...current.filter((item) => item.storage_path !== analysis.storage_path),
+      ]);
+      queryClient.setQueryData(
+        queryKeys.documentAnalysis(analysis.storage_path),
+        analysis,
       );
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Evraklar yüklenemedi.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(documents));
-    } catch {
-      /* The live state remains usable when browser storage is unavailable. */
-    }
-  }, [documents, storageKey]);
-  useEffect(() => {
-    if (!selectedDocument) {
-      setAnalysis(null);
-      return;
-    }
-    setAnalysis(null);
-    setError(null);
-    let active = true;
-    documentService
-      .getAnalysis(selectedDocument.storage_path)
-      .then((result) => active && setAnalysis(result))
-      .catch(
-        (caught) =>
-          active &&
-          setError(
-            caught instanceof Error
-              ? caught.message
-              : "Evrak analizi yüklenemedi.",
-          ),
-      );
-    return () => {
-      active = false;
-    };
-  }, [selectedDocument]);
-
-  const upload = useCallback(
-    async (file: File) => {
-      setUploading(true);
-      setError(null);
-      try {
-        const result = await documentService.analyze(file);
-        setDocuments((current) => mergeDocuments([result], current));
-        setSelectedDocument(result);
-        setAnalysis(result);
-        setError(null);
-        onUploaded?.(result);
-      } catch (caught) {
-        setError(
-          caught instanceof Error ? caught.message : "Evrak yüklenemedi.",
-        );
-        throw caught;
-      } finally {
-        setUploading(false);
-      }
+      setSelectedDocument(analysis);
+      onUploaded?.(analysis);
     },
-    [onUploaded],
-  );
+  });
+  const updateFieldsMutation = useMutation({
+    mutationFn: ({ storagePath, fields }: { storagePath: string; fields: EvrakFields }) =>
+      documentService.updateFields(storagePath, fields),
+    onSuccess: (analysis) => {
+      queryClient.setQueryData<DocumentMetadata[]>(queryKeys.documents(), (current = []) =>
+        (current ?? []).map((item) =>
+          item.storage_path === analysis.storage_path
+            ? { ...item, compliance_status: analysis.compliance_status, summary: analysis.summary }
+            : item,
+        ),
+      );
+      queryClient.setQueryData(queryKeys.documentAnalysis(analysis.storage_path), analysis);
+      setSelectedDocument((current) =>
+        current && current.storage_path === analysis.storage_path
+          ? { ...current, compliance_status: analysis.compliance_status }
+          : current,
+      );
+    },
+  });
+  const removeMutation = useMutation({
+    mutationFn: (storagePath: string) => documentService.remove(storagePath),
+    onSuccess: (_result, storagePath) => {
+      queryClient.setQueryData<DocumentMetadata[]>(queryKeys.documents(), (current = []) =>
+        current.filter((item) => item.storage_path !== storagePath),
+      );
+      queryClient.removeQueries({ queryKey: queryKeys.documentAnalysis(storagePath) });
+      void queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+  });
+
+  useEffect(() => {
+    if (
+      selectedDocument &&
+      documentsQuery.data &&
+      !documentsQuery.data.some(
+        (document) => document.storage_path === selectedDocument.storage_path,
+      )
+    ) {
+      setSelectedDocument(null);
+    }
+  }, [documentsQuery.data, selectedDocument]);
+
+  const error =
+    uploadMutation.error ?? analysisQuery.error ?? documentsQuery.error;
 
   return {
-    documents,
+    documents: documentsQuery.data ?? [],
     selectedDocument,
     setSelectedDocument,
-    analysis,
-    loading,
-    uploading,
-    error,
-    refresh,
-    upload,
+    analysis: analysisQuery.data ?? null,
+    loading: documentsQuery.isLoading || analysisQuery.isLoading,
+    refreshing: documentsQuery.isFetching && !documentsQuery.isLoading,
+    uploading: uploadMutation.isPending,
+    updatingFields: updateFieldsMutation.isPending,
+    deleting: removeMutation.isPending,
+    error: error instanceof Error ? error.message : null,
+    refresh: async () => {
+      await documentsQuery.refetch();
+    },
+    upload: async (file: File) => {
+      await uploadMutation.mutateAsync(file);
+    },
+    updateFields: async (storagePath: string, fields: EvrakFields) => {
+      await updateFieldsMutation.mutateAsync({ storagePath, fields });
+    },
+    deleteDocument: async (storagePath: string) => {
+      await removeMutation.mutateAsync(storagePath);
+    },
   };
 }

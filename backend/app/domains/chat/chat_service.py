@@ -4,9 +4,10 @@ from typing import Any, AsyncIterator, Optional
 from uuid import uuid4
 
 from app.ai.reasoning_levels import get_reasoning_level_preset
+from app.ai.workflows.events import emit_reply_stream
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.authorization import AuthorizationException
-from app.core.constants import AI_WORKFLOW_TIMEOUT_SECONDS
+from app.core.config import settings
 from app.domains.chat import chat_recorder
 from app.domains.drafts import draft_recorder
 from app.domains.chat.schema.chat_schema import (
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 #: The orchestrated flow runs several sub-graphs, so it gets a longer budget
 #: than a single analysis pass.
-ORCHESTRATION_TIMEOUT_SECONDS = AI_WORKFLOW_TIMEOUT_SECONDS * 2
+ORCHESTRATION_TIMEOUT_SECONDS = settings.AI_WORKFLOW_TIMEOUT_SECONDS * 2
 
 DEFAULT_REPLY = "İşleminiz tamamlandı."
 INTERRUPTED_REPLY = "Devam etmek için ek bilgiye veya onayınıza ihtiyaç var."
@@ -474,6 +475,11 @@ class ChatService:
         final_output = state.get("final_output", {}) or {}
         reply = self._select_reply(final_output)
         workflow_status = final_output.get("status", "FAILED")
+        # The only text ever streamed to the client this turn -- see
+        # emit_reply_stream's docstring. Streamed *before* final_result so
+        # the chat bubble fills in live rather than the whole reply
+        # appearing at once with the "typing" state ending abruptly.
+        await emit_reply_stream(queue, reply)
         await queue.put(
             {
                 "event": "final_result",
@@ -581,6 +587,7 @@ class ChatService:
             "action": request.action,
             "answers": request.answers,
             "instructions": request.instructions,
+            "reason": request.reason,
             "reasoning_level": (
                 request.reasoning_level.value if request.reasoning_level else None
             ),
@@ -595,7 +602,12 @@ class ChatService:
         something a chat history view can show in place of a message bubble.
         """
         if request.action == "answer" and request.answers:
-            return "; ".join(f"{key}: {value}" for key, value in request.answers.items())
+            return "; ".join(
+                f"{key}: {', '.join(value) if isinstance(value, list) else value}"
+                for key, value in request.answers.items()
+            )
+        if request.action == "reject" and request.reason:
+            return f"reject: {request.reason}"
         if request.instructions:
             return f"{request.action}: {request.instructions}"
         return request.action
@@ -662,20 +674,19 @@ class ChatService:
 
         draft = final_output.get("draft") or {}
         if draft.get("draft"):
-            routing = final_output.get("routing") or {}
-            parts = [f"Resmî yazı taslağınız hazırlandı.\n\n{draft['draft']}"]
-            if routing.get("routed_unit"):
-                parts.append(f"\n\n**Önerilen Birim:** {routing['routed_unit']}")
-            if draft.get("status") == "REJECTED":
-                parts.append("\n\n_Bu taslak reddedildi._")
-            elif draft.get("status") == "REVISE_REQUESTED":
-                parts.append("\n\n_Bu taslak için revizyon talep edildi._")
-            elif draft.get("requires_human_approval"):
-                parts.append(
-                    "\n\n_Bu taslak insan onayı gerektiriyor: "
-                    f"{draft.get('evaluation_notes', '')}_"
-                )
-            return "".join(parts)
+            # The reply is the draft text alone -- routing unit, confidence
+            # score, approval/rejection notes and the changelog summary all
+            # used to be appended here as free text, but they are structured
+            # data the frontend already receives via this same
+            # final_output (as ``details`` on the chat message: see
+            # ChatMessageResponse.details / the "final_result" SSE event)
+            # and renders as its own meta strip -- see
+            # frontend DraftMetaStrip. A conflict finding was never folded
+            # in here either, for the same reason (see
+            # app.ai.workflows.revise_graph.audit_node's "notice" event):
+            # a structured finding belongs in a dedicated surface, not
+            # concatenated onto the answer.
+            return f"Resmî yazı taslağınız hazırlandı.\n\n{draft['draft']}"
 
         if draft.get("error"):
             return f"Taslak oluşturulamadı: {draft['error']}"

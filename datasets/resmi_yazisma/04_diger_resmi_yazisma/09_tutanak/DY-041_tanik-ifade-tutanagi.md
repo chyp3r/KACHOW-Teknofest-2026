@@ -1,11 +1,15 @@
 ---
-id: DY-041
-kategori: diger_resmi_yazisma
-niyet: 09_tutanak
-belge_turu: resmi_sablon
+id: "DY-041"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "09_tutanak"
+niyet: "09_tutanak"
+baslik: "Tanık İfade Tutanağı"
 kurum: "Amasya Üniversitesi Hukuk Müşavirliği"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/04_diger_resmi_yazisma/09_tutanak/DY-041_tanik-ifade-tutanagi.md"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+rag_status: "candidate"
 ---
 
 # Tanık İfade Tutanağı

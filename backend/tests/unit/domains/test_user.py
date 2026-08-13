@@ -44,9 +44,9 @@ async def test_get_users_multi():
     repository.get_multi = AsyncMock(return_value=mock_users)
 
     service = UserService(repository)
-    result = await service.get_users(skip=0, limit=10, role="employee")
+    result = await service.get_users("company-1", skip=0, limit=10, role="employee")
     assert len(result) == 2
-    repository.get_multi.assert_called_once_with(skip=0, limit=10, role="employee")
+    repository.get_multi.assert_called_once_with("company-1", skip=0, limit=10, role="employee")
 
 @pytest.mark.asyncio
 async def test_update_user_success():
@@ -54,14 +54,14 @@ async def test_update_user_success():
     mock_user = MagicMock()
     mock_user.email = "old@example.com"
     
-    repository.get_by_id = AsyncMock(return_value=mock_user)
+    repository.get_by_id_in_company = AsyncMock(return_value=mock_user)
     repository.get_by_email = AsyncMock(return_value=None)
     repository.update = AsyncMock(return_value=mock_user)
 
     service = UserService(repository)
     schema = UserUpdate(email="new@example.com", role=UserRole.MANAGER, is_active=True)
-    
-    await service.update_user("user-id", schema)
+
+    await service.update_user("user-id", schema, "company-1")
     
     repository.update.assert_called_once()
     call_args = repository.update.call_args[0][1]
@@ -108,8 +108,8 @@ async def test_soft_delete_success():
     repository.soft_delete = AsyncMock(return_value=MagicMock())
 
     service = UserService(repository)
-    await service.soft_delete_user("user-id")
-    repository.soft_delete.assert_called_once_with("user-id")
+    await service.soft_delete_user("user-id", "company-1")
+    repository.soft_delete.assert_called_once_with("user-id", "company-1")
 
 @pytest.mark.asyncio
 async def test_hard_delete_success():
@@ -117,8 +117,8 @@ async def test_hard_delete_success():
     repository.hard_delete = AsyncMock(return_value=True)
 
     service = UserService(repository)
-    await service.hard_delete_user("user-id")
-    repository.hard_delete.assert_called_once_with("user-id")
+    await service.hard_delete_user("user-id", "company-1")
+    repository.hard_delete.assert_called_once_with("user-id", "company-1")
 
 @pytest.mark.asyncio
 async def test_delete_user_not_found():
@@ -128,7 +128,7 @@ async def test_delete_user_not_found():
 
     service = UserService(repository)
     with pytest.raises(NotFoundException):
-        await service.soft_delete_user("user-id")
-        
+        await service.soft_delete_user("user-id", "company-1")
+
     with pytest.raises(NotFoundException):
-        await service.hard_delete_user("user-id")
+        await service.hard_delete_user("user-id", "company-1")

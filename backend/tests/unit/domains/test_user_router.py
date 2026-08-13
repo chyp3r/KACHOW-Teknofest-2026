@@ -20,11 +20,11 @@ async def mock_get_db():
     yield AsyncMock()
 
 def mock_get_current_user_admin():
-    user = UserModel(id="admin-1", username="admin", email="a@a.com", role=UserRole.ADMIN.value, clearance_level="hizmete_ozel", is_active=True, is_deleted=False, hashed_password="pw", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
+    user = UserModel(id="admin-1", company_id="company-1", username="admin", email="a@a.com", role=UserRole.ADMIN.value, clearance_level="hizmete_ozel", is_active=True, is_deleted=False, hashed_password="pw", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
     return user
 
 def mock_get_current_user_employee():
-    user = UserModel(id="emp-1", username="emp1", email="e@e.com", role=UserRole.EMPLOYEE.value, clearance_level="hizmete_ozel", is_active=True, is_deleted=False, hashed_password="pw", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
+    user = UserModel(id="emp-1", company_id="company-1", username="emp1", email="e@e.com", role=UserRole.EMPLOYEE.value, clearance_level="hizmete_ozel", is_active=True, is_deleted=False, hashed_password="pw", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
     return user
 
 def mock_require_roles_admin():
@@ -75,6 +75,7 @@ def test_invite_user(mock_repo_cls, mock_service_cls):
     mock_invite.id = "i-1"
     mock_invite.email = "new@example.com"
     mock_invite.role = "employee"
+    mock_invite.company_id = "company-1"
     mock_invite.is_used = False
     mock_invite.created_at = datetime.now(timezone.utc)
     mock_invite.updated_at = datetime.now(timezone.utc)
@@ -111,8 +112,8 @@ def test_get_me(mock_repo_cls, mock_service_cls):
 def test_get_user_as_admin(mock_repo_cls, mock_service_cls):
     mock_service = mock_service_cls.return_value
     mock_user = UserModel(id="emp-1", username="emp1", email="e@e.com", role="employee", clearance_level="hizmete_ozel", is_active=True, is_deleted=False, hashed_password="x", created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
-    mock_service.get_user_by_id = AsyncMock(return_value=mock_user)
-    
+    mock_service.get_user_by_id_in_company = AsyncMock(return_value=mock_user)
+
     response = client.get("/users/emp-1")
     assert response.status_code == 200
     assert response.json()["data"]["id"] == "emp-1"
@@ -154,7 +155,7 @@ def test_soft_delete(mock_repo_cls, mock_service_cls):
     
     response = client.delete("/users/emp-1/soft")
     assert response.status_code == 200
-    mock_service.soft_delete_user.assert_called_once_with("emp-1")
+    mock_service.soft_delete_user.assert_called_once_with("emp-1", "company-1")
 
 @patch("app.domains.users.router.UserService")
 @patch("app.domains.users.router.UserRepository")
@@ -164,4 +165,4 @@ def test_hard_delete(mock_repo_cls, mock_service_cls):
     
     response = client.delete("/users/emp-1/hard")
     assert response.status_code == 200
-    mock_service.hard_delete_user.assert_called_once_with("emp-1")
+    mock_service.hard_delete_user.assert_called_once_with("emp-1", "company-1")

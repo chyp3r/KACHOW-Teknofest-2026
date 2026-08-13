@@ -165,6 +165,25 @@ class VerificationReport(BaseModel):
     missing_structure: list[str] = Field(
         default_factory=list, description="Resmî yazıda eksik olan yapısal unsurlar."
     )
+    example_leaks: list[UnsupportedClaim] = Field(
+        default_factory=list,
+        description=(
+            "Taslakta geçen, kaynakta doğrulanamayan ve yalnızca üslup referans "
+            "örneklerinde bulunan değerler -- writer/reviser'a örnekten somut bilgi "
+            "kopyalamaması söylenmiş olsa da, bunun deterministik doğrulaması."
+        ),
+    )
+    instruction_only_claims: list[UnsupportedClaim] = Field(
+        default_factory=list,
+        description=(
+            "Taslakta geçen, kaynak evrakta veya mevzuat bağlamında doğrulanamayan "
+            "ama kullanıcının revizyon talimatında geçen değerler. Skora ve onay "
+            "kararına example_leaks gibi katılmazlar -- kullanıcının talimatı "
+            "tanım gereği kabul edilir (bkz. modül dokümantasyonu) -- ancak "
+            "app.ai.revision.conflict bu listeyi talimatın mevzuat/kaynakla "
+            "çelişip çelişmediğini denetlemek için okur."
+        ),
+    )
     placeholder_count: int = Field(
         default=0, description="Taslakta doldurulması gereken yer tutucu sayısı."
     )
@@ -358,18 +377,35 @@ def _collect_claims(
     return claims
 
 
-def _check_structure(draft: str) -> tuple[list[str], float]:
+#: Structure keys that don't apply to an individually-signed petition (an
+#: itiraz/başvuru/şikayet dilekçesi, or any sub-genre resolving with
+#: "dilekçe" in its label -- see ``resolve_correspondence_type``). A
+#: petitioner never assigns their own case number, so requiring a "Sayı:"
+#: line here would force the writer to fabricate one or fail verification on
+#: every well-formed petition it produces. The other checks (Konu, Tarih,
+#: kapanış, imza) still apply -- a petition has all of those, just not an
+#: institutional case number.
+PETITION_EXEMPT_STRUCTURE_KEYS = frozenset({"sayi"})
+
+
+def _check_structure(
+    draft: str, *, skip_keys: frozenset[str] = frozenset()
+) -> tuple[list[str], float]:
     """Score the draft's structural completeness.
 
     Args:
         draft: The generated draft.
+        skip_keys: Structure check keys to exempt (see
+            ``PETITION_EXEMPT_STRUCTURE_KEYS``).
 
     Returns:
         The labels of missing elements and the total penalty incurred.
     """
     missing: list[str] = []
     penalty = 0.0
-    for _key, label, pattern, weight in STRUCTURE_CHECKS:
+    for key, label, pattern, weight in STRUCTURE_CHECKS:
+        if key in skip_keys:
+            continue
         if not pattern.search(draft):
             missing.append(label)
             penalty += weight
@@ -384,6 +420,8 @@ def verify_draft(
     classification: dict[str, Any] | None = None,
     instructions: str = "",
     strict: bool = True,
+    style_examples: list[str] | None = None,
+    is_individual_petition: bool = False,
 ) -> VerificationReport:
     """Verify a draft's groundedness and structural completeness.
 
@@ -394,10 +432,33 @@ def verify_draft(
         classification: Analysis output, whose extracted fields also count as
             trusted material.
         instructions: The user's instructions, which may legitimately introduce
-            names or dates the source document does not contain.
+            names or dates the source document does not contain. Not folded
+            into the grounding haystack (see ``trusted`` below) -- a claim
+            that traces only to the instructions is split into
+            ``instruction_only_claims`` instead, so it still scores and
+            approves exactly as if it were grounded (the user's word is
+            trusted by construction, same net effect as before this field
+            existed), but the fact that it came *only* from the instruction
+            and not from the source/mevzuat becomes visible to
+            ``app.ai.revision.conflict``, which is the layer responsible for
+            deciding whether that is worth warning about.
         strict: When False (the ``other_official`` correspondence type, where the
             writer is permitted to supply conventional boilerplate) ungrounded
             claims are reported but do not force human approval.
+        style_examples: Few-shot style-example texts handed to the writer (see
+            ``ExampleRetriever``), if any. Any ungrounded claim that traces
+            back to one of these -- a real institution name, date or case
+            number the writer copied instead of treating the example as
+            style-only -- is split out into ``example_leaks`` and always
+            forces human approval, independent of ``strict``: a leaked real
+            fact is a confidentiality/integrity problem the correspondence
+            type's leniency was never meant to cover.
+        is_individual_petition: True for a personal dilekçe-shaped sub-genre
+            (see ``PETITION_EXEMPT_STRUCTURE_KEYS``) -- exempts the "Sayı:"
+            structure check so a well-formed petition isn't flagged (and
+            forced into a repair loop trying to add institutional scaffolding
+            it should never have) for lacking a case number only the
+            receiving institution assigns.
 
     Returns:
         The verification report.
@@ -409,7 +470,11 @@ def verify_draft(
             evaluation_notes="Taslak boş olduğu için doğrulanamadı.",
         )
 
-    trusted: list[str] = [source_document, context, instructions]
+    # `instructions` is deliberately not in the grounding haystack -- it is
+    # split out below via `instruction_only_claims` instead of being folded
+    # in here, so its presence is visible to the caller rather than silently
+    # indistinguishable from source/mevzuat grounding.
+    trusted: list[str] = [source_document, context]
     if classification:
         trusted.append(_flatten_classification(classification))
 
@@ -424,7 +489,64 @@ def verify_draft(
     auditable = _strip_placeholders(draft)
 
     claims = _collect_claims(auditable, haystack, canonical_index)
-    missing_structure, structure_penalty = _check_structure(draft)
+    skip_keys = PETITION_EXEMPT_STRUCTURE_KEYS if is_individual_petition else frozenset()
+    missing_structure, structure_penalty = _check_structure(draft, skip_keys=skip_keys)
+
+    # Split out claims that are unsupported by source/mevzuat but *are*
+    # present in the user's own instructions -- checked before example_leaks
+    # so a value the user explicitly typed is never mislabeled as a leaked
+    # style example just because it happens to also appear in one. Kept out
+    # of `claims`/the penalty and out of `requires_approval` on purpose: the
+    # user's word is trusted by construction (see `verify_draft`'s
+    # docstring), so this split changes *visibility*, not scoring.
+    instruction_only_claims: list[UnsupportedClaim] = []
+    instructions_haystack = _fold(instructions)
+    if instructions_haystack:
+        remaining_after_instructions: list[UnsupportedClaim] = []
+        for claim in claims:
+            if _fold(claim.value) in instructions_haystack:
+                instruction_only_claims.append(
+                    claim.model_copy(
+                        update={
+                            "explanation": (
+                                "Bu değer kaynak evrakta veya mevzuat bağlamında değil, "
+                                f"yalnızca kullanıcının talimatında geçiyor (özgün tür: {claim.kind})."
+                            ),
+                        }
+                    )
+                )
+            else:
+                remaining_after_instructions.append(claim)
+        claims = remaining_after_instructions
+
+    # Split out claims that are unsupported by the trusted sources *and*
+    # traceable to a style example -- a stronger, more specific signal than
+    # a generic unsupported claim (which could just as easily be an ordinary
+    # model slip). Kept out of `claims`/repair_items on purpose: a repair
+    # pass sees the exact same examples, so looping it back through the
+    # reviser risks reproducing the same leak instead of fixing it (see
+    # draft_graph.verify_node, which never feeds example_leaks into revision).
+    example_leaks: list[UnsupportedClaim] = []
+    examples_haystack = _fold(" \n ".join(style_examples or []))
+    if examples_haystack:
+        remaining: list[UnsupportedClaim] = []
+        for claim in claims:
+            if _fold(claim.value) in examples_haystack:
+                example_leaks.append(
+                    claim.model_copy(
+                        update={
+                            "kind": "ornek_sizintisi",
+                            "explanation": (
+                                "Bu değer yalnızca üslup referans örneğinde geçiyor; "
+                                "kaynak evrakta, mevzuat bağlamında veya kullanıcı "
+                                f"talimatında bulunmuyor (özgün tür: {claim.kind})."
+                            ),
+                        }
+                    )
+                )
+            else:
+                remaining.append(claim)
+        claims = remaining
 
     claim_penalty = min(
         len(claims) * UNSUPPORTED_CLAIM_PENALTY, MAX_UNSUPPORTED_PENALTY
@@ -436,16 +558,19 @@ def verify_draft(
         or bool(missing_structure)
         or placeholder_count > 0
         or (strict and bool(claims))
+        or bool(example_leaks)
     )
 
     return VerificationReport(
         confidence_score=round(score, 1),
         requires_human_approval=requires_approval,
         unsupported_claims=claims,
+        example_leaks=example_leaks,
+        instruction_only_claims=instruction_only_claims,
         missing_structure=missing_structure,
         placeholder_count=placeholder_count,
         evaluation_notes=_build_notes(
-            claims, missing_structure, placeholder_count, score
+            claims, missing_structure, placeholder_count, score, example_leaks
         ),
     )
 
@@ -511,6 +636,7 @@ def _build_notes(
     missing_structure: list[str],
     placeholder_count: int,
     score: float,
+    example_leaks: list[UnsupportedClaim] | None = None,
 ) -> str:
     """Compose the Turkish rationale shown alongside the score.
 
@@ -519,11 +645,18 @@ def _build_notes(
         missing_structure: Missing structural elements.
         placeholder_count: Number of unfilled placeholders.
         score: The computed confidence score.
+        example_leaks: Unsupported claims traced back to a style example.
 
     Returns:
         A human-readable summary.
     """
     notes: list[str] = []
+    if example_leaks:
+        sample = ", ".join(f"'{claim.value}'" for claim in example_leaks[:3])
+        notes.append(
+            f"{len(example_leaks)} adet değer yalnızca üslup referans örneğinde "
+            f"bulundu ve kaynakta doğrulanamadı ({sample}); insan onayı gerekiyor."
+        )
     if claims:
         sample = ", ".join(f"{claim.kind}: '{claim.value}'" for claim in claims[:3])
         notes.append(

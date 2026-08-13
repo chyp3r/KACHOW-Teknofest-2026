@@ -41,3 +41,5 @@ langchain-opendataloader-pdf==2.0.0
 pypdfium2==5.12.1
 pytesseract==0.3.13
 pillow==12.3.0
+beautifulsoup4==4.15.0
+python-docx==1.2.0

@@ -168,6 +168,58 @@ async def emit_token(config: Optional[RunnableConfig], node: str, text: str) -> 
     await emit(config, {"event": "token", "node": node, "text": text})
 
 
+#: Characters per chunk in :func:`emit_reply_stream`. Small enough to still
+#: read as a live stream, large enough that a long draft doesn't spend
+#: hundreds of queue round-trips on it.
+_REPLY_STREAM_CHUNK_SIZE = 48
+
+
+async def emit_reply_stream(
+    queue: Any, text: str, *, node: str = "reply", chunk_size: int = _REPLY_STREAM_CHUNK_SIZE
+) -> None:
+    """Stream a validated final reply to the client, chunk by chunk.
+
+    The *only* place a ``token`` event is emitted post the draft/assist/
+    revise validation rework (see ``draft_graph.writer_node``,
+    ``planning_graph._run_assist``, ``revise_graph.rewrite_node``, none of
+    which call ``emit_token`` anymore) -- called once, from
+    ``app.domains.chat.chat_service._enqueue_terminal_event``, on the exact
+    text ``final_result`` is about to carry. This is what makes "what
+    streamed into the chat bubble" and "the turn's final answer" the same
+    text by construction rather than by convention: nothing upstream of this
+    call ever reaches the client's token handler, so there is nothing for a
+    guardrail/verify pass to have silently changed out from under what the
+    user already saw.
+
+    Takes the raw queue directly, not a ``RunnableConfig`` -- this runs after
+    the graph invocation has already returned, so there is no node config in
+    scope, only the same ``asyncio.Queue`` that was attached to it as
+    ``status_queue``.
+
+    Args:
+        queue: The SSE progress queue, or None (a no-op, same as :func:`emit`).
+        text: The validated final reply.
+        node: Node id carried on each token event -- purely informational;
+            no node clears a live preview on its own ``node_start`` anymore
+            (there is nothing left upstream that would stream one).
+        chunk_size: Characters per emitted chunk.
+    """
+    if queue is None or not text:
+        return
+    try:
+        for start in range(0, len(text), chunk_size):
+            await queue.put(
+                {
+                    "event": "token",
+                    "node": node,
+                    "text": text[start : start + chunk_size],
+                    "seq": _next_seq(queue),
+                }
+            )
+    except Exception:
+        logger.warning("Could not stream final reply")
+
+
 async def emit_node_error(
     config: Optional[RunnableConfig],
     node: str,
@@ -312,6 +364,99 @@ async def emit_guardrail_event(
             "kind": kind,
             "decision": decision,
             "reasons": list(reasons or []),
+        },
+    )
+
+
+async def emit_notice(
+    config: Optional[RunnableConfig],
+    *,
+    node: str,
+    title: str,
+    message: str,
+    level: str = "info",
+) -> None:
+    """Publish a non-blocking, informational message as its own chat turn.
+
+    The non-pausing counterpart to :func:`emit_interrupt`. Use this for a
+    finding that must be surfaced but must never gate the run -- an
+    instruction/mevzuat conflict is the motivating case (see
+    ``app.ai.revision.conflict``'s ``applied_anyway`` invariant: the edit
+    already happened, this is only telling the user about a wrinkle in it).
+    The frontend renders it as its own assistant message rather than folding
+    it into the streamed reply, so a warning about round 1 never gets
+    concatenated onto round 2's text the way raw token streaming would.
+
+    Args:
+        config: The node's runnable config.
+        node: Which node raised this notice (e.g. ``"revise_audit"``).
+        title: Short Turkish heading.
+        message: The full Turkish notice text.
+        level: Severity; only ``"info"`` exists today.
+    """
+    await emit(
+        config,
+        {
+            "event": "notice",
+            "node": node,
+            "level": level,
+            "title": title,
+            "message": message,
+        },
+    )
+
+
+async def emit_question(
+    config: Optional[RunnableConfig],
+    *,
+    node: str,
+    question: str,
+    options: list[dict[str, str]],
+    allow_free_text: bool = True,
+    questions: Optional[list[dict[str, Any]]] = None,
+) -> None:
+    """Publish a decision the run needs, offered as clickable options.
+
+    Unlike :func:`emit_interrupt`, this never pauses a LangGraph run via
+    ``interrupt()`` -- the clarify step already ends its own turn
+    deterministically and simply waits for the user's next message, which
+    ``app.ai.workflows.planner._try_resolve_pending_clarification`` resolves
+    against these same options. This event only tells the client to render
+    them as a card instead of leaving the user to retype a label verbatim.
+
+    Args:
+        config: The node's runnable config.
+        node: Which node raised this question (``"clarify"`` today).
+        question: The Turkish question text.
+        options: ``[{"value": ..., "label": ...}, ...]``.
+        allow_free_text: Whether a typed reply can also resolve this
+            question. Always True today.
+        questions: The canonical ``PromptQuestion``-shaped list this event
+            carries. Omitted by every caller today (``_step_clarify`` only
+            ever asks one question) -- when absent, a single-element list is
+            built from ``question``/``options``/``allow_free_text`` so old
+            and new clients see the same content either way.
+    """
+    await emit(
+        config,
+        {
+            "event": "question",
+            "node": node,
+            "question": question,
+            "options": list(options),
+            "allow_free_text": allow_free_text,
+            "questions": questions
+            if questions is not None
+            else [
+                {
+                    "key": node,
+                    "question": question,
+                    "options": list(options),
+                    "allow_free_text": allow_free_text,
+                    "multi_select": False,
+                    "required": True,
+                }
+            ],
         },
     )
 

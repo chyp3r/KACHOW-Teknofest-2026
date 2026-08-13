@@ -68,6 +68,20 @@ def _probe_checkpointer() -> str:
     return "ok" if get_checkpointer() is not None else "fail"
 
 
+def _probe_router_semantic() -> str:
+    """Whether the intent ladder's semantic rung actually loaded.
+
+    Informational, like ``_probe_checkpointer`` -- reported outside
+    ``dependencies`` so it never flips overall health to 503. A stale or
+    missing prototype vector file degrades the router (see
+    ``ROUTER_SEMANTIC_AVAILABLE``'s docstring) but the system still answers
+    every request; it just does so with one fewer layer of the ladder.
+    """
+    from app.observability.ai_metrics import router_semantic_available
+
+    return "ok" if router_semantic_available() else "unavailable"
+
+
 @health_router.get("/health")
 async def health_check(response: Response, deep: bool = Query(default=False)):
     """Health check endpoint returning standardized APIResponse.
@@ -96,6 +110,7 @@ async def health_check(response: Response, deep: bool = Query(default=False)):
         }
         data["dependencies"] = dependencies
         data["checkpointer"] = _probe_checkpointer()
+        data["router_semantic"] = _probe_router_semantic()
 
         if any(status == "fail" for status in dependencies.values()):
             data["status"] = "degraded"

@@ -16,11 +16,24 @@ küçük ama çok daha keskindir. `evaluation/ragas/` bu nedenle boş bırakılm
 ## Çalıştırma
 
 ```bash
+# Altın küme değiştiğinde bir kere: intent mesajlarının önbelleğe alınmış
+# gömme vektörlerini yeniden üretir (evaluation/datasets/intent_embeddings.json).
+# Bu, hiçbir dil modeli çağrısı yapmadan semantik katmanın (Katman 2) da
+# ölçülebilmesini sağlayan önbellektir -- eksikse intent_suite lexical-only'e
+# düşer, aynı üretimin embeddings istemcisi yokken yaptığı gibi.
+docker compose run --rm --no-deps backend python scripts/build_eval_embeddings.py
+
 # Tüm suite'ler; evaluation/reports/all-latest.{json,md} üretir
 make eval
 
 # Değişiklik öncesi referans noktası
 make eval-baseline
+
+# Opsiyonel: yalnızca intents suite'i, fusion'ın tartışmalı bıraktığı
+# vakalarda gerçek fast-tier modeli çağırır. Varsayılan `make eval`in bir
+# parçası DEĞİL -- gerçek Ollama çağrısı yaptığı için daha yavaş ve
+# tekrarlanabilirliği garanti değil.
+make eval-llm
 
 # Karşılaştırmalı koşu
 docker compose run --rm --no-deps backend \
@@ -39,9 +52,11 @@ içindir.
 |---|---|
 | `metrics.py` | Sınıflandırma ve kalibrasyon metrikleri. Yalnızca standart kütüphane. |
 | `harness/runner.py` | Altın kümeyi yükleyen, koşturan ve süre ölçen jenerik koşucu. |
-| `harness/intent_suite.py` | `resolve_plan_deterministic`'e bağlanır. |
+| `harness/intent_suite.py` | `resolve_plan`'a bağlanır (`llm_client=None`) -- lexical + semantik katman, model hariç. |
+| `harness/cached_embeddings.py` | `scripts/build_eval_embeddings.py`'nin önbelleğinden okuyan, hiç ağ çağrısı yapmayan sahte embeddings istemcisi. |
 | `harness/draft_suite.py` | `verify_draft`'e bağlanır (yargıç hariç). |
 | `datasets/*.jsonl` | Altın kümeler. |
+| `datasets/intent_embeddings.json` | Intent altın kümesinin önbelleğe alınmış gömme vektörleri (üretilir, elle düzenlenmez). |
 | `reports/` | Üretilen raporlar (JSON + Markdown). |
 
 ## Metrikler neden abstention-farkında

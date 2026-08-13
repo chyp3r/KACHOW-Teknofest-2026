@@ -11,7 +11,29 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "supersecretkeychangeinproduction"
 
     # Database Configuration
+    #: The app's own runtime connection. From Faz 3 (Postgres RLS) onward
+    #: this is expected to be a restricted, non-owner role (``kachow_app`` --
+    #: see migration ``0013_rls``): row-level security is only a real
+    #: defense when the connection making the request cannot bypass it by
+    #: virtue of owning the tables, which a superuser/owner connection
+    #: always can regardless of any `ENABLE ROW LEVEL SECURITY` statement.
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+    #: The schema-owner connection: Alembic migrations (DDL), and the
+    #: narrow set of pre-tenant identity lookups (login, token refresh,
+    #: invite-gated registration) that must search `users`/`invited_emails`
+    #: by a globally-unique `username`/`email` *before* any company context
+    #: exists to scope a row-level-security policy by -- see
+    #: `app.infrastructure.database.session.get_owner_db`. Empty by default,
+    #: which makes `effective_alembic_database_url` fall back to
+    #: `DATABASE_URL` -- so a deployment that hasn't adopted the Faz 3 role
+    #: split yet (both settings pointing at the same owner connection) keeps
+    #: working exactly as before.
+    ALEMBIC_DATABASE_URL: str = ""
+    #: Password for the restricted `kachow_app` Postgres role migration
+    #: `0013_rls` creates. Dev-only default, matching this repo's existing
+    #: `POSTGRES_PASSWORD=postgres` convention (see `compose.yml`) -- never
+    #: meant to be this value in a real deployment.
+    KACHOW_APP_DB_PASSWORD: str = "kachow_app_dev_only"
 
     #: LangGraph's AsyncPostgresSaver, backing HITL (missing-info requests and
     #: draft approval) on the planning graph. Best-effort at startup: when
@@ -25,18 +47,57 @@ class Settings(BaseSettings):
     #: the competition brief explicitly asks for.
     HITL_APPROVAL_GATE_ENABLED: bool = True
 
-    #: On by default: /documents/* and /chat/* require a JWT bearer token,
-    #: and the RBAC guardrail layer (app.core.permissions.role_checker,
-    #: app.ai.guardrails.output_gate, document_tools.py's deny-at-retrieval
-    #: check) only has a real requester to enforce clearance against when
-    #: this is on. Set to False for local/offline demos with no frontend
-    #: login flow -- REQUIRE_AUTH=False is a genuine "fully open" dev mode:
-    #: ownership and clearance checks skip entirely rather than denying
-    #: everything (see _verify_document_access / build_assistant_tools'
-    #: own docstrings for the precise "None means skip" convention this
-    #: relies on), so local testing isn't blocked, but nothing in that mode
-    #: is protected -- never point it at a network reachable outside a
-    #: trusted demo/dev environment.
+    #: Gate the pre-draft writing-brief interrupt (who's writing, who it's
+    #: going to, closing formula -- see app.ai.workflows.writing_brief)
+    #: separately from the post-draft approval gate above. Smart-skip means
+    #: this only ever pauses a turn when a slot is genuinely unresolved, but
+    #: a demo that wants zero pauses can still disable it outright.
+    HITL_BRIEF_GATE_ENABLED: bool = True
+
+    #: How many times the human approval gate's "revizyon iste" action may
+    #: send the draft back through the revise sub-graph within the same run
+    #: before the gate stops offering it (see planning_graph.gate_revise_node
+    #: /route_after_gate). Bounds worst-case latency per turn -- without a
+    #: cap, a human clicking "revizyon iste" repeatedly on a stubborn draft
+    #: pays for an unbounded number of LLM calls in one request.
+    HITL_MAX_GATE_REVISIONS: int = 2
+
+    #: Whether a revision checks the user's own instruction against the
+    #: retrieved mevzuat/source document for contradictions (see
+    #: app.ai.revision.conflict). The deterministic layer always runs;
+    #: this only gates the additional fast-tier LLM pass. Off does not mean
+    #: "no warning" -- see the deterministic layer's own findings -- it means
+    #: no second, reasoning-based opinion on top of them.
+    REVISION_CONFLICT_AUDIT_ENABLED: bool = True
+
+    #: Whether a revision whose instruction introduces new normative content
+    #: (a law/article citation, an institution, a date) re-retrieves
+    #: legislation before rewriting, instead of relying solely on the
+    #: frozen context carried over from when the draft was first written.
+    #: See app.ai.revision.retrieval.maybe_extend_context.
+    REVISION_RERETRIEVAL_ENABLED: bool = True
+
+    #: Hard ceiling on the conditional re-retrieval call so one slow Qdrant
+    #: query cannot stall a revision -- degrades to the frozen context on
+    #: timeout rather than blocking.
+    REVISION_RERETRIEVAL_TIMEOUT_SECONDS: float = 10.0
+
+    #: Ceiling on a single planning-graph run (chat, draft generation,
+    #: routing). Env-configurable so a local run against a slow/CPU-only
+    #: Ollama model can be given more headroom without a code change; the
+    #: orchestrated chat flow multiplies this (see
+    #: app.domains.chat.chat_service.ORCHESTRATION_TIMEOUT_SECONDS).
+    AI_WORKFLOW_TIMEOUT_SECONDS: int = 480
+
+    #: Mandatory as of the multi-tenancy work: every request to every
+    #: router requires a JWT bearer token, and every row in the system now
+    #: carries a `company_id` -- there is no longer an "unauthenticated
+    #: demo/dev path" for a request to fall back to, since there would be
+    #: no company to scope its reads/writes to. Kept as a settable flag
+    #: only so `_require_auth_in_production` (app.lifespan) can still
+    #: refuse to boot a misconfigured deployment; flipping it to False is
+    #: not a supported mode and most routes will simply reject every
+    #: request without one.
     REQUIRE_AUTH: bool = True
 
     #: Off by default. `rate_limit()` (app.api.rate_limit) keys its Redis
@@ -68,20 +129,48 @@ class Settings(BaseSettings):
     #: test-disabled convention as RUN_RECORDING_ENABLED.
     DRAFT_HISTORY_ENABLED: bool = True
 
-    #: Create one ADMIN, one MANAGER and one EMPLOYEE account on startup if
-    #: they don't already exist (see app.domains.users.seeder). Idempotent
-    #: and best-effort like RUN_RECORDING_ENABLED; tests disable it globally
-    #: (conftest.py's `_disable_default_user_seeding`) so a full-lifespan
-    #: test doesn't also attempt real database writes. The passwords below
-    #: are development/demo defaults -- override every SEED_* value for any
+    #: Create one demo company on startup if it doesn't already exist (see
+    #: app.domains.companies.seeder) -- the tenant every other seeded row
+    #: below is anchored to, so this must run first. Same idempotent,
+    #: best-effort, test-disabled convention as the other SEED_* flags.
+    SEED_DEMO_COMPANY: bool = True
+    SEED_DEMO_COMPANY_SLUG: str = "demo"
+    SEED_DEMO_COMPANY_NAME: str = "Demo Kurum"
+
+    #: Create one ROOT, one ADMIN, one MANAGER and one EMPLOYEE account on
+    #: startup if they don't already exist (see app.domains.users.seeder).
+    #: ROOT has no company (see UserModel.company_id); the other three are
+    #: bound to the seeded demo company. Idempotent and best-effort like
+    #: RUN_RECORDING_ENABLED; tests disable it globally (conftest.py's
+    #: `_disable_default_user_seeding`) so a full-lifespan test doesn't
+    #: also attempt real database writes. The passwords below are
+    #: development/demo defaults -- override every SEED_* value for any
     #: deployment reachable outside a trusted demo environment.
+    #:
+    #: Domain is `.example` (RFC 2606, reserved for documentation), not
+    #: `.local` -- `.local` is on `email_validator`'s SPECIAL_USE_DOMAIN_NAMES
+    #: block-list (it's an mDNS reserved TLD, RFC 6762), so every
+    #: `UserResponse` a seeded account round-trips through (e.g. `GET /users/
+    #: me`) fails Pydantic's `EmailStr` validation with a 500 the instant a
+    #: real HTTP request exercises it -- unit tests never caught this because
+    #: they mock the service layer and never construct a real `UserResponse`
+    #: from a seeded row.
     SEED_DEFAULT_USERS: bool = True
-    SEED_ADMIN_EMAIL: str = "admin@kachow.local"
+    SEED_ROOT_EMAIL: str = "root@kachow.example"
+    SEED_ROOT_PASSWORD: str = "Root123!"
+    SEED_ADMIN_EMAIL: str = "admin@kachow.example"
     SEED_ADMIN_PASSWORD: str = "Admin123!"
-    SEED_MANAGER_EMAIL: str = "manager@kachow.local"
+    SEED_MANAGER_EMAIL: str = "manager@kachow.example"
     SEED_MANAGER_PASSWORD: str = "Manager123!"
-    SEED_EMPLOYEE_EMAIL: str = "employee@kachow.local"
+    SEED_EMPLOYEE_EMAIL: str = "employee@kachow.example"
     SEED_EMPLOYEE_PASSWORD: str = "Employee123!"
+
+    #: Create the default routable units on startup, within the demo
+    #: company, if it has none yet (see app.domains.units.seeder). Same
+    #: idempotent, best-effort, test-disabled convention as
+    #: SEED_DEFAULT_USERS -- without it a fresh environment has no units to
+    #: route to until an admin creates one through `POST /units`.
+    SEED_DEFAULT_UNITS: bool = True
 
     # Ollama Configuration
     # Note: When running inside Docker, set OLLAMA_BASE_URL to http://host.docker.internal:11434
@@ -178,6 +267,13 @@ class Settings(BaseSettings):
     MEVZUAT_CORPUS_DIR: str = "./datasets/mevzuat"
     MEVZUAT_COLLECTION_NAME: str = "mevzuat"
 
+    # Draft few-shot style examples, curated by
+    # scripts/curate_yazisma_examples.py from datasets/resmi_yazisma. Indexed
+    # unchunked (one official letter = one point) -- see
+    # scripts/index_yazisma_examples.py.
+    RESMI_YAZISMA_EXAMPLES_PATH: str = "./datasets/resmi_yazisma/ornekler.jsonl"
+    RESMI_YAZISMA_COLLECTION_NAME: str = "resmi_yazisma_ornek"
+
     # Live legislation lookup over MCP (github.com/saidsurucu/mevzuat-mcp, MIT),
     # querying mevzuat.gov.tr directly.
     #
@@ -230,14 +326,36 @@ class Settings(BaseSettings):
     )
 
     @property
+    def effective_alembic_database_url(self) -> str:
+        """``ALEMBIC_DATABASE_URL``, or ``DATABASE_URL`` when unset.
+
+        The one place that resolves the fallback -- every other reader
+        (``alembic/env.py``, ``checkpointer_dsn`` below, ``app.infrastructure.
+        database.session.get_owner_db``) uses this property, never the raw
+        setting, so the fallback logic exists in exactly one place.
+        """
+        return self.ALEMBIC_DATABASE_URL or self.DATABASE_URL
+
+    @property
     def checkpointer_dsn(self) -> str:
-        """``DATABASE_URL`` adapted for psycopg3, the checkpointer's driver.
+        """The schema-owner connection, adapted for psycopg3, the checkpointer's driver.
+
+        Deliberately ``effective_alembic_database_url``, not ``DATABASE_URL``:
+        ``AsyncPostgresSaver.setup()`` runs ``CREATE TABLE IF NOT EXISTS`` for
+        its own checkpoint tables on every boot, which a restricted,
+        non-owner ``DATABASE_URL`` role (see that setting's own docstring)
+        has no privilege to do. The checkpoint tables are already excluded
+        from Alembic/RLS entirely (see ``alembic/env.py``'s
+        ``_CHECKPOINT_TABLE_PREFIX`` exclusion) -- they were always meant to
+        be self-managed outside the tenancy model, so owning their own
+        connection independent of the app's row-level-security posture is
+        consistent, not a workaround.
 
         SQLAlchemy's asyncpg URL scheme (``postgresql+asyncpg://``) isn't a
         driver psycopg recognises; stripping the suffix lets both drivers
         share one connection string instead of keeping two in sync.
         """
-        return self.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+        return self.effective_alembic_database_url.replace("postgresql+asyncpg://", "postgresql://")
 
     @property
     def mevzuat_mcp_args(self) -> list[str]:

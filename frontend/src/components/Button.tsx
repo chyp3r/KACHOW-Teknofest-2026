@@ -1,0 +1,83 @@
+import { Loader2 } from "lucide-react";
+import {
+  forwardRef,
+  type ButtonHTMLAttributes,
+  type ReactNode,
+} from "react";
+
+export type ButtonVariant = "primary" | "secondary" | "outline" | "ghost" | "destructive";
+export type ControlSize = "sm" | "md" | "lg";
+
+export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant;
+  size?: ControlSize;
+  leadingIcon?: ReactNode;
+  trailingIcon?: ReactNode;
+  loading?: boolean;
+  fullWidth?: boolean;
+}
+
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  {
+    variant = "primary",
+    size = "md",
+    leadingIcon,
+    trailingIcon,
+    loading = false,
+    fullWidth = false,
+    disabled,
+    className = "",
+    children,
+    type = "button",
+    ...props
+  },
+  ref,
+) {
+  const classes = [
+    "button",
+    `button-${variant}`,
+    `control-${size}`,
+    fullWidth ? "button-full" : "",
+    loading ? "is-loading" : "",
+    className,
+  ].filter(Boolean).join(" ");
+
+  return (
+    <button
+      ref={ref}
+      type={type}
+      className={classes}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      {...props}
+    >
+      {loading ? <Loader2 className="spinner" aria-hidden="true" /> : leadingIcon ? <span className="button-icon" aria-hidden="true">{leadingIcon}</span> : null}
+      <span className="button-label">{children}</span>
+      {!loading && trailingIcon ? <span className="button-icon" aria-hidden="true">{trailingIcon}</span> : null}
+    </button>
+  );
+});
+
+export interface IconButtonProps extends Omit<ButtonProps, "children" | "leadingIcon" | "trailingIcon" | "fullWidth"> {
+  "aria-label": string;
+  icon: ReactNode;
+  tooltip?: string;
+}
+
+export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
+  { icon, tooltip, className = "", variant = "ghost", size = "md", ...props },
+  ref,
+) {
+  return (
+    <Button
+      ref={ref}
+      variant={variant}
+      size={size}
+      className={`icon-button ${className}`.trim()}
+      title={tooltip}
+      {...props}
+    >
+      <span className="icon-button-glyph" aria-hidden="true">{icon}</span>
+    </Button>
+  );
+});

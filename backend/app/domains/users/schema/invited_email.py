@@ -11,6 +11,7 @@ class InvitedEmailResponse(BaseModel):
     id: str = Field(description="Unique invitation ID")
     email: EmailStr = Field(description="Invited email address")
     role: UserRole = Field(description="Pre-assigned role")
+    company_id: str = Field(description="Company the invitee will join upon registration")
     is_used: bool = Field(description="Invitation utilization status")
 
     model_config = {

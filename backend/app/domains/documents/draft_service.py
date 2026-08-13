@@ -6,7 +6,7 @@ from app.ai.guardrails.injection import scrub_extracted_text
 from app.ai.reasoning_levels import get_reasoning_level_preset
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
-from app.core.constants import AI_WORKFLOW_TIMEOUT_SECONDS
+from app.core.config import settings
 from app.domains.documents.schema.document_schema import DraftRequestSchema, DraftResponseSchema
 from app.domains.drafts import draft_recorder
 from app.infrastructure.extractors.base import BaseDocumentExtractor, DocumentExtractionError
@@ -30,16 +30,17 @@ class DraftService:
         self.routing_graph = routing_graph
 
     async def generate_draft_and_route(
-        self, request: DraftRequestSchema, user_id: Optional[str] = None
+        self, request: DraftRequestSchema, user_id: str, company_id: str
     ) -> DraftResponseSchema:
         """Execute the drafting and routing workflows sequentially.
 
         Args:
             request: The drafting request.
-            user_id: The authenticated caller's id, when known -- attached
-                to the persisted draft version (see
-                ``app.domains.drafts.draft_recorder``). ``None`` in the open
-                demo/dev path.
+            user_id: The authenticated caller's id -- attached to the
+                persisted draft version (see
+                ``app.domains.drafts.draft_recorder``).
+            company_id: The authenticated caller's company -- scopes the
+                unit list the routing workflow chooses from.
         """
         
         # 1. Fetch raw document and extract text
@@ -82,7 +83,7 @@ class DraftService:
         classification_dict = request.classification.model_dump(mode="json")
 
         draft_timeout = (
-            AI_WORKFLOW_TIMEOUT_SECONDS
+            settings.AI_WORKFLOW_TIMEOUT_SECONDS
             * 1.5
             * get_reasoning_level_preset(request.reasoning_level).timeout_multiplier
         )
@@ -174,15 +175,16 @@ class DraftService:
                     {
                         "draft": draft_content,
                         "confidence_score": confidence,
+                        "company_id": company_id,
                     },
                     config=self._trace_config()
                 ),
-                timeout=AI_WORKFLOW_TIMEOUT_SECONDS,
+                timeout=settings.AI_WORKFLOW_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError as e:
             raise AIException(
                 message="Yönlendirme kararı zaman aşımına uğradı.",
-                details={"timeout_seconds": AI_WORKFLOW_TIMEOUT_SECONDS},
+                details={"timeout_seconds": settings.AI_WORKFLOW_TIMEOUT_SECONDS},
             ) from e
         except Exception as e:
             logger.exception("Routing workflow failed")
@@ -191,7 +193,15 @@ class DraftService:
                 details={"reason": str(e)},
             ) from e
 
-        destination = routing_state.get("final_destination", "HumanApproval")
+        destination = routing_state.get("final_destination") or ""
+        # Routing could not confidently assign a unit (empty draft, low
+        # score, an LLM failure, or a hallucinated unit name) -- same flag
+        # the draft-quality gate above already uses, OR'd in rather than
+        # overwritten, since either source is a legitimate reason a human
+        # needs to look at this draft before it goes anywhere.
+        common_fields["requires_human_approval"] = common_fields[
+            "requires_human_approval"
+        ] or routing_state.get("requires_human_approval", False)
         draft_id = await draft_recorder.record_draft(
             user_id=user_id,
             session_id=None,

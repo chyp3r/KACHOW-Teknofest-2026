@@ -64,14 +64,24 @@ class ChatResumeRequest(BaseModel):
         min_length=1, max_length=128, description="Devam ettirilecek oturumun thread_id'si."
     )
     action: Literal["answer", "approve", "revise", "reject"] = Field(
-        description="answer: eksik bilgi cevapları. approve/revise/reject: taslak onay kararı."
+        description=(
+            "answer: eksik bilgi/yazım briefi cevapları. approve/revise/reject: "
+            "taslak onay kararı. reject aynı zamanda yazım briefi kapısını da iptal eder."
+        )
     )
-    answers: dict[str, str] = Field(
+    answers: dict[str, str | list[str]] = Field(
         default_factory=dict,
-        description="action='answer' için InfoQuestion.key -> kullanıcı cevabı eşlemesi.",
+        description=(
+            "action='answer' için PromptQuestion.key -> kullanıcı cevabı eşlemesi. "
+            "Çoklu seçim soruları bir liste taşır; her başka soru tek bir dizedir "
+            "(\"Sen karar ver\" seçeneği dahil, bkz. writing_brief.AUTO_ANSWER)."
+        ),
     )
     instructions: str = Field(
         default="", max_length=4000, description="action='revise' için ek talimat."
+    )
+    reason: str = Field(
+        default="", max_length=2000, description="action='reject' için red gerekçesi."
     )
     reasoning_level: Optional[ReasoningLevel] = Field(
         default=None,

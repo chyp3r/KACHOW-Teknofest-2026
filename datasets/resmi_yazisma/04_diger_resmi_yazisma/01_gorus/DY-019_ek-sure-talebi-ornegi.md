@@ -1,25 +1,35 @@
 ---
-id: DY-019
-kategori: diger_resmi_yazisma
-niyet: 01_gorus
-belge_turu: resmi_sablon
+id: "DY-019"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "01_gorus"
+niyet: "01_gorus"
+baslik: "Soruşturmacı"
 kurum: "Erzincan Binali Yıldırım Üniversitesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-019_ek-sure-talebi-ornegi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-019_ek-sure-talebi-ornegi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Ek Süre Talebi Örneği
+# Soruşturmacı
 
-- Resmî kaynak: https://ogrenciisleri.ebyu.edu.tr/disiplin-sorusturma-rehberi/
-- Doğrudan belge: https://ogrenciisleri.ebyu.edu.tr/Dosyalar/Mevzuat/disiplin%20sorusturma%20rehberi/2025-2026/Ek%20S%C3%BCre%20Talebi.docx
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-019_ek-sure-talebi-ornegi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+Ek Süre Talep örneği;
 
-## Veri kümesinde kullanım
+……………….. DEKANLIĞINA/MÜDÜRLÜĞÜNE
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+İlgi : … makamının … gün ve … sayılı yazısı.
 
-## Doğrulama notu
+İlgi yazı ile, ………………. (ilgili) hakkında ………..…..(fiil)’ini işlediği iddiası ile, …………… tarihinde, başlatılan disiplin soruşturmasında soruşturmacı olarak görevlendirilmiş bulunmaktayım. (Ek süre talebinin gerekçesi, sözgelimi soruşturmanın arz ettiği özellik ve güçlük; araya giren tatil vs.) ………….. nedeniyle soruşturmanın yasal süresi içinde bitirilmesi mümkün gözükmemektedir. Soruşturmanın tamamlanabilmesi için 2547 Sayılı Kanun’un 54. maddesinin 4. fıkrasının a bendi uyarınca ek süreye ihtiyaç bulunmaktadır. ……. gün ek süre verilmesini saygılarımla arz ederim.
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+# Soruşturmacı
+
+(İmza)
+
+…./…./….

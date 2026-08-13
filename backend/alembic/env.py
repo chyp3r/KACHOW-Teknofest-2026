@@ -17,15 +17,21 @@ from app.observability.model.run_model import RunModel, RunStepModel  # noqa: F4
 from app.observability.model.guardrail_model import GuardrailEventModel  # noqa: F401
 from app.domains.chat.model.chat_model import ChatMessageModel, ChatSessionModel  # noqa: F401
 from app.domains.drafts.model.draft_model import DraftModel  # noqa: F401
+from app.domains.units.model.unit_model import UnitModel  # noqa: F401
+from app.domains.companies.model.company_model import CompanyModel  # noqa: F401
+from app.core.authz.model.permission_grant_model import PermissionGrantModel  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Read the connection string from application settings rather than
-# alembic.ini, so migrations always target the same database the app itself
-# connects to.
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# alembic.ini. Deliberately the schema-owner connection
+# (effective_alembic_database_url), not settings.DATABASE_URL directly: from
+# Faz 3 (Postgres RLS) onward the app itself connects as a restricted,
+# non-owner role that cannot run DDL -- see DATABASE_URL/ALEMBIC_DATABASE_URL's
+# own docstrings in app.core.config.
+config.set_main_option("sqlalchemy.url", settings.effective_alembic_database_url)
 
 target_metadata = Base.metadata
 
@@ -48,7 +54,7 @@ def include_object(object_, name, type_, reflected, compare_to):
 def run_migrations_offline() -> None:
     """Emit SQL to stdout without a live database connection."""
     context.configure(
-        url=settings.DATABASE_URL,
+        url=settings.effective_alembic_database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},

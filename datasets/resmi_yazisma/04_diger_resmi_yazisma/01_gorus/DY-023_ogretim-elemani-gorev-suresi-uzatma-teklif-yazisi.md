@@ -1,25 +1,47 @@
 ---
-id: DY-023
-kategori: diger_resmi_yazisma
-niyet: 01_gorus
-belge_turu: resmi_sablon
+id: "DY-023"
+kategori: "diger_resmi_yazisma"
+alt_kategori: "01_gorus"
+niyet: "01_gorus"
+baslik: "Görev Süresi Uzatma Talebi/Talepleri …../ ….. / 20…"
 kurum: "Düzce Üniversitesi Fen Edebiyat Fakültesi"
-erisim_tarihi: 2026-07-31
-dogrulama: resmi_kaynaktan_indirildi
+kaynak: "datasets/resmi_yazisma/00_gelen_kaynaklar/diger_resmi_yazisma/DY-023_ogretim-elemani-gorev-suresi-uzatma-teklif-yazisi.docx"
+yerel_orijinal: "00_gelen_kaynaklar/diger_resmi_yazisma/DY-023_ogretim-elemani-gorev-suresi-uzatma-teklif-yazisi.docx"
+kaynak_turu: "docx"
+belge_turu: "resmi_sablon"
+erisim_tarihi: "2026-07-31"
+dogrulama: "resmi_kaynaktan_indirildi"
+extractor: "python-docx"
+used_ocr: "false"
+page_count: "1"
+quality_score: "1.0"
+rag_status: "candidate"
 ---
 
-# Öğretim Elemanı Görev Süresi Uzatma Teklif Yazısı
+# Görev Süresi Uzatma Talebi/Talepleri …../ ….. / 20…
 
-- Resmî kaynak: https://fef.duzce.edu.tr/sayfa/0468/sablon-yazilar
-- Doğrudan belge: https://cdn.duzce.edu.tr/File/GetFile/f1654ef0-7409-483d-b3cd-4ea4e40c65ae
-- Yerel asıl belge: 00_gelen_kaynaklar/diger_resmi_yazisma/DY-023_ogretim-elemani-gorev-suresi-uzatma-teklif-yazisi.docx
-- Tarih bilgisi: Kaynakta belirtilen tarih esas alınır
-- Sayfa/bölüm: Belgenin tamamı
+DÜZCE ÜNİVERSİTESİ
 
-## Veri kümesinde kullanım
+FEN EDEBİYAT FAKÜLTESİ
 
-Kişisel ve olaya özgü alanlar anonimleştirilerek şablon yapısı için kullanılmalıdır.
+………………………………………….. BÖLÜM BAŞKANLIĞI
 
-## Doğrulama notu
+**Sayı:** [EVRAK SAYISI]
 
-Bu kayıt, resmî kurum alan adındaki kaynak üzerinden 2026-07-31 tarihinde kontrol edilmiştir. Metin kartta yeniden üretilmemiştir; gerçek içerik kaynak bağlantısında ve varsa indirilen asıl dosyadadır.
+Konu: Görev Süresi Uzatma Talebi/Talepleri …../ ….. / 20…
+
+FEN EDEBİYAT FAKÜLTESİ DEKANLIĞINA
+
+Bölümümüz öğretim elemanlarından …… , ……, ……. 14/07/201…… tarihinde görev sürelerinin uzatılması talebiyle bölüm başkanlığımıza başvurmuşlardır.
+
+……………, ………., ……….……… 'ın Temmuz 20…- Temmuz 20…. tarihleri arasında yapmış oldukları etkinlikleri içeren faaliyet raporları ve dilekçeleri ekte sunulmuştur. 14/07/20… tarihinde görev süresi dolacak olan adı geçen öğretim elemanlarımızın Bölüm Başkanlığımızın uygun görüşüyle anılan kadroya yeniden atanabilmesi için gereğini bilgilerinize arz ederim.
+
+Ad Soyad
+
+……….. Bölüm Başkanı
+
+EKLER : ……….. 'a ait dilekçe ve faaliyet raporu (3 sayfa)
+
+……….. 'e ait dilekçe ve faaliyet raporu (3 sayfa)
+
+……… 'a ait dilekçe ve faaliyet raporu (3 sayfa)

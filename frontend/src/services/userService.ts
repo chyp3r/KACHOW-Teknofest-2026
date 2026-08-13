@@ -24,4 +24,14 @@ export const userService = {
     }),
   removeAccess: (id: string) =>
     apiRequest<null>(`/api/v1/users/${id}/soft`, { method: "DELETE" }),
+  deletePermanently: (id: string) =>
+    apiRequest<null>(`/api/v1/users/${id}/hard`, { method: "DELETE" }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiRequest<null>("/api/v1/users/me/password", {
+      method: "POST",
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    }),
 };

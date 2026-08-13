@@ -30,6 +30,7 @@ from app.core.enums.user_role import UserRole
 
 __all__ = [
     "BudgetPolicy",
+    "DraftPolicy",
     "GuardrailPolicy",
     "IntentPolicy",
     "MemoryPolicy",
@@ -73,50 +74,80 @@ class VerificationPolicy:
 
 @dataclass(frozen=True)
 class RoutingPolicy:
-    """The unit list and the score below which nothing may be routed.
+    """The score below which nothing may be routed automatically.
+
+    The unit list itself is no longer policy -- units are managed at runtime
+    through the ``units`` domain (``POST/PATCH/DELETE /units``, admin/manager
+    only) and read fresh on every routing decision by ``routing_graph`` via
+    ``app.domains.units.provider.get_active_units_for_routing``. There is no
+    "İnsan Onayı Gerekli" pseudo-unit anymore: when routing can't confidently
+    pick a real unit (empty draft, low score, an LLM failure, or a unit name
+    outside the current list), no unit is assigned and the existing
+    ``requires_human_approval`` flag is set instead -- the same flag the
+    draft-quality gate already uses, not a special unit value.
 
     Attributes:
         human_approval_score_threshold: Below this a draft is not trustworthy
             enough to route anywhere but a human. The *lower* of the two
             thresholds -- see :func:`Policy.check_invariants` for why the
             relationship matters.
-        units: The routing targets. Single source of truth; the ``Literal`` in
-            ``routing_graph.RouteOutput`` is checked against it by test.
-        human_approval_unit: The escape hatch inside ``units``.
     """
 
     human_approval_score_threshold: float = 50.0
-    human_approval_unit: str = "İnsan Onayı Gerekli"
-    units: tuple[str, ...] = (
-        "İnsan Kaynakları",
-        "Hukuk Müşavirliği",
-        "Mali İşler",
-        "Vatandaş İlişkileri",
-        "Bilgi İşlem Dairesi",
-        "Destek Hizmetleri",
-        "İnsan Onayı Gerekli",
-    )
 
 
 @dataclass(frozen=True)
 class IntentPolicy:
-    """Margin thresholds for the scored intent resolver.
+    """Margin thresholds for the lexical layer, and probability bands for the
+    fused decision built on top of it.
 
     Attributes:
-        presence_floor: Below this an intent is noise, not a candidate. Without
-            a floor two rules scoring 0.1 and 0.0 would read as a confident
-            decision purely because nothing contested them.
-        decisive_margin: Lead the top intent needs over the runner-up to be
-            acted on. Below it the resolver abstains.
+        presence_floor: Below this an intent is noise, not a candidate in the
+            lexical layer's own scoring. Without a floor two rules scoring 0.1
+            and 0.0 would read as a confident decision purely because nothing
+            contested them. Still meaningful as a property of
+            ``score_intents``'s output even though the top-level decision
+            (see ``tau_high``/``tau_low`` below) no longer gates on it
+            directly.
+        decisive_margin: Reference lead for the lexical layer's own margin;
+            same status as ``presence_floor`` above.
         compound_floor: Score at which both draft and analyze count as
-            independently well-attested, making the message a compound request.
-        confidence_scale: Margin that maps to full confidence.
+            independently well-attested lexically, making the message a
+            compound request. Checked on the raw additive lexical scores
+            *before* fusion runs, deliberately -- a softmax's classes compete
+            by construction, so it cannot represent "both readings are
+            independently strong" the way an additive score can (see
+            ``scripts/fit_router.py``'s module docstring).
+        confidence_scale: Margin that maps to the lexical layer's own
+            confidence in [0, 1] (``IntentScores.confidence``).
+        tau_high: Minimum fused probability for the router to commit to an
+            intent outright. Below it the ladder does not guess.
+        tau_low: Below this fused probability the fusion signal alone is too
+            thin to *report* as a committed decision, but it no longer gates
+            the model call -- a fast-tier model is asked whenever one is
+            available (see ``app.ai.workflows.planner.resolve_plan``), since
+            a low fused probability is exactly the case a model call is
+            useful for, not a reason to skip it. ``tau_low`` still bounds
+            when a clarifying question is asked instead of trusting the
+            model's own ``unclear`` verdict: only when the fused evidence is
+            this thin *and* the model couldn't separate the top two options
+            either (see ``clarify_margin``).
+        clarify_margin: Minimum lead the top fused intent must hold over the
+            runner-up for the model's ``unclear`` verdict to be honored as a
+            genuine tie rather than overridden with the fused top intent. A
+            model saying "I'm not sure" about a message the fusion layer
+            already leads clearly on (lexical evidence just happened to fall
+            under ``tau_high``) should not turn into an unnecessary question
+            -- only a genuine photo finish should.
     """
 
     presence_floor: float = 1.4
     decisive_margin: float = 1.2
     compound_floor: float = 2.6
     confidence_scale: float = 4.0
+    tau_high: float = 0.55
+    tau_low: float = 0.35
+    clarify_margin: float = 0.08
 
 
 @dataclass(frozen=True)
@@ -202,6 +233,10 @@ class BudgetPolicy:
                 # gracefully degrading to None and the node finishing on the
                 # deterministic result alone.
                 "scan_sensitivity": 25.0,
+                # Same budget as retrieve_mevzuat: an identical Qdrant/Ollama
+                # round trip, and a timeout degrades to zero style examples
+                # rather than failing the draft (see retrieve_examples_node).
+                "retrieve_examples": 25.0,
             }
         )
     )
@@ -256,12 +291,42 @@ class GuardrailPolicy:
     role_clearance_map: Mapping[UserRole, SensitivityLevel] = field(
         default_factory=lambda: MappingProxyType(
             {
+                UserRole.ROOT: SensitivityLevel.COK_GIZLI,
                 UserRole.ADMIN: SensitivityLevel.COK_GIZLI,
                 UserRole.MANAGER: SensitivityLevel.COK_GIZLI,
                 UserRole.EMPLOYEE: SensitivityLevel.HIZMETE_OZEL,
             }
         )
     )
+
+
+@dataclass(frozen=True)
+class DraftPolicy:
+    """Few-shot style-example retrieval for the draft writer.
+
+    Attributes:
+        style_examples_enabled: Master switch. False reproduces pre-feature
+            behaviour exactly (``retrieve_examples_node`` short-circuits to
+            an empty list without touching Qdrant) -- the A/B and
+            emergency-rollback lever.
+        style_example_count: Style examples requested per draft. Two, not
+            one: a single example teaches its own idiosyncrasies as if they
+            were the format; two let the writer see what varies (wording,
+            length) versus what is structurally constant (field order,
+            closing direction). Not raised further without re-measuring --
+            more examples also means more surface for
+            ``draft_verifier``'s ``ornek_sizintisi`` check to have to catch.
+        style_example_char_budget: Ceiling on the combined character length
+            of retrieved example text; the longest example is dropped first
+            past this. Sized so brief + writer.md + examples stays well
+            inside ``OLLAMA_NUM_CTX`` (8192 tokens) even in Turkish, where
+            ``CHARS_PER_TOKEN_TR`` (2.8) makes the same text cost noticeably
+            more tokens than in English.
+    """
+
+    style_examples_enabled: bool = True
+    style_example_count: int = 2
+    style_example_char_budget: int = 4000
 
 
 @dataclass(frozen=True)
@@ -276,6 +341,7 @@ class Policy:
     semantic: SemanticPolicy = field(default_factory=SemanticPolicy)
     budget: BudgetPolicy = field(default_factory=BudgetPolicy)
     guardrail: GuardrailPolicy = field(default_factory=GuardrailPolicy)
+    draft: DraftPolicy = field(default_factory=DraftPolicy)
 
     def check_invariants(self) -> None:
         """Assert the relationships between parameters that must always hold.
@@ -324,6 +390,22 @@ class Policy:
                 "compound reading cannot need less evidence than a single one"
             )
 
+        for name, value in (
+            ("intent.tau_high", self.intent.tau_high),
+            ("intent.tau_low", self.intent.tau_low),
+        ):
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be a probability in [0, 1]")
+
+        if self.intent.tau_low >= self.intent.tau_high:
+            raise ValueError(
+                "intent.tau_low must stay below intent.tau_high -- otherwise the "
+                "model-call band between them is empty or inverted"
+            )
+
+        if not 0.0 <= self.intent.clarify_margin <= 1.0:
+            raise ValueError("intent.clarify_margin must be a probability gap in [0, 1]")
+
         if self.memory.history_raw_cap <= self.memory.history_window:
             raise ValueError(
                 "memory.history_raw_cap must exceed memory.history_window so "
@@ -340,9 +422,6 @@ class Policy:
                     f"ceiling ({ceiling}s)"
                 )
 
-        if routing.human_approval_unit not in routing.units:
-            raise ValueError("routing.human_approval_unit must be one of routing.units")
-
         guardrail = self.guardrail
         for name, value in (
             ("guardrail.output_groundedness_threshold", guardrail.output_groundedness_threshold),
@@ -358,3 +437,8 @@ class Policy:
                 "guardrail.role_clearance_map is missing entries for: "
                 f"{sorted(role.value for role in missing_roles)}"
             )
+
+        if self.draft.style_example_count <= 0:
+            raise ValueError("draft.style_example_count must be positive")
+        if self.draft.style_example_char_budget <= 0:
+            raise ValueError("draft.style_example_char_budget must be positive")

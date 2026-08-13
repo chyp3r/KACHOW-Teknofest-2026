@@ -13,6 +13,7 @@ from app.ai.workflows.events import (
     emit_node_skipped,
     emit_node_start,
     emit_partial,
+    emit_reply_stream,
     emit_token,
     get_status_queue,
 )
@@ -175,6 +176,32 @@ async def test_seq_is_monotonic_per_queue_and_independent_across_queues():
     assert queue_a.get_nowait()["seq"] == 1
     assert queue_b.get_nowait()["seq"] == 1
     assert queue_a.get_nowait()["seq"] == 2
+
+
+@pytest.mark.asyncio
+async def test_emit_reply_stream_chunks_the_text_and_reassembles_exactly():
+    queue: asyncio.Queue = asyncio.Queue()
+    text = "Sayın Makam, " * 10 + "Arz ederim."
+
+    await emit_reply_stream(queue, text, chunk_size=8)
+
+    chunks = []
+    while not queue.empty():
+        event = queue.get_nowait()
+        assert event["event"] == "token"
+        assert event["node"] == "reply"
+        chunks.append(event["text"])
+
+    assert "".join(chunks) == text
+    assert len(chunks) > 1
+
+
+@pytest.mark.asyncio
+async def test_emit_reply_stream_is_a_no_op_for_empty_text_or_no_queue():
+    queue: asyncio.Queue = asyncio.Queue()
+    await emit_reply_stream(queue, "")
+    assert queue.empty()
+    await emit_reply_stream(None, "merhaba")  # must not raise
 
 
 def test_child_config_returns_empty_dict_for_no_parent_config():
