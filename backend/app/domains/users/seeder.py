@@ -29,7 +29,7 @@ from app.core.enums.user_role import UserRole
 from app.core.security import hash_password
 from app.domains.users.model.user_model import UserModel
 from app.domains.users.repository import UserRepository
-from app.infrastructure.database.session import AsyncSessionLocal
+from app.infrastructure.database.session import OwnerAsyncSessionLocal, tenant_session
 
 logger = logging.getLogger(__name__)
 
@@ -86,15 +86,33 @@ def _seed_accounts(company_id: Optional[str]) -> list[_SeedAccount]:
 async def _seed_one(account: _SeedAccount) -> bool:
     """Create one account if it doesn't already exist.
 
+    The existence check runs on the schema-owner connection
+    (`OwnerAsyncSessionLocal`), not a tenant-scoped one: `username`/`email`
+    are unique *system-wide* (`UserModel`'s own `unique=True` columns), not
+    per company, so "does this already exist" has to see every company, the
+    same reasoning as `app.infrastructure.database.session.get_owner_db`.
+    Checking it under a single company's row-level-security scope instead
+    was tried first and broke exactly this way: two different companies can
+    each be seeded with a user named "admin", the per-company-scoped check
+    can't see the other one, and the insert then fails on the *global*
+    unique constraint anyway -- just later, and as an unhandled
+    `IntegrityError` instead of a clean "already exists, skip".
+
+    The insert itself does use `tenant_session` -- `users` is under
+    row-level security (migration `0013_rls`) and this write has no request
+    to read a tenant `ContextVar` from, so it must supply the target
+    company_id (or `is_root=True` for the root account, which has none)
+    explicitly.
+
     Returns:
         True if a new row was created, False if it already existed (by
         email or by username) and nothing was done.
     """
-    async with AsyncSessionLocal() as session:
-        repository = UserRepository(session)
-        if await repository.get_by_email(account.email) is not None:
+    async with OwnerAsyncSessionLocal() as check_session:
+        check_repository = UserRepository(check_session)
+        if await check_repository.get_by_email(account.email) is not None:
             return False
-        if await repository.get_by_username(account.username) is not None:
+        if await check_repository.get_by_username(account.username) is not None:
             logger.warning(
                 "Seed account username '%s' is already taken by a different "
                 "email; skipping.",
@@ -102,6 +120,9 @@ async def _seed_one(account: _SeedAccount) -> bool:
             )
             return False
 
+    is_root = account.role == UserRole.ROOT.value
+    async with tenant_session(account.company_id, is_root=is_root) as session:
+        repository = UserRepository(session)
         user = UserModel(
             id=str(uuid4()),
             company_id=account.company_id,

@@ -23,7 +23,7 @@ from uuid import uuid4
 from app.core.config import settings
 from app.domains.units.model.unit_model import UnitModel
 from app.domains.units.repository import UnitRepository
-from app.infrastructure.database.session import AsyncSessionLocal
+from app.infrastructure.database.session import tenant_session
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ async def _seed_one(unit: _SeedUnit, company_id: str) -> bool:
         True if a new row was created, False if a unit with that name
         already existed and nothing was done.
     """
-    async with AsyncSessionLocal() as session:
+    async with tenant_session(company_id) as session:
         repository = UnitRepository(session)
         if await repository.get_by_name(unit.name, company_id) is not None:
             return False

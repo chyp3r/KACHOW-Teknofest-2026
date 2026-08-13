@@ -2,6 +2,27 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.2.0] - 2026-08-13
+### Eklendi
+- **Postgres Row-Level Security -- Faz 3**: `kachow_app` rolü (`NOSUPERUSER`, tablo sahipliği yok, yalnızca DML) -- backend artık şema sahibi olarak değil bu rolle bağlanıyor (`settings.DATABASE_URL`). `ENABLE`+`FORCE ROW LEVEL SECURITY` ve bir `tenant_isolation` policy'si `users`/`units`/`documents`/`invited_emails`/`permission_grants` üzerinde: `company_id = current_setting('app.current_company_id', true) OR current_setting('app.is_root', true) = 'on'`. Migration `0013_rls` idempotent (mevcut volume'lerde `scripts/init-db.sh` yeniden çalışmadığı için); taze volume'ler için aynı kurulum `scripts/init-db.sh`'a da eklendi.
+- **Yeni `app.core.context`/`app.api.middleware.tenant.TenantContextMiddleware`**: JWT'nin `company_id`/`role` claim'lerini bir istek başlamadan önce bir `ContextVar`'a yazıyor; `get_db` oturumu açar açmaz bunu Postgres GUC'larına (`app.current_company_id`, `app.is_root`) basıyor -- ilk statement olarak, `SET LOCAL`in transaction'sız buharlaşması tuzağına karşı.
+- **`ALEMBIC_DATABASE_URL` + `get_owner_db`**: Alembic ve üç "kiracı-öncesi" uç nokta (`POST /auth/login`, `POST /auth/refresh`, `POST /users` kayıt) artık şema-sahibi bağlantısını kullanıyor -- `username`/`email` şirket bazında değil sistem genelinde benzersiz olduğu için, hangi şirket olduğu henüz bilinmeden bir kullanıcıyı bulmak zorundalar.
+- **`tenant_session(company_id, is_root)`**: İstek-dışı yazıcılar (`units/provider.py`, users/units seeder'ları) için `get_db`'nin GUC-basma mantığının eşdeğeri.
+- `tests/integration/` altına gerçek Postgres'e karşı çalışan yeni bir entegrasyon paketi: `test_rls_role_is_not_owner.py` (rolün gerçekten tablo sahibi olmadığının ve RLS bayraklarının gerçekten açık olduğunun doğrulanması -- "RLS sessizce hiçbir şey yapmıyor" tuzağını yakalayan test), `test_rls_isolation.py` (çapraz şirket izolasyonu, `kachow_app` üzerinden SQL seviyesinde), `test_tenant_repository_scoping.py` (RLS tamamen kapalıyken bile repository katmanının tek başına yeterli olduğunun kanıtı). Yeni `tests/integration/conftest.py`: oturum başına bir kerelik, gerçek `alembic upgrade head` ile migrate edilmiş atılabilir test veritabanı.
+
+### Değiştirildi
+- `checkpointer_dsn` artık şema-sahibi bağlantısını kullanıyor -- `AsyncPostgresSaver.setup()` kendi checkpoint tablolarını her açılışta `CREATE TABLE IF NOT EXISTS` ile kuruyor, kısıtlı `kachow_app` rolünün DDL yetkisi yok.
+
+### Düzeltildi
+- **Canlı doğrulama sırasında bulunan iki gerçek hata** (RLS öncesinde de vardı, RLS onları ortaya çıkardı): `users/seeder.py::_seed_one`'ın var-olma kontrolü şirket-scope'lu bir oturumda çalışıyordu, ama `username`/`email` global benzersiz -- iki şirkete aynı "admin" kullanıcı adını seed etmeye çalışmak kontrolü değil global unique constraint'i tetikleyip çöküyordu; kontrol artık şema-sahibi bağlantısında. `AuthService.refresh_access_token`'ın ürettiği yeni access token `company_id` claim'ini taşımıyordu -- RLS öncesi zararsızdı, sonrasında o token'la yapılan her istek "User not found" ile başarısız oluyordu.
+
+### Test
+- `docker compose exec backend pytest -q` → 1548 test geçti (1522 mevcut + 26 yeni entegrasyon testi). Gerçek, çalışan Docker yığınına karşı uçtan uca doğrulama: rol/GUC/RLS bayrakları doğrudan `psql` ile, sonra tam HTTP akışı (login, refresh, kayıt/davet, root'un şirketler arası erişimi, kimliksiz istek → 401, `units`/`permission_grants` üzerinde gerçek yazma/okuma) `kachow_app` bağlantısı üzerinden.
+
+**Not — kapsam yalnızca backend'i içerir.** `drafts`/`chat_sessions`/`chat_messages`/`runs`/`run_steps`/`guardrail_events` bilinçli olarak RLS dışı bırakıldı (`company_id` hâlâ nullable, Faz 1'in ertelemesi). Sonraki fazlar (evrak havuzu/taslak dağıtımı, analitik/denetim) ayrı issue'larda takip edilecektir.
+
+Refs: [#171](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/171)
+
 ## [3.1.0] - 2026-08-13
 ### Eklendi
 - **ABAC yetkilendirme motoru -- Faz 2**: Yeni `app.core.authz` paketi, kendi PDP'imiz (OPA/Casbin değil) -- `app.ai.policy.schema.Policy`'nin frozen/import-time-doğrulanan dataclass deseniyle aynı. `engine.authorize(subject, action, resource, env, grants)`: saf fonksiyon, DB/Redis bağımlılığı yok, karar sırası kiracı kapısı → açık `deny` yetkisi → en yüksek öncelikli `permit` yetkisi → yerleşik rol kuralları (`rules.BUILTIN_RULES`) → örtük red.

@@ -14,6 +14,7 @@ from app.api.middleware import (
     CorrelationIdMiddleware,
     ResponseTimeMiddleware,
     StructuredLoggingMiddleware,
+    TenantContextMiddleware,
 )
 from app.api.router import api_router
 from app.core.config import settings
@@ -49,6 +50,10 @@ app.add_middleware(
 app.add_middleware(StructuredLoggingMiddleware)
 app.add_middleware(ResponseTimeMiddleware)
 app.add_middleware(CorrelationIdMiddleware)
+# Sets the tenant ContextVar app.infrastructure.database.session.get_db reads
+# to apply Postgres RLS's GUCs -- must run before any route dependency (incl.
+# get_db itself) executes, same as CorrelationIdMiddleware above.
+app.add_middleware(TenantContextMiddleware)
 
 # Prometheus /metrics: default HTTP instrumentation plus the AI-specific
 # collectors (node/LLM latency, draft scores, HITL counters, ...).

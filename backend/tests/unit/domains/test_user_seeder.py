@@ -2,8 +2,15 @@
 
 SEED_DEFAULT_USERS is off globally in tests (see conftest.py's
 `_disable_default_user_seeding`), so every test here explicitly re-enables
-it and stands in for `AsyncSessionLocal` with a mock session rather than
-hitting a real database -- same approach as test_run_recorder.py.
+it and stands in for `OwnerAsyncSessionLocal`/`tenant_session` with a mock
+session rather than hitting a real database -- same approach as
+test_run_recorder.py. Both session sources are pointed at the *same* mock
+(see `enabled_session` below): `_seed_one` opens one for its pre-existence
+check (schema-owner, sees every company -- see that function's own
+docstring) and a second, tenant-scoped one for the actual insert, but a
+single shared mock keeps `execute.side_effect`'s call ordering meaningful
+across both without the test needing to know or care which physical
+session each call went through.
 """
 
 from unittest.mock import AsyncMock, MagicMock
@@ -39,12 +46,17 @@ def mock_session():
 
 @pytest.fixture
 def enabled_session(monkeypatch, mock_session):
-    """Turn seeding on and point AsyncSessionLocal at a mock session."""
+    """Turn seeding on and point OwnerAsyncSessionLocal/tenant_session at a mock session."""
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "SEED_DEFAULT_USERS", True)
     monkeypatch.setattr(
-        seeder, "AsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
+        seeder, "OwnerAsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
+    )
+    monkeypatch.setattr(
+        seeder,
+        "tenant_session",
+        lambda company_id, is_root=False: _FakeSessionContext(mock_session),
     )
     return mock_session
 
@@ -158,7 +170,12 @@ async def test_seed_default_users_is_a_noop_when_disabled(monkeypatch, mock_sess
 
     monkeypatch.setattr(settings, "SEED_DEFAULT_USERS", False)
     monkeypatch.setattr(
-        seeder, "AsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
+        seeder, "OwnerAsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
+    )
+    monkeypatch.setattr(
+        seeder,
+        "tenant_session",
+        lambda company_id, is_root=False: _FakeSessionContext(mock_session),
     )
 
     await seeder.seed_default_users("company-1")
