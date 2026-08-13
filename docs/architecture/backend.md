@@ -427,9 +427,12 @@ Dört sabit denetim katmanı, bu sırayla:
    parametresi alır ve ona göre filtreler (bkz. `app.domains.documents.
    repository.DocumentRepository`'nin kendi docstring'i). Postgres Row-Level
    Security ile ikinci savunma hattı sonraki bir fazda eklenecektir.
-2. **Sahiplik/rol** -- `app.core.permissions.role_checker.bypasses_ownership`:
-   ADMIN/MANAGER/ROOT bir kaynağı sahibi olmasalar bile görebilir, ama
-   yalnızca **kendi şirketleri içinde** (kiracı kapsamı asla atlanmaz).
+2. **ABAC kararı** -- `app.core.authz.engine.authorize` (bkz. aşağıdaki "ABAC
+   Yetkilendirme Motoru" bölümü). `role_checker.bypasses_ownership` hâlâ
+   var ve list/filtre kararlarında (`GET /documents` gibi) kullanılıyor, ama
+   tekil kaynak erişim kontrolleri artık bu motora taşındı: ADMIN/MANAGER/
+   ROOT bir kaynağı sahibi olmasalar bile görebilir, ama yalnızca **kendi
+   şirketleri içinde** (kiracı kapsamı asla atlanmaz).
 3. **Gizlilik derecesi** -- `role_checker.clearance_for`/`assert_clearance`,
    şirket sınırından bağımsız, ortogonal bir merdiven (`SensitivityLevel`).
 4. **Guardrail'ler** -- `app.ai.guardrails.output_gate`,
@@ -447,6 +450,72 @@ derinlerinden (`PlanningState` üzerinden, `user_id`'nin bugün taşındığı
 şekilde) yazılır ve `company_id`'nin oraya taşınması ayrı bir faz olarak
 planlanmıştır (bkz. `app.observability.model.run_model.RunModel.company_id`
 docstring'i).
+
+## ABAC Yetkilendirme Motoru (`app.core.authz`)
+
+Kendi PDP'imiz -- OPA/Casbin gibi harici bir policy engine değil.
+`app.ai.policy.schema.Policy`'nin frozen/import-time-doğrulanan dataclass
+deseniyle aynı: kurallar `app.core.authz.rules.BUILTIN_RULES` içinde
+donmuş bir Python tuple'ı, saf fonksiyon değerlendirici `app.core.authz.
+engine.authorize`. Neden harici bir motor değil: repo'nun test altyapısı
+neredeyse tamamen mock tabanlı -- DB/ağ bağımlılığı olmayan saf bir
+fonksiyon, gerçek Postgres/Redis'e ihtiyaç duymadan tamamen unit-test
+edilebiliyor (bkz. `tests/unit/core/authz/test_engine.py`).
+
+**Katmanlar**:
+
+* `attributes.py` -- `Subject`/`Resource`/`Environment` dataclass'ları ve
+  `Action` sabitleri (`"document:read"`, `"draft:send"`, ...).
+* `rules.py` -- yerleşik rol/eylem kuralları. ROOT sınırsız (`"*"`);
+  ADMIN/MANAGER her `Action` için şirket geneli (`scope="any"`); EMPLOYEE
+  yalnızca kendi sahip olduğu kaynaklarda (`scope="own"`).
+* `engine.py::authorize(subject, action, resource, env, grants)` -- karar
+  algoritması: (0) kiracı kapısı, (1) açık `deny` yetkisi kazanır, (2) en
+  yüksek `priority`'li `permit` yetkisi, (3) yerleşik kurallar, (4) örtük
+  red. `grants` boş bırakılırsa (çoğu router çağrısı böyle yapar) yalnızca
+  0/3/4 adımları çalışır -- DB'ye hiç gidilmez.
+* `permission_grants` tablosu (`model/permission_grant_model.py` +
+  `repository.py`) -- PAP (Policy Administration Point) deposu. Bir yönetici
+  bir çalışana rol dışı bir yetki devrettiğinde (örn. `document:delete`,
+  yalnızca kendi yüklediği evraklar üzerinde) burada bir satır oluşur.
+  `valid_from`/`valid_until` aynı şema üzerinden süreli
+  yetki/delegasyon/break-glass'i verir -- ayrı bir tablo yok.
+* `cache.py::AuthzDecisionCache` -- Redis epoch-tabanlı karar önbelleği.
+  Geçersizleştirme `INCR authz:epoch:{company_id}` ile -- asla `SCAN`/`DEL`
+  değil (bkz. modülün kendi docstring'i). Zaman sınırlı (time-boxed) bir
+  yetkiye dayanan kararlar hiç önbelleğe alınmaz.
+* `service.py::AuthzService` -- önbellek + DB `permission_grants` + saf
+  motoru saran async orkestrasyon katmanı. Yalnızca gerçekten
+  `permission_grants`'a ihtiyaç duyan tüketiciler bunu kullanır (bugün:
+  yetki yönetimi uçları) -- `documents`/`drafts` router'larındaki sahiplik
+  kontrolleri saf `engine.authorize`'ı DB'siz çağırır (bkz. aşağıda).
+* `dependency.py::require_permission` -- PEP #1, FastAPI dependency
+  factory'si. `api/dependency.py::require_roles` artık bu paketin
+  `engine.role_permitted`'ine ince bir shim -- davranış değişmedi, tek
+  kaynak burada.
+
+**İki tüketim şekli, kasıtlı olarak**:
+
+1. **DB'siz (hot path)** -- `documents/router.py::_authorize_document`,
+   `drafts/router.py::_assert_owns_draft`: `engine.authorize`'ı `grants=()`
+   ile çağırır. `bypasses_ownership`'in eski davranışını birebir üretir,
+   sıfır ek DB/Redis round-trip'i ile. Beş ayrı yerde tekrarlanan
+   `if resource.owner_id != current_user.id and not bypasses_ownership(...)`
+   deseni tek bir çağrıya indi.
+2. **DB destekli** -- `AuthzService` üzerinden, yetki yönetimi uçlarında
+   (`POST/GET /users/{id}/permissions`, `DELETE /users/permissions/{id}`).
+   Yetki devri sırasında **ayrıcalık yükseltmesi önlenir**: devreden
+   (granter) `authz.authorize()` ile kendi kimliğiyle aynı kontrolden
+   geçirilir -- sahip olmadığı bir yetkiyi kimseye devredemez.
+
+Gizlilik derecesi (`role_checker.clearance_for`/`assert_clearance`) bu
+motora **katılmaz** -- yukarıdaki dört katman listesinin 3. maddesi olarak
+ayrı, sıralı bir kapı olarak kalır. Sebep: `app.ai.tools.document_tools`
+clearance'ı doğrudan karşılaştırıp modele bir red string'i döndürüyor
+(exception fırlatmıyor) ve derlenmiş bir LangGraph node'unun içinden
+çağrılıyor -- `app.ai.*`'nin `app.domains.*` import edemeyeceği katman
+kuralı gereği oraya DB destekli bir PDP enjekte etmek bu kuralı ihlal
+ederdi (bkz. `app.core.authz`'in kendi paket docstring'i).
 
 ---
 

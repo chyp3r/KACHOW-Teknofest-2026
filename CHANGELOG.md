@@ -2,6 +2,25 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.1.0] - 2026-08-13
+### Eklendi
+- **ABAC yetkilendirme motoru -- Faz 2**: Yeni `app.core.authz` paketi, kendi PDP'imiz (OPA/Casbin değil) -- `app.ai.policy.schema.Policy`'nin frozen/import-time-doğrulanan dataclass deseniyle aynı. `engine.authorize(subject, action, resource, env, grants)`: saf fonksiyon, DB/Redis bağımlılığı yok, karar sırası kiracı kapısı → açık `deny` yetkisi → en yüksek öncelikli `permit` yetkisi → yerleşik rol kuralları (`rules.BUILTIN_RULES`) → örtük red.
+- **`permission_grants` tablosu (PAP deposu)**: `subject_type`/`subject_id`, `action`, `resource_type`/`resource_selector`, `effect`, `priority`, `valid_from`/`valid_until` (süreli yetki/delegasyon/break-glass, ayrı şema gerekmeden), `granted_by`, `revoked_at`, `reason`. Migration `0012_permission_grants`.
+- **Redis epoch-tabanlı karar önbelleği** (`app.core.authz.cache.AuthzDecisionCache`): geçersizleştirme `INCR authz:epoch:{company_id}` ile, asla `SCAN`/`DEL` değil. Zaman sınırlı bir yetkiye dayanan kararlar hiç önbelleğe alınmaz; kiracı-uyuşmazlığı red kararları da (bedava yeniden hesaplanır, önbelleklemesi ayak kurşunu). `RedisCache.incr()` eklendi.
+- **Yetki yönetimi uçları**: `POST/GET /api/v1/users/{id}/permissions`, `DELETE /api/v1/users/permissions/{grant_id}` (Admin/Manager, kendi şirketi). Yetki devrinde **ayrıcalık yükseltmesi engellenir**: devreden kişi aynı eylemi kendi kimliğiyle de gerçekleştiremiyorsa istek `403` ile reddedilir.
+- `docs/api/permissions.md` ve `docs/architecture/backend.md`'ye yeni "ABAC Yetkilendirme Motoru" bölümü eklendi.
+
+### Değiştirildi
+- **Beş ayrı yerde tekrarlanan sahiplik kontrolü tek bir çağrıya indi**: `documents/router.py` (4 uç nokta) ve `drafts/router.py::_assert_owns_draft`'taki `if resource.owner_id != current_user.id and not bypasses_ownership(...)` deseni artık tek bir `engine.authorize()` çağrısı (`_authorize_document`/`_assert_owns_draft` içinde). Bilinçli tasarım kararı: bu hot path'ler saf, DB'siz motoru (`grants=()`) çağırıyor -- `bypasses_ownership`'in eski davranışını birebir üretiyor, sıfır yeni DB/Redis round-trip'i ile; `permission_grants`'ın gerçekten tüketilmesi (DB destekli `AuthzService`) yalnızca yetki yönetimi uçlarında.
+- **`require_roles` artık `engine.role_permitted`'e ince bir shim** (`api/dependency.py`) -- davranış birebir aynı, tek kaynak `app.core.authz` paketinde.
+
+### Test
+- `tests/unit/core/authz/` -- motor (deny kazanır, öncelik sıralaması, süre dolumu/cacheable bayrağı, kiracı kapısı, seçici eşleştirme), repository (DB satırı → `GrantView` dönüşümü) ve servis (önbellek isabet/kaçırma, epoch bump, root'un grant çözümlemesini atlaması) için 38 yeni test. `tests/unit/domains/test_permission_grant_router.py` -- yetki verme/listeleme/geri alma uçları, ayrıcalık yükseltmesi reddi, employee 403 kilidi için 8 yeni test. Mevcut 1476 test, davranış değişmediği için **hiç değişiklik gerekmeden** geçti (`test_ownership.py` dahil). Migration `0012` gerçek geliştirme veritabanına karşı upgrade+downgrade+upgrade ile doğrulandı.
+
+**Not — kapsam yalnızca backend'i içerir.** Frontend (yetki yönetimi arayüzü) bu sürüme dahil değildir. Sonraki fazlar (Postgres RLS, evrak havuzu, taslak dağıtımı/bildirimler, analitik/denetim) ayrı issue'larda takip edilecektir.
+
+Refs: [#169](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/169)
+
 ## [3.0.0] - 2026-08-13
 ### Eklendi
 - **Çok kiracılı (multi-tenant) şirket sistemi -- Faz 1: Tenancy temeli**: Sistem artık `root` / `company_admin` / `company_manager` / `employee` olmak üzere dört rollü, şirket (`companies`) bazlı çok kiracılı bir mimari. Yeni `app.domains.companies` domain'i: `CompanyModel` (`id`, `name`, `slug` benzersiz, `tax_number`, `is_active`, `is_deleted`, `settings` JSON, `created_by`), `POST/GET /api/v1/companies`, `GET/PATCH /api/v1/companies/{id}`, `POST /api/v1/companies/{id}/admins` (mevcut bir şirket kullanıcısını Admin'e yükseltir, cross-tenant self-escalation'a karşı kullanıcının zaten o şirkete ait olduğunu doğrular), `DELETE /api/v1/companies/{id}` (yumuşak silme). Tümü Root'a, detay/güncelleme ayrıca o şirketin kendi Admin'ine açık.

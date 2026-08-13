@@ -36,6 +36,13 @@ from app.domains.users.service import UserService
 from app.api.exceptions.authentication import AuthenticationException
 from app.api.exceptions.authorization import AuthorizationException
 from app.infrastructure.cache import get_cache
+# Re-exported so every router keeps importing its dependency callables from
+# this one module -- see app.core.authz.dependency's own docstring.
+from app.core.authz.dependency import (  # noqa: F401
+    get_authz_service,
+    require_permission,
+    subject_from_user,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,10 +80,23 @@ async def get_current_user(
 
 
 def require_roles(*allowed_roles: UserRole):
-    """Dependency factory that enforces role-based access control on a route."""
+    """Dependency factory that enforces role-based access control on a route.
+
+    A thin shim over the ABAC PDP's ``role_permitted`` (see
+    ``app.core.authz.engine``), per the tenancy plan's ABAC design -- so the
+    role-membership check every route already relied on lives in one place
+    alongside the rest of the engine, rather than being reimplemented here.
+    Behaviour is unchanged: same membership test, same exception on a
+    mismatch, so no existing route or test changes.
+    """
+    from app.core.authz.engine import role_permitted
 
     async def _check_role(current_user: UserModel = Depends(get_current_user)) -> UserModel:
-        if current_user.role not in [role.value for role in allowed_roles]:
+        try:
+            role = UserRole(current_user.role)
+        except ValueError:
+            raise AuthorizationException(message="You do not have permission to perform this action.")
+        if not role_permitted(role, allowed_roles):
             raise AuthorizationException(message="You do not have permission to perform this action.")
         return current_user
 
