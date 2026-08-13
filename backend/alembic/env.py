@@ -19,6 +19,7 @@ from app.domains.chat.model.chat_model import ChatMessageModel, ChatSessionModel
 from app.domains.drafts.model.draft_model import DraftModel  # noqa: F401
 from app.domains.units.model.unit_model import UnitModel  # noqa: F401
 from app.domains.companies.model.company_model import CompanyModel  # noqa: F401
+from app.core.authz.model.permission_grant_model import PermissionGrantModel  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

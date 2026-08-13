@@ -5,7 +5,9 @@ from fastapi import APIRouter, Depends
 from app.api.dependency import get_draft_history_service, require_auth_if_enabled
 from app.api.exceptions.authorization import AuthorizationException
 from app.api.responses import SuccessResponse
-from app.core.permissions.role_checker import bypasses_ownership
+from app.core.authz.attributes import Action, Resource
+from app.core.authz.dependency import subject_from_user
+from app.core.authz.engine import authorize
 from app.domains.drafts.model.draft_model import DraftModel
 from app.domains.drafts.schema.draft_schema import DraftResponse
 from app.domains.drafts.service import DraftService
@@ -22,16 +24,26 @@ router = APIRouter(
 def _assert_owns_draft(draft: DraftModel, current_user: UserModel) -> None:
     """Refuse to hand back a draft the caller doesn't own.
 
-    ADMIN/MANAGER/ROOT see every draft company-wide, the same as
-    ``bypasses_ownership`` everywhere else. Note: not yet company-scoped at
-    the query level -- see ``ChatSessionModel.company_id``'s docstring for
-    why (``drafts.company_id`` has the same Faz 3-deferred population).
+    Single ABAC decision (bare, grant-less ``engine.authorize`` -- see
+    ``documents/router.py::_authorize_document``'s docstring for why no DB
+    round trip here) replacing the old ``draft.user_id``/
+    ``bypasses_ownership`` check. ADMIN/MANAGER/ROOT see every draft
+    company-wide, EMPLOYEE only its own -- same outcome as before. Note:
+    not yet company-scoped at the query level -- see
+    ``ChatSessionModel.company_id``'s docstring for why (``drafts.
+    company_id`` has the same Faz 3-deferred population); ``engine.
+    authorize``'s tenant gate is a no-op while ``draft.company_id`` is
+    ``None``, same as this check doing no company comparison at all today.
 
     Raises:
         AuthorizationException: If ``draft.user_id`` belongs to a different
             user than ``current_user`` (and it isn't ADMIN/MANAGER/ROOT).
     """
-    if draft.user_id != current_user.id and not bypasses_ownership(current_user):
+    resource = Resource(
+        type="draft", id=draft.id, company_id=draft.company_id, owner_id=draft.user_id
+    )
+    decision = authorize(subject_from_user(current_user), Action.DRAFT_READ, resource)
+    if not decision.permit:
         raise AuthorizationException(message="Bu taslağa erişim izniniz yok.")
 
 

@@ -9,9 +9,15 @@ from app.domains.users.schema.invited_email import InvitedEmailCreate, InvitedEm
 from app.domains.users.repository import UserRepository
 from app.domains.users.service import UserService
 from app.domains.users.model.user_model import UserModel
-from app.api.dependency import get_current_user, require_roles
+from app.api.dependency import get_authz_service, get_current_user, require_roles, subject_from_user
+from app.core.authz.attributes import Resource
+from app.core.authz.model.permission_grant_model import PermissionGrantModel
+from app.core.authz.repository import PermissionGrantRepository
+from app.core.authz.schema import PermissionGrantCreate, PermissionGrantResponse
+from app.core.authz.service import AuthzService
 from app.core.enums.user_role import UserRole
 from app.api.exceptions.authorization import AuthorizationException
+from app.api.exceptions.not_found import NotFoundException
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -151,4 +157,93 @@ async def hard_delete(
     repository = UserRepository(db)
     service = UserService(repository)
     await service.hard_delete_user(user_id, current_user.company_id)
+    return SuccessResponse(data=None)
+
+
+@router.post("/{user_id}/permissions", response_model=APIResponse[PermissionGrantResponse])
+async def grant_permission(
+    user_id: str,
+    schema: PermissionGrantCreate,
+    current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+    db: AsyncSession = Depends(get_db),
+    authz: AuthzService = Depends(get_authz_service),
+):
+    """Delegate a permission to a company user (Admin/Manager only).
+
+    Privilege non-escalation: the granter itself must be authorized for
+    ``schema.action`` (checked with its own identity standing in for the
+    resource's owner) before it may hand that action to someone else -- a
+    manager who only holds a delegated ``document:delete`` grant cannot in
+    turn grant ``draft:send``, since it was never granted that itself. Built
+    -in ADMIN/MANAGER role rules already cover every action defined today
+    (see ``app.core.authz.rules.BUILTIN_RULES``), so this check only starts
+    actually restricting once a manager's own permissions are themselves
+    grant-derived rather than role-derived.
+    """
+    user_repository = UserRepository(db)
+    target = await user_repository.get_by_id_in_company(user_id, current_user.company_id)
+    if target is None:
+        raise NotFoundException(message="Kullanıcı bulunamadı.")
+
+    self_check_resource = Resource(
+        type=schema.resource_type, company_id=current_user.company_id, owner_id=current_user.id
+    )
+    granter_decision = await authz.authorize(
+        subject_from_user(current_user), schema.action, self_check_resource
+    )
+    if not granter_decision.permit:
+        raise AuthorizationException(message="Sahip olmadığınız bir yetkiyi devredemezsiniz.")
+
+    grant_repository = PermissionGrantRepository(db)
+    grant = await grant_repository.create(
+        PermissionGrantModel(
+            company_id=current_user.company_id,
+            subject_type="user",
+            subject_id=user_id,
+            action=schema.action,
+            resource_type=schema.resource_type,
+            resource_selector=schema.resource_selector,
+            effect=schema.effect,
+            priority=schema.priority,
+            valid_from=schema.valid_from,
+            valid_until=schema.valid_until,
+            granted_by=current_user.id,
+            reason=schema.reason,
+        )
+    )
+    await authz.invalidate_company(current_user.company_id)
+    return SuccessResponse(data=PermissionGrantResponse.model_validate(grant).model_dump(mode="json"))
+
+
+@router.get("/{user_id}/permissions", response_model=APIResponse[List[PermissionGrantResponse]])
+async def list_permissions(
+    user_id: str,
+    current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+    db: AsyncSession = Depends(get_db),
+):
+    """List every non-revoked permission explicitly granted to a company user (Admin/Manager only)."""
+    grant_repository = PermissionGrantRepository(db)
+    grants = await grant_repository.list_for_user(current_user.company_id, user_id)
+    return SuccessResponse(
+        data=[PermissionGrantResponse.model_validate(g).model_dump(mode="json") for g in grants]
+    )
+
+
+@router.delete("/permissions/{grant_id}", response_model=APIResponse[None])
+async def revoke_permission(
+    grant_id: str,
+    current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+    db: AsyncSession = Depends(get_db),
+    authz: AuthzService = Depends(get_authz_service),
+):
+    """Revoke a permission grant (Admin/Manager only, own company).
+
+    The revoked row is kept, not deleted (see
+    ``PermissionGrantModel.revoked_at``'s docstring) -- its own audit trail.
+    """
+    grant_repository = PermissionGrantRepository(db)
+    revoked = await grant_repository.revoke(grant_id, current_user.company_id)
+    if not revoked:
+        raise NotFoundException(message="Yetki bulunamadı ya da zaten geri alınmış.")
+    await authz.invalidate_company(current_user.company_id)
     return SuccessResponse(data=None)

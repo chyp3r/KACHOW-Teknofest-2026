@@ -11,9 +11,13 @@ from app.api.exceptions.authorization import AuthorizationException
 from app.api.exceptions.validation import ValidationException
 from app.api.rate_limit import rate_limit
 from app.api.responses import SuccessResponse
+from app.core.authz.attributes import Action, Resource
+from app.core.authz.dependency import subject_from_user
+from app.core.authz.engine import authorize
 from app.core.constants import MAX_FILE_SIZE_BYTES
 from app.core.enums.sensitivity_level import SensitivityLevel
 from app.core.permissions.role_checker import assert_clearance, bypasses_ownership
+from app.domains.documents.model.document_model import DocumentModel
 from app.domains.documents.service import DocumentService
 from app.domains.documents.draft_service import DraftService
 from app.domains.documents.repository import DocumentRepository
@@ -70,6 +74,30 @@ async def _read_bounded(file: UploadFile, limit: int) -> bytes:
             )
         chunks.append(chunk)
     return b"".join(chunks)
+
+
+def _authorize_document(current_user: UserModel, document: DocumentModel, action: str) -> None:
+    """Single ABAC decision replacing the ``owner_id``/``bypasses_ownership``
+    check every route below used to repeat inline.
+
+    Calls the bare, grant-less ``engine.authorize`` (built-in role rules
+    only) rather than the DB-backed ``AuthzService``: reproduces
+    ``bypasses_ownership``'s exact prior semantics (ADMIN/MANAGER/ROOT see
+    every document company-wide, EMPLOYEE only its own), with zero new
+    per-request DB/Redis round trips on this hot path. Consulting
+    ``permission_grants`` here too is a natural follow-up once a caller
+    actually needs to delegate document access beyond role, not a gap in
+    this change -- see the Faz 2 issue.
+
+    Raises:
+        AuthorizationException: If ``authorize()`` denies.
+    """
+    resource = Resource(
+        type="document", id=document.id, company_id=document.company_id, owner_id=document.owner_id
+    )
+    decision = authorize(subject_from_user(current_user), action, resource)
+    if not decision.permit:
+        raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
 
 
 @router.post("/analyze", response_model=None)
@@ -146,8 +174,7 @@ async def generate_draft(
     document = await document_repository.get_by_id(request.storage_path, current_user.company_id)
     if document is None:
         raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
-    if document.owner_id != current_user.id and not bypasses_ownership(current_user):
-        raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+    _authorize_document(current_user, document, Action.DOCUMENT_READ)
     try:
         document_level = SensitivityLevel(document.sensitivity_level)
     except ValueError:
@@ -269,8 +296,7 @@ async def update_document_fields(
     document = await document_repository.get_by_id(storage_path, current_user.company_id)
     if document is None:
         raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
-    if document.owner_id != current_user.id and not bypasses_ownership(current_user):
-        raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+    _authorize_document(current_user, document, Action.DOCUMENT_UPDATE)
 
     result = await service.update_document_fields(storage_path, payload.fields, current_user.company_id)
     if result is None:
@@ -323,8 +349,7 @@ async def get_document_analysis(
     document = await document_repository.get_by_id(storage_path, current_user.company_id)
     if document is None:
         raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
-    if document.owner_id != current_user.id and not bypasses_ownership(current_user):
-        raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+    _authorize_document(current_user, document, Action.DOCUMENT_READ)
 
     result = await service.get_cached_analysis(storage_path)
     if result is None:
@@ -370,8 +395,7 @@ async def delete_document(
 
     document = await document_repository.get_by_id(storage_path, current_user.company_id)
     if document is not None:
-        if document.owner_id != current_user.id and not bypasses_ownership(current_user):
-            raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+        _authorize_document(current_user, document, Action.DOCUMENT_DELETE)
         try:
             document_level = SensitivityLevel(document.sensitivity_level)
         except ValueError:
