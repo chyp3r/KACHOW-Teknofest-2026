@@ -59,7 +59,7 @@ _UNIT = seeder._SeedUnit(name="Mali İşler", description="Bütçe ve ödemeler.
 async def test_seed_one_creates_the_unit_when_missing(enabled_session):
     enabled_session.execute.return_value = _result(None)
 
-    created = await seeder._seed_one(_UNIT)
+    created = await seeder._seed_one(_UNIT, "company-1")
 
     assert created is True
     enabled_session.add.assert_called_once()
@@ -76,7 +76,7 @@ async def test_seed_one_skips_when_name_already_exists(enabled_session):
     existing = UnitModel(id="u1", name="Mali İşler", description="Var olan.", is_active=True)
     enabled_session.execute.return_value = _result(existing)
 
-    created = await seeder._seed_one(_UNIT)
+    created = await seeder._seed_one(_UNIT, "company-1")
 
     assert created is False
     enabled_session.add.assert_not_called()
@@ -95,7 +95,7 @@ async def test_seed_default_units_is_a_noop_when_disabled(monkeypatch, mock_sess
         seeder, "AsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
     )
 
-    await seeder.seed_default_units()
+    await seeder.seed_default_units("company-1")
 
     mock_session.execute.assert_not_called()
     mock_session.add.assert_not_called()
@@ -105,7 +105,7 @@ async def test_seed_default_units_is_a_noop_when_disabled(monkeypatch, mock_sess
 async def test_seed_default_units_creates_every_default_unit(enabled_session):
     enabled_session.execute.return_value = _result(None)
 
-    await seeder.seed_default_units()
+    await seeder.seed_default_units("company-1")
 
     expected_names = {u.name for u in seeder._seed_units()}
     assert enabled_session.add.call_count == len(expected_names)
@@ -119,7 +119,7 @@ async def test_seed_default_units_tolerates_one_unit_failing(monkeypatch, enable
     """One unit's DB error must not stop the others from being seeded."""
     calls = []
 
-    async def fake_seed_one(unit):
+    async def fake_seed_one(unit, company_id):
         calls.append(unit.name)
         if unit.name == "Hukuk Müşavirliği":
             raise Exception("db exploded")
@@ -127,7 +127,7 @@ async def test_seed_default_units_tolerates_one_unit_failing(monkeypatch, enable
 
     monkeypatch.setattr(seeder, "_seed_one", fake_seed_one)
 
-    await seeder.seed_default_units()
+    await seeder.seed_default_units("company-1")
 
     expected_names = [u.name for u in seeder._seed_units()]
     assert calls == expected_names

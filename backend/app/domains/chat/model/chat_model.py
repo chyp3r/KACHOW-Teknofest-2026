@@ -21,6 +21,13 @@ class ChatSessionModel(Base, TimestampMixin):
     __tablename__ = "chat_sessions"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    #: Nullable for now -- see `DraftModel.company_id`'s docstring: this
+    #: recorder is invoked from `ChatService`'s turn-completion hook, which
+    #: does not yet carry `company_id` through its state. Populated once
+    #: Faz 3 threads it through, same as `user_id` already is today.
+    company_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("companies.id"), nullable=True, index=True
+    )
     user_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("users.id"), nullable=True, index=True
     )
@@ -42,6 +49,11 @@ class ChatMessageModel(Base, TimestampMixin):
     __tablename__ = "chat_messages"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    #: Denormalized from the parent session; nullable for now -- see
+    #: `ChatSessionModel.company_id`.
+    company_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("companies.id"), nullable=True, index=True
+    )
     session_id: Mapped[str] = mapped_column(
         String, ForeignKey("chat_sessions.id"), nullable=False, index=True
     )

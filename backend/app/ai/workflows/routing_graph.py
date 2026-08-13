@@ -20,11 +20,14 @@ logger = logging.getLogger(__name__)
 #: route simultaneously good enough to send.
 HUMAN_APPROVAL_SCORE_THRESHOLD = get_policy().routing.human_approval_score_threshold
 
-#: `(name, description)` pairs for the units eligible for routing. Supplied by
-#: the caller (see `create_routing_graph`) and re-fetched on every decision --
-#: there is no module-level constant anymore, since the list is now
-#: runtime-managed (see `app.domains.units`), not policy.
-UnitsProvider = Callable[[], Awaitable[List[Tuple[str, str]]]]
+#: `(name, description)` pairs for the units eligible for routing, scoped to
+#: one company. Supplied by the caller (see `create_routing_graph`) and
+#: re-fetched on every decision -- there is no module-level constant
+#: anymore, since the list is now runtime-managed (see `app.domains.units`),
+#: not policy. Takes `company_id` because units are company-scoped (Faz 1
+#: tenancy work): returning every company's units here would leak one
+#: tenant's department names/descriptions into another's routing prompt.
+UnitsProvider = Callable[[str], Awaitable[List[Tuple[str, str]]]]
 
 
 class RoutingState(TypedDict, total=False):
@@ -38,6 +41,13 @@ class RoutingState(TypedDict, total=False):
 
     draft: str
     confidence_score: float
+    #: Which company's unit list to route against. Empty/missing degrades to
+    #: "no units configured" (see `routing_node`'s `if not units:` branch)
+    #: rather than falling back to every company's units -- fail-secure, not
+    #: fail-open, for a caller that hasn't been updated to supply it yet
+    #: (see the tenancy plan's Faz 3, which threads this through every
+    #: caller including the planning graph's own state).
+    company_id: str
     final_destination: Optional[str]
     justification: str
     routed_unit: Optional[str]
@@ -103,8 +113,9 @@ def create_routing_graph(llm_client: BaseLLMClient, units_provider: UnitsProvide
     Args:
         llm_client: LLM used for the routing decision. Pass the fast-tier client:
             the output is one label plus one sentence.
-        units_provider: Async callable returning the currently active
-            `(name, description)` units, read fresh on every call (see
+        units_provider: Async callable taking a `company_id` and returning
+            that company's currently active `(name, description)` units,
+            read fresh on every call (see
             `app.domains.units.provider.get_active_units_for_routing`) --
             injected the same way `llm_client` is, so this module never
             imports `app.domains` directly.
@@ -123,7 +134,8 @@ def create_routing_graph(llm_client: BaseLLMClient, units_provider: UnitsProvide
 
         score = state.get("confidence_score", 100.0)
         draft = (state.get("draft") or "").strip()
-        units = await units_provider()
+        company_id = state.get("company_id") or ""
+        units = await units_provider(company_id) if company_id else []
 
         if not units:
             logger.warning("No active units configured; routing cannot assign one.")

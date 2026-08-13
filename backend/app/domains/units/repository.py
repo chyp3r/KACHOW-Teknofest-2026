@@ -7,30 +7,45 @@ from app.domains.units.model.unit_model import UnitModel
 
 
 class UnitRepository:
-    """SOTA Repository for SQLAlchemy database transactions regarding Units."""
+    """SOTA Repository for SQLAlchemy database transactions regarding Units.
+
+    Every method takes an explicit `company_id` and filters on it -- see
+    `app.domains.documents.repository.DocumentRepository`'s docstring for
+    the same convention and reasoning.
+    """
 
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_by_id(self, unit_id: str) -> Optional[UnitModel]:
-        """Fetch a unit by primary key ID."""
-        result = await self.db.execute(select(UnitModel).where(UnitModel.id == unit_id))
+    async def get_by_id(self, unit_id: str, company_id: str) -> Optional[UnitModel]:
+        """Fetch a unit by primary key ID, scoped to `company_id`."""
+        result = await self.db.execute(
+            select(UnitModel).where(UnitModel.id == unit_id, UnitModel.company_id == company_id)
+        )
         return result.scalar_one_or_none()
 
-    async def get_by_name(self, name: str) -> Optional[UnitModel]:
-        """Fetch a unit by its unique name."""
-        result = await self.db.execute(select(UnitModel).where(UnitModel.name == name))
+    async def get_by_name(self, name: str, company_id: str) -> Optional[UnitModel]:
+        """Fetch a unit by name within `company_id` (uniqueness is per-company, not global)."""
+        result = await self.db.execute(
+            select(UnitModel).where(UnitModel.name == name, UnitModel.company_id == company_id)
+        )
         return result.scalar_one_or_none()
 
-    async def list_all(self) -> List[UnitModel]:
-        """Fetch every unit, active or not, ordered by name."""
-        result = await self.db.execute(select(UnitModel).order_by(UnitModel.name))
+    async def list_all(self, company_id: str) -> List[UnitModel]:
+        """Fetch every unit of `company_id`, active or not, ordered by name."""
+        result = await self.db.execute(
+            select(UnitModel)
+            .where(UnitModel.company_id == company_id)
+            .order_by(UnitModel.name)
+        )
         return list(result.scalars().all())
 
-    async def list_active(self) -> List[UnitModel]:
-        """Fetch only the units currently eligible for routing suggestions."""
+    async def list_active(self, company_id: str) -> List[UnitModel]:
+        """Fetch only `company_id`'s units currently eligible for routing suggestions."""
         result = await self.db.execute(
-            select(UnitModel).where(UnitModel.is_active == True).order_by(UnitModel.name)  # noqa: E712
+            select(UnitModel)
+            .where(UnitModel.company_id == company_id, UnitModel.is_active == True)  # noqa: E712
+            .order_by(UnitModel.name)
         )
         return list(result.scalars().all())
 
@@ -48,8 +63,10 @@ class UnitRepository:
         await self.db.flush()
         return unit
 
-    async def delete(self, unit_id: str) -> bool:
-        """Permanently remove a unit record from the database."""
-        result = await self.db.execute(delete(UnitModel).where(UnitModel.id == unit_id))
+    async def delete(self, unit_id: str, company_id: str) -> bool:
+        """Permanently remove a unit record from the database, scoped to `company_id`."""
+        result = await self.db.execute(
+            delete(UnitModel).where(UnitModel.id == unit_id, UnitModel.company_id == company_id)
+        )
         await self.db.flush()
         return result.rowcount > 0

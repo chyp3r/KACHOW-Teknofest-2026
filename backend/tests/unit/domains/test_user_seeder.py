@@ -50,7 +50,11 @@ def enabled_session(monkeypatch, mock_session):
 
 
 _ACCOUNT = seeder._SeedAccount(
-    username="admin", email="admin@kachow.local", password="Admin123!", role="admin"
+    username="admin",
+    email="admin@kachow.local",
+    password="Admin123!",
+    role="admin",
+    company_id="company-1",
 )
 
 
@@ -63,13 +67,23 @@ def test_seed_accounts_uses_configured_credentials(monkeypatch):
     monkeypatch.setattr(settings, "SEED_ADMIN_EMAIL", "custom-admin@x.com")
     monkeypatch.setattr(settings, "SEED_ADMIN_PASSWORD", "custom-pw")
 
-    accounts = seeder._seed_accounts()
+    accounts = seeder._seed_accounts("company-1")
 
-    assert {a.role for a in accounts} == {"admin", "manager", "employee"}
+    assert {a.role for a in accounts} == {"root", "admin", "manager", "employee"}
     admin = next(a for a in accounts if a.role == "admin")
     assert admin.username == "admin"
     assert admin.email == "custom-admin@x.com"
     assert admin.password == "custom-pw"
+    assert admin.company_id == "company-1"
+
+    root = next(a for a in accounts if a.role == "root")
+    assert root.company_id is None
+
+
+def test_seed_accounts_seeds_only_root_without_a_company():
+    accounts = seeder._seed_accounts(None)
+
+    assert {a.role for a in accounts} == {"root"}
 
 
 # ==========================================
@@ -147,7 +161,7 @@ async def test_seed_default_users_is_a_noop_when_disabled(monkeypatch, mock_sess
         seeder, "AsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
     )
 
-    await seeder.seed_default_users()
+    await seeder.seed_default_users("company-1")
 
     mock_session.execute.assert_not_called()
     mock_session.add.assert_not_called()
@@ -157,17 +171,17 @@ async def test_seed_default_users_is_a_noop_when_disabled(monkeypatch, mock_sess
 async def test_seed_default_users_creates_one_account_per_role(enabled_session):
     enabled_session.execute.return_value = _result(None)
 
-    await seeder.seed_default_users()
+    await seeder.seed_default_users("company-1")
 
-    assert enabled_session.add.call_count == 3
+    assert enabled_session.add.call_count == 4
     roles = {call.args[0].role for call in enabled_session.add.call_args_list}
-    assert roles == {"admin", "manager", "employee"}
-    assert enabled_session.commit.await_count == 3
+    assert roles == {"root", "admin", "manager", "employee"}
+    assert enabled_session.commit.await_count == 4
 
 
 @pytest.mark.asyncio
 async def test_seed_default_users_tolerates_one_account_failing(monkeypatch, enabled_session):
-    """One account's DB error must not stop the other two from being seeded."""
+    """One account's DB error must not stop the others from being seeded."""
     calls = []
 
     async def fake_seed_one(account):
@@ -178,6 +192,6 @@ async def test_seed_default_users_tolerates_one_account_failing(monkeypatch, ena
 
     monkeypatch.setattr(seeder, "_seed_one", fake_seed_one)
 
-    await seeder.seed_default_users()
+    await seeder.seed_default_users("company-1")
 
-    assert calls == ["admin", "manager", "employee"]
+    assert calls == ["root", "admin", "manager", "employee"]

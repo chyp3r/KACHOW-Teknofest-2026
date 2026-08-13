@@ -32,7 +32,7 @@ services:
     environment:
       - ENVIRONMENT=development
       # Local demo mode only. Production refuses to start while auth is off.
-      - REQUIRE_AUTH=${REQUIRE_AUTH:-false}
+      - REQUIRE_AUTH=${REQUIRE_AUTH:-true}
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3.5:9b}
       - OLLAMA_TEMPERATURE=${OLLAMA_TEMPERATURE:-0.7}

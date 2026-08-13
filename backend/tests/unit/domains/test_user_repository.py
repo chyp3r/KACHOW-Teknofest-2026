@@ -76,7 +76,7 @@ async def test_soft_delete(repo, mock_session):
     mock_result.scalar_one_or_none.return_value = user
     mock_session.execute.return_value = mock_result
     
-    result = await repo.soft_delete("user-123")
+    result = await repo.soft_delete("user-123", "company-1")
     assert result.is_deleted is True
     assert result.is_active is False
     mock_session.flush.assert_called_once()
@@ -86,8 +86,8 @@ async def test_hard_delete(repo, mock_session):
     mock_result = MagicMock()
     mock_result.rowcount = 1
     mock_session.execute.return_value = mock_result
-    
-    result = await repo.hard_delete("user-123")
+
+    result = await repo.hard_delete("user-123", "company-1")
     assert result is True
     mock_session.flush.assert_called_once()
 
@@ -95,12 +95,12 @@ async def test_hard_delete(repo, mock_session):
 async def test_get_multi_no_filters(repo, mock_session):
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = [
-        UserModel(id="1", username="test1", email="t1@example.com", role="employee", is_active=True, is_deleted=False, hashed_password="pw"), 
+        UserModel(id="1", username="test1", email="t1@example.com", role="employee", is_active=True, is_deleted=False, hashed_password="pw"),
         UserModel(id="2", username="test2", email="t2@example.com", role="employee", is_active=True, is_deleted=False, hashed_password="pw")
     ]
     mock_session.execute.return_value = mock_result
-    
-    users = await repo.get_multi(skip=0, limit=10)
+
+    users = await repo.get_multi("company-1", skip=0, limit=10)
     assert len(users) == 2
     mock_session.execute.assert_called_once()
 
@@ -111,8 +111,8 @@ async def test_get_multi_with_filters(repo, mock_session):
         UserModel(id="1", username="test1", email="t1@example.com", role="employee", is_active=True, is_deleted=False, hashed_password="pw")
     ]
     mock_session.execute.return_value = mock_result
-    
-    users = await repo.get_multi(skip=0, limit=10, role="admin")
+
+    users = await repo.get_multi("company-1", skip=0, limit=10, role="admin")
     assert len(users) == 1
     mock_session.execute.assert_called_once()
 

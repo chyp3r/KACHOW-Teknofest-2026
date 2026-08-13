@@ -37,9 +37,12 @@ class UserService:
 
         hashed = hash_password(schema.password)
 
-        # Enforce role defined by the manager in the invite
+        # Enforce role AND company defined by the inviting admin/manager in
+        # the invite -- letting a registrant pick either would be a
+        # self-escalation / cross-tenant self-assignment hole.
         user = UserModel(
             id=str(uuid4()),
+            company_id=invite.company_id,
             username=schema.username,
             email=schema.email,
             hashed_password=hashed,
@@ -63,8 +66,8 @@ class UserService:
 
         return created_user
 
-    async def invite_user_email(self, schema: InvitedEmailCreate) -> InvitedEmailModel:
-        """Invite/whitelist an email for registration (Admin/Manager only)."""
+    async def invite_user_email(self, schema: InvitedEmailCreate, company_id: str) -> InvitedEmailModel:
+        """Invite/whitelist an email for registration into `company_id` (Admin/Manager only)."""
         registered = await self.repository.get_by_email(schema.email)
         if registered:
             raise ConflictException(message="A user with this email address is already registered.")
@@ -75,6 +78,7 @@ class UserService:
 
         invite = InvitedEmailModel(
             id=str(uuid4()),
+            company_id=company_id,
             email=schema.email,
             role=schema.role.value,
             is_used=False
@@ -83,19 +87,41 @@ class UserService:
         return await self.repository.create_invite(invite)
 
     async def get_user_by_id(self, user_id: str) -> UserModel:
-        """Fetch user by ID, raising NotFoundException if not present."""
+        """Fetch user by ID (not company-scoped), raising NotFoundException if not present.
+
+        For the authentication path only (`get_current_user`) -- the JWT's
+        `sub` already identifies a specific row, so there is no company to
+        scope against yet. Admin/manager-facing lookups of another user
+        must use `get_user_by_id_in_company` instead.
+        """
         user = await self.repository.get_by_id(user_id)
         if not user:
             raise NotFoundException(message="User not found.")
         return user
 
-    async def get_users(self, skip: int = 0, limit: int = 100, role: Optional[str] = None) -> List[UserModel]:
-        """Fetch list of users with pagination and optional role filters."""
-        return await self.repository.get_multi(skip=skip, limit=limit, role=role)
+    async def get_user_by_id_in_company(self, user_id: str, company_id: str) -> UserModel:
+        """Fetch a user by ID within `company_id`, raising NotFoundException if not present."""
+        user = await self.repository.get_by_id_in_company(user_id, company_id)
+        if not user:
+            raise NotFoundException(message="User not found.")
+        return user
 
-    async def update_user(self, user_id: str, schema: UserUpdate) -> UserModel:
-        """Update user details, verifying unique constraints if email changes."""
-        user = await self.get_user_by_id(user_id)
+    async def get_users(
+        self, company_id: str, skip: int = 0, limit: int = 100, role: Optional[str] = None
+    ) -> List[UserModel]:
+        """Fetch list of users of `company_id` with pagination and optional role filters."""
+        return await self.repository.get_multi(company_id, skip=skip, limit=limit, role=role)
+
+    async def update_user(self, user_id: str, schema: UserUpdate, company_id: str) -> UserModel:
+        """Update user details, verifying unique constraints if email changes.
+
+        Args:
+            company_id: The acting admin's company -- `user_id` must belong
+                to it, or this raises `NotFoundException` the same as if
+                the row didn't exist at all (never leaks whether a user id
+                exists in a different company).
+        """
+        user = await self.get_user_by_id_in_company(user_id, company_id)
 
         update_dict = schema.model_dump(exclude_unset=True)
         if "email" in update_dict and update_dict["email"] != user.email:
@@ -124,18 +150,18 @@ class UserService:
         # Publish UserPasswordChangedEvent
         await event_bus.publish(UserPasswordChangedEvent(payload={"user_id": user_id}))
 
-    async def soft_delete_user(self, user_id: str) -> None:
-        """Soft delete user by ID."""
-        user = await self.repository.soft_delete(user_id)
+    async def soft_delete_user(self, user_id: str, company_id: str) -> None:
+        """Soft delete user by ID, scoped to `company_id`."""
+        user = await self.repository.soft_delete(user_id, company_id)
         if not user:
             raise NotFoundException(message="User not found.")
 
         # Publish UserDeletedEvent (soft)
         await event_bus.publish(UserDeletedEvent(payload={"user_id": user_id, "delete_type": "soft"}))
 
-    async def hard_delete_user(self, user_id: str) -> None:
-        """Hard delete user by ID."""
-        deleted = await self.repository.hard_delete(user_id)
+    async def hard_delete_user(self, user_id: str, company_id: str) -> None:
+        """Hard delete user by ID, scoped to `company_id`."""
+        deleted = await self.repository.hard_delete(user_id, company_id)
         if not deleted:
             raise NotFoundException(message="User not found.")
 

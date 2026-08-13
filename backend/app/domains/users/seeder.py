@@ -21,6 +21,7 @@ never be the reason the API fails to boot.
 
 import logging
 from dataclasses import dataclass
+from typing import Optional
 from uuid import uuid4
 
 from app.core.config import settings
@@ -39,29 +40,47 @@ class _SeedAccount:
     email: str
     password: str
     role: str
+    #: None only for root -- see UserModel.company_id's CHECK constraint.
+    company_id: Optional[str]
 
 
-def _seed_accounts() -> list[_SeedAccount]:
-    return [
+def _seed_accounts(company_id: Optional[str]) -> list[_SeedAccount]:
+    accounts = [
         _SeedAccount(
-            username="admin",
-            email=settings.SEED_ADMIN_EMAIL,
-            password=settings.SEED_ADMIN_PASSWORD,
-            role=UserRole.ADMIN.value,
-        ),
-        _SeedAccount(
-            username="manager",
-            email=settings.SEED_MANAGER_EMAIL,
-            password=settings.SEED_MANAGER_PASSWORD,
-            role=UserRole.MANAGER.value,
-        ),
-        _SeedAccount(
-            username="employee",
-            email=settings.SEED_EMPLOYEE_EMAIL,
-            password=settings.SEED_EMPLOYEE_PASSWORD,
-            role=UserRole.EMPLOYEE.value,
+            username="root",
+            email=settings.SEED_ROOT_EMAIL,
+            password=settings.SEED_ROOT_PASSWORD,
+            role=UserRole.ROOT.value,
+            company_id=None,
         ),
     ]
+    if company_id is not None:
+        accounts.extend(
+            [
+                _SeedAccount(
+                    username="admin",
+                    email=settings.SEED_ADMIN_EMAIL,
+                    password=settings.SEED_ADMIN_PASSWORD,
+                    role=UserRole.ADMIN.value,
+                    company_id=company_id,
+                ),
+                _SeedAccount(
+                    username="manager",
+                    email=settings.SEED_MANAGER_EMAIL,
+                    password=settings.SEED_MANAGER_PASSWORD,
+                    role=UserRole.MANAGER.value,
+                    company_id=company_id,
+                ),
+                _SeedAccount(
+                    username="employee",
+                    email=settings.SEED_EMPLOYEE_EMAIL,
+                    password=settings.SEED_EMPLOYEE_PASSWORD,
+                    role=UserRole.EMPLOYEE.value,
+                    company_id=company_id,
+                ),
+            ]
+        )
+    return accounts
 
 
 async def _seed_one(account: _SeedAccount) -> bool:
@@ -85,6 +104,7 @@ async def _seed_one(account: _SeedAccount) -> bool:
 
         user = UserModel(
             id=str(uuid4()),
+            company_id=account.company_id,
             username=account.username,
             email=account.email,
             hashed_password=hash_password(account.password),
@@ -97,18 +117,25 @@ async def _seed_one(account: _SeedAccount) -> bool:
         return True
 
 
-async def seed_default_users() -> None:
-    """Create the default ADMIN/MANAGER/EMPLOYEE accounts, skipping any that
-    already exist.
+async def seed_default_users(company_id: Optional[str]) -> None:
+    """Create the default ROOT/ADMIN/MANAGER/EMPLOYEE accounts, skipping any
+    that already exist.
 
     A no-op when `settings.SEED_DEFAULT_USERS` is off. Safe to call on every
     startup.
+
+    Args:
+        company_id: The demo company to bind ADMIN/MANAGER/EMPLOYEE to (see
+            `app.domains.companies.seeder.seed_demo_company`, which must run
+            first). ROOT is seeded regardless, since it has no company.
+            When `None` (demo company seeding is off and none exists yet),
+            only ROOT is seeded.
     """
     if not settings.SEED_DEFAULT_USERS:
         return
 
     created = []
-    for account in _seed_accounts():
+    for account in _seed_accounts(company_id):
         try:
             if await _seed_one(account):
                 created.append(f"{account.email} ({account.role})")

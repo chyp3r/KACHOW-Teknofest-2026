@@ -17,16 +17,16 @@ router = APIRouter(prefix="/units", tags=["units"])
 
 @router.get("", response_model=APIResponse[List[UnitResponse]])
 async def list_units(
-    _: None = Depends(require_auth_if_enabled),
+    current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """List every unit (active and inactive) -- the AI's routing suggestions
-    themselves only ever consider the active subset (see
-    ``app.domains.units.provider``); this endpoint returns both so an admin
-    UI can review and reactivate a disabled unit."""
+    """List every unit of the caller's company (active and inactive) -- the
+    AI's routing suggestions themselves only ever consider the active
+    subset (see ``app.domains.units.provider``); this endpoint returns both
+    so an admin UI can review and reactivate a disabled unit."""
     repository = UnitRepository(db)
     service = UnitService(repository)
-    units = await service.list_units()
+    units = await service.list_units(current_user.company_id)
     response_data = [UnitResponse.model_validate(u) for u in units]
     return SuccessResponse(data=response_data)
 
@@ -37,10 +37,10 @@ async def create_unit(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new routable unit (Admin/Manager only)."""
+    """Create a new routable unit within the caller's company (Admin/Manager only)."""
     repository = UnitRepository(db)
     service = UnitService(repository)
-    unit = await service.create_unit(schema)
+    unit = await service.create_unit(schema, current_user.company_id)
     response_data = UnitResponse.model_validate(unit)
     return SuccessResponse(data=response_data)
 
@@ -55,7 +55,7 @@ async def update_unit(
     """Update a unit's name, description or active status (Admin/Manager only)."""
     repository = UnitRepository(db)
     service = UnitService(repository)
-    unit = await service.update_unit(unit_id, schema)
+    unit = await service.update_unit(unit_id, schema, current_user.company_id)
     response_data = UnitResponse.model_validate(unit)
     return SuccessResponse(data=response_data)
 
@@ -69,5 +69,5 @@ async def delete_unit(
     """Permanently delete a unit (Admin/Manager only)."""
     repository = UnitRepository(db)
     service = UnitService(repository)
-    await service.delete_unit(unit_id)
+    await service.delete_unit(unit_id, current_user.company_id)
     return SuccessResponse(data=None)

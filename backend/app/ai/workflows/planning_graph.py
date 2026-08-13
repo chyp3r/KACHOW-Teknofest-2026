@@ -1229,7 +1229,15 @@ def create_planning_graph(
         if draft_result.get("requires_human_approval"):
             score = 0.0
         updates["routing_result"] = await routing_graph.ainvoke(
-            {"draft": draft_result.get("draft", ""), "confidence_score": score},
+            {
+                "draft": draft_result.get("draft", ""),
+                "confidence_score": score,
+                # Empty until Faz 3 threads company_id through PlanningState
+                # itself (see RoutingState.company_id's docstring) -- degrades
+                # to "no units configured, needs human approval" rather than
+                # leaking another company's units into this prompt.
+                "company_id": state.get("company_id") or "",
+            },
             config=child_config(config),
         )
 

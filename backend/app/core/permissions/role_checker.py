@@ -49,7 +49,7 @@ def clearance_for(user: Optional[UserModel]) -> Optional[SensitivityLevel]:
         # itself become the reason a request 500s.
         return None
 
-    if role in (UserRole.ADMIN, UserRole.MANAGER):
+    if role in (UserRole.ROOT, UserRole.ADMIN, UserRole.MANAGER):
         return policy.role_clearance_map[role]
 
     try:
@@ -59,9 +59,10 @@ def clearance_for(user: Optional[UserModel]) -> Optional[SensitivityLevel]:
 
 
 def bypasses_ownership(user: Optional[UserModel]) -> bool:
-    """Whether ``user`` sees every document company-wide, not just its own.
+    """Whether ``user`` sees every document *within its own company*, not
+    just its own.
 
-    ADMIN/MANAGER already clear every confidentiality level (see
+    ADMIN/MANAGER/ROOT already clear every confidentiality level (see
     :func:`clearance_for`) -- confirmed with the user that "company managers
     can access everything" extends to ownership too, not just clearance:
     the pre-existing per-owner isolation (``DocumentRepository.is_owned_by``,
@@ -69,11 +70,20 @@ def bypasses_ownership(user: Optional[UserModel]) -> bool:
     fix) previously applied uniformly regardless of role, so even an admin
     could not open a document they did not personally upload.
 
+    Since the multi-tenancy work, "everything" here means *company-wide*,
+    not system-wide: this function only decides whether the ownership
+    check inside a single company is skipped. The company boundary itself
+    is enforced one layer up, by the mandatory ``company_id`` filter every
+    repository applies (and, from Faz 3 onward, Postgres RLS) -- a MANAGER
+    of company A can never reach company B's rows regardless of what this
+    function returns. Root reads across companies only through the explicit
+    scope-switch path (``X-Company-Scope``), never through this bypass.
+
     Args:
         user: The authenticated user, or ``None``.
 
     Returns:
-        True for ADMIN/MANAGER, False otherwise (including ``None``/an
+        True for ADMIN/MANAGER/ROOT, False otherwise (including ``None``/an
         unrecognised role -- ownership isolation is the fail-secure default).
     """
     if user is None:
@@ -82,7 +92,7 @@ def bypasses_ownership(user: Optional[UserModel]) -> bool:
         role = UserRole(user.role)
     except ValueError:
         return False
-    return role in (UserRole.ADMIN, UserRole.MANAGER)
+    return role in (UserRole.ROOT, UserRole.ADMIN, UserRole.MANAGER)
 
 
 def assert_clearance(user: Optional[UserModel], required_level: SensitivityLevel) -> None:

@@ -29,7 +29,7 @@ class AuthService:
         logger.info(f"Issuing access tokens for authenticated user ID: {user.id}")
         access_token = create_access_token(
             subject=user.id,
-            extra_claims={"role": user.role, "username": user.username}
+            extra_claims={"role": user.role, "username": user.username, "company_id": user.company_id}
         )
         refresh_token = create_refresh_token(subject=user.id)
 

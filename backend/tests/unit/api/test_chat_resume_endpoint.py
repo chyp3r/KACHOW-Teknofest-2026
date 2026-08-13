@@ -5,13 +5,16 @@ draft-approval gate) continues; /sessions/{id}/state is how a client that
 reloaded mid-pause recovers the pending interrupt instead of losing it.
 """
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.dependency import get_chat_service
+from app.api.dependency import get_chat_service, require_auth_if_enabled
+from app.core.enums.user_role import UserRole
 from app.domains.chat.schema.chat_schema import ChatMessageResponse
+from app.domains.users.model.user_model import UserModel
 from app.main import app
 
 RESUME_SYNC_ENDPOINT = "/api/v1/chat/resume/sync"
@@ -20,9 +23,24 @@ STATE_ENDPOINT = "/api/v1/chat/sessions/{session_id}/state"
 
 client = TestClient(app, raise_server_exceptions=False)
 
+_CURRENT_USER = UserModel(
+    id="user-1",
+    company_id="company-1",
+    username="user1",
+    email="u1@example.com",
+    role=UserRole.EMPLOYEE.value,
+    clearance_level="hizmete_ozel",
+    is_active=True,
+    is_deleted=False,
+    hashed_password="pw",
+    created_at=datetime.now(timezone.utc),
+    updated_at=datetime.now(timezone.utc),
+)
+
 
 def _override(service):
     app.dependency_overrides[get_chat_service] = lambda: service
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _CURRENT_USER
 
 
 @pytest.fixture(autouse=True)
@@ -106,7 +124,7 @@ def test_resume_stream_returns_an_sse_response():
     _override(service)
 
     response = client.post(
-        RESUME_STREAM_ENDPOINT, json={"session_id": "s1", "action": "approve"}
+        RESUME_STREAM_ENDPOINT, json={"session_id": "user-1:s1", "action": "approve"}
     )
 
     assert response.status_code == 200

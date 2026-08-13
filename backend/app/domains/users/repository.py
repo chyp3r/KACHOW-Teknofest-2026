@@ -12,9 +12,34 @@ class UserRepository:
 
     # ---------- User Methods ----------
     async def get_by_id(self, user_id: str) -> Optional[UserModel]:
-        """Fetch active user by primary key ID."""
+        """Fetch active user by primary key ID.
+
+        Deliberately not company-scoped: the JWT `sub` already identifies a
+        specific row, so this is the low-level lookup used by
+        `get_current_user` (before any company context is even resolved)
+        and internally by service methods that apply their own company
+        check afterwards (see `get_by_id_in_company`). Callers exposing a
+        user by id to an admin/manager over the API must use
+        `get_by_id_in_company` instead.
+        """
         result = await self.db.execute(
             select(UserModel).where(UserModel.id == user_id, UserModel.is_deleted == False)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_id_in_company(self, user_id: str, company_id: str) -> Optional[UserModel]:
+        """Fetch active user by ID, scoped to `company_id`.
+
+        The tenant-safe variant of `get_by_id` -- an ADMIN/MANAGER managing
+        users through the API must never be able to read or modify another
+        company's user by simply guessing/enumerating an id.
+        """
+        result = await self.db.execute(
+            select(UserModel).where(
+                UserModel.id == user_id,
+                UserModel.company_id == company_id,
+                UserModel.is_deleted == False,
+            )
         )
         return result.scalar_one_or_none()
 
@@ -32,9 +57,17 @@ class UserRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_multi(self, skip: int = 0, limit: int = 100, role: Optional[str] = None) -> List[UserModel]:
-        """Fetch multiple users with pagination, filtering out soft-deleted ones."""
-        query = select(UserModel).where(UserModel.is_deleted == False)
+    async def get_multi(
+        self,
+        company_id: str,
+        skip: int = 0,
+        limit: int = 100,
+        role: Optional[str] = None,
+    ) -> List[UserModel]:
+        """Fetch multiple users of `company_id` with pagination, filtering out soft-deleted ones."""
+        query = select(UserModel).where(
+            UserModel.company_id == company_id, UserModel.is_deleted == False
+        )
         if role:
             query = query.where(UserModel.role == role)
         query = query.offset(skip).limit(limit)
@@ -55,18 +88,20 @@ class UserRepository:
         await self.db.flush()
         return user
 
-    async def soft_delete(self, user_id: str) -> Optional[UserModel]:
-        """Mark a user as deleted and deactivate their account."""
-        user = await self.get_by_id(user_id)
+    async def soft_delete(self, user_id: str, company_id: str) -> Optional[UserModel]:
+        """Mark a user as deleted and deactivate their account, scoped to `company_id`."""
+        user = await self.get_by_id_in_company(user_id, company_id)
         if user:
             user.is_deleted = True
             user.is_active = False
             await self.db.flush()
         return user
 
-    async def hard_delete(self, user_id: str) -> bool:
-        """Permanently purge a user record from the database."""
-        result = await self.db.execute(delete(UserModel).where(UserModel.id == user_id))
+    async def hard_delete(self, user_id: str, company_id: str) -> bool:
+        """Permanently purge a user record from the database, scoped to `company_id`."""
+        result = await self.db.execute(
+            delete(UserModel).where(UserModel.id == user_id, UserModel.company_id == company_id)
+        )
         await self.db.flush()
         return result.rowcount > 0
 

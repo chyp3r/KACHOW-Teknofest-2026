@@ -29,6 +29,7 @@ async def record_event(
     reasons: Optional[list[str]] = None,
     run_id: Optional[str] = None,
     document_id: Optional[str] = None,
+    company_id: Optional[str] = None,
     requester_user_id: Optional[str] = None,
     requester_role: Optional[str] = None,
     effective_clearance: Optional[str] = None,
@@ -52,6 +53,10 @@ async def record_event(
         run_id: The planning-graph run this decision belongs to, when there
             is one (an upload-time finding has none yet).
         document_id: The document this decision concerns, when there is one.
+        company_id: The tenant this decision concerns, when the caller is
+            request-scoped and has one in hand (e.g. an upload-time
+            assessment); ``None`` from graph-internal call sites until
+            Faz 3 threads ``company_id`` through the planning graph's state.
         requester_user_id, requester_role, effective_clearance: Who was
             asking, and at what clearance -- populated once the RBAC layer
             (Phase 4) has a real requester to attribute the decision to;
@@ -76,6 +81,7 @@ async def record_event(
                     id=uuid4().hex,
                     run_id=run_id,
                     document_id=document_id,
+                    company_id=company_id,
                     stage=stage,
                     kind=kind,
                     decision=decision,

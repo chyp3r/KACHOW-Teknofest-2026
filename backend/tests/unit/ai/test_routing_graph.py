@@ -36,7 +36,7 @@ EXPECTED_KEYS = {
 SOME_UNITS = [("Mali İşler", "Bütçe ve ödemeler."), ("Destek Hizmetleri", "Genel destek.")]
 
 
-async def _units_provider(units=SOME_UNITS):
+async def _units_provider(company_id: str, units=SOME_UNITS):
     return units
 
 
@@ -45,7 +45,7 @@ async def test_an_empty_draft_short_circuits_to_human_approval_without_calling_t
     graph = create_routing_graph(llm_client=MagicMock(spec=BaseLLMClient), units_provider=_units_provider)
 
     with patch.object(RouterAgent, "run_structured") as mock_run:
-        result = await graph.ainvoke({"draft": "   ", "confidence_score": 100.0})
+        result = await graph.ainvoke({"company_id": "company-1", "draft": "   ", "confidence_score": 100.0})
 
     mock_run.assert_not_called()
     assert result["routed_unit"] is None
@@ -59,7 +59,11 @@ async def test_a_low_confidence_score_forces_human_approval_without_calling_the_
 
     with patch.object(RouterAgent, "run_structured") as mock_run:
         result = await graph.ainvoke(
-            {"draft": "Bir taslak metni.", "confidence_score": HUMAN_APPROVAL_SCORE_THRESHOLD - 1}
+            {
+                "company_id": "company-1",
+                "draft": "Bir taslak metni.",
+                "confidence_score": HUMAN_APPROVAL_SCORE_THRESHOLD - 1,
+            }
         )
 
     mock_run.assert_not_called()
@@ -73,11 +77,11 @@ async def test_no_active_units_short_circuits_to_human_approval_without_calling_
     """An admin having deleted/disabled every unit must degrade gracefully,
     not crash or hallucinate a destination."""
     graph = create_routing_graph(
-        llm_client=MagicMock(spec=BaseLLMClient), units_provider=lambda: _units_provider([])
+        llm_client=MagicMock(spec=BaseLLMClient), units_provider=lambda company_id: _units_provider(company_id, [])
     )
 
     with patch.object(RouterAgent, "run_structured") as mock_run:
-        result = await graph.ainvoke({"draft": "Bir taslak metni.", "confidence_score": 90.0})
+        result = await graph.ainvoke({"company_id": "company-1", "draft": "Bir taslak metni.", "confidence_score": 90.0})
 
     mock_run.assert_not_called()
     assert result["routed_unit"] is None
@@ -92,7 +96,7 @@ async def test_a_confident_draft_is_routed_per_the_model_decision():
         return RouteOutput(destination="Mali İşler", justification="Bütçe talebiyle ilgili.")
 
     with patch.object(RouterAgent, "run_structured", side_effect=fake_run_structured):
-        result = await graph.ainvoke({"draft": "Bütçe artışı talep ediyorum.", "confidence_score": 90.0})
+        result = await graph.ainvoke({"company_id": "company-1", "draft": "Bütçe artışı talep ediyorum.", "confidence_score": 90.0})
 
     assert result["routed_unit"] == "Mali İşler"
     assert result["reasoning"] == "Bütçe talebiyle ilgili."
@@ -111,7 +115,7 @@ async def test_a_unit_outside_the_offered_list_degrades_to_human_approval():
         return RouteOutput(destination="İnsan Onayı Gerekli", justification="Belirsiz.")
 
     with patch.object(RouterAgent, "run_structured", side_effect=fake_run_structured):
-        result = await graph.ainvoke({"draft": "Belirsiz bir talep.", "confidence_score": 90.0})
+        result = await graph.ainvoke({"company_id": "company-1", "draft": "Belirsiz bir talep.", "confidence_score": 90.0})
 
     assert result["routed_unit"] is None
     assert result["requires_human_approval"] is True
@@ -125,7 +129,7 @@ async def test_a_model_failure_degrades_to_human_approval_rather_than_raising():
         raise RuntimeError("provider unavailable")
 
     with patch.object(RouterAgent, "run_structured", side_effect=fake_run_structured):
-        result = await graph.ainvoke({"draft": "Bir taslak metni.", "confidence_score": 90.0})
+        result = await graph.ainvoke({"company_id": "company-1", "draft": "Bir taslak metni.", "confidence_score": 90.0})
 
     assert result["routed_unit"] is None
     assert result["requires_human_approval"] is True
@@ -141,7 +145,7 @@ async def test_missing_confidence_score_defaults_to_full_confidence():
         return RouteOutput(destination="Destek Hizmetleri", justification="r")
 
     with patch.object(RouterAgent, "run_structured", side_effect=fake_run_structured):
-        result = await graph.ainvoke({"draft": "Bir taslak metni."})
+        result = await graph.ainvoke({"company_id": "company-1", "draft": "Bir taslak metni."})
 
     assert result["routed_unit"] == "Destek Hizmetleri"
     assert result["requires_human_approval"] is False

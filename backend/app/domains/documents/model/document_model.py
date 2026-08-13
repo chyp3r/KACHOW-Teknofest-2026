@@ -1,6 +1,4 @@
-from typing import Optional
-
-from sqlalchemy import Boolean, String
+from sqlalchemy import Boolean, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.enums.sensitivity_level import SensitivityLevel
@@ -20,10 +18,11 @@ class DocumentModel(Base, TimestampMixin):
     architecture migration's B8 finding: any caller who knew or guessed a
     storage_path could read another user's document through chat).
 
-    `owner_id` is nullable because `settings.REQUIRE_AUTH=False` (the default
-    demo/dev mode) uploads documents with no authenticated user at all --
-    those rows stay ownerless and visible to everyone, preserving today's
-    demo behaviour. Ownership is only enforced once a real user is attached.
+    `owner_id` and `company_id` are both required now that authentication is
+    mandatory (see `settings.REQUIRE_AUTH`) -- every document has exactly one
+    uploading user in exactly one company. Legacy ownerless rows from before
+    this migration were backfilled to the demo company/employee (see
+    `alembic/versions/0010_backfill_tenancy.py`).
     """
 
     __tablename__ = "documents"
@@ -34,7 +33,12 @@ class DocumentModel(Base, TimestampMixin):
     #: filter, the API's `{storage_path}` path parameter) already addresses
     #: a document by this value.
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    owner_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    company_id: Mapped[str] = mapped_column(
+        String, ForeignKey("companies.id"), nullable=False, index=True
+    )
+    owner_id: Mapped[str] = mapped_column(
+        String, ForeignKey("users.id"), nullable=False, index=True
+    )
     file_name: Mapped[str] = mapped_column(String, nullable=False)
     document_type: Mapped[str] = mapped_column(String, nullable=False, default="")
     document_type_label: Mapped[str] = mapped_column(String, nullable=False, default="")

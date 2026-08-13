@@ -5,14 +5,18 @@
 > çalışma zamanında birim ekleyip/düzenleyip/silebilir, ve
 > [`routing_graph`](./routing.md) her yönlendirme kararında aktif birim
 > listesini veritabanından taze olarak okur.
+>
+> Birimler **şirket bazlı** kapsanır (bkz. `docs/api/companies.md`): her uç
+> nokta kimliği doğrulanmış çağıranın kendi şirketiyle sınırlıdır, ve `name`
+> benzersizliği global değil `(company_id, name)` bazındadır -- iki farklı
+> şirket aynı anda bir "İnsan Kaynakları" birimi tanımlayabilir.
 
 ---
 
 # GET /api/v1/units
 
-Tüm birimleri (aktif ve pasif) listeler. `REQUIRE_AUTH` açıksa kimlik
-doğrulaması gerekir, aksi halde herkese açıktır (`/routing`, `/documents` ile
-aynı kalıp).
+Kimliği doğrulanmış çağıranın kendi şirketindeki tüm birimleri (aktif ve
+pasif) listeler.
 
 ## Yanıt
 
@@ -49,10 +53,10 @@ Yeni bir birim oluşturur. **Admin/Manager yetkisi gerektirir.**
 
 | Alan | Tür | Zorunlu | Açıklama |
 |---|---|---|---|
-| `name` | string | Evet | Benzersiz birim adı (1-200 karakter) |
+| `name` | string | Evet | Şirket içinde benzersiz birim adı (1-200 karakter) |
 | `description` | string | Evet | AI'nin yönlendirme kararında kullandığı açıklama (1-2000 karakter) |
 
-`name` zaten mevcutsa `409 RESOURCE_CONFLICT` döner.
+`name` bu şirkette zaten mevcutsa `409 RESOURCE_CONFLICT` döner.
 
 ---
 

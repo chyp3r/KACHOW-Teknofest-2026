@@ -27,6 +27,16 @@ class DraftModel(Base, TimestampMixin):
     __tablename__ = "drafts"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    #: Nullable for now: `draft_recorder.record_draft` is called from deep
+    #: inside `ChatService`/the planning graph, which does not yet carry
+    #: `company_id` through its state (see the tenancy plan's Faz 3, which
+    #: threads `company_id` through the same recorder call chains that
+    #: currently only carry `user_id`). Populated wherever the caller is a
+    #: request-scoped path with `company_id` already in hand (e.g.
+    #: `POST /documents/draft`); `NULL` elsewhere until Faz 3 lands.
+    company_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("companies.id"), nullable=True, index=True
+    )
     user_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("users.id"), nullable=True, index=True
     )

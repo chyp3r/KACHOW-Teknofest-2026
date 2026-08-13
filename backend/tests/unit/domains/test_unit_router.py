@@ -22,7 +22,8 @@ async def mock_get_db():
 
 def mock_get_current_user_admin():
     return UserModel(
-        id="admin-1", username="admin", email="a@a.com", role=UserRole.ADMIN.value,
+        id="admin-1", company_id="company-1", username="admin", email="a@a.com",
+        role=UserRole.ADMIN.value,
         clearance_level="hizmete_ozel", is_active=True, is_deleted=False, hashed_password="pw",
         created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
     )
@@ -30,7 +31,8 @@ def mock_get_current_user_admin():
 
 def mock_get_current_user_employee():
     return UserModel(
-        id="emp-1", username="emp1", email="e@e.com", role=UserRole.EMPLOYEE.value,
+        id="emp-1", company_id="company-1", username="emp1", email="e@e.com",
+        role=UserRole.EMPLOYEE.value,
         clearance_level="hizmete_ozel", is_active=True, is_deleted=False, hashed_password="pw",
         created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
     )
@@ -43,7 +45,7 @@ def mock_require_roles_admin():
 
 
 app.dependency_overrides[get_db] = mock_get_db
-app.dependency_overrides[require_auth_if_enabled] = lambda: None
+app.dependency_overrides[require_auth_if_enabled] = mock_get_current_user_admin
 app.dependency_overrides[get_current_user] = mock_get_current_user_admin
 app.dependency_overrides[require_roles] = mock_require_roles_admin
 
@@ -128,7 +130,7 @@ def test_delete_unit_as_admin(mock_repo_cls, mock_service_cls):
     response = client.delete("/units/u1")
 
     assert response.status_code == 200
-    mock_service.delete_unit.assert_called_once_with("u1")
+    mock_service.delete_unit.assert_called_once_with("u1", "company-1")
 
 
 @patch("app.domains.units.router.UnitService")

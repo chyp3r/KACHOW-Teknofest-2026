@@ -8,6 +8,7 @@ from app.api.exceptions.ai_error import AIException
 from app.api.responses import SuccessResponse
 from app.core.config import settings
 from app.domains.routing.schema import RoutingSuggestionRequest, RoutingSuggestionResponse
+from app.domains.users.model.user_model import UserModel
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ router = APIRouter(
 async def suggest_routing(
     request: RoutingSuggestionRequest,
     routing_graph=Depends(get_routing_graph),
+    current_user: UserModel = Depends(require_auth_if_enabled),
 ):
     """Produce a unit-routing decision for a draft, independent of drafting it.
 
@@ -31,7 +33,11 @@ async def suggest_routing(
     try:
         state = await asyncio.wait_for(
             routing_graph.ainvoke(
-                {"draft": request.draft, "confidence_score": request.confidence_score}
+                {
+                    "draft": request.draft,
+                    "confidence_score": request.confidence_score,
+                    "company_id": current_user.company_id,
+                }
             ),
             timeout=settings.AI_WORKFLOW_TIMEOUT_SECONDS,
         )

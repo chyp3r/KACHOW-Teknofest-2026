@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.domains.auth.router import router as auth_router
 from app.domains.chat.router import router as chat_router
+from app.domains.companies.router import router as companies_router
 from app.domains.documents.router import router as document_router
 from app.domains.drafts.router import router as drafts_router
 from app.domains.routing.router import router as routing_router
@@ -15,6 +16,7 @@ api_router = APIRouter()
 api_router.include_router(health_router, tags=["health"])
 api_router.include_router(auth_router, tags=["auth"])
 api_router.include_router(chat_router, tags=["chat"])
+api_router.include_router(companies_router, tags=["companies"])
 api_router.include_router(document_router, tags=["documents"])
 api_router.include_router(drafts_router, tags=["drafts"])
 api_router.include_router(routing_router, tags=["routing"])

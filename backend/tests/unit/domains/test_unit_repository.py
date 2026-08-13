@@ -17,7 +17,13 @@ def repo(mock_session):
 
 
 def _unit(**overrides):
-    fields = dict(id="unit-1", name="Mali İşler", description="Bütçe ve ödemeler.", is_active=True)
+    fields = dict(
+        id="unit-1",
+        company_id="company-1",
+        name="Mali İşler",
+        description="Bütçe ve ödemeler.",
+        is_active=True,
+    )
     fields.update(overrides)
     return UnitModel(**fields)
 
@@ -28,7 +34,7 @@ async def test_get_by_id(repo, mock_session):
     mock_result.scalar_one_or_none.return_value = _unit()
     mock_session.execute.return_value = mock_result
 
-    unit = await repo.get_by_id("unit-1")
+    unit = await repo.get_by_id("unit-1", "company-1")
     assert unit is not None
     assert unit.id == "unit-1"
     mock_session.execute.assert_called_once()
@@ -40,7 +46,7 @@ async def test_get_by_name(repo, mock_session):
     mock_result.scalar_one_or_none.return_value = _unit()
     mock_session.execute.return_value = mock_result
 
-    unit = await repo.get_by_name("Mali İşler")
+    unit = await repo.get_by_name("Mali İşler", "company-1")
     assert unit is not None
     assert unit.name == "Mali İşler"
     mock_session.execute.assert_called_once()
@@ -55,7 +61,7 @@ async def test_list_all(repo, mock_session):
     ]
     mock_session.execute.return_value = mock_result
 
-    units = await repo.list_all()
+    units = await repo.list_all("company-1")
     assert len(units) == 2
     mock_session.execute.assert_called_once()
 
@@ -66,7 +72,7 @@ async def test_list_active(repo, mock_session):
     mock_result.scalars.return_value.all.return_value = [_unit(id="1", name="A")]
     mock_session.execute.return_value = mock_result
 
-    units = await repo.list_active()
+    units = await repo.list_active("company-1")
     assert len(units) == 1
     mock_session.execute.assert_called_once()
 
@@ -105,7 +111,7 @@ async def test_delete_existing(repo, mock_session):
     mock_result.rowcount = 1
     mock_session.execute.return_value = mock_result
 
-    result = await repo.delete("unit-1")
+    result = await repo.delete("unit-1", "company-1")
     assert result is True
     mock_session.flush.assert_called_once()
 
@@ -116,5 +122,5 @@ async def test_delete_missing(repo, mock_session):
     mock_result.rowcount = 0
     mock_session.execute.return_value = mock_result
 
-    result = await repo.delete("no-such-id")
+    result = await repo.delete("no-such-id", "company-1")
     assert result is False

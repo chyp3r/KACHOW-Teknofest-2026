@@ -1,22 +1,59 @@
 """API tests for the document analysis endpoint."""
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.ai.compliance.evrak_field import EvrakField, MissingField
-from app.api.dependency import get_document_analysis_service
+from app.api.dependency import (
+    get_document_analysis_service,
+    get_document_repository,
+    require_auth_if_enabled,
+)
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
 from app.core.enums.compliance_status import ComplianceStatus
 from app.core.enums.document_type import DocumentType
+from app.core.enums.user_role import UserRole
+from app.domains.documents.model.document_model import DocumentModel
 from app.domains.documents.schema.document_schema import (
     DocumentAnalysisResponseSchema,
     ExtractionInfoSchema,
     MevzuatReferenceSchema,
 )
+from app.domains.users.model.user_model import UserModel
 from app.main import app
+
+_CURRENT_USER = UserModel(
+    id="admin-1",
+    company_id="company-1",
+    username="admin",
+    email="a@a.com",
+    role=UserRole.ADMIN.value,
+    clearance_level="cok_gizli",
+    is_active=True,
+    is_deleted=False,
+    hashed_password="pw",
+    created_at=datetime.now(timezone.utc),
+    updated_at=datetime.now(timezone.utc),
+)
+
+
+def _mock_document_repository():
+    """A document repository stand-in that always resolves to a document
+    owned by `_CURRENT_USER`'s company -- the router's ownership/company
+    check (`get_by_id` + `bypasses_ownership`) must pass before the field-
+    update/delete service calls this test exercises are ever reached."""
+    repo = AsyncMock()
+    repo.get_by_id.return_value = DocumentModel(
+        id="uploads/x.pdf",
+        company_id="company-1",
+        owner_id="admin-1",
+        file_name="evrak.pdf",
+    )
+    return repo
 
 ENDPOINT = "/api/v1/documents/analyze"
 
@@ -50,6 +87,8 @@ client = TestClient(app, raise_server_exceptions=False)
 
 def _override(service):
     app.dependency_overrides[get_document_analysis_service] = lambda: service
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _CURRENT_USER
+    app.dependency_overrides[get_document_repository] = _mock_document_repository
 
 
 @pytest.fixture(autouse=True)

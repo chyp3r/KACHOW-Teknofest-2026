@@ -20,14 +20,22 @@ from app.domains.units.repository import UnitRepository
 from app.infrastructure.database.session import AsyncSessionLocal
 
 
-async def get_active_units_for_routing() -> List[Tuple[str, str]]:
-    """Return `(name, description)` for every currently active unit.
+async def get_active_units_for_routing(company_id: str) -> List[Tuple[str, str]]:
+    """Return `(name, description)` for every currently active unit of `company_id`.
+
+    Args:
+        company_id: The tenant to scope the unit list to -- two companies
+            may both have an "İnsan Kaynakları" unit, and one's routing
+            decision must never see the other's.
 
     Returns:
-        An empty list when no unit is configured yet -- callers must treat
-        that as "nothing to route to", not as an error.
+        An empty list when no unit is configured yet (or `company_id` is
+        falsy) -- callers must treat that as "nothing to route to", not as
+        an error.
     """
+    if not company_id:
+        return []
     async with AsyncSessionLocal() as session:
         repository = UnitRepository(session)
-        units = await repository.list_active()
+        units = await repository.list_active(company_id)
         return [(unit.name, unit.description) for unit in units]

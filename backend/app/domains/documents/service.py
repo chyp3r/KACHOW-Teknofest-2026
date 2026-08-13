@@ -96,7 +96,8 @@ class DocumentService:
         file_name: str,
         content: bytes,
         content_type: Optional[str] = None,
-        owner_id: Optional[str] = None,
+        owner_id: str,
+        company_id: str,
     ) -> DocumentAnalysisResponseSchema:
         """Store, extract and analyse an incoming official document.
 
@@ -104,10 +105,10 @@ class DocumentService:
             file_name: Original name of the uploaded file.
             content: Raw file bytes.
             content_type: Declared MIME type, when the client supplied one.
-            owner_id: The authenticated caller's id, when
-                `settings.REQUIRE_AUTH` is enabled. `None` in the open
-                demo/dev path -- the document is registered ownerless and
-                stays visible to everyone, matching today's behaviour.
+            owner_id: The authenticated caller's id -- registered as the
+                document's owner.
+            company_id: The authenticated caller's company -- registered as
+                the document's tenant.
 
         Returns:
             The full first-review result.
@@ -172,7 +173,7 @@ class DocumentService:
 
         state = await self._run_analysis(extracted.text, extracted.used_ocr)
         response = self._assemble(file_name, storage_path, extracted, state, scrubbed_markers)
-        await self._register_document(file_name, storage_path, owner_id, response)
+        await self._register_document(file_name, storage_path, owner_id, company_id, response)
         await self._save_document_analysis_cache(
             storage_path, extracted.text, extracted.pages, response
         )
@@ -183,7 +184,7 @@ class DocumentService:
             extracted.pages,
             sensitivity_level=response.guardrail.sensitivity_level,
         )
-        await self._record_sensitivity_assessment(storage_path, owner_id, response)
+        await self._record_sensitivity_assessment(storage_path, owner_id, company_id, response)
 
         await self._publish(
             DocumentAnalyzedEvent(
@@ -561,7 +562,8 @@ class DocumentService:
         self,
         file_name: str,
         storage_path: str,
-        owner_id: Optional[str],
+        owner_id: str,
+        company_id: str,
         response: DocumentAnalysisResponseSchema,
     ) -> None:
         """Register the document's ownership + listing metadata in Postgres.
@@ -578,6 +580,7 @@ class DocumentService:
                 DocumentModel(
                     id=storage_path,
                     owner_id=owner_id,
+                    company_id=company_id,
                     file_name=file_name,
                     document_type=response.document_type.value,
                     document_type_label=response.document_type_label,
@@ -593,7 +596,8 @@ class DocumentService:
     @staticmethod
     async def _record_sensitivity_assessment(
         storage_path: str,
-        owner_id: Optional[str],
+        owner_id: str,
+        company_id: str,
         response: DocumentAnalysisResponseSchema,
     ) -> None:
         """Record the input-side guardrail audit event for one upload.
@@ -617,6 +621,7 @@ class DocumentService:
             kind="sensitivity",
             decision=decision,
             document_id=storage_path,
+            company_id=company_id,
             requester_user_id=owner_id,
             reasons=guardrail.reasons,
             related_document_ids=[storage_path],
@@ -701,7 +706,7 @@ class DocumentService:
             return None
 
     async def update_document_fields(
-        self, storage_path: str, fields: EvrakField
+        self, storage_path: str, fields: EvrakField, company_id: str
     ) -> Optional[DocumentAnalysisResponseSchema]:
         """Apply a user-corrected field set and re-run compliance.
 
@@ -766,13 +771,13 @@ class DocumentService:
         )
 
         if self.document_repository is not None:
-            document = await self.document_repository.get_by_id(storage_path)
+            document = await self.document_repository.get_by_id(storage_path, company_id)
             if document is not None:
                 document.compliance_status = analysis.compliance_status.value
 
         return analysis
 
-    async def delete_document(self, storage_path: str) -> None:
+    async def delete_document(self, storage_path: str, company_id: str) -> None:
         """Permanently remove a document: registry row, raw file, analysis
         cache, and any indexed Q&A chunks.
 
@@ -784,9 +789,11 @@ class DocumentService:
 
         Args:
             storage_path: The document's storage key.
+            company_id: The caller's company -- deletion is scoped to it,
+                same as every other document read/write.
         """
         if self.document_repository is not None:
-            await self.document_repository.delete(storage_path)
+            await self.document_repository.delete(storage_path, company_id)
 
         try:
             await self.storage.delete_file(storage_path)

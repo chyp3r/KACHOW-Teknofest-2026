@@ -78,7 +78,7 @@ def draft_service(mock_storage, mock_extractor, mock_draft_graph, mock_routing_g
 async def test_generate_draft_and_route_success(draft_service, mock_draft_graph, mock_routing_graph):
     request = _request(instructions="Test", correspondence_type="cover_letter")
 
-    response = await draft_service.generate_draft_and_route(request)
+    response = await draft_service.generate_draft_and_route(request, user_id="user-1", company_id="company-1")
 
     assert response.draft == "Sayın İlgili, taslak metindir."
     assert response.confidence_score == 85.0
@@ -105,7 +105,7 @@ async def test_generate_draft_flags_human_approval_when_routing_cannot_assign_a_
     }
     request = _request()
 
-    response = await draft_service.generate_draft_and_route(request)
+    response = await draft_service.generate_draft_and_route(request, user_id="user-1", company_id="company-1")
 
     assert response.destination == ""
     assert response.requires_human_approval is True
@@ -131,7 +131,7 @@ async def test_generate_draft_skips_routing_when_information_is_missing(
     }
     request = _request()
 
-    response = await draft_service.generate_draft_and_route(request)
+    response = await draft_service.generate_draft_and_route(request, user_id="user-1", company_id="company-1")
 
     assert response.missing_information
     assert response.destination == ""
@@ -144,7 +144,7 @@ async def test_generate_draft_storage_error(draft_service, mock_storage):
     request = _request()
 
     with pytest.raises(ValidationException) as exc:
-        await draft_service.generate_draft_and_route(request)
+        await draft_service.generate_draft_and_route(request, user_id="user-1", company_id="company-1")
     assert "bulunamadı" in str(exc.value)
 
 
@@ -154,7 +154,7 @@ async def test_generate_draft_extractor_error(draft_service, mock_extractor):
     request = _request()
 
     with pytest.raises(ValidationException) as exc:
-        await draft_service.generate_draft_and_route(request)
+        await draft_service.generate_draft_and_route(request, user_id="user-1", company_id="company-1")
     assert "çıkarılamadı" in str(exc.value)
 
 
@@ -167,7 +167,7 @@ async def test_generate_draft_graph_failure(draft_service, mock_draft_graph):
     request = _request()
 
     with pytest.raises(AIException) as exc:
-        await draft_service.generate_draft_and_route(request)
+        await draft_service.generate_draft_and_route(request, user_id="user-1", company_id="company-1")
     assert "üretilemedi" in str(exc.value)
 
 
@@ -188,7 +188,7 @@ async def test_generate_draft_threads_the_requested_reasoning_level_into_the_gra
 ):
     request = _request(reasoning_level="deep")
 
-    await draft_service.generate_draft_and_route(request)
+    await draft_service.generate_draft_and_route(request, user_id="user-1", company_id="company-1")
 
     graph_input = mock_draft_graph.ainvoke.call_args.args[0]
     assert graph_input["reasoning_level"] == "deep"

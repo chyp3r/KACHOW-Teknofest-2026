@@ -291,6 +291,7 @@ class GuardrailPolicy:
     role_clearance_map: Mapping[UserRole, SensitivityLevel] = field(
         default_factory=lambda: MappingProxyType(
             {
+                UserRole.ROOT: SensitivityLevel.COK_GIZLI,
                 UserRole.ADMIN: SensitivityLevel.COK_GIZLI,
                 UserRole.MANAGER: SensitivityLevel.COK_GIZLI,
                 UserRole.EMPLOYEE: SensitivityLevel.HIZMETE_OZEL,

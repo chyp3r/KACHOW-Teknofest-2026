@@ -14,6 +14,7 @@ async def test_authenticate_user_success():
     mock_user.username = "john_doe"
     mock_user.hashed_password = hashed
     mock_user.role = "employee"
+    mock_user.company_id = "company-1"
     mock_user.is_active = True
 
     repository = MagicMock()
@@ -185,6 +186,7 @@ async def test_refresh_token_success():
     mock_user.username = "john_doe"
     mock_user.hashed_password = hashed
     mock_user.role = "employee"
+    mock_user.company_id = "company-1"
     mock_user.is_active = True
 
     repository = MagicMock()

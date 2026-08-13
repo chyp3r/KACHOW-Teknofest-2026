@@ -86,19 +86,21 @@ def require_roles(*allowed_roles: UserRole):
 async def require_auth_if_enabled(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
-) -> Optional[UserModel]:
-    """Enforce authentication only when ``settings.REQUIRE_AUTH`` is True.
+) -> UserModel:
+    """Require an authenticated, tenant-bound user.
 
-    A single conditional dependency rather than two different router wirings,
-    so flipping ``REQUIRE_AUTH`` doesn't need a redeploy with different route
-    registrations -- see the setting's docstring for why /documents/* and
-    /chat/* default to open.
+    Multi-tenancy made authentication mandatory everywhere: every row in the
+    system now carries a ``company_id`` (see the tenancy plan's Faz 1), so
+    there is no longer an "unauthenticated demo/dev path" for a request to
+    fall back to -- there would be no company to scope its reads/writes to.
+    The name is kept (rather than renamed to e.g. ``require_authenticated_
+    user``) purely to avoid touching every router's import and
+    ``Depends(...)`` call site in this same change; a rename is a fine
+    follow-up with no behavioural stakes.
 
     Returns:
-        The authenticated user when ``REQUIRE_AUTH`` is True, otherwise None.
+        The authenticated, active user.
     """
-    if not settings.REQUIRE_AUTH:
-        return None
     return await get_current_user(token=token, db=db)
 
 

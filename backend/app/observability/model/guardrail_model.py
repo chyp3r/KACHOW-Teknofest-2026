@@ -28,6 +28,14 @@ class GuardrailEventModel(Base, TimestampMixin):
     __tablename__ = "guardrail_events"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    #: Nullable for now: populated when the caller is request-scoped with
+    #: `company_id` already in hand (e.g. `DocumentService`'s upload-time
+    #: sensitivity assessment); `NULL` for the guardrail events recorded
+    #: from inside the planning graph until Faz 3 threads `company_id`
+    #: through `PlanningState` alongside `user_id` (see `RunModel.company_id`).
+    company_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("companies.id"), nullable=True, index=True
+    )
     run_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("runs.id"), nullable=True, index=True
     )

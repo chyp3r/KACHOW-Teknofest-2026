@@ -5,21 +5,39 @@ after it was generated should get a fresh routing decision without paying for
 a new generation.
 """
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.dependency import get_routing_graph
+from app.api.dependency import get_routing_graph, require_auth_if_enabled
+from app.core.enums.user_role import UserRole
+from app.domains.users.model.user_model import UserModel
 from app.main import app
 
 ENDPOINT = "/api/v1/routing/suggest"
 
 client = TestClient(app, raise_server_exceptions=False)
 
+_CURRENT_USER = UserModel(
+    id="user-1",
+    company_id="company-1",
+    username="user1",
+    email="u1@example.com",
+    role=UserRole.EMPLOYEE.value,
+    clearance_level="hizmete_ozel",
+    is_active=True,
+    is_deleted=False,
+    hashed_password="pw",
+    created_at=datetime.now(timezone.utc),
+    updated_at=datetime.now(timezone.utc),
+)
+
 
 def _override(graph):
     app.dependency_overrides[get_routing_graph] = lambda: graph
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _CURRENT_USER
 
 
 @pytest.fixture(autouse=True)
