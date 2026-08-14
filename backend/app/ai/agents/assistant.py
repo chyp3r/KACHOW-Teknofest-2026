@@ -115,6 +115,13 @@ class AssistantAgent(BaseAgent):
         tools_by_name = {tool.name: tool for tool in tools}
         lc_tools = [to_langchain_tool(tool) for tool in tools]
 
+        # Set only when a generate_with_tools turn ends the loop cleanly (no
+        # further tool calls) with a non-empty answer already in hand -- the
+        # common shape for a converged tool turn. Left None on every other
+        # exit (a turn's own call raised, MAX_TOOL_TURNS ran out with a tool
+        # call still pending, or no tools were bound at all) so those keep
+        # falling through to the real stream() call below exactly as before.
+        final_response_content: Optional[str] = None
         for _ in range(MAX_TOOL_TURNS if lc_tools else 0):
             try:
                 response = await self.llm_client.generate_with_tools(
@@ -125,6 +132,7 @@ class AssistantAgent(BaseAgent):
                 break
 
             if not response.tool_calls:
+                final_response_content = response.content
                 break
 
             messages.append(
@@ -154,13 +162,21 @@ class AssistantAgent(BaseAgent):
                     }
                 )
 
-        # Final answer streamed with no tools bound: guarantees this call
-        # produces text rather than yet another tool request, regardless of
-        # how many rounds the loop above ran.
+        # Reuse the tool loop's own answer when it already converged instead
+        # of paying for a second full generation pass to say the same thing:
+        # on a real request this was the difference between two Ollama calls
+        # and three, and the third was what pushed the "assist" node past its
+        # node_budget ceiling (app/ai/policy/schema.py) often enough to matter.
+        # Falls through to the original unconditional stream() whenever there
+        # is no such answer yet (see final_response_content's own comment).
         final_chunks: list[str] = []
-        async for chunk in self.llm_client.stream(messages=messages, temperature=0.2):
-            final_chunks.append(chunk)
-            yield chunk
+        if final_response_content:
+            final_chunks.append(final_response_content)
+            yield final_response_content
+        else:
+            async for chunk in self.llm_client.stream(messages=messages, temperature=0.2):
+                final_chunks.append(chunk)
+                yield chunk
 
         # Measured against `messages` as it stands right before the final
         # call -- the largest the prompt gets this turn (tool turns already
