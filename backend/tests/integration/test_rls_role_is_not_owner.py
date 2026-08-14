@@ -32,6 +32,9 @@ _RLS_TABLES = (
     "guardrail_events",
     "draft_shares",
     "notifications",
+    "audit_log",
+    "usage_counters",
+    "company_quotas",
 )
 
 

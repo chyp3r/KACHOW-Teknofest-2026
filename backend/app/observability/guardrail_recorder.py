@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from app.core.config import settings
 from app.infrastructure.database.session import tenant_session
+from app.observability import company_metrics
 from app.observability.ai_metrics import GUARDRAIL_DECISIONS
 from app.observability.model.guardrail_model import GuardrailEventModel
 
@@ -72,6 +73,10 @@ async def record_event(
     # metrics, not an audit record, and should stay live even when a
     # deployment turns RUN_RECORDING_ENABLED off to skip the DB write.
     GUARDRAIL_DECISIONS.labels(stage=stage, kind=kind, decision=decision).inc()
+    if decision == "blocked" and company_id is not None:
+        slug = company_metrics.cached_slug(company_id)
+        if slug is not None:
+            company_metrics.note_guardrail_block(slug, kind)
 
     if not settings.RUN_RECORDING_ENABLED:
         return

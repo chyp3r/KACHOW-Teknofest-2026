@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependency import require_auth_if_enabled, require_roles
 from app.api.responses import APIResponse, SuccessResponse
 from app.core.enums.user_role import UserRole
+from app.domains.audit.repository import AuditLogRepository
+from app.domains.audit.service import AuditService
 from app.domains.documents.repository import DocumentRepository
 from app.domains.pools.repository import DocumentPoolItemRepository, DocumentPoolRepository
 from app.domains.pools.schema.pool_schema import (
@@ -23,6 +25,10 @@ from app.infrastructure.database.session import get_db
 from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 
 router = APIRouter(prefix="/pools", tags=["pools"])
+
+
+def _audit_service(db: AsyncSession) -> AuditService:
+    return AuditService(AuditLogRepository(db))
 
 
 def _pool_service(db: AsyncSession) -> PoolService:
@@ -106,6 +112,15 @@ async def push_bulk(
     (Admin/Manager only). Per-recipient result: 'pushed' | 'denied_clearance' | 'not_found'."""
     service = _pool_service(db)
     results = await service.push(schema, current_user, current_user.company_id)
+    await _audit_service(db).record(
+        company_id=current_user.company_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="pool:push",
+        resource_type="document",
+        resource_id=schema.document_id,
+        after={"results": [r.model_dump() for r in results]},
+    )
     return SuccessResponse(data=[r.model_dump() for r in results])
 
 

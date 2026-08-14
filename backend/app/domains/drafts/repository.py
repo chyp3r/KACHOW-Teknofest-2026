@@ -40,6 +40,42 @@ class DraftRepository:
         )
         return list(result.scalars().all())
 
+    def _latest_version_query(
+        self,
+        company_id: Optional[str],
+        session_id: Optional[str],
+        document_id: Optional[str],
+        user_id: Optional[str],
+    ):
+        """The filtered "one row per collapsed chain" query, with no
+        ordering/pagination applied -- shared by `list_drafts` (which adds
+        `order_by`/`offset`/`limit`) and `count_drafts` (which wraps this in
+        `SELECT count()` instead of fetching and `len()`-ing every row)."""
+        group_key = func.coalesce(DraftModel.session_id, DraftModel.id)
+        latest_version = (
+            select(
+                group_key.label("group_key"),
+                func.max(DraftModel.version).label("max_version"),
+            )
+            .where(DraftModel.is_deleted.is_(False))
+            .group_by(group_key)
+            .subquery()
+        )
+        query = select(DraftModel).join(
+            latest_version,
+            (group_key == latest_version.c.group_key)
+            & (DraftModel.version == latest_version.c.max_version),
+        )
+        if company_id is not None:
+            query = query.where(DraftModel.company_id == company_id)
+        if session_id is not None:
+            query = query.where(DraftModel.session_id == session_id)
+        if document_id is not None:
+            query = query.where(DraftModel.document_id == document_id)
+        if user_id is not None:
+            query = query.where(DraftModel.user_id == user_id)
+        return query
+
     async def list_drafts(
         self,
         company_id: Optional[str] = None,
@@ -87,29 +123,7 @@ class DraftRepository:
         filtering explicitly rather than leaning on row-level security
         alone.
         """
-        group_key = func.coalesce(DraftModel.session_id, DraftModel.id)
-        latest_version = (
-            select(
-                group_key.label("group_key"),
-                func.max(DraftModel.version).label("max_version"),
-            )
-            .where(DraftModel.is_deleted.is_(False))
-            .group_by(group_key)
-            .subquery()
-        )
-        query = select(DraftModel).join(
-            latest_version,
-            (group_key == latest_version.c.group_key)
-            & (DraftModel.version == latest_version.c.max_version),
-        )
-        if company_id is not None:
-            query = query.where(DraftModel.company_id == company_id)
-        if session_id is not None:
-            query = query.where(DraftModel.session_id == session_id)
-        if document_id is not None:
-            query = query.where(DraftModel.document_id == document_id)
-        if user_id is not None:
-            query = query.where(DraftModel.user_id == user_id)
+        query = self._latest_version_query(company_id, session_id, document_id, user_id)
         query = query.order_by(DraftModel.updated_at.desc()).offset(skip).limit(limit)
         result = await self.db.execute(query)
         return list(result.scalars().all())
@@ -121,15 +135,14 @@ class DraftRepository:
         document_id: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> int:
-        drafts = await self.list_drafts(
-            company_id=company_id,
-            session_id=session_id,
-            document_id=document_id,
-            user_id=user_id,
-            skip=0,
-            limit=10_000,
-        )
-        return len(drafts)
+        """A real `SELECT count()` over the same collapsed-chain query
+        `list_drafts` builds, not a `list_drafts(..., limit=10_000)` +
+        `len()` -- the previous approach silently under-counted (and paid
+        for) anything past 10,000 rows, the exact anti-pattern
+        `DocumentRepository.count_for_owner` was already fixed to avoid."""
+        query = self._latest_version_query(company_id, session_id, document_id, user_id)
+        result = await self.db.execute(select(func.count()).select_from(query.subquery()))
+        return result.scalar_one()
 
     async def create_version(
         self,

@@ -1,7 +1,7 @@
 from typing import List, Optional
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.chat.model.chat_model import ChatMessageModel, ChatSessionModel
@@ -74,8 +74,13 @@ class ChatSessionRepository:
         return list(result.scalars().all())
 
     async def count_for_user(self, company_id: Optional[str], user_id: Optional[str]) -> int:
-        sessions = await self.list_for_user(company_id, user_id, skip=0, limit=10_000)
-        return len(sessions)
+        query = select(func.count(ChatSessionModel.id))
+        if company_id is not None:
+            query = query.where(ChatSessionModel.company_id == company_id)
+        if user_id is not None:
+            query = query.where(ChatSessionModel.user_id == user_id)
+        result = await self.db.execute(query)
+        return result.scalar_one()
 
 
 class ChatMessageRepository:
@@ -121,5 +126,7 @@ class ChatMessageRepository:
         return list(result.scalars().all())
 
     async def count_for_session(self, session_id: str) -> int:
-        messages = await self.list_for_session(session_id, skip=0, limit=10_000)
-        return len(messages)
+        result = await self.db.execute(
+            select(func.count(ChatMessageModel.id)).where(ChatMessageModel.session_id == session_id)
+        )
+        return result.scalar_one()

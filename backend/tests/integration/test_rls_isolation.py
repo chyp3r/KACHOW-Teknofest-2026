@@ -171,6 +171,87 @@ async def test_company_a_cannot_insert_a_draft_claiming_company_bs_id(app_engine
 
 
 # ==========================================
+# audit_log, usage_counters, company_quotas (Faz 6, new tables)
+# ==========================================
+async def test_company_a_cannot_see_company_bs_audit_log_row(app_engine, owner_engine, two_companies):
+    from sqlalchemy import text as _text
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    owner_session_maker = async_sessionmaker(bind=owner_engine, class_=AsyncSession, expire_on_commit=False)
+    async with owner_session_maker() as owner_session:
+        await owner_session.execute(
+            _text(
+                "INSERT INTO audit_log (id, company_id, seq, action, decision, prev_hash, hash, created_at, updated_at) "
+                "VALUES ('rls-isolation-test-audit', :cid, 1, 'unit:create', 'permit', '0'||repeat('0', 63), "
+                "'1'||repeat('0', 63), now(), now())"
+            ),
+            {"cid": two_companies["b"]["company_id"]},
+        )
+        await owner_session.commit()
+
+    session = await app_session(app_engine, company_id=two_companies["a"]["company_id"])
+    try:
+        row = (
+            await session.execute(
+                text("SELECT id FROM audit_log WHERE id = 'rls-isolation-test-audit'")
+            )
+        ).scalar_one_or_none()
+    finally:
+        await session.close()
+
+    assert row is None
+
+
+async def test_company_a_insert_into_audit_log_rejects_company_bs_id(app_engine, two_companies):
+    session = await app_session(app_engine, company_id=two_companies["a"]["company_id"])
+    try:
+        with pytest.raises(DBAPIError, match="row-level security"):
+            await session.execute(
+                text(
+                    "INSERT INTO audit_log (id, company_id, seq, action, decision, prev_hash, hash, created_at, updated_at) "
+                    "VALUES ('rls-isolation-test-audit-2', :bad_cid, 1, 'unit:create', 'permit', "
+                    "'0'||repeat('0', 63), '1'||repeat('0', 63), now(), now())"
+                ),
+                {"bad_cid": two_companies["b"]["company_id"]},
+            )
+    finally:
+        await session.rollback()
+        await session.close()
+
+
+async def test_company_a_insert_into_usage_counters_rejects_company_bs_id(app_engine, two_companies):
+    session = await app_session(app_engine, company_id=two_companies["a"]["company_id"])
+    try:
+        with pytest.raises(DBAPIError, match="row-level security"):
+            await session.execute(
+                text(
+                    "INSERT INTO usage_counters (id, company_id, metric, period, count, created_at, updated_at) "
+                    "VALUES ('rls-isolation-test-usage', :bad_cid, 'documents', '2026-08', 0, now(), now())"
+                ),
+                {"bad_cid": two_companies["b"]["company_id"]},
+            )
+    finally:
+        await session.rollback()
+        await session.close()
+
+
+async def test_company_a_insert_into_company_quotas_rejects_company_bs_id(app_engine, two_companies):
+    session = await app_session(app_engine, company_id=two_companies["a"]["company_id"])
+    try:
+        with pytest.raises(DBAPIError, match="row-level security"):
+            await session.execute(
+                text(
+                    "INSERT INTO company_quotas (id, company_id, created_at, updated_at) "
+                    "VALUES ('rls-isolation-test-quota', :bad_cid, now(), now())"
+                ),
+                {"bad_cid": two_companies["b"]["company_id"]},
+            )
+    finally:
+        await session.rollback()
+        await session.close()
+
+
+# ==========================================
 # draft_shares + notifications (Faz 5, new tables migrated in 0017)
 # ==========================================
 async def test_company_a_cannot_see_company_bs_draft_share(app_engine, two_companies):

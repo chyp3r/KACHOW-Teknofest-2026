@@ -18,8 +18,14 @@ from app.core.authz.service import AuthzService
 from app.core.enums.user_role import UserRole
 from app.api.exceptions.authorization import AuthorizationException
 from app.api.exceptions.not_found import NotFoundException
+from app.domains.audit.repository import AuditLogRepository
+from app.domains.audit.service import AuditService
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+def _audit_service(db: AsyncSession) -> AuditService:
+    return AuditService(AuditLogRepository(db))
 
 @router.post("", response_model=APIResponse[UserResponse])
 async def register(schema: UserCreate, db: AsyncSession = Depends(get_owner_db)):
@@ -218,6 +224,15 @@ async def grant_permission(
         )
     )
     await authz.invalidate_company(current_user.company_id)
+    await _audit_service(db).record(
+        company_id=current_user.company_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="permission:grant",
+        resource_type="permission_grant",
+        resource_id=grant.id,
+        after={"subject_id": user_id, "action": schema.action, "effect": schema.effect},
+    )
     return SuccessResponse(data=PermissionGrantResponse.model_validate(grant).model_dump(mode="json"))
 
 
@@ -252,4 +267,12 @@ async def revoke_permission(
     if not revoked:
         raise NotFoundException(message="Yetki bulunamadı ya da zaten geri alınmış.")
     await authz.invalidate_company(current_user.company_id)
+    await _audit_service(db).record(
+        company_id=current_user.company_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="permission:revoke",
+        resource_type="permission_grant",
+        resource_id=grant_id,
+    )
     return SuccessResponse(data=None)

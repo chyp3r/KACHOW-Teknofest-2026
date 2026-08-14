@@ -12,6 +12,7 @@ from app.domains.drafts.model.draft_model import DraftModel
 from app.domains.drafts.model.draft_share_model import DraftShareModel
 from app.domains.drafts.repository import DraftRepository, DraftShareRepository
 from app.domains.drafts.schema.draft_share_schema import DraftSendRequest
+from app.domains.quotas.service import DRAFTS_METRIC, QuotaService
 from app.domains.units.repository import UnitRepository
 from app.domains.users.model.user_model import UserModel
 from app.domains.users.repository import UserRepository
@@ -51,11 +52,13 @@ class DraftShareService:
         draft_repository: DraftRepository,
         user_repository: UserRepository,
         unit_repository: UnitRepository,
+        quota_service: Optional[QuotaService] = None,
     ):
         self.share_repository = share_repository
         self.draft_repository = draft_repository
         self.user_repository = user_repository
         self.unit_repository = unit_repository
+        self.quota_service = quota_service
 
     @staticmethod
     async def _publish(event) -> None:
@@ -209,6 +212,11 @@ class DraftShareService:
         share = await self.share_repository.respond(share, status, response_note)
 
         if status == "accepted" and draft is not None:
+            # Accepting forks a real new draft row owned by `requester` --
+            # counts against their own company's draft quota exactly like
+            # any other new draft, see `QuotaService`'s module docstring.
+            if self.quota_service is not None:
+                await self.quota_service.check_and_increment(company_id, DRAFTS_METRIC)
             await self.draft_repository.create_version(
                 user_id=requester.id,
                 company_id=company_id,

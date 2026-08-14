@@ -82,21 +82,24 @@ def _probe_router_semantic() -> str:
     return "ok" if router_semantic_available() else "unavailable"
 
 
-@health_router.get("/health")
-async def health_check(response: Response, deep: bool = Query(default=False)):
-    """Health check endpoint returning standardized APIResponse.
+async def build_health_payload(deep: bool) -> tuple[dict, bool]:
+    """The health check's actual data, independent of the HTTP response
+    wrapping -- shared by `health_check` (the route, which wraps this in
+    ``SuccessResponse``, a ``JSONResponse`` with no attribute a caller could
+    read a value back off of) and ``app.domains.companies.root_router.
+    root_health`` (which needs the raw dict to merge its own per-company
+    section into, not a rendered response).
 
-    Args:
-        deep: When True, probes Postgres, Redis, Qdrant, Ollama and the
-            LangGraph checkpointer instead of only reporting that the process
-            is up. Any failed dependency sets the HTTP status to 503 so
-            uptime monitors and load balancers can act on it, not just read it.
+    Returns:
+        `(data, degraded)` -- `degraded` is `True` iff any deep-probed
+        dependency failed, for the caller to decide its own status code.
     """
     data = {
         "status": "healthy",
         "project": settings.PROJECT_NAME,
         "environment": settings.ENVIRONMENT,
     }
+    degraded = False
 
     if deep:
         postgres, redis_status, qdrant, ollama = await asyncio.gather(
@@ -114,6 +117,22 @@ async def health_check(response: Response, deep: bool = Query(default=False)):
 
         if any(status == "fail" for status in dependencies.values()):
             data["status"] = "degraded"
-            response.status_code = 503
+            degraded = True
 
+    return data, degraded
+
+
+@health_router.get("/health")
+async def health_check(response: Response, deep: bool = Query(default=False)):
+    """Health check endpoint returning standardized APIResponse.
+
+    Args:
+        deep: When True, probes Postgres, Redis, Qdrant, Ollama and the
+            LangGraph checkpointer instead of only reporting that the process
+            is up. Any failed dependency sets the HTTP status to 503 so
+            uptime monitors and load balancers can act on it, not just read it.
+    """
+    data, degraded = await build_health_payload(deep)
+    if degraded:
+        response.status_code = 503
     return SuccessResponse(data=data)
