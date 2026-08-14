@@ -2,7 +2,7 @@
 
 RUN_RECORDING_ENABLED is off globally in tests (see conftest.py's
 `_disable_run_recording`), so every test here explicitly re-enables it and
-stands in for `AsyncSessionLocal` with a mock session rather than hitting a
+stands in for `tenant_session` with a mock session rather than hitting a
 real database -- these test the recorder's own logic in isolation, not
 Postgres itself (that's covered by the alembic migration verification done
 by hand for this phase, same as Faz 4/5).
@@ -35,12 +35,14 @@ def mock_session():
 
 @pytest.fixture
 def enabled_session(monkeypatch, mock_session):
-    """Turn recording on and point AsyncSessionLocal at a mock session."""
+    """Turn recording on and point tenant_session at a mock session."""
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "RUN_RECORDING_ENABLED", True)
     monkeypatch.setattr(
-        run_recorder, "AsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
+        run_recorder,
+        "tenant_session",
+        lambda company_id=None, is_root=False: _FakeSessionContext(mock_session),
     )
     return mock_session
 
@@ -85,7 +87,9 @@ async def test_start_run_is_a_noop_when_recording_is_disabled(monkeypatch, mock_
 
     monkeypatch.setattr(settings, "RUN_RECORDING_ENABLED", False)
     monkeypatch.setattr(
-        run_recorder, "AsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
+        run_recorder,
+        "tenant_session",
+        lambda company_id=None, is_root=False: _FakeSessionContext(mock_session),
     )
 
     await run_recorder.start_run(

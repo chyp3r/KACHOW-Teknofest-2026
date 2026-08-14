@@ -18,7 +18,7 @@ from typing import Optional
 
 from app.core.config import settings
 from app.domains.drafts.repository import DraftRepository
-from app.infrastructure.database.session import AsyncSessionLocal
+from app.infrastructure.database.session import tenant_session
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,7 @@ async def record_draft(
     judge: Optional[dict] = None,
     missing_information: Optional[list] = None,
     instructions: Optional[str] = None,
+    company_id: Optional[str] = None,
 ) -> Optional[str]:
     """Append a new draft version and return its id, or `None` if not recorded.
 
@@ -46,6 +47,14 @@ async def record_draft(
     (a revision); when it is `None` (a direct `/documents/draft` call with
     no chat session), always starts a fresh version=1 draft, since there is
     no key to find a prior version against.
+
+    Args:
+        company_id: The caller's tenant -- from `DraftService.
+            generate_draft_and_route`'s own `company_id` parameter on the
+            direct-API path, or `PlanningState.company_id` via
+            `ChatService._maybe_record_draft` on the chat path. Threaded
+            through so this write passes `drafts`' row-level-security
+            `WITH CHECK` once that table is migrated to it.
 
     Returns:
         The new draft's id, or `None` when history recording is disabled or
@@ -55,7 +64,7 @@ async def record_draft(
     if not settings.DRAFT_HISTORY_ENABLED:
         return None
     try:
-        async with AsyncSessionLocal() as session:
+        async with tenant_session(company_id) as session:
             repository = DraftRepository(session)
             parent = (
                 await repository.get_latest_for_session(session_id)
@@ -64,6 +73,7 @@ async def record_draft(
             )
             draft = await repository.create_version(
                 user_id=user_id,
+                company_id=company_id,
                 session_id=session_id,
                 document_id=document_id,
                 content=content,

@@ -176,6 +176,7 @@ async def send_chat_message(
         request,
         user_id=current_user.id,
         requester_clearance=clearance.value if clearance else None,
+        company_id=current_user.company_id,
     )
     return SuccessResponse(data=make_serializable(result.model_dump()))
 
@@ -207,7 +208,10 @@ async def stream_chat_message(
     clearance = clearance_for(current_user)
     return _sse_response(
         service.handle_message_stream(
-            request, user_id=user_id, requester_clearance=clearance.value if clearance else None
+            request,
+            user_id=user_id,
+            requester_clearance=clearance.value if clearance else None,
+            company_id=current_user.company_id,
         ),
         http_request,
     )
@@ -230,7 +234,10 @@ async def resume_chat_stream(
     user_id = current_user.id
     ChatService._verify_thread_ownership(request.session_id, user_id)
     return _sse_response(
-        service.resume_stream(request.session_id, request, user_id=user_id), http_request
+        service.resume_stream(
+            request.session_id, request, user_id=user_id, company_id=current_user.company_id
+        ),
+        http_request,
     )
 
 
@@ -242,7 +249,7 @@ async def resume_chat_sync(
 ):
     """Resume a paused run and return the completed (or re-paused) result."""
     result = await service.resume(
-        request.session_id, request, user_id=current_user.id
+        request.session_id, request, user_id=current_user.id, company_id=current_user.company_id
     )
     return SuccessResponse(data=make_serializable(result.model_dump()))
 
@@ -263,19 +270,14 @@ async def list_chat_sessions(
     """List the caller's chat sessions, most recently active first.
 
     ``user_id=None`` (an ADMIN/MANAGER/ROOT -- see ``bypasses_ownership``)
-    lists every session, matching ``GET /documents``'s convention. Note:
-    unlike the documents listing, this is not yet company-scoped at the
-    query level (``chat_sessions.company_id`` is only populated once Faz 3
-    threads it through -- see ``ChatSessionModel.company_id``'s docstring),
-    so an ADMIN/MANAGER/ROOT bypass here currently sees every session
-    system-wide, not just their own company's. Narrow scope, tracked
-    alongside the rest of the Faz 3 recorder work.
+    lists every session *within the caller's own company*, matching
+    ``GET /documents``'s convention.
     """
     user_id = None if bypasses_ownership(current_user) else current_user.id
     sessions = await session_repository.list_for_user(
-        user_id, skip=pagination.offset, limit=pagination.limit
+        current_user.company_id, user_id, skip=pagination.offset, limit=pagination.limit
     )
-    total = await session_repository.count_for_user(user_id)
+    total = await session_repository.count_for_user(current_user.company_id, user_id)
     page_items = [
         {
             "session_id": session.id,

@@ -15,7 +15,22 @@ from sqlalchemy import text
 
 pytestmark = pytest.mark.integration
 
-_RLS_TABLES = ("users", "units", "documents", "invited_emails", "permission_grants")
+_RLS_TABLES = (
+    "users",
+    "units",
+    "documents",
+    "invited_emails",
+    "permission_grants",
+    "unit_memberships",
+    "document_pools",
+    "document_pool_items",
+    "drafts",
+    "chat_sessions",
+    "chat_messages",
+    "runs",
+    "run_steps",
+    "guardrail_events",
+)
 
 
 async def test_kachow_app_is_not_the_schema_owner(app_engine, owner_engine):

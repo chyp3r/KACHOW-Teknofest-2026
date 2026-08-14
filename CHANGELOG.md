@@ -2,6 +2,23 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.3.0] - 2026-08-14
+### Eklendi
+- **Birim üyeliği + evrak havuzu -- Faz 4**: Yeni `unit_memberships` tablosu (kullanıcı↔birim bağı, en fazla bir `is_primary` üyelik, partial unique index ile zorlanır) ve `POST/DELETE /units/{id}/members`, `GET /units/{id}/members`, `GET /units/{id}/suggested-recipients` uçları -- sonuncusu mevcut `routing_graph`'ı yeniden kullanır, yeni bir AI çağrısı yapmaz. Yeni `app.domains.pools` domain'i: `document_pools`/`document_pool_items` tabloları, `GET /pools/me` (her kullanıcının kişisel havuzu ilk kullanımda tembel oluşturulur -- artık her evrak yüklemesi de otomatik olarak sahibinin havuzuna dosyalanıyor), `GET/POST /pools/{id}/items`, `POST /pools/push` (birden fazla alıcıya veya bir birimin tüm üyelerine toplu gönderim, **alıcı bazlı gizlilik kontrolü** ile -- `gizli` bir evrak `hizmete_ozel` bir alıcı için sessizce değil `denied_clearance` olarak reddedilir), `DELETE /pools/{id}/items/{id}`, `POST /pools/items/{id}/acknowledge`. Migration `0014_units_and_pools` -- yeni tablolar `company_id NOT NULL` ile doğuyor, doğrudan RLS'e alınıyor (backfill gerekmiyor).
+- **`company_id` LangGraph state'ine ve dört recorder'a thread edildi**: `PlanningState.company_id`, `ChatService._invoke`'dan `user_id` ile aynı şekilde ekleniyor; `draft_recorder`, `run_recorder`, `guardrail_recorder`, `chat_recorder`'ın hepsi artık `tenant_session(company_id)` kullanıyor. Faz 1'den beri nullable kalan `drafts`/`chat_sessions`/`chat_messages`/`runs`/`run_steps`/`guardrail_events`'in `company_id`'si migration `0015_backfill_recorder_company_id` (veri, `0010`'un "legacy-pre-tenancy" şirketini yeniden kullanır) + `0016_recorder_tables_rls` (`NOT NULL` + RLS) ile artık zorunlu ve RLS kapsamında -- bu değişiklik, Faz 3'ün PR incelemesinde ayrı bir faza mı yoksa Faz 4'e mi katılacağı sorulduğunda kullanıcıyla konuşulup Faz 4'e katıldı.
+- `DraftRepository`/`ChatSessionRepository`/`ChatMessageRepository`'ye açık `company_id` filtre parametreleri eklendi (repository katmanının birincil savunma sözleşmesiyle tutarlı -- RLS'e yaslanmak yerine).
+
+### Düzeltildi
+- **`GET /drafts` her zaman 500 veriyordu**: Faz 2'nin ABAC refactor'ü `drafts/router.py`'den `bypasses_ownership` import'unu kaldırmıştı ama `list_drafts` uç noktası hâlâ onu çağırıyordu -- gerçek Docker yığınına karşı canlı duman testinde bulundu (mevcut hiçbir test bu uç noktayı HTTP seviyesinde çalıştırmıyordu). Import geri eklendi; regresyonu yakalayacak yeni `tests/unit/domains/test_draft_router.py` eklendi.
+
+### Test
+- `docker compose exec backend pytest -q` → 1609 test geçti. `tests/integration/test_rls_role_is_not_owner.py` artık 14 tabloyu (5 mevcut + 9 yeni) kapsıyor; `tests/integration/test_rls_isolation.py`'ye `unit_memberships` ve `drafts` için çapraz-şirket izolasyon testleri eklendi.
+- Gerçek Docker yığınına karşı uçtan uca doğrulama: birim üyeliği ekleme/listeleme/önerilen-alıcılar, evrak havuzuna itme (tekli + toplu, alıcı-bazlı gizlilik reddi dahil), evrak yüklemenin otomatik havuz dosyalaması, gerçek bir sohbet turunun `runs`/`chat_sessions`/`guardrail_events`'e doğru `company_id` ile yazdığının doğrudan SQL ile kontrolü.
+
+**Not — kapsam yalnızca backend'i içerir.** Sonraki fazlar (taslak dağıtımı/bildirimler, analitik/denetim) ayrı issue'larda takip edilecektir.
+
+Refs: [#173](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/173)
+
 ## [3.2.0] - 2026-08-13
 ### Eklendi
 - **Postgres Row-Level Security -- Faz 3**: `kachow_app` rolü (`NOSUPERUSER`, tablo sahipliği yok, yalnızca DML) -- backend artık şema sahibi olarak değil bu rolle bağlanıyor (`settings.DATABASE_URL`). `ENABLE`+`FORCE ROW LEVEL SECURITY` ve bir `tenant_isolation` policy'si `users`/`units`/`documents`/`invited_emails`/`permission_grants` üzerinde: `company_id = current_setting('app.current_company_id', true) OR current_setting('app.is_root', true) = 'on'`. Migration `0013_rls` idempotent (mevcut volume'lerde `scripts/init-db.sh` yeniden çalışmadığı için); taze volume'ler için aynı kurulum `scripts/init-db.sh`'a da eklendi.

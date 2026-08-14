@@ -20,7 +20,7 @@ from typing import Any, Optional
 from uuid import uuid4
 
 from app.core.config import settings
-from app.infrastructure.database.session import AsyncSessionLocal
+from app.infrastructure.database.session import tenant_session
 from app.observability.model.run_model import RunModel, RunStepModel
 
 logger = logging.getLogger(__name__)
@@ -40,6 +40,7 @@ async def start_run(
     evidence: tuple[str, ...],
     alternatives: tuple[tuple[str, float], ...],
     clarification: Optional[dict[str, Any]],
+    company_id: Optional[str] = None,
 ) -> None:
     """Record a run's resolved plan at the moment planning completes.
 
@@ -53,14 +54,21 @@ async def start_run(
             clarification: Every field of the ``PlanDecision``
             ``resolve_plan`` produced (see
             ``app.ai.workflows.planner.PlanDecision``).
+        company_id: The caller's tenant (``PlanningState.company_id``, set
+            by ``ChatService._invoke``). Threaded through so this INSERT
+            passes ``runs``' row-level-security ``WITH CHECK`` once that
+            table is migrated to it (see ``tenant_session``) -- ``None``
+            degrades to "not recorded" via the try/except below rather than
+            raising, same as any other recorder failure.
     """
     if not settings.RUN_RECORDING_ENABLED:
         return
     try:
-        async with AsyncSessionLocal() as session:
+        async with tenant_session(company_id) as session:
             session.add(
                 RunModel(
                     id=run_id,
+                    company_id=company_id,
                     thread_id=thread_id,
                     user_id=user_id,
                     document_id=document_id,
@@ -87,20 +95,26 @@ async def record_step(
     status: str,
     duration_ms: float,
     error: Optional[str] = None,
+    company_id: Optional[str] = None,
 ) -> None:
     """Record one plan step's outcome (see ``_execute_one_step``).
 
     A no-op when ``run_id`` is empty -- a resumed run whose checkpoint
     predates this field (or any state built without going through
     ``planning_node``) has nothing to attach the step to.
+
+    Args:
+        company_id: See :func:`start_run`'s docstring -- same reasoning,
+            denormalized onto ``run_steps`` the same way ``run_id`` is.
     """
     if not settings.RUN_RECORDING_ENABLED or not run_id:
         return
     try:
-        async with AsyncSessionLocal() as session:
+        async with tenant_session(company_id) as session:
             session.add(
                 RunStepModel(
                     id=uuid4().hex,
+                    company_id=company_id,
                     run_id=run_id,
                     step=step,
                     status=status,
@@ -113,18 +127,24 @@ async def record_step(
         logger.exception("Failed to record run step '%s' for run %s", step, run_id)
 
 
-async def end_run(*, run_id: str, status: str) -> None:
+async def end_run(*, run_id: str, status: str, company_id: Optional[str] = None) -> None:
     """Close out a run's status once its terminal node runs.
 
     A no-op when ``run_id`` is empty, same reasoning as :func:`record_step`.
     Never fires for a run that paused at the human-in-the-loop gate and was
     never resumed -- it stays "running", an honest reflection of an
     abandoned run rather than a swept or timed-out one.
+
+    Args:
+        company_id: See :func:`start_run`'s docstring. This is an UPDATE,
+            not an INSERT -- once ``runs`` is under row-level security, the
+            GUC this sets is what lets the row be *found* at all, not just
+            what a WITH CHECK validates.
     """
     if not settings.RUN_RECORDING_ENABLED or not run_id:
         return
     try:
-        async with AsyncSessionLocal() as session:
+        async with tenant_session(company_id) as session:
             run = await session.get(RunModel, run_id)
             if run is None:
                 return

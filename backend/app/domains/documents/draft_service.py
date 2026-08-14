@@ -145,6 +145,7 @@ class DraftService:
         if missing_information:
             draft_id = await draft_recorder.record_draft(
                 user_id=user_id,
+                company_id=company_id,
                 session_id=None,
                 document_id=request.storage_path,
                 content=draft_content,
@@ -204,6 +205,7 @@ class DraftService:
         ] or routing_state.get("requires_human_approval", False)
         draft_id = await draft_recorder.record_draft(
             user_id=user_id,
+            company_id=company_id,
             session_id=None,
             document_id=request.storage_path,
             content=draft_content,

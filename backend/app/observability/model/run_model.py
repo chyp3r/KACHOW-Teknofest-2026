@@ -28,13 +28,12 @@ class RunModel(Base, TimestampMixin):
     __tablename__ = "runs"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    #: Nullable for now -- this row is written from inside a planning-graph
-    #: node (`app.observability.run_recorder.start_run`), which does not yet
-    #: carry `company_id` through `PlanningState` (see the tenancy plan's
-    #: Faz 3, which threads it through the same state that already carries
-    #: `user_id`).
-    company_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("companies.id"), nullable=True, index=True
+    #: NOT NULL since migration `0016_recorder_tables_rls` -- written from
+    #: `PlanningState.company_id` (see `app.observability.run_recorder.
+    #: start_run`), threaded through the planning graph's state alongside
+    #: `user_id`. Under row-level security (that same migration).
+    company_id: Mapped[str] = mapped_column(
+        String, ForeignKey("companies.id"), nullable=False, index=True
     )
     thread_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
@@ -66,10 +65,10 @@ class RunStepModel(Base, TimestampMixin):
     __tablename__ = "run_steps"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    #: Denormalized from the parent run; nullable for now -- see
-    #: `RunModel.company_id`.
-    company_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("companies.id"), nullable=True, index=True
+    #: Denormalized from the parent run; NOT NULL since `0016_recorder_
+    #: tables_rls` -- see `RunModel.company_id`.
+    company_id: Mapped[str] = mapped_column(
+        String, ForeignKey("companies.id"), nullable=False, index=True
     )
     run_id: Mapped[str] = mapped_column(
         String, ForeignKey("runs.id"), nullable=False, index=True

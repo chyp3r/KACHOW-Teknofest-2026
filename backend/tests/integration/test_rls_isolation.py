@@ -111,3 +111,60 @@ async def test_wrong_company_id_guc_also_sees_zero_rows(app_engine, two_companie
         await session.close()
 
     assert count == 0
+
+
+# ==========================================
+# unit_memberships (Faz 4, new table -- not just a retrofit of an existing one)
+# ==========================================
+async def test_company_a_cannot_see_company_bs_unit_membership(app_engine, two_companies):
+    session = await app_session(app_engine, company_id=two_companies["a"]["company_id"])
+    try:
+        row = (
+            await session.execute(
+                text("SELECT id FROM unit_memberships WHERE id = :mid"),
+                {"mid": two_companies["b"]["membership_id"]},
+            )
+        ).scalar_one_or_none()
+    finally:
+        await session.close()
+
+    assert row is None
+
+
+async def test_company_a_insert_into_unit_memberships_rejects_company_bs_id(app_engine, two_companies):
+    session = await app_session(app_engine, company_id=two_companies["a"]["company_id"])
+    try:
+        with pytest.raises(DBAPIError, match="row-level security"):
+            await session.execute(
+                text(
+                    "INSERT INTO unit_memberships (id, company_id, unit_id, user_id, is_primary, created_at, updated_at) "
+                    "VALUES ('rls-isolation-test-membership', :bad_cid, :unit_id, :user_id, false, now(), now())"
+                ),
+                {
+                    "bad_cid": two_companies["b"]["company_id"],
+                    "unit_id": two_companies["a"]["unit_id"],
+                    "user_id": two_companies["a"]["user_id"],
+                },
+            )
+    finally:
+        await session.rollback()
+        await session.close()
+
+
+# ==========================================
+# The six recorder tables migrated to RLS in this same phase (0016_recorder_tables_rls)
+# ==========================================
+async def test_company_a_cannot_insert_a_draft_claiming_company_bs_id(app_engine, two_companies):
+    session = await app_session(app_engine, company_id=two_companies["a"]["company_id"])
+    try:
+        with pytest.raises(DBAPIError, match="row-level security"):
+            await session.execute(
+                text(
+                    "INSERT INTO drafts (id, company_id, user_id, version, content, is_deleted, created_at, updated_at) "
+                    "VALUES ('rls-isolation-test-draft', :bad_cid, :user_id, 1, 'x', false, now(), now())"
+                ),
+                {"bad_cid": two_companies["b"]["company_id"], "user_id": two_companies["a"]["user_id"]},
+            )
+    finally:
+        await session.rollback()
+        await session.close()

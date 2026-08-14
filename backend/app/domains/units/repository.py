@@ -1,9 +1,11 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.units.model.unit_membership_model import UnitMembershipModel
 from app.domains.units.model.unit_model import UnitModel
+from app.domains.users.model.user_model import UserModel
 
 
 class UnitRepository:
@@ -67,6 +69,77 @@ class UnitRepository:
         """Permanently remove a unit record from the database, scoped to `company_id`."""
         result = await self.db.execute(
             delete(UnitModel).where(UnitModel.id == unit_id, UnitModel.company_id == company_id)
+        )
+        await self.db.flush()
+        return result.rowcount > 0
+
+
+class UnitMembershipRepository:
+    """Repository for the user <-> unit link (see `UnitMembershipModel`).
+
+    Every method takes an explicit `company_id`, same convention as
+    `UnitRepository` above.
+    """
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def get(self, unit_id: str, user_id: str, company_id: str) -> Optional[UnitMembershipModel]:
+        result = await self.db.execute(
+            select(UnitMembershipModel).where(
+                UnitMembershipModel.unit_id == unit_id,
+                UnitMembershipModel.user_id == user_id,
+                UnitMembershipModel.company_id == company_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_for_unit(self, unit_id: str, company_id: str) -> List[Tuple[UnitMembershipModel, UserModel]]:
+        """Every member of `unit_id`, joined with their identity, ranked for suggestion:
+        primary members first, then "lead"s, then everyone else, alphabetically."""
+        result = await self.db.execute(
+            select(UnitMembershipModel, UserModel)
+            .join(UserModel, UserModel.id == UnitMembershipModel.user_id)
+            .where(UnitMembershipModel.unit_id == unit_id, UnitMembershipModel.company_id == company_id)
+            .order_by(
+                UnitMembershipModel.is_primary.desc(),
+                (UnitMembershipModel.role_in_unit == "lead").desc(),
+                UserModel.username.asc(),
+            )
+        )
+        return [(membership, user) for membership, user in result.all()]
+
+    async def clear_primary_for_user(self, user_id: str, company_id: str) -> None:
+        """Unset any existing `is_primary` membership for `user_id`.
+
+        Called before setting a new one -- the partial unique index
+        (`uq_unit_memberships_one_primary_per_user`) allows at most one
+        `is_primary=true` row per user, so promoting a second unit to
+        primary must first demote whichever one currently holds it.
+        """
+        result = await self.db.execute(
+            select(UnitMembershipModel).where(
+                UnitMembershipModel.user_id == user_id,
+                UnitMembershipModel.company_id == company_id,
+                UnitMembershipModel.is_primary.is_(True),
+            )
+        )
+        for membership in result.scalars().all():
+            membership.is_primary = False
+        await self.db.flush()
+
+    async def create(self, membership: UnitMembershipModel) -> UnitMembershipModel:
+        self.db.add(membership)
+        await self.db.flush()
+        return membership
+
+    async def delete(self, unit_id: str, user_id: str, company_id: str) -> bool:
+        result = await self.db.execute(
+            delete(UnitMembershipModel).where(
+                UnitMembershipModel.unit_id == unit_id,
+                UnitMembershipModel.user_id == user_id,
+                UnitMembershipModel.company_id == company_id,
+            )
         )
         await self.db.flush()
         return result.rowcount > 0
