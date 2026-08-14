@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependency import require_auth_if_enabled, require_roles
 from app.api.responses import APIResponse, SuccessResponse
 from app.core.enums.user_role import UserRole
+from app.domains.audit.repository import AuditLogRepository
+from app.domains.audit.service import AuditService
 from app.domains.units.repository import UnitMembershipRepository, UnitRepository
 from app.domains.units.schema.unit_membership_schema import UnitMemberCreate, UnitMemberResponse
 from app.domains.units.schema.unit_schema import UnitCreate, UnitResponse, UnitUpdate
@@ -15,6 +17,10 @@ from app.domains.users.repository import UserRepository
 from app.infrastructure.database.session import get_db
 
 router = APIRouter(prefix="/units", tags=["units"])
+
+
+def _audit_service(db: AsyncSession) -> AuditService:
+    return AuditService(AuditLogRepository(db))
 
 
 @router.get("", response_model=APIResponse[List[UnitResponse]])
@@ -43,6 +49,15 @@ async def create_unit(
     repository = UnitRepository(db)
     service = UnitService(repository)
     unit = await service.create_unit(schema, current_user.company_id)
+    await _audit_service(db).record(
+        company_id=current_user.company_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="unit:create",
+        resource_type="unit",
+        resource_id=unit.id,
+        after={"name": unit.name},
+    )
     response_data = UnitResponse.model_validate(unit)
     return SuccessResponse(data=response_data)
 
@@ -58,6 +73,15 @@ async def update_unit(
     repository = UnitRepository(db)
     service = UnitService(repository)
     unit = await service.update_unit(unit_id, schema, current_user.company_id)
+    await _audit_service(db).record(
+        company_id=current_user.company_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="unit:update",
+        resource_type="unit",
+        resource_id=unit_id,
+        after=schema.model_dump(exclude_unset=True, mode="json"),
+    )
     response_data = UnitResponse.model_validate(unit)
     return SuccessResponse(data=response_data)
 
@@ -72,6 +96,14 @@ async def delete_unit(
     repository = UnitRepository(db)
     service = UnitService(repository)
     await service.delete_unit(unit_id, current_user.company_id)
+    await _audit_service(db).record(
+        company_id=current_user.company_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="unit:delete",
+        resource_type="unit",
+        resource_id=unit_id,
+    )
     return SuccessResponse(data=None)
 
 

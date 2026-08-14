@@ -70,7 +70,7 @@ class ChatService:
             AIException: If the workflow fails or exceeds its timeout.
         """
         thread_id = self._thread_id(request.session_id, user_id)
-        config = self._trace_config(thread_id)
+        config = self._trace_config(thread_id, user_id, company_id)
         state = await self._invoke(
             request,
             config=config,
@@ -125,7 +125,7 @@ class ChatService:
 
         async def run_graph() -> None:
             try:
-                config = self._trace_config(thread_id)
+                config = self._trace_config(thread_id, user_id, company_id)
                 config.setdefault("configurable", {})["status_queue"] = queue
 
                 state = await self._invoke(
@@ -222,7 +222,7 @@ class ChatService:
 
         self._verify_thread_ownership(session_id, user_id)
         HITL_RESUMES.labels(action=request.action).inc()
-        config = self._trace_config(session_id)
+        config = self._trace_config(session_id, user_id, company_id)
         # No explicit escalation on this resume -> preset resolves to
         # BALANCED (multiplier 1.0), leaving today's fixed timeout unchanged.
         timeout = ORCHESTRATION_TIMEOUT_SECONDS * get_reasoning_level_preset(
@@ -299,7 +299,7 @@ class ChatService:
 
         async def run_graph() -> None:
             try:
-                config = self._trace_config(session_id)
+                config = self._trace_config(session_id, user_id, company_id)
                 config.setdefault("configurable", {})["status_queue"] = queue
 
                 state = await asyncio.wait_for(
@@ -739,20 +739,31 @@ class ChatService:
         return DEFAULT_REPLY
 
     @staticmethod
-    def _trace_config(thread_id: str) -> dict[str, Any]:
+    def _trace_config(
+        thread_id: str, user_id: Optional[str] = None, company_id: Optional[str] = None
+    ) -> dict[str, Any]:
         """Build the LangGraph config: thread_id plus Langfuse tracing when available.
 
         Args:
             thread_id: The checkpointer thread id for this session.
+            user_id, company_id: Attached as Langfuse trace metadata (see
+                ``app.observability.tracer.build_trace_config``) when known
+                -- omitted (not fabricated) at call sites that don't have
+                one in scope, e.g. ``get_session_state``.
 
         Returns:
             A config dict with ``configurable.thread_id`` always set, and
             ``callbacks`` present only when tracing is available.
         """
         try:
-            from app.observability.tracer import build_trace_config
+            from app.observability.tracer import build_trace_config, company_tags
 
-            return build_trace_config(thread_id=thread_id)
+            return build_trace_config(
+                thread_id=thread_id,
+                langfuse_user_id=user_id,
+                langfuse_session_id=thread_id,
+                langfuse_tags=company_tags(company_id),
+            )
         except Exception:
             logger.debug("Langfuse tracing unavailable; continuing without it.")
             return {"configurable": {"thread_id": thread_id}}

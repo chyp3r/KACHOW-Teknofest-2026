@@ -19,6 +19,7 @@ from typing import Optional
 from app.core.config import settings
 from app.domains.drafts.repository import DraftRepository
 from app.infrastructure.database.session import tenant_session
+from app.observability import company_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,10 @@ async def record_draft(
                 instructions=instructions,
             )
             await session.commit()
+            if company_id is not None:
+                slug = company_metrics.cached_slug(company_id)
+                if slug is not None:
+                    company_metrics.note_draft_created(slug, status)
             return draft.id
     except Exception:
         logger.exception("Failed to record draft for session %s", session_id)

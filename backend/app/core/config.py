@@ -255,7 +255,27 @@ class Settings(BaseSettings):
     # Langfuse Configuration
     LANGFUSE_PUBLIC_KEY: str | None = None
     LANGFUSE_SECRET_KEY: str | None = None
+    #: The backend's own API endpoint -- in `compose.yml` this is the
+    #: internal Docker service hostname (`http://langfuse:3000`), reachable
+    #: from this container but *not* from a browser. Do not reuse this for
+    #: a link a human is meant to click; see `LANGFUSE_PUBLIC_URL` below.
     LANGFUSE_HOST: str = "http://localhost:3000"
+
+    #: The browser-reachable URL for the same Langfuse instance -- used only
+    #: by `GET /companies/{id}/analytics/links`'s deep link. Defaults to the
+    #: same value as `LANGFUSE_HOST` for a non-Docker/local run where the two
+    #: really are identical; `compose.yml` overrides only `LANGFUSE_HOST`
+    #: (to the internal hostname), so this keeps its `localhost` default
+    #: there and the two intentionally diverge under Docker.
+    LANGFUSE_PUBLIC_URL: str = "http://localhost:3000"
+
+    #: Base URL for `GET /companies/{id}/analytics/links`'s deep link --
+    #: `compose.yml`'s `grafana` service publishes on 3001 (Prometheus/
+    #: Postgres already use 3000/5432, hence not the Grafana default port).
+    #: The `company` dashboard template variable (see `monitoring/
+    #: dashboards/company_dashboard.json`) is appended by the analytics
+    #: service, not baked in here, since it varies per company.
+    GRAFANA_URL: str = "http://localhost:3001"
 
     # Semantic prototype vectors, written by scripts/build_prototypes.py.
     # Same relative-to-working-directory convention as the corpus below, which

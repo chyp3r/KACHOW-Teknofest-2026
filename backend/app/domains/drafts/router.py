@@ -10,6 +10,8 @@ from app.core.authz.attributes import Action, Resource
 from app.core.authz.dependency import subject_from_user
 from app.core.authz.engine import authorize
 from app.core.permissions.role_checker import bypasses_ownership
+from app.domains.audit.repository import AuditLogRepository
+from app.domains.audit.service import AuditService
 from app.domains.drafts.draft_share_service import DraftShareService
 from app.domains.drafts.model.draft_model import DraftModel
 from app.domains.drafts.model.draft_share_model import DraftShareModel
@@ -21,6 +23,8 @@ from app.domains.drafts.schema.draft_share_schema import (
     DraftShareResponse,
 )
 from app.domains.drafts.service import DraftService
+from app.domains.quotas.repository import CompanyQuotaRepository, UsageCounterRepository
+from app.domains.quotas.service import QuotaService
 from app.domains.units.repository import UnitRepository
 from app.domains.users.model.user_model import UserModel
 from app.domains.users.repository import UserRepository
@@ -104,7 +108,12 @@ def _draft_share_service(db: AsyncSession) -> DraftShareService:
         draft_repository=DraftRepository(db),
         user_repository=UserRepository(db),
         unit_repository=UnitRepository(db),
+        quota_service=QuotaService(UsageCounterRepository(db), CompanyQuotaRepository(db)),
     )
+
+
+def _audit_service(db: AsyncSession) -> AuditService:
+    return AuditService(AuditLogRepository(db))
 
 
 def _share_response(share: DraftShareModel, draft: Optional[DraftModel]) -> DraftShareResponse:
@@ -234,6 +243,17 @@ async def send_draft(
     """
     service = _draft_share_service(db)
     shares = await service.send(draft_id, current_user, request, current_user.company_id)
+    audit = _audit_service(db)
+    for share in shares:
+        await audit.record(
+            company_id=current_user.company_id,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role,
+            action="draft:share_send",
+            resource_type="draft_share",
+            resource_id=share.id,
+            after={"draft_id": draft_id, "recipient_id": share.recipient_id, "status": share.status},
+        )
     return SuccessResponse(data=[_share_response(share, None).model_dump(mode="json") for share in shares])
 
 
@@ -262,6 +282,15 @@ async def accept_draft_share(
     share, draft = await service.respond(
         share_id, current_user.company_id, current_user, "accepted", request.response_note
     )
+    await _audit_service(db).record(
+        company_id=current_user.company_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="draft:share_accept",
+        resource_type="draft_share",
+        resource_id=share.id,
+        after={"status": share.status},
+    )
     return SuccessResponse(data=_share_response(share, draft).model_dump(mode="json"))
 
 
@@ -277,6 +306,15 @@ async def reject_draft_share(
     share, draft = await service.respond(
         share_id, current_user.company_id, current_user, "rejected", request.response_note
     )
+    await _audit_service(db).record(
+        company_id=current_user.company_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="draft:share_reject",
+        resource_type="draft_share",
+        resource_id=share.id,
+        after={"status": share.status},
+    )
     return SuccessResponse(data=_share_response(share, draft).model_dump(mode="json"))
 
 
@@ -289,4 +327,13 @@ async def withdraw_draft_share(
     """Withdraw a still-`sent` share. Sender (or Admin/Manager/Root) only."""
     service = _draft_share_service(db)
     share = await service.withdraw(share_id, current_user.company_id, current_user)
+    await _audit_service(db).record(
+        company_id=current_user.company_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="draft:share_withdraw",
+        resource_type="draft_share",
+        resource_id=share.id,
+        after={"status": share.status},
+    )
     return SuccessResponse(data=_share_response(share, None).model_dump(mode="json"))
