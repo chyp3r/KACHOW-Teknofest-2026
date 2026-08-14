@@ -130,6 +130,7 @@ def test_a_settled_draft_from_the_revise_step_is_recorded_as_a_revise():
     version = update["active_draft"]
     assert version.version == 2
     assert version.created_from == "revise"
+    assert version.supersedes == 1
     assert update["draft_history"] == (first, version)
 
 
@@ -157,6 +158,7 @@ def test_a_second_unrelated_draft_request_is_not_mislabeled_as_a_revise():
     )
 
     assert update["active_draft"].created_from == "draft"
+    assert update["active_draft"].supersedes == 0
 
 
 def test_the_draft_version_carries_its_grounding_forward():
@@ -224,7 +226,11 @@ def test_a_revise_requested_draft_is_still_versioned():
     assert update["draft_history"] == (version,)
 
 
-def test_a_rejected_draft_is_archived_without_staying_active():
+def test_a_rejected_draft_with_no_new_text_is_annotated_in_place_and_stays_active():
+    """Defensive fallback path: no `draft_result["draft"]` at all (not
+    reachable through the router today, see the no-op test below for the
+    even-more-defensive case) -- the existing active_draft is annotated in
+    place rather than manufacturing a duplicate entry with no text."""
     first = DraftVersion(
         version=1, text="v1", correspondence_type="cover_letter",
         confidence_score=70.0, created_from="draft",
@@ -239,13 +245,16 @@ def test_a_rejected_draft_is_archived_without_staying_active():
         draft_result={"status": "REJECTED", "rejection_reason": "Üslup çok resmi değil."},
     )
 
-    assert update["active_draft"] is None
     assert len(update["draft_history"]) == 1
     archived = update["draft_history"][0]
     assert archived.version == 1
     assert archived.text == "v1"
     assert archived.created_from == "rejected"
     assert archived.rejection_reason == "Üslup çok resmi değil."
+    # The rejected draft stays active -- a reject is a verdict on the text,
+    # not an instruction to forget it (see focus.py's own docstring on
+    # _ARCHIVE_ONLY_DRAFT_STATUSES).
+    assert update["active_draft"] is archived
     assert update["last_rejection"] == {
         "version": 1, "reason": "Üslup çok resmi değil.", "draft": "v1",
     }
@@ -267,13 +276,100 @@ def test_a_rejection_with_no_prior_active_draft_still_archives_the_real_text():
         },
     )
 
-    assert update["active_draft"] is None
     archived = update["draft_history"][0]
     assert archived.version == 1
     assert archived.text == "reddedilen ilk taslak"
     assert archived.created_from == "rejected"
     assert archived.rejection_reason == "Üslup uygun değil."
+    assert archived.supersedes == 0
+    assert update["active_draft"] is archived
     assert update["last_rejection"]["draft"] == "reddedilen ilk taslak"
+
+
+def test_rejecting_a_revision_keeps_its_own_text_not_the_prior_versions():
+    """The bug this fixes: a revision that fixed the content but not the
+    tone, then rejected for its tone, must not silently discard the content
+    fix by re-archiving the *prior* turn's version instead of this turn's
+    real, revised text."""
+    first = DraftVersion(
+        version=1, text="v1 - eski içerik", correspondence_type="cover_letter",
+        confidence_score=70.0, created_from="draft",
+    )
+    focus = SessionFocus(active_draft=first, draft_history=(first,))
+
+    update = compute_focus_update(
+        focus,
+        document_id=None,
+        plan_intent="revise",
+        input_text="Üslubu daha resmi yap.",
+        draft_result={
+            "status": "REJECTED",
+            "rejection_reason": "Üslup hâlâ çok resmi değil.",
+            "draft": "v2 - düzeltilmiş içerik, yanlış üslup",
+            "correspondence_type": "cover_letter",
+        },
+    )
+
+    assert len(update["draft_history"]) == 2
+    # v1 is untouched in history -- it was never the thing rejected.
+    assert update["draft_history"][0] is first
+    rejected = update["draft_history"][1]
+    assert rejected.version == 2
+    assert rejected.text == "v2 - düzeltilmiş içerik, yanlış üslup"
+    assert rejected.created_from == "rejected"
+    assert rejected.supersedes == 1
+    assert update["active_draft"] is rejected
+
+
+def test_rejecting_an_unrelated_fresh_draft_does_not_claim_to_supersede_the_open_one():
+    """An unrelated draft request arriving while some other draft is still
+    open, then rejected, must not claim to supersede the unrelated open
+    draft -- `supersedes` only tracks real revision chains."""
+    first = DraftVersion(
+        version=1, text="v1", correspondence_type="cover_letter",
+        confidence_score=70.0, created_from="draft",
+    )
+    focus = SessionFocus(active_draft=first, draft_history=(first,))
+
+    update = compute_focus_update(
+        focus,
+        document_id=None,
+        plan_intent="draft",
+        input_text="Başka bir konuda taslak hazırla.",
+        draft_result={
+            "status": "REJECTED",
+            "rejection_reason": "Bu değil.",
+            "draft": "ilgisiz yeni taslak",
+        },
+    )
+
+    rejected = update["draft_history"][1]
+    assert rejected.supersedes == 0
+
+
+def test_a_gate_revise_round_rejected_at_the_gate_supersedes_the_prior_version():
+    first = DraftVersion(
+        version=1, text="v1", correspondence_type="cover_letter",
+        confidence_score=70.0, created_from="draft",
+    )
+    focus = SessionFocus(active_draft=first, draft_history=(first,))
+
+    update = compute_focus_update(
+        focus,
+        document_id=None,
+        plan_intent="draft",
+        input_text="ignored for gate-originated revisions",
+        draft_result={
+            "status": "REJECTED",
+            "rejection_reason": "Hâlâ olmadı.",
+            "draft": "gate üzerinden revize edilmiş metin",
+            "instruction_origin": "human_gate",
+        },
+    )
+
+    rejected = update["draft_history"][1]
+    assert rejected.created_from == "rejected"
+    assert rejected.supersedes == 1
 
 
 def test_a_rejection_with_neither_active_draft_nor_text_is_a_no_op():

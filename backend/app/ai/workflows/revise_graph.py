@@ -163,12 +163,27 @@ def _build_brief(active_draft: DraftVersion, context: str) -> str:
     (see ``app.ai.revision.retrieval``) is reflected in every downstream
     prompt, not just the first one.
     """
+    rejection_note = ""
+    if active_draft.status == "REJECTED" and active_draft.rejection_reason:
+        # `active_draft` can itself be a previously rejected version (see
+        # app.ai.session.focus's own docstring on _ARCHIVE_ONLY_DRAFT_STATUSES
+        # -- a reject no longer clears active_draft, it stays revisable).
+        # Surfacing why it was rejected keeps this revision targeted at that
+        # one complaint instead of treating the whole text as suspect, which
+        # is exactly what the reviser's own "yalnızca kusur listesindeki
+        # maddeleri gider" contract already expects of it.
+        rejection_note = (
+            "5. Önceki Sürümün Reddedilme Gerekçesi (YALNIZCA bu noktaya "
+            f"odaklan; metnin geri kalanındaki doğru bilgiyi koru): "
+            f"{active_draft.rejection_reason}\n"
+        )
     return (
         f"1. Önceki Taslak Sürümü: {active_draft.version}\n"
         f"2. Doğrulanmış Sınıflandırma: {active_draft.classification.get('summary', 'Özet yok.')}\n"
         f'3. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
         f"{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
         f"4. Yazım Briefi:\n{format_writing_brief(active_draft.writing_brief)}\n"
+        f"{rejection_note}"
     )
 
 
