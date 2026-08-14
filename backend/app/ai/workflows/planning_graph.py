@@ -211,6 +211,14 @@ class PlanningState(TypedDict, total=False):
     #: run-recording hooks in this module and, alongside
     #: requester_clearance below, by _run_assist's tool/output-gate wiring.
     user_id: str | None
+    #: The authenticated caller's tenant (ChatService._invoke), carried the
+    #: same way user_id is -- read by every recorder call in this module
+    #: (start_run/record_step/end_run, the output guardrail's
+    #: record_event) so their writes can be attributed to a company, and by
+    #: the routing sub-call (see routing_node) to scope which units it may
+    #: suggest. Survives a human-in-the-loop pause/resume via the
+    #: checkpointer, same as user_id.
+    company_id: str | None
     #: The authenticated caller's resolved SensitivityLevel (see
     #: app.core.permissions.role_checker.clearance_for), as its string
     #: value -- graph state must stay JSON-serialisable, same reason
@@ -683,6 +691,7 @@ def create_planning_graph(
             evidence=decision.evidence,
             alternatives=decision.alternatives,
             clarification=decision.clarification,
+            company_id=state.get("company_id"),
         )
 
         return {
@@ -1014,6 +1023,7 @@ def create_planning_graph(
                     reasons=verdict.reasons,
                     run_id=state.get("run_id"),
                     document_id=document_id,
+                    company_id=state.get("company_id"),
                     requester_user_id=state.get("user_id"),
                     related_document_ids=[document_id] if document_id else [],
                 )
@@ -1109,6 +1119,7 @@ def create_planning_graph(
         await end_run(
             run_id=state.get("run_id", ""),
             status=str(final_output.get("status", "unknown")).lower(),
+            company_id=state.get("company_id"),
         )
 
         pending, boundary = _pending_consolidation(
@@ -1232,10 +1243,12 @@ def create_planning_graph(
             {
                 "draft": draft_result.get("draft", ""),
                 "confidence_score": score,
-                # Empty until Faz 3 threads company_id through PlanningState
-                # itself (see RoutingState.company_id's docstring) -- degrades
-                # to "no units configured, needs human approval" rather than
-                # leaking another company's units into this prompt.
+                # PlanningState.company_id (threaded from ChatService._invoke).
+                # Empty only for a state built outside that path (or a stale
+                # pre-Faz-4 checkpoint) -- degrades to "no units configured,
+                # needs human approval" rather than leaking another company's
+                # units into this prompt (see RoutingState.company_id's
+                # docstring).
                 "company_id": state.get("company_id") or "",
             },
             config=child_config(config),
@@ -1483,6 +1496,7 @@ def create_planning_graph(
             status=step_outcome,
             duration_ms=step_duration * 1000,
             error=updates.get(_result_key(step), {}).get("error"),
+            company_id=state.get("company_id"),
         )
 
         # The sub-graphs emit their own node_end events with richer payloads;

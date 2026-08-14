@@ -444,15 +444,13 @@ constraint ile zorlanır) -- root herhangi bir şirkete bağlı değildir ve
 şirket verisine yalnızca açık bir scope-switch akışıyla erişir (bkz.
 `docs/api/companies.md`).
 
-**Bilinen kapsam dışı**: `chat_sessions`/`chat_messages`/`drafts`/`runs`/
-`run_steps`/`guardrail_events` tabloları `company_id` kolonunu taşır ama bu
-alan henüz zorunlu değildir -- bu satırlar LangGraph orkestrasyon katmanının
-derinlerinden (`PlanningState` üzerinden, `user_id`'nin bugün taşındığı
-şekilde) yazılır ve `company_id`'nin oraya taşınması ayrı bir faz olarak
-planlanmıştır (bkz. `app.observability.model.run_model.RunModel.company_id`
-docstring'i). Bu tablolar henüz RLS'e de dahil değil -- bir tablo, kolonu her
-satırda gerçekten dolu olmadan RLS'e alınmaz (aksi hâlde meşru satırlar bile
-kimseye görünmez hâle gelir; bkz. migration `0013_rls`'in kendi docstring'i).
+`chat_sessions`/`chat_messages`/`drafts`/`runs`/`run_steps`/
+`guardrail_events`'in `company_id`'si de Faz 4'ten (migration `0016_
+recorder_tables_rls`) itibaren `NOT NULL` ve RLS kapsamında -- `PlanningState.
+company_id`, `ChatService._invoke`'dan planlama grafiğinin durumuna
+`user_id` ile aynı şekilde ekleniyor ve dört recorder'ın (`draft_recorder`,
+`run_recorder`, `guardrail_recorder`, `chat_recorder`) hepsi artık `tenant_
+session(company_id)` kullanıyor (bkz. aşağıdaki RLS bölümü).
 
 ## Postgres Row-Level Security (RLS)
 
@@ -472,11 +470,19 @@ yapar:
    yaratımı hem orada (taze volume'ler için) hem migration'da (mevcut
    volume'ler için) tekrarlanır.
 2. **`ENABLE`+`FORCE ROW LEVEL SECURITY`** ve tek bir `tenant_isolation`
-   policy'si, Faz 1'in zaten `company_id NOT NULL` yaptığı tablolarda:
-   `users`, `units`, `documents`, `invited_emails`, `permission_grants`
-   (Faz 2). `FORCE` şart -- onsuz RLS tablo sahibi için zaten atlanıyor
-   *ve* `BYPASSRLS` yetkili herhangi bir rol için de atlanır; `kachow_app`
-   ikisi de değil, ama `FORCE` bunu gelecekte de öyle kalmaya zorluyor.
+   policy'si, her kiracı-şekilli tabloda: `users`/`units`/`documents`/
+   `invited_emails` (Faz 1), `permission_grants` (Faz 2), `unit_memberships`/
+   `document_pools`/`document_pool_items` (Faz 4, `0014_units_and_pools` --
+   yeni tablolar olduğu için backfill'e gerek kalmadan doğrudan `NOT NULL`
+   ile doğuyorlar), ve `drafts`/`chat_sessions`/`chat_messages`/`runs`/
+   `run_steps`/`guardrail_events` (Faz 4, `0015_backfill_recorder_company_id`
+   + `0016_recorder_tables_rls` -- Faz 1'den beri nullable kalan altılı,
+   LangGraph state threading tamamlanınca aynı üç-aşamalı desenle
+   kapatıldı). `company_id`'si olmayan tek tablo `companies`'in kendisi --
+   kiracının kökü, kapsanacak bir kiracısı yok. `FORCE` şart -- onsuz RLS
+   tablo sahibi için zaten atlanıyor *ve* `BYPASSRLS` yetkili herhangi bir
+   rol için de atlanır; `kachow_app` ikisi de değil, ama `FORCE` bunu
+   gelecekte de öyle kalmaya zorluyor.
 
 Policy: `company_id = current_setting('app.current_company_id', true) OR
 current_setting('app.is_root', true) = 'on'`. `current_setting(key, true)`
@@ -539,13 +545,15 @@ yapılan her sonraki istek "User not found" ile patlıyordu (GUC boş kalıyor).
 ### Dürüst uyarı
 
 RLS **ikinci** savunma hattıdır, birincisi değil: (a) diskteki analiz
-blob'u ve Qdrant hiç RLS kapsamında değil, (b) `drafts`/`chat_sessions`/
-`runs`/... hâlâ RLS dışı (yukarıdaki "bilinen kapsam dışı"), (c) alembic ve
-`scripts/` şema-sahibi tarafında çalışıyor, RLS'ten etkilenmiyor. Asıl doğru
-olması gereken şey hâlâ repository katmanındaki zorunlu `company_id`
-filtresi -- `tests/integration/test_tenant_repository_scoping.py` bunu RLS
-tamamen kapalıyken (şema-sahibi bağlantısıyla) doğruluyor, `tests/
-integration/test_rls_isolation.py` de RLS'in kendisini `kachow_app` üzerinden.
+blob'u ve Qdrant hiç RLS kapsamında değil, (b) LangGraph checkpointer'ın
+kendi tabloları (`checkpoint*`) da değil -- kasıtlı olarak
+şema-sahibi bağlantısında kalıyorlar (bkz. `settings.checkpointer_dsn`'in
+docstring'i), (c) alembic ve `scripts/` şema-sahibi tarafında çalışıyor,
+RLS'ten etkilenmiyor. Asıl doğru olması gereken şey hâlâ repository
+katmanındaki zorunlu `company_id` filtresi -- `tests/integration/
+test_tenant_repository_scoping.py` bunu RLS tamamen kapalıyken (şema-sahibi
+bağlantısıyla) doğruluyor, `tests/integration/test_rls_isolation.py` de
+RLS'in kendisini `kachow_app` üzerinden.
 
 ## ABAC Yetkilendirme Motoru (`app.core.authz`)
 

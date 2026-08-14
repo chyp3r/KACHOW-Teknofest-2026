@@ -41,6 +41,7 @@ class DraftService:
 
     async def list_drafts(
         self,
+        company_id: Optional[str] = None,
         session_id: Optional[str] = None,
         document_id: Optional[str] = None,
         user_id: Optional[str] = None,
@@ -48,6 +49,7 @@ class DraftService:
         limit: int = 100,
     ) -> List[DraftModel]:
         return await self.repository.list_drafts(
+            company_id=company_id,
             session_id=session_id,
             document_id=document_id,
             user_id=user_id,
@@ -57,12 +59,13 @@ class DraftService:
 
     async def count_drafts(
         self,
+        company_id: Optional[str] = None,
         session_id: Optional[str] = None,
         document_id: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> int:
         return await self.repository.count_drafts(
-            session_id=session_id, document_id=document_id, user_id=user_id
+            company_id=company_id, session_id=session_id, document_id=document_id, user_id=user_id
         )
 
     async def delete_draft(self, draft_id: str) -> None:

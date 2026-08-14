@@ -40,6 +40,7 @@ class DraftRepository:
 
     async def list_drafts(
         self,
+        company_id: Optional[str] = None,
         session_id: Optional[str] = None,
         document_id: Optional[str] = None,
         user_id: Optional[str] = None,
@@ -53,6 +54,14 @@ class DraftRepository:
         list-then-len approach, since a draft listing must already collapse
         each session's version chain down to one row and a subquery join
         does that in one query instead of fetching every version.
+
+        `company_id` is `Optional` only because `drafts.company_id` itself
+        still is (see `DraftModel.company_id`'s docstring) -- omitted
+        entirely rather than filtered to `NULL`, so a caller that hasn't
+        adopted tenant scoping yet keeps seeing every company's drafts
+        exactly as before, matching every other repository's convention of
+        filtering explicitly rather than leaning on row-level security
+        alone.
         """
         latest_version = (
             select(
@@ -68,6 +77,8 @@ class DraftRepository:
             (DraftModel.session_id == latest_version.c.session_id)
             & (DraftModel.version == latest_version.c.max_version),
         )
+        if company_id is not None:
+            query = query.where(DraftModel.company_id == company_id)
         if session_id is not None:
             query = query.where(DraftModel.session_id == session_id)
         if document_id is not None:
@@ -80,12 +91,18 @@ class DraftRepository:
 
     async def count_drafts(
         self,
+        company_id: Optional[str] = None,
         session_id: Optional[str] = None,
         document_id: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> int:
         drafts = await self.list_drafts(
-            session_id=session_id, document_id=document_id, user_id=user_id, skip=0, limit=10_000
+            company_id=company_id,
+            session_id=session_id,
+            document_id=document_id,
+            user_id=user_id,
+            skip=0,
+            limit=10_000,
         )
         return len(drafts)
 
@@ -93,6 +110,7 @@ class DraftRepository:
         self,
         *,
         user_id: Optional[str],
+        company_id: Optional[str] = None,
         session_id: Optional[str],
         document_id: Optional[str],
         content: str,
@@ -111,6 +129,7 @@ class DraftRepository:
         """Append a new version, chained to `parent` when this is a revision."""
         draft = DraftModel(
             id=uuid4().hex,
+            company_id=company_id,
             user_id=user_id,
             session_id=session_id,
             document_id=document_id,

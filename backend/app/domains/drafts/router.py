@@ -8,6 +8,7 @@ from app.api.responses import SuccessResponse
 from app.core.authz.attributes import Action, Resource
 from app.core.authz.dependency import subject_from_user
 from app.core.authz.engine import authorize
+from app.core.permissions.role_checker import bypasses_ownership
 from app.domains.drafts.model.draft_model import DraftModel
 from app.domains.drafts.schema.draft_schema import DraftResponse
 from app.domains.drafts.service import DraftService
@@ -28,12 +29,10 @@ def _assert_owns_draft(draft: DraftModel, current_user: UserModel) -> None:
     ``documents/router.py::_authorize_document``'s docstring for why no DB
     round trip here) replacing the old ``draft.user_id``/
     ``bypasses_ownership`` check. ADMIN/MANAGER/ROOT see every draft
-    company-wide, EMPLOYEE only its own -- same outcome as before. Note:
-    not yet company-scoped at the query level -- see
-    ``ChatSessionModel.company_id``'s docstring for why (``drafts.
-    company_id`` has the same Faz 3-deferred population); ``engine.
-    authorize``'s tenant gate is a no-op while ``draft.company_id`` is
-    ``None``, same as this check doing no company comparison at all today.
+    company-wide, EMPLOYEE only its own -- same outcome as before.
+    ``drafts.company_id`` is NOT NULL and RLS'd since migration
+    ``0016_recorder_tables_rls``, so ``engine.authorize``'s tenant gate is
+    now a real second check here too, not a no-op.
 
     Raises:
         AuthorizationException: If ``draft.user_id`` belongs to a different
@@ -63,6 +62,7 @@ async def list_drafts(
     """
     user_id = None if bypasses_ownership(current_user) else current_user.id
     drafts = await service.list_drafts(
+        company_id=current_user.company_id,
         session_id=session_id,
         document_id=document_id,
         user_id=user_id,
@@ -70,7 +70,10 @@ async def list_drafts(
         limit=pagination.limit,
     )
     total = await service.count_drafts(
-        session_id=session_id, document_id=document_id, user_id=user_id
+        company_id=current_user.company_id,
+        session_id=session_id,
+        document_id=document_id,
+        user_id=user_id,
     )
     pages = (total + pagination.size - 1) // pagination.size if pagination.size else 0
     paginated = PaginatedResponse(

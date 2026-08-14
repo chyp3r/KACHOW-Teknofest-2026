@@ -41,12 +41,13 @@ class RoutingState(TypedDict, total=False):
 
     draft: str
     confidence_score: float
-    #: Which company's unit list to route against. Empty/missing degrades to
-    #: "no units configured" (see `routing_node`'s `if not units:` branch)
-    #: rather than falling back to every company's units -- fail-secure, not
-    #: fail-open, for a caller that hasn't been updated to supply it yet
-    #: (see the tenancy plan's Faz 3, which threads this through every
-    #: caller including the planning graph's own state).
+    #: Which company's unit list to route against. Every caller supplies it
+    #: now (`DraftService.generate_draft_and_route`, `routing/router.py`,
+    #: and `PlanningState.company_id` via `planning_graph.py`'s routing
+    #: sub-call) -- empty/missing still degrades to "no units configured"
+    #: (see `routing_node`'s `if not units:` branch) rather than falling
+    #: back to every company's units, fail-secure for any caller this
+    #: doesn't hold for.
     company_id: str
     final_destination: Optional[str]
     justification: str

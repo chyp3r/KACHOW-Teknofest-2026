@@ -89,6 +89,71 @@ ile devre dışı bırakmak genellikle tercih edilir.
 
 ---
 
+# POST /api/v1/units/{unit_id}/members
+
+Bir kullanıcıyı birime ekler. **Admin/Manager yetkisi gerektirir.**
+
+## İstek
+
+```json
+{
+  "user_id": "u1...",
+  "is_primary": true,
+  "role_in_unit": "lead"
+}
+```
+
+| Alan | Tür | Zorunlu | Açıklama |
+|---|---|---|---|
+| `user_id` | string | Evet | Eklenecek kullanıcının ID'si (çağıranın kendi şirketinde olmalı) |
+| `is_primary` | bool | Hayır | Bu kullanıcının birincil/ana birimi (varsayılan `false`) -- bir kullanıcının en fazla bir birincil birimi olabilir, `true` verilirse önceki birincil üyelik otomatik geri alınır |
+| `role_in_unit` | string | Hayır | Serbest metin, örn. `"lead"` |
+
+Kullanıcı veya birim bulunamazsa `404 NOT_FOUND`, kullanıcı zaten üyeyse
+`409 RESOURCE_CONFLICT` döner.
+
+---
+
+# DELETE /api/v1/units/{unit_id}/members/{user_id}
+
+Bir kullanıcıyı birimden çıkarır. **Admin/Manager yetkisi gerektirir.**
+Üyelik bulunamazsa `404 NOT_FOUND` döner.
+
+---
+
+# GET /api/v1/units/{unit_id}/members
+
+Bir birimin üyelerini, önerilen sırayla (önce birincil üye, sonra
+`role_in_unit="lead"`, sonra alfabetik) listeler.
+
+## Yanıt
+
+```json
+{
+  "success": true,
+  "data": [
+    { "user_id": "u1...", "username": "aylin", "email": "aylin@kurum.example", "is_primary": true, "role_in_unit": "lead" }
+  ],
+  "error": null,
+  "meta": { "timestamp": "2026-08-14T12:00:00Z" }
+}
+```
+
+---
+
+# GET /api/v1/units/{unit_id}/suggested-recipients
+
+AI'nin taslak yönlendirme kararında önerdiği birimin üyelerini döner --
+taslak alıcısı seçimi için önerilen kişiler. Yeni bir AI çağrısı yapmaz;
+`GET /units/{unit_id}/members` ile aynı sıralanmış üye listesini döner.
+Çağıran, taslağın yönlendirildiği birimin ID'sini `POST /documents/draft`
+yanıtındaki (veya `POST /routing/suggest`'in) `destination` birim adını
+`GET /units` listesiyle eşleştirerek bulur.
+
+Yanıt şekli `GET /units/{unit_id}/members` ile birebir aynıdır.
+
+---
+
 ## Hata durumları
 
 | Durum | Kod | Sebep |

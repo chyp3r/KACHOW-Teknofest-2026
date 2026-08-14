@@ -11,6 +11,8 @@ from app.ai.guardrails.file_integrity import check_file_integrity
 from app.ai.guardrails.injection import scrub_extracted_text
 from app.domains.documents.model.document_model import DocumentModel
 from app.domains.documents.repository import DocumentRepository
+from app.domains.pools.model.document_pool_item_model import DocumentPoolItemModel
+from app.domains.pools.repository import DocumentPoolItemRepository, DocumentPoolRepository
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
 from app.core.config import settings
@@ -69,6 +71,8 @@ class DocumentService:
         embedding_service: Optional[EmbeddingService] = None,
         vector_store: Optional[BaseVectorStore] = None,
         document_repository: Optional[DocumentRepository] = None,
+        pool_repository: Optional[DocumentPoolRepository] = None,
+        pool_item_repository: Optional[DocumentPoolItemRepository] = None,
     ) -> None:
         """Initialise the service with injected collaborators.
 
@@ -82,6 +86,11 @@ class DocumentService:
                 when absent, a document is analysed exactly as before but
                 never registered, which also means it never appears in
                 `GET /documents` or passes an ownership check.
+            pool_repository, pool_item_repository: The evrak havuzu (see
+                `app.domains.pools`) every upload files itself into (its
+                owner's personal default pool). Optional for the same
+                reason `document_repository` is -- when absent, a document
+                is registered exactly as before but never pool-filed.
         """
         self.storage = storage
         self.extractor = extractor
@@ -89,6 +98,8 @@ class DocumentService:
         self.embedding_service = embedding_service
         self.vector_store = vector_store
         self.document_repository = document_repository
+        self.pool_repository = pool_repository
+        self.pool_item_repository = pool_item_repository
 
     async def analyze_document(
         self,
@@ -394,6 +405,8 @@ class DocumentService:
                 kind="magic_byte",
                 decision="blocked",
                 reasons=[integrity.reason],
+                company_id=company_id,
+                requester_user_id=owner_id,
             )
             raise ValidationException(
                 message="Dosya içeriği doğrulanamadı.",
@@ -590,8 +603,36 @@ class DocumentService:
                     pii_flagged=bool(response.guardrail.pii_findings),
                 )
             )
+            await self._file_into_default_pool(storage_path, owner_id, company_id)
         except Exception:
             logger.exception("Failed to register document %s", storage_path)
+
+    async def _file_into_default_pool(self, storage_path: str, owner_id: str, company_id: str) -> None:
+        """File a freshly-registered document into its uploader's personal pool.
+
+        Same "personal pool" concept `app.domains.pools.service.PoolService.
+        get_or_create_personal_pool` lazily creates on first read -- this is
+        the other lazy-creation path, on first *write* (an upload), so a
+        pool exists and already has content the first time its owner opens
+        `GET /pools/me`. A no-op, not an error, when this service was built
+        without pool repositories (most unit tests) -- same optionality as
+        `document_repository` itself.
+        """
+        if self.pool_repository is None or self.pool_item_repository is None:
+            return
+        pool = await self.pool_repository.get_or_create_default(
+            "user", owner_id, company_id, name="Kişisel Havuz"
+        )
+        await self.pool_item_repository.create(
+            DocumentPoolItemModel(
+                id=uuid4().hex,
+                company_id=company_id,
+                pool_id=pool.id,
+                document_id=storage_path,
+                added_by=owner_id,
+                source="upload",
+            )
+        )
 
     @staticmethod
     async def _record_sensitivity_assessment(

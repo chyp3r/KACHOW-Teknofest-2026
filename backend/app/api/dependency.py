@@ -260,16 +260,22 @@ def get_chat_message_repository(db: AsyncSession = Depends(get_db)) -> ChatMessa
 def get_document_analysis_service(
     analysis_graph: Any = Depends(get_document_analysis_graph),
     document_repository: DocumentRepository = Depends(get_document_repository),
+    db: AsyncSession = Depends(get_db),
 ) -> DocumentService:
     """Provide the document analysis service with its collaborators injected.
 
     Args:
         analysis_graph: The compiled analysis workflow.
         document_repository: Ownership/listing registry.
+        db: Shared with the pool repositories below so filing an upload into
+            its owner's default pool commits in the same transaction as
+            registering the document itself.
 
     Returns:
         A ready-to-use `DocumentService`.
     """
+    from app.domains.pools.repository import DocumentPoolItemRepository, DocumentPoolRepository
+
     return DocumentService(
         storage=get_storage_client(),
         extractor=get_document_extractor(),
@@ -277,6 +283,8 @@ def get_document_analysis_service(
         embedding_service=EmbeddingService(embeddings_client=get_embeddings_client()),
         vector_store=get_vector_store(),
         document_repository=document_repository,
+        pool_repository=DocumentPoolRepository(db),
+        pool_item_repository=DocumentPoolItemRepository(db),
     )
 
 # ---------------------------------------------------------------------------

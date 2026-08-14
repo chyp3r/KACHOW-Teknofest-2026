@@ -18,7 +18,7 @@ from typing import Any, Optional
 
 from app.core.config import settings
 from app.domains.chat.repository import ChatMessageRepository, ChatSessionRepository
-from app.infrastructure.database.session import AsyncSessionLocal
+from app.infrastructure.database.session import tenant_session
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ async def record_turn(
     reply: str,
     workflow_status: str,
     details: Optional[dict[str, Any]] = None,
+    company_id: Optional[str] = None,
 ) -> None:
     """Persist one completed turn: the session row plus both its messages.
 
@@ -45,26 +46,33 @@ async def record_turn(
         workflow_status: `ChatMessageResponse.workflow_status` for this turn.
         details: `ChatMessageResponse.details` for this turn, stored on the
             assistant message only.
+        company_id: The caller's tenant -- threaded through so this write
+            passes `chat_sessions`/`chat_messages`' row-level-security
+            `WITH CHECK` once those tables are migrated to it.
     """
     if not settings.CHAT_HISTORY_ENABLED:
         return
     try:
-        async with AsyncSessionLocal() as session:
+        async with tenant_session(company_id) as session:
             sessions = ChatSessionRepository(session)
             messages = ChatMessageRepository(session)
             await sessions.get_or_create(
                 thread_id,
                 user_id=user_id,
+                company_id=company_id,
                 document_id=document_id,
                 title=_derive_title(user_message),
             )
-            await messages.add_message(thread_id, role="user", content=user_message)
+            await messages.add_message(
+                thread_id, role="user", content=user_message, company_id=company_id
+            )
             await messages.add_message(
                 thread_id,
                 role="assistant",
                 content=reply,
                 workflow_status=workflow_status,
                 details=details,
+                company_id=company_id,
             )
             await session.commit()
     except Exception:
