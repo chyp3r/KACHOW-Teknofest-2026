@@ -63,17 +63,6 @@ def test_inverting_the_two_approval_thresholds_is_rejected():
         broken.check_invariants()
 
 
-def test_judge_blend_weights_must_sum_to_one():
-    policy = get_policy()
-    broken = replace(
-        policy,
-        verification=replace(policy.verification, judge_model_weight=0.9),
-    )
-
-    with pytest.raises(ValueError, match="sum to 1.0"):
-        broken.check_invariants()
-
-
 def test_compound_floor_cannot_sit_below_the_presence_floor():
     """A compound reading cannot need less evidence than a single one."""
     policy = get_policy()
@@ -172,8 +161,6 @@ def test_consuming_modules_read_their_constants_from_the_policy():
     policy = get_policy()
 
     assert draft_verifier.MIN_AUTOMATED_CONFIDENCE_SCORE == policy.verification.min_automated_confidence
-    assert draft_verifier.UNSUPPORTED_CLAIM_PENALTY == policy.verification.unsupported_claim_penalty
-    assert draft_verifier.MAX_UNSUPPORTED_PENALTY == policy.verification.max_unsupported_penalty
     assert draft_verifier.TOKEN_OVERLAP_THRESHOLD == policy.verification.token_overlap_threshold
     assert llm_judge._ECHO_OVERLAP_THRESHOLD == policy.verification.judge_echo_overlap_threshold
     assert routing_graph.HUMAN_APPROVAL_SCORE_THRESHOLD == policy.routing.human_approval_score_threshold

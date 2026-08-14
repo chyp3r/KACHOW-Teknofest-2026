@@ -235,7 +235,7 @@ def detect_conflicts_deterministic(
     # element and the revised draft actually lost it.
     normalized = _fold(raw)
     missing = set(report.missing_structure)
-    labels_by_id = {check_id: label for check_id, label, _pattern, _weight in STRUCTURE_CHECKS}
+    labels_by_id = {check_id: label for check_id, label, _pattern in STRUCTURE_CHECKS}
     seen_ids: set[str] = set()
     for hint, check_id in _REMOVAL_HINTS.items():
         if check_id in seen_ids or hint not in normalized:

@@ -1,8 +1,10 @@
 """Unit tests for the deterministic groundedness/structure verifier."""
 
+from app.ai.verification.confidence_rules import RULES
 from app.ai.verification.draft_verifier import (
     MIN_AUTOMATED_CONFIDENCE_SCORE,
     STRUCTURE_CHECKS,
+    _STRUCTURE_RULE_IDS,
     verify_draft,
 )
 
@@ -143,14 +145,17 @@ def test_placeholders_are_excluded_from_grounding_audit_but_still_counted():
 
 def test_each_structure_check_contributes_its_full_weight_when_missing():
     """A draft with none of the five structural markers must be penalised by
-    the exact sum of every STRUCTURE_CHECKS weight, not a partial or capped
-    amount."""
+    the exact sum of every structure rule's own penalty (confidence_rules.
+    RULES, via _STRUCTURE_RULE_IDS), not a partial or capped amount."""
     bare_draft = "Bu metinde hiçbir resmi unsur yok."
     report = verify_draft(bare_draft, source_document=bare_draft)
 
-    total_weight = sum(weight for _, _, _, weight in STRUCTURE_CHECKS)
+    total_weight = sum(
+        RULES[_STRUCTURE_RULE_IDS[key]].penalty for key, _, _ in STRUCTURE_CHECKS
+    )
     assert len(report.missing_structure) == len(STRUCTURE_CHECKS)
     assert report.confidence_score == round(max(0.0, 100.0 - total_weight), 1)
+    assert len(report.applied_rules) == len(STRUCTURE_CHECKS)
 
 
 def test_strict_false_reports_unsupported_claims_without_forcing_approval():

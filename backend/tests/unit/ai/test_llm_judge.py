@@ -5,6 +5,8 @@ import asyncio
 import pytest
 
 from app.ai.agents.judge import JudgeAgent
+from app.ai.guardrails.pii import PiiFinding
+from app.ai.revision.elision import ContentLossFinding
 from app.ai.verification.draft_verifier import MIN_AUTOMATED_CONFIDENCE_SCORE, VerificationReport
 from app.ai.verification.llm_judge import (
     DraftJudgeVerdict,
@@ -122,10 +124,14 @@ async def test_judge_draft_rejects_a_verdict_that_echoes_the_draft(fake_fast_llm
 # ==========================================
 # merge_verdicts()
 # ==========================================
-def test_merge_computes_weighted_average_when_judge_available():
-    combined = merge_verdicts(_report(confidence_score=80.0), _verdict(score=60.0))
+def test_the_judges_own_numeric_score_never_moves_the_combined_score():
+    """The judge no longer contributes a blended number (see this module's
+    own docstring) -- a judge verdict with no findings and
+    addresses_request=True changes nothing about the score, however low its
+    own `.score` field is, because that field is never read here."""
+    combined = merge_verdicts(_report(confidence_score=80.0), _verdict(score=1.0))
 
-    assert combined.combined_score == round(0.6 * 80.0 + 0.4 * 60.0, 1)
+    assert combined.combined_score == 80.0
     assert combined.judge_available is True
 
 
@@ -137,7 +143,14 @@ def test_merge_falls_back_to_deterministic_score_when_judge_unavailable():
     assert "kullanılamadı" in combined.notes
 
 
-def test_critical_finding_caps_score_and_forces_human_approval():
+def test_critical_finding_forces_human_approval_without_moving_the_score():
+    """A critical judge finding gates approval through the rule table's own
+    zero-penalty `yargic_kritik_bulgu` row (see confidence_rules.py's
+    docstring) -- it no longer drags the score down artificially. A single
+    critical defect being averaged away by an otherwise clean structural
+    score was never the problem this was solving; the *number* now stays
+    honest about what the deterministic checks actually found, while the
+    *gate* still opens."""
     verdict = _verdict(
         score=95.0,
         findings=[
@@ -149,10 +162,14 @@ def test_critical_finding_caps_score_and_forces_human_approval():
     )
     combined = merge_verdicts(_report(confidence_score=95.0), verdict)
 
-    assert combined.combined_score < MIN_AUTOMATED_CONFIDENCE_SCORE
+    assert combined.combined_score == 95.0
     assert combined.requires_human_approval is True
     assert combined.requires_revision is True
     assert any(item.kind == "judge:kapanis" for item in combined.repair_items)
+    assert any(
+        rule.rule_id == "yargic_kritik_bulgu" and rule.penalty_applied == 0.0
+        for rule in combined.applied_rules
+    )
 
 
 def test_critical_finding_of_a_non_revisable_kind_still_forces_approval_but_no_repair_item():
@@ -199,6 +216,93 @@ def test_missing_information_passes_through_unchanged():
     combined = merge_verdicts(_report(), _verdict(), missing_information=questions)
 
     assert combined.missing_information == questions
+
+
+# ===========================================================================
+# merge_verdicts() -- signals folded in from outside the deterministic
+# verifier (PII, a guessed correspondence type, missing mevzuat context,
+# revision content loss). Each is its own confidence_rules.py row, so each
+# has its own real score deduction now (previously only a bolt-on approval
+# flag with no effect on the number at all).
+# ===========================================================================
+def test_a_pii_finding_deducts_score_and_forces_approval():
+    combined = merge_verdicts(
+        _report(confidence_score=100.0), None,
+        pii_findings=[PiiFinding(kind="tckn", preview="12345678***")],
+    )
+
+    assert combined.combined_score == 85.0  # 100 - 15 (pii_bulgusu)
+    assert combined.requires_human_approval is True
+
+
+def test_a_guessed_correspondence_type_deducts_score_and_forces_approval():
+    combined = merge_verdicts(
+        _report(confidence_score=100.0), None, correspondence_type_fallback=True
+    )
+
+    assert combined.combined_score == 90.0  # 100 - 10 (tur_tahmini)
+    assert combined.requires_human_approval is True
+
+
+def test_missing_mevzuat_context_deducts_score_and_forces_approval():
+    combined = merge_verdicts(_report(confidence_score=100.0), None, has_context=False)
+
+    assert combined.combined_score == 92.0  # 100 - 8 (mevzuat_baglami_yok)
+    assert combined.requires_human_approval is True
+
+
+def test_content_loss_deducts_score_forces_approval_and_becomes_a_repair_item():
+    loss = ContentLossFinding(
+        detail="Taslakta önceki içeriğin yerine kısaltma kullanılmış.",
+        suggested_fix="Elenen paragrafı kelimesi kelimesine geri getir.",
+    )
+    combined = merge_verdicts(_report(confidence_score=100.0), None, content_loss=loss)
+
+    assert combined.combined_score == 75.0  # 100 - 25 (icerik_kaybi)
+    assert combined.requires_human_approval is True
+    assert any(item.kind == "content_loss" for item in combined.repair_items)
+
+
+def test_multiple_additional_findings_deduct_cumulatively():
+    combined = merge_verdicts(
+        _report(confidence_score=100.0), None,
+        correspondence_type_fallback=True,  # -10
+        has_context=False,  # -8
+        pii_findings=[
+            PiiFinding(kind="tckn", preview="1***"),
+            PiiFinding(kind="iban", preview="TR***"),
+        ],  # -15 * 2 = -30
+    )
+
+    assert combined.combined_score == 52.0  # 100 - 10 - 8 - 30
+    assert combined.requires_human_approval is True
+    assert combined.combined_score < MIN_AUTOMATED_CONFIDENCE_SCORE
+
+
+def test_no_additional_signals_leaves_the_deterministic_score_untouched():
+    combined = merge_verdicts(_report(confidence_score=100.0), None)
+
+    assert combined.combined_score == 100.0
+    assert combined.requires_human_approval is False
+
+
+def test_applied_rules_combines_the_reports_own_rules_with_the_additional_ones():
+    report = VerificationReport(
+        confidence_score=92.0,
+        requires_human_approval=False,
+        missing_structure=["Sayı satırı"],
+        applied_rules=[
+            {
+                "rule_id": "eksik_sayi_satiri", "label": "Eksik Sayı satırı",
+                "category": "yapi", "occurrences": 1, "penalty_applied": 8.0,
+                "forces_approval": True,
+            }
+        ],
+    )
+    combined = merge_verdicts(report, None, correspondence_type_fallback=True)
+
+    rule_ids = {rule.rule_id for rule in combined.applied_rules}
+    assert rule_ids == {"eksik_sayi_satiri", "tur_tahmini"}
 
 
 def test_clean_draft_and_verdict_requires_neither_revision_nor_approval():

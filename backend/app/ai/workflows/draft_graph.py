@@ -19,7 +19,6 @@ from app.ai.revision.elision import detect_content_loss
 from app.ai.verification import (
     DraftJudgeVerdict,
     InfoQuestion,
-    RepairItem,
     build_missing_info_request,
     judge_draft,
     merge_verdicts,
@@ -95,6 +94,11 @@ class DraftState(TypedDict, total=False):
     repair_items: list[dict[str, Any]]
     pii_findings: list[dict[str, Any]]
     missing_information: list[dict[str, Any]]
+    #: The full, auditable rule breakdown behind confidence_score -- report's
+    #: own findings plus everything merge_verdicts folds in (PII, guessed
+    #: correspondence type, missing mevzuat context, judge findings). See
+    #: app.ai.verification.confidence_rules.
+    applied_rules: list[dict[str, Any]]
     attempt_history: list[dict[str, Any]]
     status: str
     error: str
@@ -746,8 +750,6 @@ def create_draft_graph(
         if report.placeholder_count > 0:
             missing_information = build_missing_info_request(draft_text, report, classification)
 
-        combined = merge_verdicts(report, verdict, missing_information=missing_information)
-
         # Mirrors revise_graph.verify_node's content-loss check (see
         # app.ai.revision.elision's module docstring). A repair pass here
         # (writer_node's is_revision branch) hands the reviser's raw output
@@ -762,26 +764,8 @@ def create_draft_graph(
             content_loss = detect_content_loss(
                 previous_draft, draft_text, state.get("instructions", "")
             )
-        if content_loss is not None:
-            logger.warning("Draft repair pass dropped content: %s", content_loss.detail)
-            combined.repair_items.append(
-                RepairItem(
-                    kind="content_loss",
-                    source="deterministic",
-                    detail=content_loss.detail,
-                    suggested_fix=content_loss.suggested_fix,
-                )
-            )
-            combined.requires_revision = True
-            # Same rationale as revise_graph: if the bounded repair loop runs
-            # out before this is actually fixed, the draft must not ship as a
-            # quiet COMPLETED.
-            combined.requires_human_approval = True
-
-        DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)
-        if verdict is not None:
-            DRAFT_SCORE.labels(source="judge").observe(verdict.score)
-        DRAFT_SCORE.labels(source="combined").observe(combined.combined_score)
+            if content_loss is not None:
+                logger.warning("Draft repair pass dropped content: %s", content_loss.detail)
 
         # Personal data (TCKN/IBAN/phone/address) surfacing in a generated
         # draft is grounds for review the same way an unresolved
@@ -795,16 +779,20 @@ def create_draft_graph(
             if finding.confidence >= get_policy().guardrail.pii_confidence_floor
         ]
 
-        # An unresolved correspondence type or a draft with no verified
-        # legislative context means the system guessed, which is itself
-        # grounds for review -- and a second generation cannot fix either, so
-        # this is folded into the approval decision, not into requires_revision.
-        requires_approval = (
-            combined.requires_human_approval
-            or state.get("correspondence_type_source") == "fallback"
-            or not state.get("context")
-            or bool(pii_findings)
+        combined = merge_verdicts(
+            report,
+            verdict,
+            missing_information=missing_information,
+            pii_findings=pii_findings,
+            correspondence_type_fallback=state.get("correspondence_type_source") == "fallback",
+            has_context=bool(state.get("context")),
+            content_loss=content_loss,
         )
+
+        DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)
+        if verdict is not None:
+            DRAFT_SCORE.labels(source="judge").observe(verdict.score)
+        DRAFT_SCORE.labels(source="combined").observe(combined.combined_score)
 
         history_entry = {
             "attempt": state.get("attempts", 0),
@@ -817,7 +805,7 @@ def create_draft_graph(
 
         if missing_information:
             status = "NEEDS_INPUT"
-        elif requires_approval:
+        elif combined.requires_human_approval:
             status = "NEEDS_HUMAN_APPROVAL"
         else:
             status = "COMPLETED"
@@ -836,7 +824,7 @@ def create_draft_graph(
             "draft": draft_text,
             "confidence_score": combined.combined_score,
             "combined_score": combined.combined_score,
-            "requires_human_approval": requires_approval,
+            "requires_human_approval": combined.requires_human_approval,
             "requires_revision": combined.requires_revision,
             "evaluation_notes": evaluation_notes,
             "pii_findings": [finding.model_dump() for finding in pii_findings],
@@ -848,6 +836,7 @@ def create_draft_graph(
             "attempt_history": attempt_history,
             "status": status,
             "reasoning_level": preset.level.value,
+            "applied_rules": [rule.model_dump() for rule in combined.applied_rules],
         }
 
         await emit_node_end(

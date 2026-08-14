@@ -63,7 +63,8 @@ yönlendirme önerisi sunar.
 
 | Alan | Açıklama |
 |---|---|
-| `confidence_score` | Hibrit skor: `0.6 * deterministik + 0.4 * yargıç` (yargıç kullanılamadıysa yalnızca deterministik skor) |
+| `confidence_score` | Tek, deterministik bir kural tablosundan hesaplanır (`app.ai.verification.confidence_rules`) — `100 - uygulanan ceza toplamı`. Yargıç skora katılmaz, yalnızca insan onayı kapısını açar; bkz. `applied_rules` |
+| `applied_rules` | `confidence_score`'u üreten kural satırları (`rule_id`, `label`, `occurrences`, `penalty_applied`, `forces_approval`) — "bu skor neden X?" sorusunun satır satır cevabı |
 | `attempts` | Kaç üretim/revizyon denemesi yapıldığı (en fazla 2: bir ilk üretim + bir revizyon) |
 | `verification` | Deterministik doğrulayıcının raporu — doğrulanamayan iddialar, eksik yapısal unsurlar, yer tutucu sayısı |
 | `judge` | Kalite yargıcının verdiği (varsa) yapılandırılmış değerlendirme; yargıç kullanılamadıysa boş `{}` |

@@ -26,7 +26,12 @@ from app.ai.policy.schema import (
 #: patch for a threshold, minor for a new parameter, major for a removed one.
 #: 2.0.0: removed RoutingPolicy.units/human_approval_unit -- units are now a
 #: runtime-managed domain (see app.domains.units), not a policy parameter.
-POLICY_VERSION = "2.0.0"
+#: 3.0.0: removed VerificationPolicy.unsupported_claim_penalty/
+#: max_unsupported_penalty/judge_deterministic_weight/judge_model_weight --
+#: penalty values now live in the single rule table at
+#: app.ai.verification.confidence_rules.RULES, and the judge no longer
+#: contributes a blended numeric score (see that module's docstring).
+POLICY_VERSION = "3.0.0"
 
 _POLICY = Policy(version=POLICY_VERSION)
 

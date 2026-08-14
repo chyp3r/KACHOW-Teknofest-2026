@@ -6,6 +6,17 @@ import { AlertCircle, CheckCircle2, Route, XCircle } from "lucide-react";
 // Record<string, unknown> (see ChatMessage.details) and this is the one
 // place that reaches into it, so a shape drift fails soft (a field just
 // doesn't render) rather than throwing.
+// One row of app.ai.verification.confidence_rules.AppliedRule -- the
+// deterministic rule table's own breakdown of confidence_score, so "why is
+// this score 62?" has a satisfying answer instead of a bare number.
+interface AppliedRule {
+  rule_id: string;
+  label: string;
+  occurrences: number;
+  penalty_applied: number;
+  forces_approval: boolean;
+}
+
 interface DraftDetails {
   draft?: string;
   status?: string;
@@ -14,6 +25,7 @@ interface DraftDetails {
   evaluation_notes?: string;
   rejection_reason?: string;
   changelog?: { summary?: string };
+  applied_rules?: AppliedRule[];
 }
 
 interface RoutingDetails {
@@ -34,6 +46,9 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
   const isRejected = draft.status === "REJECTED";
   const isReviseExhausted = draft.status === "REVISE_REQUESTED";
   const changelogSummary = draft.changelog?.summary;
+  // Every row here already fired at least once (see confidence_rules.
+  // score_findings) -- no further filtering needed.
+  const appliedRules = draft.applied_rules ?? [];
 
   if (
     !hasScore &&
@@ -52,6 +67,19 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
         <span className="draft-meta-chip">
           Güven skoru: {draft.combined_score}/100
         </span>
+      )}
+      {appliedRules.length > 0 && (
+        <details className="message-logs draft-meta-rules">
+          <summary>Skor dökümü ({appliedRules.length})</summary>
+          {appliedRules.map((rule) => (
+            <p key={rule.rule_id}>
+              {rule.label}
+              {rule.occurrences > 1 ? ` (×${rule.occurrences})` : ""}
+              {rule.penalty_applied > 0 ? ` — -${rule.penalty_applied} puan` : ""}
+              {rule.forces_approval ? " · insan onayı gerektirir" : ""}
+            </p>
+          ))}
+        </details>
       )}
       {routedUnit && (
         <span className="draft-meta-chip">

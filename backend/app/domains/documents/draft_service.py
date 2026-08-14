@@ -154,7 +154,16 @@ class DraftService:
             verification=draft_state.get("verification", {}),
             judge=draft_state.get("judge", {}),
             missing_information=missing_information,
+            applied_rules=draft_state.get("applied_rules", []),
         )
+        # DraftModel.verification has no dedicated applied_rules column (a
+        # JSON blob already, no migration needed) -- folded in here so the
+        # persisted record carries the full auditable score breakdown, not
+        # just the response schema's own top-level field.
+        verification_for_storage = {
+            **common_fields["verification"],
+            "applied_rules": common_fields["applied_rules"],
+        }
 
         # This endpoint has no session/interrupt mechanism of its own (that's
         # the chat path's job via /chat/resume) -- a draft still carrying
@@ -176,7 +185,7 @@ class DraftService:
                 confidence_score=confidence,
                 requires_human_approval=common_fields["requires_human_approval"],
                 attempts=common_fields["attempts"],
-                verification=common_fields["verification"],
+                verification=verification_for_storage,
                 judge=common_fields["judge"],
                 missing_information=missing_information,
                 instructions=request.instructions,

@@ -73,7 +73,6 @@ from app.ai.revision.retrieval import maybe_extend_context
 from app.ai.session.focus import DraftVersion
 from app.ai.verification import (
     InfoQuestion,
-    RepairItem,
     VerificationReport,
     build_missing_info_request,
     judge_draft,
@@ -141,6 +140,8 @@ class ReviseState(TypedDict, total=False):
     pii_findings: list[dict[str, Any]]
     missing_information: list[dict[str, Any]]
     attempt_history: list[dict[str, Any]]
+    #: See draft_graph.DraftState's own field of the same name.
+    applied_rules: list[dict[str, Any]]
 
     #: Set by `audit`.
     conflicts: list[dict[str, Any]]
@@ -609,8 +610,6 @@ def create_revise_graph(
                 draft_text, report, active_draft.classification
             )
 
-        combined = merge_verdicts(report, verdict, missing_information=missing_information)
-
         # Neither of the two paths that can produce `draft_text` without
         # splicing through `_merge` (a whole-draft rewrite with no located
         # target, or any repair-loop pass -- see rewrite_node) had anything
@@ -624,25 +623,6 @@ def create_revise_graph(
         )
         if content_loss is not None:
             logger.warning("Revise rewrite dropped content: %s", content_loss.detail)
-            combined.repair_items.append(
-                RepairItem(
-                    kind="content_loss",
-                    source="deterministic",
-                    detail=content_loss.detail,
-                    suggested_fix=content_loss.suggested_fix,
-                )
-            )
-            combined.requires_revision = True
-            # Not just another automatic repair attempt: if the bounded
-            # repair loop runs out before this is actually fixed, the draft
-            # must not ship as a quiet COMPLETED -- silently dropped content
-            # is worse than a missing structural marker.
-            combined.requires_human_approval = True
-
-        DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)
-        if verdict is not None:
-            DRAFT_SCORE.labels(source="judge").observe(verdict.score)
-        DRAFT_SCORE.labels(source="combined").observe(combined.combined_score)
 
         # Parity with draft_graph.verify_node: a revision that introduces
         # PII, or that inherited a guessed (fallback) correspondence type,
@@ -653,12 +633,21 @@ def create_revise_graph(
             for finding in find_pii(draft_text)
             if finding.confidence >= get_policy().guardrail.pii_confidence_floor
         ]
-        requires_approval = (
-            combined.requires_human_approval
-            or state.get("correspondence_type_source") == "fallback"
-            or not state.get("context")
-            or bool(pii_findings)
+
+        combined = merge_verdicts(
+            report,
+            verdict,
+            missing_information=missing_information,
+            pii_findings=pii_findings,
+            correspondence_type_fallback=state.get("correspondence_type_source") == "fallback",
+            has_context=bool(state.get("context")),
+            content_loss=content_loss,
         )
+
+        DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)
+        if verdict is not None:
+            DRAFT_SCORE.labels(source="judge").observe(verdict.score)
+        DRAFT_SCORE.labels(source="combined").observe(combined.combined_score)
 
         history_entry = {
             "attempt": state.get("attempts", 0),
@@ -671,7 +660,7 @@ def create_revise_graph(
 
         if missing_information:
             status = StepStatus.NEEDS_INPUT
-        elif requires_approval:
+        elif combined.requires_human_approval:
             status = StepStatus.NEEDS_HUMAN_APPROVAL
         else:
             status = StepStatus.COMPLETED
@@ -690,7 +679,7 @@ def create_revise_graph(
             "draft": draft_text,
             "confidence_score": combined.combined_score,
             "combined_score": combined.combined_score,
-            "requires_human_approval": requires_approval,
+            "requires_human_approval": combined.requires_human_approval,
             "requires_revision": combined.requires_revision,
             "evaluation_notes": evaluation_notes,
             "pii_findings": [finding.model_dump() for finding in pii_findings],
@@ -701,6 +690,7 @@ def create_revise_graph(
             "missing_information": [q.model_dump() for q in missing_information],
             "attempt_history": attempt_history,
             "status": status,
+            "applied_rules": [rule.model_dump() for rule in combined.applied_rules],
         }
         await emit_node_end(
             config, "verify", "Taslak Doğrulama", "Taslak doğrulaması tamamlandı.",
