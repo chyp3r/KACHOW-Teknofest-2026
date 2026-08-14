@@ -57,6 +57,28 @@ class DraftRepository:
         each session's version chain down to one row and a subquery join
         does that in one query instead of fetching every version.
 
+        The grouping key is `COALESCE(session_id, id)`, not bare
+        `session_id`. A direct `POST /documents/draft` call (no chat
+        session at all -- see `DraftModel.session_id`'s docstring) leaves
+        `session_id` `NULL`, and SQL's three-valued logic makes `NULL =
+        NULL` evaluate to `NULL`, not `TRUE`: a plain `session_id ==
+        session_id` join condition would silently drop *every* such draft
+        from this listing, and grouping by bare `session_id` would (via
+        `GROUP BY`, which does bucket `NULL`s together, unlike a join
+        predicate) collapse every unrelated session-less draft in the
+        system into one shared "latest version" -- hiding all but a single
+        globally-dominant row, system-wide, once any of them exceeded
+        `version=1` (which only became possible once `DraftShareService.
+        respond`'s accept-fork could produce one). Falling back to the
+        row's own `id` when `session_id` is `NULL` gives every session-less
+        draft its own singleton group instead: correct for the common case
+        (independent direct drafts, which were never meant to collapse into
+        each other), and for an accepted share's forked copy specifically
+        -- the fork is owned by a different user than the original (see
+        `DraftShareService.respond`), so both showing up as separate rows
+        in a company-wide (ADMIN/MANAGER/ROOT) listing is the right
+        outcome, not a duplicate to hide.
+
         `company_id` is `Optional` only because `drafts.company_id` itself
         still is (see `DraftModel.company_id`'s docstring) -- omitted
         entirely rather than filtered to `NULL`, so a caller that hasn't
@@ -65,18 +87,19 @@ class DraftRepository:
         filtering explicitly rather than leaning on row-level security
         alone.
         """
+        group_key = func.coalesce(DraftModel.session_id, DraftModel.id)
         latest_version = (
             select(
-                DraftModel.session_id.label("session_id"),
+                group_key.label("group_key"),
                 func.max(DraftModel.version).label("max_version"),
             )
             .where(DraftModel.is_deleted.is_(False))
-            .group_by(DraftModel.session_id)
+            .group_by(group_key)
             .subquery()
         )
         query = select(DraftModel).join(
             latest_version,
-            (DraftModel.session_id == latest_version.c.session_id)
+            (group_key == latest_version.c.group_key)
             & (DraftModel.version == latest_version.c.max_version),
         )
         if company_id is not None:
