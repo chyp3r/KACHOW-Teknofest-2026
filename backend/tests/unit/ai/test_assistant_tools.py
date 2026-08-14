@@ -399,6 +399,43 @@ async def test_assistant_executes_a_requested_tool_and_streams_the_final_answer(
 
 
 @pytest.mark.asyncio
+async def test_assistant_reuses_the_tool_loops_own_final_answer_without_restreaming(fake_llm):
+    """When generate_with_tools' last turn already wrote the answer (no more
+    tool calls, non-empty content), run_stream must reuse it instead of
+    paying for a second, redundant generation through stream() -- that
+    second pass is what pushed the "assist" node's 70s budget (node_budget in
+    app/ai/policy/schema.py) past its limit on a real multi-tool-turn
+    request: two generate_with_tools calls plus stream() again for content
+    the model had already produced."""
+    handler = AsyncMock(return_value="belgede bulunan cevap")
+    tool = ToolSpec(
+        name="search_document", description="test", args_schema=_NoArgs, handler=handler
+    )
+    fake_llm.generate_with_tools_side_effect = [
+        ToolCallResponse(
+            content="",
+            tool_calls=[{"id": "call-1", "name": "search_document", "args": {"query": "x"}}],
+        ),
+        ToolCallResponse(content="gerçek cevap burada", tool_calls=[]),
+    ]
+    # Deliberately distinct from the expected answer -- if run_stream falls
+    # through to stream() anyway, the assertion below fails loudly instead of
+    # coincidentally matching.
+    fake_llm.stream_chunks = ["BU YANIT KULLANILMAMALI"]
+    agent = AssistantAgent(fake_llm)
+
+    chunks = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="Bu belgede ne var?", history=[], tools=[tool]
+        )
+    ]
+
+    assert "".join(chunks) == "gerçek cevap burada"
+    assert fake_llm.stream_calls == []
+
+
+@pytest.mark.asyncio
 async def test_assistant_stops_after_max_tool_turns_and_still_answers(fake_llm):
     """A model that keeps requesting tools must not loop forever -- after
     MAX_TOOL_TURNS rounds the agent forces a plain-text final answer."""
