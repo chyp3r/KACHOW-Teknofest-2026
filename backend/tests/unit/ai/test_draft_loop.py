@@ -165,6 +165,44 @@ async def test_a_placeholder_short_circuits_to_needs_input_after_one_writer_call
     assert result["missing_information"][0]["key"] == "muhatap"
 
 
+DRAFT_WITH_A_LITERAL_NOT_FOUND_VALUE = (
+    "Konu: Test Konusu\n"
+    "Sayı: Bulunamadı\n"
+    "Tarih: 30.07.2026\n\n"
+    "Sayın Makam,\n\n"
+    "Arz ederim.\n\n"
+    "Ali Veli\nGenel Müdür"
+)
+
+
+@pytest.mark.asyncio
+async def test_a_literal_not_found_value_also_short_circuits_to_needs_input():
+    """The bug this guards against: a writer that writes the literal word
+    "Bulunamadı" instead of the `[...]` placeholder it was told to leave
+    used to ship as a quiet COMPLETED -- PLACEHOLDER_PATTERN never matched
+    it, so no question was ever asked. verify_node's normalization backstop
+    (see app.ai.verification.placeholders) must turn it into the same
+    NEEDS_INPUT path a written-out placeholder already gets."""
+    graph = create_draft_graph(_mock_llm_client())
+
+    with (
+        patch.object(WriterAgent, "stream") as mock_writer,
+        patch.object(ReviserAgent, "stream") as mock_reviser,
+    ):
+        mock_writer.side_effect = lambda **kwargs: _one_chunk(
+            DRAFT_WITH_A_LITERAL_NOT_FOUND_VALUE
+        )
+
+        result = await graph.ainvoke(BASE_STATE)
+
+    mock_reviser.assert_not_called()
+    assert result["status"] == "NEEDS_INPUT"
+    assert result["missing_information"]
+    assert result["missing_information"][0]["key"] == "belge_sayisi"
+    assert "Bulunamadı" not in result["draft"]
+    assert "[Belge Sayısı]" in result["draft"]
+
+
 @pytest.mark.asyncio
 async def test_attempts_stop_at_the_cap_even_when_still_revisable():
     graph = create_draft_graph(_mock_llm_client())

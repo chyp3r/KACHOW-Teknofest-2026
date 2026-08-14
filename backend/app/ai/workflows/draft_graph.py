@@ -23,6 +23,7 @@ from app.ai.verification import (
     build_missing_info_request,
     judge_draft,
     merge_verdicts,
+    normalize_unfilled_markers,
     verify_draft,
 )
 from app.ai.workflows.correspondence import (
@@ -198,15 +199,17 @@ def _build_brief(
         f"SENİN YAZACAĞIN YANITIN KENDİ Sayı/Tarih alanına ASLA yazma; o alan her zaman ilgili "
         f"yer tutucudur, çünkü yanıtın sayısını SENİN kurumunun evrak kaydı verir, gelen evrakın "
         f"kaydı değil):\n"
-        f"   - Gelen Evrakın Sayısı: {fields.get('sayi') or 'Bulunamadı'}\n"
-        f"   - Gelen Evrakın Tarihi: {fields.get('tarih') or 'Bulunamadı'}\n"
+        f"   - Gelen Evrakın Sayısı: {fields.get('sayi') or '(gelen evrakta belirtilmemiş)'}\n"
+        f"   - Gelen Evrakın Tarihi: {fields.get('tarih') or '(gelen evrakta belirtilmemiş)'}\n"
         f"4. Diğer Çıkarılan Bilgiler (bunlar yanıtın kendi ilgili alanlarında -- Konu, Muhatap "
-        f"vb. -- doğrudan kullanılabilir):\n"
-        f"   - Konu: {fields.get('konu') or 'Bulunamadı'}\n"
-        f"   - Muhatap: {fields.get('muhatap') or 'Bulunamadı'}\n"
-        f"   - Gönderen Kurum: {fields.get('gonderen_kurum') or 'Bulunamadı'}\n"
-        f"   - İmza Sahibi: {fields.get('imza_sahibi') or 'Bulunamadı'}"
-        f" ({fields.get('imza_unvani') or 'unvan yok'})\n"
+        f"vb. -- doğrudan kullanılabilir; aşağıdaki parantez içi not bir alanın evrakta "
+        f"bulunmadığını belirtir -- bu notu KENDİSİ bir değermiş gibi taslağa yazma, "
+        f"yanındaki yönergeye göre ilgili yer tutucuyu bırak):\n"
+        f"   - Konu: {fields.get('konu') or '(evrakta yok -- taslakta [Konu] yer tutucusunu bırak)'}\n"
+        f"   - Muhatap: {fields.get('muhatap') or '(evrakta yok -- taslakta [Muhatap] yer tutucusunu bırak; Yazım Briefi bölümünde belirtilmişse onu esas al)'}\n"
+        f"   - Gönderen Kurum: {fields.get('gonderen_kurum') or '(evrakta belirtilmemiş)'}\n"
+        f"   - İmza Sahibi: {fields.get('imza_sahibi') or '(evrakta belirtilmemiş)'}"
+        f" ({fields.get('imza_unvani') or '(unvan belirtilmemiş)'})\n"
         f"5. Evrakta Tespit Edilen Eksik Alanlar: {missing_labels or 'yok'}\n"
         f'6. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
         f"{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
@@ -651,7 +654,15 @@ def create_draft_graph(
             "[Doğrulayıcı] Taslak kaynak evrak ve mevzuata karşı denetleniyor...",
         )
 
-        draft_text = state.get("draft", "")
+        # A prompt instruction is not a guarantee: the brief tells the
+        # writer to leave a `[...]` placeholder for anything missing (see
+        # `_build_brief`), but a smaller local model can still write a
+        # header field's own line with a literal "bulunamadı"/"yok" value
+        # instead. Normalized before anything else runs so the rest of this
+        # node -- groundedness, the judge, missing-information detection --
+        # all see the same, corrected text the human gate and the final
+        # reply will show.
+        draft_text, _ = normalize_unfilled_markers(state.get("draft", ""))
         classification = state.get("classification") or {}
         sub_genre = state.get("correspondence_sub_genre", "")
         strict = state.get("correspondence_type") != "other_official"
@@ -822,6 +833,7 @@ def create_draft_graph(
             evaluation_notes = f"{evaluation_notes} {content_loss.detail}"
 
         update = {
+            "draft": draft_text,
             "confidence_score": combined.combined_score,
             "combined_score": combined.combined_score,
             "requires_human_approval": requires_approval,

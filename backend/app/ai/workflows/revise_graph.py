@@ -78,6 +78,7 @@ from app.ai.verification import (
     build_missing_info_request,
     judge_draft,
     merge_verdicts,
+    normalize_unfilled_markers,
     verify_draft,
 )
 from app.ai.workflows.correspondence import format_correspondence_profile
@@ -540,7 +541,11 @@ def create_revise_graph(
 
     async def verify_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
         active_draft = state["active_draft"]
-        draft_text = state.get("draft", "")
+        # Same backstop as draft_graph.verify_node -- a repair/rewrite pass
+        # can leave the same literal "bulunamadı"/"yok" marker the original
+        # writer could, and revise never re-runs the original writer's
+        # prompt to begin with.
+        draft_text, _ = normalize_unfilled_markers(state.get("draft", ""))
         correspondence_type = state.get("correspondence_type") or active_draft.correspondence_type
         sub_genre = state.get("correspondence_sub_genre") or getattr(
             active_draft, "correspondence_sub_genre", ""
@@ -682,6 +687,7 @@ def create_revise_graph(
             evaluation_notes = f"{evaluation_notes} {content_loss.detail}"
 
         update = {
+            "draft": draft_text,
             "confidence_score": combined.combined_score,
             "combined_score": combined.combined_score,
             "requires_human_approval": requires_approval,
