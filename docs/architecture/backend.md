@@ -474,11 +474,13 @@ yapar:
    `invited_emails` (Faz 1), `permission_grants` (Faz 2), `unit_memberships`/
    `document_pools`/`document_pool_items` (Faz 4, `0014_units_and_pools` --
    yeni tablolar olduğu için backfill'e gerek kalmadan doğrudan `NOT NULL`
-   ile doğuyorlar), ve `drafts`/`chat_sessions`/`chat_messages`/`runs`/
+   ile doğuyorlar), `drafts`/`chat_sessions`/`chat_messages`/`runs`/
    `run_steps`/`guardrail_events` (Faz 4, `0015_backfill_recorder_company_id`
    + `0016_recorder_tables_rls` -- Faz 1'den beri nullable kalan altılı,
    LangGraph state threading tamamlanınca aynı üç-aşamalı desenle
-   kapatıldı). `company_id`'si olmayan tek tablo `companies`'in kendisi --
+   kapatıldı), ve `draft_shares`/`notifications` (Faz 5, `0017_draft_shares_
+   notifications` -- `document_pools` gibi baştan `NOT NULL` doğan yeni
+   tablolar). `company_id`'si olmayan tek tablo `companies`'in kendisi --
    kiracının kökü, kapsanacak bir kiracısı yok. `FORCE` şart -- onsuz RLS
    tablo sahibi için zaten atlanıyor *ve* `BYPASSRLS` yetkili herhangi bir
    rol için de atlanır; `kachow_app` ikisi de değil, ama `FORCE` bunu
@@ -620,6 +622,72 @@ clearance'ı doğrudan karşılaştırıp modele bir red string'i döndürüyor
 çağrılıyor -- `app.ai.*`'nin `app.domains.*` import edemeyeceği katman
 kuralı gereği oraya DB destekli bir PDP enjekte etmek bu kuralı ihlal
 ederdi (bkz. `app.core.authz`'in kendi paket docstring'i).
+
+## Taslak Dağıtımı ve Bildirimler (Faz 5)
+
+Çalışanlar arası taslak gönder/al akışı (`draft_shares`) ve buna bağlı
+gerçek zamanlı bildirim sistemi (`notifications`) -- şartnamedeki "taslak
+paylaşımı" ve "bildirim" maddelerinin karşılığı. İkisi de RLS kapsamında
+(bkz. yukarıdaki tablo listesi), migration `0017_draft_shares_notifications`.
+
+**`draft_shares`** -- `drafts` tablosunun belirli bir versiyonunun belirli
+alıcı(lar)a gönderimi. Ayrı bir inbox/outbox tablosu yok: gelen kutusu
+`recipient_id = ben`, giden kutusu `sender_id = ben`, ikisi de bu tek
+tablonun farklı filtreli sorguları (`DraftShareRepository.list_inbox`/
+`list_outbox`). Gönderim `Action.DRAFT_SEND` ile gerçek ABAC motorundan
+geçer (Faz 2'de tanımlanmış ama o zamana kadar kullanılmamış bir sabit) --
+`PoolService`'in kasıtlı olarak basitleştirilmiş `bypasses_ownership`
+kısayolunun aksine, bir taslağın tek sahibi olduğu için `engine.authorize`'ın
+`Resource` şekline birebir oturuyor.
+
+Zaten oluşmuş bir paylaşımı görüntülemek/yanıtlamak ise bir ABAC kararı
+**değil**: `draft_shares` satırının `sender_id`/`recipient_id`'si kendisi
+yetkilendirmedir (yalnızca iki taraf, ya da `bypasses_ownership` ile
+ADMIN/MANAGER/ROOT şirket geneli). Bunun nedeni, taslağın kendi sahipliğine
+göre `draft:read` kontrolü yapılsaydı, taslağı sahiplenmeyen bir alıcının
+kendisine gönderilen şeyi bile okuyamayacak olması -- bkz.
+`DraftShareService`'in kendi modül docstring'i. Her yanıt (`DraftShareResponse`)
+bu yüzden `drafts` ile join'lenmiş içeriği taşır, ayrı bir `GET /drafts/{id}`
+çağrısına gerek kalmadan.
+
+`suggested_unit_id`, gönderim anında taslağın `destination` alanından
+(AI'ın routing kararı, serbest metin) `UnitRepository.get_by_name` ile
+**anlık kopyalanır** -- yeni bir AI çağrısı yok, `docs/api/units.md`'deki
+`GET /units/{id}/suggested-recipients`'la aynı "tekrar kullan, yeniden
+üretme" ilkesi. Eşleşme yoksa (birim o zamandan beri yeniden adlandırılmış/
+silinmiş) `suggested_unit_id` sessizce `NULL` kalır -- dürüst bir kaçırma,
+hata değil.
+
+**Kabul etmek bir versiyon fork'lar**: `accept`, `DraftRepository.
+create_version`'ın zaten var olan `parent_draft_id` zincirleme mekanizmasını
+kullanarak, **alıcının sahip olduğu** yeni bir taslak versiyonu yaratır
+(`session_id=NULL`, doğrudan `POST /documents/draft` çağrısıyla aynı
+şekilde). Bunun anlamı: "kabul etmek" yalnızca bir durum değişikliği değil,
+taslağı gerçekten devralmak -- alıcı artık `GET /drafts/{yeni_id}` ile
+kendi kopyasına erişebiliyor. `reject` hiçbir şey fork'lamaz.
+
+**`notifications`** -- kişisel, `bypasses_ownership`'siz (bir bildirim
+yalnızca `user_id`'sine ait, şirket geneli görünüm yok). İki event
+(`app/events/event.py`): `draft.shared` (alıcıya) ve `draft.share_responded`
+(yalnızca `accepted`/`rejected` -- `read`/`withdrawn` bildirim üretmez,
+ilki zaten gönderenin ilgi alanı değil, ikincisi gönderenin kendi eylemi).
+`app/events/subscribers.py`'deki dinleyiciler `tenant_session(company_id)`
+açar (istek-dışı kod, GUC okuyacak bir request yok -- bkz. yukarıdaki GUC
+mekaniği bölümü), `notifications` satırını yazar, sonra Redis'e publish eder.
+
+**Gerçek zamanlı akış (`GET /notifications/stream`, SSE) neden Redis
+pub/sub üzerinden, süreç-içi `EventBus` üzerinden değil**: `EventBus`
+tamamen bellek-içi ve tek sürece özel -- çok worker'lı bir uvicorn
+dağıtımında, bir bildirim worker A'da publish edilirse worker B'deki bir
+SSE bağlantısı bunu asla görmez. `RedisCache.publish`/`pubsub()` bu sınırı
+aşıyor. Kanal adı `notifications:{company_id}:{user_id}` (`app.domains.
+notifications.service.channel_for`) -- kullanıcı bazında zaten benzersiz
+olsa da `company_id` eklemek çapraz-şirket bir kanal çakışmasını olası
+değil, **yapısal olarak imkânsız** kılıyor. Canlı push kaybolsa bile veri
+kaybı yok: `notifications` satırı publish'ten **önce** yazılıyor (bkz.
+`NotificationService.create`), yani bağlı olmayan/kopan bir SSE istemcisi
+bir sonraki `GET /notifications` çağrısında bildirimi zaten görüyor --
+Redis burada yalnızca gecikmeyi azaltıyor, doğruluğu değil.
 
 ---
 

@@ -82,6 +82,25 @@ class RedisCache:
             logger.error(f"Redis incr failed for key={key}: {e}")
             return None
 
+    async def publish(self, channel: str, message: str) -> None:
+        """Publish a message to a Redis pub/sub channel.
+
+        Used for the notification stream's fan-out (see
+        ``app.domains.notifications.router``'s SSE endpoint): the process-
+        wide in-memory ``EventBus`` alone is not enough once more than one
+        uvicorn worker is running, since a subscriber connected to worker A
+        never sees an event published from worker B. Fail-open like every
+        other method here -- a dropped live-push notification still exists
+        as a row in ``notifications`` and shows up on the next
+        ``GET /notifications`` poll, so a Redis hiccup degrades to "less
+        real-time", never to data loss.
+        """
+        await self.connect()
+        try:
+            await self.client.publish(channel, message)
+        except Exception as e:
+            logger.error(f"Redis publish failed for channel={channel}: {e}")
+
     async def exists(self, key: str) -> bool:
         """Check if a key exists in the cache."""
         await self.connect()

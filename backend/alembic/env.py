@@ -23,6 +23,8 @@ from app.core.authz.model.permission_grant_model import PermissionGrantModel  # 
 from app.domains.units.model.unit_membership_model import UnitMembershipModel  # noqa: F401
 from app.domains.pools.model.document_pool_model import DocumentPoolModel  # noqa: F401
 from app.domains.pools.model.document_pool_item_model import DocumentPoolItemModel  # noqa: F401
+from app.domains.drafts.model.draft_share_model import DraftShareModel  # noqa: F401
+from app.domains.notifications.model.notification_model import NotificationModel  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

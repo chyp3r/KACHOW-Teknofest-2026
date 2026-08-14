@@ -2,6 +2,22 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.4.0] - 2026-08-14
+### Eklendi
+- **Taslak dağıtımı -- Faz 5**: Yeni `draft_shares` tablosu (bir taslak versiyonunun bir/birden fazla alıcıya gönderimi -- ayrı bir gelen/giden kutusu tablosu yok, `recipient_id = ben`/`sender_id = ben` aynı tablonun filtreli görünümü). `POST /drafts/{id}/send` (`Action.DRAFT_SEND` ile gerçek ABAC motorundan geçer -- Faz 2'de tanımlanmış ama o zamana kadar kullanılmamış bir sabit; `suggested_unit_id` taslağın `destination` alanından `UnitRepository.get_by_name` ile anlık kopyalanır, yeni bir AI çağrısı yok), `GET /drafts/inbox`, `GET /drafts/outbox`, `POST /drafts/shares/{id}/read`, `POST /drafts/shares/{id}/accept` (**mevcut `DraftRepository.create_version` zincirleme mekanizmasını kullanarak alıcının sahip olduğu yeni bir versiyon fork'lar** -- "kabul" yalnızca durum değişikliği değil, taslağı gerçekten devralmak), `POST /drafts/shares/{id}/reject`, `DELETE /drafts/shares/{id}` (yalnızca gönderen, yalnızca `sent`).
+- **Bildirimler -- Faz 5**: Yeni `app.domains.notifications` domain'i, `notifications` tablosu (kişisel, `bypasses_ownership`'siz). `GET /notifications`, `POST /notifications/{id}/read`, `POST /notifications/read-all`, **`GET /notifications/stream`** (SSE, Redis pub/sub ile fan-out -- süreç-içi `EventBus` tek başına çok worker'lı bir uvicorn'da yetersiz kalırdı; `notifications` satırı publish'ten önce yazıldığı için canlı push kaybolsa bile veri kaybı yok). `RedisCache.publish()` eklendi.
+- **Yeni event'ler**: `app/events/event.py`'ye `DraftSharedEvent`/`DraftShareRespondedEvent`; `app/events/subscribers.py`'de bunları dinleyip `notifications` satırı yazan + Redis'e publish eden dinleyiciler (`tenant_session(company_id)` kullanır -- istek-dışı kod).
+- Migration `0017_draft_shares_notifications` -- iki yeni tablo, `document_pools` (Faz 4) gibi baştan `company_id NOT NULL` ile doğuyor, doğrudan RLS'e alınıyor (backfill gerekmiyor).
+- `docs/api/draft-shares.md`, `docs/api/notifications.md` (yeni), `docs/architecture/backend.md`'ye "Taslak Dağıtımı ve Bildirimler" bölümü.
+
+### Test
+- `docker compose exec backend pytest -q` → 1657 test geçti (1609 mevcut + 48 yeni). `tests/integration/test_rls_role_is_not_owner.py` artık 16 tabloyu kapsıyor; `tests/integration/test_rls_isolation.py`'ye `draft_shares`/`notifications` için çapraz-şirket izolasyon testleri eklendi.
+- Gerçek Docker yığınına karşı uçtan uca doğrulama: iki çalışan arasında gönder → gelen kutusunda gör → bildirim al → kabul et (fork'lanan versiyonu doğrudan `GET /drafts/{id}` ile doğrulandı) → gönderen bildirim aldı; ayrıca reddet ve geri çek akışları, ve canlı `curl -N` ile `GET /notifications/stream`'in Redis pub/sub üzerinden gerçekten anlık push ettiğinin doğrudan gözlemi.
+
+**Not — kapsam yalnızca backend'i içerir.** Sonraki faz (analitik/denetim/kota) ayrı bir issue'da takip edilecektir.
+
+Refs: [#175](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/175)
+
 ## [3.3.0] - 2026-08-14
 ### Eklendi
 - **Birim üyeliği + evrak havuzu -- Faz 4**: Yeni `unit_memberships` tablosu (kullanıcı↔birim bağı, en fazla bir `is_primary` üyelik, partial unique index ile zorlanır) ve `POST/DELETE /units/{id}/members`, `GET /units/{id}/members`, `GET /units/{id}/suggested-recipients` uçları -- sonuncusu mevcut `routing_graph`'ı yeniden kullanır, yeni bir AI çağrısı yapmaz. Yeni `app.domains.pools` domain'i: `document_pools`/`document_pool_items` tabloları, `GET /pools/me` (her kullanıcının kişisel havuzu ilk kullanımda tembel oluşturulur -- artık her evrak yüklemesi de otomatik olarak sahibinin havuzuna dosyalanıyor), `GET/POST /pools/{id}/items`, `POST /pools/push` (birden fazla alıcıya veya bir birimin tüm üyelerine toplu gönderim, **alıcı bazlı gizlilik kontrolü** ile -- `gizli` bir evrak `hizmete_ozel` bir alıcı için sessizce değil `denied_clearance` olarak reddedilir), `DELETE /pools/{id}/items/{id}`, `POST /pools/items/{id}/acknowledge`. Migration `0014_units_and_pools` -- yeni tablolar `company_id NOT NULL` ile doğuyor, doğrudan RLS'e alınıyor (backfill gerekmiyor).

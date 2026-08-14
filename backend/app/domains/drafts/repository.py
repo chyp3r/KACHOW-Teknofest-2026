@@ -1,10 +1,12 @@
-from typing import List, Optional
+from datetime import datetime, timezone
+from typing import List, Optional, Tuple
 from uuid import uuid4
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.drafts.model.draft_model import DraftModel
+from app.domains.drafts.model.draft_share_model import DraftShareModel
 
 
 class DraftRepository:
@@ -174,3 +176,117 @@ class DraftRepository:
             update(DraftModel).where(DraftModel.id == draft_id).values(is_deleted=True)
         )
         await self.db.flush()
+
+
+class DraftShareRepository:
+    """Repository for `draft_shares` (see `DraftShareModel`).
+
+    Every method takes an explicit `company_id`, same convention as every
+    other repository since the tenancy work -- RLS backs this up, it does
+    not replace it.
+    """
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def get_by_id(self, share_id: str, company_id: str) -> Optional[DraftShareModel]:
+        result = await self.db.execute(
+            select(DraftShareModel).where(
+                DraftShareModel.id == share_id, DraftShareModel.company_id == company_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def create(self, share: DraftShareModel) -> DraftShareModel:
+        self.db.add(share)
+        await self.db.flush()
+        return share
+
+    def _inbox_query(self, company_id: str, user_id: str, status: Optional[str]):
+        query = select(DraftShareModel, DraftModel).join(
+            DraftModel, DraftModel.id == DraftShareModel.draft_id
+        ).where(
+            DraftShareModel.company_id == company_id, DraftShareModel.recipient_id == user_id
+        )
+        if status is not None:
+            query = query.where(DraftShareModel.status == status)
+        return query
+
+    async def list_inbox(
+        self,
+        company_id: str,
+        user_id: str,
+        status: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> List[Tuple[DraftShareModel, DraftModel]]:
+        """Shares received by `user_id`, newest first, joined with the draft's content."""
+        query = (
+            self._inbox_query(company_id, user_id, status)
+            .order_by(DraftShareModel.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await self.db.execute(query)
+        return [(share, draft) for share, draft in result.all()]
+
+    async def count_inbox(self, company_id: str, user_id: str, status: Optional[str] = None) -> int:
+        query = select(func.count(DraftShareModel.id)).where(
+            DraftShareModel.company_id == company_id, DraftShareModel.recipient_id == user_id
+        )
+        if status is not None:
+            query = query.where(DraftShareModel.status == status)
+        result = await self.db.execute(query)
+        return result.scalar_one()
+
+    async def list_outbox(
+        self,
+        company_id: str,
+        user_id: str,
+        status: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> List[Tuple[DraftShareModel, DraftModel]]:
+        """Shares sent by `user_id`, newest first, joined with the draft's content."""
+        query = select(DraftShareModel, DraftModel).join(
+            DraftModel, DraftModel.id == DraftShareModel.draft_id
+        ).where(
+            DraftShareModel.company_id == company_id, DraftShareModel.sender_id == user_id
+        )
+        if status is not None:
+            query = query.where(DraftShareModel.status == status)
+        query = query.order_by(DraftShareModel.created_at.desc()).offset(skip).limit(limit)
+        result = await self.db.execute(query)
+        return [(share, draft) for share, draft in result.all()]
+
+    async def count_outbox(self, company_id: str, user_id: str, status: Optional[str] = None) -> int:
+        query = select(func.count(DraftShareModel.id)).where(
+            DraftShareModel.company_id == company_id, DraftShareModel.sender_id == user_id
+        )
+        if status is not None:
+            query = query.where(DraftShareModel.status == status)
+        result = await self.db.execute(query)
+        return result.scalar_one()
+
+    async def mark_read(self, share: DraftShareModel) -> DraftShareModel:
+        """Advance a still-`sent` share to `read`. A no-op past `sent` (already
+        `accepted`/`rejected`/`withdrawn` shares don't regress to `read`)."""
+        if share.status == "sent":
+            share.status = "read"
+        await self.db.flush()
+        return share
+
+    async def respond(
+        self, share: DraftShareModel, status: str, response_note: Optional[str]
+    ) -> DraftShareModel:
+        """Resolve a share as `accepted` or `rejected`."""
+        share.status = status
+        share.response_note = response_note
+        share.responded_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        return share
+
+    async def withdraw(self, share: DraftShareModel) -> DraftShareModel:
+        share.status = "withdrawn"
+        await self.db.flush()
+        return share

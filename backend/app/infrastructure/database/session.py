@@ -165,20 +165,16 @@ async def tenant_session(
 
     For out-of-request writers/readers that already know which company
     they're acting for: ``app.domains.units.provider.
-    get_active_units_for_routing``, and the users/units seeders
-    (``app.domains.users.seeder``, ``app.domains.units.seeder``). Applies the
+    get_active_units_for_routing``, the users/units seeders
+    (``app.domains.users.seeder``, ``app.domains.units.seeder``), the four
+    best-effort recorders (``app.domains.drafts.draft_recorder``,
+    ``app.observability.run_recorder``/``guardrail_recorder``,
+    ``app.domains.chat.chat_recorder`` -- since migration ``0016_recorder_
+    tables_rls``, see ``RunModel.company_id``'s docstring), and
+    ``app.events.subscribers``' notification-writing listeners. Applies the
     same GUCs ``get_db`` does (see ``_apply_tenant_guc``), from explicit
     arguments instead of ``app.core.context.get_current_tenant`` -- there is
     no request in flight to have populated it.
-
-    Not used by ``app.domains.drafts.draft_recorder``, ``app.observability.
-    run_recorder``/``guardrail_recorder``, or ``app.domains.chat.
-    chat_recorder``: the tables they write to (``drafts``, ``runs``,
-    ``run_steps``, ``guardrail_events``, ``chat_sessions``,
-    ``chat_messages``) are not under RLS yet -- ``company_id`` is still
-    nullable there, population deferred until it can be threaded through
-    LangGraph state (see ``RunModel.company_id``'s docstring) -- so there is
-    no policy yet for a GUC to satisfy.
     """
     async with AsyncSessionLocal() as session:
         try:

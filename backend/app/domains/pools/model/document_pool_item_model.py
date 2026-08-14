@@ -35,8 +35,10 @@ class DocumentPoolItemModel(Base, TimestampMixin):
     )
     added_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     #: "upload" (the owner's own document, filed automatically) | "manager_push"
-    #: (`POST /pools/push`) | "share" (reserved for Faz 5's draft/document
-    #: sharing, unused today).
+    #: (`POST /pools/push`) | "share" (reserved, still unused -- Faz 5 ended
+    #: up implementing draft sharing via its own `draft_shares` table
+    #: instead of a pool-item source, since a share has sender/recipient/
+    #: status/response fields a pool item has no room for).
     source: Mapped[str] = mapped_column(String, nullable=False, default="upload")
     note: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     #: Set when the pool's owner acknowledges/reads a pushed item (`POST

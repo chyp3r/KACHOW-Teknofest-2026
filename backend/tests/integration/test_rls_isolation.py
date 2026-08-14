@@ -168,3 +168,73 @@ async def test_company_a_cannot_insert_a_draft_claiming_company_bs_id(app_engine
     finally:
         await session.rollback()
         await session.close()
+
+
+# ==========================================
+# draft_shares + notifications (Faz 5, new tables migrated in 0017)
+# ==========================================
+async def test_company_a_cannot_see_company_bs_draft_share(app_engine, two_companies):
+    session = await app_session(app_engine, company_id=two_companies["a"]["company_id"])
+    try:
+        row = (
+            await session.execute(
+                text("SELECT id FROM draft_shares WHERE id = :sid"),
+                {"sid": two_companies["b"]["draft_share_id"]},
+            )
+        ).scalar_one_or_none()
+    finally:
+        await session.close()
+
+    assert row is None
+
+
+async def test_company_a_cannot_insert_a_draft_share_claiming_company_bs_id(app_engine, two_companies):
+    session = await app_session(app_engine, company_id=two_companies["a"]["company_id"])
+    try:
+        with pytest.raises(DBAPIError, match="row-level security"):
+            await session.execute(
+                text(
+                    "INSERT INTO draft_shares (id, company_id, draft_id, sender_id, recipient_id, "
+                    "status, created_at, updated_at) "
+                    "VALUES ('rls-isolation-test-share', :bad_cid, :did, :uid, :uid, 'sent', now(), now())"
+                ),
+                {
+                    "bad_cid": two_companies["b"]["company_id"],
+                    "did": two_companies["a"]["draft_id"],
+                    "uid": two_companies["a"]["user_id"],
+                },
+            )
+    finally:
+        await session.rollback()
+        await session.close()
+
+
+async def test_company_a_cannot_see_company_bs_notification(app_engine, two_companies):
+    session = await app_session(app_engine, company_id=two_companies["a"]["company_id"])
+    try:
+        row = (
+            await session.execute(
+                text("SELECT id FROM notifications WHERE id = :nid"),
+                {"nid": two_companies["b"]["notification_id"]},
+            )
+        ).scalar_one_or_none()
+    finally:
+        await session.close()
+
+    assert row is None
+
+
+async def test_company_a_cannot_insert_a_notification_claiming_company_bs_id(app_engine, two_companies):
+    session = await app_session(app_engine, company_id=two_companies["a"]["company_id"])
+    try:
+        with pytest.raises(DBAPIError, match="row-level security"):
+            await session.execute(
+                text(
+                    "INSERT INTO notifications (id, company_id, user_id, type, title, created_at, updated_at) "
+                    "VALUES ('rls-isolation-test-notification', :bad_cid, :uid, 'draft_shared', 'x', now(), now())"
+                ),
+                {"bad_cid": two_companies["b"]["company_id"], "uid": two_companies["a"]["user_id"]},
+            )
+    finally:
+        await session.rollback()
+        await session.close()
