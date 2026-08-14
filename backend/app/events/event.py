@@ -22,6 +22,26 @@ class DocumentAnalyzedEvent(BaseEvent):
 class DraftCreatedEvent(BaseEvent):
     event_type: str = "draft.created"
 
+class DraftSharedEvent(BaseEvent):
+    """One `draft_shares` row created (`POST /drafts/{id}/send`).
+
+    Published once per recipient, not once per bulk send call -- see
+    `DraftShareService.send`'s docstring for why. `payload` carries
+    `company_id`, `share_id`, `draft_id`, `sender_id`, `sender_username`,
+    `recipient_id`; the subscriber in `app.events.subscribers` turns this
+    into one `notifications` row plus a live SSE push for `recipient_id`.
+    """
+    event_type: str = "draft.shared"
+
+class DraftShareRespondedEvent(BaseEvent):
+    """A recipient accepted or rejected a shared draft (never published for
+    "read" or "withdrawn" -- see `DraftShareService`'s own docstring for
+    why those two don't notify). `payload` carries `company_id`,
+    `share_id`, `draft_id`, `sender_id`, `recipient_id`,
+    `recipient_username`, `status` ("accepted"|"rejected"), `response_note`.
+    """
+    event_type: str = "draft.share_responded"
+
 class DocumentRoutedEvent(BaseEvent):
     event_type: str = "document.routed"
 

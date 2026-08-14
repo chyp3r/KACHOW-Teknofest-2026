@@ -30,6 +30,8 @@ _RLS_TABLES = (
     "runs",
     "run_steps",
     "guardrail_events",
+    "draft_shares",
+    "notifications",
 )
 
 

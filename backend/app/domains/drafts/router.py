@@ -1,6 +1,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependency import get_draft_history_service, require_auth_if_enabled
 from app.api.exceptions.authorization import AuthorizationException
@@ -9,10 +10,21 @@ from app.core.authz.attributes import Action, Resource
 from app.core.authz.dependency import subject_from_user
 from app.core.authz.engine import authorize
 from app.core.permissions.role_checker import bypasses_ownership
+from app.domains.drafts.draft_share_service import DraftShareService
 from app.domains.drafts.model.draft_model import DraftModel
+from app.domains.drafts.model.draft_share_model import DraftShareModel
+from app.domains.drafts.repository import DraftRepository, DraftShareRepository
 from app.domains.drafts.schema.draft_schema import DraftResponse
+from app.domains.drafts.schema.draft_share_schema import (
+    DraftSendRequest,
+    DraftShareRespondRequest,
+    DraftShareResponse,
+)
 from app.domains.drafts.service import DraftService
+from app.domains.units.repository import UnitRepository
 from app.domains.users.model.user_model import UserModel
+from app.domains.users.repository import UserRepository
+from app.infrastructure.database.session import get_db
 from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 
 # Authentication is mandatory (see require_auth_if_enabled) -- every route in
@@ -86,6 +98,80 @@ async def list_drafts(
     return SuccessResponse(data=paginated.model_dump(mode="json"))
 
 
+def _draft_share_service(db: AsyncSession) -> DraftShareService:
+    return DraftShareService(
+        share_repository=DraftShareRepository(db),
+        draft_repository=DraftRepository(db),
+        user_repository=UserRepository(db),
+        unit_repository=UnitRepository(db),
+    )
+
+
+def _share_response(share: DraftShareModel, draft: Optional[DraftModel]) -> DraftShareResponse:
+    return DraftShareResponse(
+        id=share.id,
+        draft_id=share.draft_id,
+        sender_id=share.sender_id,
+        recipient_id=share.recipient_id,
+        suggested_unit_id=share.suggested_unit_id,
+        message=share.message,
+        status=share.status,
+        responded_at=share.responded_at,
+        response_note=share.response_note,
+        created_at=share.created_at,
+        content=draft.content if draft is not None else None,
+        correspondence_type=draft.correspondence_type if draft is not None else None,
+        destination=draft.destination if draft is not None else None,
+    )
+
+
+# NOTE: /inbox and /outbox must be registered before GET /{draft_id} below --
+# FastAPI matches routes in registration order, and a single-segment path
+# like "/inbox" would otherwise be swallowed by "/{draft_id}" (draft_id=
+# "inbox") since that route was already registered first.
+@router.get("/inbox", response_model=None)
+async def list_draft_inbox(
+    status: Optional[str] = None,
+    pagination: PaginationParam = Depends(),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    db: AsyncSession = Depends(get_db),
+):
+    """Shares received by the caller, newest first. Optional `status` filter
+    ("sent" | "read" | "accepted" | "rejected" | "withdrawn")."""
+    service = _draft_share_service(db)
+    items, total = await service.list_inbox(
+        current_user.company_id, current_user.id, status, pagination.offset, pagination.limit
+    )
+    page_items = [_share_response(share, draft).model_dump(mode="json") for share, draft in items]
+    pages = (total + pagination.size - 1) // pagination.size if pagination.size else 0
+    return SuccessResponse(
+        data=PaginatedResponse(
+            items=page_items, total=total, page=pagination.page, size=pagination.size, pages=pages
+        ).model_dump()
+    )
+
+
+@router.get("/outbox", response_model=None)
+async def list_draft_outbox(
+    status: Optional[str] = None,
+    pagination: PaginationParam = Depends(),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    db: AsyncSession = Depends(get_db),
+):
+    """Shares sent by the caller, newest first. Optional `status` filter."""
+    service = _draft_share_service(db)
+    items, total = await service.list_outbox(
+        current_user.company_id, current_user.id, status, pagination.offset, pagination.limit
+    )
+    page_items = [_share_response(share, draft).model_dump(mode="json") for share, draft in items]
+    pages = (total + pagination.size - 1) // pagination.size if pagination.size else 0
+    return SuccessResponse(
+        data=PaginatedResponse(
+            items=page_items, total=total, page=pagination.page, size=pagination.size, pages=pages
+        ).model_dump()
+    )
+
+
 @router.get("/{draft_id}", response_model=None)
 async def get_draft(
     draft_id: str,
@@ -127,3 +213,80 @@ async def list_draft_versions(
             for version in versions
         ]
     )
+
+
+# ---------------------------------------------------------------------------
+# Draft delivery -- çalışanlar arası taslak gönder/al (Faz 5)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{draft_id}/send", response_model=None)
+async def send_draft(
+    draft_id: str,
+    request: DraftSendRequest,
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send one draft version to one or more recipients within the caller's company.
+
+    `Action.DRAFT_SEND`-gated: an EMPLOYEE may only send its own draft,
+    ADMIN/MANAGER/ROOT may send any draft company-wide.
+    """
+    service = _draft_share_service(db)
+    shares = await service.send(draft_id, current_user, request, current_user.company_id)
+    return SuccessResponse(data=[_share_response(share, None).model_dump(mode="json") for share in shares])
+
+
+@router.post("/shares/{share_id}/read", response_model=None)
+async def read_draft_share(
+    share_id: str,
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    db: AsyncSession = Depends(get_db),
+):
+    """Advance a share to `read`. Recipient only."""
+    service = _draft_share_service(db)
+    share, draft = await service.mark_read(share_id, current_user.company_id, current_user)
+    return SuccessResponse(data=_share_response(share, draft).model_dump(mode="json"))
+
+
+@router.post("/shares/{share_id}/accept", response_model=None)
+async def accept_draft_share(
+    share_id: str,
+    request: DraftShareRespondRequest,
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    db: AsyncSession = Depends(get_db),
+):
+    """Accept a shared draft. Recipient only -- forks a new version the
+    recipient now owns (see `DraftShareService.respond`)."""
+    service = _draft_share_service(db)
+    share, draft = await service.respond(
+        share_id, current_user.company_id, current_user, "accepted", request.response_note
+    )
+    return SuccessResponse(data=_share_response(share, draft).model_dump(mode="json"))
+
+
+@router.post("/shares/{share_id}/reject", response_model=None)
+async def reject_draft_share(
+    share_id: str,
+    request: DraftShareRespondRequest,
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reject a shared draft. Recipient only."""
+    service = _draft_share_service(db)
+    share, draft = await service.respond(
+        share_id, current_user.company_id, current_user, "rejected", request.response_note
+    )
+    return SuccessResponse(data=_share_response(share, draft).model_dump(mode="json"))
+
+
+@router.delete("/shares/{share_id}", response_model=None)
+async def withdraw_draft_share(
+    share_id: str,
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    db: AsyncSession = Depends(get_db),
+):
+    """Withdraw a still-`sent` share. Sender (or Admin/Manager/Root) only."""
+    service = _draft_share_service(db)
+    share = await service.withdraw(share_id, current_user.company_id, current_user)
+    return SuccessResponse(data=_share_response(share, None).model_dump(mode="json"))
