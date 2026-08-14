@@ -244,6 +244,27 @@ def merge_verdicts(
         )
         for label in report.missing_structure
     )
+    # Unlike example_leaks (never fed into repair -- a repair pass sees the
+    # exact same style examples and could reproduce the same leak), this is
+    # a plain deletion: replace the draft's own Sayı: value with the
+    # placeholder it should have been. A repair pass has nothing to
+    # reproduce the leak *from* here -- the incoming number simply should
+    # not be in this line at all.
+    repair_items.extend(
+        RepairItem(
+            kind="incoming_number_leak",
+            source="deterministic",
+            detail=(
+                f"Taslağın kendi Sayı: satırı gelen evrakın sayısını taşıyor: "
+                f"'{leak.value}'."
+            ),
+            suggested_fix=(
+                "Kendi Sayı: satırını '[Belge Sayısı]' yer tutucusuyla değiştir; "
+                "gelen evrakın sayısını yalnızca İlgi satırında bırak."
+            ),
+        )
+        for leak in report.incoming_number_leaks
+    )
 
     hard_override = False
     if judge_available:

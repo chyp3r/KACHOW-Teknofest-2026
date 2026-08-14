@@ -35,6 +35,69 @@ def test_document_number_present_in_source_is_not_flagged():
     assert report.requires_human_approval is False
 
 
+def test_the_drafts_own_number_line_echoing_the_incoming_documents_number_is_flagged():
+    """The bug this guards against: the incoming document's own number is
+    genuinely grounded (it's part of `classification`), so the general
+    groundedness check alone has no reason to flag it -- being true doesn't
+    make it allowed in the response's own Sayı: line. A response's own case
+    number is assigned by the writing institution's registry, never copied
+    from the document it replies to."""
+    draft = WELL_FORMED_DRAFT.replace("Sayı: E-123-456", "Sayı: E-2026-998877")
+    classification = {"fields": {"sayi": "E-2026-998877"}}
+
+    report = verify_draft(
+        draft, source_document="Diğer içerik.", classification=classification
+    )
+
+    assert len(report.incoming_number_leaks) == 1
+    assert report.incoming_number_leaks[0].value == "E-2026-998877"
+    assert report.requires_human_approval is True
+    assert report.confidence_score < 100.0
+
+
+def test_a_correctly_left_placeholder_sayi_line_is_not_a_leak():
+    draft = WELL_FORMED_DRAFT.replace("Sayı: E-123-456", "Sayı: [Belge Sayısı]")
+    classification = {"fields": {"sayi": "E-2026-998877"}}
+
+    report = verify_draft(
+        draft, source_document="Diğer içerik.", classification=classification
+    )
+
+    assert report.incoming_number_leaks == []
+
+
+def test_a_reference_to_the_incoming_number_in_an_ilgi_line_is_not_a_leak():
+    """The incoming number is legitimately quoted in an "İlgi:" line -- only
+    the draft's own "Sayı:" line is checked."""
+    draft = (
+        "Konu: Yıllık İzin Talebi\n"
+        "Sayı: [Belge Sayısı]\n"
+        "Tarih: [Tarih]\n"
+        "İlgi: E-2026-998877 sayılı yazınız.\n\n"
+        "Sayın Makam,\n\nArz ederim.\n\nMehmet Öztürk\nGenel Müdür"
+    )
+    classification = {"fields": {"sayi": "E-2026-998877"}}
+
+    report = verify_draft(
+        draft, source_document="Diğer içerik.", classification=classification
+    )
+
+    assert report.incoming_number_leaks == []
+
+
+def test_the_drafts_own_number_unrelated_to_the_incoming_one_is_not_a_leak():
+    classification = {"fields": {"sayi": "E-2026-998877"}}
+
+    report = verify_draft(
+        WELL_FORMED_DRAFT, source_document="Diğer içerik.", classification=classification
+    )
+
+    # WELL_FORMED_DRAFT's own number (E-123-456) is unrelated to the
+    # incoming one -- still an ordinary unsupported claim (nothing grounds
+    # it), but not the specific incoming-number-leak rule.
+    assert report.incoming_number_leaks == []
+
+
 def test_institution_paraphrase_escape_hatch_via_token_overlap():
     """A draft that shortens 'Çevre ve Şehircilik İl Müdürlüğü' to 'Çevre İl
     Müdürlüğü' shares enough significant tokens (>=75%) with the source's

@@ -184,6 +184,16 @@ class VerificationReport(BaseModel):
             "çelişip çelişmediğini denetlemek için okur."
         ),
     )
+    incoming_number_leaks: list[UnsupportedClaim] = Field(
+        default_factory=list,
+        description=(
+            "Taslağın KENDİ Sayı: satırının, cevaplanan gelen evrakın sayısıyla "
+            "aynı olduğu durumlar (bkz. _check_incoming_number_leak). Genel "
+            "dayanaksız-iddia denetiminden ayrı: bu değer kaynakta (classification) "
+            "gerçekten var ve o yüzden 'dayanaksız' değil -- sorun, doğru olması "
+            "değil, taslağın bu satırında ASLA görünmemesi gerekmesidir."
+        ),
+    )
     placeholder_count: int = Field(
         default=0, description="Taslakta doldurulması gereken yer tutucu sayısı."
     )
@@ -377,6 +387,80 @@ def _collect_claims(
     return claims
 
 
+#: The outgoing draft's own "Sayı:" header line -- deliberately the same
+#: anchor `STRUCTURE_CHECKS`'s "sayi" entry uses (start of line), so this
+#: only ever reads the response's own number field, never an "İlgi:" line
+#: that legitimately quotes the incoming document's number.
+_OWN_NUMBER_LINE_PATTERN = re.compile(r"^\s*Sayı\s*:\s*(.+)$", re.MULTILINE | re.IGNORECASE)
+
+#: Points deducted when the draft's own Sayı: line echoes the incoming
+#: document's number (see `_check_incoming_number_leak`). Sized above
+#: `UNSUPPORTED_CLAIM_PENALTY` alone (12) so a single leak cannot be
+#: shrugged off as an ordinary ungrounded claim -- it is a structurally
+#: wrong field, not a missing citation.
+INCOMING_NUMBER_LEAK_PENALTY = 25.0
+
+
+def _check_incoming_number_leak(
+    draft: str, classification: dict[str, Any] | None
+) -> list[UnsupportedClaim]:
+    """Flag the draft's own Sayı: line if it echoes the incoming document's.
+
+    A response's own case number is assigned by the *writing* institution's
+    registry at send time -- it can never legitimately be the number of the
+    document being replied to (see `writer.md`'s "GELEN EVRAKIN KİMLİK
+    BİLGİLERİ" rule). This is deliberately separate from `_collect_claims`'s
+    general groundedness check: the incoming number IS grounded (it is part
+    of `classification`, which is folded into the trusted haystack), so the
+    general check has no reason to flag it there -- being *true* does not
+    make it *allowed in this line*. This checks that narrower, positional
+    rule directly.
+
+    Args:
+        draft: The generated draft text, unstripped (placeholders and all --
+            this only ever matches a literal "Sayı: <value>" line, so a
+            correctly-left `[Belge Sayısı]` placeholder never matches).
+        classification: Analysis output, whose extracted `fields.sayi` is
+            the incoming document's own number.
+
+    Returns:
+        A single-item list carrying the leaked value, or empty.
+    """
+    fields = (classification or {}).get("fields") or {}
+    if hasattr(fields, "model_dump"):
+        fields = fields.model_dump()
+    incoming_sayi = str(fields.get("sayi") or "").strip()
+    if not incoming_sayi:
+        return []
+
+    incoming_canonical = canonical_for_kind("sayı", incoming_sayi)
+    incoming_folded = _fold(incoming_sayi)
+
+    for match in _OWN_NUMBER_LINE_PATTERN.finditer(draft):
+        own_value = match.group(1).strip()
+        if not _strip_placeholders(own_value).strip():
+            continue  # a correctly-left placeholder, not a leak
+        own_canonical = canonical_for_kind("sayı", own_value)
+        same = _fold(own_value) == incoming_folded or (
+            incoming_canonical is not None and own_canonical == incoming_canonical
+        )
+        if same:
+            return [
+                UnsupportedClaim(
+                    kind="gelen_sayi_sizintisi",
+                    value=own_value,
+                    explanation=(
+                        "Bu, taslağın KENDİ Sayı alanı -- ama değer, cevaplanan "
+                        "gelen evrakın kendi sayısıyla aynı. Giden yazının sayısı "
+                        "yazan kurumun evrak kaydınca verilir; gelen evrakın "
+                        "sayısı yalnızca İlgi satırında kullanılabilir."
+                    ),
+                    canonical=own_canonical or "",
+                )
+            ]
+    return []
+
+
 #: Structure keys that don't apply to an individually-signed petition (an
 #: itiraz/başvuru/şikayet dilekçesi, or any sub-genre resolving with
 #: "dilekçe" in its label -- see ``resolve_correspondence_type``). A
@@ -548,10 +632,13 @@ def verify_draft(
                 remaining.append(claim)
         claims = remaining
 
+    incoming_number_leaks = _check_incoming_number_leak(draft, classification)
+
     claim_penalty = min(
         len(claims) * UNSUPPORTED_CLAIM_PENALTY, MAX_UNSUPPORTED_PENALTY
     )
-    score = max(0.0, 100.0 - claim_penalty - structure_penalty)
+    number_leak_penalty = INCOMING_NUMBER_LEAK_PENALTY if incoming_number_leaks else 0.0
+    score = max(0.0, 100.0 - claim_penalty - structure_penalty - number_leak_penalty)
 
     requires_approval = (
         score < MIN_AUTOMATED_CONFIDENCE_SCORE
@@ -559,6 +646,7 @@ def verify_draft(
         or placeholder_count > 0
         or (strict and bool(claims))
         or bool(example_leaks)
+        or bool(incoming_number_leaks)
     )
 
     return VerificationReport(
@@ -567,10 +655,12 @@ def verify_draft(
         unsupported_claims=claims,
         example_leaks=example_leaks,
         instruction_only_claims=instruction_only_claims,
+        incoming_number_leaks=incoming_number_leaks,
         missing_structure=missing_structure,
         placeholder_count=placeholder_count,
         evaluation_notes=_build_notes(
-            claims, missing_structure, placeholder_count, score, example_leaks
+            claims, missing_structure, placeholder_count, score, example_leaks,
+            incoming_number_leaks,
         ),
     )
 
@@ -637,6 +727,7 @@ def _build_notes(
     placeholder_count: int,
     score: float,
     example_leaks: list[UnsupportedClaim] | None = None,
+    incoming_number_leaks: list[UnsupportedClaim] | None = None,
 ) -> str:
     """Compose the Turkish rationale shown alongside the score.
 
@@ -646,11 +737,18 @@ def _build_notes(
         placeholder_count: Number of unfilled placeholders.
         score: The computed confidence score.
         example_leaks: Unsupported claims traced back to a style example.
+        incoming_number_leaks: The draft's own Sayı: line echoing the
+            incoming document's number (see `_check_incoming_number_leak`).
 
     Returns:
         A human-readable summary.
     """
     notes: list[str] = []
+    if incoming_number_leaks:
+        notes.append(
+            "Taslağın kendi Sayı: alanı, cevaplanan gelen evrakın sayısıyla "
+            f"aynı ('{incoming_number_leaks[0].value}'); insan onayı gerekiyor."
+        )
     if example_leaks:
         sample = ", ".join(f"'{claim.value}'" for claim in example_leaks[:3])
         notes.append(
