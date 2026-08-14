@@ -60,7 +60,7 @@ async def test_a_chat_turn_records_its_plan_decision_and_step_outcome(fake_llm, 
     assert step_call["run_id"] == run_id
     assert step_call["status"] in {"completed", "failed"}
 
-    end_run.assert_awaited_once_with(run_id=run_id, status="completed")
+    end_run.assert_awaited_once_with(run_id=run_id, status="completed", company_id=None)
 
 
 @pytest.mark.asyncio

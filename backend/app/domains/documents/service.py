@@ -11,6 +11,9 @@ from app.ai.guardrails.file_integrity import check_file_integrity
 from app.ai.guardrails.injection import scrub_extracted_text
 from app.domains.documents.model.document_model import DocumentModel
 from app.domains.documents.repository import DocumentRepository
+from app.domains.pools.model.document_pool_item_model import DocumentPoolItemModel
+from app.domains.pools.repository import DocumentPoolItemRepository, DocumentPoolRepository
+from app.domains.quotas.service import DOCUMENTS_METRIC, QuotaService
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
 from app.core.config import settings
@@ -40,7 +43,7 @@ from app.ai.embeddings.service import EmbeddingService
 from app.ai.embeddings.chunking.recursive import RecursiveChunker
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.infrastructure.vectorstore.base import BaseVectorStore
-from app.observability import guardrail_recorder
+from app.observability import company_metrics, guardrail_recorder
 from app.shared.validator.file_validator import validate_file_extension
 
 logger = logging.getLogger(__name__)
@@ -69,6 +72,9 @@ class DocumentService:
         embedding_service: Optional[EmbeddingService] = None,
         vector_store: Optional[BaseVectorStore] = None,
         document_repository: Optional[DocumentRepository] = None,
+        pool_repository: Optional[DocumentPoolRepository] = None,
+        pool_item_repository: Optional[DocumentPoolItemRepository] = None,
+        quota_service: Optional[QuotaService] = None,
     ) -> None:
         """Initialise the service with injected collaborators.
 
@@ -82,6 +88,15 @@ class DocumentService:
                 when absent, a document is analysed exactly as before but
                 never registered, which also means it never appears in
                 `GET /documents` or passes an ownership check.
+            pool_repository, pool_item_repository: The evrak havuzu (see
+                `app.domains.pools`) every upload files itself into (its
+                owner's personal default pool). Optional for the same
+                reason `document_repository` is -- when absent, a document
+                is registered exactly as before but never pool-filed.
+            quota_service: Enforces `company_quotas.max_documents_per_month`
+                (see `app.domains.quotas`). Optional for the same reason as
+                above -- when absent, uploads are never quota-gated (every
+                pre-Faz-6 caller, and most unit tests).
         """
         self.storage = storage
         self.extractor = extractor
@@ -89,6 +104,9 @@ class DocumentService:
         self.embedding_service = embedding_service
         self.vector_store = vector_store
         self.document_repository = document_repository
+        self.pool_repository = pool_repository
+        self.pool_item_repository = pool_item_repository
+        self.quota_service = quota_service
 
     async def analyze_document(
         self,
@@ -118,6 +136,14 @@ class DocumentService:
             AIException: If the analysis workflow fails or times out.
         """
         await self._validate_upload(file_name, content, content_type)
+
+        # Gated after the cheap upload-shape validation (rejecting a garbage
+        # file never touches the quota) but before extraction/analysis --
+        # the expensive half of this pipeline -- begins. See `QuotaService`'s
+        # module docstring for why only "documents"/"drafts" are enforced,
+        # not tokens.
+        if self.quota_service is not None:
+            await self.quota_service.check_and_increment(company_id, DOCUMENTS_METRIC)
 
         storage_path = await self._store(file_name, content)
         await self._publish(
@@ -171,7 +197,7 @@ class DocumentService:
                 },
             )
 
-        state = await self._run_analysis(extracted.text, extracted.used_ocr)
+        state = await self._run_analysis(extracted.text, extracted.used_ocr, owner_id, company_id)
         response = self._assemble(file_name, storage_path, extracted, state, scrubbed_markers)
         await self._register_document(file_name, storage_path, owner_id, company_id, response)
         await self._save_document_analysis_cache(
@@ -394,6 +420,8 @@ class DocumentService:
                 kind="magic_byte",
                 decision="blocked",
                 reasons=[integrity.reason],
+                company_id=company_id,
+                requester_user_id=owner_id,
             )
             raise ValidationException(
                 message="Dosya içeriği doğrulanamadı.",
@@ -414,12 +442,20 @@ class DocumentService:
         key = f"{UPLOAD_PATH_PREFIX}/{uuid4().hex}{extension}"
         return await self.storage.put_file(key, content)
 
-    async def _run_analysis(self, text: str, used_ocr: bool) -> dict[str, Any]:
+    async def _run_analysis(
+        self,
+        text: str,
+        used_ocr: bool,
+        owner_id: Optional[str] = None,
+        company_id: Optional[str] = None,
+    ) -> dict[str, Any]:
         """Invoke the analysis workflow under a timeout.
 
         Args:
             text: Extracted document text.
             used_ocr: Whether the text came from OCR.
+            owner_id, company_id: Attached as Langfuse trace metadata (see
+                ``_trace_config``) when known.
 
         Returns:
             The final workflow state.
@@ -431,7 +467,7 @@ class DocumentService:
             return await asyncio.wait_for(
                 self.analysis_graph.ainvoke(
                     {"input_text": text, "is_ocr_text": used_ocr},
-                    config=self._trace_config(),
+                    config=self._trace_config(owner_id, company_id),
                 ),
                 timeout=settings.AI_WORKFLOW_TIMEOUT_SECONDS,
             )
@@ -448,20 +484,26 @@ class DocumentService:
             ) from exc
 
     @staticmethod
-    def _trace_config() -> dict[str, Any]:
+    def _trace_config(owner_id: Optional[str] = None, company_id: Optional[str] = None) -> dict[str, Any]:
         """Build the LangGraph config, attaching Langfuse tracing when available.
 
         Imported lazily and defensively: the Langfuse LangChain integration needs
         the monolithic `langchain` package, so an unavailable tracer must degrade
         to "no tracing" rather than failing every upload.
 
+        Args:
+            owner_id, company_id: Attached as Langfuse trace metadata (see
+                ``app.observability.tracer.build_trace_config``) when known.
+
         Returns:
             A LangGraph config dict, empty when tracing is unavailable.
         """
         try:
-            from app.observability.tracer import build_trace_config
+            from app.observability.tracer import build_trace_config, company_tags
 
-            return build_trace_config()
+            return build_trace_config(
+                langfuse_user_id=owner_id, langfuse_tags=company_tags(company_id)
+            )
         except Exception:
             logger.debug("Langfuse tracing unavailable; continuing without it.")
             return {}
@@ -590,8 +632,39 @@ class DocumentService:
                     pii_flagged=bool(response.guardrail.pii_findings),
                 )
             )
+            await self._file_into_default_pool(storage_path, owner_id, company_id)
+            slug = company_metrics.cached_slug(company_id)
+            if slug is not None:
+                company_metrics.note_document_registered(slug)
         except Exception:
             logger.exception("Failed to register document %s", storage_path)
+
+    async def _file_into_default_pool(self, storage_path: str, owner_id: str, company_id: str) -> None:
+        """File a freshly-registered document into its uploader's personal pool.
+
+        Same "personal pool" concept `app.domains.pools.service.PoolService.
+        get_or_create_personal_pool` lazily creates on first read -- this is
+        the other lazy-creation path, on first *write* (an upload), so a
+        pool exists and already has content the first time its owner opens
+        `GET /pools/me`. A no-op, not an error, when this service was built
+        without pool repositories (most unit tests) -- same optionality as
+        `document_repository` itself.
+        """
+        if self.pool_repository is None or self.pool_item_repository is None:
+            return
+        pool = await self.pool_repository.get_or_create_default(
+            "user", owner_id, company_id, name="Kişisel Havuz"
+        )
+        await self.pool_item_repository.create(
+            DocumentPoolItemModel(
+                id=uuid4().hex,
+                company_id=company_id,
+                pool_id=pool.id,
+                document_id=storage_path,
+                added_by=owner_id,
+                source="upload",
+            )
+        )
 
     @staticmethod
     async def _record_sensitivity_assessment(

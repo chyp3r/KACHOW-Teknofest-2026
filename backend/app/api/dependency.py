@@ -74,9 +74,25 @@ async def get_current_user(
         user = await user_service.get_user_by_id(user_id)
         if not user.is_active:
             raise AuthenticationException(message="User account is not active.")
-        return user
     except Exception as exc:
         raise AuthenticationException(message="User not found.") from exc
+
+    # Best-effort, and cheap in aggregate: `company_metrics.cached_slug` is a
+    # permanent in-process cache (a company's slug never changes), so this
+    # pays one extra query per company for the life of the process, not per
+    # request. ROOT has no company to attribute a request to and is skipped.
+    from app.observability import company_metrics
+
+    if user.company_id is not None:
+        if company_metrics.cached_slug(user.company_id) is None:
+            from app.domains.companies.repository import CompanyRepository
+
+            company = await CompanyRepository(db).get_by_id(user.company_id)
+            if company is not None:
+                company_metrics.cache_slug(user.company_id, company.slug)
+        company_metrics.note_request(user.company_id)
+
+    return user
 
 
 def require_roles(*allowed_roles: UserRole):
@@ -260,16 +276,24 @@ def get_chat_message_repository(db: AsyncSession = Depends(get_db)) -> ChatMessa
 def get_document_analysis_service(
     analysis_graph: Any = Depends(get_document_analysis_graph),
     document_repository: DocumentRepository = Depends(get_document_repository),
+    db: AsyncSession = Depends(get_db),
 ) -> DocumentService:
     """Provide the document analysis service with its collaborators injected.
 
     Args:
         analysis_graph: The compiled analysis workflow.
         document_repository: Ownership/listing registry.
+        db: Shared with the pool repositories below so filing an upload into
+            its owner's default pool commits in the same transaction as
+            registering the document itself.
 
     Returns:
         A ready-to-use `DocumentService`.
     """
+    from app.domains.pools.repository import DocumentPoolItemRepository, DocumentPoolRepository
+    from app.domains.quotas.repository import CompanyQuotaRepository, UsageCounterRepository
+    from app.domains.quotas.service import QuotaService
+
     return DocumentService(
         storage=get_storage_client(),
         extractor=get_document_extractor(),
@@ -277,6 +301,9 @@ def get_document_analysis_service(
         embedding_service=EmbeddingService(embeddings_client=get_embeddings_client()),
         vector_store=get_vector_store(),
         document_repository=document_repository,
+        pool_repository=DocumentPoolRepository(db),
+        pool_item_repository=DocumentPoolItemRepository(db),
+        quota_service=QuotaService(UsageCounterRepository(db), CompanyQuotaRepository(db)),
     )
 
 # ---------------------------------------------------------------------------
@@ -324,13 +351,23 @@ async def get_routing_graph() -> Any:
 def get_draft_service(
     draft_graph: Any = Depends(get_draft_graph),
     routing_graph: Any = Depends(get_routing_graph),
+    db: AsyncSession = Depends(get_db),
 ) -> DraftService:
-    """Provide the draft service with its collaborators injected."""
+    """Provide the draft service with its collaborators injected.
+
+    `db` only backs `quota_service` here -- the draft itself is still
+    persisted through `app.domains.drafts.draft_recorder`'s own independent
+    session (see that module's docstring), unchanged.
+    """
+    from app.domains.quotas.repository import CompanyQuotaRepository, UsageCounterRepository
+    from app.domains.quotas.service import QuotaService
+
     return DraftService(
         storage=get_storage_client(),
         extractor=get_document_extractor(),
         draft_graph=draft_graph,
         routing_graph=routing_graph,
+        quota_service=QuotaService(UsageCounterRepository(db), CompanyQuotaRepository(db)),
     )
 
 

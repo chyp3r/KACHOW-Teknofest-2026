@@ -7,6 +7,8 @@ from app.api.dependency import require_roles
 from app.api.exceptions.authorization import AuthorizationException
 from app.api.responses import APIResponse, SuccessResponse
 from app.core.enums.user_role import UserRole
+from app.domains.audit.repository import AuditLogRepository
+from app.domains.audit.service import AuditService
 from app.domains.companies.repository import CompanyRepository
 from app.domains.companies.schema.company_schema import (
     CompanyAdminAssign,
@@ -22,6 +24,10 @@ from app.infrastructure.database.session import get_db
 from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 
 router = APIRouter(prefix="/companies", tags=["companies"])
+
+
+def _audit_service(db: AsyncSession) -> AuditService:
+    return AuditService(AuditLogRepository(db))
 
 
 def _require_company_access(current_user: UserModel, company_id: str) -> None:
@@ -47,6 +53,15 @@ async def create_company(
     """Create a new tenant company (Root only)."""
     service = CompanyService(CompanyRepository(db), UserRepository(db))
     company = await service.create_company(schema, created_by=current_user.id)
+    await _audit_service(db).record(
+        company_id=company.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="company:create",
+        resource_type="company",
+        resource_id=company.id,
+        after={"name": company.name, "slug": company.slug},
+    )
     return SuccessResponse(data=CompanyResponse.model_validate(company))
 
 
@@ -90,6 +105,15 @@ async def update_company(
     _require_company_access(current_user, company_id)
     service = CompanyService(CompanyRepository(db), UserRepository(db))
     company = await service.update_company(company_id, schema)
+    await _audit_service(db).record(
+        company_id=company_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="company:update",
+        resource_type="company",
+        resource_id=company_id,
+        after=schema.model_dump(exclude_unset=True, mode="json"),
+    )
     return SuccessResponse(data=CompanyResponse.model_validate(company))
 
 
@@ -103,6 +127,15 @@ async def assign_company_admin(
     """Promote an existing company user to Admin (Root only)."""
     service = CompanyService(CompanyRepository(db), UserRepository(db))
     user = await service.assign_admin(company_id, schema.user_id)
+    await _audit_service(db).record(
+        company_id=company_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="company:assign_admin",
+        resource_type="user",
+        resource_id=user.id,
+        after={"role": user.role},
+    )
     return SuccessResponse(data=UserResponse.model_validate(user))
 
 
@@ -115,4 +148,12 @@ async def delete_company(
     """Soft-delete a company (Root only)."""
     service = CompanyService(CompanyRepository(db), UserRepository(db))
     await service.delete_company(company_id)
+    await _audit_service(db).record(
+        company_id=company_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="company:delete",
+        resource_type="company",
+        resource_id=company_id,
+    )
     return SuccessResponse(data=None)

@@ -33,12 +33,14 @@ def mock_session():
 
 @pytest.fixture
 def enabled_session(monkeypatch, mock_session):
-    """Turn recording on and point AsyncSessionLocal at a mock session."""
+    """Turn recording on and point tenant_session at a mock session."""
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "RUN_RECORDING_ENABLED", True)
     monkeypatch.setattr(
-        guardrail_recorder, "AsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
+        guardrail_recorder,
+        "tenant_session",
+        lambda company_id=None, is_root=False: _FakeSessionContext(mock_session),
     )
     return mock_session
 
@@ -69,7 +71,9 @@ async def test_record_event_increments_the_counter_even_when_recording_is_disabl
 
     monkeypatch.setattr(settings, "RUN_RECORDING_ENABLED", False)
     monkeypatch.setattr(
-        guardrail_recorder, "AsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
+        guardrail_recorder,
+        "tenant_session",
+        lambda company_id=None, is_root=False: _FakeSessionContext(mock_session),
     )
     before = _counter_value("output", "leakage", "blocked")
 
@@ -137,7 +141,9 @@ async def test_record_event_is_a_noop_when_recording_is_disabled(monkeypatch, mo
 
     monkeypatch.setattr(settings, "RUN_RECORDING_ENABLED", False)
     monkeypatch.setattr(
-        guardrail_recorder, "AsyncSessionLocal", lambda: _FakeSessionContext(mock_session)
+        guardrail_recorder,
+        "tenant_session",
+        lambda company_id=None, is_root=False: _FakeSessionContext(mock_session),
     )
 
     await guardrail_recorder.record_event(stage="input", kind="pii", decision="flagged")

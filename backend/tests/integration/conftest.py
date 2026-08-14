@@ -181,12 +181,15 @@ async def app_session(engine, company_id, is_root: bool = False) -> AsyncSession
 
 @pytest.fixture
 async def two_companies(owner_engine) -> AsyncGenerator[dict, None]:
-    """Two companies, one user and one document each, inserted via the owner connection.
+    """Two companies, each with one user, one document, one unit, one unit
+    membership, one draft, one draft_share (self-addressed -- see below) and
+    one notification, inserted via the owner connection.
 
-    Returns a dict: ``{"a": {"company_id", "user_id", "document_id"}, "b": {...}}``.
-    Uses ``owner_engine`` (not RLS'd) purely as convenient, trusted test-data
-    setup -- what's actually under test in this package is whether the
-    *app* role can cross from A into B, never whether the owner can (it
+    Returns a dict: ``{"a": {"company_id", "user_id", "document_id", "unit_id",
+    "membership_id", "draft_id", "draft_share_id", "notification_id"}, "b":
+    {...}}``. Uses ``owner_engine`` (not RLS'd) purely as convenient, trusted
+    test-data setup -- what's actually under test in this package is whether
+    the *app* role can cross from A into B, never whether the owner can (it
     always can, by definition).
     """
     session_maker = async_sessionmaker(bind=owner_engine, class_=AsyncSession, expire_on_commit=False)
@@ -223,7 +226,67 @@ async def two_companies(owner_engine) -> AsyncGenerator[dict, None]:
                 ),
                 {"id": document_id, "cid": company_id, "uid": user_id, "fname": f"{label}.pdf"},
             )
-            result[label] = {"company_id": company_id, "user_id": user_id, "document_id": document_id}
+
+            unit_id = uuid4().hex
+            membership_id = uuid4().hex
+            await session.execute(
+                text(
+                    "INSERT INTO units (id, company_id, name, description, is_active, created_at, updated_at) "
+                    "VALUES (:id, :cid, :name, 'desc', true, now(), now())"
+                ),
+                {"id": unit_id, "cid": company_id, "name": f"RLS Test Unit {label.upper()}"},
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO unit_memberships (id, company_id, unit_id, user_id, is_primary, created_at, updated_at) "
+                    "VALUES (:id, :cid, :uid, :userid, false, now(), now())"
+                ),
+                {"id": membership_id, "cid": company_id, "uid": unit_id, "userid": user_id},
+            )
+
+            draft_id = uuid4().hex
+            await session.execute(
+                text(
+                    "INSERT INTO drafts (id, company_id, user_id, version, content, is_deleted, created_at, updated_at) "
+                    "VALUES (:id, :cid, :uid, 1, 'içerik', false, now(), now())"
+                ),
+                {"id": draft_id, "cid": company_id, "uid": user_id},
+            )
+
+            #: Self-addressed (sender == recipient) purely so this fixture
+            #: doesn't need a second user per company -- the RLS tests below
+            #: only care about company_id boundaries, not the sender/
+            #: recipient distinction `draft_shares`' own business logic cares
+            #: about (see `DraftShareService`).
+            draft_share_id = uuid4().hex
+            await session.execute(
+                text(
+                    "INSERT INTO draft_shares (id, company_id, draft_id, sender_id, recipient_id, "
+                    "status, created_at, updated_at) "
+                    "VALUES (:id, :cid, :did, :uid, :uid, 'sent', now(), now())"
+                ),
+                {"id": draft_share_id, "cid": company_id, "did": draft_id, "uid": user_id},
+            )
+
+            notification_id = uuid4().hex
+            await session.execute(
+                text(
+                    "INSERT INTO notifications (id, company_id, user_id, type, title, created_at, updated_at) "
+                    "VALUES (:id, :cid, :uid, 'draft_shared', 'Test', now(), now())"
+                ),
+                {"id": notification_id, "cid": company_id, "uid": user_id},
+            )
+
+            result[label] = {
+                "company_id": company_id,
+                "user_id": user_id,
+                "document_id": document_id,
+                "unit_id": unit_id,
+                "membership_id": membership_id,
+                "draft_id": draft_id,
+                "draft_share_id": draft_share_id,
+                "notification_id": notification_id,
+            }
         await session.commit()
 
     yield result

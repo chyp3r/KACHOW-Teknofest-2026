@@ -1,7 +1,7 @@
 from typing import List, Optional
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.chat.model.chat_model import ChatMessageModel, ChatSessionModel
@@ -25,12 +25,13 @@ class ChatSessionRepository:
         user_id: Optional[str],
         document_id: Optional[str],
         title: Optional[str],
+        company_id: Optional[str] = None,
     ) -> ChatSessionModel:
         """Fetch the session row, creating it on the first turn.
 
         A later turn only updates `document_id` (the most recently attached
-        document) -- `title` and `user_id` are set once, at creation, and
-        never overwritten.
+        document) -- `title`/`user_id`/`company_id` are set once, at
+        creation, and never overwritten.
         """
         session = await self.get_by_id(session_id)
         if session is not None:
@@ -39,30 +40,47 @@ class ChatSessionRepository:
             return session
 
         session = ChatSessionModel(
-            id=session_id, user_id=user_id, document_id=document_id, title=title
+            id=session_id,
+            user_id=user_id,
+            company_id=company_id,
+            document_id=document_id,
+            title=title,
         )
         self.db.add(session)
         await self.db.flush()
         return session
 
     async def list_for_user(
-        self, user_id: Optional[str], skip: int = 0, limit: int = 100
+        self, company_id: Optional[str], user_id: Optional[str], skip: int = 0, limit: int = 100
     ) -> List[ChatSessionModel]:
-        """List sessions visible to `user_id`, most recently active first.
+        """List sessions of `company_id` visible to `user_id`, most recently active first.
 
-        `user_id=None` (the `REQUIRE_AUTH=False` demo/dev path) lists every
-        session, matching `DocumentRepository.list_for_owner`'s convention.
+        `user_id=None` (an ADMIN/MANAGER/ROOT -- see `bypasses_ownership`)
+        lists every session in the company. `company_id` is `Optional` only
+        because `chat_sessions.company_id` itself still is (see
+        `ChatSessionModel.company_id`'s docstring) -- once migration
+        `0016_recorder_tables_rls` makes it `NOT NULL`, every real caller
+        always supplies one; explicit filtering here (not left to row-level
+        security alone) is the same primary-defense convention every other
+        repository follows, e.g. `DocumentRepository.list_for_owner`.
         """
         query = select(ChatSessionModel)
+        if company_id is not None:
+            query = query.where(ChatSessionModel.company_id == company_id)
         if user_id is not None:
             query = query.where(ChatSessionModel.user_id == user_id)
         query = query.order_by(ChatSessionModel.updated_at.desc()).offset(skip).limit(limit)
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
-    async def count_for_user(self, user_id: Optional[str]) -> int:
-        sessions = await self.list_for_user(user_id, skip=0, limit=10_000)
-        return len(sessions)
+    async def count_for_user(self, company_id: Optional[str], user_id: Optional[str]) -> int:
+        query = select(func.count(ChatSessionModel.id))
+        if company_id is not None:
+            query = query.where(ChatSessionModel.company_id == company_id)
+        if user_id is not None:
+            query = query.where(ChatSessionModel.user_id == user_id)
+        result = await self.db.execute(query)
+        return result.scalar_one()
 
 
 class ChatMessageRepository:
@@ -78,9 +96,11 @@ class ChatMessageRepository:
         content: str,
         workflow_status: Optional[str] = None,
         details: Optional[dict] = None,
+        company_id: Optional[str] = None,
     ) -> ChatMessageModel:
         message = ChatMessageModel(
             id=uuid4().hex,
+            company_id=company_id,
             session_id=session_id,
             role=role,
             content=content,
@@ -106,5 +126,7 @@ class ChatMessageRepository:
         return list(result.scalars().all())
 
     async def count_for_session(self, session_id: str) -> int:
-        messages = await self.list_for_session(session_id, skip=0, limit=10_000)
-        return len(messages)
+        result = await self.db.execute(
+            select(func.count(ChatMessageModel.id)).where(ChatMessageModel.session_id == session_id)
+        )
+        return result.scalar_one()

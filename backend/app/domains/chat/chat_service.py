@@ -43,6 +43,7 @@ class ChatService:
         request: ChatMessageRequest,
         user_id: Optional[str] = None,
         requester_clearance: Optional[str] = None,
+        company_id: Optional[str] = None,
     ) -> ChatMessageResponse:
         """Process a user message and return the completed (or paused) result.
 
@@ -57,6 +58,10 @@ class ChatService:
                 ``SensitivityLevel.value`` (see
                 ``app.core.permissions.role_checker.clearance_for``), when
                 known. ``None`` in the open demo/dev path.
+            company_id: The authenticated caller's tenant -- carried into
+                the graph's own state (``PlanningState.company_id``) so the
+                run/draft/guardrail recorders can attribute their writes to
+                a company, the same way ``user_id`` already is.
 
         Returns:
             The orchestrated response.
@@ -65,12 +70,16 @@ class ChatService:
             AIException: If the workflow fails or exceeds its timeout.
         """
         thread_id = self._thread_id(request.session_id, user_id)
-        config = self._trace_config(thread_id)
+        config = self._trace_config(thread_id, user_id, company_id)
         state = await self._invoke(
-            request, config=config, user_id=user_id, requester_clearance=requester_clearance
+            request,
+            config=config,
+            user_id=user_id,
+            requester_clearance=requester_clearance,
+            company_id=company_id,
         )
         response = await self._response_from_state(
-            state, config, thread_id, user_id=user_id, document_id=request.document_id
+            state, config, thread_id, user_id=user_id, document_id=request.document_id, company_id=company_id
         )
         await chat_recorder.record_turn(
             thread_id=thread_id,
@@ -80,6 +89,7 @@ class ChatService:
             reply=response.reply,
             workflow_status=response.workflow_status,
             details=response.details,
+            company_id=company_id,
         )
         return response
 
@@ -88,6 +98,7 @@ class ChatService:
         request: ChatMessageRequest,
         user_id: Optional[str] = None,
         requester_clearance: Optional[str] = None,
+        company_id: Optional[str] = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Process a user message, yielding progress events as they happen.
 
@@ -100,6 +111,7 @@ class ChatService:
             request: The chat request.
             user_id: See :meth:`handle_message`.
             requester_clearance: See :meth:`handle_message`.
+            company_id: See :meth:`handle_message`.
 
         Yields:
             Progress and result events. The first event is always ``session``,
@@ -113,7 +125,7 @@ class ChatService:
 
         async def run_graph() -> None:
             try:
-                config = self._trace_config(thread_id)
+                config = self._trace_config(thread_id, user_id, company_id)
                 config.setdefault("configurable", {})["status_queue"] = queue
 
                 state = await self._invoke(
@@ -121,6 +133,7 @@ class ChatService:
                     config=config,
                     user_id=user_id,
                     requester_clearance=requester_clearance,
+                    company_id=company_id,
                 )
                 reply, workflow_status, details = await self._enqueue_terminal_event(
                     queue,
@@ -129,6 +142,7 @@ class ChatService:
                     thread_id,
                     user_id=user_id,
                     document_id=request.document_id,
+                    company_id=company_id,
                 )
                 await chat_recorder.record_turn(
                     thread_id=thread_id,
@@ -138,6 +152,7 @@ class ChatService:
                     reply=reply,
                     workflow_status=workflow_status,
                     details=details,
+                    company_id=company_id,
                 )
             except asyncio.CancelledError:
                 raise
@@ -176,6 +191,7 @@ class ChatService:
         session_id: str,
         request: ChatResumeRequest,
         user_id: Optional[str] = None,
+        company_id: Optional[str] = None,
     ) -> ChatMessageResponse:
         """Resume a run paused at the human-in-the-loop gate and await its result.
 
@@ -187,6 +203,11 @@ class ChatService:
                 :meth:`_thread_id`), or the resume is refused -- otherwise an
                 authenticated caller could resume another user's paused run
                 simply by knowing/guessing its session_id.
+            company_id: The authenticated caller's tenant, for the recorder
+                write below -- the graph's own ``company_id`` state field is
+                already set from the original ``handle_message`` invocation
+                and survives the checkpointer resume unchanged, so this is
+                only needed here for :func:`chat_recorder.record_turn`.
 
         Returns:
             The orchestrated response, completed or paused again (e.g. when
@@ -201,7 +222,7 @@ class ChatService:
 
         self._verify_thread_ownership(session_id, user_id)
         HITL_RESUMES.labels(action=request.action).inc()
-        config = self._trace_config(session_id)
+        config = self._trace_config(session_id, user_id, company_id)
         # No explicit escalation on this resume -> preset resolves to
         # BALANCED (multiplier 1.0), leaving today's fixed timeout unchanged.
         timeout = ORCHESTRATION_TIMEOUT_SECONDS * get_reasoning_level_preset(
@@ -227,7 +248,7 @@ class ChatService:
             ) from exc
 
         response = await self._response_from_state(
-            state, config, session_id, user_id=user_id, document_id=None
+            state, config, session_id, user_id=user_id, document_id=None, company_id=company_id
         )
         await chat_recorder.record_turn(
             thread_id=session_id,
@@ -237,6 +258,7 @@ class ChatService:
             reply=response.reply,
             workflow_status=response.workflow_status,
             details=response.details,
+            company_id=company_id,
         )
         return response
 
@@ -245,6 +267,7 @@ class ChatService:
         session_id: str,
         request: ChatResumeRequest,
         user_id: Optional[str] = None,
+        company_id: Optional[str] = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Resume a paused run, yielding progress events as they happen.
 
@@ -256,6 +279,7 @@ class ChatService:
             session_id: The thread_id the paused run is waiting on.
             request: The human's answer/decision.
             user_id: See :meth:`resume`.
+            company_id: See :meth:`resume`.
 
         Yields:
             Progress and result events.
@@ -275,7 +299,7 @@ class ChatService:
 
         async def run_graph() -> None:
             try:
-                config = self._trace_config(session_id)
+                config = self._trace_config(session_id, user_id, company_id)
                 config.setdefault("configurable", {})["status_queue"] = queue
 
                 state = await asyncio.wait_for(
@@ -285,7 +309,7 @@ class ChatService:
                     timeout=timeout,
                 )
                 reply, workflow_status, details = await self._enqueue_terminal_event(
-                    queue, state, config, session_id, user_id=user_id, document_id=None
+                    queue, state, config, session_id, user_id=user_id, document_id=None, company_id=company_id
                 )
                 await chat_recorder.record_turn(
                     thread_id=session_id,
@@ -295,6 +319,7 @@ class ChatService:
                     reply=reply,
                     workflow_status=workflow_status,
                     details=details,
+                    company_id=company_id,
                 )
             except asyncio.CancelledError:
                 raise
@@ -362,6 +387,7 @@ class ChatService:
         config: dict[str, Any],
         user_id: Optional[str] = None,
         requester_clearance: Optional[str] = None,
+        company_id: Optional[str] = None,
     ) -> dict[str, Any]:
         """Run the planning graph under a timeout.
 
@@ -379,6 +405,12 @@ class ChatService:
                 output guardrail. Set once here; persists across a later
                 human-in-the-loop resume via the checkpointer, same as
                 user_id/document_id.
+            company_id: The authenticated caller's tenant, carried into
+                ``PlanningState.company_id`` the same way -- read by every
+                recorder call inside the planning graph (``start_run``,
+                ``record_step``, ``end_run``, the output guardrail's
+                ``record_event``) so their writes can be attributed to a
+                company. Also persists across a checkpointer resume.
 
         Returns:
             The final (or paused) workflow state.
@@ -412,6 +444,7 @@ class ChatService:
                         "reasoning_level": request.reasoning_level.value,
                         "user_id": user_id,
                         "requester_clearance": requester_clearance,
+                        "company_id": company_id,
                     },
                     config=config,
                 ),
@@ -439,6 +472,7 @@ class ChatService:
         thread_id: str,
         user_id: Optional[str] = None,
         document_id: Optional[str] = None,
+        company_id: Optional[str] = None,
     ) -> tuple[str, str, dict[str, Any]]:
         """Push the run's closing event: ``final_result``, or nothing if paused.
 
@@ -488,7 +522,7 @@ class ChatService:
                 "details": final_output,
             }
         )
-        await self._maybe_record_draft(final_output, thread_id, user_id, document_id)
+        await self._maybe_record_draft(final_output, thread_id, user_id, document_id, company_id)
         return reply, workflow_status, final_output
 
     async def _response_from_state(
@@ -498,6 +532,7 @@ class ChatService:
         thread_id: str,
         user_id: Optional[str] = None,
         document_id: Optional[str] = None,
+        company_id: Optional[str] = None,
     ) -> ChatMessageResponse:
         """Build the non-streaming response, accounting for a paused run."""
         if await self._is_paused(config):
@@ -511,7 +546,7 @@ class ChatService:
             )
 
         final_output = state.get("final_output", {}) or {}
-        await self._maybe_record_draft(final_output, thread_id, user_id, document_id)
+        await self._maybe_record_draft(final_output, thread_id, user_id, document_id, company_id)
         return ChatMessageResponse(
             reply=self._select_reply(final_output),
             workflow_status=final_output.get("status", "FAILED"),
@@ -525,6 +560,7 @@ class ChatService:
         thread_id: str,
         user_id: Optional[str],
         document_id: Optional[str],
+        company_id: Optional[str] = None,
     ) -> None:
         """Persist a draft this turn produced or revised, if any.
 
@@ -541,6 +577,7 @@ class ChatService:
         routing = final_output.get("routing") or {}
         await draft_recorder.record_draft(
             user_id=user_id,
+            company_id=company_id,
             session_id=thread_id,
             document_id=document_id,
             content=content,
@@ -702,20 +739,31 @@ class ChatService:
         return DEFAULT_REPLY
 
     @staticmethod
-    def _trace_config(thread_id: str) -> dict[str, Any]:
+    def _trace_config(
+        thread_id: str, user_id: Optional[str] = None, company_id: Optional[str] = None
+    ) -> dict[str, Any]:
         """Build the LangGraph config: thread_id plus Langfuse tracing when available.
 
         Args:
             thread_id: The checkpointer thread id for this session.
+            user_id, company_id: Attached as Langfuse trace metadata (see
+                ``app.observability.tracer.build_trace_config``) when known
+                -- omitted (not fabricated) at call sites that don't have
+                one in scope, e.g. ``get_session_state``.
 
         Returns:
             A config dict with ``configurable.thread_id`` always set, and
             ``callbacks`` present only when tracing is available.
         """
         try:
-            from app.observability.tracer import build_trace_config
+            from app.observability.tracer import build_trace_config, company_tags
 
-            return build_trace_config(thread_id=thread_id)
+            return build_trace_config(
+                thread_id=thread_id,
+                langfuse_user_id=user_id,
+                langfuse_session_id=thread_id,
+                langfuse_tags=company_tags(company_id),
+            )
         except Exception:
             logger.debug("Langfuse tracing unavailable; continuing without it.")
             return {"configurable": {"thread_id": thread_id}}

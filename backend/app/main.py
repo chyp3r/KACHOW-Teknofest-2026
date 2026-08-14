@@ -21,6 +21,7 @@ from app.core.config import settings
 from app.core.constants.system import CORS_ORIGINS
 from app.lifespan import lifespan
 from app.observability.ai_metrics import init_ai_metrics
+from app.observability.company_metrics import init_company_metrics
 from app.observability.metrics import init_metrics
 from app.observability.logger import setup_logging
 
@@ -59,6 +60,7 @@ app.add_middleware(TenantContextMiddleware)
 # collectors (node/LLM latency, draft scores, HITL counters, ...).
 init_metrics(app)
 init_ai_metrics()
+init_company_metrics()
 
 # Register Global Exception Handlers
 app.add_exception_handler(BaseAppException, app_exception_handler)

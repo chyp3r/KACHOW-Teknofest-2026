@@ -98,6 +98,25 @@ async def test_redis_exists_exception(mock_aioredis, redis_cache):
 
 @pytest.mark.asyncio
 @patch("app.infrastructure.cache.redis.aioredis")
+async def test_redis_publish(mock_aioredis, redis_cache):
+    mock_client = AsyncMock()
+    mock_aioredis.from_url.return_value = mock_client
+
+    await redis_cache.publish("channel", "message")
+    mock_client.publish.assert_called_once_with("channel", "message")
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.cache.redis.aioredis")
+async def test_redis_publish_exception_is_swallowed(mock_aioredis, redis_cache):
+    mock_client = AsyncMock()
+    mock_client.publish.side_effect = Exception("DB error")
+    mock_aioredis.from_url.return_value = mock_client
+
+    # Fail-open: must not raise.
+    await redis_cache.publish("channel", "message")
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.cache.redis.aioredis")
 async def test_redis_clear(mock_aioredis, redis_cache):
     mock_client = AsyncMock()
     mock_aioredis.from_url.return_value = mock_client

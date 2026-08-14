@@ -13,7 +13,8 @@ from typing import Optional
 from uuid import uuid4
 
 from app.core.config import settings
-from app.infrastructure.database.session import AsyncSessionLocal
+from app.infrastructure.database.session import tenant_session
+from app.observability import company_metrics
 from app.observability.ai_metrics import GUARDRAIL_DECISIONS
 from app.observability.model.guardrail_model import GuardrailEventModel
 
@@ -53,10 +54,11 @@ async def record_event(
         run_id: The planning-graph run this decision belongs to, when there
             is one (an upload-time finding has none yet).
         document_id: The document this decision concerns, when there is one.
-        company_id: The tenant this decision concerns, when the caller is
-            request-scoped and has one in hand (e.g. an upload-time
-            assessment); ``None`` from graph-internal call sites until
-            Faz 3 threads ``company_id`` through the planning graph's state.
+        company_id: The tenant this decision concerns -- threaded through
+            from every call site, including graph-internal ones (see
+            ``PlanningState.company_id``). ``None`` only for a genuinely
+            unresolvable case; the write below degrades to "not recorded"
+            rather than raising, same as any other recorder failure.
         requester_user_id, requester_role, effective_clearance: Who was
             asking, and at what clearance -- populated once the RBAC layer
             (Phase 4) has a real requester to attribute the decision to;
@@ -71,11 +73,15 @@ async def record_event(
     # metrics, not an audit record, and should stay live even when a
     # deployment turns RUN_RECORDING_ENABLED off to skip the DB write.
     GUARDRAIL_DECISIONS.labels(stage=stage, kind=kind, decision=decision).inc()
+    if decision == "blocked" and company_id is not None:
+        slug = company_metrics.cached_slug(company_id)
+        if slug is not None:
+            company_metrics.note_guardrail_block(slug, kind)
 
     if not settings.RUN_RECORDING_ENABLED:
         return
     try:
-        async with AsyncSessionLocal() as session:
+        async with tenant_session(company_id) as session:
             session.add(
                 GuardrailEventModel(
                     id=uuid4().hex,

@@ -9,13 +9,27 @@ from app.api.exceptions.validation import ValidationException
 from app.core.config import settings
 from app.domains.documents.schema.document_schema import DraftRequestSchema, DraftResponseSchema
 from app.domains.drafts import draft_recorder
+from app.domains.quotas.service import DRAFTS_METRIC, QuotaService
 from app.infrastructure.extractors.base import BaseDocumentExtractor, DocumentExtractionError
 from app.infrastructure.storage.base import BaseStorage
 
 logger = logging.getLogger(__name__)
 
 class DraftService:
-    """Service for handling document drafting and department routing (Task 2)."""
+    """Service for handling document drafting and department routing (Task 2).
+
+    Only this direct `POST /documents/draft` path and `DraftShareService.
+    respond`'s accept-fork are quota-gated today, not chat-originated draft
+    generation -- see `QuotaService`'s module docstring for the token-quota
+    equivalent of this same honesty, and `docs/api/root.md`/`analytics.md`
+    for why: the chat flow only decides *whether* a turn drafts at all deep
+    inside the compiled `planning_graph`, and this codebase's own layering
+    rule (`app.ai.*` never imports `app.domains.*` -- see
+    `app.domains.units.provider`'s docstring) means a DB-backed quota check
+    cannot live at the point that decision is made without violating it,
+    the same reason confidentiality clearance is kept out of the ABAC engine
+    itself (see `app.core.authz.engine`'s module docstring).
+    """
 
     def __init__(
         self,
@@ -23,11 +37,13 @@ class DraftService:
         extractor: BaseDocumentExtractor,
         draft_graph: Any,
         routing_graph: Any,
+        quota_service: Optional[QuotaService] = None,
     ) -> None:
         self.storage = storage
         self.extractor = extractor
         self.draft_graph = draft_graph
         self.routing_graph = routing_graph
+        self.quota_service = quota_service
 
     async def generate_draft_and_route(
         self, request: DraftRequestSchema, user_id: str, company_id: str
@@ -42,7 +58,10 @@ class DraftService:
             company_id: The authenticated caller's company -- scopes the
                 unit list the routing workflow chooses from.
         """
-        
+        if self.quota_service is not None:
+            await self.quota_service.check_and_increment(company_id, DRAFTS_METRIC)
+
+
         # 1. Fetch raw document and extract text
         try:
             content_bytes = await self.storage.get_file(request.storage_path)
@@ -102,7 +121,7 @@ class DraftService:
                         ),
                         "reasoning_level": request.reasoning_level.value,
                     },
-                    config=self._trace_config()
+                    config=self._trace_config(user_id, company_id)
                 ),
                 timeout=draft_timeout,
             )
@@ -145,6 +164,7 @@ class DraftService:
         if missing_information:
             draft_id = await draft_recorder.record_draft(
                 user_id=user_id,
+                company_id=company_id,
                 session_id=None,
                 document_id=request.storage_path,
                 content=draft_content,
@@ -177,7 +197,7 @@ class DraftService:
                         "confidence_score": confidence,
                         "company_id": company_id,
                     },
-                    config=self._trace_config()
+                    config=self._trace_config(user_id, company_id)
                 ),
                 timeout=settings.AI_WORKFLOW_TIMEOUT_SECONDS,
             )
@@ -204,6 +224,7 @@ class DraftService:
         ] or routing_state.get("requires_human_approval", False)
         draft_id = await draft_recorder.record_draft(
             user_id=user_id,
+            company_id=company_id,
             session_id=None,
             document_id=request.storage_path,
             content=draft_content,
@@ -228,10 +249,12 @@ class DraftService:
         )
 
     @staticmethod
-    def _trace_config() -> dict[str, Any]:
+    def _trace_config(user_id: Optional[str] = None, company_id: Optional[str] = None) -> dict[str, Any]:
         try:
-            from app.observability.tracer import build_trace_config
+            from app.observability.tracer import build_trace_config, company_tags
 
-            return build_trace_config()
+            return build_trace_config(
+                langfuse_user_id=user_id, langfuse_tags=company_tags(company_id)
+            )
         except Exception:
             return {}

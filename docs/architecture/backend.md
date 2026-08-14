@@ -444,15 +444,13 @@ constraint ile zorlanır) -- root herhangi bir şirkete bağlı değildir ve
 şirket verisine yalnızca açık bir scope-switch akışıyla erişir (bkz.
 `docs/api/companies.md`).
 
-**Bilinen kapsam dışı**: `chat_sessions`/`chat_messages`/`drafts`/`runs`/
-`run_steps`/`guardrail_events` tabloları `company_id` kolonunu taşır ama bu
-alan henüz zorunlu değildir -- bu satırlar LangGraph orkestrasyon katmanının
-derinlerinden (`PlanningState` üzerinden, `user_id`'nin bugün taşındığı
-şekilde) yazılır ve `company_id`'nin oraya taşınması ayrı bir faz olarak
-planlanmıştır (bkz. `app.observability.model.run_model.RunModel.company_id`
-docstring'i). Bu tablolar henüz RLS'e de dahil değil -- bir tablo, kolonu her
-satırda gerçekten dolu olmadan RLS'e alınmaz (aksi hâlde meşru satırlar bile
-kimseye görünmez hâle gelir; bkz. migration `0013_rls`'in kendi docstring'i).
+`chat_sessions`/`chat_messages`/`drafts`/`runs`/`run_steps`/
+`guardrail_events`'in `company_id`'si de Faz 4'ten (migration `0016_
+recorder_tables_rls`) itibaren `NOT NULL` ve RLS kapsamında -- `PlanningState.
+company_id`, `ChatService._invoke`'dan planlama grafiğinin durumuna
+`user_id` ile aynı şekilde ekleniyor ve dört recorder'ın (`draft_recorder`,
+`run_recorder`, `guardrail_recorder`, `chat_recorder`) hepsi artık `tenant_
+session(company_id)` kullanıyor (bkz. aşağıdaki RLS bölümü).
 
 ## Postgres Row-Level Security (RLS)
 
@@ -472,11 +470,29 @@ yapar:
    yaratımı hem orada (taze volume'ler için) hem migration'da (mevcut
    volume'ler için) tekrarlanır.
 2. **`ENABLE`+`FORCE ROW LEVEL SECURITY`** ve tek bir `tenant_isolation`
-   policy'si, Faz 1'in zaten `company_id NOT NULL` yaptığı tablolarda:
-   `users`, `units`, `documents`, `invited_emails`, `permission_grants`
-   (Faz 2). `FORCE` şart -- onsuz RLS tablo sahibi için zaten atlanıyor
-   *ve* `BYPASSRLS` yetkili herhangi bir rol için de atlanır; `kachow_app`
-   ikisi de değil, ama `FORCE` bunu gelecekte de öyle kalmaya zorluyor.
+   policy'si, her kiracı-şekilli tabloda: `users`/`units`/`documents`/
+   `invited_emails` (Faz 1), `permission_grants` (Faz 2), `unit_memberships`/
+   `document_pools`/`document_pool_items` (Faz 4, `0014_units_and_pools` --
+   yeni tablolar olduğu için backfill'e gerek kalmadan doğrudan `NOT NULL`
+   ile doğuyorlar), `drafts`/`chat_sessions`/`chat_messages`/`runs`/
+   `run_steps`/`guardrail_events` (Faz 4, `0015_backfill_recorder_company_id`
+   + `0016_recorder_tables_rls` -- Faz 1'den beri nullable kalan altılı,
+   LangGraph state threading tamamlanınca aynı üç-aşamalı desenle
+   kapatıldı), `draft_shares`/`notifications` (Faz 5, `0017_draft_shares_
+   notifications`), ve `usage_counters`/`company_quotas` (Faz 6,
+   `0019_usage_counters_and_quotas` -- yine baştan `NOT NULL` doğan yeni
+   tablolar). `company_id`'si olmayan tablolar: `companies`'in kendisi --
+   kiracının kökü, kapsanacak bir kiracısı yok -- ve **`audit_log`**
+   (Faz 6, `0018_audit_log`), tek kasıtlı istisna: bir ROOT'un sistem geneli
+   eylemleri (örn. `POST /companies`) tek bir şirkete ait değildir, ve
+   `company_id IS NULL` bir satırda `tenant_isolation` policy'sinin
+   `company_id = current_setting(...)` yarısı üçlü mantıkta NULL'a
+   düşüp yalnızca `OR is_root` yarısından görünür kalmasını sağlar --
+   policy'nin kendisi değişmeden aynı davranışı verir (bkz. `AuditLogModel`'in
+   kendi docstring'i). `FORCE` şart -- onsuz RLS tablo sahibi için zaten
+   atlanıyor *ve* `BYPASSRLS` yetkili herhangi bir rol için de atlanır;
+   `kachow_app` ikisi de değil, ama `FORCE` bunu gelecekte de öyle kalmaya
+   zorluyor.
 
 Policy: `company_id = current_setting('app.current_company_id', true) OR
 current_setting('app.is_root', true) = 'on'`. `current_setting(key, true)`
@@ -539,13 +555,15 @@ yapılan her sonraki istek "User not found" ile patlıyordu (GUC boş kalıyor).
 ### Dürüst uyarı
 
 RLS **ikinci** savunma hattıdır, birincisi değil: (a) diskteki analiz
-blob'u ve Qdrant hiç RLS kapsamında değil, (b) `drafts`/`chat_sessions`/
-`runs`/... hâlâ RLS dışı (yukarıdaki "bilinen kapsam dışı"), (c) alembic ve
-`scripts/` şema-sahibi tarafında çalışıyor, RLS'ten etkilenmiyor. Asıl doğru
-olması gereken şey hâlâ repository katmanındaki zorunlu `company_id`
-filtresi -- `tests/integration/test_tenant_repository_scoping.py` bunu RLS
-tamamen kapalıyken (şema-sahibi bağlantısıyla) doğruluyor, `tests/
-integration/test_rls_isolation.py` de RLS'in kendisini `kachow_app` üzerinden.
+blob'u ve Qdrant hiç RLS kapsamında değil, (b) LangGraph checkpointer'ın
+kendi tabloları (`checkpoint*`) da değil -- kasıtlı olarak
+şema-sahibi bağlantısında kalıyorlar (bkz. `settings.checkpointer_dsn`'in
+docstring'i), (c) alembic ve `scripts/` şema-sahibi tarafında çalışıyor,
+RLS'ten etkilenmiyor. Asıl doğru olması gereken şey hâlâ repository
+katmanındaki zorunlu `company_id` filtresi -- `tests/integration/
+test_tenant_repository_scoping.py` bunu RLS tamamen kapalıyken (şema-sahibi
+bağlantısıyla) doğruluyor, `tests/integration/test_rls_isolation.py` de
+RLS'in kendisini `kachow_app` üzerinden.
 
 ## ABAC Yetkilendirme Motoru (`app.core.authz`)
 
@@ -612,6 +630,172 @@ clearance'ı doğrudan karşılaştırıp modele bir red string'i döndürüyor
 çağrılıyor -- `app.ai.*`'nin `app.domains.*` import edemeyeceği katman
 kuralı gereği oraya DB destekli bir PDP enjekte etmek bu kuralı ihlal
 ederdi (bkz. `app.core.authz`'in kendi paket docstring'i).
+
+## Taslak Dağıtımı ve Bildirimler (Faz 5)
+
+Çalışanlar arası taslak gönder/al akışı (`draft_shares`) ve buna bağlı
+gerçek zamanlı bildirim sistemi (`notifications`) -- şartnamedeki "taslak
+paylaşımı" ve "bildirim" maddelerinin karşılığı. İkisi de RLS kapsamında
+(bkz. yukarıdaki tablo listesi), migration `0017_draft_shares_notifications`.
+
+**`draft_shares`** -- `drafts` tablosunun belirli bir versiyonunun belirli
+alıcı(lar)a gönderimi. Ayrı bir inbox/outbox tablosu yok: gelen kutusu
+`recipient_id = ben`, giden kutusu `sender_id = ben`, ikisi de bu tek
+tablonun farklı filtreli sorguları (`DraftShareRepository.list_inbox`/
+`list_outbox`). Gönderim `Action.DRAFT_SEND` ile gerçek ABAC motorundan
+geçer (Faz 2'de tanımlanmış ama o zamana kadar kullanılmamış bir sabit) --
+`PoolService`'in kasıtlı olarak basitleştirilmiş `bypasses_ownership`
+kısayolunun aksine, bir taslağın tek sahibi olduğu için `engine.authorize`'ın
+`Resource` şekline birebir oturuyor.
+
+Zaten oluşmuş bir paylaşımı görüntülemek/yanıtlamak ise bir ABAC kararı
+**değil**: `draft_shares` satırının `sender_id`/`recipient_id`'si kendisi
+yetkilendirmedir (yalnızca iki taraf, ya da `bypasses_ownership` ile
+ADMIN/MANAGER/ROOT şirket geneli). Bunun nedeni, taslağın kendi sahipliğine
+göre `draft:read` kontrolü yapılsaydı, taslağı sahiplenmeyen bir alıcının
+kendisine gönderilen şeyi bile okuyamayacak olması -- bkz.
+`DraftShareService`'in kendi modül docstring'i. Her yanıt (`DraftShareResponse`)
+bu yüzden `drafts` ile join'lenmiş içeriği taşır, ayrı bir `GET /drafts/{id}`
+çağrısına gerek kalmadan.
+
+`suggested_unit_id`, gönderim anında taslağın `destination` alanından
+(AI'ın routing kararı, serbest metin) `UnitRepository.get_by_name` ile
+**anlık kopyalanır** -- yeni bir AI çağrısı yok, `docs/api/units.md`'deki
+`GET /units/{id}/suggested-recipients`'la aynı "tekrar kullan, yeniden
+üretme" ilkesi. Eşleşme yoksa (birim o zamandan beri yeniden adlandırılmış/
+silinmiş) `suggested_unit_id` sessizce `NULL` kalır -- dürüst bir kaçırma,
+hata değil.
+
+**Kabul etmek bir versiyon fork'lar**: `accept`, `DraftRepository.
+create_version`'ın zaten var olan `parent_draft_id` zincirleme mekanizmasını
+kullanarak, **alıcının sahip olduğu** yeni bir taslak versiyonu yaratır
+(`session_id=NULL`, doğrudan `POST /documents/draft` çağrısıyla aynı
+şekilde). Bunun anlamı: "kabul etmek" yalnızca bir durum değişikliği değil,
+taslağı gerçekten devralmak -- alıcı artık `GET /drafts/{yeni_id}` ile
+kendi kopyasına erişebiliyor. `reject` hiçbir şey fork'lamaz.
+
+**`notifications`** -- kişisel, `bypasses_ownership`'siz (bir bildirim
+yalnızca `user_id`'sine ait, şirket geneli görünüm yok). İki event
+(`app/events/event.py`): `draft.shared` (alıcıya) ve `draft.share_responded`
+(yalnızca `accepted`/`rejected` -- `read`/`withdrawn` bildirim üretmez,
+ilki zaten gönderenin ilgi alanı değil, ikincisi gönderenin kendi eylemi).
+`app/events/subscribers.py`'deki dinleyiciler `tenant_session(company_id)`
+açar (istek-dışı kod, GUC okuyacak bir request yok -- bkz. yukarıdaki GUC
+mekaniği bölümü), `notifications` satırını yazar, sonra Redis'e publish eder.
+
+**Gerçek zamanlı akış (`GET /notifications/stream`, SSE) neden Redis
+pub/sub üzerinden, süreç-içi `EventBus` üzerinden değil**: `EventBus`
+tamamen bellek-içi ve tek sürece özel -- çok worker'lı bir uvicorn
+dağıtımında, bir bildirim worker A'da publish edilirse worker B'deki bir
+SSE bağlantısı bunu asla görmez. `RedisCache.publish`/`pubsub()` bu sınırı
+aşıyor. Kanal adı `notifications:{company_id}:{user_id}` (`app.domains.
+notifications.service.channel_for`) -- kullanıcı bazında zaten benzersiz
+olsa da `company_id` eklemek çapraz-şirket bir kanal çakışmasını olası
+değil, **yapısal olarak imkânsız** kılıyor. Canlı push kaybolsa bile veri
+kaybı yok: `notifications` satırı publish'ten **önce** yazılıyor (bkz.
+`NotificationService.create`), yani bağlı olmayan/kopan bir SSE istemcisi
+bir sonraki `GET /notifications` çağrısında bildirimi zaten görüyor --
+Redis burada yalnızca gecikmeyi azaltıyor, doğruluğu değil.
+
+## Denetim Kaydı, Analitik ve Kotalar (Faz 6)
+
+Planın son fazı: hash zincirli denetim kaydı, mevcut tablolar üzerine
+düz SQL analitik, root konsolu, şirket bazlı Prometheus/Grafana/Langfuse
+ve dürüst kapsamlı kullanım kotaları.
+
+**`audit_log`** (`app.domains.audit`) -- kurcalamaya dayanıklı zincir:
+`hash = sha256(prev_hash || canonical_json(satır))`, `seq` zincir-bazlı
+monoton (`company_id IS NOT DISTINCT FROM` ile hesaplanır -- Faz 5'te
+`DraftRepository.list_drafts`'ta bulunan NULL-gruplama hatasıyla aynı
+sınıfa karşı baştan korumalı, bkz. `AuditLogRepository._next_seq_and_
+prev_hash`'in docstring'i). `AuditService.record()` diğer recorder'lar
+gibi **best-effort** -- kendi `tenant_session`'ını açar, asıl eylemi asla
+engellemez, hata yalnızca loglanır. Her `GET` değil: `permission:grant/
+revoke`, şirket oluştur/güncelle/sil/admin-ata, birim oluştur/güncelle/sil,
+taslak paylaşım gönder/kabul/reddet/geri-çek, havuz push gibi
+durum-değiştiren idari eylemlere bağlanır -- dürüst, orantılı kapsam.
+`GET /audit/verify` zinciri `seq` sırasıyla yürür, her satırın hem kendi
+`hash`'ini kendi alanlarından yeniden hesaplayıp doğrular hem
+`prev_hash`'in bir önceki satırın gerçek `hash`'iyle eştiğini kontrol
+eder (ikincisi, zincirin ortasından bir satır silinmiş/yeniden
+sıralanmışsa, birincisi tek başına yakalayamaz).
+
+**Canlı doğrulama sırasında bulunan iki gerçek hata** (yine RLS/Faz 3-5
+paternine sadık: bulundu, düzeltildi, otomatik testle sabitlendi):
+`GET /root/health`'in `SuccessResponse`'un döndürdüğü `JSONResponse`'tan
+`.data` okumaya çalışması (`SuccessResponse` bir Pydantic modeli değil,
+zaten render edilmiş bir `JSONResponse` döndüren bir fabrika fonksiyonu --
+bkz. `app.api.responses.success.SuccessResponse`) -- düzeltme,
+`app.domains.system.router.health_check`'in gövdesini `build_health_
+payload`'a çıkarıp hem route hem `root_health`'in ham dict üzerinde
+çalışmasını sağladı. Ve `AuditLogRepository.append`'in kendi içindeki
+`hashable_fields` çağrısı -- bir yeniden adlandırma sırasında tanım
+satırı güncellenmiş ama tek çağrı yeri unutulmuştu (`_hashable_fields`
+kalmıştı), `tests/unit/domains/test_audit_service.py`'nin mock'lu
+testlerinin **hiçbiri** gerçek `append()`'i hiç çağırmadığı için
+görünmezdi -- `tests/integration/test_audit_repository.py` (yeni, gerçek
+Postgres'e karşı) tam olarak bu sınıf hatayı yakalamak için var, ve
+düzeltme öncesi koda karşı gerçekten başarısız olduğu doğrulandı.
+
+**Analitik** (`app.domains.analytics`) -- yeni bir pipeline yok, mevcut
+`documents`/`drafts`/`runs`/`guardrail_events` üzerine düz SQLAlchemy
+toplu sorgular, `(company_id, metric, range)` başına 60 saniyelik Redis
+önbellek. `GET /companies/{id}/analytics/summary` ayrıca `kachow_company_
+active_users` gauge'unu **fırsatçı** olarak tazeler -- bu kod tabanında
+periyodik görev çalıştıran bir altyapı yok (celery/cron yok), yani bu
+gauge sürekli değil, yalnızca bir analitik özet çağrısı yapıldığında
+güncel.
+
+**Root konsolu** (`app.domains.companies.root_router` +
+`root_repository.py`) -- kasıtlı olarak ayrı bir repository:
+`AnalyticsRepository`'nin her sorgusu `company_id` filtreli, `RootRepository`'
+ninki hiçbiri değil. Aynı dosyaya `company_id=None` opsiyonel parametresi
+eklemek yerine ayrı bir modül olarak tutulması, unutulmuş bir filtrenin
+şirketler arası veri sızdırmasını yapısal olarak imkânsız kılıyor.
+
+**Kullanım kotaları** (`app.domains.quotas`) -- yalnızca `documents` ve
+`drafts` sayımı üzerinden **dürüst** zorlama; token bazlı kota **kasıtlı
+olarak kapsam dışı** -- `app.observability.ai_metrics.LLM_TOKENS`'ın kendi
+docstring'i zaten `BaseLLMClient.generate()`'in bugün token sayısı
+döndürmediğini itiraf ediyor, sahte bir sayı üretip ona göre kota
+zorlamak gerçek zorlamadan daha kötü olurdu. Zorlama şu üç noktada:
+`DocumentService.analyze_document` (pahalı analiz işlem hattından **önce**),
+`DraftService.generate_draft_and_route` (doğrudan `POST /documents/draft`),
+ve `DraftShareService.respond`'un `accept` fork'u (alıcının kendi
+kotasından düşer). **Sohbet akışından üretilen taslaklar kotalanmıyor** --
+`planning_graph`'ın hangi turun taslak ürettiğine dinamik karar vermesi,
+ve `app.ai.*`'nin `app.domains.*` import edememesi (bkz. ABAC bölümünün
+clearance'ı motora katmama gerekçesiyle aynı kural) bu yolu DB destekli bir
+kota kontrolünden mimari olarak ayırıyor -- dürüstçe belgelenen bir kapsam
+sınırı, sessizce atlanmış bir özellik değil.
+
+**Prometheus/Grafana** (`app.observability.company_metrics`) -- kasıtlı
+küçük bir set: `kachow_company_requests_total`, `_documents_total`,
+`_drafts_total`, `_guardrail_blocks_total`, `_active_users` (gauge),
+etiket değeri her zaman `slug` (uuid değil). `company_id -> slug`
+eşlemesi süreç-içi kalıcı bir sözlükte önbelleklenir (`get_current_user`
+içinde, yalnızca ilk görülüşte bir sorgu) -- her isteğe bir DB
+sorgusu eklemeden `TenantContextMiddleware`'in kendisine (istekten
+DB'ye erişimi olmayan, kasıtlı olarak) dokunmadan. `monitoring/dashboards/
+company_dashboard.json` (yeni) bir `company` template değişkeniyle
+gelir.
+
+**Langfuse etiketleme** -- `build_trace_config`'e `langfuse_user_id`/
+`langfuse_session_id`/`langfuse_tags=[company:slug, role:...]` eklendi.
+**Dürüst uyarı**: `compose.yml` hâlâ `langfuse/langfuse:2` çalıştırıyor,
+`langfuse` Python bağımlılığı ise v4 SDK -- bu iki sürümün uyuşmadığı
+önceki fazlardan beri biliniyor, yani bu etiketleme bugün muhtemelen
+hiçbir yere ulaşmıyor (no-op). Eklemenin maliyeti sıfıra yakın ve
+tracing'in kendisi çalışır hale geldiği gün otomatik işlemeye başlar;
+birinci parti, her zaman açık gözlemlenebilirlik hikayesi hâlâ
+`runs`/`run_steps`/`guardrail_events` (ve şimdi `audit_log`).
+
+**Performans**: `DraftRepository.count_drafts` artık `list_drafts(...,
+limit=10_000)` + `len()` değil, aynı COALESCE-gruplu filtrelenmiş
+sorgunun `SELECT count()` sarmalı (`DocumentRepository.count_for_owner`
+zaten önceki bir fazda düzeltilmiş bulundu). Aynı denetim sırasında
+`ChatSessionRepository.count_for_user`/`ChatMessageRepository.
+count_for_session`'da da aynı anti-desen bulundu ve düzeltildi.
 
 ---
 

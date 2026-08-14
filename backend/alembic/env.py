@@ -20,6 +20,14 @@ from app.domains.drafts.model.draft_model import DraftModel  # noqa: F401
 from app.domains.units.model.unit_model import UnitModel  # noqa: F401
 from app.domains.companies.model.company_model import CompanyModel  # noqa: F401
 from app.core.authz.model.permission_grant_model import PermissionGrantModel  # noqa: F401
+from app.domains.units.model.unit_membership_model import UnitMembershipModel  # noqa: F401
+from app.domains.pools.model.document_pool_model import DocumentPoolModel  # noqa: F401
+from app.domains.pools.model.document_pool_item_model import DocumentPoolItemModel  # noqa: F401
+from app.domains.drafts.model.draft_share_model import DraftShareModel  # noqa: F401
+from app.domains.notifications.model.notification_model import NotificationModel  # noqa: F401
+from app.domains.audit.model.audit_log_model import AuditLogModel  # noqa: F401
+from app.domains.quotas.model.usage_counter_model import UsageCounterModel  # noqa: F401
+from app.domains.quotas.model.company_quota_model import CompanyQuotaModel  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
