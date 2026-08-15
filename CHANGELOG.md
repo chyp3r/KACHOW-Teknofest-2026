@@ -2,6 +2,46 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.10.0] - 2026-08-15
+### Eklendi
+Şirket bazlı RLHF adapter katmanının ikinci fazı -- runtime prompt-adapter (Faz C2, #185),
+Faz C1'i (#183) takip ediyor. Anında etkili, GPU'suz: bir admin bir üslup kuralı yazdığı anda
+bir sonraki taslak/revizyon turu bunu uyguluyor.
+
+- **`app.ai.adapters.company_adapter.CompanyAdapter`**: `style_rules`/`preferred_examples`/
+  `avoided_patterns`/`version`/`trained_at`/`sample_count` taşıyan değişmez (frozen) veri
+  sınıfı. Yalnızca üslup ve biçim taşır, asla olgu taşımaz -- bu yapısal olarak zorlanıyor,
+  sınıfta dünya hakkında bir iddia (isim, tarih, kurum) tutabilecek hiçbir alan yok.
+- **`app.domains.companies.provider.get_company_adapter`/`set_company_adapter`**:
+  `CompanyModel.settings` JSON'ından okur/yazar, Redis'te 5 dk TTL ile cache'lenir.
+  `app.domains.units.provider.get_active_units_for_routing`'in kurduğu kalıp birebir izlendi:
+  `app.ai.*` hiçbir zaman `app.domains.*` import etmiyor (`docs/architecture/backend.md`), bu
+  yüzden gerçek DB/Redis erişimi domains tarafında kalıp AI grafiğine düz bir async callable
+  olarak (`adapter_provider`) enjekte ediliyor -- `units_provider` ile aynı desen.
+- **`draft_graph.py`/`revise_graph.py`**: `writer_node`/`reviser_node` her denemede şirketin
+  adaptörünü çözüp (`_resolve_adapter` -- çözümleme başarısız olursa veya adapter yoksa sessizce
+  boş adaptöre düşer, taslak turunu asla düşürmez) `format_adapter_block()` ile prompt'a ekliyor.
+  **Kritik sınır korunuyor**: `preferred_examples` mevcut `style_examples` akışına katılıyor, bu
+  yüzden `verify_draft`'ın deterministik `ornek_sizintisi` kontrolüne aynen tabi -- adaptörden
+  sızan bir kurum adı, tıpkı alınan bir üslup örneğinden sızan gibi yakalanıp insan onayına
+  düşürülüyor. Uçtan uca testle doğrulandı.
+- **`GET`/`PUT /companies/{id}/adapter`** (admin/root): C3'ün otomatik eğitim boru hattı
+  gelmeden önce bir admin elle üslup kuralı/kaçınılacak kalıp/tercih edilen örnek girebiliyor.
+  `PUT` her alanı tamamen değiştirir (eklemez), versiyonu artırır, `trained_at` damgalar ve
+  audit log'a düşer.
+
+### Test
+- `docker compose exec backend pytest -q` → 1814 test geçti (28 yeni: `CompanyAdapter`/
+  `format_adapter_block` birim testleri, `provider.py` için sahte Redis/DB testleri, gerçek
+  derlenmiş draft/revise grafikleriyle uçtan uca prompt-enjeksiyon ve `ornek_sizintisi`
+  sızıntı testi, yeni endpoint'ler için router testleri).
+- Migration/RLS gerekmedi -- `CompanyModel.settings` zaten var olan bir JSON alanı.
+- Canlı doğrulama: gerçek Postgres + Redis'e karşı `get_company_adapter`/`set_company_adapter`
+  elle çalıştırıldı (versiyon artışı, cache isabeti, `CompanyModel.settings`'teki diğer
+  anahtarların korunduğu doğrulandı).
+
+Refs: [#185](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/185)
+
 ## [3.9.0] - 2026-08-15
 ### Eklendi
 Şirket bazlı RLHF adapter katmanının ilk fazı -- feedback toplama (Faz C1, #183). Kullanıcının
