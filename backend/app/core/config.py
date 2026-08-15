@@ -251,6 +251,13 @@ class Settings(BaseSettings):
     S3_ENDPOINT_URL: str = "http://localhost:9000"
     S3_ACCESS_KEY: str = "minioadmin"
     S3_SECRET_KEY: str = "minioadmin"
+    #: SFT/DPO JSONL exports + LoRA adapter weights, one subdirectory per
+    #: `{company_slug}/{run_id}` (Faz C3 Aşama 3, #191). Only ever written by
+    #: the training worker (`app.workers.training`), never the main backend
+    #: process -- kept as its own setting rather than reusing
+    #: LOCAL_STORAGE_DIR since these are large, disposable training
+    #: artifacts, not user-facing document storage.
+    TRAINING_ARTIFACTS_DIR: str = "./artifacts/training"
 
     # Langfuse Configuration
     LANGFUSE_PUBLIC_KEY: str | None = None
