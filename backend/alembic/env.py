@@ -29,6 +29,8 @@ from app.domains.audit.model.audit_log_model import AuditLogModel  # noqa: F401
 from app.domains.quotas.model.usage_counter_model import UsageCounterModel  # noqa: F401
 from app.domains.quotas.model.company_quota_model import CompanyQuotaModel  # noqa: F401
 from app.domains.feedback.model.feedback_model import FeedbackModel  # noqa: F401
+from app.domains.training.model.training_run_model import TrainingRunModel  # noqa: F401
+from app.domains.training.model.training_sample_model import TrainingSampleModel  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

@@ -2,7 +2,7 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
-## [3.10.1] - 2026-08-15
+## [3.11.1] - 2026-08-15
 ### Düzeltildi
 - **Geçersiz/olmayan JWT ile giren kullanıcı artık `/login`'e yönlendiriliyor.**
   `compose.yml`'deki frontend servisinin `VITE_DEV_AUTH_BYPASS` varsayılanı `true`'ydu --
@@ -15,6 +15,66 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   (`VITE_DEV_AUTH_BYPASS=true`) açılabilir.
 
 Refs: [#189](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/189)
+
+## [3.11.0] - 2026-08-15
+### Eklendi
+Faz C2'yi (#185) takip eden, Faz C'nin son parçası: kullanıcıların 👍/👎 oyladığı taslaklardan
+(Faz C1, #183) otomatik olarak `CompanyAdapter` (Faz C2) üslup kuralı çıkaran bir eğitim boru
+hattı (Faz C3, #187).
+
+- **`app.domains.training.*`** (yeni domain): `TrainingSampleModel`/`TrainingRunModel` +
+  migration `0021_training.py` (RLS dahil). Bir tercih çifti örneği (`training_samples`) daima
+  tek kanatlı: bir 👍 `chosen`-only, bir 👎 `rejected`-only bir satır üretir -- gerçek metin
+  `feedback.draft_id` üzerinden `drafts.content`'e çözülüyor (feedback tablosunun kendisi ham
+  metni hiç tutmuyor, bkz. `FeedbackModel`'in kendi docstring'i).
+- **`app.ai.training.dataset`**/**`style_miner`** (yeni, `app.ai` katmanı -- `app.domains` import
+  etmiyor, C2'nin kurduğu tek yönlü bağımlılık kuralıyla aynı): `compile_pairs_from_feedback`
+  saf fonksiyonu + `mine_style` -- deterministik diff sinyalleri (ortalama uzunluk vb.) çıkarıp
+  eğitim işi başına **tek** `fast_llm_client` çağrısıyla (mesaj başına değil, bkz. plan'ın A6
+  notu) en fazla 10 üslup kuralı + 10 kaçınılacak kalıp üretir. `MIN_FEEDBACK_SAMPLES = 50`
+  eşiğinin altında iş `skipped` olarak biter, boş bir adaptör yayınlanmaz.
+- **`app.domains.training.service.TrainingService.run_style_adapter_training`**: derle → eşiği
+  kontrol et → üslup madenciliği yap → `app.domains.companies.provider.set_company_adapter`
+  (Faz C2) ile adaptörü versiyonlayarak yayınla. Otomatik çalıştırmalar `preferred_examples`'a
+  asla dokunmuyor -- mevcut değeri `get_company_adapter`'dan okuyup aynen geçiriyor, aksi halde
+  her otomatik koşu bir adminin elle girdiği örnekleri sessizce silerdi (`set_company_adapter`
+  her alanı tamamen değiştirir, eklemez). Bir istisna asla isteğe sızmaz -- `training_runs.
+  status="failed"` + `error` ile görünür kalır.
+- **Endpoint'ler** (`/companies/{id}/training-samples[/compile|/stats|/export]`,
+  `/training-samples/{id}`, `/companies/{id}/training-runs`): derleme eğitimden ayrı
+  tetiklenebilir (veri, eğitilmeden önce denetlenebilir); `.../export` ve `.../training-runs`
+  tetikleyicisi **aynı** `list_all_active_samples` sorgusunu paylaşır, yani gösterilen veri ile
+  eğitilen veri birebir aynı satırlar. `POST .../training-runs` Root/Admin'e kapalı değil ama
+  yeni `company_quotas.max_training_runs_per_month` kotasına tabi (mevcut `usage_counters`
+  mekanizması yeniden kullanıldı, yeni tablo yok).
+- **Frontend**: `trainingService.ts` + `useTrainingData.ts` + `AdminPage`'e yeni
+  `TrainingPanel` -- özet istatistik kartları, örnek tablosu (tıklayınca chosen/rejected diff
+  açılır), eğitim geçmişi, derle/eğit butonları.
+- **`frontend/src/api/generated.ts` yeniden üretildi** (`npx openapi-typescript`) -- bu dosya
+  aylardır güncellenmemişti (analytics/feedback dahil pek çok endpoint eksikti);
+  `UserResponse.company_id` artık istemci tarafında da mevcut, `TrainingPanel`'in kendi
+  şirketini bilmesini bu sağlıyor. Regenerasyon `UserRole`'e `"root"`'un eklendiğini ortaya
+  çıkardı -- `ROLE_LABELS` bunu karşılayacak şekilde güncellendi, atanabilir rol
+  dropdown'larına (davet/rol değiştirme) sızmasın diye ayrı bir `ASSIGNABLE_ROLE_LABELS`
+  eklendi.
+
+### Kapsam dışı (bilinçli, ayrı bir işe ertelendi)
+- **Aşama 3 -- LoRA/PEFT eğitimi** (`peft`/`trl`, `compose.yml --profile training`, shadow
+  değerlendirme harness'i): gerçek GPU eğitim altyapısı, bu PR'ın kapsamına girmeyen ayrı
+  donanım/dağıtım kararları gerektiriyor.
+- **`arq` job runner + worker servisi + haftalık cron tetikleme**: bu fazın eğitim işi
+  (deterministik diff + tek LLM çağrısı) saniyeler sürüyor ve isteğin kendi içinde senkron
+  çalışıyor -- `chat_recorder`/`draft_recorder` ile aynı "kısa ömürlü, kendi oturumunu açan"
+  desenin ötesine geçen bir kuyruk/worker container'ı bu ölçek için erken optimizasyon olurdu.
+
+### Test
+- `docker compose exec backend pytest -q` → **1847 test geçti** (33 yeni).
+- `npx vitest run` (frontend) → **142 test geçti** (8 yeni, `TrainingPanel`).
+- Canlı doğrulama: gerçek Postgres + Redis + Ollama'ya karşı uçtan uca -- 60 feedback oyu →
+  60 derlenmiş örnek → üslup madenciliği (tek LLM çağrısı) → `CompanyModel.settings`'e
+  yayınlanan versiyonlanmış adaptör, elle çalıştırılıp doğrulandı.
+
+Refs: [#187](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/187)
 
 ## [3.10.0] - 2026-08-15
 ### Eklendi

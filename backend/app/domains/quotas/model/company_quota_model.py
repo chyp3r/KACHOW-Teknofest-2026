@@ -26,3 +26,6 @@ class CompanyQuotaModel(Base, TimestampMixin):
     )
     max_documents_per_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     max_drafts_per_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    #: Faz C3 (#187) -- caps `POST /companies/{id}/training-runs`, counted
+    #: via the same `usage_counters` mechanism as the other two limits.
+    max_training_runs_per_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
