@@ -184,18 +184,41 @@ class TrainingRepository:
     # training_runs
     # ------------------------------------------------------------------
     async def create_run(
-        self, company_id: str, *, kind: str, triggered_by: Optional[str], trigger: str = "manual"
+        self,
+        company_id: str,
+        *,
+        kind: str,
+        triggered_by: Optional[str],
+        trigger: str = "manual",
+        status: str = "running",
     ) -> TrainingRunModel:
+        """`status="running"` (the default) fits the synchronous
+        style-adapter path, which starts working the instant the row
+        exists. A queued LoRA run (#191) passes `status="queued"` instead
+        -- `started_at` only gets stamped for the immediately-running case;
+        the worker itself has no "I've started" checkpoint to update it
+        from, so a queued run's actual start time is only ever visible as
+        "somewhere between created_at and finished_at."""
         run = TrainingRunModel(
             id=uuid4().hex,
             company_id=company_id,
             kind=kind,
-            status="running",
+            status=status,
             triggered_by=triggered_by,
             trigger=trigger,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(timezone.utc) if status == "running" else None,
         )
         self.db.add(run)
+        await self.db.flush()
+        return run
+
+    async def start_run(self, run: TrainingRunModel) -> TrainingRunModel:
+        """A queued run's transition to actually running -- called by
+        `app.workers.training.run_lora_training_job` once it has picked
+        the job up, not by `create_run` (which already stamps this for
+        the synchronous `status="running"` case)."""
+        run.status = "running"
+        run.started_at = datetime.now(timezone.utc)
         await self.db.flush()
         return run
 

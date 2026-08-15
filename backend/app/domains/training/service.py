@@ -7,10 +7,16 @@ This is the one place `app.ai.training` (pure compiler/miner) and
 -- both are wired together here rather than either importing the other
 directly, keeping each side's own boundary intact.
 
-Runs synchronously inside the request that triggered them: the only LLM
-call this phase makes is the single `style_miner.mine_style` call, which
-takes a few seconds -- see #187's own body for why that does not warrant
-an `arq` worker yet.
+Two very different execution shapes share this file, by kind:
+
+- `kind="style_adapter"` (`run_style_adapter_training`) runs synchronously
+  inside the triggering request -- the only LLM call it makes is the
+  single `style_miner.mine_style` call, which takes a few seconds (see
+  #187's own body for why that did not warrant a queue).
+- `kind="lora_sft"`/`"lora_dpo"` (`enqueue_lora_training_run`) is genuinely
+  long (potentially hours on a GPU host), so it is only *queued* here --
+  `app.workers.training.run_lora_training_job`, running in the separate
+  `worker` container (Faz C3 Aşama 3, #191), does the actual work.
 """
 
 import logging
@@ -27,6 +33,9 @@ from app.domains.training.repository import TrainingRepository
 logger = logging.getLogger(__name__)
 
 STYLE_ADAPTER_KIND = "style_adapter"
+LORA_SFT_KIND = "lora_sft"
+LORA_DPO_KIND = "lora_dpo"
+LORA_KINDS = (LORA_SFT_KIND, LORA_DPO_KIND)
 
 
 class TrainingService:
@@ -74,6 +83,13 @@ class TrainingService:
         this and the training path share one query."""
         return await self.repository.list_all_active_samples(company_id)
 
+    async def active_pairs_for_training(self, company_id: str) -> List[PreferencePair]:
+        """Every active sample, converted back to `PreferencePair`s -- what
+        both the style-adapter miner (Aşama 2) and the LoRA export step
+        (`app.workers.training`, Aşama 3, #191) actually train on."""
+        samples = await self.repository.list_all_active_samples(company_id)
+        return [_sample_to_pair(sample) for sample in samples]
+
     async def delete_sample(self, sample_id: str, company_id: str) -> TrainingSampleModel:
         sample = await self.repository.get_sample_by_id(sample_id, company_id)
         if sample is None:
@@ -89,6 +105,29 @@ class TrainingService:
 
     async def count_runs(self, company_id: str) -> int:
         return await self.repository.count_runs(company_id)
+
+    async def enqueue_lora_training_run(
+        self, company_id: str, *, kind: str, triggered_by: Optional[str]
+    ) -> TrainingRunModel:
+        """Create a `status="queued"` row and hand it to the training
+        worker via `arq` -- returns immediately, does not wait for the
+        run to actually happen (see this module's own docstring for why
+        LoRA is queued, unlike the synchronous style-adapter path).
+
+        The `app.workers.queue` import is local, not top-level: that
+        module's own `app.workers.training` imports `TrainingService`
+        (this class) back, to run the query the worker itself needs --
+        a top-level import here would be a circular import between the
+        two modules. Deferring it until the call actually happens breaks
+        the cycle without either side needing to restructure around it.
+        """
+        from app.workers.queue import enqueue_lora_training_job
+
+        run = await self.repository.create_run(
+            company_id, kind=kind, triggered_by=triggered_by, trigger="manual", status="queued"
+        )
+        await enqueue_lora_training_job(company_id, run.id)
+        return run
 
     async def run_style_adapter_training(
         self, company_id: str, *, triggered_by: Optional[str], llm_client
