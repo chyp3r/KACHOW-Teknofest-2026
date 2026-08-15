@@ -371,8 +371,7 @@
 .chat-content > .interrupt-panel { flex: 0 1 auto; min-height: 0; max-height: 42dvh; overflow-y: auto; }
 .chat-content .interrupt-panel .draft-preview { max-height: none; overflow: visible; }
 .chat-content > .alert,
-.chat-content > .processing-line,
-.chat-content > .cancel-stream-button { flex: 0 0 auto; }
+.chat-content > .processing-line { flex: 0 0 auto; }
 .chat-message { width: min(100%, 820px); margin: var(--space-5) 0; }
 .chat-message > div { max-width: min(100%, 720px); border: 0; background: transparent; }
 .chat-message.assistant > div { padding: var(--space-1) 0 var(--space-1) var(--space-1); }

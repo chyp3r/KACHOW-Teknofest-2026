@@ -62,6 +62,16 @@ export function useChatWorkflow(
   // steps it actually took.
   const [nodeLabels, setNodeLabels] = useState<Record<string, string>>({});
   const [nodeOrder, setNodeOrder] = useState<string[]>([]);
+  // Wall-clock timestamp (Date.now()) each node most recently started running
+  // -- re-stamped on every node_start, including a re-entry (e.g. "draft"
+  // running a second attempt), so the waiting-state UI's per-step timer
+  // always reflects the current attempt rather than the first one.
+  const [nodeStartedAt, setNodeStartedAt] = useState<Record<string, number>>({});
+  // Wall-clock timestamp the current turn's request left the client -- reset
+  // on every send/resume, distinct from nodeStartedAt so the waiting-state
+  // UI can show a total-elapsed counter even before the first node_start
+  // event has arrived.
+  const [turnStartedAt, setTurnStartedAt] = useState<number | null>(null);
   const [planIntent, setPlanIntent] = useState("");
   const [logs, setLogs] = useState<WorkflowLog[]>([]);
   const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([]);
@@ -192,6 +202,8 @@ export function useChatWorkflow(
     setPlanSteps([]);
     setNodeLabels({});
     setNodeOrder([]);
+    setNodeStartedAt({});
+    setTurnStartedAt(Date.now());
     setPlanIntent("");
     setToolCalls([]);
     setGuardrailEvents([]);
@@ -222,6 +234,7 @@ export function useChatWorkflow(
         case "node_start":
           noteNode(event.node, event.label);
           setNodeStatus((previous) => ({ ...previous, [event.node]: "running" }));
+          setNodeStartedAt((previous) => ({ ...previous, [event.node]: Date.now() }));
           if (event.meta) setNodeMeta((previous) => ({ ...previous, [event.node]: event.meta ?? {} }));
           // No node clears streamingText here anymore -- draft/revise/assist
           // no longer stream their own raw output (see backend
@@ -424,6 +437,8 @@ export function useChatWorkflow(
     planSteps,
     nodeLabels,
     nodeOrder,
+    nodeStartedAt,
+    turnStartedAt,
     planIntent,
     logs,
     toolCalls,

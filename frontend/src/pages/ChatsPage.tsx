@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { AlertCircle, GitBranch, History, Plus, RotateCcw, Square } from "lucide-react";
+import { AlertCircle, GitBranch, History, Plus, RotateCcw } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { ChatDropZone } from "../features/chat/ChatDropZone";
@@ -10,7 +10,8 @@ import type {
   ChatSession,
   GuardrailEvent,
   InterruptState,
-  WorkflowLog,
+  ToolCallEvent,
+  WorkflowNodeStatus,
 } from "../types/chat";
 import type { DocumentMetadata, ReasoningLevel } from "../types/documents";
 import { Button } from "../components/Button";
@@ -29,11 +30,19 @@ export function ChatsPage({
   messages,
   streamingText,
   loading,
-  logs,
   guardrailEvents,
   interrupt,
   workflowOpen,
   historyOpen,
+  planSteps = [],
+  nodeOrder = [],
+  nodeLabels = {},
+  nodeStatus = {},
+  nodeMeta = {},
+  nodeResults = {},
+  toolCalls = [],
+  nodeStartedAt = {},
+  turnStartedAt = null,
   onSelectDocument,
   onClearDocument,
   onSend,
@@ -61,11 +70,24 @@ export function ChatsPage({
   messages: ChatMessage[];
   streamingText: string;
   loading: boolean;
-  logs: WorkflowLog[];
   guardrailEvents: GuardrailEvent[];
   interrupt: InterruptState | null;
   workflowOpen: boolean;
   historyOpen: boolean;
+  // ThinkingBubble's live-progress data -- same shape useChatWorkflow
+  // already exposes to DecisionFlow, threaded through here as well so the
+  // waiting-state bubble in the chat flow shows the same "what's actually
+  // happening" the workflow drawer does. Optional/defaulted so a caller
+  // that only wants a plain loading state doesn't have to wire all of it.
+  planSteps?: string[];
+  nodeOrder?: string[];
+  nodeLabels?: Record<string, string>;
+  nodeStatus?: Record<string, WorkflowNodeStatus>;
+  nodeMeta?: Record<string, Record<string, unknown>>;
+  nodeResults?: Record<string, Record<string, unknown>>;
+  toolCalls?: ToolCallEvent[];
+  nodeStartedAt?: Record<string, number>;
+  turnStartedAt?: number | null;
   onSelectDocument: (document: DocumentMetadata) => void;
   onClearDocument: () => void;
   onSend: (
@@ -91,6 +113,23 @@ export function ChatsPage({
 }) {
   const [promptTemplate, setPromptTemplate] = useState<string | null>(null);
   const historyTriggerRef = useRef<HTMLButtonElement>(null);
+
+  // ThinkingBubble's "taking longer than usual" shortcut -- cancels the
+  // stalled turn and resends the same last user message at the "fast"
+  // reasoning level. The setTimeout gives onCancel's abort() a tick to
+  // reach send()'s catch/finally (aborting is asynchronous: the fetch
+  // reader has to actually throw before `loading`/the in-flight request
+  // ref clear), so an immediate re-send would otherwise be silently
+  // dropped by send()'s own `if (loading || activeRequest.current) return`
+  // guard.
+  const retryFast = () => {
+    const lastUserMessage = [...messages].reverse().find((message) => message.sender === "user");
+    if (!lastUserMessage) return;
+    onCancel();
+    window.setTimeout(() => {
+      void onSend(lastUserMessage.text, "fast", Boolean(selectedDocument));
+    }, 50);
+  };
 
   const page = (
     <div className="chat-page">
@@ -162,7 +201,6 @@ export function ChatsPage({
           messages={messages}
           streamingText={streamingText}
           loading={loading}
-          logs={logs}
           hasSelectedDocument={Boolean(selectedDocument)}
           interrupt={interrupt}
           onResume={onResume}
@@ -173,10 +211,18 @@ export function ChatsPage({
           // revizyon mu?" isn't the moment to also silently change the
           // reasoning level or attach/detach the document.
           onSelectOption={(label) => void onSend(label, "balanced", Boolean(selectedDocument))}
+          planSteps={planSteps}
+          nodeOrder={nodeOrder}
+          nodeLabels={nodeLabels}
+          nodeStatus={nodeStatus}
+          nodeMeta={nodeMeta}
+          nodeResults={nodeResults}
+          toolCalls={toolCalls}
+          nodeStartedAt={nodeStartedAt}
+          turnStartedAt={turnStartedAt}
+          onCancel={onCancel}
+          onRetryFast={retryFast}
         />
-        {loading && (
-          <Button className="cancel-stream-button" variant="ghost" size="sm" leadingIcon={<Square />} onClick={onCancel}>İşlemi durdur</Button>
-        )}
         </div>
         <div className="composer-dock">
           <ChatComposer
