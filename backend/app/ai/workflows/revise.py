@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
 
+from app.ai.adapters.company_adapter import AdapterProvider
 from app.ai.llms.base import BaseLLMClient
 from app.ai.reasoning_levels import get_reasoning_level_preset
 from app.ai.revision.instruction import (
@@ -65,6 +66,8 @@ async def run_revise(
     mevzuat_retriever: Optional[Any] = None,
     revise_graph: Optional[Any] = None,
     instruction_origin: str = "user_turn",
+    company_id: Optional[str] = None,
+    adapter_provider: Optional[AdapterProvider] = None,
 ) -> dict[str, Any]:
     """Produce a targeted revision of the active draft.
 
@@ -110,6 +113,15 @@ async def run_revise(
             own "revizyon iste" action (see ``planning_graph.gate_revise_node``).
             Carried straight through into the result so
             ``SessionFocus.compute_focus_update`` can tell them apart.
+        company_id: Which tenant this revision is for -- resolves this
+            company's runtime style adapter (Faz C2). None skips adapter
+            resolution entirely, same as omitting ``adapter_provider``.
+        adapter_provider: Async callable resolving a company's adapter (see
+            ``app.domains.companies.provider.get_company_adapter``),
+            forwarded to ``create_revise_graph`` when this call builds its
+            own graph. Ignored when ``revise_graph`` is supplied pre-built
+            -- that graph's own adapter_provider (or lack of one) already
+            applies.
 
     Returns:
         The revision result.
@@ -118,7 +130,9 @@ async def run_revise(
 
     preset = get_reasoning_level_preset(reasoning_level)
     resolved_correspondence_type = correspondence_type or active_draft.correspondence_type
-    graph = revise_graph or create_revise_graph(llm_client, fast_llm_client, mevzuat_retriever)
+    graph = revise_graph or create_revise_graph(
+        llm_client, fast_llm_client, mevzuat_retriever, adapter_provider
+    )
 
     try:
         final_state = await graph.ainvoke(
@@ -126,6 +140,7 @@ async def run_revise(
                 "active_draft": active_draft,
                 "instructions": instructions,
                 "reasoning_level": preset.level.value,
+                "company_id": company_id or "",
             },
             config=child_config(config),
         )

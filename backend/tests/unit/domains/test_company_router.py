@@ -209,3 +209,77 @@ def test_delete_company_as_admin_forbidden(mock_user_repo_cls, mock_repo_cls, mo
     response = client.delete("/companies/company-1")
 
     assert response.status_code == 403
+
+
+# ==========================================
+# Runtime style adapter (Faz C2, #185)
+# ==========================================
+from app.ai.adapters.company_adapter import CompanyAdapter  # noqa: E402
+
+
+@patch("app.domains.companies.router.get_company_adapter")
+def test_get_company_adapter_as_own_admin(mock_get_adapter):
+    app.dependency_overrides[get_current_user] = lambda: ADMIN_USER
+    mock_get_adapter.return_value = CompanyAdapter(
+        company_id="company-1", version=2, style_rules=("Kısa yaz.",)
+    )
+
+    response = client.get("/companies/company-1/adapter")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["version"] == 2
+    assert data["style_rules"] == ["Kısa yaz."]
+    mock_get_adapter.assert_awaited_once_with("company-1")
+
+
+@patch("app.domains.companies.router.get_company_adapter")
+def test_get_company_adapter_as_a_different_companys_admin_forbidden(mock_get_adapter):
+    app.dependency_overrides[get_current_user] = lambda: OTHER_ADMIN_USER
+
+    response = client.get("/companies/company-1/adapter")
+
+    assert response.status_code == 403
+    mock_get_adapter.assert_not_awaited()
+
+
+@patch("app.domains.companies.router.set_company_adapter")
+def test_update_company_adapter_as_root(mock_set_adapter):
+    mock_set_adapter.return_value = CompanyAdapter(
+        company_id="company-1", version=1, style_rules=("Kapanışta Arz ederim kullan.",)
+    )
+
+    response = client.put(
+        "/companies/company-1/adapter",
+        json={"style_rules": ["Kapanışta Arz ederim kullan."]},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["version"] == 1
+    assert data["style_rules"] == ["Kapanışta Arz ederim kullan."]
+    mock_set_adapter.assert_awaited_once_with(
+        "company-1",
+        style_rules=["Kapanışta Arz ederim kullan."],
+        preferred_examples=[],
+        avoided_patterns=[],
+    )
+
+
+@patch("app.domains.companies.router.set_company_adapter")
+def test_update_company_adapter_as_a_different_companys_admin_forbidden(mock_set_adapter):
+    app.dependency_overrides[get_current_user] = lambda: OTHER_ADMIN_USER
+
+    response = client.put("/companies/company-1/adapter", json={"style_rules": ["Kural."]})
+
+    assert response.status_code == 403
+    mock_set_adapter.assert_not_awaited()
+
+
+@patch("app.domains.companies.router.set_company_adapter")
+def test_update_company_adapter_for_unknown_company_404s(mock_set_adapter):
+    mock_set_adapter.side_effect = ValueError("Company 'company-1' not found.")
+
+    response = client.put("/companies/company-1/adapter", json={"style_rules": ["Kural."]})
+
+    assert response.status_code == 404

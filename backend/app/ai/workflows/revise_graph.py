@@ -52,6 +52,8 @@ from app.ai.guardrails.injection import assert_no_prompt_leak, assert_no_scaffol
 from app.ai.guardrails.pii import find_pii
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
+from app.ai.adapters.company_adapter import AdapterProvider, CompanyAdapter
+from app.ai.adapters.injection import format_adapter_block
 from app.ai.policy.budget import node_budget
 from app.ai.reasoning_levels import ReasoningLevelPreset, get_reasoning_level_preset
 from app.ai.revision.changelog import build_changelog
@@ -104,6 +106,11 @@ class ReviseState(TypedDict, total=False):
     active_draft: DraftVersion
     instructions: str
     reasoning_level: str
+    #: Which tenant this revision is for -- read by `rewrite_node` to resolve
+    #: this company's runtime style adapter (Faz C2, see `adapter_provider`
+    #: on `create_revise_graph`). Absent/empty behaves exactly like no
+    #: adapter configured, never an error.
+    company_id: str
 
     #: Set by `parse`.
     instruction: RevisionInstruction
@@ -126,6 +133,11 @@ class ReviseState(TypedDict, total=False):
     previous_draft: str
     attempts: int
     error: str
+    #: The resolved adapter (`CompanyAdapter.to_dict()`), carried forward so
+    #: `verify` can fold `preferred_examples` into the same
+    #: `ornek_sizintisi` leak check `style_examples` already goes through,
+    #: without re-resolving it a second time.
+    company_adapter: dict[str, Any]
 
     #: Set by `verify`.
     confidence_score: float
@@ -211,6 +223,7 @@ def _format_style_examples_flat(texts: tuple[str, ...]) -> str:
 def _build_directive_prompt(
     *, source_draft: str, target: Optional[TargetSpan], directive: EditDirective,
     brief: str, correspondence_type: str, sub_genre: str, style_examples: tuple[str, ...],
+    adapter_block: str = "",
 ) -> str:
     """Compose the reviser's prompt for one directive, scoped to its target
     span when one was found."""
@@ -246,12 +259,14 @@ def _build_directive_prompt(
         "### ÇIKTI:\nYalnızca istenen bölümün (veya kural tüm taslağı kapsıyorsa taslağın "
         "tamamının) yeni metnini döndür. Meta yorum, markdown kod bloğu veya açıklama ekleme."
         f"{_format_style_examples_flat(style_examples)}"
+        f"{adapter_block}"
     )
 
 
 def _build_repair_prompt(
     *, brief: str, correspondence_type: str, sub_genre: str, previous_draft: str,
     repair_items: list[dict[str, Any]], style_examples: tuple[str, ...],
+    adapter_block: str = "",
 ) -> str:
     """Compose the repair prompt for a second-plus attempt, after `verify`
     found deterministic/judge defects. Mirrors draft_graph._build_repair_prompt."""
@@ -275,6 +290,7 @@ def _build_repair_prompt(
         "'...', '(değişmedi)', '[aynı]' gibi kısaltma veya atlama ifadeleriyle hiçbir "
         "bölümü özetleme; zaten doldurulmuş bilgileri asla silme."
         f"{_format_style_examples_flat(style_examples)}"
+        f"{adapter_block}"
     )
 
 
@@ -290,6 +306,7 @@ def create_revise_graph(
     llm_client: BaseLLMClient,
     fast_llm_client: Optional[BaseLLMClient] = None,
     mevzuat_retriever: Optional[Any] = None,
+    adapter_provider: Optional[AdapterProvider] = None,
 ):
     """Create and compile the revision workflow.
 
@@ -301,12 +318,32 @@ def create_revise_graph(
         mevzuat_retriever: Optional retriever for conditional legislation
             re-retrieval (see ``app.ai.revision.retrieval``). None always
             skips re-retrieval, reproducing pre-feature behaviour exactly.
+        adapter_provider: Optional async callable resolving a company's
+            runtime style adapter (Faz C2, see
+            ``app.domains.companies.provider.get_company_adapter``) --
+            injected the same way ``draft_graph``'s own ``adapter_provider``
+            is. None reproduces pre-feature behaviour exactly (no adapter
+            block, ever).
 
     Returns:
         The compiled LangGraph workflow.
     """
     judge_agent = JudgeAgent(fast_llm_client or llm_client)
     conflict_agent = ConflictAuditorAgent(fast_llm_client or llm_client)
+
+    async def _resolve_adapter(state: ReviseState) -> CompanyAdapter:
+        """This company's runtime style adapter, or an empty one when no
+        ``adapter_provider`` was configured, no ``company_id`` is on this
+        turn's state, or resolution itself fails -- see
+        ``draft_graph``'s identical helper for the same rationale."""
+        company_id = state.get("company_id") or ""
+        if not company_id or adapter_provider is None:
+            return CompanyAdapter.empty(company_id)
+        try:
+            return await adapter_provider(company_id)
+        except Exception:
+            logger.warning("Company adapter resolution failed for %s", company_id, exc_info=True)
+            return CompanyAdapter.empty(company_id)
 
     async def parse_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
         active_draft = state["active_draft"]
@@ -442,6 +479,11 @@ def create_revise_graph(
             active_draft, "correspondence_sub_genre", ""
         )
         style_examples = active_draft.style_examples
+        # Resolved once per attempt (Redis-cached in the real provider, see
+        # app.domains.companies.provider.get_company_adapter), same as
+        # draft_graph.writer_node's identical call.
+        adapter = await _resolve_adapter(state)
+        adapter_block = format_adapter_block(adapter)
 
         await emit_node_start(
             config, "revise", "Taslak Revizyonu",
@@ -459,6 +501,7 @@ def create_revise_graph(
                         previous_draft=state.get("previous_draft", ""),
                         repair_items=state.get("repair_items") or [],
                         style_examples=style_examples,
+                        adapter_block=adapter_block,
                     )
                     agent = ReviserAgent(client)
                     merged_draft = await _generate_validated(agent, prompt, preset)
@@ -486,6 +529,7 @@ def create_revise_graph(
                                 correspondence_type=correspondence_type,
                                 sub_genre=sub_genre,
                                 style_examples=style_examples,
+                                adapter_block=adapter_block,
                             )
                             rewritten = await _generate_validated(agent, prompt, preset)
                             working_draft = _merge(working_draft, targets[i], rewritten)
@@ -502,6 +546,7 @@ def create_revise_graph(
                             brief=brief, correspondence_type=correspondence_type,
                             sub_genre=sub_genre,
                             style_examples=style_examples,
+                            adapter_block=adapter_block,
                         )
                         rewritten = await _generate_validated(agent, prompt, preset)
                         merged_draft = _merge(active_draft.text, target, rewritten)
@@ -538,7 +583,12 @@ def create_revise_graph(
         await emit_node_end(
             config, "revise", "Taslak Revizyonu", "Revizyon tamamlandı.", {"draft": merged_draft},
         )
-        return {"draft": merged_draft, "attempts": attempt_number, "status": "IN_PROGRESS"}
+        return {
+            "draft": merged_draft,
+            "attempts": attempt_number,
+            "status": "IN_PROGRESS",
+            "company_adapter": adapter.to_dict(),
+        }
 
     def route_after_rewrite(state: ReviseState) -> str:
         return "end" if state.get("status") == StepStatus.FAILED else "verify"
@@ -562,6 +612,12 @@ def create_revise_graph(
             "[Doğrulayıcı] Revize taslak kaynak evrak ve mevzuata karşı denetleniyor...",
         )
 
+        # Same fold-in as draft_graph.verify_node -- the adapter's own
+        # preferred_examples get the exact same ornek_sizintisi leak check
+        # as every other style example (see CompanyAdapter's docstring).
+        adapter = CompanyAdapter.from_dict(
+            state.get("company_id") or "", state.get("company_adapter")
+        )
         report = verify_draft(
             draft_text,
             source_document=active_draft.source_document,
@@ -569,7 +625,7 @@ def create_revise_graph(
             classification=active_draft.classification,
             instructions=state.get("instructions", ""),
             strict=strict,
-            style_examples=list(active_draft.style_examples),
+            style_examples=list(active_draft.style_examples) + list(adapter.preferred_examples),
             is_individual_petition="dilekçe" in sub_genre.lower(),
         )
 

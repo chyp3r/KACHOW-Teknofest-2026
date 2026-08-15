@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -44,3 +44,29 @@ class CompanyAdminAssign(BaseModel):
     """Pydantic schema for assigning an existing user as a company admin."""
 
     user_id: str = Field(description="Şirket admini yapılacak kullanıcının ID'si")
+
+
+class CompanyAdapterUpdate(BaseModel):
+    """Pydantic schema for hand-authoring a company's runtime style adapter
+    (Faz C2) -- replaces the whole list per field, not an append.
+
+    There is no automated training pipeline yet (Faz C3); this is how an
+    admin configures a company's adapter until one exists.
+    """
+
+    style_rules: List[str] = Field(default_factory=list, max_length=20)
+    preferred_examples: List[str] = Field(default_factory=list, max_length=10)
+    avoided_patterns: List[str] = Field(default_factory=list, max_length=20)
+
+
+class CompanyAdapterResponse(BaseModel):
+    """Pydantic schema for one company's current adapter -- mirrors
+    ``app.ai.adapters.company_adapter.CompanyAdapter`` field-for-field."""
+
+    company_id: str
+    version: int
+    style_rules: List[str]
+    preferred_examples: List[str]
+    avoided_patterns: List[str]
+    trained_at: Optional[str] = None
+    sample_count: int
