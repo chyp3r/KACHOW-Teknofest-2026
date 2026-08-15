@@ -230,6 +230,28 @@ def decompose_instruction(instruction: str) -> tuple[EditDirective, ...]:
             )
         )
 
+    if len(fragments) > 1 and len(directives) < len(fragments):
+        # At least one coordinator-separated clause named neither a
+        # section/paragraph nor an operation -- e.g. "muhatap Ankara
+        # Valiliği" in "Konuyu değiştir ve muhatap Ankara Valiliği". That
+        # clause cannot ride along inside another directive's own located
+        # span (a directive's prompt is confined to its own span -- see
+        # _build_directive_prompt), so it would otherwise be silently
+        # dropped: this was Görev 2's "bilgi kısmı hiçbir yere yazılmıyor"
+        # bug. Re-parsing the *combined* text for a single section_hint
+        # (the old fallback below) is not a fix either -- it can rediscover
+        # a narrow location from just one clause and misapply the whole
+        # compound ask to that one span. Safe default: a multi-clause
+        # instruction that does not fully decompose into located directives
+        # falls back to one whole-draft rewrite, carrying every clause's
+        # own text (`instruction`, unmodified) so nothing asked for is lost.
+        return (
+            EditDirective(
+                scope="whole", operation="content", section_hint=None,
+                ordinal=None, raw=instruction, order=0,
+            ),
+        )
+
     if len(directives) <= 1:
         scope, operation, section_hint, ordinal = _parse_one(instruction)
         return (

@@ -143,6 +143,39 @@ async def test_a_targeted_revise_never_reruns_the_draft_pipeline(fake_llm, fake_
 
 
 @pytest.mark.asyncio
+async def test_a_plain_muhatap_statement_with_no_revise_verb_still_routes_to_revise(
+    fake_llm, fake_fast_llm
+):
+    """The bug this guards against: "Muhatap Ankara Valiliği olsun." names no
+    revise verb at all (no "değiştir"/"yap" alongside a tone/length cue), so
+    it used to score nothing and fall through to whatever weak filler was
+    lying around instead of continuing the open draft (see
+    intent_scorer.score_intents's revise.muhatap_statement rule)."""
+    graph, draft_graph = _build_graph(fake_llm, fake_fast_llm)
+    config = {"configurable": {"thread_id": "revise-muhatap-e2e"}}
+
+    first = await graph.ainvoke(
+        {"input_text": "Bu evraka cevap yazısı hazırla.", "document_id": None}, config=config
+    )
+    first = await _resolve_brief_gate_with_defaults(graph, config, first)
+    assert draft_graph.ainvoke.await_count == 1
+
+    fake_llm.stream_chunks = [DRAFT_TEXT.replace("Sayın Makam,", "ANKARA VALİLİĞİNE\n\nSayın Makam,")]
+    second = await graph.ainvoke(
+        {"input_text": "Muhatap Ankara Valiliği olsun.", "document_id": None}, config=config
+    )
+
+    # The (expensive, multi-call) draft pipeline never ran a second time --
+    # proof the router took the revise path, not a fresh draft.
+    assert draft_graph.ainvoke.await_count == 1
+    assert second["final_output"]["intent"] == "revise"
+    snapshot = await graph.aget_state(config)
+    focus = snapshot.values["focus"]
+    assert focus.active_draft.created_from == "revise"
+    assert "ANKARA VALİLİĞİNE" in focus.active_draft.text
+
+
+@pytest.mark.asyncio
 async def test_an_ambiguous_expensive_followup_asks_instead_of_guessing(fake_llm, fake_fast_llm):
     graph, draft_graph = _build_graph(fake_llm, fake_fast_llm)
     config = {"configurable": {"thread_id": "clarify-e2e"}}

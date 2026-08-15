@@ -75,6 +75,32 @@ describe("InterruptPanel", () => {
     );
   });
 
+  it("lets the user redirect a missing-information answer into a revision instead", () => {
+    const onResume = vi.fn().mockResolvedValue(undefined);
+    render(
+      <InterruptPanel
+        interrupt={missingInformation}
+        loading={false}
+        onResume={onResume}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Bilgi vermek yerine taslağı revize etmek mi istiyorsunuz?",
+      }),
+    );
+    const note = screen.getByLabelText("Revizyon talimatı");
+    fireEvent.change(note, { target: { value: "Unvanı Daire Başkanı olarak değiştir." } });
+    fireEvent.click(screen.getByRole("button", { name: "Bunun yerine revizyon iste" }));
+
+    expect(onResume).toHaveBeenCalledWith(
+      "revise",
+      {},
+      "Unvanı Daire Başkanı olarak değiştir.",
+    );
+  });
+
   it("shows explicit approval actions for a completed draft", () => {
     const onResume = vi.fn().mockResolvedValue(undefined);
     render(

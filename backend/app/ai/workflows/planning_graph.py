@@ -1790,6 +1790,23 @@ def create_planning_graph(
         )
 
         if kind == "missing_information":
+            if answer.get("action") == "revise":
+                # Escape hatch: the user typed a revision instruction into
+                # what was meant to be an answer box instead of the field's
+                # actual value -- apply_answers would otherwise substitute
+                # that free text verbatim into the placeholder it was
+                # answering, producing a nonsense draft (Görev 2's
+                # "revizyon ve bilgi karışıyor" bug). Reuses the exact same
+                # gate_revise machinery the draft_approval gate's "revizyon
+                # iste" already runs through -- route_after_gate only
+                # inspects draft_result["status"], not kind, so setting the
+                # same REVISE_REQUESTED status here is enough.
+                note = (answer.get("instructions") or "").strip()
+                return {
+                    "gate_revision_note": note,
+                    "draft_result": {**draft_result, "status": StepStatus.REVISE_REQUESTED},
+                }
+
             filled_draft, residual = apply_answers(
                 draft_result.get("draft", ""), answer.get("answers", {})
             )

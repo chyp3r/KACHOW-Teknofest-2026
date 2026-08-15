@@ -43,6 +43,30 @@ def test_an_unsplittable_instruction_falls_back_to_whole_scope():
     assert directives[0].raw == "Bunu daha iyi yap."
 
 
+def test_an_unlocatable_clause_alongside_a_located_one_falls_back_to_whole_scope():
+    """The bug this guards against: "muhatap Ankara Valiliği" names neither a
+    section nor an operation, so it cannot ride along inside the "Konuyu
+    değiştir" directive's own located span (a directive's prompt is confined
+    to its own span) -- it used to be silently dropped. The whole compound
+    instruction must fall back to one whole-draft rewrite instead, carrying
+    every clause's own text, rather than re-discovering just the "konu"
+    location from one clause and misapplying the whole ask to it."""
+    directives = decompose_instruction("Konuyu değiştir ve muhatap Ankara Valiliği olsun.")
+
+    assert len(directives) == 1
+    assert directives[0].scope == "whole"
+    assert directives[0].raw == "Konuyu değiştir ve muhatap Ankara Valiliği olsun."
+
+
+def test_a_fully_locatable_compound_instruction_still_decomposes_normally():
+    """Regression guard: the new fallback must not fire when every clause
+    *does* locate -- that is exactly the precise-splice case this module
+    exists for."""
+    directives = decompose_instruction("Konuyu değiştir ve son paragrafı kısalt.")
+
+    assert len(directives) == 2
+
+
 def test_each_directive_locates_independently_in_the_original_draft():
     directives = decompose_instruction("Konuyu değiştir ve son paragrafı kısalt.")
     konu_target = locate_target(DRAFT, directives[0])

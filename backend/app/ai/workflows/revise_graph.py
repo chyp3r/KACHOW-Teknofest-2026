@@ -224,8 +224,11 @@ def _build_directive_prompt(
     else:
         scope_rule = (
             "### KURAL:\nAşağıdaki kullanıcı talimatına göre TÜM taslağı yeniden yaz. "
-            "Brief'te olmayan hiçbir yeni bilgi (kişi, kurum, tarih, sayı, mevzuat maddesi) "
-            "ekleme; yalnızca istenen üslup/kapsam/uzunluk değişikliğini yap. "
+            "Ne brief'te NE DE bu talimatta geçen bir yeni bilgi (kişi, kurum, tarih, "
+            "sayı, mevzuat maddesi) ekleme -- ama talimatın kendisi bir isim/kurum/tarih "
+            "belirtiyorsa (ör. \"muhatabı X Valiliği yap\") bunu doğrudan uygula, "
+            "kullanıcının kendi belirttiği bilgi kaynak sayılır. Talimatta belirtilmeyen "
+            "hiçbir alanda üslup/kapsam/uzunluk dışında bir değişiklik yapma. "
             "Talimatla ilgisi olmayan her cümleyi, önceki taslaktaki haliyle, KELİMESİ "
             "KELİMESİNE ve EKSİKSİZ olarak yeniden üret. '...', '(değişmedi)', '[aynı]' "
             "gibi kısaltma veya atlama ifadeleriyle hiçbir bölümü özetleme; zaten "
