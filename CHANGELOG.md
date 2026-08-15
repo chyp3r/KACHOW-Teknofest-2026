@@ -2,6 +2,70 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.12.0] - 2026-08-16
+### Eklendi
+Faz C3'ün (#187) kendi gövdesinde ertelenen son parçası: gerçek LoRA/PEFT fine-tuning kodu ve
+bunu kuyruğa alıp çalıştıran `arq` worker'ı (#191).
+
+- **`backend/requirements-training.txt`**: `torch`/`transformers`/`peft`/`trl`/`datasets`/
+  `accelerate` -- yalnızca yeni `deploy/docker/worker.Dockerfile` imajına giriyor, ana backend
+  imajına değil. `bitsandbytes` bilinçli olarak dışarıda bırakıldı: arm64 host'ta wheel
+  bulunamayıp build'i tamamen kırdı ve `app.ai.training.lora` zaten kuantizasyon kullanmıyor.
+- **`arq` bağımlılık çakışması çözüldü**: `arq` kendi `redis<6` bağımlılığını zorunlu kılıyor
+  (`redis==8.1.0` ile hiçbir sürümü uyumlu değil, doğrulandı). Proje genelinde `redis` `5.3.1`'e
+  indirildi -- `RedisCache`'in gerçek kullanımı (`from_url`/`get`/`set`/`delete`/`aclose`) bu
+  sürümler arasında değişmiyor, tam test paketiyle doğrulandı.
+- **`app.ai.training.lora`** (yeni): `PreferencePair`'lardan SFT (`chosen`) ve DPO
+  (`chosen`/`rejected`) örnek/JSONL export'u; gerçek `peft`/`trl` çağrıları
+  (`get_peft_model`/`SFTTrainer`/`DPOTrainer`, DPO aşaması bir SFT adaptörünün üstüne devam
+  edebiliyor); Ollama `Modelfile` üretimi. Ağır kütüphaneler tembel/opsiyonel import edilir --
+  bu modülü import etmek (örn. ana backend süreci üzerinden), `peft`/`trl` kurulu olmasa bile
+  asla patlamaz; yalnızca gerçek eğitim fonksiyonlarını çağırmak `RuntimeError` fırlatır.
+- **`app.workers.queue`/`app.workers.training`** (yeni): `arq` job runner, mevcut Redis
+  broker'ı üzerinden. `run_lora_training_job`: örnekleri derler, SFT/DPO JSONL'e döker, LoRA
+  eğitir, Ollama `/api/create` HTTP API'siyle (CLI değil -- worker container'ında `ollama`
+  binary'si yok) `kachow-{slug}:{run_id}` modelini yayınlar, ardından **shadow değerlendirme**
+  yapar: mevcut model ile aday modeli aynı küçük tutulmuş örnek setinde çalıştırıp
+  `verify_draft`'ın deterministik güven skorunu karşılaştırır -- aday modelin ortalama skoru
+  belirgin şekilde düşükse (`SHADOW_EVAL_REGRESSION_MARGIN`), çalıştırma `failed` olur ve
+  `CompanyModel.settings.llm_model_override` **hiç yazılmaz**.
+- **`compose.yml`**: yeni `worker` servisi -- **varsayılan `docker compose up`'ta hiç
+  başlamıyor** (`profiles: ["training"]`). `scripts/start_training_worker.sh` ile elle ayağa
+  kaldırılıyor, `scripts/stop_training_worker.sh` ile durduruluyor. Bir LoRA çalıştırması
+  (`POST .../training-runs?kind=lora_sft`) worker çalışmasa bile kuyruğa girer; hiçbir şey
+  tüketmeden Redis'te bekler.
+- **`POST /companies/{id}/training-runs`**'a `kind` parametresi: `style_adapter` (varsayılan,
+  senkron) veya `lora_sft`/`lora_dpo` (kuyruğa alınır, `training_runs.status="queued"` ile
+  döner).
+
+### Bilinçli sınırlar
+- Şirket bazlı model seçimi (`app.domains.companies.provider.get_llm_model_override`) yalnızca
+  worker'ın kendi shadow-eval adımında kullanılıyor; canlı draft/revise grafiklerinin model
+  seçimini istek başına şirkete göre değiştirmek (her istekte farklı grafik/istemci inşa etmek)
+  ayrı, çok daha büyük bir mimari değişiklik -- kapsam dışı.
+- `TRAINING_ARTIFACTS_DIR`'ın Ollama sunucu sürecinin de okuyabildiği bir yol olması gerekiyor
+  (bu geliştirme ortamında Ollama host'ta çalışıyor, worker container'ında değil) -- bu,
+  gerçek dağıtım topolojisine göre çözülmesi gereken bir bind-mount kararı, kod bunu kendi
+  başına çözemez.
+- Gerçek bir GPU eğitim koşusu bu ortamda **çalıştırılmadı** (kullanıcının açık isteği) --
+  worker image'ı gerçek `torch`/`peft`/`trl`/`transformers` ile inşa edilip içe aktarma
+  doğrulandı, ama fine-tuning gerçek bir GPU'lu host'ta ayrıca çalıştırılacak.
+
+### Test
+- `docker compose exec backend pytest -q` → **1876 test geçti** (29 yeni: `lora.py` saf
+  fonksiyon + mock'lanmış eğitim orkestrasyonu testleri, `run_lora_training_job`'ın
+  bulunamadı/eşik-altı/başarılı/regresyon/istisna yollarının tamamı, `enqueue_lora_training_run`,
+  router'ın `kind` dallanması, `llm_model_override` okuma/yazma).
+- `docker compose --profile training build worker` → **gerçekten inşa edildi** (2.57GB),
+  `docker compose --profile training run --rm worker python -c "..."` ile worker image'ında
+  `torch`/`peft`/`trl` gerçekten kurulu ve `app.workers.queue`/`app.ai.training.lora` sorunsuz
+  import edildiği doğrulandı.
+- `docker compose config --services` / `--profile training config --services` → `worker`
+  servisinin varsayılan profilde **görünmediği**, yalnızca `--profile training` ile
+  göründüğü doğrulandı.
+
+Refs: [#191](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/191), #187.
+
 ## [3.11.0] - 2026-08-15
 ### Eklendi
 Faz C2'yi (#185) takip eden, Faz C'nin son parçası: kullanıcıların 👍/👎 oyladığı taslaklardan

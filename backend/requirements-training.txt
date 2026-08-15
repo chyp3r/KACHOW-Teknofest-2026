@@ -1,0 +1,20 @@
+# Only installed into the training worker image (deploy/docker/worker.Dockerfile),
+# never the main backend image -- see app.ai.training.lora's module docstring
+# for why these imports are lazy/optional there. GPU training itself (CUDA
+# drivers, a GPU-capable torch wheel) is a host/deployment concern outside
+# this file: pip resolves a CPU-only torch wheel by default, which is enough
+# for the worker container to *build* and for its own unit tests to mock
+# these libraries, but real fine-tuning needs a CUDA-capable host running
+# this image with a GPU reservation (see compose.yml's `worker` service).
+-r requirements.txt
+torch==2.6.0
+transformers==4.57.0
+peft==0.14.0
+trl==0.13.0
+datasets==3.2.0
+accelerate==1.2.1
+# bitsandbytes (4-bit/8-bit quantized training) deliberately not pinned
+# here: it has spotty non-x86_64/CUDA wheel availability (broke this
+# image's build entirely on an arm64 host) and app.ai.training.lora
+# doesn't use quantization -- standard bf16/fp32 LoRA only. Add it
+# yourself on a specific GPU host if you need it.

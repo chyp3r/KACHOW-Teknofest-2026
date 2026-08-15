@@ -254,3 +254,79 @@ def test_list_runs_as_manager(mock_repo_cls, mock_service_cls):
 
     assert response.status_code == 200
     assert response.json()["data"]["total"] == 1
+
+
+# ==========================================
+# kind=lora_sft/lora_dpo -- queued via arq (Faz C3 Aşama 3, #191)
+# ==========================================
+@patch("app.domains.training.router.get_fast_llm_client")
+@patch("app.domains.training.router.TrainingService")
+@patch("app.domains.training.router.TrainingRepository")
+@patch("app.domains.training.router.QuotaService")
+def test_trigger_lora_sft_run_queues_instead_of_running_synchronously(
+    mock_quota_cls, mock_repo_cls, mock_service_cls, mock_llm
+):
+    mock_quota = mock_quota_cls.return_value
+    mock_quota.check_and_increment = AsyncMock(return_value=None)
+    mock_service = mock_service_cls.return_value
+    mock_service.enqueue_lora_training_run = AsyncMock(return_value=_run(kind="lora_sft", status="queued"))
+    mock_service.run_style_adapter_training = AsyncMock()
+
+    response = client.post("/companies/company-1/training-runs?kind=lora_sft")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "queued"
+    mock_service.enqueue_lora_training_run.assert_awaited_once_with(
+        "company-1", kind="lora_sft", triggered_by="admin-1"
+    )
+    mock_service.run_style_adapter_training.assert_not_awaited()
+
+
+@patch("app.domains.training.router.get_fast_llm_client")
+@patch("app.domains.training.router.TrainingService")
+@patch("app.domains.training.router.TrainingRepository")
+@patch("app.domains.training.router.QuotaService")
+def test_trigger_lora_dpo_run_queues_too(mock_quota_cls, mock_repo_cls, mock_service_cls, mock_llm):
+    mock_quota = mock_quota_cls.return_value
+    mock_quota.check_and_increment = AsyncMock(return_value=None)
+    mock_service = mock_service_cls.return_value
+    mock_service.enqueue_lora_training_run = AsyncMock(return_value=_run(kind="lora_dpo", status="queued"))
+
+    response = client.post("/companies/company-1/training-runs?kind=lora_dpo")
+
+    assert response.status_code == 200
+    mock_service.enqueue_lora_training_run.assert_awaited_once_with(
+        "company-1", kind="lora_dpo", triggered_by="admin-1"
+    )
+
+
+@patch("app.domains.training.router.get_fast_llm_client")
+@patch("app.domains.training.router.TrainingService")
+@patch("app.domains.training.router.TrainingRepository")
+@patch("app.domains.training.router.QuotaService")
+def test_trigger_run_with_an_unknown_kind_is_rejected(
+    mock_quota_cls, mock_repo_cls, mock_service_cls, mock_llm
+):
+    response = client.post("/companies/company-1/training-runs?kind=not_a_real_kind")
+
+    assert response.status_code == 422
+
+
+@patch("app.domains.training.router.get_fast_llm_client")
+@patch("app.domains.training.router.TrainingService")
+@patch("app.domains.training.router.TrainingRepository")
+@patch("app.domains.training.router.QuotaService")
+def test_trigger_run_defaults_to_style_adapter_when_kind_is_omitted(
+    mock_quota_cls, mock_repo_cls, mock_service_cls, mock_llm
+):
+    mock_quota = mock_quota_cls.return_value
+    mock_quota.check_and_increment = AsyncMock(return_value=None)
+    mock_service = mock_service_cls.return_value
+    mock_service.run_style_adapter_training = AsyncMock(return_value=_run())
+    mock_service.enqueue_lora_training_run = AsyncMock()
+
+    response = client.post("/companies/company-1/training-runs")
+
+    assert response.status_code == 200
+    mock_service.run_style_adapter_training.assert_awaited_once()
+    mock_service.enqueue_lora_training_run.assert_not_awaited()

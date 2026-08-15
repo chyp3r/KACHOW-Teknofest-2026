@@ -237,3 +237,47 @@ async def test_a_raised_exception_marks_the_run_failed_instead_of_propagating(se
 
     assert result.status == "failed"
     assert repo.finish_run.await_args.kwargs["error"] == "db down"
+
+
+# ==========================================
+# enqueue_lora_training_run (Faz C3 Aşama 3, #191)
+# ==========================================
+async def test_enqueue_lora_training_run_creates_a_queued_run_and_hands_it_to_arq(
+    service, repo, monkeypatch
+):
+    run = _run(status="queued", kind="lora_sft")
+    repo.create_run.return_value = run
+
+    import app.workers.queue as queue_module
+
+    enqueue_mock = AsyncMock(return_value="arq-job-1")
+    monkeypatch.setattr(queue_module, "enqueue_lora_training_job", enqueue_mock)
+
+    result = await service.enqueue_lora_training_run(
+        "company-1", kind="lora_sft", triggered_by="user-1"
+    )
+
+    assert result is run
+    repo.create_run.assert_awaited_once_with(
+        "company-1", kind="lora_sft", triggered_by="user-1", trigger="manual", status="queued"
+    )
+    enqueue_mock.assert_awaited_once_with("company-1", run.id)
+
+
+async def test_enqueue_lora_training_run_never_runs_the_job_itself_synchronously(
+    service, repo, monkeypatch
+):
+    """The whole point of queuing: the request that triggers this must
+    return immediately, regardless of whether any worker is even running
+    to pick the job up."""
+    run = _run(status="queued", kind="lora_dpo")
+    repo.create_run.return_value = run
+
+    import app.workers.queue as queue_module
+
+    enqueue_mock = AsyncMock(return_value="arq-job-2")
+    monkeypatch.setattr(queue_module, "enqueue_lora_training_job", enqueue_mock)
+
+    await service.enqueue_lora_training_run("company-1", kind="lora_dpo", triggered_by="user-1")
+
+    repo.finish_run.assert_not_awaited()
