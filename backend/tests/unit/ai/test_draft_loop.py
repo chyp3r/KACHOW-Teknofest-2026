@@ -499,3 +499,50 @@ async def test_a_preview_that_would_leak_the_system_prompt_is_never_published():
             previews.append(event)
 
     assert previews == []
+
+
+@pytest.mark.asyncio
+async def test_a_preview_masks_pii_even_though_the_final_draft_is_left_for_human_review():
+    """The preview is a disappearing progress indicator, never the
+    authoritative text, so it masks PII unconditionally (redact_pii) --
+    unlike the final draft, which keeps PII intact and instead routes it
+    through the pii_bulgusu confidence rule for human review (a legitimate
+    official letter can legitimately carry a TCKN, e.g. a personnel
+    petition about its own subject)."""
+    graph = create_draft_graph(_mock_llm_client())
+    queue = asyncio.Queue()
+    config = {"configurable": {"status_queue": queue}}
+
+    valid_tckn = "12345678950"
+    part1 = "Konu: Test Konusu\nSayı: E-1-1\nTarih: 30.07.2026\n\nSayın Makam,\n\n"
+    # A single "Kimlik No: <digits>" mention plus enough padding to cross the
+    # preview threshold -- not repeated, since repeating it would itself
+    # read as an address-shaped line (2+ "no: <digits>" hits) and get
+    # collapsed by the *other* PII rule this test isn't about.
+    padding = "Bu cümle önizleme eşiğini aşmak için tekrarlanan dolgu metnidir. " * 3
+    filler = f"Başvuran T.C. Kimlik No: {valid_tckn} olan kişidir. {padding}"
+    part3 = "Arz ederim.\n\nAli Veli\nGenel Müdür"
+
+    async def _chunks(**kwargs):
+        for chunk in (part1, filler, part3):
+            yield chunk
+
+    with patch.object(WriterAgent, "stream") as mock_writer:
+        mock_writer.side_effect = _chunks
+        result = await graph.ainvoke(BASE_STATE, config=config)
+
+    previews = []
+    while not queue.empty():
+        event = queue.get_nowait()
+        if event.get("event") == "partial_result" and event.get("key") == "draft":
+            previews.append(event["value"]["draft"])
+
+    assert previews, "expected at least one 'draft' partial_result preview"
+    assert all(valid_tckn not in preview for preview in previews)
+    assert any("*" in preview for preview in previews)
+
+    # The final draft, unlike the preview, keeps the raw PII -- it is
+    # flagged for human review instead of being silently rewritten.
+    assert valid_tckn in result["draft"]
+    assert result["requires_human_approval"] is True
+    assert any(finding["kind"] == "tckn" for finding in result["pii_findings"])

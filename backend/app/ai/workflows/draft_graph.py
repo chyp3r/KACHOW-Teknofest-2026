@@ -10,7 +10,7 @@ from app.ai.agents.judge import JudgeAgent
 from app.ai.agents.reviser import ReviserAgent
 from app.ai.agents.writer import WriterAgent
 from app.ai.guardrails.injection import GuardrailViolation, assert_no_prompt_leak
-from app.ai.guardrails.pii import find_pii
+from app.ai.guardrails.pii import find_pii, redact_pii
 from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
 from app.ai.llms.base import BaseLLMClient
@@ -601,6 +601,23 @@ def create_draft_graph(
         # fails the check is silently skipped for that round rather than
         # shown, so the security invariant (nothing unvalidated reaches the
         # user) holds for the preview too, not just the final text.
+        #
+        # The preview is also PII-masked before publishing (redact_pii, same
+        # deterministic TCKN/IBAN/phone/address scanner the output guardrail
+        # uses -- see app.ai.guardrails.output_gate). This is deliberately
+        # *not* applied to the final `draft` returned below: a legitimate
+        # official letter (a personnel petition citing its own subject's
+        # TCKN, say) is expected to carry PII, and that gets flagged for
+        # human review via the `pii_bulgusu` confidence rule instead of
+        # being silently rewritten. The preview has no such nuance to
+        # preserve -- it is a disappearing progress indicator, never the
+        # authoritative text -- so masking it unconditionally trades nothing
+        # away and only shrinks the window a sensitive value is visible on
+        # screen while the draft is still being written. No separate
+        # sliding-window buffer is needed to catch a PII pattern split
+        # across two raw generation chunks: `accumulated` below is always
+        # the *entire* buffer re-scanned from the start, not an incremental
+        # delta, so a pattern is only ever matched once it is fully present.
         budget = node_budget("writer", preset.level)
         chunks: list[str] = []
         last_preview_length = 0
@@ -622,8 +639,11 @@ def create_draft_graph(
                             pass
                         else:
                             last_preview_length = len(accumulated)
+                            masked_preview, _preview_pii = redact_pii(preview)
                             await emit_partial(
-                                config, "draft", {"draft": preview, "attempt": attempt_number}
+                                config,
+                                "draft",
+                                {"draft": masked_preview, "attempt": attempt_number},
                             )
 
             draft = "".join(chunks).strip()

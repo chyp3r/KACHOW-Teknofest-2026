@@ -31,9 +31,18 @@ bu sürede ekranda statik bir "İstek işleniyor" satırından başka hiçbir il
   bekleme spinner'ıyla karışmaması için.
 - `prefers-reduced-motion` desteği ayrıca eklenmedi: `integration.css`'teki mevcut global kural
   (`animation-duration: .01ms !important`) yeni animasyonları da otomatik kapsıyor.
+- **Önizleme artık PII'yi maskeliyor**: `writer_node` her önizlemeyi yayınlamadan önce
+  `app.ai.guardrails.pii.redact_pii` (TCKN/IBAN/telefon/adres, çıktı guardrail'inin de
+  kullandığı aynı deterministik tarayıcı) ile maskeliyor. Nihai taslak buna dahil değil --
+  meşru bir resmî yazı kendi konusunun TCKN'sini taşıyabilir, bu yüzden nihai metin PII'yi
+  koruyor ve bunun yerine `pii_bulgusu` güven kuralıyla insan onayına düşüyor; önizleme ise
+  kaybolan geçici bir ilerleme göstergesi olduğu için maskelemeden hiçbir şey kaybetmiyor.
+  Ayrı bir kayan pencere (sliding window) tamponu gerekmedi: önizleme her seferinde akışın
+  *tamamını* baştan yeniden tarıyor, artımlı bir fark değil -- bir kalıp iki ham üretim
+  parçası arasına bölünse bile, tamamlanmadan asla eşleşmiyor.
 
 ### Test
-- `docker compose exec backend pytest -q` → 1765 test geçti.
+- `docker compose exec backend pytest -q` → 1766 test geçti.
 - `frontend`: `npx vitest run` → 126 test geçti, `tsc --noEmit` temiz.
 
 Refs: [#181](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/181)
