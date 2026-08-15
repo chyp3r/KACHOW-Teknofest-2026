@@ -2,6 +2,20 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.10.1] - 2026-08-15
+### Düzeltildi
+- **Geçersiz/olmayan JWT ile giren kullanıcı artık `/login`'e yönlendiriliyor.**
+  `compose.yml`'deki frontend servisinin `VITE_DEV_AUTH_BYPASS` varsayılanı `true`'ydu --
+  gerçek bir oturum olmadan siteye girildiğinde sahte bir "Yerel geliştirici" hesabıyla
+  doğrudan `/chats`'e düşülüyor, ardından backend'in kendi varsayılanı olan
+  `REQUIRE_AUTH=true`'ya çarpan her istek 401 ile başarısız oluyordu. `VITE_DEV_AUTH_BYPASS`
+  varsayılanı `false` yapıldı; `App.tsx`'in zaten var olan route guard'ı (`user ?
+  <AuthenticatedApp/> : <Navigate to="/login"/>`) artık normal akışta çalışıyor. Bypass,
+  backend'i bilerek `REQUIRE_AUTH=false` ile çalıştıran bir geliştirici için hâlâ elle
+  (`VITE_DEV_AUTH_BYPASS=true`) açılabilir.
+
+Refs: [#189](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/189)
+
 ## [3.10.0] - 2026-08-15
 ### Eklendi
 Şirket bazlı RLHF adapter katmanının ikinci fazı -- runtime prompt-adapter (Faz C2, #185),
