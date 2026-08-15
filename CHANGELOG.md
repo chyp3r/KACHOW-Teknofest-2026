@@ -2,6 +2,54 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.9.0] - 2026-08-15
+### Eklendi
+Şirket bazlı RLHF adapter katmanının ilk fazı -- feedback toplama (Faz C1, #183). Kullanıcının
+kendi isteğine göre: "otomatik eğitim altyapısı hazır olsun ama şimdilik sadece otomatik veri
+toplama çalışsın" -- bu sürüm yalnızca toplama tarafını içeriyor, hiçbir şey bu veriyi henüz
+eğitim için okumuyor.
+
+- **Yeni `backend/app/domains/feedback/` domaini** -- `drafts`/`audit`/`notifications`
+  domainlerinin kalıbı birebir izlenerek (model/repository/service/schema/router).
+- **Yeni `feedback` tablosu** (migration `0020_feedback.py`, RLS'li -- `tenant_isolation`
+  politikası, gerçek bir Postgres'e karşı upgrade/downgrade/upgrade ile doğrulandı).
+  `(company_id, user_id, target_kind, content_hash)` üzerinde uniq: aynı metne tekrar oy
+  verilirse (veya 👍→👎 arası geçilirse) satır çoğalmaz, mevcut oy güncellenir. Oyun kimliği
+  bir mesaj id'si değil, metnin kendisinin hash'i -- canlı bir sohbet cevabının henüz kalıcı
+  bir id'si yok (`chat_recorder` turdan sonra asenkron yazıyor), `content_hash` ise her zaman
+  anında mevcut olan tek kimlik. Ham oylanan metin hiçbir zaman saklanmıyor, yalnızca hash'i --
+  metin zaten başka yerde kalıcı (`chat_messages.content`/`drafts.content`), burada ikinci bir
+  şifresiz kopyası tutulmuyor.
+- **Endpoint'ler**: `POST /feedback` (herhangi bir kullanıcı, kendi şirketiyle sınırlı),
+  `DELETE /feedback/{id}` (oy sahibi veya admin/manager/root), `GET /feedback` (admin/manager/
+  root, kendi şirketi), `GET /companies/{id}/feedback/stats` (admin/manager/root --
+  `analytics/router.py`'nin `_require_company_access` kalıbı). Her `submit`/`delete`
+  `AuditService.record` ile denetim izine düşüyor.
+- **Frontend**: sohbet balonlarına 👍/👎 butonları (`FeedbackButtons.tsx`) -- 👎'de metni
+  hemen göndermek yerine opsiyonel bir yorum kutusu açılıyor ("ne iyileştirilebilir?"), zaten
+  verilmiş bir oya tekrar tıklamak onu geri çekiyor. Hedef tür (`draft`/`revision`/
+  `assist_reply`) mesajın `details.draft`/`details.intent` alanlarından türetiliyor, ayrı bir
+  backend alanı gerekmeden. Yeni `useFeedback.ts` hook'u ve `feedbackService.ts`.
+- Canlı tarayıcı testinde yakalanan bir hata: oy başarısız olduğunda (`vote`/`withdraw`)
+  yakalanmayan bir promise reddi konsola sessizce düşüyordu, kullanıcıya hiçbir görsel geri
+  bildirim vermeden -- artık her iki yol da yakalanıyor ve "Oy gönderilemedi. Lütfen tekrar
+  deneyin." satır içi hatası gösteriyor.
+
+### Kapsam dışı (ayrı issue'larda)
+- **C2**: Runtime prompt-adapter katmanı (`CompanyModel.settings`'ten okunan, anlık etkili
+  üslup adapter'ı).
+- **C3**: Eğitim boru hattı (`training_samples`/`training_runs`, `arq` worker, style-mining,
+  opsiyonel LoRA, admin arayüzü).
+
+### Test
+- `docker compose exec backend pytest -q` → 1786 test geçti.
+- `frontend`: `npx vitest run` → 134 test geçti, `tsc --noEmit` temiz.
+- Canlı doğrulama: tarayıcıda gerçek bir sohbet turu üzerinden 👍 tıklanıp uç noktanın
+  gerçekten kayıtlı olduğu (`POST /api/v1/feedback`), ardından hata yolunun kullanıcıya görünür
+  şekilde başarısız olduğu doğrulandı.
+
+Refs: [#183](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/183)
+
 ## [3.8.0] - 2026-08-15
 ### Eklendi
 Bekleme sırasındaki UX iyileştirmesi (Faz B) -- bir taslak turu 30-90 saniye sürebiliyordu ve

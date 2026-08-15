@@ -220,6 +220,7 @@ export function ChatsPage({
           toolCalls={toolCalls}
           nodeStartedAt={nodeStartedAt}
           turnStartedAt={turnStartedAt}
+          sessionId={activeSessionId}
           onCancel={onCancel}
           onRetryFast={retryFast}
         />
