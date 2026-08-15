@@ -1,4 +1,6 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { ChatMessage, InterruptState } from "../../types/chat";
 import { MessageList } from "./MessageList";
@@ -12,6 +14,14 @@ const baseProps = {
   onSuggestion: vi.fn(),
 };
 
+// A message.sender === "assistant" message renders FeedbackButtons (Faz
+// C1), which calls useMutation -- every render in this file needs a
+// QueryClient in scope now, same as AdminPage.test.tsx's own wrapper.
+function renderWithQueryClient(ui: ReactNode) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
+
 describe("MessageList", () => {
   it("renders a pending draft approval as a chat bubble in the scrolling conversation, not a standalone panel", () => {
     const interrupt: InterruptState = {
@@ -19,7 +29,7 @@ describe("MessageList", () => {
       interruptId: "interrupt-1",
       payload: { draft: "Onaylanacak taslak metni" },
     };
-    const { container } = render(
+    const { container } = renderWithQueryClient(
       <MessageList
         {...baseProps}
         messages={[{ sender: "user", text: "taslak hazırla" }]}
@@ -44,7 +54,7 @@ describe("MessageList", () => {
       interruptId: "interrupt-2",
       payload: { questions: [] },
     };
-    render(
+    renderWithQueryClient(
       <MessageList
         {...baseProps}
         messages={[]}
@@ -57,7 +67,35 @@ describe("MessageList", () => {
   });
 
   it("renders no interrupt bubble when there is nothing pending", () => {
-    const { container } = render(<MessageList {...baseProps} messages={[{ sender: "assistant", text: "tamam" }]} />);
+    const { container } = renderWithQueryClient(
+      <MessageList {...baseProps} messages={[{ sender: "assistant", text: "tamam" }]} />,
+    );
     expect(container.querySelector(".interrupt-message")).toBeNull();
+  });
+
+  it("offers a 👍/👎 vote on an assistant reply but not on the user's own message", () => {
+    renderWithQueryClient(
+      <MessageList
+        {...baseProps}
+        messages={[
+          { sender: "user", text: "taslak hazırla" },
+          { sender: "assistant", text: "İşte taslağınız." },
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByRole("button", { name: "Beğendim" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Beğenmedim" })).toHaveLength(1);
+  });
+
+  it("does not offer a vote on a non-blocking notice message", () => {
+    renderWithQueryClient(
+      <MessageList
+        {...baseProps}
+        messages={[{ sender: "assistant", text: "Bir çelişki bulundu.", kind: "notice" }]}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Beğendim" })).not.toBeInTheDocument();
   });
 });

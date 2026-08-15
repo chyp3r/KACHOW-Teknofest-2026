@@ -12,9 +12,32 @@ import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
 import { PromptQuestionCard } from "./PromptQuestionCard";
 import { DraftMetaStrip } from "./DraftMetaStrip";
+import { FeedbackButtons } from "./FeedbackButtons";
 import { InterruptPanel } from "./InterruptPanel";
 import { ThinkingBubble } from "./ThinkingBubble";
 import type { PromptAnswers } from "./PromptQuestionCard";
+import type { FeedbackTargetKind } from "../../types/feedback";
+
+// What a message's vote should be filed under, plus a small context
+// snapshot worth carrying alongside it (see FeedbackModel.context) --
+// derived from the same `details.draft`/`details.intent` shape
+// DraftMetaStrip already reads, not a new field the backend has to add.
+function feedbackTargetFor(message: ChatMessage): {
+  targetKind: FeedbackTargetKind;
+  context?: Record<string, unknown>;
+} {
+  const draft = message.details?.draft as
+    | { status?: string; combined_score?: number }
+    | undefined;
+  const intent = message.details?.intent as string | undefined;
+  if (draft) {
+    return {
+      targetKind: intent === "revise" ? "revision" : "draft",
+      context: { status: draft.status, combined_score: draft.combined_score },
+    };
+  }
+  return { targetKind: "assist_reply" };
+}
 
 export function MessageList({
   messages,
@@ -36,6 +59,7 @@ export function MessageList({
   turnStartedAt = null,
   onCancel,
   onRetryFast,
+  sessionId,
 }: {
   messages: ChatMessage[];
   streamingText: string;
@@ -74,6 +98,10 @@ export function MessageList({
   turnStartedAt?: number | null;
   onCancel?: () => void;
   onRetryFast?: () => void;
+  // Carried on a vote for traceability only (FeedbackModel.session_id) --
+  // absent for a caller with no session concept, in which case a vote
+  // simply carries no session link.
+  sessionId?: string | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
@@ -163,6 +191,14 @@ export function MessageList({
                   ))}
                 </details>
               ) : null}
+              {message.sender === "assistant" && message.kind !== "notice" && message.text && (
+                <FeedbackButtons
+                  {...feedbackTargetFor(message)}
+                  content={message.text}
+                  sessionId={sessionId ?? undefined}
+                  messageId={message.id}
+                />
+              )}
             </div>
           </article>
         ))

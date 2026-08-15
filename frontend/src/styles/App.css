@@ -850,6 +850,15 @@ textarea { min-height: 105px; resize: vertical; }
 .chat-message.notice-message .message-avatar { color: var(--text-warning); background: color-mix(in srgb, var(--status-running) 15%, transparent); }
 .chat-message.notice-message header { color: var(--text-warning); }
 .chat-message .prompt-question-card { margin-top: var(--space-3); }
+
+/* 👍/👎 on one assistant message (Faz C1, FeedbackButtons.tsx) -- an
+   already-active vote is highlighted the same way a selected option is
+   elsewhere (.prompt-question-option.is-selected), not a bespoke color. */
+.feedback-buttons { margin-top: var(--space-3); }
+.feedback-buttons-row { display: flex; gap: var(--space-1); }
+.feedback-buttons-row .icon-button.is-active { color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 14%, transparent); }
+.feedback-comment-box { display: grid; gap: var(--space-2); margin-top: var(--space-2); padding: var(--space-3); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-primary); max-width: 420px; }
+.feedback-error { margin: var(--space-2) 0 0; color: var(--text-error); }
 .processing-line { display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); }
 .streaming-caret { display: inline-block; width: 7px; height: 16px; margin-left: var(--space-1); vertical-align: text-bottom; background: var(--accent-blue); animation: blink .8s infinite; }
 @keyframes blink { 50% { opacity: 0; } }
