@@ -73,11 +73,11 @@ from app.ai.revision.retrieval import maybe_extend_context
 from app.ai.session.focus import DraftVersion
 from app.ai.verification import (
     InfoQuestion,
-    RepairItem,
     VerificationReport,
     build_missing_info_request,
     judge_draft,
     merge_verdicts,
+    normalize_unfilled_markers,
     verify_draft,
 )
 from app.ai.workflows.correspondence import format_correspondence_profile
@@ -140,6 +140,8 @@ class ReviseState(TypedDict, total=False):
     pii_findings: list[dict[str, Any]]
     missing_information: list[dict[str, Any]]
     attempt_history: list[dict[str, Any]]
+    #: See draft_graph.DraftState's own field of the same name.
+    applied_rules: list[dict[str, Any]]
 
     #: Set by `audit`.
     conflicts: list[dict[str, Any]]
@@ -163,12 +165,27 @@ def _build_brief(active_draft: DraftVersion, context: str) -> str:
     (see ``app.ai.revision.retrieval``) is reflected in every downstream
     prompt, not just the first one.
     """
+    rejection_note = ""
+    if active_draft.status == "REJECTED" and active_draft.rejection_reason:
+        # `active_draft` can itself be a previously rejected version (see
+        # app.ai.session.focus's own docstring on _ARCHIVE_ONLY_DRAFT_STATUSES
+        # -- a reject no longer clears active_draft, it stays revisable).
+        # Surfacing why it was rejected keeps this revision targeted at that
+        # one complaint instead of treating the whole text as suspect, which
+        # is exactly what the reviser's own "yalnızca kusur listesindeki
+        # maddeleri gider" contract already expects of it.
+        rejection_note = (
+            "5. Önceki Sürümün Reddedilme Gerekçesi (YALNIZCA bu noktaya "
+            f"odaklan; metnin geri kalanındaki doğru bilgiyi koru): "
+            f"{active_draft.rejection_reason}\n"
+        )
     return (
         f"1. Önceki Taslak Sürümü: {active_draft.version}\n"
         f"2. Doğrulanmış Sınıflandırma: {active_draft.classification.get('summary', 'Özet yok.')}\n"
         f'3. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
         f"{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
         f"4. Yazım Briefi:\n{format_writing_brief(active_draft.writing_brief)}\n"
+        f"{rejection_note}"
     )
 
 
@@ -207,8 +224,11 @@ def _build_directive_prompt(
     else:
         scope_rule = (
             "### KURAL:\nAşağıdaki kullanıcı talimatına göre TÜM taslağı yeniden yaz. "
-            "Brief'te olmayan hiçbir yeni bilgi (kişi, kurum, tarih, sayı, mevzuat maddesi) "
-            "ekleme; yalnızca istenen üslup/kapsam/uzunluk değişikliğini yap. "
+            "Ne brief'te NE DE bu talimatta geçen bir yeni bilgi (kişi, kurum, tarih, "
+            "sayı, mevzuat maddesi) ekleme -- ama talimatın kendisi bir isim/kurum/tarih "
+            "belirtiyorsa (ör. \"muhatabı X Valiliği yap\") bunu doğrudan uygula, "
+            "kullanıcının kendi belirttiği bilgi kaynak sayılır. Talimatta belirtilmeyen "
+            "hiçbir alanda üslup/kapsam/uzunluk dışında bir değişiklik yapma. "
             "Talimatla ilgisi olmayan her cümleyi, önceki taslaktaki haliyle, KELİMESİ "
             "KELİMESİNE ve EKSİKSİZ olarak yeniden üret. '...', '(değişmedi)', '[aynı]' "
             "gibi kısaltma veya atlama ifadeleriyle hiçbir bölümü özetleme; zaten "
@@ -525,7 +545,11 @@ def create_revise_graph(
 
     async def verify_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
         active_draft = state["active_draft"]
-        draft_text = state.get("draft", "")
+        # Same backstop as draft_graph.verify_node -- a repair/rewrite pass
+        # can leave the same literal "bulunamadı"/"yok" marker the original
+        # writer could, and revise never re-runs the original writer's
+        # prompt to begin with.
+        draft_text, _ = normalize_unfilled_markers(state.get("draft", ""))
         correspondence_type = state.get("correspondence_type") or active_draft.correspondence_type
         sub_genre = state.get("correspondence_sub_genre") or getattr(
             active_draft, "correspondence_sub_genre", ""
@@ -589,8 +613,6 @@ def create_revise_graph(
                 draft_text, report, active_draft.classification
             )
 
-        combined = merge_verdicts(report, verdict, missing_information=missing_information)
-
         # Neither of the two paths that can produce `draft_text` without
         # splicing through `_merge` (a whole-draft rewrite with no located
         # target, or any repair-loop pass -- see rewrite_node) had anything
@@ -604,25 +626,6 @@ def create_revise_graph(
         )
         if content_loss is not None:
             logger.warning("Revise rewrite dropped content: %s", content_loss.detail)
-            combined.repair_items.append(
-                RepairItem(
-                    kind="content_loss",
-                    source="deterministic",
-                    detail=content_loss.detail,
-                    suggested_fix=content_loss.suggested_fix,
-                )
-            )
-            combined.requires_revision = True
-            # Not just another automatic repair attempt: if the bounded
-            # repair loop runs out before this is actually fixed, the draft
-            # must not ship as a quiet COMPLETED -- silently dropped content
-            # is worse than a missing structural marker.
-            combined.requires_human_approval = True
-
-        DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)
-        if verdict is not None:
-            DRAFT_SCORE.labels(source="judge").observe(verdict.score)
-        DRAFT_SCORE.labels(source="combined").observe(combined.combined_score)
 
         # Parity with draft_graph.verify_node: a revision that introduces
         # PII, or that inherited a guessed (fallback) correspondence type,
@@ -633,12 +636,21 @@ def create_revise_graph(
             for finding in find_pii(draft_text)
             if finding.confidence >= get_policy().guardrail.pii_confidence_floor
         ]
-        requires_approval = (
-            combined.requires_human_approval
-            or state.get("correspondence_type_source") == "fallback"
-            or not state.get("context")
-            or bool(pii_findings)
+
+        combined = merge_verdicts(
+            report,
+            verdict,
+            missing_information=missing_information,
+            pii_findings=pii_findings,
+            correspondence_type_fallback=state.get("correspondence_type_source") == "fallback",
+            has_context=bool(state.get("context")),
+            content_loss=content_loss,
         )
+
+        DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)
+        if verdict is not None:
+            DRAFT_SCORE.labels(source="judge").observe(verdict.score)
+        DRAFT_SCORE.labels(source="combined").observe(combined.combined_score)
 
         history_entry = {
             "attempt": state.get("attempts", 0),
@@ -651,7 +663,7 @@ def create_revise_graph(
 
         if missing_information:
             status = StepStatus.NEEDS_INPUT
-        elif requires_approval:
+        elif combined.requires_human_approval:
             status = StepStatus.NEEDS_HUMAN_APPROVAL
         else:
             status = StepStatus.COMPLETED
@@ -667,9 +679,10 @@ def create_revise_graph(
             evaluation_notes = f"{evaluation_notes} {content_loss.detail}"
 
         update = {
+            "draft": draft_text,
             "confidence_score": combined.combined_score,
             "combined_score": combined.combined_score,
-            "requires_human_approval": requires_approval,
+            "requires_human_approval": combined.requires_human_approval,
             "requires_revision": combined.requires_revision,
             "evaluation_notes": evaluation_notes,
             "pii_findings": [finding.model_dump() for finding in pii_findings],
@@ -680,6 +693,7 @@ def create_revise_graph(
             "missing_information": [q.model_dump() for q in missing_information],
             "attempt_history": attempt_history,
             "status": status,
+            "applied_rules": [rule.model_dump() for rule in combined.applied_rules],
         }
         await emit_node_end(
             config, "verify", "Taslak Doğrulama", "Taslak doğrulaması tamamlandı.",

@@ -87,6 +87,8 @@ export function InterruptPanel({
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [quickPicks, setQuickPicks] = useState<PromptAnswers>({});
+  const [showRevisionEscapeHatch, setShowRevisionEscapeHatch] = useState(false);
+  const [revisionNote, setRevisionNote] = useState("");
   const questions = Array.isArray(interrupt.payload.questions)
     ? interrupt.payload.questions
     : [];
@@ -250,12 +252,54 @@ export function InterruptPanel({
       )}
 
       {isMissingInformation ? (
-        <PromptQuestionCard
-          questions={questions}
-          loading={loading}
-          submitLabel={loading ? "Gönderiliyor…" : "Bilgileri gönder ve devam et"}
-          onSubmit={(answers) => void onResume("answer", answers, "")}
-        />
+        <>
+          <PromptQuestionCard
+            questions={questions}
+            loading={loading}
+            submitLabel={loading ? "Gönderiliyor…" : "Bilgileri gönder ve devam et"}
+            onSubmit={(answers) => void onResume("answer", answers, "")}
+          />
+          {/* Escape hatch: a revision instruction typed into an answer box
+              used to be substituted verbatim into the placeholder it was
+              answering, producing a nonsense draft -- this routes it
+              through a real revision instead (see planning_graph.
+              human_gate_node's own "missing_information" + action="revise"
+              branch). */}
+          {!showRevisionEscapeHatch ? (
+            <button
+              type="button"
+              className="interrupt-escape-hatch-toggle"
+              disabled={loading}
+              onClick={() => setShowRevisionEscapeHatch(true)}
+            >
+              Bilgi vermek yerine taslağı revize etmek mi istiyorsunuz?
+            </button>
+          ) : (
+            <div className="interrupt-form form-stack interrupt-revision-escape-hatch">
+              <Textarea
+                label="Revizyon talimatı"
+                value={revisionNote}
+                onChange={(event) => setRevisionNote(event.target.value)}
+                placeholder="Örn. Unvanı Daire Başkanı olarak değiştir."
+              />
+              <FormActions className="interrupt-actions approval-actions">
+                <Button
+                  variant="secondary"
+                  disabled={loading}
+                  onClick={() => setShowRevisionEscapeHatch(false)}
+                >
+                  Vazgeç
+                </Button>
+                <Button
+                  disabled={loading || !revisionNote.trim()}
+                  onClick={() => void onResume("revise", {}, revisionNote.trim())}
+                >
+                  Bunun yerine revizyon iste
+                </Button>
+              </FormActions>
+            </div>
+          )}
+        </>
       ) : isWritingBrief ? (
         <>
           <PromptQuestionCard

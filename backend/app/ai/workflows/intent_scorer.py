@@ -281,4 +281,24 @@ def score_intents(
         result.scores["assist"] = result.scores.get("assist", 0.0) + WEIGHT_HINT * 2
         result.evidence.append("assist.short_message")
 
+    # A statement naming the draft's muhatap ("Muhatap Ankara Valiliği
+    # olsun.") with no revise verb at all scores nothing today -- every
+    # REVISE_RULES surface is an explicit verb ("değiştir", "yap" alongside a
+    # tone/length cue), and "muhatap" alone names none of them. Without this,
+    # the message that supplies exactly the missing-information gate's own
+    # answer ("bilgi kısmı hiçbir yere yazılmıyor" -- see intent_rules.py's
+    # module docstring) has no evidence for anything and falls to whatever
+    # weak filler happens to be lying around. Gated the same way
+    # REVISE_RULES itself is (has_active_draft) and excluded when it's a
+    # question ("Muhatap kim?" asks about the current value, not a request
+    # to change it) -- with both conditions met, nothing else this message
+    # could plausibly mean once a draft is already open for revision.
+    if (
+        has_active_draft
+        and not looks_like_question(message, normalized)
+        and " muhatap " in f" {normalized} "
+    ):
+        result.scores["revise"] = result.scores.get("revise", 0.0) + WEIGHT_DOMAIN
+        result.evidence.append("revise.muhatap_statement")
+
     return result

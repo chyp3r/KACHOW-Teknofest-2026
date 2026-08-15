@@ -160,7 +160,14 @@ class DraftResponseSchema(BaseModel):
 
     draft_id: str = Field(default="", description="Kalıcı taslak kaydının kimliği.")
     draft: str = Field(description="Üretilen nihai resmî yazı taslağı.")
-    confidence_score: float = Field(description="Taslak kalitesine verilen hibrit güven skoru (0-100).")
+    confidence_score: float = Field(
+        description=(
+            "Taslak kalitesine verilen güven skoru (0-100), tek bir deterministik "
+            "kural tablosundan hesaplanır (bkz. app.ai.verification.confidence_rules) "
+            "-- kalite yargıcı skora katılmaz, yalnızca applied_rules üzerinden "
+            "insan onayı kapısını açar."
+        )
+    )
     requires_human_approval: bool = Field(description="İnsan onayı gerektirip gerektirmediği.")
     attempts: int = Field(default=1, description="Taslak üretim/revizyon deneme sayısı.")
     verification: dict = Field(
@@ -172,6 +179,13 @@ class DraftResponseSchema(BaseModel):
     missing_information: List[InfoQuestion] = Field(
         default_factory=list,
         description="Taslağı tamamlamak için kullanıcıdan istenen eksik bilgiler.",
+    )
+    applied_rules: list = Field(
+        default_factory=list,
+        description=(
+            "confidence_score'u üreten kural tablosu satırları -- rule_id/label/"
+            "occurrences/penalty_applied/forces_approval (bkz. AppliedRule)."
+        ),
     )
     destination: str = Field(description="Evrakın yönlendirildiği birim veya aksiyon.")
     justification: str = Field(description="Yönlendirme kararının gerekçesi.")

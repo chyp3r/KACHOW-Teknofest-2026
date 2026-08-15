@@ -34,11 +34,17 @@ _VERSIONABLE_DRAFT_STATUSES = frozenset(
     {"COMPLETED", "NEEDS_HUMAN_APPROVAL", "NEEDS_INPUT", "APPROVED", "REVISE_REQUESTED"}
 )
 
-#: draft_result statuses that end the active draft's life without producing
-#: a new version of it -- the existing version is annotated and archived
-#: instead (see compute_focus_update's rejection branch). REJECTED is the
-#: only one: unlike REVISE_REQUESTED above, a rejection is a real decision
-#: about the *existing* text, not new text of its own.
+#: draft_result statuses that record a verdict on the text without treating
+#: it as a fresh, accepted version (see compute_focus_update's rejection
+#: branch). REJECTED is the only one. A rejection does NOT clear
+#: active_draft to None -- the rejected text stays "the" active draft,
+#: revisable in the next turn, exactly like an approved one. The only way to
+#: truly abandon it is an explicit RESET_SURFACES phrase. This was not
+#: always true: an earlier version of this branch archived the *prior*
+#: turn's version (discarding whatever new text this turn's revision
+#: actually produced) and then cleared active_draft to None, which silently
+#: dropped a user's own accepted edits the moment they rejected the
+#: remaining, unrelated complaint in the same round.
 _ARCHIVE_ONLY_DRAFT_STATUSES = frozenset({"REJECTED"})
 
 #: Intents whose message is worth folding into the session's objective.
@@ -120,6 +126,19 @@ class DraftVersion:
         changelog: This version's own change log against the version it
             replaced, when it was produced by a revision (see
             ``app.ai.revision.changelog``). Empty for a fresh draft.
+        supersedes: The ``version`` number of the ``DraftVersion`` this one
+            was written to replace, or ``0`` when there was none (the first
+            draft of a session, or an unrelated fresh draft request that
+            happened to arrive while some other draft was still active).
+            Set only when this version was actually produced by revising
+            ``focus.active_draft`` (``created_from`` is ``"revise"`` or
+            ``"gate_revise"``) -- never inferred from "a draft happened to
+            exist", which would mislabel an unrelated draft as continuing
+            one it has nothing to do with. This is what lets a later
+            consumer (see the feedback/training pipeline) walk a real
+            edit chain -- including a rejected version followed by the
+            revision that actually fixed it -- without guessing from text
+            similarity.
     """
 
     version: int
@@ -127,6 +146,7 @@ class DraftVersion:
     correspondence_type: str
     confidence_score: float
     created_from: Literal["draft", "revise", "human_fill", "gate_revise", "rejected"]
+    supersedes: int = 0
     classification: dict[str, Any] = dataclasses.field(default_factory=dict)
     context: str = ""
     source_document: str = ""
@@ -155,7 +175,12 @@ class SessionFocus:
         active_document_id: Storage path of the document the session is
             currently working with.
         active_draft: The draft version currently open for revision or
-            approval, or ``None`` while there is no in-progress draft.
+            approval, or ``None`` while there is no in-progress draft. Stays
+            set (with ``status == "REJECTED"``) after a rejection -- a
+            reject is a verdict on the text, not an instruction to forget
+            it, so the next turn's "üslubunu düzelt" still has something to
+            attach to. Only an explicit ``RESET_SURFACES`` phrase or
+            ``ACTIVE_DRAFT_IDLE_LIMIT`` idle turns clears it to ``None``.
         draft_history: Every settled version, oldest first (``active_draft``
             is always ``draft_history[-1]`` when set).
         objective: A short, accumulated statement of what the user is
@@ -226,19 +251,54 @@ def _accumulate_objective(existing: str, addition: str) -> str:
     return combined[-OBJECTIVE_CHAR_CAP:]
 
 
+def _revision_origin(
+    plan_intent: Optional[str], draft_result: dict[str, Any]
+) -> Literal["draft", "revise", "gate_revise"]:
+    """How this turn's settled draft text came to exist.
+
+    Shared by the ordinary versioning branch and the rejection branch of
+    ``compute_focus_update`` -- both need the same distinction (a fresh,
+    unrelated draft vs. an actual revision of what was already active) for
+    the same reason: ``created_from``/``supersedes`` must reflect what
+    really happened, not "a draft happened to already exist".
+    """
+    if draft_result.get("instruction_origin") == "human_gate":
+        return "gate_revise"
+    if plan_intent == "revise":
+        return "revise"
+    return "draft"
+
+
+def _supersedes_of(
+    created_from: Literal["draft", "revise", "gate_revise"],
+    active_draft: Optional["DraftVersion"],
+) -> int:
+    """The version number a revision replaces, or 0 when there isn't one.
+
+    Only set for an actual revision of ``active_draft`` (see
+    ``DraftVersion.supersedes``) -- a fresh, unrelated draft request that
+    happens to arrive while some other draft is still open must not claim
+    to supersede it.
+    """
+    if created_from in ("revise", "gate_revise") and active_draft is not None:
+        return active_draft.version
+    return 0
+
+
 def _draft_version_from_result(
     draft_result: dict[str, Any],
     *,
     version: int,
     created_from: Literal["draft", "revise", "human_fill", "gate_revise", "rejected"],
     rejection_reason: str = "",
+    supersedes: int = 0,
 ) -> DraftVersion:
     """Build a ``DraftVersion`` straight from a settled ``draft_result``.
 
-    Shared by the ordinary versioning branch and the "rejected with no
-    prior active_draft" branch of ``compute_focus_update`` -- both start
-    from the same raw material, they only differ in ``created_from`` and
-    (for a rejection) the reason.
+    Shared by the ordinary versioning branch and the rejection branch of
+    ``compute_focus_update`` -- both start from the same raw material, they
+    only differ in ``created_from``, ``supersedes`` and (for a rejection)
+    the reason.
     """
     return DraftVersion(
         version=version,
@@ -248,6 +308,7 @@ def _draft_version_from_result(
             draft_result.get("combined_score") or draft_result.get("confidence_score") or 0.0
         ),
         created_from=created_from,
+        supersedes=supersedes,
         classification=draft_result.get("classification") or {},
         context=draft_result.get("context") or "",
         source_document=draft_result.get("source_document") or "",
@@ -349,31 +410,49 @@ def compute_focus_update(
         # "revizyon iste" loop (see planning_graph.gate_revise_node) is
         # distinguished from an ordinary revise turn -- both are still a
         # revision, but one happened inside the gate, not the plan.
-        if draft_result.get("instruction_origin") == "human_gate":
-            created_from = "gate_revise"
-        elif plan_intent == "revise":
-            created_from = "revise"
-        else:
-            created_from = "draft"
+        created_from = _revision_origin(plan_intent, draft_result)
+        supersedes = _supersedes_of(created_from, focus.active_draft)
         version = _draft_version_from_result(
             draft_result, version=len(focus.draft_history) + 1, created_from=created_from,
+            supersedes=supersedes,
         )
         update["active_draft"] = version
         update["draft_history"] = (*focus.draft_history, version)
     elif archived_rejection:
-        # A rejection is a decision about the *existing* text, not new text
-        # of its own. When that text was already `focus.active_draft` (a
-        # draft rejected in a later turn than the one that produced it), it
-        # is annotated in place -- replacing its own entry in
-        # `draft_history`, which the SessionFocus invariant guarantees is
-        # that same object -- rather than appended as a second,
-        # textually-identical version. Otherwise (rejected within the same
-        # turn it was drafted, before ever reaching `focus.active_draft`) a
-        # fresh version is built straight from `draft_result`, tagged
-        # rejected from the start. Either way the draft is archived, never
-        # lost -- see this module's docstring for why that matters.
+        # A rejection is a verdict on the *text*, not an instruction to
+        # forget it -- the rejected draft stays `active_draft`, revisable in
+        # the next turn exactly like an approved one (see
+        # _ARCHIVE_ONLY_DRAFT_STATUSES's docstring). Whenever this turn
+        # actually produced text (`draft_result["draft"]` -- true on every
+        # path reachable through the router: the gate only ever reaches
+        # REJECTED after the step that ran this turn already settled a
+        # draft, whether that was a fresh write or a gate_revise round), a
+        # NEW version is appended rather than overwriting whatever was
+        # `focus.active_draft` at the *start* of the turn -- otherwise a
+        # revision that fixed the content but not the tone, then rejected
+        # for its tone, would silently discard the content fix along with
+        # it (this was the bug: the prior turn's version was archived in
+        # place and this turn's real revised text was never recorded
+        # anywhere). Whether this rejection actually supersedes the prior
+        # active_draft (vs. coexists with an unrelated one) follows the same
+        # origin test `produced_version` above uses.
         reason = (draft_result.get("rejection_reason") or "").strip()
-        if focus.active_draft is not None:
+        new_text = draft_result.get("draft") or ""
+        if new_text:
+            created_from = _revision_origin(plan_intent, draft_result)
+            supersedes = _supersedes_of(created_from, focus.active_draft)
+            rejected_version = _draft_version_from_result(
+                draft_result, version=len(focus.draft_history) + 1, created_from="rejected",
+                rejection_reason=reason, supersedes=supersedes,
+            )
+            history = (*focus.draft_history, rejected_version)
+        else:
+            # No new text this turn -- not reachable through the router
+            # today (`archived_rejection`'s own guard requires this only
+            # when `focus.active_draft is not None`, see its definition
+            # above), kept as a defensive fallback: annotate the existing
+            # active_draft in place rather than manufacture a duplicate
+            # entry with no text of its own.
             rejected_version = dataclasses.replace(
                 focus.active_draft, created_from="rejected", status=str(draft_status),
                 rejection_reason=reason,
@@ -382,14 +461,11 @@ def compute_focus_update(
                 history = (*focus.draft_history[:-1], rejected_version)
             else:
                 history = (*focus.draft_history, rejected_version)
-        else:
-            rejected_version = _draft_version_from_result(
-                draft_result, version=len(focus.draft_history) + 1, created_from="rejected",
-                rejection_reason=reason,
-            )
-            history = (*focus.draft_history, rejected_version)
         update["draft_history"] = history
-        update["active_draft"] = None
+        # Stays the active draft -- see this branch's opening comment. The
+        # only way to truly clear it is an explicit RESET_SURFACES phrase,
+        # handled below exactly as it already was for every other case.
+        update["active_draft"] = rejected_version
         update["last_rejection"] = {
             "version": rejected_version.version, "reason": reason, "draft": rejected_version.text,
         }

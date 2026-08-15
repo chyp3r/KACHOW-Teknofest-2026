@@ -13,11 +13,11 @@ Sana bir **Yazışma Türü Profili** verilecek (üst yazı, cevap yazısı, bil
 Her resmî yazı aşağıdaki yapıyı içermelidir:
 
 1. **Başlık / Kurum Adı**: "T.C." ile başlayan kurum anteti (brief'te varsa aynen kullan, yoksa `[Kurum Adı]` yer tutucusu bırak)
-2. **Sayı**: Brief'te verilmişse aynen yaz, verilmemişse `Sayı: [Belge Sayısı]`
-3. **Tarih**: Brief'te verilmişse aynen yaz, verilmemişse `Tarih: [Tarih]`
+2. **Sayı**: SENİN yazdığın bu yazının KENDİ sayısı -- bu, senin kurumunun evrak kaydının vereceği bir numaradır ve sen bunu asla bilemezsin. **Her zaman** `Sayı: [Belge Sayısı]` yaz (Yazım Briefi'nde "Sayı ve tarih: Boş bırak" denmişse `Sayı:` satırını boş bırak). Brief'in "GELEN EVRAKIN KİMLİK BİLGİLERİ" bölümündeki sayı SENİN sayın DEĞİLDİR -- oraya kesinlikle kopyalama; o bilgi yalnızca aşağıdaki İlgi satırında kullanılır.
+3. **Tarih**: Aynı gerekçeyle **her zaman** `Tarih: [Tarih]` yaz (brief'te "Boş bırak" denmişse boş bırak). Gelen evrakın tarihini buraya asla yazma.
 4. **Konu**: `Konu: ...` formatında, evrakın konusunu kısaca belirten başlık
 5. **Muhatap**: Yazının gönderileceği makam (büyük harflerle) -- brief'in Yazım Briefi bölümündeki "Yazının Gönderileceği Makam (muhatap)" satırıyla birebir aynı olmalı. Aşağıdaki "Yazan Taraf ve Muhatap Yönü" bölümüne bak.
-6. **İlgi**: Varsa atıf yapılan belge/yazı referansları
+6. **İlgi**: Brief'in "GELEN EVRAKIN KİMLİK BİLGİLERİ" bölümünde sayı/tarih varsa, buraya `İlgi: [gelen evrakın sayısı] sayılı ve [gelen evrakın tarihi] tarihli yazınız.` biçiminde yaz -- bu bilginin taslakta görünebileceği TEK yer burasıdır.
 7. **Gövde**: Ana metin — talep, gerekçe, açıklama ve sonuç paragrafları
 8. **Kapanış**: Brief'in Yazım Briefi bölümünde bir "Kapanış" satırı varsa AYNEN onu kullan. Yoksa varsayılan hiyerarşi kuralı geçerlidir: alt makama "Rica ederim.", üst makama "Arz ederim." (Eşit düzeyde "Bilgilerinize sunulur.")
 9. **İmza Bloğu**: Ad, Soyad, Unvan (brief'te varsa aynen kullan, yoksa yer tutucu bırak)

@@ -14,6 +14,7 @@ from app.ai.verification.llm_judge import (
     merge_verdicts,
 )
 from app.ai.verification.missing_info import InfoQuestion, apply_answers, build_missing_info_request
+from app.ai.verification.placeholders import NormalizedDraft, normalize_unfilled_markers
 
 __all__ = [
     "MIN_AUTOMATED_CONFIDENCE_SCORE",
@@ -30,4 +31,6 @@ __all__ = [
     "InfoQuestion",
     "apply_answers",
     "build_missing_info_request",
+    "NormalizedDraft",
+    "normalize_unfilled_markers",
 ]

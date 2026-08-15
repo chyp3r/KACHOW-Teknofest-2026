@@ -43,32 +43,33 @@ __all__ = [
 
 @dataclass(frozen=True)
 class VerificationPolicy:
-    """Thresholds and weights for the deterministic draft gate.
+    """Thresholds for the deterministic draft gate.
+
+    The penalty *values* a draft is scored against (per-claim, per-leak,
+    per-missing-structural-element, ...) do not live here any more -- they
+    are the single rule table at ``app.ai.verification.confidence_rules.
+    RULES``, versioned and reviewed on its own terms rather than as loose
+    floats scattered across this dataclass and the modules that read it.
+    This dataclass keeps only the thresholds that are not a rule's own
+    penalty: where the automated/human-review line sits, and the matching
+    tolerances the groundedness check itself uses. Similarly, the judge no
+    longer contributes a blended numeric score (see
+    ``app.ai.verification.llm_judge.merge_verdicts``'s module docstring) --
+    it contributes rule findings like everything else, so there is no
+    "judge weight" left to configure here either.
 
     Attributes:
         min_automated_confidence: At or above this a draft may be sent without
             a human. The upper of the two human-approval thresholds.
-        unsupported_claim_penalty: Points deducted per ungrounded claim.
-        max_unsupported_penalty: Ceiling on that deduction, so a draft with many
-            small issues still scores above one that is structurally broken --
-            the two failure modes must not collapse onto the same number.
         token_overlap_threshold: Share of a value's significant tokens that must
             appear in the sources for the tolerant fallback to accept it.
-        judge_deterministic_weight: Weight of the deterministic score in the
-            hybrid verdict.
-        judge_model_weight: Weight of the judge's score. Must complete the
-            deterministic weight to 1.0.
         judge_echo_overlap_threshold: Above this share of a verdict's own tokens
             appearing in the draft, the verdict is an echo rather than a
             judgement and is discarded.
     """
 
     min_automated_confidence: float = 70.0
-    unsupported_claim_penalty: float = 12.0
-    max_unsupported_penalty: float = 60.0
     token_overlap_threshold: float = 0.75
-    judge_deterministic_weight: float = 0.6
-    judge_model_weight: float = 0.4
     judge_echo_overlap_threshold: float = 0.40
 
 
@@ -364,11 +365,6 @@ class Policy:
                 "routing.human_approval_score_threshold must stay below "
                 "verification.min_automated_confidence"
             )
-
-        if abs(
-            verification.judge_deterministic_weight + verification.judge_model_weight - 1.0
-        ) > 1e-9:
-            raise ValueError("judge blend weights must sum to 1.0")
 
         for name, value in (
             ("token_overlap_threshold", verification.token_overlap_threshold),

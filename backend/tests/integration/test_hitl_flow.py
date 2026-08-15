@@ -63,10 +63,17 @@ MOCK_DRAFT_RESULT = {
 }
 
 
-def _build_graph():
+def _build_graph(llm_client=None, fast_llm_client=None):
     """Returns (compiled_graph, sub_graph_mocks) so tests can assert on
     call counts -- e.g. that draft_graph.ainvoke() runs exactly once across
-    a pause and its resume, never repeating the ~30s generation."""
+    a pause and its resume, never repeating the ~30s generation.
+
+    ``llm_client``/``fast_llm_client`` default to a bare ``MagicMock`` --
+    fine for every test in this file except the one exercising the
+    missing_information gate's "revise" escape hatch, which runs the real
+    revise sub-graph and needs a fixture that actually behaves like a
+    streaming client (see the ``fake_llm``/``fake_fast_llm`` fixtures).
+    """
     document_analysis_graph = AsyncMock(
         ainvoke=AsyncMock(
             return_value={
@@ -93,7 +100,8 @@ def _build_graph():
         )
     )
     graph = create_planning_graph(
-        llm_client=MagicMock(spec=BaseLLMClient),
+        llm_client=llm_client or MagicMock(spec=BaseLLMClient),
+        fast_llm_client=fast_llm_client,
         document_analysis_graph=document_analysis_graph,
         rag_graph=rag_graph,
         draft_graph=draft_graph,
@@ -213,3 +221,50 @@ async def test_a_still_missing_answer_pauses_again_instead_of_completing(monkeyp
     snapshot = await graph.aget_state(config)
     assert snapshot.next == ("human_gate",)
     assert "[MUHATAP]" in snapshot.values["draft_result"]["draft"]
+
+
+@pytest.mark.asyncio
+async def test_a_revision_note_in_the_answer_box_runs_revise_instead_of_being_substituted_in(
+    fake_llm, fake_fast_llm, monkeypatch
+):
+    """The bug this guards against: typing a revision instruction into the
+    missing-information answer box used to be treated as the literal answer
+    to the pending placeholder -- apply_answers would substitute it verbatim
+    into [MUHATAP], producing a nonsense draft. The frontend's escape hatch
+    sends action="revise" instead of "answer"; this must run a real revision
+    (reusing the same gate_revise machinery the draft_approval gate's
+    "revizyon iste" already runs through), not apply_answers."""
+    monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
+    monkeypatch.setattr(settings, "DRAFT_JUDGE_ENABLED", False)
+    graph, mocks = _build_graph(fake_llm, fake_fast_llm)
+    config = {"configurable": {"thread_id": "hitl-revise-escape-hatch"}}
+
+    await graph.ainvoke(
+        {"input_text": "Bu evraka cevap yazısı hazırla", "document_id": None}, config=config
+    )
+
+    fake_llm.stream_chunks = [DRAFT_WITH_PLACEHOLDER.replace("Genel Müdür", "Daire Başkanı")]
+    result = await graph.ainvoke(
+        Command(
+            resume={
+                "action": "revise",
+                "answers": {},
+                "instructions": "Unvanı Daire Başkanı olarak değiştir.",
+            }
+        ),
+        config=config,
+    )
+
+    # The draft pipeline never ran a second time -- the note went through
+    # revise, not a fresh draft.
+    assert mocks["draft_graph"].ainvoke.await_count == 1
+    revised_draft = (
+        result.get("final_output", {}).get("draft", {}).get("draft")
+        or (await graph.aget_state(config)).values["draft_result"]["draft"]
+    )
+    # The placeholder text was never treated as an answer -- it is either
+    # still there (reviser left it alone, per reviser.md's own rule) or the
+    # gate is asking about it again, but it must never contain the literal
+    # revision note as if it were a muhatap value.
+    assert "Unvanı Daire Başkanı olarak değiştir" not in revised_draft
+    assert "Daire Başkanı" in revised_draft

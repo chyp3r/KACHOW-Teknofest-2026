@@ -5,7 +5,7 @@ GENERATED FILE -- do not hand-edit. Produced by ``scripts/fit_router.py`` from
 result) after changing the training-relevant slice of the gold set, the
 feature set in ``app.ai.workflows.router_features``, or ``POLICY_VERSION``.
 
-Fitted 2026-08-12T12:04:58Z against 127 training rows (see
+Fitted 2026-08-14T21:03:59Z against 127 training rows (see
 ``scripts/fit_router.py``'s module docstring for which gold-set categories
 are excluded and why). 5-fold cross-validation accuracy at fit time:
 1.0000 -- the number to compare a refit against, not training
@@ -69,7 +69,7 @@ class RouterWeights:
 
 
 ROUTER_WEIGHTS = RouterWeights(
-    version='2.0.0',
+    version='3.0.0',
     feature_names=(
     "lex_draft",
     "lex_analyze",

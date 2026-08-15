@@ -7,7 +7,7 @@ import asyncio
 import pytest
 
 from app.ai.session.focus import DraftVersion
-from app.ai.workflows.revise_graph import create_revise_graph
+from app.ai.workflows.revise_graph import _build_brief, create_revise_graph
 from app.core.enums.step_status import StepStatus
 
 #: A real checksum-valid TCKN (see test_pii.py), not a live person's.
@@ -29,6 +29,23 @@ def _active_draft(**overrides) -> DraftVersion:
     )
     defaults.update(overrides)
     return DraftVersion(**defaults)
+
+
+def test_build_brief_surfaces_a_prior_rejection_reason():
+    draft = _active_draft(status="REJECTED", rejection_reason="Üslup çok resmi değil.")
+
+    brief = _build_brief(draft, context="")
+
+    assert "Üslup çok resmi değil." in brief
+    assert "Reddedilme Gerekçesi" in brief
+
+
+def test_build_brief_omits_the_rejection_section_for_a_non_rejected_draft():
+    draft = _active_draft(status="COMPLETED")
+
+    brief = _build_brief(draft, context="")
+
+    assert "Reddedilme Gerekçesi" not in brief
 
 
 @pytest.mark.asyncio

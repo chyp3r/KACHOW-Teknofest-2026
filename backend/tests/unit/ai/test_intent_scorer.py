@@ -213,3 +213,48 @@ def test_evvelki_is_recognised_as_a_memory_recall_synonym():
 
     assert "assist.memory_recall" in scores.evidence
     assert scores.ranked[0][0] == "assist"
+
+
+# ===========================================================================
+# revise.muhatap_statement -- a plain informational statement naming the
+# draft's muhatap has no revise *verb* at all, so it scored nothing before
+# this rule existed and fell to whatever weak filler was lying around (see
+# Görev 2's "bilgi kısmı hiçbir yere yazılmıyor" bug).
+# ===========================================================================
+def test_a_muhatap_statement_is_evidence_for_revise_when_a_draft_is_open():
+    scores = score_intents(
+        "Muhatap Ankara Valiliği olsun.", document_id=None, has_active_draft=True
+    )
+
+    assert "revise.muhatap_statement" in scores.evidence
+    assert scores.ranked[0][0] == "revise"
+
+
+def test_a_muhatap_statement_scores_nothing_without_an_active_draft():
+    """Gated the same way REVISE_RULES itself is -- with no draft open,
+    "muhatap" alone has no revision to attach to."""
+    scores = score_intents(
+        "Muhatap Ankara Valiliği olsun.", document_id=None, has_active_draft=False
+    )
+
+    assert "revise.muhatap_statement" not in scores.evidence
+
+
+def test_a_muhatap_question_is_not_read_as_a_revise_statement():
+    """"Muhatap kim?" asks about the current value, not a request to change
+    it -- ambiguous enough to leave to escalation rather than guess."""
+    scores = score_intents("Muhatap kim?", document_id=None, has_active_draft=True)
+
+    assert "revise.muhatap_statement" not in scores.evidence
+
+
+def test_a_muhatap_statement_accumulates_with_an_explicit_revise_verb():
+    """Evidence accumulates rather than one signal replacing the other --
+    see the module's own opening note."""
+    scores = score_intents(
+        "Muhatap Ankara Valiliği olsun, ayrıca üslubu daha resmi yap.",
+        document_id=None, has_active_draft=True,
+    )
+
+    assert "revise.muhatap_statement" in scores.evidence
+    assert "revise.explicit_request" in scores.evidence

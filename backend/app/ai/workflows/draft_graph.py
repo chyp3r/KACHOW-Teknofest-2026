@@ -19,10 +19,10 @@ from app.ai.revision.elision import detect_content_loss
 from app.ai.verification import (
     DraftJudgeVerdict,
     InfoQuestion,
-    RepairItem,
     build_missing_info_request,
     judge_draft,
     merge_verdicts,
+    normalize_unfilled_markers,
     verify_draft,
 )
 from app.ai.workflows.correspondence import (
@@ -94,6 +94,11 @@ class DraftState(TypedDict, total=False):
     repair_items: list[dict[str, Any]]
     pii_findings: list[dict[str, Any]]
     missing_information: list[dict[str, Any]]
+    #: The full, auditable rule breakdown behind confidence_score -- report's
+    #: own findings plus everything merge_verdicts folds in (PII, guessed
+    #: correspondence type, missing mevzuat context, judge findings). See
+    #: app.ai.verification.confidence_rules.
+    applied_rules: list[dict[str, Any]]
     attempt_history: list[dict[str, Any]]
     status: str
     error: str
@@ -193,19 +198,27 @@ def _build_brief(
         f"1. Belge Türü: "
         f"{classification.get('document_type_label') or classification.get('document_type') or 'Belirtilmedi'}\n"
         f"2. Belge Özeti: {classification.get('summary') or 'Özet çıkarılamadı.'}\n"
-        f"3. Çıkarılan Kritik Bilgiler:\n"
-        f"   - Tarih: {fields.get('tarih') or 'Bulunamadı'}\n"
-        f"   - Sayı: {fields.get('sayi') or 'Bulunamadı'}\n"
-        f"   - Konu: {fields.get('konu') or 'Bulunamadı'}\n"
-        f"   - Muhatap: {fields.get('muhatap') or 'Bulunamadı'}\n"
-        f"   - Gönderen Kurum: {fields.get('gonderen_kurum') or 'Bulunamadı'}\n"
-        f"   - İmza Sahibi: {fields.get('imza_sahibi') or 'Bulunamadı'}"
-        f" ({fields.get('imza_unvani') or 'unvan yok'})\n"
-        f"4. Evrakta Tespit Edilen Eksik Alanlar: {missing_labels or 'yok'}\n"
-        f'5. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
+        f"3. GELEN EVRAKIN KİMLİK BİLGİLERİ (bu, cevapladığın evrakın KENDİ sayı/tarihidir "
+        f"-- YALNIZCA aşağıdaki bir 'İlgi:' satırında bu evraka atıf yapmak için kullanılabilir. "
+        f"SENİN YAZACAĞIN YANITIN KENDİ Sayı/Tarih alanına ASLA yazma; o alan her zaman ilgili "
+        f"yer tutucudur, çünkü yanıtın sayısını SENİN kurumunun evrak kaydı verir, gelen evrakın "
+        f"kaydı değil):\n"
+        f"   - Gelen Evrakın Sayısı: {fields.get('sayi') or '(gelen evrakta belirtilmemiş)'}\n"
+        f"   - Gelen Evrakın Tarihi: {fields.get('tarih') or '(gelen evrakta belirtilmemiş)'}\n"
+        f"4. Diğer Çıkarılan Bilgiler (bunlar yanıtın kendi ilgili alanlarında -- Konu, Muhatap "
+        f"vb. -- doğrudan kullanılabilir; aşağıdaki parantez içi not bir alanın evrakta "
+        f"bulunmadığını belirtir -- bu notu KENDİSİ bir değermiş gibi taslağa yazma, "
+        f"yanındaki yönergeye göre ilgili yer tutucuyu bırak):\n"
+        f"   - Konu: {fields.get('konu') or '(evrakta yok -- taslakta [Konu] yer tutucusunu bırak)'}\n"
+        f"   - Muhatap: {fields.get('muhatap') or '(evrakta yok -- taslakta [Muhatap] yer tutucusunu bırak; Yazım Briefi bölümünde belirtilmişse onu esas al)'}\n"
+        f"   - Gönderen Kurum: {fields.get('gonderen_kurum') or '(evrakta belirtilmemiş)'}\n"
+        f"   - İmza Sahibi: {fields.get('imza_sahibi') or '(evrakta belirtilmemiş)'}"
+        f" ({fields.get('imza_unvani') or '(unvan belirtilmemiş)'})\n"
+        f"5. Evrakta Tespit Edilen Eksik Alanlar: {missing_labels or 'yok'}\n"
+        f'6. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
         f"{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
-        f"6. Kullanıcı Talebi ve Talimatlar: {instructions}\n"
-        f"7. YAZIM BRİEFİ (İNSAN ONAYLI -- KAYNAK BİLGİ SAYILIR):\n"
+        f"7. Kullanıcı Talebi ve Talimatlar: {instructions}\n"
+        f"8. YAZIM BRİEFİ (İNSAN ONAYLI -- KAYNAK BİLGİ SAYILIR):\n"
         f"{format_writing_brief(writing_brief or {})}\n"
     )
 
@@ -645,7 +658,15 @@ def create_draft_graph(
             "[Doğrulayıcı] Taslak kaynak evrak ve mevzuata karşı denetleniyor...",
         )
 
-        draft_text = state.get("draft", "")
+        # A prompt instruction is not a guarantee: the brief tells the
+        # writer to leave a `[...]` placeholder for anything missing (see
+        # `_build_brief`), but a smaller local model can still write a
+        # header field's own line with a literal "bulunamadı"/"yok" value
+        # instead. Normalized before anything else runs so the rest of this
+        # node -- groundedness, the judge, missing-information detection --
+        # all see the same, corrected text the human gate and the final
+        # reply will show.
+        draft_text, _ = normalize_unfilled_markers(state.get("draft", ""))
         classification = state.get("classification") or {}
         sub_genre = state.get("correspondence_sub_genre", "")
         strict = state.get("correspondence_type") != "other_official"
@@ -729,8 +750,6 @@ def create_draft_graph(
         if report.placeholder_count > 0:
             missing_information = build_missing_info_request(draft_text, report, classification)
 
-        combined = merge_verdicts(report, verdict, missing_information=missing_information)
-
         # Mirrors revise_graph.verify_node's content-loss check (see
         # app.ai.revision.elision's module docstring). A repair pass here
         # (writer_node's is_revision branch) hands the reviser's raw output
@@ -745,26 +764,8 @@ def create_draft_graph(
             content_loss = detect_content_loss(
                 previous_draft, draft_text, state.get("instructions", "")
             )
-        if content_loss is not None:
-            logger.warning("Draft repair pass dropped content: %s", content_loss.detail)
-            combined.repair_items.append(
-                RepairItem(
-                    kind="content_loss",
-                    source="deterministic",
-                    detail=content_loss.detail,
-                    suggested_fix=content_loss.suggested_fix,
-                )
-            )
-            combined.requires_revision = True
-            # Same rationale as revise_graph: if the bounded repair loop runs
-            # out before this is actually fixed, the draft must not ship as a
-            # quiet COMPLETED.
-            combined.requires_human_approval = True
-
-        DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)
-        if verdict is not None:
-            DRAFT_SCORE.labels(source="judge").observe(verdict.score)
-        DRAFT_SCORE.labels(source="combined").observe(combined.combined_score)
+            if content_loss is not None:
+                logger.warning("Draft repair pass dropped content: %s", content_loss.detail)
 
         # Personal data (TCKN/IBAN/phone/address) surfacing in a generated
         # draft is grounds for review the same way an unresolved
@@ -778,16 +779,20 @@ def create_draft_graph(
             if finding.confidence >= get_policy().guardrail.pii_confidence_floor
         ]
 
-        # An unresolved correspondence type or a draft with no verified
-        # legislative context means the system guessed, which is itself
-        # grounds for review -- and a second generation cannot fix either, so
-        # this is folded into the approval decision, not into requires_revision.
-        requires_approval = (
-            combined.requires_human_approval
-            or state.get("correspondence_type_source") == "fallback"
-            or not state.get("context")
-            or bool(pii_findings)
+        combined = merge_verdicts(
+            report,
+            verdict,
+            missing_information=missing_information,
+            pii_findings=pii_findings,
+            correspondence_type_fallback=state.get("correspondence_type_source") == "fallback",
+            has_context=bool(state.get("context")),
+            content_loss=content_loss,
         )
+
+        DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)
+        if verdict is not None:
+            DRAFT_SCORE.labels(source="judge").observe(verdict.score)
+        DRAFT_SCORE.labels(source="combined").observe(combined.combined_score)
 
         history_entry = {
             "attempt": state.get("attempts", 0),
@@ -800,7 +805,7 @@ def create_draft_graph(
 
         if missing_information:
             status = "NEEDS_INPUT"
-        elif requires_approval:
+        elif combined.requires_human_approval:
             status = "NEEDS_HUMAN_APPROVAL"
         else:
             status = "COMPLETED"
@@ -816,9 +821,10 @@ def create_draft_graph(
             evaluation_notes = f"{evaluation_notes} {content_loss.detail}"
 
         update = {
+            "draft": draft_text,
             "confidence_score": combined.combined_score,
             "combined_score": combined.combined_score,
-            "requires_human_approval": requires_approval,
+            "requires_human_approval": combined.requires_human_approval,
             "requires_revision": combined.requires_revision,
             "evaluation_notes": evaluation_notes,
             "pii_findings": [finding.model_dump() for finding in pii_findings],
@@ -830,6 +836,7 @@ def create_draft_graph(
             "attempt_history": attempt_history,
             "status": status,
             "reasoning_level": preset.level.value,
+            "applied_rules": [rule.model_dump() for rule in combined.applied_rules],
         }
 
         await emit_node_end(

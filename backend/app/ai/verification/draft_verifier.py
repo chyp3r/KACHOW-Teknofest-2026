@@ -26,6 +26,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 from app.ai.policy import get_policy
+from app.ai.verification.confidence_rules import AppliedRule, RuleFinding, score_findings
 from app.ai.verification.normalizers import _TURKISH_MAP, canonical_for_kind
 from app.observability.ai_metrics import CLAIM_MATCH
 
@@ -80,32 +81,34 @@ AMOUNT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-#: Structural elements a well-formed official letter carries. Weighted because a
-#: missing closing formula is a style defect while a missing subject line is a
-#: regulatory one.
-STRUCTURE_CHECKS: tuple[tuple[str, str, re.Pattern[str], float], ...] = (
-    ("konu", "Konu satırı", re.compile(r"^\s*Konu\s*:", re.MULTILINE | re.IGNORECASE), 8.0),
-    ("sayi", "Sayı satırı", re.compile(r"^\s*Sayı\s*:", re.MULTILINE | re.IGNORECASE), 6.0),
-    ("tarih", "Tarih bilgisi", re.compile(r"Tarih\s*:|" + DATE_PATTERN.pattern, re.IGNORECASE), 4.0),
+#: Structural elements a well-formed official letter carries. The penalty for
+#: each lives in `confidence_rules.RULES` (see `_STRUCTURE_RULE_IDS` below),
+#: not here -- this table stays purely detection (key/label/pattern), so
+#: there is exactly one place a structural weight can be edited.
+STRUCTURE_CHECKS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
+    ("konu", "Konu satırı", re.compile(r"^\s*Konu\s*:", re.MULTILINE | re.IGNORECASE)),
+    ("sayi", "Sayı satırı", re.compile(r"^\s*Sayı\s*:", re.MULTILINE | re.IGNORECASE)),
+    ("tarih", "Tarih bilgisi", re.compile(r"Tarih\s*:|" + DATE_PATTERN.pattern, re.IGNORECASE)),
     (
         "kapanis",
         "Kapanış ifadesi (Arz/Rica ederim)",
         re.compile(r"(arz\s+ederim|rica\s+ederim|bilgilerinize\s+sunulur|arz\s+ve\s+rica)", re.IGNORECASE),
-        8.0,
     ),
     (
         "imza",
         "İmza bloğu",
         re.compile(r"(e-?imzal[ıi]d[ıi]r|imza|müdür|başkan|bakan|amir|şef|uzman|müşavir)", re.IGNORECASE),
-        4.0,
     ),
 )
 
-#: Penalty per ungrounded claim, and the ceiling on that penalty. Capped so a
-#: draft with many small issues still scores above one that is structurally
-#: broken -- the two failure modes should not collapse onto the same number.
-UNSUPPORTED_CLAIM_PENALTY = get_policy().verification.unsupported_claim_penalty
-MAX_UNSUPPORTED_PENALTY = get_policy().verification.max_unsupported_penalty
+#: `STRUCTURE_CHECKS` key -> the `confidence_rules.RULES` id it feeds.
+_STRUCTURE_RULE_IDS: dict[str, str] = {
+    "konu": "eksik_konu_satiri",
+    "sayi": "eksik_sayi_satiri",
+    "tarih": "eksik_tarih",
+    "kapanis": "eksik_kapanis",
+    "imza": "eksik_imza_blogu",
+}
 
 
 #: How a claim was matched against the trusted sources, weakest last.
@@ -184,8 +187,28 @@ class VerificationReport(BaseModel):
             "çelişip çelişmediğini denetlemek için okur."
         ),
     )
+    incoming_number_leaks: list[UnsupportedClaim] = Field(
+        default_factory=list,
+        description=(
+            "Taslağın KENDİ Sayı: satırının, cevaplanan gelen evrakın sayısıyla "
+            "aynı olduğu durumlar (bkz. _check_incoming_number_leak). Genel "
+            "dayanaksız-iddia denetiminden ayrı: bu değer kaynakta (classification) "
+            "gerçekten var ve o yüzden 'dayanaksız' değil -- sorun, doğru olması "
+            "değil, taslağın bu satırında ASLA görünmemesi gerekmesidir."
+        ),
+    )
     placeholder_count: int = Field(
         default=0, description="Taslakta doldurulması gereken yer tutucu sayısı."
+    )
+    applied_rules: list[AppliedRule] = Field(
+        default_factory=list,
+        description=(
+            "confidence_score'u üreten kural tablosu satırları (bkz. "
+            "app.ai.verification.confidence_rules) -- yalnızca bu doğrulama "
+            "geçişinin kendi bulguları; app.ai.verification.llm_judge.merge_verdicts "
+            "PII/yazışma türü tahmini/mevzuat bağlamı yokluğu/yargıç bulgularından "
+            "gelen ek satırları kendi combined_score'unu hesaplarken buna ekler."
+        ),
     )
     evaluation_notes: str = Field(
         default="", description="Skorun ve onay kararının kısa Türkçe gerekçesi."
@@ -377,6 +400,72 @@ def _collect_claims(
     return claims
 
 
+#: The outgoing draft's own "Sayı:" header line -- deliberately the same
+#: anchor `STRUCTURE_CHECKS`'s "sayi" entry uses (start of line), so this
+#: only ever reads the response's own number field, never an "İlgi:" line
+#: that legitimately quotes the incoming document's number.
+_OWN_NUMBER_LINE_PATTERN = re.compile(r"^\s*Sayı\s*:\s*(.+)$", re.MULTILINE | re.IGNORECASE)
+
+def _check_incoming_number_leak(
+    draft: str, classification: dict[str, Any] | None
+) -> list[UnsupportedClaim]:
+    """Flag the draft's own Sayı: line if it echoes the incoming document's.
+
+    A response's own case number is assigned by the *writing* institution's
+    registry at send time -- it can never legitimately be the number of the
+    document being replied to (see `writer.md`'s "GELEN EVRAKIN KİMLİK
+    BİLGİLERİ" rule). This is deliberately separate from `_collect_claims`'s
+    general groundedness check: the incoming number IS grounded (it is part
+    of `classification`, which is folded into the trusted haystack), so the
+    general check has no reason to flag it there -- being *true* does not
+    make it *allowed in this line*. This checks that narrower, positional
+    rule directly.
+
+    Args:
+        draft: The generated draft text, unstripped (placeholders and all --
+            this only ever matches a literal "Sayı: <value>" line, so a
+            correctly-left `[Belge Sayısı]` placeholder never matches).
+        classification: Analysis output, whose extracted `fields.sayi` is
+            the incoming document's own number.
+
+    Returns:
+        A single-item list carrying the leaked value, or empty.
+    """
+    fields = (classification or {}).get("fields") or {}
+    if hasattr(fields, "model_dump"):
+        fields = fields.model_dump()
+    incoming_sayi = str(fields.get("sayi") or "").strip()
+    if not incoming_sayi:
+        return []
+
+    incoming_canonical = canonical_for_kind("sayı", incoming_sayi)
+    incoming_folded = _fold(incoming_sayi)
+
+    for match in _OWN_NUMBER_LINE_PATTERN.finditer(draft):
+        own_value = match.group(1).strip()
+        if not _strip_placeholders(own_value).strip():
+            continue  # a correctly-left placeholder, not a leak
+        own_canonical = canonical_for_kind("sayı", own_value)
+        same = _fold(own_value) == incoming_folded or (
+            incoming_canonical is not None and own_canonical == incoming_canonical
+        )
+        if same:
+            return [
+                UnsupportedClaim(
+                    kind="gelen_sayi_sizintisi",
+                    value=own_value,
+                    explanation=(
+                        "Bu, taslağın KENDİ Sayı alanı -- ama değer, cevaplanan "
+                        "gelen evrakın kendi sayısıyla aynı. Giden yazının sayısı "
+                        "yazan kurumun evrak kaydınca verilir; gelen evrakın "
+                        "sayısı yalnızca İlgi satırında kullanılabilir."
+                    ),
+                    canonical=own_canonical or "",
+                )
+            ]
+    return []
+
+
 #: Structure keys that don't apply to an individually-signed petition (an
 #: itiraz/başvuru/şikayet dilekçesi, or any sub-genre resolving with
 #: "dilekçe" in its label -- see ``resolve_correspondence_type``). A
@@ -390,8 +479,8 @@ PETITION_EXEMPT_STRUCTURE_KEYS = frozenset({"sayi"})
 
 def _check_structure(
     draft: str, *, skip_keys: frozenset[str] = frozenset()
-) -> tuple[list[str], float]:
-    """Score the draft's structural completeness.
+) -> tuple[list[str], list[RuleFinding]]:
+    """Check the draft's structural completeness.
 
     Args:
         draft: The generated draft.
@@ -399,17 +488,19 @@ def _check_structure(
             ``PETITION_EXEMPT_STRUCTURE_KEYS``).
 
     Returns:
-        The labels of missing elements and the total penalty incurred.
+        The labels of missing elements, and one ``RuleFinding`` per missing
+        element (see ``_STRUCTURE_RULE_IDS``) for ``score_findings`` to
+        weigh -- this function no longer computes a penalty itself.
     """
     missing: list[str] = []
-    penalty = 0.0
-    for key, label, pattern, weight in STRUCTURE_CHECKS:
+    findings: list[RuleFinding] = []
+    for key, label, pattern in STRUCTURE_CHECKS:
         if key in skip_keys:
             continue
         if not pattern.search(draft):
             missing.append(label)
-            penalty += weight
-    return missing, penalty
+            findings.append(RuleFinding(rule_id=_STRUCTURE_RULE_IDS[key], detail=label))
+    return missing, findings
 
 
 def verify_draft(
@@ -490,7 +581,7 @@ def verify_draft(
 
     claims = _collect_claims(auditable, haystack, canonical_index)
     skip_keys = PETITION_EXEMPT_STRUCTURE_KEYS if is_individual_petition else frozenset()
-    missing_structure, structure_penalty = _check_structure(draft, skip_keys=skip_keys)
+    missing_structure, structure_findings = _check_structure(draft, skip_keys=skip_keys)
 
     # Split out claims that are unsupported by source/mevzuat but *are*
     # present in the user's own instructions -- checked before example_leaks
@@ -548,29 +639,50 @@ def verify_draft(
                 remaining.append(claim)
         claims = remaining
 
-    claim_penalty = min(
-        len(claims) * UNSUPPORTED_CLAIM_PENALTY, MAX_UNSUPPORTED_PENALTY
-    )
-    score = max(0.0, 100.0 - claim_penalty - structure_penalty)
+    incoming_number_leaks = _check_incoming_number_leak(draft, classification)
 
-    requires_approval = (
-        score < MIN_AUTOMATED_CONFIDENCE_SCORE
-        or bool(missing_structure)
-        or placeholder_count > 0
-        or (strict and bool(claims))
-        or bool(example_leaks)
+    # Every deterministic finding, in one list -- score_findings (the single
+    # rule table, see app.ai.verification.confidence_rules) is the only
+    # place a penalty number is computed from here on. `dayanaksiz_iddia`
+    # is the one rule whose approval-forcing is conditional (`strict`) --
+    # everything else uses the rule table's own unconditional default.
+    findings: list[RuleFinding] = list(structure_findings)
+    findings.extend(
+        RuleFinding(
+            rule_id="dayanaksiz_iddia",
+            detail=f"{claim.kind}: {claim.value}",
+            forces_approval=strict,
+        )
+        for claim in claims
     )
+    findings.extend(
+        RuleFinding(rule_id="ornek_sizintisi", detail=leak.value) for leak in example_leaks
+    )
+    findings.extend(
+        RuleFinding(rule_id="gelen_sayi_sizintisi", detail=leak.value)
+        for leak in incoming_number_leaks
+    )
+    findings.extend(
+        RuleFinding(rule_id="doldurulmamis_yer_tutucu") for _ in range(placeholder_count)
+    )
+
+    outcome = score_findings(findings)
+    score = outcome.score
+    requires_approval = outcome.forces_approval or score < MIN_AUTOMATED_CONFIDENCE_SCORE
 
     return VerificationReport(
-        confidence_score=round(score, 1),
+        confidence_score=score,
         requires_human_approval=requires_approval,
         unsupported_claims=claims,
         example_leaks=example_leaks,
         instruction_only_claims=instruction_only_claims,
+        incoming_number_leaks=incoming_number_leaks,
         missing_structure=missing_structure,
         placeholder_count=placeholder_count,
+        applied_rules=outcome.applied_rules,
         evaluation_notes=_build_notes(
-            claims, missing_structure, placeholder_count, score, example_leaks
+            claims, missing_structure, placeholder_count, score, example_leaks,
+            incoming_number_leaks,
         ),
     )
 
@@ -637,6 +749,7 @@ def _build_notes(
     placeholder_count: int,
     score: float,
     example_leaks: list[UnsupportedClaim] | None = None,
+    incoming_number_leaks: list[UnsupportedClaim] | None = None,
 ) -> str:
     """Compose the Turkish rationale shown alongside the score.
 
@@ -646,11 +759,18 @@ def _build_notes(
         placeholder_count: Number of unfilled placeholders.
         score: The computed confidence score.
         example_leaks: Unsupported claims traced back to a style example.
+        incoming_number_leaks: The draft's own Sayı: line echoing the
+            incoming document's number (see `_check_incoming_number_leak`).
 
     Returns:
         A human-readable summary.
     """
     notes: list[str] = []
+    if incoming_number_leaks:
+        notes.append(
+            "Taslağın kendi Sayı: alanı, cevaplanan gelen evrakın sayısıyla "
+            f"aynı ('{incoming_number_leaks[0].value}'); insan onayı gerekiyor."
+        )
     if example_leaks:
         sample = ", ".join(f"'{claim.value}'" for claim in example_leaks[:3])
         notes.append(

@@ -1,8 +1,10 @@
 """Unit tests for the deterministic groundedness/structure verifier."""
 
+from app.ai.verification.confidence_rules import RULES
 from app.ai.verification.draft_verifier import (
     MIN_AUTOMATED_CONFIDENCE_SCORE,
     STRUCTURE_CHECKS,
+    _STRUCTURE_RULE_IDS,
     verify_draft,
 )
 
@@ -33,6 +35,69 @@ def test_document_number_present_in_source_is_not_flagged():
     assert report.unsupported_claims == []
     assert report.confidence_score == 100.0
     assert report.requires_human_approval is False
+
+
+def test_the_drafts_own_number_line_echoing_the_incoming_documents_number_is_flagged():
+    """The bug this guards against: the incoming document's own number is
+    genuinely grounded (it's part of `classification`), so the general
+    groundedness check alone has no reason to flag it -- being true doesn't
+    make it allowed in the response's own Sayı: line. A response's own case
+    number is assigned by the writing institution's registry, never copied
+    from the document it replies to."""
+    draft = WELL_FORMED_DRAFT.replace("Sayı: E-123-456", "Sayı: E-2026-998877")
+    classification = {"fields": {"sayi": "E-2026-998877"}}
+
+    report = verify_draft(
+        draft, source_document="Diğer içerik.", classification=classification
+    )
+
+    assert len(report.incoming_number_leaks) == 1
+    assert report.incoming_number_leaks[0].value == "E-2026-998877"
+    assert report.requires_human_approval is True
+    assert report.confidence_score < 100.0
+
+
+def test_a_correctly_left_placeholder_sayi_line_is_not_a_leak():
+    draft = WELL_FORMED_DRAFT.replace("Sayı: E-123-456", "Sayı: [Belge Sayısı]")
+    classification = {"fields": {"sayi": "E-2026-998877"}}
+
+    report = verify_draft(
+        draft, source_document="Diğer içerik.", classification=classification
+    )
+
+    assert report.incoming_number_leaks == []
+
+
+def test_a_reference_to_the_incoming_number_in_an_ilgi_line_is_not_a_leak():
+    """The incoming number is legitimately quoted in an "İlgi:" line -- only
+    the draft's own "Sayı:" line is checked."""
+    draft = (
+        "Konu: Yıllık İzin Talebi\n"
+        "Sayı: [Belge Sayısı]\n"
+        "Tarih: [Tarih]\n"
+        "İlgi: E-2026-998877 sayılı yazınız.\n\n"
+        "Sayın Makam,\n\nArz ederim.\n\nMehmet Öztürk\nGenel Müdür"
+    )
+    classification = {"fields": {"sayi": "E-2026-998877"}}
+
+    report = verify_draft(
+        draft, source_document="Diğer içerik.", classification=classification
+    )
+
+    assert report.incoming_number_leaks == []
+
+
+def test_the_drafts_own_number_unrelated_to_the_incoming_one_is_not_a_leak():
+    classification = {"fields": {"sayi": "E-2026-998877"}}
+
+    report = verify_draft(
+        WELL_FORMED_DRAFT, source_document="Diğer içerik.", classification=classification
+    )
+
+    # WELL_FORMED_DRAFT's own number (E-123-456) is unrelated to the
+    # incoming one -- still an ordinary unsupported claim (nothing grounds
+    # it), but not the specific incoming-number-leak rule.
+    assert report.incoming_number_leaks == []
 
 
 def test_institution_paraphrase_escape_hatch_via_token_overlap():
@@ -80,14 +145,17 @@ def test_placeholders_are_excluded_from_grounding_audit_but_still_counted():
 
 def test_each_structure_check_contributes_its_full_weight_when_missing():
     """A draft with none of the five structural markers must be penalised by
-    the exact sum of every STRUCTURE_CHECKS weight, not a partial or capped
-    amount."""
+    the exact sum of every structure rule's own penalty (confidence_rules.
+    RULES, via _STRUCTURE_RULE_IDS), not a partial or capped amount."""
     bare_draft = "Bu metinde hiçbir resmi unsur yok."
     report = verify_draft(bare_draft, source_document=bare_draft)
 
-    total_weight = sum(weight for _, _, _, weight in STRUCTURE_CHECKS)
+    total_weight = sum(
+        RULES[_STRUCTURE_RULE_IDS[key]].penalty for key, _, _ in STRUCTURE_CHECKS
+    )
     assert len(report.missing_structure) == len(STRUCTURE_CHECKS)
     assert report.confidence_score == round(max(0.0, 100.0 - total_weight), 1)
+    assert len(report.applied_rules) == len(STRUCTURE_CHECKS)
 
 
 def test_strict_false_reports_unsupported_claims_without_forcing_approval():

@@ -218,7 +218,64 @@ async def test_reddet_captures_a_reason_and_archives_the_draft(
 
     snapshot = await graph.aget_state(config)
     focus = snapshot.values["focus"]
-    assert focus.active_draft is None
+    # The rejected draft stays active and revisable -- a reject is a verdict
+    # on the text, not an instruction to forget it (see
+    # app.ai.session.focus's own docstring on _ARCHIVE_ONLY_DRAFT_STATUSES).
+    assert focus.active_draft is not None
+    assert focus.active_draft == focus.draft_history[-1]
     assert focus.draft_history[-1].created_from == "rejected"
     assert focus.draft_history[-1].rejection_reason == "Üslup çok resmi değil."
     assert focus.last_rejection["reason"] == "Üslup çok resmi değil."
+
+
+@pytest.mark.asyncio
+async def test_revising_a_rejected_draft_builds_on_the_rejected_text_not_the_original(
+    fake_llm, fake_fast_llm, monkeypatch
+):
+    """The bug this fixes: rejecting a draft used to clear `active_draft` to
+    `None`, so the very next "taslağı revize et" had nothing to attach to
+    and fell through to a fresh `draft` request instead of continuing from
+    what was actually rejected -- silently discarding it."""
+    monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
+    graph, mocks = _build_graph(fake_llm, fake_fast_llm)
+    config = {"configurable": {"thread_id": "gate-reject-then-revise"}}
+
+    await graph.ainvoke(
+        {"input_text": "Bu evraka cevap yazısı hazırla.", "document_id": None}, config=config
+    )
+    first_reject = await graph.ainvoke(
+        Command(resume={"action": "reject", "answers": {}, "reason": "Üslup çok resmi değil."}),
+        config=config,
+    )
+    assert first_reject["final_output"]["draft"]["status"] == "REJECTED"
+
+    snapshot = await graph.aget_state(config)
+    focus = snapshot.values["focus"]
+    assert focus.active_draft is not None
+    rejected_version = focus.active_draft.version
+
+    # A fresh turn asking to revise must actually route to `revise` -- only
+    # possible because `focus.active_draft` is still set after the
+    # rejection -- and not silently fall through to a brand-new `draft`.
+    fake_llm.stream_chunks = ["Bilgilerinize sunulur."]
+    second = await graph.ainvoke(
+        {
+            "input_text": "Taslağı revize et, kapanışı 'Bilgilerinize sunulur.' yap.",
+            "document_id": None,
+        },
+        config=config,
+    )
+
+    # The (expensive, multi-call) draft pipeline never ran a second time --
+    # proof the router took the revise path, continuing from the rejected
+    # text, instead of starting a new draft from scratch.
+    assert mocks["draft_graph"].ainvoke.await_count == 1
+    revised = second["final_output"]["draft"]["draft"]
+    assert "Bilgilerinize sunulur." in revised
+    # The rejected draft's own (correct) content survives into the revision.
+    assert "İlgi yazı kapsamında bilgi arz olunur." in revised
+
+    snapshot_after = await graph.aget_state(config)
+    focus_after = snapshot_after.values["focus"]
+    assert focus_after.active_draft.created_from == "revise"
+    assert focus_after.active_draft.supersedes == rejected_version
