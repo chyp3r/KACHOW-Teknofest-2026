@@ -544,6 +544,7 @@ def create_planning_graph(
     fast_llm_client: Optional[BaseLLMClient] = None,
     checkpointer: Any = None,
     mevzuat_retriever: Any = None,
+    adapter_provider: Any = None,
 ):
     """Create and compile the master orchestration workflow.
 
@@ -567,6 +568,13 @@ def create_planning_graph(
         mevzuat_retriever: Optional retriever handed to the revise
             sub-graph for conditional legislation re-retrieval (see
             ``app.ai.revision.retrieval``). None always skips it.
+        adapter_provider: Optional async callable resolving a company's
+            runtime style adapter (Faz C2, see
+            ``app.domains.companies.provider.get_company_adapter``) --
+            forwarded to the revise sub-graph built below; ``draft_graph``
+            gets its own copy at construction time (see
+            ``app.api.dependency.get_draft_graph``), not through here. None
+            always skips adapter resolution.
         checkpointer: Optional LangGraph checkpointer (see
             ``app.infrastructure.checkpointing``). Required for the
             ``human_gate`` node's ``interrupt()`` calls to actually pause and
@@ -605,7 +613,9 @@ def create_planning_graph(
     # (both the plain "revise" step and the human approval gate's own
     # "revizyon iste" loop, see gate_revise_node) invokes this compiled
     # sub-graph rather than building a fresh one per call.
-    revise_graph = create_revise_graph(llm_client, fast_llm_client, mevzuat_retriever)
+    revise_graph = create_revise_graph(
+        llm_client, fast_llm_client, mevzuat_retriever, adapter_provider
+    )
 
     # Layer 2 of the intent ladder. Built once per graph, and only when there is
     # an embeddings client to build it with -- without one the ladder simply
@@ -822,6 +832,7 @@ def create_planning_graph(
                 "attempts": 0,
                 "reasoning_level": state.get("reasoning_level", ReasoningLevel.BALANCED.value),
                 "writing_brief": brief_answers,
+                "company_id": state.get("company_id") or "",
             },
             config=child_config(config),
         )
@@ -1301,6 +1312,7 @@ def create_planning_graph(
             mevzuat_retriever=mevzuat_retriever,
             revise_graph=revise_graph,
             instruction_origin="user_turn",
+            company_id=state.get("company_id"),
         )
         updates["draft_result"] = result
         updates["revise_result"] = {"status": result["status"]}
@@ -1956,6 +1968,7 @@ def create_planning_graph(
             mevzuat_retriever=mevzuat_retriever,
             revise_graph=revise_graph,
             instruction_origin="human_gate",
+            company_id=state.get("company_id"),
         )
         if result.get("status") == StepStatus.FAILED:
             await emit_node_error(

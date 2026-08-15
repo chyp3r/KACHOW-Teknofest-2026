@@ -321,10 +321,13 @@ async def get_draft_graph() -> Any:
     """
     global _draft_graph
     if _draft_graph is None:
+        from app.domains.companies.provider import get_company_adapter
+
         _draft_graph = create_draft_graph(
             llm_client=get_llm_client(),
             fast_llm_client=get_fast_llm_client(),
             example_retriever=await get_example_retriever(),
+            adapter_provider=get_company_adapter,
         )
     return _draft_graph
 
@@ -425,6 +428,7 @@ async def get_planning_graph(
     """
     global _planning_graph
     if _planning_graph is None:
+        from app.domains.companies.provider import get_company_adapter
         from app.infrastructure.checkpointing import get_checkpointer
 
         _planning_graph = create_planning_graph(
@@ -438,6 +442,7 @@ async def get_planning_graph(
             fast_llm_client=get_fast_llm_client(),
             checkpointer=get_checkpointer(),
             mevzuat_retriever=mevzuat_retriever,
+            adapter_provider=get_company_adapter,
         )
     return _planning_graph
 

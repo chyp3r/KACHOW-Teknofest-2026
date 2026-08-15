@@ -6,6 +6,8 @@ from typing import Any, TypedDict
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 
+from app.ai.adapters.company_adapter import AdapterProvider, CompanyAdapter
+from app.ai.adapters.injection import format_adapter_block
 from app.ai.agents.judge import JudgeAgent
 from app.ai.agents.reviser import ReviserAgent
 from app.ai.agents.writer import WriterAgent
@@ -132,6 +134,17 @@ class DraftState(TypedDict, total=False):
     #: re-querying. Empty (never absent) when retrieval is disabled, finds
     #: nothing, or fails -- few-shot is a quality boost, not a dependency.
     style_examples: list[dict[str, Any]]
+    #: Which tenant this draft is for -- read by ``writer_node`` to resolve
+    #: this company's runtime style adapter (Faz C2, see ``adapter_provider``
+    #: on ``create_draft_graph``). Absent/empty behaves exactly like no
+    #: adapter configured, never an error.
+    company_id: str
+    #: The resolved adapter (``CompanyAdapter.to_dict()``), set once by
+    #: ``writer_node`` on the first attempt and carried forward so
+    #: ``verify_node`` can fold ``preferred_examples`` into the same
+    #: ``ornek_sizintisi`` leak check ``style_examples`` already goes
+    #: through, without re-resolving it a second time.
+    company_adapter: dict[str, Any]
 
 
 def _format_classification(classification: dict[str, Any]) -> str:
@@ -231,7 +244,7 @@ def _build_brief(
     )
 
 
-def _build_repair_prompt(state: DraftState) -> str:
+def _build_repair_prompt(state: DraftState, adapter_block: str = "") -> str:
     """Compose the targeted repair prompt handed to the reviser.
 
     Sends the full brief rather than a defect-conditional slice of it. The
@@ -267,6 +280,7 @@ def _build_repair_prompt(state: DraftState) -> str:
         "Yalnızca listelenen kusurları düzelt. Başka hiçbir cümleyi değiştirme. "
         "`[...]` yer tutucularını olduğu gibi bırak."
         f"{_format_style_examples(state.get('style_examples'))}"
+        f"{adapter_block}"
     )
 
 
@@ -331,6 +345,7 @@ def create_draft_graph(
     llm_client: BaseLLMClient,
     fast_llm_client: BaseLLMClient | None = None,
     example_retriever: ExampleRetriever | None = None,
+    adapter_provider: AdapterProvider | None = None,
 ):
     """Create and compile the drafting workflow.
 
@@ -359,6 +374,13 @@ def create_draft_graph(
             ``retrieve_examples_node``). None reproduces pre-feature
             behaviour exactly -- the node short-circuits to zero examples
             without touching Qdrant.
+        adapter_provider: Optional async callable resolving a company's
+            runtime style adapter (Faz C2, see
+            ``app.domains.companies.provider.get_company_adapter``) --
+            injected the same way ``units_provider`` is on
+            ``create_routing_graph``, so this module never imports
+            ``app.domains`` directly. None reproduces pre-feature behaviour
+            exactly (no adapter block, ever).
 
     Returns:
         The compiled LangGraph workflow.
@@ -511,6 +533,20 @@ def create_draft_graph(
         )
         return {"style_examples": style_examples}
 
+    async def _resolve_adapter(state: DraftState) -> CompanyAdapter:
+        """This company's runtime style adapter (Faz C2), or an empty one
+        when no ``adapter_provider`` was configured, no ``company_id`` is on
+        this turn's state, or resolution itself fails -- an adapter is a
+        quality nicety, never a dependency the draft turn can fail on."""
+        company_id = state.get("company_id") or ""
+        if not company_id or adapter_provider is None:
+            return CompanyAdapter.empty(company_id)
+        try:
+            return await adapter_provider(company_id)
+        except Exception:
+            logger.warning("Company adapter resolution failed for %s", company_id, exc_info=True)
+            return CompanyAdapter.empty(company_id)
+
     async def writer_node(state: DraftState, config: RunnableConfig) -> dict[str, Any]:
         attempt_number = state.get("attempts", 0) + 1
         is_revision = bool(state.get("previous_draft"))
@@ -521,6 +557,12 @@ def create_draft_graph(
             "reasoning_level": preset.level.value,
             "reasoning": preset.reasoning,
         }
+        # Resolved once per attempt (Redis-cached in the real provider, see
+        # app.domains.companies.provider.get_company_adapter, so repeat
+        # attempts within one turn are cheap) rather than once per graph run:
+        # a revision attempt still needs it for its own repair prompt below.
+        adapter = await _resolve_adapter(state)
+        adapter_block = format_adapter_block(adapter)
 
         if is_revision:
             logger.info("Running Reviser Node (attempt %d)...", attempt_number)
@@ -532,7 +574,7 @@ def create_draft_graph(
                 meta=meta,
             )
             agent = ReviserAgent(client)
-            prompt = _build_repair_prompt(state)
+            prompt = _build_repair_prompt(state, adapter_block)
             temperature = 0.2
         else:
             logger.info("Running Writer Node...")
@@ -568,6 +610,7 @@ def create_draft_graph(
                 f"{format_correspondence_profile(state['correspondence_type'], state.get('correspondence_sub_genre', ''))}\n\n"
                 f"### KURALLAR:\n{rules}"
                 f"{_format_style_examples(state.get('style_examples'))}"
+                f"{adapter_block}"
             )
             agent = WriterAgent(client)
             temperature = 0.4
@@ -664,7 +707,12 @@ def create_draft_graph(
                 client.count_tokens(draft)
             )
 
-            return {"draft": draft, "attempts": attempt_number, "status": "IN_PROGRESS"}
+            return {
+                "draft": draft,
+                "attempts": attempt_number,
+                "status": "IN_PROGRESS",
+                "company_adapter": adapter.to_dict(),
+            }
         except TimeoutError:
             # Distinguished from a generic failure because str(TimeoutError())
             # is empty -- the user would have been shown "Taslak üretilemedi: ".
@@ -722,6 +770,14 @@ def create_draft_graph(
         strict = state.get("correspondence_type") != "other_official"
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
 
+        # The company adapter's own preferred_examples are real generated
+        # text, same trust boundary as retrieved style_examples -- folded
+        # into the same flat list so a leaked institution/date/name inside
+        # one is caught by the exact same ornek_sizintisi check, no separate
+        # detector needed (see CompanyAdapter's own docstring).
+        adapter = CompanyAdapter.from_dict(
+            state.get("company_id") or "", state.get("company_adapter")
+        )
         report = verify_draft(
             draft_text,
             source_document=state.get("source_document", ""),
@@ -731,7 +787,8 @@ def create_draft_graph(
             strict=strict,
             style_examples=[
                 example.get("text", "") for example in state.get("style_examples") or []
-            ],
+            ]
+            + list(adapter.preferred_examples),
             is_individual_petition="dilekçe" in sub_genre.lower(),
         )
 
