@@ -2,6 +2,42 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.8.0] - 2026-08-15
+### Eklendi
+Bekleme sırasındaki UX iyileştirmesi (Faz B) -- bir taslak turu 30-90 saniye sürebiliyordu ve
+bu sürede ekranda statik bir "İstek işleniyor" satırından başka hiçbir ilerleme hissi yoktu:
+
+- **`ThinkingBubble.tsx`** eski statik `processing-line`'ın yerine geçti: `useChatWorkflow`'un
+  zaten tuttuğu `nodeStatus`/`nodeOrder`/`nodeMeta`/`nodeResults` verisinden türetilen canlı bir
+  adım listesi (tamamlanan ✓ ile sabit, çalışan adım nabız animasyonlu), toplam geçen süre
+  sayacı ve çalışan adımın kendi süresi, adım-özel alt metin (`draft` node'unun `attempt`/
+  `reasoning_level` meta'sından, örn. "2. deneme · deep mod") gösteriyor. `DecisionFlow.tsx`'in
+  adım türetme mantığı (`deriveWorkflowStages`) dışa aktarıldı ki iş akışı çekmecesi ile sohbet
+  akışındaki balon aynı "şu an ne oluyor" listesini göstersin, ikisi ayrı ayrı bakım gerektiren
+  kopyalar olmasın.
+- **Kısmi taslak önizlemesi**: `draft_graph.py::writer_node` artık her ~200 karakter
+  büyümede bir birikmiş taslak metnini `partial_result` olarak yayınlıyor -- taslak
+  tamamlanmadan önce balonda soluk bir önizleme olarak akıyor. Güvenlik değişmezi korundu:
+  her önizleme, nihai metnin geçtiği aynı `assert_no_prompt_leak` kontrolünden geçiyor;
+  kontrolü geçemeyen bir ara arabellek o turda sessizce atlanıyor (hataya düşmüyor), yani
+  doğrulanmamış hiçbir metin -- ne önizleme ne nihai cevap -- kullanıcıya ulaşmıyor.
+  Taslak adımı çalışırken gerçek metin henüz yoksa, iskelet (shimmer) bir taslak kartı
+  gösteriliyor.
+- **Uzun bekleme ipucu**: bir adım 20 saniyeyi aştığında "Bu adım normalden uzun sürüyor"
+  uyarısı ve son kullanıcı mesajını `fast` düşünme seviyesinde yeniden gönderen bir kısayol
+  beliriyor. "İşlemi durdur" butonu artık `ChatsPage`'te ayrı bir satır değil, balonun içinde.
+- **Duraklama şeridi**: `human_gate`/`missing_information`/`draft_approval` kapısı açıkken
+  sohbet balonunun üstünde "Yanıtınız bekleniyor — akış duraklatıldı" şeridi gösteriliyor --
+  bekleme spinner'ıyla karışmaması için.
+- `prefers-reduced-motion` desteği ayrıca eklenmedi: `integration.css`'teki mevcut global kural
+  (`animation-duration: .01ms !important`) yeni animasyonları da otomatik kapsıyor.
+
+### Test
+- `docker compose exec backend pytest -q` → 1765 test geçti.
+- `frontend`: `npx vitest run` → 126 test geçti, `tsc --noEmit` temiz.
+
+Refs: [#181](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/181)
+
 ## [3.7.0] - 2026-08-15
 ### Düzeltildi
 Sahada tespit edilen beş taslak/revizyon boru hattı hatası (Faz A):
