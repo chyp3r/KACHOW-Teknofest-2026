@@ -12,11 +12,12 @@ import {
   SENSITIVITY_LABELS,
   type SensitivityLevel,
 } from "../types/security";
-import { ROLE_LABELS, type User, type UserRole } from "../types/users";
+import { ASSIGNABLE_ROLE_LABELS, type User, type UserRole } from "../types/users";
 import { Button } from "../components/Button";
 import { Input, Select } from "../components/FormControls";
 import { SectionHeader } from "../components/SectionHeader";
 import { Alert, Card, Spinner } from "../components/Surface";
+import { TrainingPanel } from "../features/admin/TrainingPanel";
 
 export function AdminPage({ onLogin }: { onLogin: () => void }) {
   const { user, loading: sessionLoading } = useAuth();
@@ -136,7 +137,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
             onChange={(event) => setInviteRole(event.target.value as UserRole)}
             aria-label="Davet rolü"
           >
-            {Object.entries(ROLE_LABELS).map(([value, label]) => (
+            {Object.entries(ASSIGNABLE_ROLE_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>
@@ -193,7 +194,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
                           })
                         }
                       >
-                        {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                        {Object.entries(ASSIGNABLE_ROLE_LABELS).map(([value, label]) => (
                           <option key={value} value={value}>
                             {label}
                           </option>
@@ -283,6 +284,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
           </div>
         )}
       </Card>
+      {user.company_id && <TrainingPanel companyId={user.company_id} canManage={canManage} />}
       <ConfirmationDialog
         open={Boolean(removeTarget)}
         title={removeMode === "hard" ? "Kullanıcıyı kalıcı sil" : "Erişimi kaldır"}

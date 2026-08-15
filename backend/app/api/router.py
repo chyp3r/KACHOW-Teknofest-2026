@@ -14,6 +14,8 @@ from app.domains.pools.router import router as pools_router
 from app.domains.companies.root_router import router as root_router
 from app.domains.routing.router import router as routing_router
 from app.domains.system.router import router as system_router, health_router
+from app.domains.training.router import company_router as training_company_router
+from app.domains.training.router import router as training_router
 from app.domains.units.router import router as units_router
 from app.domains.users.router import router as users_router
 
@@ -35,5 +37,7 @@ api_router.include_router(pools_router, tags=["pools"])
 api_router.include_router(root_router, tags=["root"])
 api_router.include_router(routing_router, tags=["routing"])
 api_router.include_router(system_router, tags=["system"])
+api_router.include_router(training_router, tags=["training"])
+api_router.include_router(training_company_router, tags=["training"])
 api_router.include_router(units_router, tags=["units"])
 api_router.include_router(users_router, tags=["users"])

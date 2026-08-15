@@ -24,6 +24,10 @@ from app.domains.quotas.repository import CompanyQuotaRepository, UsageCounterRe
 #: docstring for why "llm_tokens" is not among them yet.
 DOCUMENTS_METRIC = "documents"
 DRAFTS_METRIC = "drafts"
+#: Faz C3 (#187) -- one increment per `POST /companies/{id}/training-runs`
+#: call, honest since that endpoint is the only place a training run is
+#: ever created (no background/cron trigger exists yet, see #187's body).
+TRAINING_RUNS_METRIC = "training_runs"
 
 
 def current_period(now: Optional[datetime] = None) -> str:
@@ -44,6 +48,8 @@ class QuotaService:
             return quota.max_documents_per_month
         if metric == DRAFTS_METRIC:
             return quota.max_drafts_per_month
+        if metric == TRAINING_RUNS_METRIC:
+            return quota.max_training_runs_per_month
         return None
 
     async def check_and_increment(self, company_id: str, metric: str, amount: int = 1) -> None:
@@ -84,7 +90,7 @@ class QuotaService:
         quota = await self.quota_repository.get(company_id)
         period = current_period()
         summary = {}
-        for metric in (DOCUMENTS_METRIC, DRAFTS_METRIC):
+        for metric in (DOCUMENTS_METRIC, DRAFTS_METRIC, TRAINING_RUNS_METRIC):
             counter = await self.usage_repository.get(company_id, metric, period)
             summary[metric] = {
                 "period": period,

@@ -3,7 +3,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.api.exceptions.rate_limit import RateLimitException
-from app.domains.quotas.service import DOCUMENTS_METRIC, DRAFTS_METRIC, QuotaService, current_period
+from app.domains.quotas.service import (
+    DOCUMENTS_METRIC,
+    DRAFTS_METRIC,
+    TRAINING_RUNS_METRIC,
+    QuotaService,
+    current_period,
+)
 
 
 @pytest.fixture
@@ -21,10 +27,11 @@ def service(usage_repo, quota_repo):
     return QuotaService(usage_repo, quota_repo)
 
 
-def _quota(max_documents=None, max_drafts=None):
+def _quota(max_documents=None, max_drafts=None, max_training_runs=None):
     quota = MagicMock()
     quota.max_documents_per_month = max_documents
     quota.max_drafts_per_month = max_drafts
+    quota.max_training_runs_per_month = max_training_runs
     return quota
 
 
@@ -83,10 +90,11 @@ async def test_documents_and_drafts_limits_are_independent(service, quota_repo, 
 
 @pytest.mark.asyncio
 async def test_usage_summary_reports_used_and_limit_per_metric(service, quota_repo, usage_repo):
-    quota_repo.get.return_value = _quota(max_documents=10, max_drafts=None)
-    usage_repo.get.side_effect = [MagicMock(count=3), None]
+    quota_repo.get.return_value = _quota(max_documents=10, max_drafts=None, max_training_runs=5)
+    usage_repo.get.side_effect = [MagicMock(count=3), None, MagicMock(count=1)]
 
     summary = await service.usage_summary("company-a")
 
     assert summary[DOCUMENTS_METRIC] == {"period": current_period(), "used": 3, "limit": 10}
     assert summary[DRAFTS_METRIC] == {"period": current_period(), "used": 0, "limit": None}
+    assert summary[TRAINING_RUNS_METRIC] == {"period": current_period(), "used": 1, "limit": 5}
