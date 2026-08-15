@@ -5,12 +5,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependency import require_roles
 from app.api.exceptions.authorization import AuthorizationException
+from app.api.exceptions.not_found import NotFoundException
 from app.api.responses import APIResponse, SuccessResponse
 from app.core.enums.user_role import UserRole
 from app.domains.audit.repository import AuditLogRepository
 from app.domains.audit.service import AuditService
+from app.domains.companies.provider import get_company_adapter, set_company_adapter
 from app.domains.companies.repository import CompanyRepository
 from app.domains.companies.schema.company_schema import (
+    CompanyAdapterResponse,
+    CompanyAdapterUpdate,
     CompanyAdminAssign,
     CompanyCreate,
     CompanyResponse,
@@ -115,6 +119,64 @@ async def update_company(
         after=schema.model_dump(exclude_unset=True, mode="json"),
     )
     return SuccessResponse(data=CompanyResponse.model_validate(company))
+
+
+def _adapter_response(adapter) -> CompanyAdapterResponse:
+    return CompanyAdapterResponse(company_id=adapter.company_id, **adapter.to_dict())
+
+
+@router.get("/{company_id}/adapter", response_model=APIResponse[CompanyAdapterResponse])
+async def get_company_adapter_endpoint(
+    company_id: str,
+    current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
+):
+    """Fetch a company's current runtime style adapter (Faz C2).
+
+    Never 404s for a company with nothing configured -- returns the empty
+    adapter shape (``version=0``, empty lists) instead, same as
+    ``get_company_adapter`` itself.
+    """
+    _require_company_access(current_user, company_id)
+    adapter = await get_company_adapter(company_id)
+    return SuccessResponse(data=_adapter_response(adapter))
+
+
+@router.put("/{company_id}/adapter", response_model=APIResponse[CompanyAdapterResponse])
+async def update_company_adapter(
+    company_id: str,
+    schema: CompanyAdapterUpdate,
+    current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Replace a company's runtime style adapter (Root, or that company's
+    own Admin).
+
+    Hand-authoring is the only way to set one today -- Faz C3's automated
+    training pipeline will call the same
+    ``app.domains.companies.provider.set_company_adapter`` this uses, with
+    a real ``sample_count`` instead of the 0 a manual edit gets. Each field
+    replaces the adapter's entire list, it does not append.
+    """
+    _require_company_access(current_user, company_id)
+    try:
+        adapter = await set_company_adapter(
+            company_id,
+            style_rules=schema.style_rules,
+            preferred_examples=schema.preferred_examples,
+            avoided_patterns=schema.avoided_patterns,
+        )
+    except ValueError as exc:
+        raise NotFoundException(message="Şirket bulunamadı.") from exc
+    await _audit_service(db).record(
+        company_id=company_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="company:adapter_update",
+        resource_type="company_adapter",
+        resource_id=company_id,
+        after=adapter.to_dict(),
+    )
+    return SuccessResponse(data=_adapter_response(adapter))
 
 
 @router.post("/{company_id}/admins", response_model=APIResponse[UserResponse])
