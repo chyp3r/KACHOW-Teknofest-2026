@@ -9,8 +9,8 @@ from langgraph.graph import END, START, StateGraph
 from app.ai.agents.judge import JudgeAgent
 from app.ai.agents.reviser import ReviserAgent
 from app.ai.agents.writer import WriterAgent
-from app.ai.guardrails.injection import assert_no_prompt_leak
-from app.ai.guardrails.pii import find_pii
+from app.ai.guardrails.injection import GuardrailViolation, assert_no_prompt_leak
+from app.ai.guardrails.pii import find_pii, redact_pii
 from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
 from app.ai.llms.base import BaseLLMClient
@@ -34,6 +34,7 @@ from app.ai.workflows.events import (
     emit_node_error,
     emit_node_skipped,
     emit_node_start,
+    emit_partial,
 )
 from app.ai.workflows.resilience import IO_RETRY
 from app.ai.workflows.writing_brief import format_writing_brief
@@ -62,6 +63,13 @@ DRAFT_MAX_TOKENS = _BALANCED_PRESET.draft_max_tokens
 #: "deep" reasoning level raises this bound for callers willing to trade
 #: latency for another repair pass -- see app.ai.reasoning_levels.
 MAX_DRAFT_ATTEMPTS = _BALANCED_PRESET.max_draft_attempts
+
+#: Minimum growth (characters) between two "draft" partial_result previews
+#: sent to the client while the writer streams. Large enough that a 60-90s
+#: generation still only pays for a few dozen queue round-trips, small
+#: enough that the waiting-state UI (Faz B) has something new to show every
+#: few seconds rather than sitting on the first preview the whole time.
+_PARTIAL_PREVIEW_CHUNK_CHARS = 200
 
 
 class DraftState(TypedDict, total=False):
@@ -565,27 +573,54 @@ def create_draft_graph(
             temperature = 0.4
 
         # Called via .stream() rather than awaited whole -- not to forward
-        # chunks live (nothing is emitted here anymore; see the module-level
-        # note on final-reply streaming in app.domains.chat.chat_service),
-        # but because the timeout below still needs partial text to hand
-        # back on a budget overrun. The writer's budget is applied *inside*
-        # the node rather than by the @node_timeout decorator. A decorator
-        # would raise past the except clauses below and crash the draft
-        # graph; here a timeout becomes a FAILED result carrying whatever was
-        # generated so far, which is what the rest of the graph already
-        # knows how to handle. This is also the first time the most
-        # expensive step in the ~90s draft budget has had any node-level
-        # protection at all -- resilience.py has carried a "writer" entry
-        # since it was written, and nothing ever read it.
+        # chunks live as chat tokens (the chat bubble still only ever shows
+        # the validated final reply; see the module-level note on
+        # final-reply streaming in app.domains.chat.chat_service), but
+        # because the timeout below still needs partial text to hand back on
+        # a budget overrun. The writer's budget is applied *inside* the node
+        # rather than by the @node_timeout decorator. A decorator would raise
+        # past the except clauses below and crash the draft graph; here a
+        # timeout becomes a FAILED result carrying whatever was generated so
+        # far, which is what the rest of the graph already knows how to
+        # handle. This is also the first time the most expensive step in the
+        # ~90s draft budget has had any node-level protection at all --
+        # resilience.py has carried a "writer" entry since it was written,
+        # and nothing ever read it.
         #
-        # Chunks are buffered, never emitted: .stream() cannot run
-        # BaseAgent.validators mid-stream (there is no single response to
-        # check before tokens would be on screen), so nothing reaches the
-        # user until assert_no_prompt_leak below has cleared the accumulated
-        # text -- see chat_service._enqueue_terminal_event, the one place a
-        # validated final reply is streamed to the client.
+        # Chunks are buffered and never emitted as chat tokens: .stream()
+        # cannot run BaseAgent.validators mid-stream (there is no single
+        # response to check before tokens would be on screen), so nothing
+        # reaches the *chat bubble* until assert_no_prompt_leak below has
+        # cleared the accumulated text -- see
+        # chat_service._enqueue_terminal_event, the one place a validated
+        # final reply is streamed to the client. The waiting-state UI's
+        # partial-draft preview (Faz B) is a narrower exception: every
+        # _PARTIAL_PREVIEW_CHUNK_CHARS of growth, the buffer so far is run
+        # through the *same* assert_no_prompt_leak check below and, only if
+        # it passes, published as a "draft" partial_result -- a preview that
+        # fails the check is silently skipped for that round rather than
+        # shown, so the security invariant (nothing unvalidated reaches the
+        # user) holds for the preview too, not just the final text.
+        #
+        # The preview is also PII-masked before publishing (redact_pii, same
+        # deterministic TCKN/IBAN/phone/address scanner the output guardrail
+        # uses -- see app.ai.guardrails.output_gate). This is deliberately
+        # *not* applied to the final `draft` returned below: a legitimate
+        # official letter (a personnel petition citing its own subject's
+        # TCKN, say) is expected to carry PII, and that gets flagged for
+        # human review via the `pii_bulgusu` confidence rule instead of
+        # being silently rewritten. The preview has no such nuance to
+        # preserve -- it is a disappearing progress indicator, never the
+        # authoritative text -- so masking it unconditionally trades nothing
+        # away and only shrinks the window a sensitive value is visible on
+        # screen while the draft is still being written. No separate
+        # sliding-window buffer is needed to catch a PII pattern split
+        # across two raw generation chunks: `accumulated` below is always
+        # the *entire* buffer re-scanned from the start, not an incremental
+        # delta, so a pattern is only ever matched once it is fully present.
         budget = node_budget("writer", preset.level)
         chunks: list[str] = []
+        last_preview_length = 0
         try:
             async with asyncio.timeout(budget):
                 async for chunk in agent.stream(
@@ -595,6 +630,21 @@ def create_draft_graph(
                     reasoning=preset.reasoning,
                 ):
                     chunks.append(chunk)
+                    accumulated = "".join(chunks)
+                    if len(accumulated) - last_preview_length >= _PARTIAL_PREVIEW_CHUNK_CHARS:
+                        preview = accumulated.strip()
+                        try:
+                            assert_no_prompt_leak(preview)
+                        except GuardrailViolation:
+                            pass
+                        else:
+                            last_preview_length = len(accumulated)
+                            masked_preview, _preview_pii = redact_pii(preview)
+                            await emit_partial(
+                                config,
+                                "draft",
+                                {"draft": masked_preview, "attempt": attempt_number},
+                            )
 
             draft = "".join(chunks).strip()
             if not draft:

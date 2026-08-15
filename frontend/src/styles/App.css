@@ -853,6 +853,45 @@ textarea { min-height: 105px; resize: vertical; }
 .processing-line { display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); }
 .streaming-caret { display: inline-block; width: 7px; height: 16px; margin-left: var(--space-1); vertical-align: text-bottom; background: var(--accent-blue); animation: blink .8s infinite; }
 @keyframes blink { 50% { opacity: 0; } }
+
+/* Replaces the old static "İstek işleniyor" processing-line with a live
+   view of the turn's own progress -- see ThinkingBubble.tsx. The global
+   prefers-reduced-motion rule (integration.css) already clamps every
+   animation-duration in this block to near-zero, so no separate
+   reduced-motion handling is needed here. */
+.thinking-bubble-body { display: grid; gap: var(--space-3); }
+.thinking-bubble-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); color: var(--text-secondary); }
+.thinking-bubble-title { display: inline-flex; align-items: center; gap: var(--space-2); }
+.thinking-bubble-spinner { animation: thinking-bubble-spin .9s linear infinite; color: var(--accent-blue); }
+.thinking-bubble-elapsed { font-variant-numeric: tabular-nums; color: var(--text-muted); }
+@keyframes thinking-bubble-spin { to { transform: rotate(360deg); } }
+
+.thinking-bubble-steps { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.thinking-bubble-step { display: flex; align-items: center; gap: var(--space-2); color: var(--text-muted); }
+.thinking-bubble-step-marker { width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--border-default); flex: 0 0 auto; }
+.thinking-bubble-step.is-completed { color: var(--text-secondary); }
+.thinking-bubble-step.is-completed .thinking-bubble-step-marker { background: var(--status-completed); }
+.thinking-bubble-step.is-running { color: var(--text-primary); }
+.thinking-bubble-step.is-running .thinking-bubble-step-marker { background: var(--status-running); animation: pulse 1s ease-in-out infinite alternate; }
+.thinking-bubble-step.is-failed .thinking-bubble-step-marker { background: var(--status-failed); }
+.thinking-bubble-step.is-interrupted .thinking-bubble-step-marker { background: var(--status-running); }
+.thinking-bubble-step.is-skipped { opacity: .55; }
+.thinking-bubble-step.is-skipped .thinking-bubble-step-marker { background: var(--status-skipped); }
+.thinking-bubble-step-time { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+
+.thinking-bubble-subtext { margin: 0; color: var(--text-muted); }
+
+.thinking-bubble-draft-preview { max-height: 160px; padding: var(--space-3); overflow: hidden; border: 1px dashed var(--border-default); border-radius: var(--radius-md); background: var(--bg-primary); mask-image: linear-gradient(to bottom, black 70%, transparent 100%); }
+.thinking-bubble-draft-preview p { margin: 0; color: var(--text-muted); white-space: pre-wrap; }
+.thinking-bubble-draft-skeleton { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px dashed var(--border-default); border-radius: var(--radius-md); }
+.thinking-bubble-draft-skeleton span { display: block; width: 100%; height: var(--space-3); border-radius: var(--radius-full); background: linear-gradient(90deg, var(--border-default) 25%, var(--surface-subtle) 50%, var(--border-default) 75%); background-size: 200% 100%; animation: skeleton-shimmer 1.35s ease-in-out infinite; }
+.thinking-bubble-draft-skeleton span:last-child { width: 65%; }
+
+.thinking-bubble-long-wait { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); color: var(--text-warning); background: color-mix(in srgb, var(--status-running) 12%, transparent); }
+
+.thinking-bubble-body .cancel-stream-button { justify-self: start; }
+
+.interrupt-paused-banner { display: inline-flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); color: var(--text-warning); }
 .chat-composer { padding: var(--space-3); }
 .composer-controls { justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
 .composer-input { display: flex; gap: var(--space-2); align-items: flex-end; }

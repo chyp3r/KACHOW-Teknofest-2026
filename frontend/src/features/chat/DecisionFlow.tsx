@@ -33,7 +33,7 @@ interface GraphEdge {
 // for the dynamic stepper and its detail panel. These are fallbacks only:
 // a node_start/end/error/skipped event's own `label` (see useChatWorkflow's
 // nodeLabels) always wins when it has arrived.
-const NODE_INFO: Record<string, { label: string; short: string; description: string }> = {
+export const NODE_INFO: Record<string, { label: string; short: string; description: string }> = {
   planning: { label: "Yönlendirici", short: "ROTA", description: "İsteği deterministik kurallarla uygun işlem yoluna yönlendirir." },
   classification: { label: "Evrak Analizi", short: "ANALİZ", description: "Evrak türünü ve zorunlu üst veri alanlarını çıkarır." },
   rag: { label: "Mevzuat", short: "RAG", description: "İlgili mevzuatı hibrit aramayla getirir ve kanıt bağlamını kurar." },
@@ -166,6 +166,66 @@ function dedupe(ids: string[]): string[] {
   return result;
 }
 
+// Pure extraction of the stepper's stage-derivation so the waiting-state
+// bubble (ThinkingBubble, Faz B) can show the same "what's actually
+// happening" list inline in the chat flow, without duplicating the
+// SUB_STEPS ownership logic or NODE_INFO's label/description registry.
+export function deriveWorkflowStages(
+  planSteps: string[],
+  nodeOrder: string[],
+  nodeLabels: Record<string, string>,
+  statuses: Record<string, WorkflowNodeStatus>,
+  toolCalls: ToolCallEvent[] = [],
+): WorkflowStageItem[] {
+  const ordered = dedupe([...planSteps, ...nodeOrder]);
+  const owner = new Map<string, string>();
+  for (const stageId of ordered) {
+    for (const sub of SUB_STEPS[stageId] ?? []) {
+      if (sub === stageId || owner.has(sub) || planSteps.includes(sub)) continue;
+      owner.set(sub, stageId);
+    }
+  }
+  const stageIds = ordered.filter((id) => !owner.has(id));
+
+  const toolsByOwner = new Map<string, Map<string, number>>();
+  for (const call of toolCalls) {
+    const ownerId = owner.get(call.node) ?? call.node;
+    const perTool = toolsByOwner.get(ownerId) ?? new Map<string, number>();
+    perTool.set(call.tool, (perTool.get(call.tool) ?? 0) + 1);
+    toolsByOwner.set(ownerId, perTool);
+  }
+
+  return stageIds.map((stageId): WorkflowStageItem => {
+    const ownedSubs = ordered.filter((id) => owner.get(id) === stageId);
+    const nodes = [stageId, ...ownedSubs];
+    const status = stageStatus(nodes, statuses);
+    const needsAction = stageId === "human_gate" && status === "running";
+    const subItems = [
+      ...ownedSubs
+        .filter((sub) => (statuses[sub] ?? "todo") !== "todo")
+        .map((sub) => ({
+          id: sub,
+          label: nodeLabels[sub] ?? NODE_INFO[sub]?.label ?? sub,
+          status: statuses[sub] ?? "todo",
+        })),
+      ...Array.from(toolsByOwner.get(stageId)?.entries() ?? []).map(([tool, count]) => ({
+        id: `tool:${tool}`,
+        label: count > 1 ? `${tool} ×${count}` : tool,
+      })),
+    ];
+    return {
+      id: stageId,
+      label: nodeLabels[stageId] ?? NODE_INFO[stageId]?.label ?? stageId,
+      description: STAGE_DESCRIPTIONS[stageId] ?? NODE_INFO[stageId]?.description ?? "",
+      status: needsAction ? "interrupted" : status,
+      target:
+        nodes.find((node) => statuses[node] === "failed" || statuses[node] === "running") ??
+        stageId,
+      subItems: subItems.length > 0 ? subItems : undefined,
+    };
+  });
+}
+
 export function DecisionFlow({
   statuses,
   results,
@@ -214,55 +274,10 @@ export function DecisionFlow({
   // etc. folded under their owning step. "planning" needs no special
   // handling to stay visible: it is the very first node_start the backend
   // emits, so nodeOrder already carries it before anything else can arrive.
-  const stages: WorkflowStageItem[] = useMemo(() => {
-    const ordered = dedupe([...planSteps, ...nodeOrder]);
-    const owner = new Map<string, string>();
-    for (const stageId of ordered) {
-      for (const sub of SUB_STEPS[stageId] ?? []) {
-        if (sub === stageId || owner.has(sub) || planSteps.includes(sub)) continue;
-        owner.set(sub, stageId);
-      }
-    }
-    const stageIds = ordered.filter((id) => !owner.has(id));
-
-    const toolsByOwner = new Map<string, Map<string, number>>();
-    for (const call of toolCalls) {
-      const ownerId = owner.get(call.node) ?? call.node;
-      const perTool = toolsByOwner.get(ownerId) ?? new Map<string, number>();
-      perTool.set(call.tool, (perTool.get(call.tool) ?? 0) + 1);
-      toolsByOwner.set(ownerId, perTool);
-    }
-
-    return stageIds.map((stageId): WorkflowStageItem => {
-      const ownedSubs = ordered.filter((id) => owner.get(id) === stageId);
-      const nodes = [stageId, ...ownedSubs];
-      const status = stageStatus(nodes, statuses);
-      const needsAction = stageId === "human_gate" && status === "running";
-      const subItems = [
-        ...ownedSubs
-          .filter((sub) => (statuses[sub] ?? "todo") !== "todo")
-          .map((sub) => ({
-            id: sub,
-            label: nodeLabels[sub] ?? NODE_INFO[sub]?.label ?? sub,
-            status: statuses[sub] ?? "todo",
-          })),
-        ...Array.from(toolsByOwner.get(stageId)?.entries() ?? []).map(([tool, count]) => ({
-          id: `tool:${tool}`,
-          label: count > 1 ? `${tool} ×${count}` : tool,
-        })),
-      ];
-      return {
-        id: stageId,
-        label: nodeLabels[stageId] ?? NODE_INFO[stageId]?.label ?? stageId,
-        description: STAGE_DESCRIPTIONS[stageId] ?? NODE_INFO[stageId]?.description ?? "",
-        status: needsAction ? "interrupted" : status,
-        target:
-          nodes.find((node) => statuses[node] === "failed" || statuses[node] === "running") ??
-          stageId,
-        subItems: subItems.length > 0 ? subItems : undefined,
-      };
-    });
-  }, [planSteps, nodeOrder, nodeLabels, statuses, toolCalls]);
+  const stages: WorkflowStageItem[] = useMemo(
+    () => deriveWorkflowStages(planSteps, nodeOrder, nodeLabels, statuses, toolCalls),
+    [planSteps, nodeOrder, nodeLabels, statuses, toolCalls],
+  );
 
   const selectWithKeyboard = (
     event: KeyboardEvent<SVGGElement>,

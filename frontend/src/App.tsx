@@ -80,11 +80,19 @@ function AuthenticatedApp({ userId }: { userId: string }) {
       messages={chat.messages}
       streamingText={chat.streamingText}
       loading={chat.loading}
-      logs={chat.logs}
       guardrailEvents={chat.guardrailEvents}
       interrupt={chat.pendingInterrupt}
       workflowOpen={workflowOpen}
       historyOpen={chatHistoryOpen}
+      planSteps={chat.planSteps}
+      nodeOrder={chat.nodeOrder}
+      nodeLabels={chat.nodeLabels}
+      nodeStatus={chat.nodeStatus}
+      nodeMeta={chat.nodeMeta}
+      nodeResults={chat.nodeResults}
+      toolCalls={chat.toolCalls}
+      nodeStartedAt={chat.nodeStartedAt}
+      turnStartedAt={chat.turnStartedAt}
       onSelectDocument={selectDocument}
       onClearDocument={() => documents.setSelectedDocument(null)}
       onSend={chat.send}

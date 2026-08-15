@@ -2,30 +2,44 @@ import { Bot, FilePenLine, FileSearch, Info, MessageSquare, Route, UserRound } f
 import { useEffect, useRef } from "react";
 import type { UIEvent } from "react";
 import ReactMarkdown from "react-markdown";
-import type { ChatMessage, InterruptState, WorkflowLog } from "../../types/chat";
+import type {
+  ChatMessage,
+  InterruptState,
+  ToolCallEvent,
+  WorkflowNodeStatus,
+} from "../../types/chat";
 import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
-import { Spinner } from "../../components/Surface";
 import { PromptQuestionCard } from "./PromptQuestionCard";
 import { DraftMetaStrip } from "./DraftMetaStrip";
 import { InterruptPanel } from "./InterruptPanel";
+import { ThinkingBubble } from "./ThinkingBubble";
 import type { PromptAnswers } from "./PromptQuestionCard";
 
 export function MessageList({
   messages,
   streamingText,
   loading,
-  logs,
   hasSelectedDocument,
   interrupt,
   onResume,
   onSuggestion,
   onSelectOption,
+  planSteps = [],
+  nodeOrder = [],
+  nodeLabels = {},
+  nodeStatus = {},
+  nodeMeta = {},
+  nodeResults = {},
+  toolCalls = [],
+  nodeStartedAt = {},
+  turnStartedAt = null,
+  onCancel,
+  onRetryFast,
 }: {
   messages: ChatMessage[];
   streamingText: string;
   loading: boolean;
-  logs: WorkflowLog[];
   hasSelectedDocument: boolean;
   // Rendered as the last bubble in the scrolling conversation (see the
   // interrupt-message article below) rather than as a standalone panel
@@ -45,6 +59,21 @@ export function MessageList({
   // Optional: a caller that doesn't wire clarify options simply never
   // passes questions on a message, so this is never invoked.
   onSelectOption?: (label: string) => void;
+  // The rest are ThinkingBubble's own live-progress data, threaded straight
+  // through from useChatWorkflow -- optional so a caller with no workflow
+  // wiring (tests, a future minimal chat surface) still renders the plain
+  // loading state ThinkingBubble falls back to with empty defaults.
+  planSteps?: string[];
+  nodeOrder?: string[];
+  nodeLabels?: Record<string, string>;
+  nodeStatus?: Record<string, WorkflowNodeStatus>;
+  nodeMeta?: Record<string, Record<string, unknown>>;
+  nodeResults?: Record<string, Record<string, unknown>>;
+  toolCalls?: ToolCallEvent[];
+  nodeStartedAt?: Record<string, number>;
+  turnStartedAt?: number | null;
+  onCancel?: () => void;
+  onRetryFast?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
@@ -158,15 +187,28 @@ export function MessageList({
             <Bot size={17} />
           </span>
           <div>
+            {/* Distinct from the loading spinner on purpose: the run is not
+                "thinking" here, it is stopped, waiting on the user -- see
+                ThinkingBubble below for the "still working" state. */}
+            <p className="interrupt-paused-banner">Yanıtınız bekleniyor — akış duraklatıldı.</p>
             <InterruptPanel interrupt={interrupt} loading={loading} onResume={onResume} />
           </div>
         </article>
       )}
-      {loading && !streamingText && (
-        <div className="processing-line">
-          <Spinner label="İstek işleniyor" />
-          {logs[logs.length - 1]?.text ?? "İstek işleniyor…"}
-        </div>
+      {loading && !streamingText && !interrupt && (
+        <ThinkingBubble
+          planSteps={planSteps}
+          nodeOrder={nodeOrder}
+          nodeLabels={nodeLabels}
+          nodeStatus={nodeStatus}
+          nodeMeta={nodeMeta}
+          nodeResults={nodeResults}
+          toolCalls={toolCalls}
+          nodeStartedAt={nodeStartedAt}
+          turnStartedAt={turnStartedAt}
+          onCancel={onCancel}
+          onRetryFast={onRetryFast}
+        />
       )}
     </div>
   );
