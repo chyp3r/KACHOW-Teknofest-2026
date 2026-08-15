@@ -11,4 +11,7 @@ export const queryKeys = {
   routing: ["routing-suggestion"] as const,
   users: ["admin-users"] as const,
   health: (deep: boolean) => ["health", deep ? "deep" : "normal"] as const,
+  trainingSamples: (companyId: string, page = 1) => ["training-samples", companyId, page] as const,
+  trainingStats: (companyId: string) => ["training-stats", companyId] as const,
+  trainingRuns: (companyId: string, page = 1) => ["training-runs", companyId, page] as const,
 };

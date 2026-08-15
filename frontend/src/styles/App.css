@@ -1076,6 +1076,22 @@ td > span { color: var(--text-secondary); margin-top: var(--space-1); }
 .draft-metrics small, .draft-metrics strong { display: block; }
 .draft-metrics small { color: var(--text-muted); }
 
+.training-panel { margin-top: var(--space-5); }
+.training-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-3); margin: var(--space-4) 0; }
+.stat-card { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: rgba(148, 163, 184, .08); }
+.stat-label { color: var(--text-muted); }
+.stat-sublabel { color: var(--text-muted); }
+.stat-card-progress { justify-content: center; }
+.progress-bar { width: 100%; height: 8px; margin-top: var(--space-2); border-radius: var(--radius-full, 999px); background: rgba(148, 163, 184, .2); overflow: hidden; }
+.progress-bar-fill { height: 100%; background: var(--accent-blue); transition: width .2s ease; }
+.clickable-row { cursor: pointer; }
+.clickable-row:hover { background: var(--surface-hover); }
+.sample-diff { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); padding: var(--space-3) 0; }
+.sample-diff-side { padding: var(--space-3); border-radius: var(--radius-md); white-space: pre-wrap; }
+.sample-diff-chosen { background: color-mix(in srgb, var(--status-completed) 10%, transparent); }
+.sample-diff-rejected { background: color-mix(in srgb, var(--status-failed) 10%, transparent); }
+.empty-hint { padding: var(--space-4); color: var(--text-muted); text-align: center; }
+
 .sidebar-document-library {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
