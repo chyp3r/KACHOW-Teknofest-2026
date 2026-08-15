@@ -20,7 +20,7 @@ from app.domains.training.schema.training_schema import (
     TrainingSampleResponse,
     TrainingSampleStatsResponse,
 )
-from app.domains.training.service import TrainingService
+from app.domains.training.service import LORA_KINDS, STYLE_ADAPTER_KIND, TrainingService
 from app.domains.users.model.user_model import UserModel
 from app.infrastructure.database.session import get_db
 from app.shared.dto.pagination import PaginatedResponse, PaginationParam
@@ -194,18 +194,37 @@ async def delete_training_sample(
 )
 async def trigger_training_run(
     company_id: str,
+    kind: str = Query(
+        default=STYLE_ADAPTER_KIND,
+        pattern="^(style_adapter|lora_sft|lora_dpo)$",
+        description=(
+            "style_adapter (varsayılan): senkron, saniyeler içinde biter. "
+            "lora_sft/lora_dpo (#191): arq üzerinden training worker'a "
+            "kuyruğa alınır, saatler sürebilir -- worker çalışmıyorsa run "
+            "'queued' durumunda kalır."
+        ),
+    ),
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Compile + mine + publish a refreshed style adapter, synchronously
-    (see `app.domains.training.service`'s module docstring for why this
-    does not need a background worker at this phase's scale)."""
+    """Trigger a training run. `style_adapter` compiles + mines + publishes
+    a refreshed style adapter synchronously (see `app.domains.training.
+    service`'s module docstring for why that scale doesn't need a
+    background worker). `lora_sft`/`lora_dpo` only queues the job --
+    actually running it needs the separate `worker` container manually
+    started via `scripts/start_training_worker.sh` (see #191's own body
+    for why it isn't part of `docker compose up` by default)."""
     _require_company_access(current_user, company_id)
     await _quota_service(db).check_and_increment(company_id, TRAINING_RUNS_METRIC)
     service = _service(db)
-    run = await service.run_style_adapter_training(
-        company_id, triggered_by=current_user.id, llm_client=get_fast_llm_client()
-    )
+    if kind in LORA_KINDS:
+        run = await service.enqueue_lora_training_run(
+            company_id, kind=kind, triggered_by=current_user.id
+        )
+    else:
+        run = await service.run_style_adapter_training(
+            company_id, triggered_by=current_user.id, llm_client=get_fast_llm_client()
+        )
     await _audit_service(db).record(
         company_id=company_id,
         actor_user_id=current_user.id,

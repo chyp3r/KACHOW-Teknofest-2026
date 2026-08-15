@@ -83,6 +83,49 @@ services:
       - redis
       - qdrant
 
+  # LoRA/PEFT training worker (Faz C3 Aşama 3, #191). Deliberately under a
+  # profile, not a plain service: `docker compose up`/`up -d` never starts
+  # this, only `docker compose --profile training up -d worker` does --
+  # scripts/start_training_worker.sh wraps exactly that command, and
+  # scripts/stop_training_worker.sh stops it again. A LoRA run is enqueued
+  # by the ordinary backend process (POST /companies/{id}/training-runs
+  # ?kind=lora_sft) regardless of whether this worker happens to be
+  # running -- an unattended queue with nothing consuming it is the correct
+  # "not running right now" state, not an error.
+  #
+  # Real GPU fine-tuning needs a CUDA-capable host and driver -- this
+  # compose definition intentionally does not reserve a GPU
+  # (`deploy.resources.reservations.devices`) since that syntax is
+  # host/runtime-specific (nvidia-container-toolkit) and would break `up`
+  # on a machine without one configured; add that block yourself on the
+  # actual training host.
+  #
+  # TRAINING_ARTIFACTS_DIR must be a path Ollama's own server process can
+  # also read (see app.workers.training._ollama_create's docstring) --
+  # the local bind mount below only makes it visible to *this* container.
+  worker:
+    profiles: ["training"]
+    build:
+      context: ./
+      dockerfile: deploy/docker/worker.Dockerfile
+    image: kachow-worker:dev
+    container_name: kachow_worker_dev
+    volumes:
+      - ./backend/app:/workspace/app
+      - ./artifacts/training:/workspace/artifacts/training
+    environment:
+      - ENVIRONMENT=development
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3.5:9b}
+      - DATABASE_URL=postgresql+asyncpg://kachow_app:${KACHOW_APP_DB_PASSWORD:-kachow_app_dev_only}@db:5432/${POSTGRES_DB:-kachow}
+      - REDIS_URL=redis://redis:6379/0
+      - TRAINING_ARTIFACTS_DIR=/workspace/artifacts/training
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - db
+      - redis
+
   db:
     image: pgvector/pgvector:pg16
     container_name: kachow_db_dev

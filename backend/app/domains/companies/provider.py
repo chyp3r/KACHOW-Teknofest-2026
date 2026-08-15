@@ -22,7 +22,7 @@ never to a hard failure of the draft/revise turn itself.
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Sequence
+from typing import Optional, Sequence
 
 from sqlalchemy import select
 
@@ -146,3 +146,55 @@ async def set_company_adapter(
     cache = get_cache()
     await cache.delete(_cache_key(company_id))
     return adapter
+
+
+#: Faz C3 Aşama 3 (#191) -- the Ollama model name a successful LoRA
+#: training run publishes (`kachow-{slug}:v{n}`). Deliberately a *separate*
+#: settings key from `_SETTINGS_KEY`, not folded into `CompanyAdapter`: a
+#: model override is an infrastructure fact (which weights answer this
+#: company's calls), not a style preference, and the two are set
+#: independently -- a LoRA run does not have to succeed for a style-adapter
+#: run (Aşama 2) to keep working, and vice versa.
+#:
+#: Written by `app.workers.training.run_lora_training_job` after a shadow
+#: evaluation passes; **not consumed anywhere yet** -- wiring the live
+#: draft/revise graphs to pick a company's model per request is a separate,
+#: larger change (constructing/caching a graph per model instead of once
+#: per process) intentionally left out of #191's scope. Read this value
+#: once that wiring exists.
+_MODEL_OVERRIDE_KEY = "llm_model_override"
+
+
+async def get_llm_model_override(company_id: str) -> Optional[str]:
+    """The Ollama model name a shadow-eval-passed LoRA adapter published
+    for ``company_id``, or ``None`` if it has never trained one (the
+    common case -- callers should fall back to ``settings.OLLAMA_MODEL``)."""
+    if not company_id:
+        return None
+    try:
+        async with tenant_session(company_id, is_root=False) as session:
+            result = await session.execute(
+                select(CompanyModel.settings).where(CompanyModel.id == company_id)
+            )
+            company_settings = result.scalar_one_or_none()
+    except Exception:
+        logger.warning("LLM model override read failed for %s", company_id, exc_info=True)
+        return None
+    return (company_settings or {}).get(_MODEL_OVERRIDE_KEY) if company_settings else None
+
+
+async def set_llm_model_override(company_id: str, model_name: str) -> None:
+    """Record ``model_name`` as ``company_id``'s override, read-merge-write
+    on ``CompanyModel.settings`` same as ``set_company_adapter``.
+
+    Raises:
+        ValueError: If ``company_id`` doesn't exist.
+    """
+    async with tenant_session(company_id, is_root=False) as session:
+        result = await session.execute(select(CompanyModel).where(CompanyModel.id == company_id))
+        company = result.scalar_one_or_none()
+        if company is None:
+            raise ValueError(f"Company '{company_id}' not found.")
+        merged_settings = dict(company.settings or {})
+        merged_settings[_MODEL_OVERRIDE_KEY] = model_name
+        company.settings = merged_settings

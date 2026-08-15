@@ -188,3 +188,56 @@ async def test_set_adapter_raises_for_an_unknown_company(mock_session):
 
     with pytest.raises(ValueError):
         await provider_module.set_company_adapter("missing-co", style_rules=["Kural."])
+
+
+# ==========================================
+# llm_model_override (Faz C3 Aşama 3, #191)
+# ==========================================
+async def test_get_model_override_for_a_falsy_company_id_never_touches_the_db(mock_session):
+    result = await provider_module.get_llm_model_override("")
+
+    assert result is None
+    mock_session.execute.assert_not_awaited()
+
+
+async def test_get_model_override_returns_none_when_nothing_was_ever_trained(mock_session):
+    company = _company(settings={})
+    mock_session.execute.return_value = _scalar_result(company.settings)
+
+    result = await provider_module.get_llm_model_override("company-1")
+
+    assert result is None
+
+
+async def test_get_model_override_reads_the_published_model_name(mock_session):
+    company = _company(settings={"llm_model_override": "kachow-acme:v1"})
+    mock_session.execute.return_value = _scalar_result(company.settings)
+
+    result = await provider_module.get_llm_model_override("company-1")
+
+    assert result == "kachow-acme:v1"
+
+
+async def test_get_model_override_fails_open_to_none_when_the_db_read_raises(mock_session):
+    mock_session.execute.side_effect = RuntimeError("connection lost")
+
+    result = await provider_module.get_llm_model_override("company-1")
+
+    assert result is None
+
+
+async def test_set_model_override_writes_without_touching_other_settings_keys(mock_session):
+    company = _company(settings={"company_adapter": {"version": 1}})
+    mock_session.execute.return_value = _scalar_result(company)
+
+    await provider_module.set_llm_model_override("company-1", "kachow-acme:v1")
+
+    assert company.settings["llm_model_override"] == "kachow-acme:v1"
+    assert "company_adapter" in company.settings
+
+
+async def test_set_model_override_raises_for_an_unknown_company(mock_session):
+    mock_session.execute.return_value = _scalar_result(None)
+
+    with pytest.raises(ValueError):
+        await provider_module.set_llm_model_override("missing-co", "kachow-acme:v1")
