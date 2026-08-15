@@ -223,8 +223,12 @@ services:
       - /workspace/node_modules
     environment:
       - VITE_API_URL=http://backend:8000
-      # Skips the login screen only in Vite development mode.
-      - VITE_DEV_AUTH_BYPASS=${VITE_DEV_AUTH_BYPASS:-true}
+      # Off by default: the backend's own REQUIRE_AUTH default is `true`
+      # (see the backend service above), so a bypassed frontend session has
+      # no real JWT and every authenticated call 401s -- opt in explicitly
+      # (VITE_DEV_AUTH_BYPASS=true) only when also running the backend with
+      # REQUIRE_AUTH=false.
+      - VITE_DEV_AUTH_BYPASS=${VITE_DEV_AUTH_BYPASS:-false}
     depends_on:
       - backend
 
