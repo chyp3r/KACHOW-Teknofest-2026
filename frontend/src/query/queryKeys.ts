@@ -14,4 +14,10 @@ export const queryKeys = {
   trainingSamples: (companyId: string, page = 1) => ["training-samples", companyId, page] as const,
   trainingStats: (companyId: string) => ["training-stats", companyId] as const,
   trainingRuns: (companyId: string, page = 1) => ["training-runs", companyId, page] as const,
+  conversations: ["conversations"] as const,
+  conversationMessages: (conversationId: string) => ["conversation-messages", conversationId] as const,
+  favorites: ["favorites"] as const,
+  userSearch: (q: string, unitId: string, role: string) => ["user-search", q, unitId, role] as const,
+  notifications: (unreadOnly: boolean, page = 1) => ["notifications", unreadOnly, page] as const,
+  units: ["units"] as const,
 };

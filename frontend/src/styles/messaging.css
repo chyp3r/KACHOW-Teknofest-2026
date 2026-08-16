@@ -1,0 +1,206 @@
+/* Faz 2 -- şirket içi mesajlaşma (conversations/messages/favorites/search).
+   Kendi dosyasında, App.css'in aksine yalnızca bu özelliğe özgü kurallar --
+   design-system.css'in token'larını (--space-*, --radius-*, --surface-*)
+   kullanır, kendi renk değeri tanımlamaz. */
+
+.messages-page { height: 100dvh; padding: 0; display: flex; }
+.messages-layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  width: 100%;
+  min-height: 0;
+  border-top: 1px solid var(--border-default);
+}
+
+/* ---------- Conversation list ---------- */
+
+.conversation-list-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border-default);
+  background: var(--surface-panel);
+}
+.conversation-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--border-default);
+}
+.conversation-list-header h2 { margin: 0; font-size: 1.05rem; }
+.conversation-list-actions { display: flex; gap: var(--space-1); }
+.conversation-list { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-2); }
+.conversation-list .list-row { width: 100%; }
+
+/* ---------- Message thread ---------- */
+
+.message-thread-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-app);
+}
+.message-thread-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border-default);
+}
+.message-thread-header h2 { margin: 0; font-size: 1.05rem; }
+.message-thread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+.message-thread-loading { flex: 1; }
+.message-thread-load-older { display: flex; justify-content: center; padding-bottom: var(--space-2); }
+
+.message-bubble { display: flex; max-width: 70%; }
+.message-bubble.own { align-self: flex-end; }
+.message-bubble.other { align-self: flex-start; }
+.message-bubble-body {
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+}
+.message-bubble.own .message-bubble-body { background: var(--surface-selected); }
+.message-bubble-body header { margin-bottom: var(--space-1); color: var(--text-muted); font-size: 0.8rem; }
+.message-bubble-body p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.message-bubble-body time { display: block; margin-top: var(--space-1); color: var(--text-muted); font-size: 0.72rem; }
+.message-system-line { align-self: center; margin: var(--space-2) 0; color: var(--text-muted); font-size: 0.82rem; }
+
+.message-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-panel);
+}
+.message-composer .textarea { flex: 1; resize: none; }
+
+/* ---------- Unread badges ---------- */
+
+.unread-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-full);
+  color: white;
+  background: var(--accent-blue);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.nav-item-badge { margin-left: auto; }
+
+/* ---------- Person rows (search results / favorites / group members) ---------- */
+
+.person-picker { display: grid; gap: var(--space-3); }
+.person-list { display: grid; gap: var(--space-1); }
+.person-row,
+.group-participant-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+}
+.person-row:hover,
+.group-participant-row:hover { background: var(--surface-hover); }
+.person-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: var(--icon-container-sm);
+  height: var(--icon-container-sm);
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 13%, transparent);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.person-row-content { display: grid; min-width: 0; gap: 2px; }
+.person-row-content strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+.person-role-chip,
+.person-unit-chip {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--surface-subtle);
+}
+.person-row-actions { display: flex; align-items: center; gap: var(--space-1); margin-left: auto; }
+.person-favorite-toggle.is-active { color: #f59e0b; }
+
+/* ---------- Kişiler drawer / arama ---------- */
+
+.user-search-filters { display: grid; gap: var(--space-2); padding: var(--space-1) 0 var(--space-3); }
+.user-search-filter-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.user-search-hint { color: var(--text-muted); text-align: center; padding: var(--space-4) 0; }
+
+/* ---------- Yeni konuşma ---------- */
+
+.new-conversation-tabs { display: flex; gap: var(--space-2); margin-bottom: var(--space-3); }
+.new-group-form { display: grid; gap: var(--space-3); }
+.new-group-submit { padding-top: var(--space-2); border-top: 1px solid var(--border-default); }
+
+/* ---------- Grup üyeleri ---------- */
+
+.group-participant-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-1); }
+
+/* ---------- Bildirim zili ---------- */
+
+.notification-bell { position: relative; }
+.notification-bell-badge { position: absolute; top: -2px; right: -2px; }
+.notification-bell-panel {
+  z-index: 200;
+  width: min(360px, 92vw);
+  max-height: min(70vh, 30rem);
+  overflow-y: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-overlay);
+}
+.notification-bell-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-default);
+}
+.notification-bell-panel header h3 { margin: 0; font-size: 0.95rem; }
+.notification-bell-list { list-style: none; margin: 0; padding: var(--space-2); display: grid; gap: var(--space-1); }
+.notification-bell-list li {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.notification-bell-list li:hover { background: var(--surface-hover); }
+.notification-bell-list li.is-unread { background: var(--surface-selected); }
+.notification-bell-list li strong { display: block; }
+.notification-bell-list li p { margin: var(--space-1) 0 0; color: var(--text-secondary); font-size: 0.85rem; }
+.notification-bell-list li time { display: block; margin-top: var(--space-1); color: var(--text-muted); font-size: 0.72rem; }
+.sidebar-notification-row { display: flex; justify-content: center; padding-bottom: var(--space-2); }
+
+@media (max-width: 47.5rem) {
+  .messages-layout { grid-template-columns: 1fr; }
+  .conversation-list-panel { display: none; }
+}

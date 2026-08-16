@@ -12,6 +12,7 @@ const LoginPage = lazy(() => import("./pages/LoginPage").then((module) => ({ def
 const ChatsPage = lazy(() => import("./pages/ChatsPage").then((module) => ({ default: module.ChatsPage })));
 const DocumentsPage = lazy(() => import("./pages/DocumentsPage").then((module) => ({ default: module.DocumentsPage })));
 const DraftsPage = lazy(() => import("./pages/DraftsPage").then((module) => ({ default: module.DraftsPage })));
+const MessagesPage = lazy(() => import("./pages/MessagesPage").then((module) => ({ default: module.MessagesPage })));
 const RoutingPage = lazy(() => import("./pages/RoutingPage").then((module) => ({ default: module.RoutingPage })));
 const AdminPage = lazy(() => import("./pages/AdminPage").then((module) => ({ default: module.AdminPage })));
 const AccountPage = lazy(() => import("./pages/AccountPage").then((module) => ({ default: module.AccountPage })));
@@ -27,8 +28,10 @@ function AuthenticatedApp({ userId }: { userId: string }) {
   const chatMatch = useMatch("/chats/:sessionId");
   const draftMatch = useMatch("/drafts/:draftId");
   const documentMatch = useMatch("/documents/:storagePath");
+  const messagesMatch = useMatch("/messages/:conversationId");
   const activeSessionId = chatMatch?.params.sessionId ?? null;
   const activeDraftId = draftMatch?.params.draftId;
+  const activeConversationId = messagesMatch?.params.conversationId;
   const documents = useDocuments(userId);
   const documentItems = documents.documents;
   const selectedDocument = documents.selectedDocument;
@@ -147,6 +150,8 @@ function AuthenticatedApp({ userId }: { userId: string }) {
           <Route path="/documents/:storagePath" element={<DocumentsPage documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} loading={documents.loading} uploading={documents.uploading} updatingFields={documents.updatingFields} deletingDocument={documents.deleting} error={documents.error} onUpload={uploadDocument} onUpdateFields={documents.updateFields} onDeleteDocument={documents.deleteDocument} onSelect={(document) => { selectDocument(document); navigate(`/documents/${encodeURIComponent(document.storage_path)}`); }} onCloseDocument={() => { documents.setSelectedDocument(null); navigate("/documents"); }} />} />
           <Route path="/drafts" element={<DraftsPage documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} onSelect={selectDocument} onOpenDraft={(draftId) => navigate(`/drafts/${encodeURIComponent(draftId)}`)} onCloseDraft={() => navigate("/drafts")} />} />
           <Route path="/drafts/:draftId" element={<DraftsPage documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} activeDraftId={activeDraftId} onSelect={selectDocument} onOpenDraft={(draftId) => navigate(`/drafts/${encodeURIComponent(draftId)}`)} onCloseDraft={() => navigate("/drafts")} />} />
+          <Route path="/messages" element={<MessagesPage currentUserId={userId} onSelectConversation={(conversationId) => navigate(`/messages/${encodeURIComponent(conversationId)}`)} />} />
+          <Route path="/messages/:conversationId" element={<MessagesPage currentUserId={userId} activeConversationId={activeConversationId} onSelectConversation={(conversationId) => navigate(`/messages/${encodeURIComponent(conversationId)}`)} />} />
           <Route path="/routing" element={<RoutingPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/admin" element={canManage ? <AdminPage onLogin={() => navigate("/login")} /> : <Navigate to="/chats" replace />} />
