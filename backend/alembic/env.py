@@ -31,6 +31,12 @@ from app.domains.quotas.model.company_quota_model import CompanyQuotaModel  # no
 from app.domains.feedback.model.feedback_model import FeedbackModel  # noqa: F401
 from app.domains.training.model.training_run_model import TrainingRunModel  # noqa: F401
 from app.domains.training.model.training_sample_model import TrainingSampleModel  # noqa: F401
+from app.domains.messaging.model.conversation_model import ConversationModel  # noqa: F401
+from app.domains.messaging.model.conversation_participant_model import (  # noqa: F401
+    ConversationParticipantModel,
+)
+from app.domains.messaging.model.conversation_message_model import ConversationMessageModel  # noqa: F401
+from app.domains.users.model.user_favorite_model import UserFavoriteModel  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
