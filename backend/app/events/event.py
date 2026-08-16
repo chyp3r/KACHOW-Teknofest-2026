@@ -45,6 +45,21 @@ class DraftShareRespondedEvent(BaseEvent):
 class DocumentRoutedEvent(BaseEvent):
     event_type: str = "document.routed"
 
+class ConversationMessageCreatedEvent(BaseEvent):
+    """One `conversation_messages` row created for one active recipient.
+
+    Published once per active (non-left) recipient other than the sender,
+    same convention `DraftSharedEvent` already uses for a multi-recipient
+    fan-out (see `app.domains.drafts.draft_share_service.DraftShareService.
+    send`'s docstring) -- a group message with N members publishes N of
+    these, not one event carrying a recipient list. `payload` carries
+    `company_id`, `conversation_id`, `message_id`, `sender_id`,
+    `sender_username`, `recipient_id`, `kind` ("text"|"artifact"),
+    `body_preview` (truncated -- never the full message body, see the
+    subscriber's own docstring for why).
+    """
+    event_type: str = "messaging.message_created"
+
 class UserCreatedEvent(BaseEvent):
     event_type: str = "user.created"
 

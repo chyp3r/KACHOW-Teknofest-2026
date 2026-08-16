@@ -9,6 +9,7 @@ from app.domains.documents.router import router as document_router
 from app.domains.drafts.router import router as drafts_router
 from app.domains.feedback.router import company_router as feedback_company_router
 from app.domains.feedback.router import router as feedback_router
+from app.domains.messaging.router import router as messaging_router
 from app.domains.notifications.router import router as notifications_router
 from app.domains.pools.router import router as pools_router
 from app.domains.companies.root_router import router as root_router
@@ -32,6 +33,7 @@ api_router.include_router(document_router, tags=["documents"])
 api_router.include_router(drafts_router, tags=["drafts"])
 api_router.include_router(feedback_router, tags=["feedback"])
 api_router.include_router(feedback_company_router, tags=["feedback"])
+api_router.include_router(messaging_router, tags=["messaging"])
 api_router.include_router(notifications_router, tags=["notifications"])
 api_router.include_router(pools_router, tags=["pools"])
 api_router.include_router(root_router, tags=["root"])

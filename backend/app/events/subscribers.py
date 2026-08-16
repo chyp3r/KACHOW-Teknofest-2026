@@ -10,7 +10,12 @@ import logging
 
 from app.domains.notifications.repository import NotificationRepository
 from app.domains.notifications.service import NotificationService
-from app.events.event import DocumentAnalyzedEvent, DraftSharedEvent, DraftShareRespondedEvent
+from app.events.event import (
+    ConversationMessageCreatedEvent,
+    DocumentAnalyzedEvent,
+    DraftSharedEvent,
+    DraftShareRespondedEvent,
+)
 from app.events.subscriber import subscribe
 from app.infrastructure.cache import get_cache
 from app.infrastructure.database.session import tenant_session
@@ -102,4 +107,29 @@ async def _notify_draft_share_responded(event: DraftShareRespondedEvent) -> None
         body=f"{recipient_username} gönderdiğiniz taslağı {verb}.",
         resource_type="draft_share",
         resource_id=event.payload["share_id"],
+    )
+
+
+@subscribe("messaging.message_created")
+async def _notify_new_message(event: ConversationMessageCreatedEvent) -> None:
+    """A conversation message was sent -- notify one active recipient.
+
+    Published once per active recipient (see `ConversationMessageCreatedEvent`'s
+    own docstring), so this fires once per recipient, same as
+    `_notify_draft_shared`. `body` here is `payload["body_preview"]`, not
+    the full message -- a notification row is a durable, broadly-read
+    record (`GET /notifications`); the full conversation content stays in
+    `conversation_messages`, read only through the participation-gated
+    `GET /messaging/conversations/{id}/messages`.
+    """
+    sender_username = event.payload.get("sender_username", "Bir kullanıcı")
+    preview = event.payload.get("body_preview", "")
+    await _write_notification(
+        company_id=event.payload["company_id"],
+        user_id=event.payload["recipient_id"],
+        type="conversation_message",
+        title=f"{sender_username} size bir mesaj gönderdi",
+        body=preview,
+        resource_type="conversation",
+        resource_id=event.payload["conversation_id"],
     )
