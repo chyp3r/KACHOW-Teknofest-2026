@@ -81,6 +81,16 @@ class DocumentAnalysisState(TypedDict, total=False):
 
     input_text: str
     is_ocr_text: bool
+    # Signature/stamp/handwriting regions already detected during extraction
+    # (app.infrastructure.extractors.marks.detect_marks), threaded straight
+    # through the same way is_ocr_text is -- detection runs once, against the
+    # rasterised page, before this graph starts, and check_compliance_node
+    # below is the only node that reads it. Deliberately not a separate graph
+    # branch/node (the shape scan_sensitivity_node uses): that pattern fans
+    # to END independently and check_compliance_node cannot see its output
+    # within the same run, but check_compliance_node specifically needs this
+    # to decide whether a document reads as signed.
+    detected_marks: list[dict[str, Any]]
     document_type: str
     document_type_label: str
     summary: str
@@ -484,8 +494,19 @@ def create_document_analysis_graph(
         logger.info("Running Compliance Check Node...")
         try:
             fields = EvrakField(**(state.get("fields") or {}))
+            # None (unknown, not unsigned) when mark detection never ran at
+            # all for this document -- see DocumentAnalysisState.detected_marks
+            # and check_required_fields's own docstring.
+            marks = state.get("detected_marks")
+            is_signed = (
+                any(mark.get("kind") == "signature" for mark in marks)
+                if marks is not None
+                else None
+            )
             report = check_required_fields(
-                state.get("document_type", DocumentType.OTHER.value), fields
+                state.get("document_type", DocumentType.OTHER.value),
+                fields,
+                is_signed=is_signed,
             )
             update = {
                 "missing_fields": [item.model_dump() for item in report.missing_fields],

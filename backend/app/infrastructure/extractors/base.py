@@ -5,6 +5,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from app.core.constants import TEXT_LAYER_PROBE_MAX_PAGES, TEXT_LAYER_PROBE_MIN_CHARS
+from app.infrastructure.extractors.marks import DetectedMark
 
 try:  # pragma: no cover - exercised via patching in tests
     import pypdfium2 as pdfium
@@ -42,6 +43,16 @@ class ExtractedDocument(BaseModel):
     used_ocr: bool = Field(
         default=False,
         description="Metin OCR ile okunduysa true; alan değerleri doğrulanmalıdır.",
+    )
+    detected_marks: list[DetectedMark] = Field(
+        default_factory=list,
+        description=(
+            "Taranmış sayfalarda tespit edilen olası imza/mühür/el yazısı "
+            "bölgeleri. Yalnızca OCR yolundaki çıkarıcılar doldurur "
+            "(TesseractExtractor, OllamaVisionExtractor) -- doğrudan metin "
+            "katmanı okunan belgeler sayfa hiç görüntüye çevrilmediğinden "
+            "boş liste döner. Bir inceleme ipucudur, adli tespit değildir."
+        ),
     )
 
     @property

@@ -179,9 +179,9 @@ class Settings(BaseSettings):
     OLLAMA_TEMPERATURE: float = 0.7
     # Vision-language model used to OCR degraded scans (see extractors/vision.py
     # for the measurements behind this choice). Coupled to that module's
-    # DEFAULT_PROMPT: deepseek-ocr returns nothing under the previous Turkish
-    # prompt, so the two must move together.
-    OLLAMA_VISION_MODEL: str = "deepseek-ocr"
+    # DEFAULT_PROMPT: some vision models return nothing under a Turkish
+    # transcription prompt, so the two must move together.
+    OLLAMA_VISION_MODEL: str = "glm-ocr:latest"
     OLLAMA_REASONING: bool = False
 
     #: Generation budget. The previous value of 1024 truncated official drafts

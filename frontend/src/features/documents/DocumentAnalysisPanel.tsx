@@ -7,6 +7,12 @@ import { Input, Textarea } from "../../components/FormControls";
 import type { DocumentAnalysis, EvrakFields } from "../../types/documents";
 import { SENSITIVITY_LABELS } from "../../types/security";
 
+const MARK_KIND_LABELS: Record<"signature" | "stamp" | "handwriting", string> = {
+  signature: "İmza",
+  stamp: "Mühür/damga",
+  handwriting: "El yazısı not",
+};
+
 const LABELS: Record<keyof EvrakFields, string> = {
   sayi: "Sayı",
   tarih: "Tarih",
@@ -164,6 +170,34 @@ export function DocumentAnalysisPanel({
                 ))}
               </ul>
             )}
+          </div>
+        </details>
+      )}
+      {analysis.signature && (
+        <details>
+          <summary>İmza ve mühür</summary>
+          <div className="guardrail-summary">
+            <StatusBadge tone={analysis.signature.is_signed ? "success" : "warning"}>
+              {analysis.signature.is_signed ? "İmzalı" : "İmza tespit edilmedi"}
+            </StatusBadge>
+            {analysis.signature.marks.length ? (
+              <ul className="detail-list">
+                {analysis.signature.marks.map((mark, index) => (
+                  <li key={`${mark.kind}-${mark.page}-${index}`}>
+                    <strong>{MARK_KIND_LABELS[mark.kind]}</strong>
+                    <span>Sayfa {mark.page}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="detail-empty">
+                Sayfada imza, mühür veya el yazısı bölgesi tespit edilmedi.
+              </p>
+            )}
+            <small>
+              Bu tespit sezgisel bir inceleme ipucudur; imza veya mührün gerçekliğine
+              dair adli bir belirleme değildir.
+            </small>
           </div>
         </details>
       )}

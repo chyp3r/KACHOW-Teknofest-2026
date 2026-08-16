@@ -1,9 +1,11 @@
 """Unit tests for the document text extraction chain."""
 
+import io
 from unittest.mock import MagicMock, patch
 
 import pytest
 from langchain_core.documents import Document
+from PIL import Image, ImageDraw  # real Pillow, not mocked: crop/mark geometry must be genuine
 
 from app.infrastructure.extractors.base import (
     BaseDocumentExtractor,
@@ -630,3 +632,239 @@ def test_vision_extractor_supports_images_and_pdf_but_not_text():
     assert extractor.supports(b"x", mime_type="image/png") is True
     assert extractor.supports(PDF_BYTES) is True
     assert extractor.supports(b"x", mime_type="text/plain") is False
+
+
+def _fake_ollama_response(text: str):
+    """A context-manager stand-in for `urllib.request.urlopen`'s return value,
+    matching the shape every OllamaVisionExtractor test in this file mocks."""
+    import json as _json
+
+    class _Resp:
+        def read(self_inner):
+            return _json.dumps({"response": text}).encode()
+
+        def __enter__(self_inner):
+            return self_inner
+
+        def __exit__(self_inner, *args):
+            return False
+
+    return _Resp()
+
+
+# ==========================================
+# Header-band repair (crop-and-escalate)
+#
+# No trigger signal gates this -- calibrating one (header symbol-noise
+# density) against the real 45-document scanned corpus this project ships
+# (datasets/resmi_yazisma/00_gelen_kaynaklar/cevap_yazisi/) found none that
+# discriminates (Pearson r=0.036 with known parser gaps controlled for), so
+# it runs unconditionally on every OCR result instead. See HEADER_BAND_FRACTION
+# and FallbackDocumentExtractor._maybe_repair_header for the full rationale.
+# ==========================================
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.vision.urllib.request.urlopen")
+async def test_transcribe_header_band_crops_only_the_top_fraction(mock_urlopen):
+    mock_urlopen.return_value = _fake_ollama_response("T.C.\nÖRNEK BAKANLIĞI")
+    page = Image.new("L", (1000, 2000), color=255)
+
+    with patch.object(Image.Image, "crop", wraps=page.crop) as mock_crop:
+        result = await OllamaVisionExtractor().transcribe_header_band(page)
+
+    assert result == "T.C.\nÖRNEK BAKANLIĞI"
+    # HEADER_BAND_FRACTION default (0.28) of a 2000px-tall page.
+    mock_crop.assert_called_once_with((0, 0, 1000, 560))
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.vision.urllib.request.urlopen")
+async def test_transcribe_header_band_wraps_a_failed_call(mock_urlopen):
+    mock_urlopen.side_effect = OSError("connection refused")
+    page = Image.new("L", (100, 400), color=255)
+
+    with pytest.raises(DocumentExtractionError):
+        await OllamaVisionExtractor().transcribe_header_band(page)
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.vision.urllib.request.urlopen")
+async def test_header_repair_splices_the_transcription_over_the_first_page(mock_urlopen):
+    mock_urlopen.return_value = _fake_ollama_response("T.C.\nÖRNEK BAKANLIĞI (onarıldı)")
+    vision = OllamaVisionExtractor()
+    chain = FallbackDocumentExtractor([], header_repair=vision)
+    original_lines = [f"satır {i}" for i in range(20)]  # > HEADER_REPAIR_LINE_COUNT (14)
+    result = ExtractedDocument(
+        text="\n".join(original_lines),
+        pages=["\n".join(original_lines)],
+        page_count=1,
+        extractor="tesseract",
+        used_ocr=True,
+    )
+    raster_cache = {vision.dpi: [Image.new("L", (100, 400), color=255)]}
+
+    repaired = await chain._maybe_repair_header(result, raster_cache)
+
+    assert repaired.pages[0].startswith("T.C.\nÖRNEK BAKANLIĞI (onarıldı)\n")
+    # The body past the header-line count survives untouched.
+    assert "satır 14" in repaired.pages[0]
+    assert "satır 19" in repaired.pages[0]
+    assert "satır 5" not in repaired.pages[0]  # was inside the replaced header band
+
+
+@pytest.mark.asyncio
+async def test_header_repair_is_skipped_when_the_result_is_not_ocr():
+    chain = FallbackDocumentExtractor([], header_repair=OllamaVisionExtractor())
+    result = ExtractedDocument(
+        text="x", pages=["x"], page_count=1, extractor="pdfium", used_ocr=False
+    )
+
+    repaired = await chain._maybe_repair_header(result, {})
+
+    assert repaired is result
+
+
+@pytest.mark.asyncio
+async def test_header_repair_is_skipped_when_no_repair_extractor_is_configured():
+    chain = FallbackDocumentExtractor([], header_repair=None)
+    result = ExtractedDocument(
+        text="x", pages=["x"], page_count=1, extractor="tesseract", used_ocr=True
+    )
+
+    repaired = await chain._maybe_repair_header(result, {})
+
+    assert repaired is result
+
+
+@pytest.mark.asyncio
+async def test_header_repair_is_skipped_when_the_page_was_never_rasterised():
+    """The vision extractor's own DPI has no entry in raster_cache -- e.g. the
+    result came from a non-PDF image path that never populated it."""
+    vision = OllamaVisionExtractor()
+    chain = FallbackDocumentExtractor([], header_repair=vision)
+    result = ExtractedDocument(
+        text="x", pages=["x"], page_count=1, extractor="tesseract", used_ocr=True
+    )
+
+    repaired = await chain._maybe_repair_header(result, {})
+
+    assert repaired is result
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.vision.urllib.request.urlopen")
+async def test_header_repair_degrades_to_the_original_text_on_a_failed_vision_call(mock_urlopen):
+    """Must never turn a working extraction into a failed one."""
+    mock_urlopen.side_effect = OSError("connection refused")
+    vision = OllamaVisionExtractor()
+    chain = FallbackDocumentExtractor([], header_repair=vision)
+    result = ExtractedDocument(
+        text="orijinal metin", pages=["orijinal metin"], page_count=1,
+        extractor="tesseract", used_ocr=True,
+    )
+    raster_cache = {vision.dpi: [Image.new("L", (100, 400), color=255)]}
+
+    repaired = await chain._maybe_repair_header(result, raster_cache)
+
+    assert repaired.text == "orijinal metin"
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.vision.urllib.request.urlopen")
+async def test_header_repair_degrades_to_the_original_text_on_an_empty_transcription(mock_urlopen):
+    mock_urlopen.return_value = _fake_ollama_response("   ")
+    vision = OllamaVisionExtractor()
+    chain = FallbackDocumentExtractor([], header_repair=vision)
+    result = ExtractedDocument(
+        text="orijinal metin", pages=["orijinal metin"], page_count=1,
+        extractor="tesseract", used_ocr=True,
+    )
+    raster_cache = {vision.dpi: [Image.new("L", (100, 400), color=255)]}
+
+    repaired = await chain._maybe_repair_header(result, raster_cache)
+
+    assert repaired.text == "orijinal metin"
+
+
+# ==========================================
+# detected_marks wiring (real images, nothing about PIL/numpy mocked --
+# geometry must be genuine; only the OCR/model calls themselves are faked)
+# ==========================================
+def _png_bytes_with_a_stamp_shaped_block() -> bytes:
+    page = Image.new("L", (800, 1000), color=255)
+    draw = ImageDraw.Draw(page)
+    # 200x200, above marks._STAMP_MIN_DIMENSION_PX. A textured ring, not a
+    # solid fill -- marks._classify requires a real seal's detailed-artwork
+    # run density (see marks._STAMP_MIN_RUN_DENSITY), which a flat fill does
+    # not have (a flat fill's run density matches a genuine signature's, not
+    # a stamp's -- that collision is exactly the bug this module's own
+    # ground-truth calibration found and fixed).
+    draw.ellipse([550, 750, 750, 950], outline=0, width=10)
+    draw.ellipse([580, 780, 720, 920], outline=0, width=6)
+    for x in range(550, 750, 14):
+        draw.line([(x, 820), (x, 880)], fill=0, width=4)
+    buffer = io.BytesIO()
+    page.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.tesseract.pytesseract")
+async def test_tesseract_extractor_populates_detected_marks(mock_pytesseract):
+    mock_pytesseract.image_to_string.return_value = "taranmis metin"
+
+    result = await TesseractExtractor().extract(
+        _png_bytes_with_a_stamp_shaped_block(), mime_type="image/png"
+    )
+
+    assert any(m.kind == "stamp" and m.page == 1 for m in result.detected_marks)
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.vision.urllib.request.urlopen")
+async def test_vision_extractor_populates_detected_marks_for_a_direct_image(mock_urlopen):
+    mock_urlopen.return_value = _fake_ollama_response("bir metin")
+
+    result = await OllamaVisionExtractor().extract(
+        _png_bytes_with_a_stamp_shaped_block(), mime_type="image/png"
+    )
+
+    assert any(m.kind == "stamp" and m.page == 1 for m in result.detected_marks)
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_direct_image_degrades_detected_marks_without_failing_transcription():
+    """Mark detection decodes the image separately from transcription (see
+    OllamaVisionExtractor.extract) specifically so a decode failure here
+    cannot break a transcription that would otherwise have succeeded."""
+    with patch(
+        "app.infrastructure.extractors.vision.urllib.request.urlopen",
+        return_value=_fake_ollama_response("bir metin"),
+    ):
+        result = await OllamaVisionExtractor().extract(b"not a real image", mime_type="image/png")
+
+    assert result.text == "bir metin"
+    assert result.detected_marks == []
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.vision.urllib.request.urlopen")
+async def test_extract_applies_header_repair_to_an_early_accepted_result(mock_urlopen):
+    """Integration: the accept-early return path (`_is_acceptable` passes)
+    must also go through header repair, not only the best-effort fallback path."""
+    mock_urlopen.return_value = _fake_ollama_response("Onarılmış başlık")
+    vision = OllamaVisionExtractor()
+    accepted = _FakeExtractor("tesseract", text="y" * 250)
+    accepted_result = ExtractedDocument(
+        text="y" * 250, pages=["y" * 250], page_count=1, extractor="tesseract", used_ocr=True
+    )
+
+    async def _extract(*args, **kwargs):
+        kwargs["raster_cache"][vision.dpi] = [Image.new("L", (100, 400), color=255)]
+        return accepted_result
+
+    accepted.extract = _extract
+    chain = FallbackDocumentExtractor([accepted], min_char_count=200, header_repair=vision)
+
+    result = await chain.extract(b"data")
+
+    assert result.pages[0].startswith("Onarılmış başlık")

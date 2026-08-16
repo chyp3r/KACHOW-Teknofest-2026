@@ -27,6 +27,10 @@ def get_document_extractor() -> BaseDocumentExtractor:
     """
     global _document_extractor
     if _document_extractor is None:
+        # Shared with `header_repair` below -- the same model/config repairs a
+        # scan's header band regardless of whether it was ever tried as a
+        # full-page extractor in its own right in this chain.
+        vision_extractor = OllamaVisionExtractor()
         _document_extractor = FallbackDocumentExtractor(
             extractors=[
                 PlainTextExtractor(),
@@ -35,8 +39,9 @@ def get_document_extractor() -> BaseDocumentExtractor:
                 TesseractExtractor(),
                 # Last resort: far slower than Tesseract but the only thing that
                 # survives a degraded photocopy or phone photo.
-                OllamaVisionExtractor(),
-            ]
+                vision_extractor,
+            ],
+            header_repair=vision_extractor,
         )
     return _document_extractor
 

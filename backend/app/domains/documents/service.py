@@ -26,11 +26,13 @@ from app.core.enums.compliance_status import ComplianceStatus
 from app.core.enums.document_type import DocumentType
 from app.core.enums.sensitivity_level import SensitivityLevel
 from app.domains.documents.schema.document_schema import (
+    DetectedMarkSchema,
     DocumentAnalysisResponseSchema,
     ExtractionInfoSchema,
     GuardrailAssessmentSchema,
     MevzuatReferenceSchema,
     PiiFindingSchema,
+    SignatureAssessmentSchema,
 )
 from app.events.event import DocumentAnalyzedEvent, DocumentUploadedEvent
 from app.events.event_bus import event_bus
@@ -197,7 +199,9 @@ class DocumentService:
                 },
             )
 
-        state = await self._run_analysis(extracted.text, extracted.used_ocr, owner_id, company_id)
+        state = await self._run_analysis(
+            extracted.text, extracted.used_ocr, extracted.detected_marks, owner_id, company_id
+        )
         response = self._assemble(file_name, storage_path, extracted, state, scrubbed_markers)
         await self._register_document(file_name, storage_path, owner_id, company_id, response)
         await self._save_document_analysis_cache(
@@ -446,6 +450,7 @@ class DocumentService:
         self,
         text: str,
         used_ocr: bool,
+        detected_marks: Optional[list[Any]] = None,
         owner_id: Optional[str] = None,
         company_id: Optional[str] = None,
     ) -> dict[str, Any]:
@@ -454,6 +459,12 @@ class DocumentService:
         Args:
             text: Extracted document text.
             used_ocr: Whether the text came from OCR.
+            detected_marks: Signature/stamp/handwriting regions already found
+                during extraction (``ExtractedDocument.detected_marks``).
+                ``None`` (not an empty list) when detection never ran at all
+                for this document -- ``check_compliance_node`` treats the two
+                differently (unknown vs. genuinely no marks found); see its
+                own comment and ``check_required_fields``'s docstring.
             owner_id, company_id: Attached as Langfuse trace metadata (see
                 ``_trace_config``) when known.
 
@@ -463,10 +474,16 @@ class DocumentService:
         Raises:
             AIException: If the workflow fails or exceeds the timeout.
         """
+        initial_state: dict[str, Any] = {"input_text": text, "is_ocr_text": used_ocr}
+        if detected_marks is not None:
+            initial_state["detected_marks"] = [
+                mark.model_dump() if hasattr(mark, "model_dump") else mark
+                for mark in detected_marks
+            ]
         try:
             return await asyncio.wait_for(
                 self.analysis_graph.ainvoke(
-                    {"input_text": text, "is_ocr_text": used_ocr},
+                    initial_state,
                     config=self._trace_config(owner_id, company_id),
                 ),
                 timeout=settings.AI_WORKFLOW_TIMEOUT_SECONDS,
@@ -579,6 +596,24 @@ class DocumentService:
                 MissingField(**item) for item in state.get("missing_fields") or []
             ],
             compliance_status=compliance_status,
+            signature=SignatureAssessmentSchema(
+                # Built directly from `extracted`, not `state` -- detection
+                # already ran once during extraction (see
+                # app.infrastructure.extractors.marks.detect_marks); the
+                # graph only reads it (check_compliance_node), it never
+                # recomputes it. Same reasoning as `extraction=` above.
+                is_signed=any(mark.kind == "signature" for mark in extracted.detected_marks),
+                has_stamp=any(mark.kind == "stamp" for mark in extracted.detected_marks),
+                marks=[
+                    DetectedMarkSchema(
+                        kind=mark.kind,
+                        page=mark.page,
+                        bbox=mark.bbox,
+                        confidence=mark.confidence,
+                    )
+                    for mark in extracted.detected_marks
+                ],
+            ),
             mevzuat_references=[
                 MevzuatReferenceSchema(**item)
                 for item in state.get("mevzuat_suggestions") or []

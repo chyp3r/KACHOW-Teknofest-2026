@@ -154,11 +154,15 @@ activemq-data/
 .env
 .envrc
 .venv
+.venv-ocr*
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+# scripts/ocr_sidecar.py scratch output (logs, rendered page dumps for local testing)
+.scratch_ocr/
 
 # Spyder project settings
 .spyderproject

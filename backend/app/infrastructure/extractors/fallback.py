@@ -1,12 +1,17 @@
 import logging
 from typing import Optional
 
-from app.core.constants import MIN_EXTRACTED_CHAR_COUNT, MIN_TEXT_QUALITY_RATIO
+from app.core.constants import (
+    HEADER_REPAIR_LINE_COUNT,
+    MIN_EXTRACTED_CHAR_COUNT,
+    MIN_TEXT_QUALITY_RATIO,
+)
 from app.infrastructure.extractors.base import (
     BaseDocumentExtractor,
     DocumentExtractionError,
     ExtractedDocument,
 )
+from app.infrastructure.extractors.vision import OllamaVisionExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +32,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         extractors: list[BaseDocumentExtractor],
         min_char_count: int = MIN_EXTRACTED_CHAR_COUNT,
         min_quality_ratio: float = MIN_TEXT_QUALITY_RATIO,
+        header_repair: Optional[OllamaVisionExtractor] = None,
     ) -> None:
         """Initialise the chain.
 
@@ -36,10 +42,18 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
                 accepted without trying the remaining extractors.
             min_quality_ratio: Share of word-length tokens a result must reach to
                 be considered readable.
+            header_repair: Optional vision extractor used to repair the header
+                band of every OCR result's first page (see
+                `_maybe_repair_header`) -- typically the same instance already
+                present in `extractors`, passed again here explicitly rather
+                than searched for, so a caller that omits it gets a chain with
+                no header repair at all instead of silent isinstance-matching.
+                None disables the step entirely.
         """
         self.extractors = extractors
         self.min_char_count = min_char_count
         self.min_quality_ratio = min_quality_ratio
+        self.header_repair = header_repair
 
     def _is_acceptable(self, result: ExtractedDocument) -> bool:
         """Report whether a result is good enough to stop the chain.
@@ -58,6 +72,69 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         return (
             result.char_count >= self.min_char_count
             and result.quality_ratio >= self.min_quality_ratio
+        )
+
+    async def _maybe_repair_header(
+        self, result: ExtractedDocument, raster_cache: dict
+    ) -> ExtractedDocument:
+        """Best-effort: replace the header band of an OCR result's first page.
+
+        Applied unconditionally to every OCR result, not gated on any quality
+        score: calibrating a trigger (header symbol-noise density) against
+        the real scanned corpus this was built for (45 documents under
+        datasets/resmi_yazisma/00_gelen_kaynaklar/cevap_yazisi/) found no
+        signal that reliably separates documents needing this from those that
+        don't -- Pearson r as low as 0.036 once known parser gaps were
+        controlled for. Always paying the crop-only vision cost (~12.6s
+        measured, not ~26s for a full page) was the deliberate trade accepted
+        instead of a working trigger. See HEADER_BAND_FRACTION's own comment.
+
+        Args:
+            result: The chain's chosen result. Returned unchanged unless it
+                is OCR output with at least one page and a `header_repair`
+                extractor was configured.
+            raster_cache: The same cache the chain's extractors rasterised
+                into -- reused here so no page is rendered a second time.
+
+        Returns:
+            `result` with its first page's leading `HEADER_REPAIR_LINE_COUNT`
+            lines replaced by the vision model's transcription of that band,
+            or `result` completely unchanged on any failure or empty output --
+            this step must never turn a working extraction into a failed one.
+        """
+        if not result.used_ocr or self.header_repair is None or not result.pages:
+            return result
+
+        images = raster_cache.get(self.header_repair.dpi)
+        if not images:
+            return result
+
+        try:
+            header_text = await self.header_repair.transcribe_header_band(images[0])
+        except Exception:
+            logger.warning(
+                "Header-band repair failed for [%s]; keeping its original text.",
+                result.extractor,
+                exc_info=True,
+            )
+            return result
+
+        header_text = header_text.strip()
+        if not header_text:
+            return result
+
+        remaining_lines = result.pages[0].splitlines()[HEADER_REPAIR_LINE_COUNT:]
+        pages = [
+            "\n".join([header_text, *remaining_lines]),
+            *result.pages[1:],
+        ]
+        logger.info(
+            "Repaired the header band of [%s]'s first page (%d characters).",
+            result.extractor,
+            len(header_text),
+        )
+        return result.model_copy(
+            update={"pages": pages, "text": "\n\n".join(pages).strip()}
         )
 
     async def extract(
@@ -123,7 +200,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
                     result.char_count,
                     result.quality_ratio,
                 )
-                return result
+                return await self._maybe_repair_header(result, raster_cache)
 
             logger.info(
                 "Extractor [%s] rejected: %d characters (threshold %d), quality "
@@ -147,7 +224,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
                 best.extractor,
                 best.char_count,
             )
-            return best
+            return await self._maybe_repair_header(best, raster_cache)
 
         if last_error is not None:
             raise DocumentExtractionError(

@@ -161,6 +161,65 @@ async def test_graph_reports_compliant_document(mock_classify):
 
 @pytest.mark.asyncio
 @patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_graph_flags_a_typed_name_with_no_detected_signature(mock_classify):
+    """End-to-end: detected_marks threaded through the graph's initial state
+    (see DocumentAnalysisState's own comment on why this isn't a separate
+    node/branch) reaches check_compliance_node and produces the advisory
+    "İmza görseli" finding -- the gap a typed imza_sahibi name alone hides."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "Tam evrak.", **COMPLETE_FIELDS.model_dump()
+    )
+
+    graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
+    result = await graph.ainvoke(
+        {
+            "input_text": OFFICIAL_LETTER_TEXT,
+            "detected_marks": [{"kind": "stamp", "page": 1, "bbox": (0, 0, 10, 10), "confidence": 0.6}],
+        }
+    )
+
+    assert result["compliance_status"] == ComplianceStatus.PARTIALLY_COMPLIANT.value
+    assert [item["key"] for item in result["missing_fields"]] == ["imza_gorseli"]
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_graph_reports_no_signature_gap_when_a_signature_mark_is_present(mock_classify):
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "Tam evrak.", **COMPLETE_FIELDS.model_dump()
+    )
+
+    graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
+    result = await graph.ainvoke(
+        {
+            "input_text": OFFICIAL_LETTER_TEXT,
+            "detected_marks": [{"kind": "signature", "page": 1, "bbox": (0, 0, 10, 10), "confidence": 0.6}],
+        }
+    )
+
+    assert result["compliance_status"] == ComplianceStatus.COMPLIANT.value
+    assert result["missing_fields"] == []
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_graph_without_detected_marks_key_does_not_flag_the_signature_gap(mock_classify):
+    """detected_marks entirely absent from the initial state (e.g. a
+    born-digital PDF, or the planning_graph.py cached-document re-invocation
+    that never threads it) must read as unknown, not unsigned."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "Tam evrak.", **COMPLETE_FIELDS.model_dump()
+    )
+
+    graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
+    result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    assert result["compliance_status"] == ComplianceStatus.COMPLIANT.value
+    assert result["missing_fields"] == []
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
 async def test_graph_passes_analysis_call_parameters(mock_classify):
     """Run-to-run reproducibility requires temperature 0, not the 0.7 default."""
     mock_classify.return_value = _merged(DocumentType.PETITION, "Dilekçe.")

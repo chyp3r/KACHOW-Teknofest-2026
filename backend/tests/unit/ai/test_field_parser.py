@@ -223,6 +223,206 @@ def test_labelled_values_win_over_positional_guesses():
     assert parsed["adres"] == "Gerçek Adres 1"
 
 
+# ==========================================
+# OCR-artefact tolerance (regression tests for real scanned-corpus failures)
+#
+# Found calibrating the header-escalation gate against all 45 scanned CY-*.pdf
+# in datasets/resmi_yazisma/00_gelen_kaynaklar/cevap_yazisi/: real Tesseract
+# output consistently mangles specific characters around these labels in ways
+# a synthetic sample never exercised. Each pattern below is the exact shape
+# observed, reduced to a minimal case.
+# ==========================================
+def test_tarih_is_read_unlabelled_from_the_end_of_the_sayi_line():
+    """Standard RYUEHY layout puts the date at the right of the Sayı line with
+    no 'Tarih' label at all -- distinct from test_sayi_and_tarih_may_share_one_line,
+    which covers the labelled case. Real example (CY-012):
+    'Sayı : Z-88839574-610-2026/7061-6048344 16 Nisan 2026'."""
+    parsed = parse_labelled_fields("Sayı : Z-88839574-610-2026/7061-6048344 16 Nisan 2026")
+    assert parsed["tarih"] == "16 Nisan 2026"
+
+
+def test_unlabelled_tarih_also_reads_numeric_dates():
+    parsed = parse_labelled_fields("Sayı : E-12345-610-2026 20.04.2026")
+    assert parsed["tarih"] == "20.04.2026"
+
+
+def test_labelled_tarih_still_takes_precedence_over_the_unlabelled_pattern():
+    """The labelled form (m.12) must keep winning when both are present."""
+    parsed = parse_labelled_fields("Sayı : E-1-2-3   Tarih : 12.03.2026")
+    assert parsed["tarih"] == "12.03.2026"
+
+
+def test_tarih_is_read_from_its_own_line_right_after_sayi():
+    """Some vision-model transcriptions break the date onto its own line
+    instead of keeping it glued to the Sayı line -- distinct from
+    test_tarih_is_read_unlabelled_from_the_end_of_the_sayi_line, which covers
+    the same-line case. Real example (CY-010, glm-ocr:latest header repair):
+    'Sayı : Z-43452547-120.07.03-1841896\\n20.04.2026\\nKonu : Soru Önergesi'."""
+    text = "Sayı : Z-43452547-120.07.03-1841896\n20.04.2026\nKonu : Soru Önergesi"
+    parsed = parse_labelled_fields(text)
+    assert parsed["tarih"] == "20.04.2026"
+
+
+def test_labelled_tarih_still_takes_precedence_over_the_next_line_pattern():
+    """The labelled form (m.12) must keep winning over the next-line fallback too."""
+    text = "Sayı : E-1-2-3\nTarih : 12.03.2026\nKonu : Deneme"
+    parsed = parse_labelled_fields(text)
+    assert parsed["tarih"] == "12.03.2026"
+
+
+def test_same_line_tarih_still_takes_precedence_over_the_next_line_pattern():
+    """If the date is already found glued to the Sayı line, an unrelated date
+    appearing on the very next line (e.g. a second reference number's own
+    date) must not override it."""
+    text = "Sayı : Z-1 16 Nisan 2026\n20.04.2026\nKonu : Deneme"
+    parsed = parse_labelled_fields(text)
+    assert parsed["tarih"] == "16 Nisan 2026"
+
+
+def test_next_line_tarih_pattern_does_not_reach_past_a_blank_body_paragraph():
+    """A date appearing later in the body, separated from Sayı by ordinary
+    content, must not be mistaken for the header date."""
+    text = (
+        "Sayı : Z-1\n"
+        "Konu : Deneme\n\n"
+        "Bu yazı 20.04.2026 tarihinde hazırlanmıştır.\n"
+    )
+    parsed = parse_labelled_fields(text)
+    assert "tarih" not in parsed
+
+
+def test_gonderen_kurum_survives_a_stray_character_glued_onto_the_tc_line():
+    """Real OCR (CY-023/027/028/030): a decorative border/emblem glyph is
+    misread as a stray leading character on the same line as 'T.C.'
+    ('* T.C.', ', T.C.'), which the exact-match anchor used to reject outright."""
+    text = "* T.C.\nÖRNEK BAKANLIĞI\nPersonel Genel Müdürlüğü\n\nKonu : Deneme"
+    parsed = parse_labelled_fields(text)
+    assert parsed["gonderen_kurum"] == "ÖRNEK BAKANLIĞI Personel Genel Müdürlüğü"
+
+
+def test_muhatap_survives_an_incidental_miscased_letter_within_the_line():
+    """Real scanned-corpus OCR sometimes renders one letter of an otherwise
+    upper-case addressee line as lower-case ("ÖRNEK VALİLİğİNE"). The original
+    pattern required every character before the suffix to be non-lower-case,
+    so a single miscased letter anywhere lost the whole line; the fix keeps
+    that requirement off the run before the suffix, while keeping the suffix
+    itself upper-case-only -- see the comment on `_ADDRESSEE_LINE` for why
+    that second half matters."""
+    parsed = parse_labelled_fields(OFFICIAL_LETTER.replace("ÖRNEK VALİLİĞİNE", "ÖRNEK VALİLİğİNE"))
+    assert parsed["muhatap"] == "ÖRNEK VALİLİğİNE"
+
+
+def test_addressee_pattern_does_not_match_an_ordinary_body_sentence():
+    """Regression guard: a fully case-insensitive fix attempt matched ordinary
+    prose ending in a dative-suffixed word (extremely common in Turkish),
+    which corrupted `muhatap` with body text instead of the real addressee --
+    and, because `_parse_sender_institution` also stops at an
+    `_ADDRESSEE_LINE` match, corrupted `gonderen_kurum` too. Both must still
+    resolve correctly here."""
+    text = (
+        "T.C.\nÖRNEK BAKANLIĞI\n\nKonu : Deneme\n\n"
+        "ÖRNEK VALİLİĞİNE\n\n"
+        "Bakanlığımız görev ve yetki alanına giren hususlar itibarıyla önergenize "
+        "ilişkin cevaplarımıza aşağıda yer verilmiştir ve konuya ilişkin bilgi sunulmuştur.\n\n"
+        "Metin arz ederim.\n\nAhmet Yılmaz\nGenel Müdür"
+    )
+    parsed = parse_labelled_fields(text)
+    assert parsed["muhatap"] == "ÖRNEK VALİLİĞİNE"
+    assert parsed["gonderen_kurum"] == "ÖRNEK BAKANLIĞI"
+
+
+def test_addressee_pattern_does_not_match_a_capitalised_name():
+    """Regression guard: the same case-insensitive fix attempt also matched
+    an ordinary Title Case person's name ('Zeynep Kaya', from a real sample
+    document's signature block) as if it were an addressee, because 'Kaya'
+    happens to end in 'ya' -- indistinguishable, by letters alone, from a
+    genuine dative-case institution name in Title Case. Requiring the suffix
+    itself to stay upper-case rules this out."""
+    text = "T.C.\nÖRNEK BAKANLIĞI\n\nKonu : Deneme\n\nÖRNEK VALİLİĞİNE\n\nMetin.\n\nZeynep Kaya"
+    parsed = parse_labelled_fields(text)
+    assert parsed["muhatap"] == "ÖRNEK VALİLİĞİNE"
+
+
+def test_muhatap_survives_a_handwritten_annotation_on_the_same_line():
+    """Real OCR on CY-012 (from the real scanned corpus, not synthetic): a
+    handwritten reference number ('7/42413') sits to the right of the
+    addressee line on the page, and a vision model reading it accurately
+    ('7/4/2413') places it on the same text line as the addressee --
+    'TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA 7/4/2413'. The original
+    pattern anchored on '$' right after the suffix, so this correctly-read
+    annotation broke the match entirely and muhatap came back None -- the
+    better the OCR read the handwriting, the worse this field scored. Fix:
+    tolerate exactly one short *digits-and-slashes* trailing token after the
+    suffix (not any short token -- see the two false-positive regression
+    tests just below for why that first, broader attempt was unsafe)."""
+    text = (
+        "T.C.\nÖRNEK BAKANLIĞI\n\nKonu : Deneme\n\n"
+        "TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA 7/4/2413\n\n"
+        "Metin arz ederim.\n\nAhmet Yılmaz\nGenel Müdür"
+    )
+    parsed = parse_labelled_fields(text)
+    assert parsed["muhatap"] == "TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA 7/4/2413"
+
+
+def test_addressee_pattern_does_not_match_an_institution_name_ending_in_the_suffix():
+    """Regression guard, found by an A/B run against the real 45-document
+    corpus holding OCR output fixed and comparing old vs new parser output
+    (not asserted from first principles -- the earlier `\\S{1,12}` version of
+    this tolerance passed every unit test and still broke live on real data).
+    'HAZİNE VE MALİYE BAKANLIĞI' is an institution's own letterhead line, not
+    an addressee -- but 'MALİYE' ends in 'YE' and 'BAKANLIĞI' is one short
+    token, so the broad version matched it anyway. Because
+    `_parse_addressee` returns the *first* matching line, that false match
+    both stole the result from the real addressee lower in the document and,
+    via `_parse_sender_institution`'s shared break condition, zeroed out
+    every `gonderen_kurum` recovery on the 6 real documents sharing this
+    letterhead (CY-023/028/029/030/038/042). Restricting the trailing
+    annotation to `[0-9/]` closes this without losing the CY-012 case above."""
+    text = (
+        "T.C.\nHAZİNE VE MALİYE BAKANLIĞI\nStrateji Geliştirme Başkanlığı\n\n"
+        "Konu : Deneme\n\n"
+        "TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA 7/42045\n\n"
+        "Metin arz ederim.\n\nAhmet Yılmaz\nGenel Müdür"
+    )
+    parsed = parse_labelled_fields(text)
+    assert parsed["muhatap"] == "TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA 7/42045"
+    assert parsed["gonderen_kurum"] == "HAZİNE VE MALİYE BAKANLIĞI Strateji Geliştirme Başkanlığı"
+
+
+def test_addressee_pattern_does_not_match_ocr_garbage_ending_in_the_suffix():
+    """Second real false positive from the same A/B run: OCR footer noise on
+    CY-004 ('İnternet Adresi: Www.tccb. gov.tr MİDYE İN') coincidentally ends
+    in 'MİDYE' (which contains 'YE') followed by the short garbage token
+    'İN', matching the broad `\\S{1,12}` version and replacing the real
+    (unrecoverable on that document, but that is a separate, honest gap --
+    see CY-010 in the real-corpus ground truth) muhatap with noise."""
+    text = (
+        "T.C.\nÖRNEK BAKANLIĞI\n\nKonu : Deneme\n\n"
+        "Metin arz ederim.\n\n"
+        "İnternet Adresi: Www.tccb. gov.tr MİDYE İN\n"
+    )
+    parsed = parse_labelled_fields(text)
+    assert "muhatap" not in parsed
+
+
+def test_sayi_survives_a_stray_glyph_before_its_colon():
+    """Real OCR (CY-001/005/007/008/013/019...): a form checkbox glyph is
+    consistently misread as '(o' between the label and its colon
+    ('Sayı (o :E-48360949-610-375523'), which the exact `label:` anchor used
+    to reject outright -- this single bug alone accounted for the majority of
+    missing `sayi` values across the 45-document scanned corpus."""
+    parsed = parse_labelled_fields("Sayı (o :E-48360949-610-375523\nKonu : Deneme")
+    assert parsed["sayi"] == "E-48360949-610-375523"
+
+
+def test_stray_glyph_tolerance_does_not_swallow_a_real_short_label_value():
+    """The tolerance is capped at 3 characters specifically so it cannot eat
+    into a genuine value when the label:value format is completely normal."""
+    parsed = parse_labelled_fields("Sayı : E-1\nKonu : X")
+    assert parsed["sayi"] == "E-1"
+    assert parsed["konu"] == "X"
+
+
 @pytest.mark.parametrize("path", SAMPLE_FILES, ids=lambda p: p.stem)
 def test_parser_recovers_positional_fields_across_the_corpus(path):
     with open(path, encoding="utf-8") as handle:
