@@ -5,6 +5,7 @@ import {
   LogIn,
   LogOut,
   Menu,
+  MessageCircle,
   MessageSquare,
   Moon,
   ShieldCheck,
@@ -20,10 +21,13 @@ import {
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { ROLE_LABELS } from "../types/users";
+import { useConversations } from "../hooks/useConversations";
+import { useMessagingStream } from "../hooks/useMessagingStream";
 import { useTheme } from "../hooks/useTheme";
 import type { ThemeMode } from "../contexts/ThemeContext";
 import { Button, IconButton } from "../components/Button";
 import { Select } from "../components/FormControls";
+import { NotificationBell } from "../components/NotificationBell";
 import { OverlayBackdrop } from "../components/Surface";
 
 interface AppShellProps {
@@ -36,8 +40,10 @@ const NAV_ITEMS: Array<{
   label: string;
   icon: typeof MessageSquare;
   admin?: boolean;
+  badgeKey?: "messages";
 }> = [
   { route: "/chats", label: "Sohbetler", icon: MessageSquare },
+  { route: "/messages", label: "Mesajlar", icon: MessageCircle, badgeKey: "messages" },
   { route: "/documents", label: "Evraklar", icon: FileText },
   { route: "/drafts", label: "Taslaklar", icon: FilePenLine },
   { route: "/routing", label: "Yönlendirme", icon: Route },
@@ -63,6 +69,8 @@ export function AppShell({
   const navigate = useNavigate();
   const route = location.pathname;
   const { user, logout } = useAuth();
+  const conversations = useConversations();
+  useMessagingStream(Boolean(user));
   const { mode, setMode } = useTheme();
   const ThemeIcon = THEME_ICONS[mode];
   const themeModes: ThemeMode[] = ["system", "light", "dark"];
@@ -144,7 +152,7 @@ export function AppShell({
           {NAV_ITEMS.filter(
             (item) =>
               !item.admin || user?.role === "admin" || user?.role === "manager",
-          ).map(({ route: itemRoute, label, icon: Icon }) => (
+          ).map(({ route: itemRoute, label, icon: Icon, badgeKey }) => (
               <NavLink
                 key={itemRoute}
                 to={itemRoute}
@@ -154,10 +162,18 @@ export function AppShell({
               >
                 <Icon size={18} />
                 <span>{label}</span>
+                {badgeKey === "messages" && conversations.unreadTotal > 0 && (
+                  <span className="unread-badge nav-item-badge">{conversations.unreadTotal}</span>
+                )}
               </NavLink>
           ))}
         </nav>
         <div className="sidebar-footer">
+          {!compact && (
+            <div className="sidebar-notification-row">
+              <NotificationBell />
+            </div>
+          )}
           <label className="theme-control">
             <span>
               <ThemeIcon size={17} />
