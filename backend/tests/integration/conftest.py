@@ -277,6 +277,53 @@ async def two_companies(owner_engine) -> AsyncGenerator[dict, None]:
                 {"id": notification_id, "cid": company_id, "uid": user_id},
             )
 
+            #: Same self-addressed trick `draft_shares` above uses -- a
+            #: single-member "group" (kind='group' rather than 'dm': a DM
+            #: needs two distinct participant rows, which this fixture's
+            #: one-user-per-company shape can't provide) is enough to
+            #: exercise the company_id boundary these RLS tests care about,
+            #: without needing a second real user.
+            conversation_id = uuid4().hex
+            await session.execute(
+                text(
+                    "INSERT INTO conversations (id, company_id, kind, title, created_by, is_archived, "
+                    "created_at, updated_at) "
+                    "VALUES (:id, :cid, 'group', 'RLS Test Grup', :uid, false, now(), now())"
+                ),
+                {"id": conversation_id, "cid": company_id, "uid": user_id},
+            )
+            conversation_participant_id = uuid4().hex
+            await session.execute(
+                text(
+                    "INSERT INTO conversation_participants (id, company_id, conversation_id, user_id, "
+                    "role_in_conversation, created_at, updated_at) "
+                    "VALUES (:id, :cid, :convid, :uid, 'owner', now(), now())"
+                ),
+                {"id": conversation_participant_id, "cid": company_id, "convid": conversation_id, "uid": user_id},
+            )
+            conversation_message_id = uuid4().hex
+            await session.execute(
+                text(
+                    "INSERT INTO conversation_messages (id, company_id, conversation_id, sender_id, kind, "
+                    "body, created_at, updated_at) "
+                    "VALUES (:id, :cid, :convid, :uid, 'text', 'merhaba', now(), now())"
+                ),
+                {"id": conversation_message_id, "cid": company_id, "convid": conversation_id, "uid": user_id},
+            )
+
+            #: Self-favoriting, only meaningful as raw RLS test data --
+            #: `FavoriteService.add_favorite` itself rejects this (see its
+            #: own test), but this fixture bypasses the service entirely.
+            favorite_id = uuid4().hex
+            await session.execute(
+                text(
+                    "INSERT INTO user_favorites (id, company_id, owner_user_id, favorite_user_id, "
+                    "created_at, updated_at) "
+                    "VALUES (:id, :cid, :uid, :uid, now(), now())"
+                ),
+                {"id": favorite_id, "cid": company_id, "uid": user_id},
+            )
+
             result[label] = {
                 "company_id": company_id,
                 "user_id": user_id,
@@ -286,6 +333,10 @@ async def two_companies(owner_engine) -> AsyncGenerator[dict, None]:
                 "draft_id": draft_id,
                 "draft_share_id": draft_share_id,
                 "notification_id": notification_id,
+                "conversation_id": conversation_id,
+                "conversation_participant_id": conversation_participant_id,
+                "conversation_message_id": conversation_message_id,
+                "favorite_id": favorite_id,
             }
         await session.commit()
 

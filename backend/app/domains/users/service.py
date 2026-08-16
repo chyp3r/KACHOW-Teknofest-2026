@@ -112,6 +112,26 @@ class UserService:
         """Fetch list of users of `company_id` with pagination and optional role filters."""
         return await self.repository.get_multi(company_id, skip=skip, limit=limit, role=role)
 
+    async def search_users(
+        self,
+        company_id: str,
+        q: Optional[str] = None,
+        unit_id: Optional[str] = None,
+        role: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50,
+    ):
+        """Search `company_id`'s users for the messaging/artifact-transfer
+        recipient picker (`GET /users/search`) -- see
+        `UserRepository._search_query`'s docstring for the filter
+        semantics. Returns each user paired with its primary unit's name.
+        """
+        items = await self.repository.search(
+            company_id, q=q, unit_id=unit_id, role=role, skip=skip, limit=limit
+        )
+        total = await self.repository.count_search(company_id, q=q, unit_id=unit_id, role=role)
+        return items, total
+
     async def update_user(self, user_id: str, schema: UserUpdate, company_id: str) -> UserModel:
         """Update user details, verifying unique constraints if email changes.
 

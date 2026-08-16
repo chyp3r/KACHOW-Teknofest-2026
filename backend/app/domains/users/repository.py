@@ -1,8 +1,11 @@
-from typing import Optional, List
-from sqlalchemy import select, delete
+from typing import Optional, List, Tuple
+from sqlalchemy import delete, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.domains.units.model.unit_membership_model import UnitMembershipModel
+from app.domains.units.model.unit_model import UnitModel
 from app.domains.users.model.user_model import UserModel
 from app.domains.users.model.invited_email import InvitedEmailModel
+from app.domains.users.model.user_favorite_model import UserFavoriteModel
 
 class UserRepository:
     """SOTA Repository for SQLAlchemy database transactions regarding Users and Invites."""
@@ -130,3 +133,152 @@ class UserRepository:
             await self.db.flush()
             return True
         return False
+
+    # ---------- Search ----------
+
+    def _search_query(
+        self,
+        company_id: str,
+        q: Optional[str],
+        unit_id: Optional[str],
+        role: Optional[str],
+    ):
+        """Shared filtered query for `search`/`count_search`.
+
+        `q` matches `username`/`email` (case-insensitive substring) --
+        `UserModel` has no separate display-name column today, so "isim"
+        search is a username/email match, same as every other user-facing
+        list in this codebase. `unit_id` matches *any* of a user's unit
+        memberships (not only the primary one `search` also returns).
+        """
+        query = select(UserModel).where(
+            UserModel.company_id == company_id, UserModel.is_deleted.is_(False)
+        )
+        if q:
+            pattern = f"%{q}%"
+            query = query.where(or_(UserModel.username.ilike(pattern), UserModel.email.ilike(pattern)))
+        if role:
+            query = query.where(UserModel.role == role)
+        if unit_id:
+            query = query.where(
+                exists().where(
+                    UnitMembershipModel.user_id == UserModel.id,
+                    UnitMembershipModel.company_id == company_id,
+                    UnitMembershipModel.unit_id == unit_id,
+                )
+            )
+        return query
+
+    async def search(
+        self,
+        company_id: str,
+        q: Optional[str] = None,
+        unit_id: Optional[str] = None,
+        role: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50,
+    ) -> List[Tuple[UserModel, Optional[str]]]:
+        """Search company users, each paired with its primary unit's name
+        (`None` if the user has no primary unit membership) -- see
+        `_search_query` for the filter semantics.
+        """
+        primary_unit_name = (
+            select(UnitModel.name)
+            .join(UnitMembershipModel, UnitMembershipModel.unit_id == UnitModel.id)
+            .where(
+                UnitMembershipModel.user_id == UserModel.id,
+                UnitMembershipModel.company_id == company_id,
+                UnitMembershipModel.is_primary.is_(True),
+            )
+            .correlate(UserModel)
+            .scalar_subquery()
+        )
+        query = (
+            self._search_query(company_id, q, unit_id, role)
+            .add_columns(primary_unit_name.label("unit_name"))
+            .order_by(UserModel.username.asc())
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await self.db.execute(query)
+        return [(user, unit_name) for user, unit_name in result.all()]
+
+    async def count_search(
+        self,
+        company_id: str,
+        q: Optional[str] = None,
+        unit_id: Optional[str] = None,
+        role: Optional[str] = None,
+    ) -> int:
+        query = select(func.count()).select_from(
+            self._search_query(company_id, q, unit_id, role).subquery()
+        )
+        result = await self.db.execute(query)
+        return result.scalar_one()
+
+
+class UserFavoriteRepository:
+    """Repository for `user_favorites` (see `UserFavoriteModel`).
+
+    Every method is scoped to `owner_user_id` -- a favorite is a one-
+    directional, per-user list, never a company-wide or shared resource.
+    """
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def get(
+        self, owner_user_id: str, favorite_user_id: str, company_id: str
+    ) -> Optional[UserFavoriteModel]:
+        result = await self.db.execute(
+            select(UserFavoriteModel).where(
+                UserFavoriteModel.owner_user_id == owner_user_id,
+                UserFavoriteModel.favorite_user_id == favorite_user_id,
+                UserFavoriteModel.company_id == company_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def create(self, favorite: UserFavoriteModel) -> UserFavoriteModel:
+        self.db.add(favorite)
+        await self.db.flush()
+        return favorite
+
+    async def delete(self, owner_user_id: str, favorite_user_id: str, company_id: str) -> bool:
+        result = await self.db.execute(
+            delete(UserFavoriteModel).where(
+                UserFavoriteModel.owner_user_id == owner_user_id,
+                UserFavoriteModel.favorite_user_id == favorite_user_id,
+                UserFavoriteModel.company_id == company_id,
+            )
+        )
+        await self.db.flush()
+        return result.rowcount > 0
+
+    async def list_for_owner(
+        self, owner_user_id: str, company_id: str
+    ) -> List[Tuple[UserFavoriteModel, UserModel]]:
+        """`owner_user_id`'s favorites, joined with the favorited user's
+        identity, newest-favorited first."""
+        result = await self.db.execute(
+            select(UserFavoriteModel, UserModel)
+            .join(UserModel, UserModel.id == UserFavoriteModel.favorite_user_id)
+            .where(
+                UserFavoriteModel.owner_user_id == owner_user_id,
+                UserFavoriteModel.company_id == company_id,
+            )
+            .order_by(UserFavoriteModel.created_at.desc())
+        )
+        return [(favorite, user) for favorite, user in result.all()]
+
+    async def is_favorite(self, owner_user_id: str, favorite_user_id: str, company_id: str) -> bool:
+        result = await self.db.execute(
+            select(
+                exists().where(
+                    UserFavoriteModel.owner_user_id == owner_user_id,
+                    UserFavoriteModel.favorite_user_id == favorite_user_id,
+                    UserFavoriteModel.company_id == company_id,
+                )
+            )
+        )
+        return bool(result.scalar())

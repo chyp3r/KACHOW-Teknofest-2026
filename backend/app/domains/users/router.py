@@ -3,13 +3,17 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.database.session import get_db, get_owner_db
+from app.api.rate_limit import rate_limit
 from app.api.responses import APIResponse, SuccessResponse
 from app.domains.users.schema.user_schema import UserCreate, UserUpdate, PasswordChangeRequest, UserResponse
 from app.domains.users.schema.invited_email import InvitedEmailCreate, InvitedEmailResponse
-from app.domains.users.repository import UserRepository
+from app.domains.users.schema.favorite_schema import FavoriteCreateRequest, FavoriteResponse
+from app.domains.users.schema.user_search_schema import UserSearchResult
+from app.domains.users.repository import UserFavoriteRepository, UserRepository
 from app.domains.users.service import UserService
+from app.domains.users.favorites_service import FavoriteService
 from app.domains.users.model.user_model import UserModel
-from app.api.dependency import get_authz_service, get_current_user, require_roles, subject_from_user
+from app.api.dependency import get_authz_service, get_current_user, require_auth_if_enabled, require_roles, subject_from_user
 from app.core.authz.attributes import Resource
 from app.core.authz.model.permission_grant_model import PermissionGrantModel
 from app.core.authz.repository import PermissionGrantRepository
@@ -20,12 +24,17 @@ from app.api.exceptions.authorization import AuthorizationException
 from app.api.exceptions.not_found import NotFoundException
 from app.domains.audit.repository import AuditLogRepository
 from app.domains.audit.service import AuditService
+from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
 def _audit_service(db: AsyncSession) -> AuditService:
     return AuditService(AuditLogRepository(db))
+
+
+def _favorite_service(db: AsyncSession) -> FavoriteService:
+    return FavoriteService(UserFavoriteRepository(db), UserRepository(db))
 
 @router.post("", response_model=APIResponse[UserResponse])
 async def register(schema: UserCreate, db: AsyncSession = Depends(get_owner_db)):
@@ -82,6 +91,109 @@ async def get_me(current_user: UserModel = Depends(get_current_user)):
     """Get profile details of the currently authenticated user."""
     response_data = UserResponse.model_validate(current_user)
     return SuccessResponse(data=response_data)
+
+
+# NOTE: /search and /me/... must be registered before GET /{user_id} below
+# -- FastAPI matches routes in registration order, and a single-segment
+# path like "/search" would otherwise be swallowed by "/{user_id}"
+# (user_id="search") since that route is registered first otherwise.
+@router.get(
+    "/search",
+    response_model=None,
+    dependencies=[Depends(rate_limit(max_requests=30, window_seconds=60, key_prefix="user_search"))],
+)
+async def search_users(
+    q: Optional[str] = Query(default=None, min_length=2, max_length=100),
+    unit_id: Optional[str] = Query(default=None),
+    role: Optional[UserRole] = Query(default=None),
+    pagination: PaginationParam = Depends(),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    db: AsyncSession = Depends(get_db),
+):
+    """Search the caller's own company's users for the messaging/artifact-
+    transfer recipient picker. `q` requires at least 2 characters (rate-
+    limited on top -- see `rate_limit`'s own docstring) to keep this from
+    doubling as a company-wide user enumeration tool. Results are always
+    company-scoped by RLS + the explicit `company_id` filter regardless.
+    """
+    service = UserService(UserRepository(db))
+    favorite_repository = UserFavoriteRepository(db)
+    role_str = role.value if role else None
+    items, total = await service.search_users(
+        current_user.company_id,
+        q=q,
+        unit_id=unit_id,
+        role=role_str,
+        skip=pagination.offset,
+        limit=min(pagination.limit, 50),
+    )
+    page_items = []
+    for user, unit_name in items:
+        is_favorite = await favorite_repository.is_favorite(current_user.id, user.id, current_user.company_id)
+        page_items.append(
+            UserSearchResult(
+                id=user.id,
+                username=user.username,
+                email=user.email,
+                role=user.role,
+                unit_name=unit_name,
+                is_favorite=is_favorite,
+            ).model_dump(mode="json")
+        )
+    pages = (total + pagination.size - 1) // pagination.size if pagination.size else 0
+    return SuccessResponse(
+        data=PaginatedResponse(
+            items=page_items, total=total, page=pagination.page, size=pagination.size, pages=pages
+        ).model_dump()
+    )
+
+
+def _favorite_response(favorite, user: UserModel) -> FavoriteResponse:
+    return FavoriteResponse(
+        id=favorite.id,
+        favorite_user_id=favorite.favorite_user_id,
+        username=user.username,
+        email=user.email,
+        note=favorite.note,
+        created_at=favorite.created_at,
+    )
+
+
+@router.get("/me/favorites", response_model=None)
+async def list_my_favorites(
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    db: AsyncSession = Depends(get_db),
+):
+    """The caller's own favorites, newest-favorited first."""
+    items = await _favorite_service(db).list_favorites(current_user.company_id, current_user)
+    return SuccessResponse(
+        data=[_favorite_response(favorite, user).model_dump(mode="json") for favorite, user in items]
+    )
+
+
+@router.post("/me/favorites", response_model=None)
+async def add_my_favorite(
+    request: FavoriteCreateRequest,
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add a company user to the caller's own favorites."""
+    favorite, user = await _favorite_service(db).add_favorite(
+        current_user.company_id, current_user, request.user_id, request.note
+    )
+    return SuccessResponse(data=_favorite_response(favorite, user).model_dump(mode="json"))
+
+
+@router.delete("/me/favorites/{user_id}", response_model=None)
+async def remove_my_favorite(
+    user_id: str,
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove a user from the caller's own favorites."""
+    await _favorite_service(db).remove_favorite(current_user.company_id, current_user, user_id)
+    return SuccessResponse(data={"removed": True})
+
 
 @router.get("/{user_id}", response_model=APIResponse[UserResponse])
 async def get_user(

@@ -2,6 +2,48 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.13.0] - 2026-08-16
+### Eklendi
+Şirket içi iletişim + AI-assisted artifact transfer planının **Faz 1**'i (#194):
+DM + grup mesajlaşma domain'i, favoriler ve kullanıcı arama. AI/agent katmanına
+hiçbir dokunuş yok -- bu tamamen deterministik zemin, sonraki fazların (frontend,
+transfer domain'i, AI-assisted transfer) üzerine oturacağı.
+
+- **`app.domains.messaging`** (yeni): `conversations`/`conversation_participants`/
+  `conversation_messages` (migration `0022`). Bir konuşmaya erişim ABAC kararı
+  değil -- `conversation_participants` satırının kendisi erişim grant'i, tıpkı
+  `draft_shares`'ın zaten kurduğu desen gibi. DM idempotent: `dm_key` üzerinde
+  `WHERE kind='dm'` partial unique index, iki kullanıcı arasında ikinci bir DM
+  açılmasını uygulama kodu değil veritabanının kendisi engelliyor. Grup yönetimi
+  (yeniden adlandırma, başkasını çıkarma) `PoolService`/`DraftShareService`'in
+  zaten kullandığı `bypasses_ownership` asimetrisiyle -- yeni bir ABAC action'ı
+  eklenmedi, gerek yoktu. Soft-leave: ayrılan bir katılımcı geçmişi okuyabilir,
+  yeni mesaj gönderemez. Okunmamış sayısı `last_read_message_id`'nin işaret
+  ettiği mesajın `created_at`'ıyla karşılaştırılarak hesaplanıyor (mesaj id'leri
+  sıralı değil, opak uuid-hex). `GET /messaging/stream`: `notifications/router.py`
+  ile birebir aynı Redis pub/sub SSE deseni, ayrı kanal prefix'i.
+- **`user_favorites`** (yeni, migration `0023`): tek yönlü, kullanıcı başına
+  favori listesi. Faz 4'teki AI-assisted transfer akışının zorunlu tutacağı
+  kapı burada temelleniyor.
+- **`GET /users/search`**: isim (kullanıcı adı/e-posta -- `UserModel`'de ayrı bir
+  görünen-ad kolonu yok), birim, rol filtreleri. Enumeration'a karşı rate limit +
+  minimum 2 karakter.
+- **`ConversationMessageCreatedEvent`**: `DraftSharedEvent`'in aktif alıcı başına
+  bir kez yayınlama deseninin birebir aynısı. Bildirim gövdesi her zaman kısa bir
+  `body_preview` -- tam mesaj içeriği yalnızca katılımcılık-korumalı thread'de.
+
+### Test
+- `docker compose exec backend pytest tests/unit tests/integration -q` →
+  **1918 test geçti** (120 yeni: mesajlaşma/favori servis unit testleri,
+  bildirim subscriber testleri, `conversation_participants`/`conversations`/
+  `conversation_messages`/`user_favorites` için RLS izolasyon testleri, gerçek
+  Postgres üzerinde uçtan uca DM/okunmamış/soft-leave senaryoları, kullanıcı
+  arama SQL'inin repository seviyesinde doğrulanması).
+- `alembic check` yeni tablolar için temiz; `alembic downgrade -2` /
+  `upgrade head` round-trip doğrulandı.
+
+Refs: [#194](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/194).
+
 ## [3.12.0] - 2026-08-16
 ### Eklendi
 Faz C3'ün (#187) kendi gövdesinde ertelenen son parçası: gerçek LoRA/PEFT fine-tuning kodu ve
