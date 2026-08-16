@@ -2,6 +2,58 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.14.0] - 2026-08-16
+### Eklendi
+Şirket içi iletişim planının **Faz 2**'si (#196): Faz 1'de (#194/#195) kurulan
+mesajlaşma backend'ini tüketen frontend. Backend/AI katmanına hiçbir dokunuş yok.
+
+- **`/messages`, `/messages/:conversationId`** (yeni sayfa): `ConversationList`
+  (DM/grup listesi, okunmamış rozeti) + `MessageThread` (keyset "eski
+  mesajları yükle") + `MessageComposer` (Enter=gönder, Shift+Enter=yeni satır --
+  `ChatComposer` ile aynı konvansiyon). `NewConversationDialog` (DM/Grup
+  sekmeleri) ve `UserSearchDrawer` ("Kişiler" paneli) ortak bir `PersonPickerBody`
+  üzerinden besleniyor -- arama/filtre/favoriler-boşken görünümü tek yerde.
+- **`GroupParticipantsPanel`**: grup üyesi ekleme/çıkarma yalnızca grup sahibi
+  veya şirket geneli yetkiye (ADMIN/MANAGER/ROOT) sahip kullanıcılara açık --
+  backend'in kendi yetki asimetrisini birebir yansıtıyor, bu UI'ın izin verdiği
+  değil.
+- **`NotificationBell`**: `GET /notifications/stream` nihayet bağlandı --
+  draft-sharing işinden beri var olan ama hiç tüketilmeyen endpoint. Panel bir
+  portal ile `position: fixed` render ediliyor: `.app-sidebar`'ın kendi
+  `overflow: hidden`'ı yüzünden normal bir mutlak konumlu açılır panel
+  kenar boyunca kırpılırdı.
+- **`useMessagingStream`/`useNotificationsStream`**: SSE, `AppShell`'in
+  kendisinde bağlanıyor (yalnızca `/messages` sayfasında değil) -- kullanıcı
+  başka bir sayfadayken de kenar çubuğundaki okunmamış rozeti canlı kalıyor.
+- **`services/sse.ts`** (yeni): `chatService.consumeSseStream`'den farklı, ham
+  JSON okuyan minimal bir SSE reader -- `/messaging/stream` ve
+  `/notifications/stream`'in `WorkflowEvent` zarfı yok, doğrudan kaynağın
+  kendisini (`Message`/`Notification`) taşıyorlar.
+- **`GET /units`, `GET /notifications`** için frontend tüketicisi yoktu; bu
+  fazla ikisi de (birim filtre dropdown'ı, bildirim zili) ilk kez bağlandı.
+
+### Bilinçli sınırlar
+- `npm run api:types`/`api:types:check` betiği yanlış bir yola işaret ediyor
+  (`http://localhost:8000/openapi.json`, doğrusu
+  `http://localhost:8000/api/v1/openapi.json`) ve `src/api/generated.ts` Faz 1
+  backend uçları eklenmeden önceki tarihte (15 Ağustos) donmuş -- bu, bu PR'dan
+  önce var olan bir kopukluk; Faz 2 kapsamında düzeltilmedi, ayrı bir görev
+  olarak bayraklandı.
+- Sanal listeleme/otomatik en alta kaydırma performans optimizasyonu yok --
+  uzun bir sohbet geçmişinde `MessageThread` tüm yüklenmiş mesajları render
+  ediyor; keyset "eski mesajları yükle" akışı zaten sayfa başına 50 mesajla
+  sınırlı olduğu için bu ölçekte gözlemlenebilir bir sorun değil.
+
+### Test
+- `docker compose exec frontend npm run typecheck && npm run lint && npm run test`
+  → **166/166 test geçti** (24 yeni: `sse.ts` SSE frame ayrıştırma,
+  `useConversations`/`useMessageThread`/`useFavorites`/`useUserSearch` hook
+  testleri, `ConversationList`/`MessageComposer` bileşen testleri).
+  `AppShell.test.tsx` `QueryClientProvider` ile sarmalandı -- `AppShell` artık
+  react-query hook'ları mount ediyor.
+
+Refs: [#196](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/196).
+
 ## [3.13.0] - 2026-08-16
 ### Eklendi
 Şirket içi iletişim + AI-assisted artifact transfer planının **Faz 1**'i (#194):
