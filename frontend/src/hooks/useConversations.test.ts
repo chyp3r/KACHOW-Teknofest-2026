@@ -70,10 +70,12 @@ describe("useConversations", () => {
       await result.current.openDm("other");
     });
 
-    expect(result.current.conversations).toHaveLength(2);
     // The reopened conversation moves to the front -- its last_message_at
-    // is now the most recent.
-    expect(result.current.conversations[0].id).toBe("conv-2");
+    // is now the most recent. `mutateAsync` resolving doesn't guarantee the
+    // cache-write side effect has already propagated to this render, so
+    // assert via waitFor rather than immediately after act().
+    await waitFor(() => expect(result.current.conversations[0].id).toBe("conv-2"));
+    expect(result.current.conversations).toHaveLength(2);
   });
 
   it("creating a group adds a new conversation without touching existing ones", async () => {

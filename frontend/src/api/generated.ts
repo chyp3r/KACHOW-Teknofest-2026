@@ -1091,6 +1091,155 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/messaging/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Conversations
+         * @description The caller's active conversations, most recent activity first.
+         */
+        get: operations["list_conversations_api_v1_messaging_conversations_get"];
+        put?: never;
+        /**
+         * Create Conversation
+         * @description Open a DM (idempotent) or create a group conversation.
+         */
+        post: operations["create_conversation_api_v1_messaging_conversations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/messaging/conversations/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Conversation */
+        get: operations["get_conversation_api_v1_messaging_conversations__conversation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Conversation
+         * @description Rename/archive a group conversation (owner, or Admin/Manager/Root).
+         */
+        patch: operations["update_conversation_api_v1_messaging_conversations__conversation_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/messaging/conversations/{conversation_id}/participants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Participants
+         * @description Add members to a group conversation (owner, or Admin/Manager/Root).
+         */
+        post: operations["add_participants_api_v1_messaging_conversations__conversation_id__participants_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/messaging/conversations/{conversation_id}/participants/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Participant
+         * @description Leave a group (self) or remove another member (owner, or Admin/Manager/Root).
+         */
+        delete: operations["remove_participant_api_v1_messaging_conversations__conversation_id__participants__user_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/messaging/conversations/{conversation_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Messages
+         * @description Keyset page of messages, newest first (`before_id` to page older).
+         */
+        get: operations["list_messages_api_v1_messaging_conversations__conversation_id__messages_get"];
+        put?: never;
+        /** Send Message */
+        post: operations["send_message_api_v1_messaging_conversations__conversation_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/messaging/conversations/{conversation_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark Read */
+        post: operations["mark_read_api_v1_messaging_conversations__conversation_id__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/messaging/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Messages
+         * @description Live-push new messages over SSE, one connection per user across every
+         *     conversation they're in -- same Redis pub/sub pattern as
+         *     `notifications/router.py::stream_notifications`, distinct channel
+         *     prefix (see `messaging_channel_for`'s docstring). A dropped or never-
+         *     received push is never data loss: `GET /messaging/conversations/{id}/
+         *     messages` always has the row regardless of whether this stream was
+         *     connected when it was sent.
+         */
+        get: operations["stream_messages_api_v1_messaging_stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notifications": {
         parameters: {
             query?: never;
@@ -1514,9 +1663,13 @@ export interface paths {
         put?: never;
         /**
          * Trigger Training Run
-         * @description Compile + mine + publish a refreshed style adapter, synchronously
-         *     (see `app.domains.training.service`'s module docstring for why this
-         *     does not need a background worker at this phase's scale).
+         * @description Trigger a training run. `style_adapter` compiles + mines + publishes
+         *     a refreshed style adapter synchronously (see `app.domains.training.
+         *     service`'s module docstring for why that scale doesn't need a
+         *     background worker). `lora_sft`/`lora_dpo` only queues the job --
+         *     actually running it needs the separate `worker` container manually
+         *     started via `scripts/start_training_worker.sh` (see #191's own body
+         *     for why it isn't part of `docker compose up` by default).
          */
         post: operations["trigger_training_run_api_v1_companies__company_id__training_runs_post"];
         delete?: never;
@@ -1718,6 +1871,74 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Users
+         * @description Search the caller's own company's users for the messaging/artifact-
+         *     transfer recipient picker. `q` requires at least 2 characters (rate-
+         *     limited on top -- see `rate_limit`'s own docstring) to keep this from
+         *     doubling as a company-wide user enumeration tool. Results are always
+         *     company-scoped by RLS + the explicit `company_id` filter regardless.
+         */
+        get: operations["search_users_api_v1_users_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/me/favorites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List My Favorites
+         * @description The caller's own favorites, newest-favorited first.
+         */
+        get: operations["list_my_favorites_api_v1_users_me_favorites_get"];
+        put?: never;
+        /**
+         * Add My Favorite
+         * @description Add a company user to the caller's own favorites.
+         */
+        post: operations["add_my_favorite_api_v1_users_me_favorites_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/me/favorites/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove My Favorite
+         * @description Remove a user from the caller's own favorites.
+         */
+        delete: operations["remove_my_favorite_api_v1_users_me_favorites__user_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2797,6 +3018,48 @@ export interface components {
             } | null;
         };
         /**
+         * ConversationCreateRequest
+         * @description `POST /messaging/conversations` body -- discriminated by `kind`.
+         *
+         *     A DM sets `participant_id` only; a group sets `title` and
+         *     `participant_ids` only. One endpoint, not two, because "open or create
+         *     a conversation" is a single concept to the caller -- the discriminator
+         *     just picks which fields are relevant, the same way the frontend forms
+         *     it maps to would.
+         */
+        ConversationCreateRequest: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "dm" | "group";
+            /**
+             * Participant Id
+             * @description DM only: diğer katılımcı ID'si
+             */
+            participant_id?: string | null;
+            /**
+             * Title
+             * @description Grup only
+             */
+            title?: string | null;
+            /**
+             * Participant Ids
+             * @description Grup only: kurucu dışındaki üye ID'leri
+             */
+            participant_ids?: string[] | null;
+        };
+        /**
+         * ConversationUpdateRequest
+         * @description Group-only: rename or archive. A DM has no editable fields.
+         */
+        ConversationUpdateRequest: {
+            /** Title */
+            title?: string | null;
+            /** Is Archived */
+            is_archived?: boolean | null;
+        };
+        /**
          * CorrespondenceType
          * @description Supported official correspondence outputs produced by the draft workflow.
          *
@@ -3052,6 +3315,16 @@ export interface components {
              */
             entities?: string[];
         };
+        /** FavoriteCreateRequest */
+        FavoriteCreateRequest: {
+            /**
+             * User Id
+             * @description Favorilere eklenecek kullanıcının ID'si
+             */
+            user_id: string;
+            /** Note */
+            note?: string | null;
+        };
         /**
          * FeedbackResponse
          * @description Pydantic schema for one feedback row.
@@ -3222,6 +3495,16 @@ export interface components {
              * @description Raw account password
              */
             password: string;
+        };
+        /** MarkReadRequest */
+        MarkReadRequest: {
+            /** Message Id */
+            message_id?: string | null;
+        };
+        /** MessageCreateRequest */
+        MessageCreateRequest: {
+            /** Body */
+            body: string;
         };
         /**
          * MevzuatReferenceSchema
@@ -3440,6 +3723,11 @@ export interface components {
              * @description Total number of pages available
              */
             pages: number;
+        };
+        /** ParticipantAddRequest */
+        ParticipantAddRequest: {
+            /** User Ids */
+            user_ids: string[];
         };
         /**
          * PasswordChangeRequest
@@ -5589,6 +5877,328 @@ export interface operations {
             };
         };
     };
+    list_conversations_api_v1_messaging_conversations_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_conversation_api_v1_messaging_conversations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_conversation_api_v1_messaging_conversations__conversation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_conversation_api_v1_messaging_conversations__conversation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_participants_api_v1_messaging_conversations__conversation_id__participants_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ParticipantAddRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_participant_api_v1_messaging_conversations__conversation_id__participants__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_messages_api_v1_messaging_conversations__conversation_id__messages_get: {
+        parameters: {
+            query?: {
+                before_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_message_api_v1_messaging_conversations__conversation_id__messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_read_api_v1_messaging_conversations__conversation_id__read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkReadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_messages_api_v1_messaging_stream_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     list_notifications_api_v1_notifications_get: {
         parameters: {
             query?: {
@@ -6188,7 +6798,10 @@ export interface operations {
     };
     trigger_training_run_api_v1_companies__company_id__training_runs_post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description style_adapter (varsayılan): senkron, saniyeler içinde biter. lora_sft/lora_dpo (#191): arq üzerinden training worker'a kuyruğa alınır, saatler sürebilir -- worker çalışmıyorsa run 'queued' durumunda kalır. */
+                kind?: string;
+            };
             header?: never;
             path: {
                 company_id: string;
@@ -6580,6 +7193,125 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["APIResponse_UserResponse_"];
+                };
+            };
+        };
+    };
+    search_users_api_v1_users_search_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                unit_id?: string | null;
+                role?: components["schemas"]["UserRole"] | null;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_my_favorites_api_v1_users_me_favorites_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    add_my_favorite_api_v1_users_me_favorites_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FavoriteCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_my_favorite_api_v1_users_me_favorites__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

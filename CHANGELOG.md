@@ -31,14 +31,16 @@ mesajlaşma backend'ini tüketen frontend. Backend/AI katmanına hiçbir dokunu�
   kendisini (`Message`/`Notification`) taşıyorlar.
 - **`GET /units`, `GET /notifications`** için frontend tüketicisi yoktu; bu
   fazla ikisi de (birim filtre dropdown'ı, bildirim zili) ilk kez bağlandı.
+- **`npm run api:types` düzeltildi**: yanlış bir yola işaret ediyordu
+  (`http://localhost:8000/openapi.json`, doğrusu
+  `http://localhost:8000/api/v1/openapi.json` -- backend `openapi_url` olarak
+  `{API_V1_STR}/openapi.json` kullanıyor). Bu, bu PR'dan önce var olan bir
+  kopukluktu -- `src/api/generated.ts` Faz 1 backend uçları eklenmeden önceki
+  tarihte (15 Ağustos) donmuştu. Düzeltilmiş yola karşı yeniden üretildi:
+  yalnızca yeni `/messaging/*`, `/users/search`, `/users/me/favorites/*`
+  yolları eklendi, mevcut hiçbir yol kaldırılmadı.
 
 ### Bilinçli sınırlar
-- `npm run api:types`/`api:types:check` betiği yanlış bir yola işaret ediyor
-  (`http://localhost:8000/openapi.json`, doğrusu
-  `http://localhost:8000/api/v1/openapi.json`) ve `src/api/generated.ts` Faz 1
-  backend uçları eklenmeden önceki tarihte (15 Ağustos) donmuş -- bu, bu PR'dan
-  önce var olan bir kopukluk; Faz 2 kapsamında düzeltilmedi, ayrı bir görev
-  olarak bayraklandı.
 - Sanal listeleme/otomatik en alta kaydırma performans optimizasyonu yok --
   uzun bir sohbet geçmişinde `MessageThread` tüm yüklenmiş mesajları render
   ediyor; keyset "eski mesajları yükle" akışı zaten sayfa başına 50 mesajla

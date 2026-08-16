@@ -91,6 +91,8 @@ describe("useMessageThread", () => {
       await result.current.send("yeni mesaj");
     });
 
-    expect(result.current.messages.map((item) => item.id)).toEqual(["msg-1", "msg-2"]);
+    await waitFor(() =>
+      expect(result.current.messages.map((item) => item.id)).toEqual(["msg-1", "msg-2"]),
+    );
   });
 });
