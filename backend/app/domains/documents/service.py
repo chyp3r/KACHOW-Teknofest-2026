@@ -14,7 +14,10 @@ from app.domains.documents.repository import DocumentRepository
 from app.domains.pools.model.document_pool_item_model import DocumentPoolItemModel
 from app.domains.pools.repository import DocumentPoolItemRepository, DocumentPoolRepository
 from app.domains.quotas.service import DOCUMENTS_METRIC, QuotaService
+from app.domains.users.model.user_model import UserModel
 from app.api.exceptions.ai_error import AIException
+from app.api.exceptions.authorization import AuthorizationException
+from app.api.exceptions.not_found import NotFoundException
 from app.api.exceptions.validation import ValidationException
 from app.core.config import settings
 from app.core.constants import (
@@ -891,3 +894,159 @@ class DocumentService:
                 )
             except Exception:
                 logger.exception("Failed to delete indexed chunks for %s", storage_path)
+
+    async def adopt_pool_item(
+        self, *, item_id: str, current_user: UserModel, company_id: str
+    ) -> DocumentPoolItemModel:
+        """Copy-on-write for a transferred document (Faz 5, #205).
+
+        Until this runs, a `source="transfer"` pool item's `document_id`
+        still points at the *sender's* original `documents` row (see
+        `app.domains.pools.service.PoolService.file_transferred_document`)
+        -- the recipient can view it through the pool join but does not own
+        it: they cannot edit its metadata, and it fails any ownership check
+        keyed off `documents.owner_id`. This gives the pool item's own
+        owner a fully independent copy instead: own blob (copied through
+        `BaseStorage`, not assumed to be a bare local path -- see
+        `BaseStorage`'s own docstring on why S3 keys aren't), own
+        `documents` row, own analysis cache, reindexed for Q&A under the
+        new storage key. See the plan's own §D5/§M for why the transfer
+        itself deliberately stops short of this and leaves `adopt` as an
+        opt-in escape hatch rather than doing it automatically on every
+        transfer (most recipients never need to edit what they received).
+
+        Reindexing runs inline, synchronously -- the same way the original
+        upload path's own `_index_for_qa` already does. There is no
+        arq-backed indexing worker in this codebase to queue onto instead
+        (the only wired-up arq job today is LoRA training, see
+        `app.workers.queue.WorkerSettings`); standing one up is out of
+        scope for what is otherwise a same-shape copy operation.
+
+        Raises:
+            NotFoundException: The pool item, its pool, or the source
+                document doesn't resolve within `company_id`.
+            AuthorizationException: The caller isn't the pool's own owner
+                -- unlike most of this module's authorization, there is no
+                Admin/Manager bypass here, since adopting creates a
+                *personal* copy for the caller specifically.
+            ValidationException: The item isn't a `source="transfer"` item
+                (nothing else needs adopting), or the source file itself
+                can't be read back from storage.
+        """
+        if self.pool_item_repository is None or self.pool_repository is None or self.document_repository is None:
+            raise ValidationException(message="Evrak havuzu bu istek için yapılandırılmamış.")
+
+        item = await self.pool_item_repository.get_by_id(item_id, company_id)
+        if item is None:
+            raise NotFoundException(message="Havuz öğesi bulunamadı.")
+
+        pool = await self.pool_repository.get_by_id(item.pool_id, company_id)
+        if pool is None or pool.owner_type != "user" or pool.owner_id != current_user.id:
+            raise AuthorizationException(message="Bu öğeyi yalnızca havuzun sahibi kopyalayabilir.")
+
+        if item.source != "transfer":
+            raise ValidationException(message="Yalnızca transfer edilen evraklar bu şekilde kopyalanabilir.")
+
+        source_document = await self.document_repository.get_by_id(item.document_id, company_id)
+        if source_document is None:
+            raise NotFoundException(message="Kaynak evrak bulunamadı.")
+
+        if self.quota_service is not None:
+            await self.quota_service.check_and_increment(company_id, DOCUMENTS_METRIC)
+
+        try:
+            content = await self.storage.get_file(source_document.id)
+        except Exception as exc:
+            raise ValidationException(message="Kaynak evrak dosyasına ulaşılamadı.") from exc
+
+        new_storage_path = await self._store(source_document.file_name, content)
+
+        # The snapshot frozen at transfer time (see `file_transferred_
+        # document`) is the most up to date view the recipient actually
+        # saw -- falling back to the sender's live row only covers the
+        # (should-never-happen) case of an item.source="transfer" row with
+        # no snapshot.
+        snapshot = item.metadata_snapshot or {}
+        new_document = DocumentModel(
+            id=new_storage_path,
+            owner_id=current_user.id,
+            company_id=company_id,
+            file_name=source_document.file_name,
+            document_type=snapshot.get("document_type", source_document.document_type),
+            document_type_label=snapshot.get("document_type_label", source_document.document_type_label),
+            compliance_status=snapshot.get("compliance_status", source_document.compliance_status),
+            summary=snapshot.get("summary", source_document.summary),
+            sensitivity_level=snapshot.get("sensitivity_level", source_document.sensitivity_level),
+            pii_flagged=bool(snapshot.get("pii_flagged", source_document.pii_flagged)),
+        )
+        await self.document_repository.create(new_document)
+
+        cache_data = await self._copy_analysis_cache(source_document.id, new_storage_path)
+        if cache_data is not None:
+            try:
+                sensitivity_level = SensitivityLevel(new_document.sensitivity_level)
+            except ValueError:
+                sensitivity_level = SensitivityLevel.UNMARKED
+            await self._index_for_qa(
+                new_storage_path,
+                cache_data.get("extracted_text", ""),
+                cache_data.get("pages"),
+                sensitivity_level=sensitivity_level,
+            )
+
+        # Repoint the existing item at the new, owned copy rather than
+        # creating a second pool item -- the recipient still has exactly
+        # one entry for this document, now backed by their own row instead
+        # of a snapshot. `transferred_by` is left as-is: who originally
+        # sent it is still true and worth keeping after adoption, even
+        # though `source` no longer reads "transfer".
+        item.document_id = new_storage_path
+        item.source = "adopted"
+        item.metadata_snapshot = None
+        await self.pool_item_repository.save(item)
+
+        slug = company_metrics.cached_slug(company_id)
+        if slug is not None:
+            company_metrics.note_document_registered(slug)
+
+        return item
+
+    async def _copy_analysis_cache(
+        self, source_storage_path: str, new_storage_path: str
+    ) -> Optional[dict]:
+        """Copy the local analysis-cache JSON under a new storage key, for
+        `adopt_pool_item` -- the cache is keyed by storage_path (see
+        `_save_document_analysis_cache`), independent of the storage
+        backend, so an adopted copy needs its own cache file too, not just
+        the blob.
+
+        Returns:
+            The copied cache dict (so the caller can reindex immediately
+            without a second disk read), or `None` when the source had no
+            cache to copy -- a degraded but non-fatal case (adopt still
+            succeeds, just without Q&A indexing), the same "best-effort
+            past the registry row" tolerance `delete_document` already
+            applies to its own cleanup steps.
+        """
+        import json
+
+        old_path = os.path.join(settings.LOCAL_STORAGE_DIR, f"{source_storage_path}_analysis.json")
+        new_path = os.path.join(settings.LOCAL_STORAGE_DIR, f"{new_storage_path}_analysis.json")
+
+        def _copy() -> Optional[dict]:
+            if not os.path.exists(old_path):
+                return None
+            with open(old_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+            with open(new_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            return data
+
+        try:
+            return await asyncio.to_thread(_copy)
+        except Exception:
+            logger.exception(
+                "Failed to copy analysis cache from %s to %s", source_storage_path, new_storage_path
+            )
+            return None
