@@ -66,6 +66,44 @@ class MevzuatReferenceSchema(BaseModel):
     aciklama: str = Field(description="Bu hükmün evrakla ilişkisi.")
 
 
+class DetectedMarkSchema(BaseModel):
+    """One region flagged as possibly a signature, stamp, or handwritten
+    annotation (see ``app.infrastructure.extractors.marks.DetectedMark``, the
+    infrastructure-layer type this mirrors rather than reuses directly --
+    same reasoning as ``ExtractionInfoSchema`` not reusing ``ExtractedDocument``).
+
+    A heuristic review hint, not a forensic determination: there is no
+    hand-labelled signature/stamp dataset for this project's document
+    corpus, so nothing here carries a measured accuracy.
+    """
+
+    kind: str = Field(description="'signature', 'stamp' veya 'handwriting'.")
+    page: int = Field(description="1 tabanlı sayfa numarası.")
+    bbox: tuple[int, int, int, int] = Field(
+        description="(x0, y0, x1, y1) -- sayfa boyutundan bağımsız 0-1000 ölçeğinde."
+    )
+    confidence: float = Field(description="0.0-1.0 arası kaba güven skoru.")
+
+
+class SignatureAssessmentSchema(BaseModel):
+    """Signature/stamp detection outcome for one document -- a review aid,
+    never an authoritative substitute for `fields.imza_sahibi` (the typed
+    name) or for actually opening the document. See `DetectedMarkSchema`.
+    """
+
+    is_signed: bool = Field(
+        default=False,
+        description="Sayfada en az bir imza şeklinde bölge tespit edildi mi.",
+    )
+    has_stamp: bool = Field(
+        default=False,
+        description="Sayfada en az bir mühür/damga şeklinde bölge tespit edildi mi.",
+    )
+    marks: List[DetectedMarkSchema] = Field(
+        default_factory=list, description="Tespit edilen tüm bölgeler."
+    )
+
+
 class DocumentAnalysisResponseSchema(BaseModel):
     """Full first-review (ön inceleme) result for an incoming document.
 
@@ -95,6 +133,10 @@ class DocumentAnalysisResponseSchema(BaseModel):
     guardrail: GuardrailAssessmentSchema = Field(
         default_factory=GuardrailAssessmentSchema,
         description="Girdi guardrail değerlendirmesi (gizlilik derecesi, PII bulguları).",
+    )
+    signature: SignatureAssessmentSchema = Field(
+        default_factory=SignatureAssessmentSchema,
+        description="İmza/mühür tespit sonucu (bkz. SignatureAssessmentSchema).",
     )
 
 

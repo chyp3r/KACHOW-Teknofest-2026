@@ -1,0 +1,143 @@
+{
+  "_meta": {
+    "description": "Hand-labelled ground truth for 19 real scanned CY-*.pdf documents under 00_gelen_kaynaklar/cevap_yazisi/, stratified over single- and multi-page scans and over the corpus's distinct letterhead templates (MSB, Ticaret, Cumhurbaşkanı Yardımcısı, Sanayi ve Teknoloji, Hazine ve Maliye, TBMM). Page 1 was read visually for each document; only page 1 is labelled, matching the header fields this corpus's RYUEHY compliance check reads. The 4 documents added after the initial 15 (CY-006, CY-023, CY-028, CY-034) were added specifically to test a signature-detection finding: the initial 15-document sample showed 0% signature recall, traced to two compounding bugs in marks.py (the stamp shape check intercepting real signatures before the signature check ever ran, and _SIGNATURE_ZONE_START_FRACTION excluding signatures that sit mid-page rather than literally the bottom third on these short-bodied letters) -- these 4 were chosen from documents the position-based heuristic flagged as signature-shaped but outside the original sample, specifically to check whether that positional signal was reliable or coincidental. All 4 turned out to be genuine wet signatures, on the same letterhead templates (Hazine ve Maliye Bakanlığı, Millî Savunma Bakanlığı, TBMM Kanunlar ve Kararlar Başkanlığı) as documents already confirmed signed in the original 15 -- strong evidence the corpus's signature placement is template-driven and the position signal generalises, not an artifact of the original sample.",
+    "clean_text_convention": "Each entry's 'clean_text' is a faithful transcription of page 1's header/addressee/reference/closing/signature-block lines (body paragraphs are shortened -- their exact wording never affects which fields the deterministic parser recovers). Expected fields are meant to be derived by running 'clean_text' through the same app.ai.compliance.field_parser.parse_labelled_fields() the OCR benchmark scores against, exactly mirroring how scripts/evaluate_ocr_fields.py derives its own ground truth from datasets/sample/evrak_*.txt ('Ground truth is the parse of the source text, not the JSON annotation'). A field the parser cannot recover even from this clean transcript (e.g. muhatap on CY-010, where the addressee is a named MP rather than a dative-suffixed institution; gonderen_kurum on CY-010, whose TBMM letterhead carries no 'T.C.' line) is left absent from the parse by construction -- that is a parser-architecture limit, not an OCR-quality question, so it must not be scored against any engine.",
+    "mark_labels": "has_signature / has_stamp / has_handwriting are visual judgements from the page image, independent of clean_text. has_signature means a signature-shaped ink mark is visible over the printed name (regardless of whether the document is legally e-imza-authenticated -- several documents carry both a 'Bu belge güvenli elektronik imza ile imzalanmıştır' notice AND a visible signature-style scrawl rendered into the PDF). has_stamp is reserved for a genuine applied ink chop/mühür distinct from the printed T.C./ministry letterhead crest -- the letterhead crest itself is NOT counted as a stamp here, since marks.py's own calibration notes (see scripts/evaluate_marks.py and the plan history) found its stamp detections are largely letterhead-emblem shaped, and conflating the two would make it impossible to tell a real detector improvement from a definitional one.",
+    "handwritten_digit_uncertainty": "Several 'sayı' values include a handwritten numeric suffix appended by hand next to a printed reference prefix (MSB, Ticaret Bakanlığı, Hazine ve Maliye templates). Cursive digits are inherently ambiguous to a human reader too; these are best-effort transcriptions, not certified exact. This uncertainty is itself informative for the benchmark -- it is exactly the content vision models are being compared on.",
+    "labelled_by": "manual visual reading of each PDF's page 1",
+    "labelled_on": "2026-08-16"
+  },
+  "CY-001_7-42571-abd-ve-israil-in-iran-a-yonelik-saldirilari-nedeniyle-alinan-onl.pdf": {
+    "clean_text": "T.C.\nCUMHURBAŞKANI YARDIMCISI\n\nSayı : E-48360949-610-375523\nKonu : Soru Önergeleri-365\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n\nİlgi : 07.04.2026 tarihli ve E-43452547-120.07.04-1830748 sayılı yazınız.\n\nAnayasanın 98 inci maddesi uyarınca Başkanlığımızca tarafıma gönderilen yazılı soru önergelerinden, bahsi geçen hususlar başta Enerji ve Tabii Kaynaklar Bakanlığı olmak üzere diğer bakanlıkların görev ve yetki alanına girmektedir.\nBilgilerini ve gereğini arz ederim.\n\nCevdet YILMAZ\nCumhurbaşkanı Yardımcısı",
+    "has_signature": false,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "No wet signature -- e-imza only, printed name/title. Handwritten TBMM tracking ref '7/42571' beside the addressee line. No 'Tarih' label anywhere on this letterhead template."
+  },
+  "CY-003_7-42931-turkiye-ve-israil-arasindaki-ticaret-hacmine-iliskin.pdf": {
+    "clean_text": "T.C.\nTİCARET BAKANLIĞI\n\nSayı : E-69602026-610-00121250011-1216701\nKonu : Soru Önergesi (7/42931)\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n\nİlgi : 10.04.2026 tarihli ve 43452547-120.07.04-E.1836040 sayılı yazınız.\n\nİlgide kayıtlı yazıları ekinde yer alan, Muğla Milletvekili Sayın Doç. Dr. Selçuk ÖZDAĞ tarafından verilen 7/42931 sayılı yazılı soru önergesinin cevabı hazırlanarak ekte sunulmuştur.\nBilgilerini ve gereğini arz ederim.\n\nProf. Dr. Ömer BOLAT\nBakan",
+    "has_signature": true,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Signature-shaped mark over 'Ömer Bolat' despite the e-imza notice. Handwritten tarih '29.04.2026', handwritten sayı suffix (uncertain digits, transcribed best-effort), handwritten ref '7/42931'."
+  },
+  "CY-005_7-42852-erisim-engeli-getirilen-bir-habere-iliskin.pdf": {
+    "clean_text": "T.C.\nCUMHURBAŞKANI YARDIMCISI\n\nSayı : E-48360949-610-378950\nKonu : Soru Önergeleri-367\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n\nİlgi : 10.04.2026 tarihli ve E-43452547-120.07.04-1836040 sayılı yazınız.\n\nAnayasanın 98 inci maddesi uyarınca Başkanlığımızca tarafıma gönderilen yazılı soru önergelerinden, bahsi geçen hususlar Milli Eğitim Bakanlığı ile Ulaştırma ve Altyapı Bakanlığının görev ve yetki alanına girmektedir.\nBilgilerini ve gereğini arz ederim.\n\nCevdet YILMAZ\nCumhurbaşkanı Yardımcısı",
+    "has_signature": false,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Same template as CY-001. Handwritten ref '7/42852'. No 'Tarih' label."
+  },
+  "CY-009_7-42649-katar-da-sehit-dusen-turk-asker-ve-teknisyenleri-icin-yapilan-ce.pdf": {
+    "clean_text": "T.C.\nMİLLÎ SAVUNMA BAKANLIĞI\nHukuk Hizmetleri Genel Müdürlüğü\n\nSayı : Z-88839574-610-2026/7064-6049322\nTarih : 16 Nisan 2026\nKonu : Yazılı Soru Önergesi\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n\nİlgi : 07.04.2026 tarihli ve E-43452547-120.07.04-1830748 sayılı yazınız.\n\nTekirdağ Milletvekili İlhami Özcan AYGUN tarafından TBMM Başkanlığına verilen ve Millî Savunma Bakanı tarafından cevap verilmesi talep edilen, 7/42649 sayılı yazılı soru önergesinin cevabı aşağıda sunulmuştur.\nArz ederim.\n\nYaşar GÜLER\nBakan",
+    "has_signature": true,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Wet signature over 'Yaşar GÜLER'. Handwritten sayı suffix, handwritten tarih, handwritten ref '7/42649' -- same MSB template as CY-012/CY-021."
+  },
+  "CY-010_7-42452-tbmm-baskanligina-gelen-yasama-dokunulmazliginin-kaldirilmasi-is.pdf": {
+    "clean_text": "TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞI\nKanunlar ve Kararlar Başkanlığı\n\nSayı : Z-43452547-120.07.03-1841896\nTarih : 20.04.2026\n\nSayın Ceylan AKÇA CUPOLO\nDiyarbakır Milletvekili\n\nİlgi : 25.03.2026 tarihli ve 7/42452 esas numaralı yazılı soru önergeniz.\n\nTBMM Başkanlığına gelen yasama dokunulmazlığının kaldırılması istemlerine ilişkin ilgi önergenizde yer alan sorularınız ekte cevaplandırılmıştır.\nBilgilerinizi rica ederim.\n\nBekir BOZDAĞ\nTürkiye Büyük Millet Meclisi\nBaşkanvekili",
+    "has_signature": true,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Deliberately-included edge case: this letterhead carries no 'T.C.' line (TBMM's own letterhead), and the addressee is a named individual MP rather than a dative-suffixed institution ('...NA'). Both gonderen_kurum and muhatap are therefore unrecoverable by the current parser from even a perfect transcription -- a parser-architecture gap, not an OCR-quality one; excluded from scoring for this reason, not omitted by oversight. Wet signature over 'Bekir BOZDAĞ'. Handwritten sayı suffix and partially-handwritten tarih ('20')."
+  },
+  "CY-012_7-42413-nato-nun-turkiye-de-yeni-bir-cok-uluslu-karargah-kuracagi-iddias.pdf": {
+    "clean_text": "T.C.\nMİLLÎ SAVUNMA BAKANLIĞI\nHukuk Hizmetleri Genel Müdürlüğü\n\nSayı : Z-88839574-610-2026/7061-6048344\nTarih : 16 Nisan 2026\nKonu : Yazılı Soru Önergesi\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n\nİlgi : 02.04.2026 tarihli ve E-43452547-120.07.04-1828355 sayılı yazınız.\n\nDüzce Milletvekili Talih ÖZCAN tarafından TBMM Başkanlığına verilen ve Millî Savunma Bakanı tarafından cevap verilmesi talep edilen, 7/42413 sayılı yazılı soru önergesinin cevabı aşağıda sunulmuştur.\nArz ederim.\n\nYaşar GÜLER\nBakan",
+    "has_signature": true,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "The user's originally-named document. CONFIRMED wet signature over 'Yaşar GÜLER' -- marks.py currently reports is_signed:false, has_stamp:true for this page (two letterhead-emblem-shaped 'stamp' detections, zero signature detections), the first hard evidence that the 'zero signatures across 45 documents' question left open by the previous plan is a detector false negative, not an absence of real signatures. Handwritten sayı suffix, handwritten tarih, handwritten ref '7/42413' (reads as '7/4/2413' under vision-model OCR)."
+  },
+  "CY-014_7-42671-17-mart-2026-tarihli-cumhurbaskani-karari-kapsaminda-transit-gec.pdf": {
+    "clean_text": "T.C.\nTİCARET BAKANLIĞI\n\nSayı : E-69602026-610-00121131703/0012137486\nKonu : Soru Önergesi (7/42671)\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n\nİlgi : 07.04.2026 tarihli ve 43452547-120.07.04-E.1830748 sayılı yazınız.\n\nİlgide kayıtlı yazıları ekinde yer alan, İstanbul Milletvekili Sayın Namık TAN tarafından verilen 7/42671 sayılı yazılı soru önergesinin cevabı hazırlanarak ekte sunulmuştur.\nBilgilerini ve gereğini arz ederim.\n\nProf. Dr. Ömer BOLAT\nBakan",
+    "has_signature": true,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Same Ticaret Bakanlığı template and same signature style as CY-003/CY-039. Handwritten tarih '21.06.2026', handwritten sayı suffix (uncertain digits), handwritten ref '7/42671'. No explicit 'Tarih' label -- date is unlabelled, right of Sayı."
+  },
+  "CY-017_7-42317-arac-ici-multimedya-sistemleri-alaninda-faaliyet-gosteren-isletm.pdf": {
+    "clean_text": "T.C.\nSANAYİ VE TEKNOLOJİ BAKANLIĞI\nStrateji Geliştirme Başkanlığı\n\nSayı : E-75833232-610-7936837\nKonu : Soru Önergeleri\n20/04/2026\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n(Kanunlar ve Kararlar Başkanlığı)\n\nİlgi : 01.04.2026 tarihli ve E-43452547-120.07.04-1827601 sayılı yazınız.\n\nBakanlığıma intikal eden, Eskişehir Milletvekili Sayın İbrahim ARSLAN tarafından tevcih edilen 7/42317 esas numaralı yazılı soru önergesinin cevabı Ek'te gönderilmektedir.\nBilgilerini ve gereğini arz ederim.\n\nMehmet Fatih KACIR\nBakan",
+    "has_signature": false,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Sanayi ve Teknoloji Bakanlığı template: sayı is fully printed (no handwritten suffix, unlike MSB/Ticaret/Hazine templates), only the TBMM tracking ref '7/42317' is handwritten. No visible ink signature over the printed name. Two-line addressee with a parenthesised continuation on the next line -- exercises _parse_addressee's parenthetical-suffix branch. Date '20/04/2026' sits to the right of 'Konu', unlabelled."
+  },
+  "CY-019_7-42217-adalet-bakani-nin-atanma-surecine-iliskin.pdf": {
+    "clean_text": "T.C.\nCUMHURBAŞKANI YARDIMCISI\n\nSayı : E-48360949-610-375498\nKonu : Soru Önergeleri-362\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n\nİlgi : 01.04.2026 tarihli ve E-43452547-120.07.04-1827601 sayılı yazınız.\n\nAnayasanın 98 inci maddesi uyarınca Başkanlığımızca tarafıma gönderilen yazılı soru önergelerinden, Diyarbakır Milletvekili Sayın Mustafa Sezgin TANRIKULU tarafından verilen 7/42217 esas numaralı önergede bahsi geçen hususlar Adalet Bakanlığının görev ve yetki alanına girmektedir.\nBilgilerini ve gereğini arz ederim.\n\nCevdet YILMAZ\nCumhurbaşkanı Yardımcısı",
+    "has_signature": false,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Same template as CY-001/CY-005/CY-024. Handwritten ref '7/42217'."
+  },
+  "CY-021_7-42309-harp-arac-ve-gerecleri-silah-muhimmat-ve-askeri-patlayici-maddel.pdf": {
+    "clean_text": "T.C.\nMİLLÎ SAVUNMA BAKANLIĞI\nHukuk Hizmetleri Genel Müdürlüğü\n\nSayı : Z-88839574-610-2026/7057-6045969\nTarih : 15 Nisan 2026\nKonu : Yazılı Soru Önergesi\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n\nİlgi : 01.04.2026 tarihli ve E-43452547-120.07.04-1827601 sayılı yazınız.\n\nBalıkesir Milletvekili Turhan ÇÖMEZ tarafından TBMM Başkanlığına verilen ve Millî Savunma Bakanı tarafından cevap verilmesi talep edilen, 7/42309 sayılı yazılı soru önergesinin cevabı aşağıda sunulmuştur.\nArz ederim.\n\nYaşar GÜLER\nBakan",
+    "has_signature": true,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Same MSB template and same signature as CY-009/CY-012. Handwritten sayı suffix, handwritten tarih, handwritten ref '7/42309'."
+  },
+  "CY-024_7-42133-6-subat-2023-tarihli-depremler-sonrasi-insa-edilen-konutlarin-te.pdf": {
+    "clean_text": "T.C.\nCUMHURBAŞKANI YARDIMCISI\n\nSayı : E-48360949-610-375478\nKonu : Soru Önergeleri-361\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n\nİlgi : 30.03.2026 tarihli ve E-43452547-120.07.04-1826832 sayılı yazınız.\n\nAnayasanın 98 inci maddesi uyarınca Başkanlığımızca tarafıma gönderilen yazılı soru önergelerinden, Diyarbakır Milletvekili Sayın Mustafa Sezgin TANRIKULU tarafından verilen 7/42133 esas numaralı önergede bahsi geçen hususlar Çevre, Şehircilik ve İklim Değişikliği Bakanlığının görev ve yetki alanına girmektedir.\nBilgilerini ve gereğini arz ederim.\n\nCevdet YILMAZ\nCumhurbaşkanı Yardımcısı",
+    "has_signature": false,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Same template as CY-001/CY-005/CY-019. Handwritten ref '7/42133'."
+  },
+  "CY-030_7-42037-dicle-universitesi-tip-fakultesi-hastanesi-projesi-nin-ihale-sur.pdf": {
+    "clean_text": "T.C.\nHAZİNE VE MALİYE BAKANLIĞI\nStrateji Geliştirme Başkanlığı\n\nSayı : Z-19809844-610-4711195\nKonu : 7/42037 Esas Sayılı Soru Önergesi\n15/04/2026\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n\nİlgi : 30/03/2026 tarihli ve E-43452547-120.07.04-1826809 sayılı yazınız.\n\nİlgi yazınız ekinde alınan Diyarbakır Milletvekili Sayın Av. Dr. M. Sezgin TANRIKULU'na ait yazılı soru önergesine ilişkin olarak, Bakanlığımız tarafından hazırlanan cevap metni ektedir.\nBilgilerini ve gereğini arz ederim.\n\nMehmet ŞİMŞEK\nBakan",
+    "has_signature": true,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Different visual template from the others: dashed-line footer separator, no e-imza QR/notice -- reads as a physically printed-and-signed document rather than an e-imza printout, consistent with its clearly wet ink signature over 'Mehmet ŞİMŞEK'. Handwritten sayı suffix, partially-handwritten date ('15'). Date is unlabelled, on its own line below Konu rather than beside Sayı."
+  },
+  "CY-036_7-41878-insansi-robot-ve-ileri-yapay-zeka-alaninda-yapilan-calismalara-i.pdf": {
+    "clean_text": "T.C.\nSANAYİ VE TEKNOLOJİ BAKANLIĞI\nStrateji Geliştirme Başkanlığı\n\nSayı : E-75833232-610-7881738\nKonu : Soru Önergeleri\n02/04/2026\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n(Kanunlar ve Kararlar Başkanlığı)\n\nİlgi : 17.03.2026 tarihli ve E-43452547-120.07.04-1817456 sayılı yazınız.\n\nBakanlığıma intikal eden, Konya Milletvekili Sayın Ali YÜKSEL tarafından tevcih edilen 7/41878 esas numaralı yazılı soru önergesinin cevabı Ek'te gönderilmektedir.\nBilgilerini ve gereğini arz ederim.\n\nMehmet Fatih KACIR\nBakan",
+    "has_signature": false,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Same Sanayi ve Teknoloji Bakanlığı template as CY-017/CY-049 -- fully printed sayı, no ink signature, two-line parenthesised addressee. Handwritten ref '7/41878'."
+  },
+  "CY-006_7-42533-abd-ve-israil-in-iran-a-yonelik-saldirilarinin-bolgesel-bir-cati.pdf": {
+    "clean_text": "T.C.\nMİLLÎ SAVUNMA BAKANLIĞI\nHukuk Hizmetleri Genel Müdürlüğü\n\nSayı : Z-88839574-610-2026/7062-6060648\nTarih : 20 Nisan 2026\nKonu : Yazılı Soru Önergesi\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n\nİlgi : 03.04.2026 tarihli ve E-43452547-120.07.04-1829485 sayılı yazınız.\n\nDiyarbakır Milletvekili Mustafa Sezgin TANRIKULU tarafından TBMM Başkanlığına verilen ve Millî Savunma Bakanı tarafından cevap verilmesi talep edilen, 7/42533 sayılı yazılı soru önergesinin cevabı aşağıda sunulmuştur.\nArz ederim.\n\nYaşar GÜLER\nBakan",
+    "has_signature": true,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Added after the initial 15 -- see this file's _meta.description. Same MSB template and signature as CY-009/CY-012/CY-021; confirms the position-based signature heuristic's y_center_fraction~0.55 on this document is a genuine signature, not a false positive."
+  },
+  "CY-023_7-42159-izmir-in-konak-ilcesine-bagli-umurbey-mahallesi-nde-bulunan-bazi.pdf": {
+    "clean_text": "T.C.\nHAZİNE VE MALİYE BAKANLIĞI\nStrateji Geliştirme Başkanlığı\n\nSayı : Z-19809844-610-4712341\nKonu : 7/42159 Esas Sayılı Soru Önergesi\n16/04/2026\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n\nİlgi : 30/03/2026 tarihli ve E-43452547-120.07.04-1826832 sayılı yazınız.\n\nİlgi yazınız ekinde alınan İzmir Milletvekili Sayın Av. Sevda ERDAN KILIÇ'a ait yazılı soru önergesine ilişkin olarak, Bakanlığımız tarafından hazırlanan cevap metni ektedir.\nBilgilerini ve gereğini arz ederim.\n\nMehmet ŞİMŞEK\nBakan",
+    "has_signature": true,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Added after the initial 15 -- see this file's _meta.description. Same Hazine ve Maliye Bakanlığı template and signature as CY-030/CY-028; confirms the position heuristic at y_center_fraction~0.39 (well above the original 2/3 'bottom third' floor) on this document is a genuine signature."
+  },
+  "CY-028_7-42045-son-10-yilda-en-fazla-kamu-ihalesi-kazanan-sirketlere-iliskin.pdf": {
+    "clean_text": "T.C.\nHAZİNE VE MALİYE BAKANLIĞI\nStrateji Geliştirme Başkanlığı\n\nSayı : Z-19809844-610-4712165\nKonu : 7/42045 Esas Sayılı Soru Önergesi\n16/04/2026\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n\nİlgi : 30/03/2026 tarihli ve E-43452547-120.07.04-1826809 sayılı yazınız.\n\nİlgi yazınız ekinde alınan Artvin Milletvekili Sayın Av. Uğur BAYRAKTUTAN'a ait yazılı soru önergesine ilişkin olarak, Bakanlığımız tarafından hazırlanan cevap metni ektedir.\nBilgilerini ve gereğini arz ederim.\n\nMehmet ŞİMŞEK\nBakan",
+    "has_signature": true,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Added after the initial 15 -- see this file's _meta.description. Same Hazine ve Maliye Bakanlığı template and signature as CY-030/CY-023; this was the lowest y_center_fraction (~0.38) among the candidates checked and is still a genuine signature, which is what set the final _SIGNATURE_ZONE_START_FRACTION."
+  },
+  "CY-034_7-41896-sayistayin-faaliyetlerine-iliskin.pdf": {
+    "clean_text": "TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞI\nKanunlar ve Kararlar Başkanlığı\n\nSayı : Z-43452547-120.07.03-1829508\nTarih : 02.04.2026\n\nSayın İdris ŞAHİN\nAnkara Milletvekili\n\nİlgi : 10.03.2026 tarihli ve 7/41896 esas numaralı yazılı soru önergeniz.\n\nSayıştayın faaliyetlerine ilişkin ilgi önergenizde yer alan sorular için Sayıştay Başkanlığı ile Plan ve Bütçe Komisyonu Başkanlığı tarafından gönderilen cevabi yazılar ekte sunulmuştur.\nBilgilerinizi rica ederim.\n\nBekir BOZDAĞ\nTürkiye Büyük Millet Meclisi\nBaşkanvekili",
+    "has_signature": true,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Added after the initial 15 -- see this file's _meta.description. Same TBMM Kanunlar ve Kararlar Başkanlığı template (no 'T.C.' line, named-MP addressee -- both muhatap and gonderen_kurum are structurally unrecoverable here, same as CY-010) and signature as CY-010. Five-page document; only page 1 is labelled. Confirms the position heuristic at y_center_fraction~0.46 on this document is a genuine signature."
+  },
+  "CY-039_7-41757-sogan-ithalatina-iliskin.pdf": {
+    "clean_text": "T.C.\nTİCARET BAKANLIĞI\n\nSayı : E-69602026-610-00120350725/1205460\nKonu : Soru Önergesi (7/41757)\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n\nİlgi : 12.03.2026 tarihli ve 43452547-120.07.04-E.1816225 sayılı yazınız.\n\nİlgide kayıtlı yazıları ekinde yer alan, Niğde Milletvekili Sayın Ömer Fethi GÜRER tarafından verilen 7/41757 sayılı yazılı soru önergesinin cevabı hazırlanarak ekte sunulmuştur.\nBilgilerini ve gereğini arz ederim.\n\nProf. Dr. Ömer BOLAT\nBakan",
+    "has_signature": true,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Same Ticaret Bakanlığı template and signature as CY-003/CY-014. Handwritten tarih '31.03.2026', handwritten sayı suffix (uncertain digits), handwritten ref '7/41757'."
+  },
+  "CY-049_7-41393-dogu-ve-guneydogu-anadolu-bolgelerinde-yer-alan-illerde-sanayi-r.pdf": {
+    "clean_text": "T.C.\nSANAYİ VE TEKNOLOJİ BAKANLIĞI\nStrateji Geliştirme Başkanlığı\n\nSayı : E-75833232-610-7865462\nKonu : Soru Önergeleri\n27/03/2026\n\nTÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA\n(Kanunlar ve Kararlar Başkanlığı)\n\nİlgi : 11.03.2026 tarihli ve E-43452547-120.07.04-1813638 sayılı yazınız.\n\nBakanlığıma intikal eden, Batman Milletvekili Sayın Serkan RAMANLI tarafından tevcih edilen 7/41393 esas numaralı yazılı soru önergesinin cevabı Ek'te gönderilmektedir.\nBilgilerini ve gereğini arz ederim.\n\nMehmet Fatih KACIR\nBakan",
+    "has_signature": false,
+    "has_stamp": false,
+    "has_handwriting": true,
+    "notes": "Same template as CY-017/CY-036. Handwritten ref '7/41393'. Four-page document -- only page 1 (this header) is labelled."
+  }
+}

@@ -71,6 +71,55 @@ describe("DocumentAnalysisPanel", () => {
     );
   });
 
+  it("does not render the signature section when the field is absent", () => {
+    // `signature` is optional (see types/documents.ts) specifically so a
+    // pre-existing analysis object, like this suite's own base fixture,
+    // still type-checks and renders without it.
+    render(<DocumentAnalysisPanel analysis={analysis} />);
+    expect(screen.queryByText("İmza ve mühür")).not.toBeInTheDocument();
+  });
+
+  it("shows a signed badge and detected marks when signature is present", () => {
+    render(
+      <DocumentAnalysisPanel
+        analysis={{
+          ...analysis,
+          signature: {
+            is_signed: true,
+            has_stamp: true,
+            marks: [
+              { kind: "signature", page: 1, bbox: [10, 900, 200, 950], confidence: 0.8 },
+              { kind: "stamp", page: 1, bbox: [600, 100, 700, 200], confidence: 0.7 },
+            ],
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("İmza ve mühür"));
+
+    expect(screen.getByText("İmzalı")).toBeInTheDocument();
+    expect(screen.getByText("Mühür/damga")).toBeInTheDocument();
+  });
+
+  it("shows an unsigned badge and empty state when no marks were detected", () => {
+    render(
+      <DocumentAnalysisPanel
+        analysis={{
+          ...analysis,
+          signature: { is_signed: false, has_stamp: false, marks: [] },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("İmza ve mühür"));
+
+    expect(screen.getByText("İmza tespit edilmedi")).toBeInTheDocument();
+    expect(
+      screen.getByText("Sayfada imza, mühür veya el yazısı bölgesi tespit edilmedi."),
+    ).toBeInTheDocument();
+  });
+
   it("discards edits on cancel without calling onSave", () => {
     const onSave = vi.fn();
     render(<DocumentAnalysisPanel analysis={analysis} onSave={onSave} />);

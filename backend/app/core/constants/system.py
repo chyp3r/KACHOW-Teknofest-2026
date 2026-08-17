@@ -52,6 +52,23 @@ TEXT_LAYER_PROBE_MIN_CHARS: int = 20
 # has no text layer on any page, so checking the first few is enough to tell
 # it apart from a born-digital PDF even when the document runs much longer.
 TEXT_LAYER_PROBE_MAX_PAGES: int = 3
+# Fraction of a scanned first page's height treated as the "header band" for
+# OllamaVisionExtractor.transcribe_header_band -- covers the letterhead
+# through the Konu line on the corpus this was measured against (the 45
+# scanned CY-*.pdf under datasets/resmi_yazisma/00_gelen_kaynaklar/cevap_yazisi/).
+# No quality signal (header-noise density, quality_ratio) reliably predicts
+# which scans need this repair -- calibrating one against that full corpus
+# found essentially no correlation with actual outcome (Pearson r=0.036 once
+# known parser gaps were controlled for). Applied unconditionally to every
+# OCR result instead; a small crop keeps the always-paid cost bounded (~12.6s
+# measured, against ~26s for a full page through the same model).
+HEADER_BAND_FRACTION: float = 0.28
+# How many leading lines of a page's OCR text the header band is assumed to
+# cover, for splicing the vision model's cleaner transcription back in. Text
+# has no pixel coordinates in this pipeline (ExtractedDocument.pages is a
+# flat list[str]), so this is the same line-count approximation used to
+# calibrate HEADER_BAND_FRACTION above, not a precise mapping.
+HEADER_REPAIR_LINE_COUNT: int = 14
 
 # ---------- Pagination ----------
 DEFAULT_PAGE_SIZE: int = 20

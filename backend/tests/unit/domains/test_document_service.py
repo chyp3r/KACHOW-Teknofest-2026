@@ -23,6 +23,7 @@ from app.infrastructure.extractors.base import (
     DocumentExtractionError,
     ExtractedDocument,
 )
+from app.infrastructure.extractors.marks import DetectedMark
 from app.infrastructure.storage.base import BaseStorage
 
 #: A real, minimally valid PDF (one blank page) -- not just bytes starting
@@ -136,6 +137,51 @@ async def test_analyze_returns_full_first_review_result():
     storage.put_file.assert_awaited_once()
     assert storage.put_file.await_args.args[0].startswith("uploads/")
     assert storage.put_file.await_args.args[0].endswith(".pdf")
+
+
+@pytest.mark.asyncio
+async def test_analyze_populates_signature_assessment_from_detected_marks():
+    """Built directly from extracted.detected_marks (see _assemble's own
+    comment on why: detection already ran once during extraction, the graph
+    only reads it, never recomputes it)."""
+    text = "Sayı: E-123\nKonu: İzin\n" + "x" * 300
+    extracted = ExtractedDocument(
+        text=text,
+        pages=[text],
+        page_count=1,
+        extractor="tesseract",
+        used_ocr=True,
+        detected_marks=[
+            DetectedMark(kind="signature", page=1, bbox=(10, 900, 200, 950), confidence=0.7),
+            DetectedMark(kind="stamp", page=1, bbox=(600, 100, 700, 200), confidence=0.8),
+        ],
+    )
+    service, _, _, _ = _build_service(extracted=extracted)
+
+    result = await service.analyze_document(
+        owner_id="user-1",
+        company_id="company-1",
+        file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
+    )
+
+    assert result.signature.is_signed is True
+    assert result.signature.has_stamp is True
+    assert {mark.kind for mark in result.signature.marks} == {"signature", "stamp"}
+
+
+@pytest.mark.asyncio
+async def test_analyze_reports_an_unsigned_document_with_no_detected_marks():
+    service, _, _, _ = _build_service()  # default fixture: detected_marks=[]
+
+    result = await service.analyze_document(
+        owner_id="user-1",
+        company_id="company-1",
+        file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
+    )
+
+    assert result.signature.is_signed is False
+    assert result.signature.has_stamp is False
+    assert result.signature.marks == []
 
 
 @pytest.mark.asyncio
@@ -538,6 +584,55 @@ async def test_update_document_fields_reruns_compliance_and_persists_the_correct
 
 
 @pytest.mark.asyncio
+async def test_get_cached_analysis_loads_a_pre_signature_field_cache(tmp_path, monkeypatch):
+    """A cache written before `signature` existed on the response schema has
+    no such key in its `analysis` object at all -- must still validate, with
+    `signature` taking its default (empty), the same guarantee `guardrail`
+    already relies on. Without a default this would 404 every document
+    analysed before this feature shipped (see get_cached_analysis's own
+    docstring: a validation failure returns None -> the router 404s)."""
+    import json
+
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
+    storage_path = "uploads/old.pdf"
+    cache_file = tmp_path / f"{storage_path}_analysis.json"
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text(
+        json.dumps(
+            {
+                "extracted_text": "metin",
+                "pages": ["metin"],
+                "analysis": {
+                    "file_name": "old.pdf",
+                    "storage_path": storage_path,
+                    "extraction": {
+                        "extractor": "tesseract",
+                        "page_count": 1,
+                        "char_count": 5,
+                        "used_ocr": True,
+                    },
+                    "document_type": "official_letter",
+                    "document_type_label": "Resmî Yazı",
+                    "summary": "özet",
+                    "fields": {},
+                    "compliance_status": "incomplete",
+                    # No "signature" key at all -- the pre-existing shape.
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    service, _, _, _ = _build_service()
+
+    result = await service.get_cached_analysis(storage_path)
+
+    assert result is not None
+    assert result.signature.is_signed is False
+    assert result.signature.marks == []
+
+
 async def test_update_document_fields_returns_none_when_nothing_is_cached(tmp_path, monkeypatch):
     from app.core.config import settings
 

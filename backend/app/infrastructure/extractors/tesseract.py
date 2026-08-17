@@ -15,6 +15,7 @@ from app.infrastructure.extractors.base import (
     has_pdf_magic_bytes,
     matches_extension,
 )
+from app.infrastructure.extractors.marks import detect_marks
 
 logger = logging.getLogger(__name__)
 
@@ -135,12 +136,22 @@ class TesseractExtractor(BaseDocumentExtractor):
             self.language,
             self.dpi,
         )
+        # Best-effort, same rendered pages: detect_marks never raises (see its
+        # own docstring), so a detector bug here must never fail an OCR result
+        # that otherwise succeeded -- no try/except needed at this call site.
+        mark_lists = await asyncio.gather(
+            *(
+                asyncio.to_thread(detect_marks, image, page_number)
+                for page_number, image in enumerate(images, start=1)
+            )
+        )
         return ExtractedDocument(
             text=text,
             pages=pages,
             page_count=len(pages),
             extractor=self.name,
             used_ocr=True,
+            detected_marks=[mark for marks in mark_lists for mark in marks],
         )
 
     def _render_pages(self, content: bytes) -> list:

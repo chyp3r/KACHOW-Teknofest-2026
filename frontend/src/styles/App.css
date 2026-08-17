@@ -1044,6 +1044,7 @@ textarea { min-height: 105px; resize: vertical; }
 .detail-list li span, .detail-list li strong { display: block; }
 .detail-list li span, .detail-empty { color: var(--text-secondary); }
 .guardrail-summary { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+.guardrail-summary > small { color: var(--text-muted); }
 .search-field { display: flex; align-items: center; gap: var(--space-2); min-width: 220px; padding: 0 var(--space-2); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
 .search-field input { border: 0; box-shadow: none; background: transparent; }
 .table-toolbar { display: flex; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }

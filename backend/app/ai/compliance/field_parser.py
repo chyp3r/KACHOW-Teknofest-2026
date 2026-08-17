@@ -41,9 +41,44 @@ _LABEL_ALTERNATION = (
 #: Only spaces and tabs may sit around the colon -- never `\s`, which matches
 #: newlines and would let an empty "Konu :" line capture the following line's text.
 #: That mattered: it silently invented a value for a field the document leaves blank.
+#:
+#: `\S{0,3}` before the colon tolerates a short stray token between the label and
+#: its colon: real scanned-corpus OCR (see field_recovery calibration against the
+#: 45 real CY-*.pdf under datasets/resmi_yazisma/) consistently misreads a form
+#: checkbox glyph as "Sayı (o :..." for one recurring template -- this single
+#: pattern accounted for the majority of missing `sayi` values across that corpus.
+#: Capped at 3 characters so it cannot eat into a genuine value when the format is
+#: already a normal "Label : value".
 _VALUE_TAIL = (
-    rf"[ \t]*[:：][ \t]*(.+?)"
+    rf"[ \t]*\S{{0,3}}[ \t]*[:：][ \t]*(.+?)"
     rf"(?=[ \t]+(?:{_LABEL_ALTERNATION})[ \t]*[:：]|[ \t]*$)"
+)
+
+#: A date, either numeric ("16.04.2026") or spelled out ("16 Nisan 2026").
+_DATE = (
+    r"\d{1,2}[./]\d{1,2}[./]\d{4}"
+    r"|\d{1,2}\s+(?:Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık)\s+\d{4}"
+)
+#: RYUEHY m.12 prescribes a "Tarih:" label, but real official correspondence
+#: routinely places the date unlabelled at the right of the Sayı line instead
+#: (verified against the 45 real scanned CY-*.pdf under datasets/resmi_yazisma/:
+#: this was the single largest cause of missing `tarih` in that corpus). Tried
+#: only as a fallback when the labelled SINGLE_VALUE_PATTERN entry finds nothing
+#: -- see its use in parse_labelled_fields.
+_UNLABELLED_DATE_ON_SAYI_LINE = re.compile(
+    rf"(?:^|\n)\s*Say[ıi][^\n]*?({_DATE})\s*$", re.MULTILINE
+)
+#: A second, narrower fallback for the same real-world problem: some vision-
+#: model transcriptions break the date onto its own line instead of keeping
+#: it glued to the Sayı line (verified against CY-010's glm-ocr:latest header
+#: repair: "Sayı : Z-43452547-120.07.03-1841896\n20.04.2026\nKonu : ..." --
+#: the labelled and same-line patterns above both find nothing there). Tried
+#: only when both of those find nothing, and requires the date to be the
+#: *entire* next line -- not merely present somewhere after Sayı -- so a date
+#: mentioned later in the body, separated by unrelated content, is never
+#: mistaken for the header date.
+_UNLABELLED_DATE_ON_LINE_AFTER_SAYI = re.compile(
+    rf"(?:^|\n)\s*Say[ıi][^\n]*\n[ \t]*({_DATE})[ \t]*(?:\n|$)", re.MULTILINE
 )
 
 SINGLE_VALUE_PATTERN: dict[str, re.Pattern[str]] = {
@@ -102,13 +137,49 @@ def _split_list(value: str) -> list[str]:
 
 #: Lines that are labelled side-headings rather than free content.
 _ANY_LABEL_LINE = re.compile(rf"^\s*(?:{_LABEL_ALTERNATION})[ \t]*[:：]", re.IGNORECASE)
-#: "T.C." header line (m.10).
-_TC_LINE = re.compile(r"^\s*T\s*\.?\s*C\s*\.?\s*$", re.IGNORECASE)
-#: An addressee line: upper-case and carrying a Turkish dative suffix (m.14),
-#: e.g. "ÖRNEK VALİLİĞİNE", "İLGİLİ MAKAMA", "DAĞITIM YERLERİNE".
-_ADDRESSEE_LINE = re.compile(
-    r"^[^a-zçğıöşü]{6,}?(?:NA|NE|YA|YE|MAKAMA|YERLERİNE|BAŞKANLIĞINA)\s*$"
-)
+#: "T.C." header line (m.10). Tolerates up to 3 leading non-alphanumeric
+#: characters: real OCR (CY-023/027/028/030 in the scanned corpus) consistently
+#: glues a decorative border/emblem glyph onto the same line as "T.C."
+#: ("* T.C.", ", T.C."), which an exact-match anchor rejected outright, losing
+#: the letterhead-institution scan entirely (_parse_sender_institution below
+#: never even starts).
+_TC_LINE = re.compile(r"^[^A-Za-zÇĞİÖŞÜçğıöşü]{0,3}\s*T\s*\.?\s*C\s*\.?\s*$", re.IGNORECASE)
+#: An addressee line: ends in a Turkish dative suffix (m.14), e.g.
+#: "ÖRNEK VALİLİĞİNE", "İLGİLİ MAKAMA", "DAĞITIM YERLERİNE".
+#:
+#: The suffix itself stays upper-case-only, unlike the run before it -- that
+#: is what keeps this safe. `.{6,40}?` (any characters, length-capped so it
+#: cannot span a whole sentence) tolerates a stray lower-case OCR artefact
+#: within an otherwise upper-case addressee line (real OCR on the scanned
+#: corpus renders some addressees with an incidental miscased letter or two),
+#: while still requiring the line to *end* upper-case, which an ordinary name
+#: or lower-case sentence fragment never does. A fully case-insensitive
+#: version was tried first and rejected: "Zeynep Kaya" -- an ordinary
+#: person's name -- matched it, because "Kaya" ends in "ya" like any of a
+#: thousand ordinary Turkish words; only requiring upper-case at the end
+#: rules that out. See test_addressee_pattern_does_not_match_a_capitalised_name
+#: and test_addressee_pattern_does_not_match_an_ordinary_body_sentence.
+_ADDRESSEE_SUFFIX = r"(?:NA|NE|YA|YE|MAKAMA|YERLERİNE|BAŞKANLIĞINA)"
+#: Trailing `\s+[0-9/]{1,12}` tolerates exactly one short *digits-and-slashes*
+#: annotation after the suffix -- real vision-model OCR on the scanned
+#: corpus (CY-012) places a handwritten reference number ('7/4/2413') on the
+#: same line as the addressee when it reads that handwriting correctly, and
+#: the stricter `$` anchor used to reject the whole line for it.
+#:
+#: Restricted to `[0-9/]`, not `\S`: a first attempt allowing any short token
+#: caused a real regression, found by an A/B run against 45 real scans holding
+#: the extracted text fixed and comparing old vs new parser output. "HAZİNE
+#: VE MALİYE BAKANLIĞI" -- an institution's own letterhead line, not an
+#: addressee -- false-matched because "MALİYE" ends in "YE" and "BAKANLIĞI"
+#: is one short token; because _parse_addressee returns the *first* matching
+#: line, this false match both won over the real addressee lower in the
+#: document and (via _parse_sender_institution's shared break condition)
+#: zeroed out gonderen_kurum recovery on every document sharing this
+#: letterhead. Same failure family as the "Zeynep Kaya" case below, just
+#: hitting an institution name instead of a person's name -- restricting the
+#: annotation to a reference-number shape closes it while still matching
+#: every real handwritten-reference case measured in the corpus.
+_ADDRESSEE_LINE = re.compile(rf"^.{{6,40}}?{_ADDRESSEE_SUFFIX}(?:\s+[0-9/]{{1,12}})?\s*$")
 #: A personal name line in the signature block: 2-4 capitalised words, no digits.
 _PERSON_NAME_LINE = re.compile(
     r"^(?:[A-ZÇĞİÖŞÜ][a-zçğıöşü]+\.?\s+){1,3}[A-ZÇĞİÖŞÜ][a-zçğıöşü]+$"
@@ -292,6 +363,26 @@ def parse_labelled_fields(text: str) -> dict[str, Any]:
             items = _split_list(match.group(1))
             if items:
                 parsed[name] = items
+
+    # Fallback for the unlabelled date real correspondence routinely places at
+    # the right of the Sayı line (see _UNLABELLED_DATE_ON_SAYI_LINE) -- tried
+    # only when the labelled "Tarih:" form above found nothing, so a document
+    # that does label it is unaffected.
+    if "tarih" not in parsed:
+        match = _UNLABELLED_DATE_ON_SAYI_LINE.search(text)
+        if match:
+            value = _clean(match.group(1))
+            if value:
+                parsed["tarih"] = value
+
+    # Second fallback, tried only when the same-line form above also found
+    # nothing -- see _UNLABELLED_DATE_ON_LINE_AFTER_SAYI's own docstring.
+    if "tarih" not in parsed:
+        match = _UNLABELLED_DATE_ON_LINE_AFTER_SAYI.search(text)
+        if match:
+            value = _clean(match.group(1))
+            if value:
+                parsed["tarih"] = value
 
     # Positional fields fill in only where a labelled value was not already found.
     for name, value in parse_positional_fields(text).items():
