@@ -37,8 +37,13 @@ from app.ai.policy.prototypes import FAMILIES
 #: layer classifies over at all -- it is a domain-admission verdict applied
 #: *after* an intent (draft/analyze/assist/revise) is already resolved (see
 #: `app.ai.workflows.scope.resolve_scope` and `planner._apply_scope_gate`),
-#: so it likewise has no prototypes and never will.
-_EXPECTED_INTENT_LABELS = set(PLAN_BY_INTENT) - {"clarify", "refuse"}
+#: so it likewise has no prototypes and never will. `transfer` (Faz 4, #201)
+#: is resolved by its own pre-fusion lexical gate (`planner._try_transfer`,
+#: checked the same way `_try_compound` is, before fusion runs at all) --
+#: see `intent_rules.TRANSFER_VERB_SURFACES`'s docstring for why it
+#: deliberately never joins the calibrated four-way softmax `draft`/
+#: `analyze`/`assist`/`revise` compete in, so it likewise has no prototypes.
+_EXPECTED_INTENT_LABELS = set(PLAN_BY_INTENT) - {"clarify", "refuse", "transfer"}
 
 
 def _load(family: str) -> dict:
