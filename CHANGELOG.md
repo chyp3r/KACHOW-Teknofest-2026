@@ -2,6 +2,68 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.15.0] - 2026-08-17
+### Eklendi
+İnternal communication planının **Faz 3**'ü (#199): taslak/evrak transferini
+tek bir deterministik domain katmanına indiren backend + bu katmanı chat
+üzerinden manuel kullanan frontend. AI/agent katmanına hiçbir dokunuş yok --
+transfer intent tespiti, slot extraction, confirmation state machine Faz 4'te.
+
+- **`ArtifactTransferService.execute`** (yeni, `domains/transfers/`): artık
+  *her* kanaldan (chat, eski REST, ileride AI) her transfer bu tek yoldan
+  geçiyor -- idempotency kontrolü → PDP (`Action.ARTIFACT_TRANSFER`) →
+  `TransferPolicy` (self-send/pasif alıcı/gizlilik/yalnızca-AI-kanalında-
+  favori) → snapshot (taslak fork'u veya evrak pool item + metadata
+  snapshot) → `artifact_transfers` satırı → alıcıyla DM'e
+  `kind="artifact"` mesajı → best-effort audit + bildirim.
+- **`DraftShareService.send`** artık bu servise delege ediyor;
+  **`respond(status="accepted")` artık fork'lamıyor** -- alıcı kopyasını
+  zaten *gönderim anında* alıyor (çift fork bug'ı giderildi). Kabul etmek
+  artık yalnızca bir durum geçişi.
+- **`POST /transfers/send`**: chat üzerinden taslak/evrak gönderme için
+  birincil yeni yol. `GET /transfers/{id}`, `GET /transfers/recommendations`
+  (taslağın yönlendirildiği birim → favoriler öncelikli üye listesi, yeni
+  bir AI çağrısı yok).
+- **`drafts.destination_unit_id`/`destination_justification`** (yeni
+  kolonlar, geriye dönük backfill'li): yönlendirmenin serbest metin birim
+  adını her göndermede yeniden aramak artık gerekmiyor.
+- **`document_pool_items.metadata_snapshot`/`transferred_by`**: evrak
+  blob'u paylaşımlı ve hiç mutasyona uğramıyor, ama metadata'sı
+  (`document_type`, `özet`, `gizlilik derecesi`...) transfer anında
+  donduruluyor -- gönderen sonradan düzenlese bile alıcının gördüğü
+  değişmiyor (entegrasyon testiyle doğrulandı).
+- **Frontend**: `SendArtifactDialog` (composer'dan taslak/evrak seçip
+  gönderme, yalnızca DM'lerde -- transferler 1:1), `ArtifactMessageCard`
+  (thread içinde canlı transfer durumu -- başlık/durum asla mesajda
+  önbelleklenmiyor, her zaman `GET /transfers/{id}`'den okunuyor).
+
+### Bilinçli sınırlar
+- `RecipientResolutionService`/`RecipientRecommendationService` bu fazda
+  inşa edildi ve tam test edildi, ama henüz bir çağıranı yok -- manuel
+  kanallar (chat composer, eski `/drafts/{id}/send`) zaten Faz 2'nin
+  kullanıcı arama UI'ı üzerinden açık bir `recipient_id` taşıyor. İlk
+  gerçek çağıran Faz 4'ün AI kanalı olacak.
+- Çok alıcılı `POST /drafts/{id}/send` artık kesin all-or-nothing değil --
+  her alıcının transferi artık bağımsız commit ediliyor. Frontend
+  tüketicisi olmadığı için (doğrulandı) blast radius düşük.
+- Evrak transferinde "Aç" eylemi yok -- alıcı evrakı kendi evrak havuzundan
+  görüntülüyor, ayrı bir detay sayfası bu fazda yok.
+
+### Test
+- `docker compose exec backend pytest tests/unit tests/integration -q` →
+  **1983 test geçti** (126 yeni: `TransferPolicy`'nin her deny sebebi,
+  `ArtifactTransferService`'in idempotency/authorization/snapshot/delivery
+  yolları, recipient resolution/recommendation, PDP `ARTIFACT_TRANSFER`
+  kapsamı, gerçek Postgres üzerinde RLS izolasyonu ve uçtan uca
+  taslak-fork-bağımsızlığı + evrak-snapshot-değişmezliği + idempotency
+  doğrulamaları).
+- `docker compose exec frontend npm run typecheck && npm run test && npm run lint`
+  → **172/172 test geçti** (6 yeni: `ArtifactMessageCard`).
+- `alembic check` yeni tablolar/kolonlar için temiz; `alembic downgrade -3`
+  / `upgrade head` round-trip doğrulandı.
+
+Refs: [#199](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/199).
+
 ## [3.14.0] - 2026-08-16
 ### Eklendi
 Şirket içi iletişim planının **Faz 2**'si (#196): Faz 1'de (#194/#195) kurulan
