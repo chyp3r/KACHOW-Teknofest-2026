@@ -18,6 +18,7 @@ from typing import Optional
 
 from app.core.config import settings
 from app.domains.drafts.repository import DraftRepository
+from app.domains.units.repository import UnitRepository
 from app.infrastructure.database.session import tenant_session
 from app.observability import company_metrics
 
@@ -32,6 +33,7 @@ async def record_draft(
     content: str,
     correspondence_type: Optional[str] = None,
     destination: Optional[str] = None,
+    destination_justification: Optional[str] = None,
     status: Optional[str] = None,
     confidence_score: Optional[float] = None,
     requires_human_approval: Optional[bool] = None,
@@ -72,6 +74,17 @@ async def record_draft(
                 if session_id is not None
                 else None
             )
+            # `destination` is the routing graph's free-text unit *name* --
+            # resolved to a real `units` row here, once, at write time, the
+            # same lookup `DraftShareService.send` used to have to redo on
+            # every send (see `drafts.destination_unit_id`'s own docstring).
+            # A name that doesn't match any unit in this company (renamed,
+            # deleted, or routing came back empty) resolves to `None`,
+            # not an error.
+            destination_unit_id = None
+            if destination and company_id:
+                unit = await UnitRepository(session).get_by_name(destination, company_id)
+                destination_unit_id = unit.id if unit else None
             draft = await repository.create_version(
                 user_id=user_id,
                 company_id=company_id,
@@ -81,6 +94,8 @@ async def record_draft(
                 parent=parent,
                 correspondence_type=correspondence_type,
                 destination=destination,
+                destination_unit_id=destination_unit_id,
+                destination_justification=destination_justification,
                 status=status,
                 confidence_score=confidence_score,
                 requires_human_approval=requires_human_approval,

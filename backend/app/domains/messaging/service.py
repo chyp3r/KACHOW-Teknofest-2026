@@ -346,17 +346,61 @@ class ConversationService:
         await self._notify_recipients(conversation_id, company_id, sender, message)
         return message
 
+    async def post_artifact_message(
+        self, conversation_id: str, company_id: str, sender: UserModel, artifact_transfer_id: str
+    ) -> ConversationMessageModel:
+        """Post the `kind="artifact"` notice for one completed transfer.
+
+        Called only by `app.domains.transfers.ArtifactTransferService`,
+        after the transfer itself is already committed in the same
+        transaction -- `conversation_id` is expected to already have
+        `sender` as an active participant (the transfer service opens/
+        reuses the DM before calling this). `body` is deliberately empty:
+        an artifact message's card content (title, version, status) is
+        never cached here -- the frontend reads it live from
+        `artifact_transfer_id`, see `ConversationMessageModel`'s own
+        docstring for why.
+        """
+        message = await self.message_repository.create(
+            ConversationMessageModel(
+                id=uuid4().hex,
+                company_id=company_id,
+                conversation_id=conversation_id,
+                sender_id=sender.id,
+                kind="artifact",
+                body="",
+                artifact_transfer_id=artifact_transfer_id,
+            )
+        )
+        conversation = await self.conversation_repository.get_by_id(conversation_id, company_id)
+        await self.conversation_repository.touch_last_message(conversation, message.created_at)
+        # No generic "new message" notification -- ArtifactTransferService
+        # publishes its own, more specific one (see `_notify_recipients`'
+        # own docstring for why `publish_event=False` here).
+        await self._notify_recipients(conversation_id, company_id, sender, message, publish_event=False)
+        return message
+
     async def _notify_recipients(
         self,
         conversation_id: str,
         company_id: str,
         sender: UserModel,
         message: ConversationMessageModel,
+        *,
+        publish_event: bool = True,
     ) -> None:
-        """Live-push the new message and publish one
-        `ConversationMessageCreatedEvent` per active recipient other than
-        `sender` (see that event's own docstring for why one-per-recipient,
-        not one-with-a-list)."""
+        """Live-push the new message to every active recipient other than
+        `sender`, and (unless `publish_event=False`) publish one
+        `ConversationMessageCreatedEvent` per recipient (see that event's
+        own docstring for why one-per-recipient, not one-with-a-list).
+
+        `publish_event=False` is `post_artifact_message`'s own case: an
+        artifact transfer already gets its own, more specific notification
+        from `ArtifactTransferService` (see its docstring) -- publishing
+        the generic "new message" event here too would double it up. The
+        live SSE push still happens either way, so the thread itself still
+        updates in real time.
+        """
         participants = await self.participant_repository.list_for_conversation(
             conversation_id, company_id, active_only=True
         )
@@ -381,20 +425,21 @@ class ConversationService:
                     )
                 except Exception:
                     logger.exception("Failed to publish live message to %s", recipient.user_id)
-            await self._publish(
-                ConversationMessageCreatedEvent(
-                    payload={
-                        "company_id": company_id,
-                        "conversation_id": conversation_id,
-                        "message_id": message.id,
-                        "sender_id": sender.id,
-                        "sender_username": sender.username,
-                        "recipient_id": recipient.user_id,
-                        "kind": message.kind,
-                        "body_preview": preview,
-                    }
+            if publish_event:
+                await self._publish(
+                    ConversationMessageCreatedEvent(
+                        payload={
+                            "company_id": company_id,
+                            "conversation_id": conversation_id,
+                            "message_id": message.id,
+                            "sender_id": sender.id,
+                            "sender_username": sender.username,
+                            "recipient_id": recipient.user_id,
+                            "kind": message.kind,
+                            "body_preview": preview,
+                        }
+                    )
                 )
-            )
 
     async def list_messages(
         self,
