@@ -1,8 +1,9 @@
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.transfers.model.transfer_intent_model import ArtifactTransferIntentModel
 from app.domains.transfers.model.transfer_model import ArtifactTransferModel
 
 
@@ -57,3 +58,62 @@ class ArtifactTransferRepository:
             .order_by(ArtifactTransferModel.created_at.desc())
         )
         return list(result.scalars().all())
+
+
+class ArtifactTransferIntentRepository:
+    """Repository for `artifact_transfer_intents` (see
+    `ArtifactTransferIntentModel`) -- the AI channel's confirmation
+    lifecycle. `cas_update` is the one method the whole state machine
+    (`app.domains.transfers.intent_service.TransferIntentService`) advances
+    through: a plain `UPDATE ... WHERE state IN (:expected)` is what turns a
+    duplicate or stale confirmation into "0 rows changed" instead of a race,
+    per the plan's §I/§H ("Confirmation güvenliği").
+    """
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def get_by_id(self, intent_id: str, company_id: str) -> Optional[ArtifactTransferIntentModel]:
+        result = await self.db.execute(
+            select(ArtifactTransferIntentModel).where(
+                ArtifactTransferIntentModel.id == intent_id,
+                ArtifactTransferIntentModel.company_id == company_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def create(self, intent: ArtifactTransferIntentModel) -> ArtifactTransferIntentModel:
+        self.db.add(intent)
+        await self.db.flush()
+        return intent
+
+    async def cas_update(
+        self,
+        intent_id: str,
+        company_id: str,
+        expected_states: Sequence[str],
+        **values,
+    ) -> Optional[ArtifactTransferIntentModel]:
+        """Advance `intent_id`'s `state` only if it is still one of
+        `expected_states`, atomically.
+
+        Returns:
+            The row, freshly re-read, when the conditional `UPDATE` actually
+            matched a row; `None` when it matched zero -- the caller (a
+            duplicate resume, two tabs racing, or a stale interrupt replay)
+            must treat that as "already resolved elsewhere", never retry it
+            as if it were a transient failure.
+        """
+        result = await self.db.execute(
+            update(ArtifactTransferIntentModel)
+            .where(
+                ArtifactTransferIntentModel.id == intent_id,
+                ArtifactTransferIntentModel.company_id == company_id,
+                ArtifactTransferIntentModel.state.in_(expected_states),
+            )
+            .values(**values)
+        )
+        await self.db.flush()
+        if result.rowcount != 1:
+            return None
+        return await self.get_by_id(intent_id, company_id)
