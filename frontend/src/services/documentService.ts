@@ -35,6 +35,16 @@ export const documentService = {
       body: JSON.stringify({ fields }),
     });
   },
+  // Slow on purpose: builds it on-demand rather than eagerly on every
+  // upload (measured 184-288s server-side on real documents -- see
+  // backend/app/ai/summarization.py's own module docstring). apiClient sets
+  // no request timeout, so this plain POST survives the wait unmodified.
+  generateDetailedSummary(storagePath: string): Promise<DocumentAnalysis> {
+    const safePath = storagePath.split("/").map(encodeURIComponent).join("/");
+    return apiRequest(`/api/v1/documents/${safePath}/detailed-summary`, {
+      method: "POST",
+    });
+  },
   remove(storagePath: string): Promise<{ deleted: boolean }> {
     const safePath = storagePath.split("/").map(encodeURIComponent).join("/");
     return apiRequest(`/api/v1/documents/${safePath}`, { method: "DELETE" });

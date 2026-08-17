@@ -29,6 +29,16 @@ const analysis: DocumentAnalysis = {
 };
 
 describe("DocumentAnalysisPanel", () => {
+  it("renders the document summary", () => {
+    render(<DocumentAnalysisPanel analysis={analysis} />);
+    expect(screen.getByText("Özet")).toBeInTheDocument();
+  });
+
+  it("does not render a summary section when the summary is empty", () => {
+    render(<DocumentAnalysisPanel analysis={{ ...analysis, summary: "" }} />);
+    expect(screen.queryByText("Özet")).not.toBeInTheDocument();
+  });
+
   it("shows sensitivity and only the masked PII preview", () => {
     render(<DocumentAnalysisPanel analysis={analysis} />);
 
@@ -130,5 +140,57 @@ describe("DocumentAnalysisPanel", () => {
 
     expect(onSave).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("Konu")).not.toBeInTheDocument();
+  });
+
+  it("does not render the detailed summary section when not wired", () => {
+    render(<DocumentAnalysisPanel analysis={analysis} />);
+    expect(screen.queryByText("Detaylı özet")).not.toBeInTheDocument();
+  });
+
+  it("offers a generate button when detailed_summary is absent", () => {
+    render(
+      <DocumentAnalysisPanel analysis={analysis} onGenerateDetailedSummary={vi.fn()} />,
+    );
+
+    fireEvent.click(screen.getByText("Detaylı özet"));
+
+    expect(
+      screen.getByRole("button", { name: "Detaylı özet oluştur" }),
+    ).toBeInTheDocument();
+  });
+
+  it("triggers generation and surfaces a failure without losing the short summary", async () => {
+    const onGenerateDetailedSummary = vi.fn().mockRejectedValue(new Error("zaman aşımı"));
+    render(
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        onGenerateDetailedSummary={onGenerateDetailedSummary}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Detaylı özet"));
+    fireEvent.click(screen.getByRole("button", { name: "Detaylı özet oluştur" }));
+
+    await waitFor(() => expect(onGenerateDetailedSummary).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText("zaman aşımı")).toBeInTheDocument());
+    // The short summary above must still be intact -- a detailed-summary
+    // failure is scoped to its own section, never the whole panel.
+    expect(screen.getByText("Özet")).toBeInTheDocument();
+  });
+
+  it("shows the detailed summary text instead of the button once generated", () => {
+    render(
+      <DocumentAnalysisPanel
+        analysis={{ ...analysis, detailed_summary: "Çok paragraflı ayrıntılı özet." }}
+        onGenerateDetailedSummary={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Detaylı özet"));
+
+    expect(screen.getByText("Çok paragraflı ayrıntılı özet.")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Detaylı özet oluştur" }),
+    ).not.toBeInTheDocument();
   });
 });

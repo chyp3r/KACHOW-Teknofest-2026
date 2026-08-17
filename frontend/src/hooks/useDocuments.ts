@@ -56,6 +56,16 @@ export function useDocuments(
       );
     },
   });
+  const detailedSummaryMutation = useMutation({
+    mutationFn: (storagePath: string) => documentService.generateDetailedSummary(storagePath),
+    onSuccess: (analysis) => {
+      // No documents-list update, unlike updateFieldsMutation above --
+      // detailed_summary is a detail-panel-only field, never shown in the
+      // row preview (DocumentTable/DocumentListItem read `summary`, not
+      // this), so the list cache has nothing to change.
+      queryClient.setQueryData(queryKeys.documentAnalysis(analysis.storage_path), analysis);
+    },
+  });
   const removeMutation = useMutation({
     mutationFn: (storagePath: string) => documentService.remove(storagePath),
     onSuccess: (_result, storagePath) => {
@@ -91,6 +101,7 @@ export function useDocuments(
     refreshing: documentsQuery.isFetching && !documentsQuery.isLoading,
     uploading: uploadMutation.isPending,
     updatingFields: updateFieldsMutation.isPending,
+    generatingDetailedSummary: detailedSummaryMutation.isPending,
     deleting: removeMutation.isPending,
     error: error instanceof Error ? error.message : null,
     refresh: async () => {
@@ -101,6 +112,9 @@ export function useDocuments(
     },
     updateFields: async (storagePath: string, fields: EvrakFields) => {
       await updateFieldsMutation.mutateAsync({ storagePath, fields });
+    },
+    generateDetailedSummary: async (storagePath: string) => {
+      await detailedSummaryMutation.mutateAsync(storagePath);
     },
     deleteDocument: async (storagePath: string) => {
       await removeMutation.mutateAsync(storagePath);

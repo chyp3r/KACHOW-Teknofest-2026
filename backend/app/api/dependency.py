@@ -5,6 +5,7 @@ from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.agents.summarizer import SummarizerAgent
 from app.ai.embeddings.models import get_embeddings_client
 from app.ai.embeddings.service import EmbeddingService
 from app.ai.llms import get_fast_llm_client, get_llm_client
@@ -304,6 +305,14 @@ def get_document_analysis_service(
         pool_repository=DocumentPoolRepository(db),
         pool_item_repository=DocumentPoolItemRepository(db),
         quota_service=QuotaService(UsageCounterRepository(db), CompanyQuotaRepository(db)),
+        # Builds the on-demand detailed summary (generate_detailed_summary)
+        # -- not part of analysis_graph, since that summary is deliberately
+        # not a graph node (see create_document_analysis_graph's own
+        # docstring for why). Same llm_client analysis_graph itself uses;
+        # SummarizerAgent is cheap to construct (no I/O), so a fresh one per
+        # request is fine, mirroring how analysis_graph builds its own
+        # per-agent instances internally.
+        summarizer_agent=SummarizerAgent(get_llm_client()),
     )
 
 # ---------------------------------------------------------------------------

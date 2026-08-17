@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -121,6 +121,21 @@ class DocumentAnalysisResponseSchema(BaseModel):
     document_type: DocumentType = Field(description="Belirlenen evrak türü.")
     document_type_label: str = Field(description="Evrak türünün Türkçe adı.")
     summary: str = Field(description="Evrakın kısa Türkçe özeti.")
+    #: Defaulted to None, not empty string: distinguishes "never requested"
+    #: from "generated but somehow empty", and lets the ~20 on-disk
+    #: *_analysis.json caches predating this field keep validating --
+    #: get_cached_analysis returns None (-> HTTP 404) on any validation
+    #: failure, so this is load-bearing, not decorative (same constraint
+    #: that governed `signature` above). Populated on-demand by
+    #: DocumentService.generate_detailed_summary, never by analyze_document
+    #: itself -- see that method's own docstring for why.
+    detailed_summary: Optional[str] = Field(
+        default=None,
+        description=(
+            "İsteğe bağlı ayrıntılı Türkçe özet. Yalnızca kullanıcı özellikle "
+            "istediğinde üretilir; üretilmemişse null."
+        ),
+    )
     fields: EvrakField = Field(description="Evraktan çıkarılan üstveri alanları.")
     missing_fields: List[MissingField] = Field(
         default_factory=list,

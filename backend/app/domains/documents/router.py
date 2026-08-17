@@ -307,6 +307,71 @@ async def update_document_fields(
     return SuccessResponse(data=result.model_dump(mode="json"))
 
 
+@router.post("/{storage_path:path}/detailed-summary", response_model=None)
+async def generate_detailed_summary(
+    storage_path: str,
+    service: DocumentService = Depends(get_document_analysis_service),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    _: None = Depends(
+        rate_limit(max_requests=5, window_seconds=60, key_prefix="documents:detailed-summary")
+    ),
+):
+    """Build (or return the already-built) detailed summary of a document.
+
+    On-demand: the short ``summary`` `POST /documents/analyze` already
+    returns is enough for most documents, and building the detailed one is
+    expensive -- measured directly, 184-288s on real documents, several
+    sequential LLM calls (see ``app.ai.summarization``'s own module
+    docstring). This is why it is its own endpoint rather than part of the
+    eager analysis: a user pays that cost only when they actually want the
+    result, not on every upload.
+
+    Idempotent: a document whose detailed summary is already cached returns
+    it immediately, no model call. Rate-limited tighter than
+    ``POST /documents/analyze`` (5/60s vs 10/60s) precisely because each
+    call that does reach the model is this expensive.
+
+    Args:
+        storage_path: The document's storage key.
+        service: Injected document analysis service.
+        document_repository: Ownership registry, checked before generating.
+        current_user: The authenticated caller.
+
+    Returns:
+        The full analysis with ``detailed_summary`` populated, in the same
+        shape as ``GET /documents/{storage_path}``.
+
+    Raises:
+        HTTPException: 400 if storage_path is malformed, 404 if no analysis
+            is cached for it.
+        AuthorizationException: 403 if the document belongs to a different
+            company or user, or the requester's clearance doesn't cover the
+            document's confidentiality level.
+        AIException: 502 if building the summary times out or the
+            underlying provider call fails (see
+            ``DocumentService.generate_detailed_summary``'s own docstring
+            for why this raises instead of degrading silently).
+    """
+    try:
+        validate_storage_path(storage_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    document = await document_repository.get_by_id(storage_path, current_user.company_id)
+    if document is None:
+        raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+    _authorize_document(current_user, document, Action.DOCUMENT_UPDATE)
+
+    result = await service.generate_detailed_summary(storage_path)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Bu evrak için bir analiz bulunamadı.")
+
+    assert_clearance(current_user, result.guardrail.sensitivity_level)
+
+    return SuccessResponse(data=result.model_dump(mode="json"))
+
+
 @router.get("/{storage_path:path}", response_model=None)
 async def get_document_analysis(
     storage_path: str,

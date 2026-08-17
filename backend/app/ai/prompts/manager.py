@@ -29,6 +29,7 @@ TEMPLATE_CONTRACTS: Dict[str, frozenset] = {
     "reviser": frozenset(),
     "memory_summary": frozenset({"existing_summary", "new_turns"}),
     "conflict_auditor": frozenset(),
+    "summarizer": frozenset(),
 }
 
 

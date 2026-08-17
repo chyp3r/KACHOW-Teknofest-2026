@@ -25,6 +25,8 @@ export function DocumentTable({
   onUpdateFields,
   onDeleteDocument,
   deletingDocument,
+  onGenerateDetailedSummary,
+  generatingDetailedSummary,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
@@ -36,6 +38,8 @@ export function DocumentTable({
   onUpdateFields?: (storagePath: string, fields: EvrakFields) => Promise<void>;
   onDeleteDocument?: (storagePath: string) => Promise<void>;
   deletingDocument?: boolean;
+  onGenerateDetailedSummary?: (storagePath: string) => Promise<void>;
+  generatingDetailedSummary?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
@@ -146,6 +150,12 @@ export function DocumentTable({
                         onSave={
                           onUpdateFields && analysis
                             ? (fields) => onUpdateFields(analysis.storage_path, fields)
+                            : undefined
+                        }
+                        generatingDetailedSummary={generatingDetailedSummary}
+                        onGenerateDetailedSummary={
+                          onGenerateDetailedSummary && analysis
+                            ? () => onGenerateDetailedSummary(analysis.storage_path)
                             : undefined
                         }
                       />
