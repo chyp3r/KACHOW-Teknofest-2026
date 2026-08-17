@@ -51,14 +51,30 @@ yalnızca AI kanalından bu yola erişim.
   interrupt türünü de render ediyor. Cross-unit uyarısı her zaman
   `payload.cross_unit`'ten (backend'de `TransferPolicy` tarafından
   hesaplanmış) okunuyor, hiçbir zaman üretilmiş metinden değil.
+  `DecisionFlow`'un dinamik iş akışı stepper'ı yeni üç node'u (`transfer_
+  resolve`/`transfer_gate`/`transfer_execute`) canlı akışta zaten doğru
+  gösteriyordu; `NODE_INFO`/`STAGE_DESCRIPTIONS`/`SUB_STEPS`'teki statik
+  fallback kayıtları da eklendi (`transfer_gate`, `brief_gate`'in `brief`
+  altına toplanması gibi `transfer_resolve`'ün altına toplanıyor).
 
 ### Bilinçli sınırlar
-- `transfer` intent'i tamamen ayrı bir lexical gate ile çözülüyor, semantik
-  prototip katmanına (embedding benzerliği) hiç girmiyor -- kalibre edilmiş
-  4-yönlü fusion softmax'ı yeniden kalibre etme riskinden kaçınmak için
-  bilinçli bir tercih. Yanlış negatifin maliyeti sıfıra yakın (kullanıcı
-  yeniden ifade eder), yanlış pozitifin maliyeti sıfır (zorunlu confirmation
-  yakalar).
+- `transfer` intent'i tamamen ayrı bir lexical gate ile çözülüyor, kalibre
+  edilmiş 4-yönlü fusion softmax'a hiç girmiyor. Ayrı ve izole bir semantik
+  katman (embedding benzerliği, kendi `"transfer_gate"` prototip ailesinde,
+  "intent" ailesinin kalibrasyonuna dokunmadan) da denendi, **gerçek
+  `nomic-embed-text` vektörleriyle ölçüldü ve geri alındı**: 5 örnekli küçük
+  bir prototip seti bu embedding modeliyle temiz ayrışmıyor -- "Bu evrakı
+  analiz eder misin?" (belirsiz olmayan bir `analyze` isteği) `transfer`
+  prototiplerine karşı 0.858 benzerlik / 0.121 marj skorladı, mevcut
+  kalibre-aile eşiklerini bile geçerek. Gerçek transfer parafrazlarından
+  bazıları bu yanlış pozitiften **daha düşük** skorladı. `SemanticPolicy`'nin
+  "intent" ailesi için zaten belgelediği bulgu burada da geçerli: rastgele
+  karar veren bir katman, hiç katman olmamasından daha kötü -- bu, gerçek
+  `analyze`/`revise` turlarını yanlış yönlendirirdi, sadece bazı `transfer`
+  taleplerini kaçırmakla kalmazdı. Bulgu `TRANSFER_VERB_SURFACES`'in
+  docstring'inde kayıtlı; yeniden denenirse gerçek etiketlenmiş bir
+  değerlendirme setiyle (mevcut `evaluation/datasets/intents.jsonl`
+  kalibrasyonunda olduğu gibi) yapılmalı, tahmini bir eşikle değil.
 - Evrak (document) için ladder'ın "açık referans" katmanı bağlanmadı --
   yalnızca `SessionFocus.active_document_id` ipucu kullanılıyor; serbest
   metinden başlık/sürüm çözümlemesi bu fazın kapsamı dışında.
@@ -69,13 +85,13 @@ yalnızca AI kanalından bu yola erişim.
 
 ### Test
 - `docker compose exec backend pytest tests/unit tests/integration -q` →
-  **2022 test geçti** (39 yeni: `TransferIntentService`'in her CAS geçişi +
+  **2023 test geçti** (40 yeni: `TransferIntentService`'in her CAS geçişi +
   TOCTOU + `execute()`'un onaysız reddi, `ArtifactResolutionService`'in her
   ladder katmanı, slot extraction, lexical gate + drafting-veto +
-  compound-plan-dışılık, `app.ai.*`'nin `app.domains.*` import etmediğinin
-  AST tabanlı statik denetimi, ve gerçek derlenmiş planning graph üzerinde
-  uçtan uca disambiguate→confirm→execute/reject/policy-denial/unresolved
-  akışları).
+  compound-plan-dışılık + geri alınan semantik denemenin regresyon testi,
+  `app.ai.*`'nin `app.domains.*` import etmediğinin AST tabanlı statik
+  denetimi, ve gerçek derlenmiş planning graph üzerinde uçtan uca
+  disambiguate→confirm→execute/reject/policy-denial/unresolved akışları).
 - `docker compose exec frontend npm run typecheck && npm run test && npm run lint`
   → **178/178 test geçti** (6 yeni: `TransferConfirmCard`, cross-unit
   uyarısının `payload.cross_unit` ile birebir eşleştiği dahil).
