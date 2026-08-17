@@ -16,6 +16,9 @@ used_ocr: "true"
 page_count: "2"
 quality_score: "0.813"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "6"
 ---
 
 # Soru Önergesi (7/42671)
@@ -49,7 +52,6 @@ Adres: [ADRES]
 Çankaya/ANKARA Fatih Mehmet ÖZCAN e a
 e Post sirateikoruonergelei(Bticart gov.tr Veri Hazırlama ve Kontrol İşletmeni Ee y time
 - : N . YİL da,
-İnternet Adresi: www.ticaret.gov.tr Telefon No: [T.C. KİMLİK NO] DE ra»
 [KURUM İLETİŞİM BİLGİLERİ]
 1/1
 

@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Ortaca Belediye Başkanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 # T.C. Ortaca Belediye Meclis Kararı (Karar No: 63)
@@ -39,11 +42,11 @@ Plan ve Bütçe Komisyonu Raporu doğrultusunda yapılan görüşmede;
 Ücretlerin her yıl Mayıs ve Kasım aylarında olmak üzere iki eşit taksitte belediye veznelerine veya e-belediye sistemi üzerinden ödenmesine katılan üyelerin oy birliği ile karar verilmiştir.
 
 Meclis Başkanı
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Belediye Başkanı
 
 Katip Üye
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 
 Katip Üye
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]

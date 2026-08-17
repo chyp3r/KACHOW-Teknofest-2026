@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Millî Eğitim Bakanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 T.C.
@@ -20,9 +23,9 @@ Mesleki ve Teknik Eğitim Genel Müdürlüğü
 **Sayı:** [EVRAK SAYISI]
 **Konu:** MESEM Devlet Katkısı Ödemesi Hk.
 
-**[KİŞİSEL BİLGİ] SANAYİ VE TİCARET LTD. ŞTİ.**
+**[KURUM ADI] SANAYİ VE TİCARET LTD. ŞTİ.**
 
-**İlgi:** 12.02.2026 tarihli ve [KİŞİSEL BİLGİ] kayıt numaralı dilekçeniz.
+**İlgi:** 12.02.2026 tarihli ve [KAYIT NUMARASI] kayıt numaralı dilekçeniz.
 
 İlgi dilekçenizde, İşletmenizde Mesleki Eğitim Merkezi (MESEM) kapsamında beceri eğitimi gören öğrencilere ödenen ücretlere ilişkin devlet katkısı ödemesinin aktarılması talep edilmektedir.
 
@@ -32,6 +35,6 @@ Eksik evrakların tamamlanması halinde müteakip dönemde tekrar başvuru yapı
 
 Bilgilerinizi ve gereğini rica ederim.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Bakan a.
 Daire Başkanı

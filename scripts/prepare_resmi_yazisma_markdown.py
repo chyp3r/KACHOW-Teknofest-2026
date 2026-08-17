@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import hashlib
 import json
 import os
@@ -25,6 +26,7 @@ from collections import Counter
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Iterable
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 from docx import Document
@@ -39,9 +41,14 @@ SOURCE_ROOT = CORPUS_ROOT / "00_gelen_kaynaklar"
 REJECTED_ROOT = CORPUS_ROOT / "99_reddedilenler"
 REPORT_JSON = CORPUS_ROOT / "kalite-raporu.json"
 REPORT_MD = CORPUS_ROOT / "KALITE_RAPORU.md"
+ANONYMIZATION_MANIFEST = CORPUS_ROOT / "anonimlestirme-manifesti.jsonl"
+STATISTICS_JSON = CORPUS_ROOT / "veri-istatistikleri.json"
+STATISTICS_MD = CORPUS_ROOT / "VERI_ISTATISTIKLERI.md"
+QA_MANIFEST = CORPUS_ROOT / "manuel-qa-manifesti.csv"
 
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 
+from app.ai.guardrails.pii import find_pii  # noqa: E402
 from app.infrastructure.extractors import get_document_extractor  # noqa: E402
 from app.infrastructure.extractors.pdfium import PdfiumExtractor  # noqa: E402
 
@@ -67,6 +74,9 @@ FRONT_MATTER_ORDER = (
     "quality_score",
     "rag_status",
     "ret_nedeni",
+    "kaynak_kurum",
+    "anonimlestirme_durumu",
+    "anonimlestirilen_alan_sayisi",
 )
 
 _SPACE = re.compile(r"[ \t\u00a0]+")
@@ -84,10 +94,15 @@ _PHONE = re.compile(
     r"[\s.-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}(?!\d)"
 )
 _EMAIL = re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b")
+_IBAN = re.compile(r"(?i)\bTR\s*\d{2}(?:[\s.-]*\d){22}\b")
+_LABELLED_IDENTIFIER = re.compile(
+    r"(?im)^(\s*(?:personel\s+sicil|öğrenci|sicil|personel|abone|dosya)"
+    r"\s*(?:no|numarası)?\s*:\s*).+$"
+)
 _ADDRESS = re.compile(r"(?im)^(\s*(?:adres|ikametgâh|ikametgah)\s*:\s*).+$")
 _ADDRESS_LINE = re.compile(
     r"(?im)^.*\b(?:mah(?:allesi)?\.?|cad(?:desi)?\.?|sok(?:ak)?\.?|bulvar[ıi]?)\b"
-    r".*\bno\s*:\s*\d+.*$"
+    r".*\bno\s*[:.]?\s*\d+.*$"
 )
 _CONTACT_PERSON = re.compile(
     r"(?i)(bilgi\s+için\s*:\s*)"
@@ -112,14 +127,37 @@ _HONORIFIC_PERSON = re.compile(
     r"[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşü.-]+(?:\s+[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşü.-]+){1,3}"
 )
 _SIGNATURE_TITLES = re.compile(
-    r"(?i)^(?:genel müdür|daire başkanı|şube müdürü|il müdürü|rektör yardımcısı|"
+    r"(?i)^(?:genel müdür|genel sekreter|daire başkanı|şube müdürü|il müdürü|"
+    r"katip üye|rektör yardımcısı|"
     r"başkan yardımcısı|cumhurbaşkanı yardımcısı|yetkili amir|başkan|müdür|vali|"
-    r"kaymakam|rektör|bakan|.*\s(?:başkanı|bakanı|yardımcısı|müdürü|vekili))\s*$"
+    r"kaymakam|rektör|bakan|.*\s(?:başkanı|bakanı|yardımcısı|müdürü|vekili|"
+    r"valisi|kaymakamı))"
+    r"(?:\s+[av]\.?)?\s*$"
 )
 _LABELLED_NAME = re.compile(
     r"(?im)^(\s*(?:başvuran|vekili|ad[ıi]\s*soyad[ıi]|adı ve soyadı|katip(?: üyeler)?|"
     r"üyeler|başkan|imza sahibi|yetkili)\s*:\s*)(?:Av\.\s*)?[^\n]+$"
 )
+_DESCRIBED_PERSON = re.compile(
+    r"\b(?:Av\.?\s+|Dr\.?\s+)?"
+    r"[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşü.-]+(?:\s+[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşü.-]+){1,3}"
+    r"(?=\s+(?:adlı|isimli|tarafından başvur(?:u|an)|adına başvur))"
+)
+_PLACEHOLDER = re.compile(r"\[[A-ZÇĞİÖŞÜ0-9][A-ZÇĞİÖŞÜ0-9 .ÇĞİÖŞÜ/-]*\]")
+_INSTITUTION_LINE = re.compile(
+    r"(?im)^(?:T\.\s*C\.\s*)?([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ0-9 .,'’()/-]{4,}"
+    r"(?:BAKANLIĞI|BAŞKANLIĞI|BELEDİYESİ|BELEDİYE BAŞKANLIĞI|VALİLİĞİ|"
+    r"KAYMAKAMLIĞI|ÜNİVERSİTESİ|MÜDÜRLÜĞÜ|KURUMU|KURULU))\s*$"
+)
+
+_SIMULATION_INSTITUTIONS = {
+    "ANKARA_BSB": "Ankara Büyükşehir Belediyesi",
+    "BOTAS": "BOTAŞ",
+    "ISKI": "İstanbul Su ve Kanalizasyon İdaresi",
+    "MEB": "Millî Eğitim Bakanlığı",
+    "SGK": "Sosyal Güvenlik Kurumu",
+    "YOK": "Yükseköğretim Kurulu",
+}
 
 _ARTICLE_HEAD_NOISE = re.compile(
     r"(?i)^(?:anasayfa|facebook'ta paylaş|twitter'da paylaş|pinterest|reddit|"
@@ -194,10 +232,26 @@ def normalize_markdown(text: str) -> str:
     return _BLANKS.sub("\n\n", "\n".join(lines)).strip()
 
 
+def _replace_labelled_name(match: re.Match[str]) -> str:
+    label = match.group(1)
+    folded = label.casefold().replace("\u0307", "")
+    if "başvuran" in folded:
+        placeholder = "[BAŞVURU SAHİBİ]"
+    elif "vekil" in folded:
+        placeholder = "[VEKİL ADI]"
+    elif any(token in folded for token in ("imza", "yetkili", "başkan")):
+        placeholder = "[İMZA SAHİBİ]"
+    else:
+        placeholder = "[KİŞİ ADI]"
+    return f"{label}{placeholder}"
+
+
 def semantic_anonymize(text: str) -> str:
     """Replace private values and legacy deletion markers with useful labels."""
     text = _EMAIL.sub("[E-POSTA]", text)
+    text = _IBAN.sub("[IBAN]", text)
     text = _PHONE.sub("[KURUM TELEFONU]", text)
+    text = _LABELLED_IDENTIFIER.sub(r"\1[KAYIT NUMARASI]", text)
     text = _ADDRESS.sub(r"\1[ADRES]", text)
     text = _ADDRESS_LINE.sub("[KURUM ADRESİ]", text)
     text = _CONTACT_PERSON.sub(r"\1[KİŞİ ADI]", text)
@@ -205,8 +259,86 @@ def semantic_anonymize(text: str) -> str:
     text = _NAME_WITH_TCKN.sub("[KİŞİ ADI] ", text)
     text = _SIMULATION_NAMES.sub("[KİŞİ ADI]", text)
     text = _HONORIFIC_PERSON.sub(r"\1[KİŞİ ADI]", text)
+    text = _DESCRIBED_PERSON.sub("[KİŞİ ADI]", text)
     text = _TCKN.sub(lambda m: f"{m.group(1) or ''}[T.C. KİMLİK NO]", text)
-    text = _LABELLED_NAME.sub(r"\1[KİŞİ ADI]", text)
+    text = _LABELLED_NAME.sub(_replace_labelled_name, text)
+
+    # Repair legacy generic/incorrect placeholders using their immediate role.
+    # This also makes repeated runs converge when an older run had already
+    # replaced the original value and the raw value is no longer present.
+    text = re.sub(
+        r"(?i)(\bSayın\s+)\[(?:EVRAK SAYISI|KİŞİSEL BİLGİ|KURUM ADI|İMZA SAHİBİ)\]",
+        r"\1[KİŞİ ADI]",
+        text,
+    )
+    text = re.sub(r"\[EVRAK SAYISI\](?=\s+Milletvekili\b)", "[İL ADI]", text)
+    text = re.sub(
+        r"(?i)(\[İL ADI\]\s+Milletvekili\s+)\[EVRAK SAYISI\]",
+        r"\1[KİŞİ ADI]",
+        text,
+    )
+    text = re.sub(
+        r"(?i)(\b(?:Prof\.?|Doç\.?|Dr\.?|Av\.?)"
+        r"(?:\s+(?:Dr\.?|Öğr\.?\s*Üyesi))?\s+)"
+        r"\[(?:EVRAK SAYISI|KİŞİSEL BİLGİ|KURUM ADI)\]",
+        r"\1[KİŞİ ADI]",
+        text,
+    )
+    text = re.sub(
+        r"(?i)(\*{0,2}VEKİLİ:\*{0,2}\s*(?:Av\.?\s*)?)"
+        r"\[(?:KİŞİSEL BİLGİ|KİŞİ ADI)\]",
+        r"\1[VEKİL ADI]",
+        text,
+    )
+    text = re.sub(
+        r"\[KİŞİSEL BİLGİ\](?=\s+(?:ÜNİVERSİTESİ|BAKANLIĞI|BELEDİYESİ|"
+        r"REKTÖRLÜĞÜ|MÜDÜRLÜĞÜ|BAŞKANLIĞI|SANAYİ VE TİCARET)\b)",
+        "[KURUM ADI]",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"\[KİŞİSEL BİLGİ\](?=\s+(?:başvuru|kayıt)\s+numaralı\b)",
+        "[KAYIT NUMARASI]",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"\[KİŞİSEL BİLGİ\](?=\s+Milletvekilleri?\b)",
+        "[KİŞİ ADI]",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"(?i)(\b(?:bursiyeri|raportör|davacı|il emniyet müdürü|"
+        r"il jandarma komutanı|orman bölge müdürü|il tarım ve orman müdürü)\s+)"
+        r"\[KİŞİSEL BİLGİ\]",
+        r"\1[KİŞİ ADI]",
+        text,
+    )
+    text = re.sub(
+        r"\[KİŞİSEL BİLGİ\](?=\s*-\s*[^\n]*(?:Valisi|Kaymakamı|Başkanı|Müdürü)\b)",
+        "[KİŞİ ADI]",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"(?i)(Bilgi Edinme Başvurusu Hk\.\s*\()\[KİŞİSEL BİLGİ\](\))",
+        r"\1[KAYIT NUMARASI]\2",
+        text,
+    )
+    text = re.sub(
+        r"(?i)((?:Raportör|Temyiz Eden \(Davacı\)):\*{0,2}\s*)"
+        r"\[KİŞİSEL BİLGİ\]",
+        r"\1[KİŞİ ADI]",
+        text,
+    )
+    text = re.sub(
+        r"\[KİŞİSEL BİLGİ\](?=\s+Sulh Ceza Hakimliğine\b)",
+        "[YARGI MERCİİ]",
+        text,
+        flags=re.IGNORECASE,
+    )
 
     lines = text.splitlines()
     for index, line in enumerate(lines):
@@ -249,8 +381,21 @@ def semantic_anonymize(text: str) -> str:
         is_person_name = re.fullmatch(
             r"[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşü.]+(?:\s+[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşü.]+){1,3}",
             candidate,
+        ) and not _SIGNATURE_TITLES.match(candidate)
+        has_person_placeholder = any(
+            placeholder in candidate for placeholder in ("[KİŞİ ADI]", "[KİŞİSEL BİLGİ]")
         )
-        if _SIGNATURE_TITLES.match(following) and (is_person_name or candidate == "[KİŞİ ADI]"):
+        if _SIGNATURE_TITLES.match(following) and (is_person_name or has_person_placeholder):
+            if is_person_name:
+                lines[index] = lines[index].replace(candidate, "[İMZA SAHİBİ]")
+            else:
+                lines[index] = re.sub(
+                    r"\[(?:KİŞİ ADI|KİŞİSEL BİLGİ)\]", "[İMZA SAHİBİ]", lines[index]
+                )
+    for index, line in enumerate(lines):
+        candidate = line.strip(" *_")
+        previous = lines[index - 1].strip(" *_") if index else ""
+        if candidate == "[KİŞİSEL BİLGİ]" and _SIGNATURE_TITLES.match(previous):
             lines[index] = lines[index].replace(candidate, "[İMZA SAHİBİ]")
     deduplicated: list[str] = []
     for line in lines:
@@ -413,6 +558,377 @@ def complete_front_matter(meta: dict[str, str], body: str, path: Path) -> dict[s
     )
     completed["dogrulama"] = completed.get("dogrulama") or "mevcut_markdown_kaydi"
     return completed
+
+
+def data_markdown_files() -> list[Path]:
+    """Return every document card, excluding generated human-readable reports."""
+    ignored = {
+        "kalite_raporu.md",
+        "veri_istatistikleri.md",
+        "rag_veri_analizi.md",
+    }
+    return sorted(
+        path
+        for path in CORPUS_ROOT.rglob("*.md")
+        if path.parent != CORPUS_ROOT
+        and "readme" not in path.name.casefold()
+        and path.name.casefold() not in ignored
+    )
+
+
+def canonicalize_institution(value: str) -> str:
+    compact = _SPACE.sub(" ", value).strip(" .,-")
+    folded = compact.casefold().replace("\u0307", "").replace("ı", "i")
+    aliases = (
+        (("ticaret bakanlığı",), "Ticaret Bakanlığı"),
+        (("sağlık bakanlığı",), "Sağlık Bakanlığı"),
+        (("hazine ve maliye bakanlığı",), "Hazine ve Maliye Bakanlığı"),
+        (("sanayi ve teknoloji bakanlığı",), "Sanayi ve Teknoloji Bakanlığı"),
+        (("milli savunma bakanlığı", "millî savunma bakanlığı"), "Millî Savunma Bakanlığı"),
+        (("türkiye büyük millet meclisi",), "Türkiye Büyük Millet Meclisi"),
+        (("düzce üniversitesi",), "Düzce Üniversitesi"),
+        (("sağlık bilimleri üniversitesi",), "Sağlık Bilimleri Üniversitesi"),
+        (("doğubayazıt kaymakamlığı",), "Doğubayazıt Kaymakamlığı"),
+    )
+    for needles, canonical in aliases:
+        if any(
+            needle.casefold().replace("\u0307", "").replace("ı", "i") in folded
+            for needle in needles
+        ):
+            return canonical
+    return compact
+
+
+def source_institution(meta: dict[str, str], body: str, path: Path) -> str:
+    """Resolve a stable source provider without confusing people with institutions."""
+    if "00_yonetmelik_ve_kurallar" in path.parts:
+        return "T.C. Resmî Gazete"
+    hostname = ""
+    for field in ("kaynak_url", "belge_url", "kaynak"):
+        value = str(meta.get(field, "")).strip()
+        if value.startswith(("http://", "https://")):
+            hostname = (urlparse(value).hostname or "").removeprefix("www.").casefold()
+            if hostname:
+                break
+
+    domain_aliases = {
+        "dilekceornegi.net": "dilekceornegi.net",
+        "tbmm.gov.tr": "Türkiye Büyük Millet Meclisi",
+        "meb.gov.tr": "Millî Eğitim Bakanlığı",
+        "ticaret.gov.tr": "Ticaret Bakanlığı",
+        "saglik.gov.tr": "Sağlık Bakanlığı",
+        "sgk.gov.tr": "Sosyal Güvenlik Kurumu",
+        "iskur.gov.tr": "Türkiye İş Kurumu",
+    }
+    for domain, institution in domain_aliases.items():
+        if hostname == domain or hostname.endswith(f".{domain}"):
+            return institution
+
+    stem = path.stem.upper()
+    for prefix, institution in _SIMULATION_INSTITUTIONS.items():
+        if stem.startswith(prefix):
+            return institution
+
+    provenance = " ".join(
+        str(meta.get(field, "")) for field in ("kaynak", "dogrulama", "belge_turu")
+    ).casefold()
+    if "sentetik" in provenance or "otonom" in provenance:
+        return "Sentetik veri üretimi"
+
+    # Curated card metadata identifies the source institution more reliably than
+    # OCR text, where a recipient/unit heading can otherwise be mistaken for it.
+    institution = str(meta.get("kurum", "")).strip()
+    if institution:
+        return canonicalize_institution(institution)
+
+    institution_match = _INSTITUTION_LINE.search(body[:4000])
+    if institution_match:
+        return canonicalize_institution(institution_match.group(1))
+    if hostname:
+        return hostname
+    return "Bilinmiyor"
+
+
+def _placeholder_counts(after: str) -> dict[str, int]:
+    after_counts = Counter(_PLACEHOLDER.findall(after))
+    return dict(sorted(after_counts.items()))
+
+
+def _remaining_name_signals(text: str) -> int:
+    patterns = (_CONTACT_PERSON, _HONORIFIC_PERSON, _LABELLED_NAME, _DESCRIBED_PERSON)
+    return sum(
+        1
+        for pattern in patterns
+        for match in pattern.finditer(text)
+        if "[" not in match.group(0)
+    )
+
+
+def _effective_rag_decision(path: Path, meta: dict[str, str]) -> tuple[str, str]:
+    """Return the canonical RAG decision for a card.
+
+    Raw scraped petition Markdown is retained as provenance while its cleaned
+    quarantine counterpart owns the final quality decision.  Reporting the raw
+    card's implicit ``candidate`` default inflated the candidate stage by 40
+    and made the manifest disagree with the catalog.
+    """
+    status = meta.get("rag_status", "candidate")
+    reason = meta.get("ret_nedeni", "")
+    if "SIMULASYON" in str(meta.get("id", "")).upper() or "SIMULASYON" in path.stem.upper():
+        # These PDFs deliberately randomise names, dates, places and document
+        # values to exercise OCR/anonymisation. A readable simulation is not a
+        # trustworthy language example: several cards combine one institution's
+        # letterhead with another city's facts. Keep them for regression tests,
+        # but never teach the production RAG from them.
+        return "rejected", "sentetik_simulasyon_yalniz_test"
+    petition_source = SOURCE_ROOT / "dilekce"
+    if path.parent == petition_source:
+        quarantine = REJECTED_ROOT / "dilekce_makaleleri" / path.name
+        if quarantine.exists():
+            quarantine_meta, _ = split_front_matter(read_text(quarantine))
+            status = quarantine_meta.get("rag_status", "rejected")
+            reason = quarantine_meta.get(
+                "ret_nedeni", "aciklayici_makale_tekil_dilekce_degil"
+            )
+    return status, reason
+
+
+def anonymize_all_markdown_cards(*, apply: bool) -> list[dict[str, Any]]:
+    """Anonymize and account for every Markdown data card, including rejects."""
+    results: list[dict[str, Any]] = []
+    for path in data_markdown_files():
+        meta, body = split_front_matter(read_text(path))
+        if not meta.get("id"):
+            results.append(
+                {
+                    "path": path.relative_to(REPO_ROOT).as_posix(),
+                    "id": "",
+                    "kategori": "",
+                    "kaynak_kurum": "Bilinmiyor",
+                    "rag_status": "review_required",
+                    "anonimlestirme_durumu": "inceleme_gerekli",
+                    "neden": "front_matter_id_eksik",
+                    "anonimlestirilmis": False,
+                    "anonimlestirilen_alanlar": {},
+                    "kalan_pii_turleri": [],
+                }
+            )
+            continue
+
+        normalized = normalize_markdown(body)
+        anonymized = semantic_anonymize(normalized)
+        placeholder_counts = _placeholder_counts(anonymized)
+        actionable_pii = [finding for finding in find_pii(anonymized) if finding.confidence >= 0.80]
+        name_signals = _remaining_name_signals(anonymized)
+        institution = source_institution(meta, anonymized, path)
+        reasons: list[str] = []
+        if actionable_pii:
+            reasons.append("kalan_yuksek_guvenli_pii")
+        if name_signals:
+            reasons.append("kisi_adi_incelemesi")
+        if institution == "Bilinmiyor":
+            reasons.append("kaynak_kurum_bilinmiyor")
+
+        completed = complete_front_matter(meta, anonymized, path)
+        completed["kaynak_kurum"] = institution
+        completed["anonimlestirme_durumu"] = "inceleme_gerekli" if reasons else "uygun"
+        completed["anonimlestirilen_alan_sayisi"] = str(sum(placeholder_counts.values()))
+        current_status, canonical_reason = _effective_rag_decision(path, completed)
+        completed["rag_status"] = current_status
+        if canonical_reason:
+            completed["ret_nedeni"] = canonical_reason
+        if reasons and current_status in {"candidate", "approved"}:
+            completed["rag_status"] = "review_required"
+            completed["ret_nedeni"] = ",".join(reasons)
+
+        rendered = render_card(completed, anonymized)
+        changed = rendered != read_text(path)
+        if apply and changed:
+            path.write_text(rendered, encoding="utf-8")
+
+        results.append(
+            {
+                "path": path.relative_to(REPO_ROOT).as_posix(),
+                "id": completed["id"],
+                "kategori": completed["kategori"],
+                "kaynak_kurum": institution,
+                "kaynak_anahtari": (
+                    completed.get("yerel_orijinal")
+                    or completed.get("kaynak_url")
+                    or completed.get("belge_url")
+                    or completed.get("kaynak")
+                    or completed["id"]
+                ),
+                "rag_status": completed.get("rag_status", "candidate"),
+                "anonimlestirme_durumu": completed["anonimlestirme_durumu"],
+                "neden": ",".join(reasons),
+                "anonimlestirilmis": bool(placeholder_counts),
+                "anonimlestirilen_alanlar": placeholder_counts,
+                "kalan_pii_turleri": sorted({finding.kind for finding in actionable_pii}),
+            }
+        )
+    return results
+
+
+def _qa_sample(records: list[dict[str, Any]], limit: int = 100) -> list[dict[str, Any]]:
+    # One logical document can have both a retained provenance card and a
+    # cleaned quarantine derivative. Review the canonical derivative once,
+    # never the intentionally noisy raw petition page.
+    canonical: dict[str, dict[str, Any]] = {}
+    for record in records:
+        current = canonical.get(record["id"])
+        path = record["path"]
+        score = 2 if "/99_reddedilenler/" in f"/{path}" else 1
+        if "/00_gelen_kaynaklar/dilekce/" in f"/{path}":
+            score = 0
+        current_path = current["path"] if current else ""
+        current_score = 2 if "/99_reddedilenler/" in f"/{current_path}" else 1
+        if "/00_gelen_kaynaklar/dilekce/" in f"/{current_path}":
+            current_score = 0
+        if current is None or score > current_score:
+            canonical[record["id"]] = record
+    records = list(canonical.values())
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        bucket = record.get("kategori") or "bilinmiyor"
+        buckets.setdefault(bucket, []).append(record)
+    for bucket in buckets.values():
+        bucket.sort(
+            key=lambda record: (
+                record["anonimlestirme_durumu"] != "inceleme_gerekli",
+                hashlib.sha256(record["id"].encode()).hexdigest(),
+            )
+        )
+    selected: list[dict[str, Any]] = []
+    while len(selected) < min(limit, len(records)):
+        progressed = False
+        for key in sorted(buckets):
+            if buckets[key] and len(selected) < limit:
+                selected.append(buckets[key].pop(0))
+                progressed = True
+        if not progressed:
+            break
+    return selected
+
+
+def write_analysis_outputs(records: list[dict[str, Any]], *, apply: bool) -> dict[str, Any]:
+    institution_counts = Counter(record["kaynak_kurum"] for record in records)
+    category_counts = Counter(record["kategori"] for record in records)
+    rag_counts_all = Counter(record["rag_status"] for record in records)
+    anonymization_counts = Counter(record["anonimlestirme_durumu"] for record in records)
+    placeholder_counts: Counter[str] = Counter()
+    location_counts: Counter[str] = Counter()
+    for record in records:
+        placeholder_counts.update(record["anonimlestirilen_alanlar"])
+        relative = Path(record["path"]).relative_to("datasets/resmi_yazisma")
+        location_counts[relative.parts[0]] += 1
+    active_records = [
+        record
+        for record in records
+        if Path(record["path"]).relative_to("datasets/resmi_yazisma").parts[0]
+        != "99_reddedilenler"
+    ]
+    rag_counts_active = Counter(record["rag_status"] for record in active_records)
+    raw_source_counts = Counter(path.suffix.casefold().lstrip(".") for path in _source_files())
+    statistics = {
+        "schema_version": 2,
+        "markdown_kaydi": len(records),
+        "aktif_korpus_kaydi": len(active_records),
+        "karantina_kaydi": len(records) - len(active_records),
+        "tekil_belge": len({record.get("kaynak_anahtari") or record["id"] for record in records}),
+        "anonimlestirilmis_kayit": sum(bool(record["anonimlestirilmis"]) for record in records),
+        "kaynak_kurum_bilinmiyor": institution_counts.get("Bilinmiyor", 0),
+        "kalan_yuksek_guvenli_pii_kaydi": sum(bool(record["kalan_pii_turleri"]) for record in records),
+        "kurum_dagilimi": dict(sorted(institution_counts.items(), key=lambda item: (-item[1], item[0]))),
+        "kategori_dagilimi": dict(sorted(category_counts.items())),
+        # Backwards-compatible alias: dashboards should use the active corpus,
+        # not duplicate quarantine derivatives.
+        "rag_dagilimi": dict(sorted(rag_counts_active.items())),
+        "rag_dagilimi_aktif_korpus": dict(sorted(rag_counts_active.items())),
+        "rag_dagilimi_tum_kartlar": dict(sorted(rag_counts_all.items())),
+        "anonimlestirme_dagilimi": dict(sorted(anonymization_counts.items())),
+        "konum_dagilimi": dict(sorted(location_counts.items())),
+        "ham_kaynak_sayisi": sum(raw_source_counts.values()),
+        "ham_kaynak_turu_dagilimi": dict(sorted(raw_source_counts.items())),
+        "semantik_yer_tutucu_dagilimi": dict(sorted(placeholder_counts.items())),
+    }
+    if not apply:
+        return statistics
+
+    ANONYMIZATION_MANIFEST.write_text(
+        "".join(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n" for record in records),
+        encoding="utf-8",
+    )
+    STATISTICS_JSON.write_text(
+        json.dumps(statistics, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    top_institutions = list(statistics["kurum_dagilimi"].items())[:30]
+    lines = [
+        "# Resmî Yazışma Veri İstatistikleri",
+        "",
+        "> Bu dosya veri hazırlama hattı tarafından deterministik olarak üretilir.",
+        "",
+        "## Özet",
+        "",
+        f"- Markdown veri kartı: **{statistics['markdown_kaydi']}**",
+        f"- Aktif korpus kartı: **{statistics['aktif_korpus_kaydi']}**",
+        f"- Karantina türevi: **{statistics['karantina_kaydi']}**",
+        f"- Tekil kaynak belge: **{statistics['tekil_belge']}**",
+        f"- Kaynak kurumu bilinmeyen: **{statistics['kaynak_kurum_bilinmiyor']}**",
+        f"- Yüksek güvenli PII kalan kayıt: **{statistics['kalan_yuksek_guvenli_pii_kaydi']}**",
+        "",
+        "## Kaynak kurum dağılımı (ilk 30)",
+        "",
+        "| Kaynak kurum/sağlayıcı | Kayıt |",
+        "|---|---:|",
+        *[f"| {institution} | {count} |" for institution, count in top_institutions],
+        "",
+        "## Aktif korpus RAG durumları",
+        "",
+        *[f"- `{status}`: {count}" for status, count in statistics["rag_dagilimi"].items()],
+        "",
+        "## Tüm kartların RAG durumları (karantina dahil)",
+        "",
+        *[
+            f"- `{status}`: {count}"
+            for status, count in statistics["rag_dagilimi_tum_kartlar"].items()
+        ],
+        "",
+    ]
+    STATISTICS_MD.write_text("\n".join(lines), encoding="utf-8")
+
+    qa_records = _qa_sample(records)
+    previous_reviews: dict[tuple[str, str], dict[str, str]] = {}
+    if QA_MANIFEST.exists():
+        with QA_MANIFEST.open(encoding="utf-8-sig", newline="") as existing:
+            for row in csv.DictReader(existing):
+                previous_reviews[(row.get("id", ""), row.get("dosya", ""))] = row
+    with QA_MANIFEST.open("w", encoding="utf-8", newline="") as handle:
+        fieldnames = [
+            "id", "kategori", "kaynak_kurum", "rag_status",
+            "anonimlestirme_durumu", "neden", "dosya", "manuel_sonuc", "not",
+            "inceleyen", "inceleme_tarihi",
+        ]
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for record in qa_records:
+            review = previous_reviews.get((record["id"], record["path"]), {})
+            writer.writerow(
+                {
+                    "id": record["id"],
+                    "kategori": record["kategori"],
+                    "kaynak_kurum": record["kaynak_kurum"],
+                    "rag_status": record["rag_status"],
+                    "anonimlestirme_durumu": record["anonimlestirme_durumu"],
+                    "neden": record["neden"],
+                    "dosya": record["path"],
+                    "manuel_sonuc": review.get("manuel_sonuc", ""),
+                    "not": review.get("not", ""),
+                    "inceleyen": review.get("inceleyen", ""),
+                    "inceleme_tarihi": review.get("inceleme_tarihi", ""),
+                }
+            )
+    return statistics
 
 
 def stable_id(source: Path) -> str:
@@ -801,10 +1317,14 @@ async def async_main() -> int:
     conversions = [] if args.normalize_only else await convert_sources(apply=args.apply, suffixes=suffixes)
     normalized = normalize_existing_cards(apply=args.apply)
     petitions = quarantine_petition_articles(apply=args.apply)
+    anonymization_records = anonymize_all_markdown_cards(apply=args.apply)
+    statistics = write_analysis_outputs(anonymization_records, apply=args.apply)
     report_conversions = source_card_inventory() if args.apply else conversions
     report = write_report(report_conversions, normalized, petitions, apply=args.apply)
-    print(json.dumps({key: value for key, value in report.items() if key != "conversions"}, ensure_ascii=False, indent=2))
-    return 1 if report["conversion_errors"] else 0
+    summary = {key: value for key, value in report.items() if key != "conversions"}
+    summary["dataset_analysis"] = statistics
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 1 if report["conversion_errors"] or statistics["kalan_yuksek_guvenli_pii_kaydi"] else 0
 
 
 if __name__ == "__main__":

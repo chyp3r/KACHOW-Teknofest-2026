@@ -12,7 +12,10 @@ used_ocr: "false"
 page_count: "1"
 quality_score: "0.857"
 rag_status: "rejected"
-ret_nedeni: "tekrar_simulasyon_sablonu"
+ret_nedeni: "sentetik_simulasyon_yalniz_test"
+kaynak_kurum: "Ankara Büyükşehir Belediyesi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "2"
 ---
 
 # Toplu Taşıma Güzergah Değişikliği Duyurusu - Belge No 16

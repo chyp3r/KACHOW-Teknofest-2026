@@ -16,6 +16,9 @@ used_ocr: "true"
 page_count: "2"
 quality_score: "0.853"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "6"
 ---
 
 # Soru Önergeleri
@@ -46,8 +49,7 @@ Ek: Soru Önergesi Cevabı
 Bu belge güvenli elektronik imza He imzalanmıştır.
 Belge Doğrulama Kodu:61937527-37B5-4335-9193-B2262AF9CD5B Belge Doğrulama Adresi:htips:/Www.turkiye.gov.tr/stb-ebys
 [KURUM ADRESİ]
-Telefon :[T.C. KİMLİK NO] Bilgi İçin:soruonergesi(â,sanayi.gov.tr la
-Faks:[T.C. KİMLİK NO] İnteret adresi: www.sanayi.gov.tr Sebe rik ;
+[KURUM İLETİŞİM BİLGİLERİ]
 Kep:sanayiveteknolojibakanligi.strateji(a.hsOl.kep.tr mi
 
 ESKİŞEHİR MİLLETVEKİLİ SAYIN [KİŞİ ADI]'IN

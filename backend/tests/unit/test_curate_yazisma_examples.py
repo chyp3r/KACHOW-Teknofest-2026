@@ -118,6 +118,96 @@ def test_build_record_defaults_niyet_when_missing():
     assert record["niyet"] == "genel"
     assert record["pii_flags"] == []
     assert record["char_len"] == len(record["text"])
+    assert record["template_family"].startswith("tpl-")
+    assert record["dataset_split"] in {"retrieval", "dev", "heldout"}
+
+
+def test_official_web_source_is_traceable_but_license_stays_review_required():
+    record = curate._build_record(
+        example_id="OFF-1",
+        correspondence_type="response_letter",
+        kategori="cevap_yazisi",
+        niyet="ret",
+        baslik="Başlık",
+        kurum="Örnek Bakanlık",
+        belge_turu="gercek_acik_kaynak",
+        text="Başvurunun değerlendirilmesine ilişkin resmî cevap metni.",
+        source_path="OFF-1.md",
+        source_meta={
+            "kaynak_url": "https://ornek.gov.tr/belge.pdf",
+            "dogrulama": "acik_kaynaktan_kazindi",
+        },
+    )
+
+    assert record["source_origin"] == "official_web_pending_review"
+    assert record["source_url"] == "https://ornek.gov.tr/belge.pdf"
+    assert record["license_status"] == "usage_review_required"
+
+
+def test_same_source_group_never_leaks_between_dataset_splits():
+    common = {
+        "example_id": "X-5",
+        "correspondence_type": "cover_letter",
+        "kategori": "ust_yazi",
+        "niyet": "iletim",
+        "baslik": "Başlık",
+        "kurum": "Kurum",
+        "belge_turu": "gercek_acik_kaynak",
+        "source_path": "X-5.md",
+        "source_meta": {"kaynak_url": "https://ornek.gov.tr/ayni-kaynak.pdf"},
+    }
+    first = curate._build_record(text="Birinci belge metni.", **common)
+    second = curate._build_record(text="Tamamen farklı ikinci belge metni.", **common)
+
+    assert first["source_group"] == second["source_group"]
+    assert first["dataset_split"] == second["dataset_split"]
+
+
+def test_template_equivalent_records_keep_one_deterministic_representative():
+    records = [
+        {"id": "B-2", "template_family": "tpl-same", "source_path": "B-2.md"},
+        {"id": "A-1", "template_family": "tpl-same", "source_path": "A-1.md"},
+        {"id": "C-3", "template_family": "tpl-other", "source_path": "C-3.md"},
+    ]
+    skipped: list[tuple[str, str]] = []
+
+    unique = curate._deduplicate_template_families(records, skipped)
+
+    assert [record["id"] for record in unique] == ["A-1", "C-3"]
+    assert skipped == [("B-2.md", "duplicate_template_family")]
+
+
+def test_analysis_separates_real_and_synthetic_counts():
+    base = {
+        "id": "X-ANALYSIS",
+        "correspondence_type": "response_letter",
+        "niyet": "ret",
+        "dataset_split": "retrieval",
+        "kurum": "Kurum",
+        "source_institution": "Kurum",
+        "template_family": "tpl-1",
+        "baslik": "Başlık",
+        "belge_turu": "örnek",
+        "source_verification": "doğrulandı",
+        "text": "Resmî cevap metni.",
+        "pii_flags": [],
+        "source_url": "",
+        "source_sha256": "abc",
+        "license_status": "usage_review_required",
+    }
+    official = {**base, "source_origin": "official_verified_local"}
+    synthetic = {
+        **base,
+        "template_family": "tpl-2",
+        "source_origin": "synthetic",
+        "license_status": "project_internal",
+    }
+
+    analysis = curate._analysis([official, synthetic])
+
+    assert analysis["real_or_official_count"] == 1
+    assert analysis["real_or_official_ratio"] == 0.5
+    assert analysis["response_real_count_by_intent"] == {"ret": 1}
 
 
 def test_build_record_surfaces_pii_findings():

@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-A80D2243
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-A80D2243"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "Öğrenci İzin Dilekçe Örneği"
 kaynak: "https://www.dilekceornegi.net/ogrenci-izin-dilekce-ornegi/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "reference_only"
+ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Öğrenci İzin Dilekçe Örneği
@@ -13,9 +19,9 @@ ANASAYFA
 Öğrenci İzin Dilekçe Örneği
 Öğrenci İzin Dilekçe Örneği
 Dilekceornegi
-7 yıl önce
+7 yıl önce
 0
-2 dakikada okunabilir
+2 dakikada okunabilir
 Facebook'ta Paylaş
 Twitter'da Paylaş
 Pinterest
@@ -26,7 +32,7 @@ Telegram
 Okula giden bir
 çocuğunuz varsa ya da siz okula giden bir öğrencisiyseniz ve belirli günler
 aralarında okullarda izinli olmak istiyorsanız okuldaki yönetime bir dilekçe
-vermeniz gerekiyor. Okullara verilen dilekçeler 
+vermeniz gerekiyor. Okullara verilen dilekçeler
 veliler tarafından yazılara imzalanır ardından da okul yönetimine teslim
 edilir. Okul yönetimi çocuğun velisinin yazdığı dilekçeyi kabul ettikten sonra
 dilekçede belirtilen tarihler aralığında o öğrenci izinli sayılır. Böylece

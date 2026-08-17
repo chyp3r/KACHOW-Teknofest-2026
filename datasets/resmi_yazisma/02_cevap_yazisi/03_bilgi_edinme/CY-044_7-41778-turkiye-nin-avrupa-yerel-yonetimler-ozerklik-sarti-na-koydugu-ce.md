@@ -17,6 +17,9 @@ page_count: "1"
 quality_score: "0.787"
 rag_status: "rejected"
 ret_nedeni: "ocr_karakter_bozulmasi"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # , Â Sayı: E-12007 03-1$23865

@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Gazi Üniversitesi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 # T.C. GAZİ ÜNİVERSİTESİ SAĞLIK BİLİMLERİ ENSTİTÜSÜ YÖNETİM KURULU KARARI
@@ -24,8 +27,8 @@ Enstitümüz Tıbbi Biyokimya Anabilim Dalı Başkanlığı'nın lisansüstü te
 
 Lisansüstü Öğretim Yönetmeliği'nin ilgili maddeleri uyarınca, Doktora öğrencisi [KİŞİ ADI]'ın "Biyokimyasal Belirteçlerin Analizi" başlıklı tez savunma sınav jürisinin aşağıdaki öğretim üyelerinden oluşturulmasına oy birliği ile karar verildi:
 
-1. Prof. Dr. [KURUM ADI] (Danışman - Gazi Üniversitesi)
-2. Prof. Dr. [KURUM ADI] (Hacettepe Üniversitesi)
-3. Doç. Dr. [KURUM ADI] (Gazi Üniversitesi)
+1. Prof. Dr. [KİŞİ ADI] (Danışman - Gazi Üniversitesi)
+2. Prof. Dr. [KİŞİ ADI] (Hacettepe Üniversitesi)
+3. Doç. Dr. [KİŞİ ADI] (Gazi Üniversitesi)
 
-**Enstitü Müdürü:** Prof. Dr. [KİŞİSEL BİLGİ]
+**Enstitü Müdürü:** Prof. Dr. [KİŞİ ADI]

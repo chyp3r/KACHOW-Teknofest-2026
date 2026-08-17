@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Adalar Belediye Başkanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 # T.C. Adalar Belediye Meclis Kararı (Karar No: 2026/01)
@@ -36,11 +39,11 @@ Yazı İşleri Müdürlüğü'nün 5393 sayılı Belediye Kanunu'nun 20 nci madd
 İstanbul Büyükşehir Belediye Meclisi ve ilçe belediyeleri çalışma takvimine uyum sağlanması amacıyla Adalar Belediye Meclisi'nin 2026 yılı tatil ayının **AĞUSTOS** ayı olarak belirlenmesine meclise katılan üyelerin oy birliği ile karar verilmiştir.
 
 Meclis Başkanı
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Belediye Başkanı
 
 Katip Üye
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 
 Katip Üye
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]

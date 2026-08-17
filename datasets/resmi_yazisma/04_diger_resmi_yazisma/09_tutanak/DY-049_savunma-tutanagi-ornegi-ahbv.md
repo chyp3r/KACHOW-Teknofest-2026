@@ -10,6 +10,9 @@ belge_turu: "resmi_sablon"
 erisim_tarihi: "2026-07-31"
 dogrulama: "resmi_kaynak_sayfasi_dogrulandi"
 rag_status: "candidate"
+kaynak_kurum: "Ankara Hacı Bayram Veli Üniversitesi Hukuk Müşavirliği"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Savunma Tutanağı Örneği - AHBV

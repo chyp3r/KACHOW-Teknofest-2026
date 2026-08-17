@@ -17,6 +17,9 @@ page_count: "5"
 quality_score: "0.834"
 rag_status: "rejected"
 ret_nedeni: "ocr_karakter_bozulmasi"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "31"
 ---
 
 # X.?®.YS..İİİ§.^.İ.ll..S9runl^

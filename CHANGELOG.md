@@ -2,6 +2,63 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.16.0] - 2026-08-17
+### Eklendi
+- **Tüm Markdown veri kümesi için semantik anonimleştirme**: Aktif, referans ve
+  reddedilmiş kayıtlar dahil 1541 belge kartı tek bir deterministik hattan
+  geçiriliyor. Kişi adı, başvuru sahibi, vekil, imza sahibi, T.C. kimlik
+  numarası, IBAN, kayıt numarası, telefon, e-posta ve adres alanları bağlama
+  duyarlı yer tutuculara dönüştürülüyor; kurum adları korunuyor.
+- **Kurum ve veri dağılımı raporları**: 869 tekil kaynak belge; ham format,
+  kategori, RAG durumu, kaynak kurum ve semantik yer tutucu dağılımları
+  `veri-istatistikleri.json`/`VERI_ISTATISTIKLERI.md` içinde üretiliyor.
+- **Dosya bazlı anonimleştirme manifesti ve manuel QA örneklemi**:
+  `anonimlestirme-manifesti.jsonl` her kartın PII sonucunu gerçek değeri tekrar
+  etmeden kaydediyor; `manuel-qa-manifesti.csv` kategori/risk dengeli 100 kartı
+  insan doğrulamasına ayırıyor.
+- **İzlenebilir RAG provenansı ve sızıntısız değerlendirme ayrımı**: Kalite
+  kapısını geçen her örnek kaynak kökeni/URL/SHA-256, lisans inceleme durumu,
+  şablon ailesi ve kaynak grubu taşır. Aynı kaynak veya şablon ailesi retrieval,
+  dev ve heldout kümelerine bölünmez; çıktılar sırasıyla 429/89/51 kayıttır.
+- **Doğrulanabilir resmî kaynak korpusu**: GİB'in genel yazı, sirküler, iç
+  genelge ve özelge API'lerinden 200 kayıt; TÜRKPATENT ilanen tebligat
+  bültenlerinden 22 tekil eksik-belge/yetkisizlik şablonu toplandı. Ham JSON/PDF,
+  URL, erişim tarihi ve SHA-256 izleri korunuyor; yeni kaynaklar açık lisans
+  varsayılmadan `usage_review_required` olarak işaretleniyor.
+
+### Değiştirildi
+- Her veri kartına `kaynak_kurum`, `anonimlestirme_durumu` ve
+  `anonimlestirilen_alan_sayisi` metadata alanları eklendi; katalog çıktısı da
+  bu alanları taşıyor.
+- Kurum adları resmî alan adları, simülasyon kaynakları ve belge antetlerinden
+  deterministik olarak kanonikleştiriliyor. Dosya sayısı ile tekil kaynak belge
+  sayısı ayrı raporlanıyor.
+- Yüksek güvenli PII veya güvenle çözülemeyen kişi/kurum sinyali bulunan adaylar
+  fail-closed biçimde `review_required` durumuna alınıyor ve RAG'a yazılmıyor.
+- OCR/anonimleştirme testi için üretilen 300 simülasyon PDF'si, içerik değerleri
+  gerçeği temsil etmediğinden `sentetik_simulasyon_yalniz_test` gerekçesiyle
+  üretimden çıkarıldı. Kalan 352 örnekteki 5 şablon tekrarı da tekilleştirildi.
+- Karantina türevleri aktif kart ve QA sayılarını artık iki kez artırmıyor;
+  QA örneklemi ham dilekçe sayfası yerine temiz kanonik türevi seçiyor ve önceki
+  inceleme sonuçlarını yeniden üretimde koruyor.
+- Kalite kapısını geçen tekil korpus 347'den 569'a; gerçek/resmî kayıt sayısı
+  231'den 453'e yükseldi. Gerçek veri oranı %66,6'dan %79,6'ya çıktı ve üst yazı,
+  cevap yazısı, bilgilendirme metni ile diğer resmî yazışma türlerinin her biri
+  en az 100 gerçek/resmî örneğe ulaştı.
+
+### Test
+- Rol bazlı kişi adı maskeleme, IBAN/kayıt numarası, kurum kanonikleştirme,
+  reddedilmiş kartların da kapsanması, simülasyon kalite kapısı, provenans,
+  kaynak-aile düzeyinde ayrım, şablon tekilleştirme ve kanonik QA seçimi için
+  birim/regresyon testleri eklendi. GİB metin kısaltmasının başlangıç/sonuç
+  bölümlerini koruması, resmî kaynak maskelemesi, TÜRKPATENT PII temizliği,
+  tür başına gerçek veri kotası ve eksik-belge senaryo kapısı da regresyonla
+  güvenceye alındı. Üretim RAG'ında genel maske, eski silme işareti, yüksek
+  güvenli PII ve tekrar şablon ailesi 0'dır. 100/100 QA kartı agent ön
+  incelemesinden geçti.
+
+Refs: [#203](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/203).
+
 ## [3.15.0] - 2026-08-17
 ### Eklendi
 İnternal communication planının **Faz 3**'ü (#199): taslak/evrak transferini

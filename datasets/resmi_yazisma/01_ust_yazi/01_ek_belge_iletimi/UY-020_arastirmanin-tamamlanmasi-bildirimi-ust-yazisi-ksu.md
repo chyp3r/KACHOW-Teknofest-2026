@@ -16,6 +16,9 @@ used_ocr: "false"
 page_count: "1"
 quality_score: "1.0"
 rag_status: "candidate"
+kaynak_kurum: "Kahramanmaraş Sütçü İmam Üniversitesi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "2"
 ---
 
 # | --- | --- | --- | --- | --- | --- |
@@ -36,7 +39,7 @@ rag_status: "candidate"
 
 | Protokol kodu | Destekleyici tarafından verilen protokol kodunu yazınız | Destekleyici tarafından verilen protokol kodunu yazınız | Destekleyici tarafından verilen protokol kodunu yazınız | Destekleyici tarafından verilen protokol kodunu yazınız | Destekleyici tarafından verilen protokol kodunu yazınız |
 
-| Koordinatör | Koordinatör araştırmacı ismini, telefon numarası ve e-posta adresini belirtiniz (Ör: Uzm. Dr. Gökhan Öztürk, [T.C. KİMLİK NO], [E-POSTA]) | Koordinatör araştırmacı ismini, telefon numarası ve e-posta adresini belirtiniz (Ör: Uzm. Dr. Gökhan Öztürk, [T.C. KİMLİK NO], [E-POSTA]) | Koordinatör araştırmacı ismini, telefon numarası ve e-posta adresini belirtiniz (Ör: Uzm. Dr. Gökhan Öztürk, [T.C. KİMLİK NO], [E-POSTA]) | Koordinatör araştırmacı ismini, telefon numarası ve e-posta adresini belirtiniz (Ör: Uzm. Dr. Gökhan Öztürk, [T.C. KİMLİK NO], [E-POSTA]) | Koordinatör araştırmacı ismini, telefon numarası ve e-posta adresini belirtiniz (Ör: Uzm. Dr. Gökhan Öztürk, [T.C. KİMLİK NO], [E-POSTA]) |
+[KURUM İLETİŞİM BİLGİLERİ]
 
 | Koordinatör merkez | Koordinatör olarak seçilen sorumlu araştırmacının olduğu araştırma merkezi koordinatör merkez olarak kabul edilir. (Ör: İstanbul Üniversitesi İstanbul Tıp Fakültesi Kardiyoloji Anabilim Dalı) | Koordinatör olarak seçilen sorumlu araştırmacının olduğu araştırma merkezi koordinatör merkez olarak kabul edilir. (Ör: İstanbul Üniversitesi İstanbul Tıp Fakültesi Kardiyoloji Anabilim Dalı) | Koordinatör olarak seçilen sorumlu araştırmacının olduğu araştırma merkezi koordinatör merkez olarak kabul edilir. (Ör: İstanbul Üniversitesi İstanbul Tıp Fakültesi Kardiyoloji Anabilim Dalı) | Koordinatör olarak seçilen sorumlu araştırmacının olduğu araştırma merkezi koordinatör merkez olarak kabul edilir. (Ör: İstanbul Üniversitesi İstanbul Tıp Fakültesi Kardiyoloji Anabilim Dalı) | Koordinatör olarak seçilen sorumlu araştırmacının olduğu araştırma merkezi koordinatör merkez olarak kabul edilir. (Ör: İstanbul Üniversitesi İstanbul Tıp Fakültesi Kardiyoloji Anabilim Dalı) |
 

@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Anayasa Mahkemesi Başkanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "3"
 ---
 
 # Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: 2021/34521
@@ -23,7 +26,7 @@ rag_status: "candidate"
 **R.G. Tarih-Sayı:** 22/02/2024 - 32468
 
 **BAŞVURAN:** [KİŞİ ADI]
-**VEKİLİ:** Av. [KİŞİSEL BİLGİ]
+**VEKİLİ:** Av. [VEKİL ADI]
 
 **BAŞVURUNUN KONUSU:** Başvuranın tarafı olduğu tapu iptali ve tescil davasının 9 yıl 4 ay boyunca sonuçlandırılamaması nedeniyle Anayasa'nın 36. maddesinde güvence altına alınan adil yargılanma hakkı kapsamındaki makul sürede yargılanma hakkının ihlal edildiği iddiasına ilişkindir.
 

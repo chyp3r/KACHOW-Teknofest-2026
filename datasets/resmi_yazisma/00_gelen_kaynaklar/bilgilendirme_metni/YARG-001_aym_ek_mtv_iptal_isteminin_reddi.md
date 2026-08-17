@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Anayasa Mahkemesi Başkanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "3"
 ---
 
 # Anayasa Mahkemesi Kararı - Esas Sayısı: 2023/131, Karar Sayısı: 2023/160
@@ -22,7 +25,7 @@ rag_status: "candidate"
 **Karar Tarihi:** 28/9/2023
 **R.G. Tarih-Sayı:** 9/11/2023 - 32364
 
-**İPTAL İSTEMİNDE BULUNAN:** [KİŞİSEL BİLGİ] Milletvekilleri
+**İPTAL İSTEMİNDE BULUNAN:** [KİŞİ ADI] Milletvekilleri
 
 **İPTAL İSTEMİNİN KONUSU:** 14/7/2023 tarihli ve 7456 sayılı 6 Şubat 2023 Tarihinde Meydana Gelen Depremlerin Yol Açtığı Ekonomik Kayıpların Telafisi İçin Ek Motorlu Taşıtlar Vergisi İhdası ile Bazı Kanunlarda ve 375 Sayılı Kanun Hükmünde Kararnamede Değişiklik Yapılması Hakkında Kanun'un 1. maddesinin Anayasa'nın 2., 5., 10., 13., 35. ve 73. maddelerine aykırılığı ileri sürülerek iptaline ve yürürlüğünün durdurulmasına karar verilmesi talebidir.
 

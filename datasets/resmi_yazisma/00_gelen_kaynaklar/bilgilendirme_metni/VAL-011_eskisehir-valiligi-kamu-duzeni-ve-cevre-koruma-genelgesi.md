@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Eskişehir Valiliği"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "1"
 ---
 
 # Eskişehir Valiliği Kamu Düzeninin Korunması ve Çevresel Temizlik Genelgesi
@@ -32,5 +35,5 @@ Eskişehir il genelinde kamusal alanların, parkların, bahçelerin ve Porsuk Ç
 
 Bilgi ve gereğini rica ederim.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Eskişehir Valisi

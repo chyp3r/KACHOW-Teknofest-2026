@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Boğaziçi Üniversitesi Rektörlüğü"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "1"
 ---
 
 # T.C. BOĞAZİÇİ ÜNİVERSİTESİ REKTÖRLÜĞÜ

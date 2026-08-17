@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Bodrum Kaymakamlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "1"
 ---
 
 # Bodrum Kaymakamlığı Çevresel Gürültü ve Canlı Müzik Yayın Usul ve Esasları Genelgesi
@@ -33,5 +36,5 @@ Bodrum ilçemizde turizm sezonunun huzur ve güvenlik içinde geçmesi, konaklay
 
 Tüm işletmecilere tebliğ olunur.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Bodrum Kaymakamı

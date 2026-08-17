@@ -4,7 +4,11 @@ kategori: "dilekce"
 alt_kategori: "belediye_imar_itiraz"
 baslik: "Belediye İmar Planı İtiraz Dilekçesi (Ornek 1)"
 kaynak: "sentetik-sablon"
+dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
+kaynak_kurum: "Sentetik veri üretimi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # Belediye İmar Planı İtiraz Dilekçesi (Ornek 1)

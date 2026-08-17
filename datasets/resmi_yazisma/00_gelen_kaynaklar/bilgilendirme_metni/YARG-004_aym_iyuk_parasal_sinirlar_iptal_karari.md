@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Anayasa Mahkemesi Başkanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "1"
 ---
 
 # Anayasa Mahkemesi Kararı - Esas Sayısı: 2022/45, Karar Sayısı: 2023/12

@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "8"
 ---
 
 # Demiryolu Ağı Genişletme Projeleri ve Kırsal Alan Fiber İnternet Altyapısı Yazılı Soru Önergesi Cevabı
@@ -18,11 +21,11 @@ rag_status: "candidate"
 **TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA**
 
 **Sayı:** [EVRAK SAYISI]
-**Konu:** [EVRAK SAYISI] Milletvekili [EVRAK SAYISI]'e Ait 7/20114 Esas Sayılı Yazılı Soru Önergesi Cevabı
+**Konu:** [İL ADI] Milletvekili [KİŞİ ADI]'e Ait 7/20114 Esas Sayılı Yazılı Soru Önergesi Cevabı
 
 **İlgi:** TBMM Başkanlığı'nın [EVRAK SAYISI] tarihli ve [EVRAK SAYISI] sayılı yazısı.
 
-İlgi yazı eki [EVRAK SAYISI] Milletvekili Sayın [EVRAK SAYISI] tarafından Bakanlığımıza yöneltilen "Yüksek Hızlı Tren (YHT) ve hızlı tren hatları inşaat durumları ile kırsal kesimde fiber internet erişim oranları" konusundaki 7/20114 Esas Sayılı Yazılı Soru Önergesine ilişkin cevabımız aşağıdadır:
+İlgi yazı eki [İL ADI] Milletvekili Sayın [KİŞİ ADI] tarafından Bakanlığımıza yöneltilen "Yüksek Hızlı Tren (YHT) ve hızlı tren hatları inşaat durumları ile kırsal kesimde fiber internet erişim oranları" konusundaki 7/20114 Esas Sayılı Yazılı Soru Önergesine ilişkin cevabımız aşağıdadır:
 
 1. **Demiryolu Yatırımları ve YHT Hatları:**
 Bakanlığımız TCDD Genel Müdürlüğü tarafından yürütülen Ulaştırma Lojistik Ana Planı (2053) hedefleri doğrultusunda, demiryolu ağ uzunluğumuz 13.919 kilometreye ulaşmıştır. Mersin-Adana-Gaziantep, Ankara-İzmir ve Karaman-Nigde hızlı tren hatlarında yapım çalışmaları fiziki olarak %70'in üzerinde gerçekleşme oranına sahiptir.
@@ -37,5 +40,5 @@ Bilgilerinize arz ederim.
 
 **Saygılarımla,**
 
-**[KİŞİSEL BİLGİ]**
+**[İMZA SAHİBİ]**
 **Ulaştırma ve Altyapı Bakanı**

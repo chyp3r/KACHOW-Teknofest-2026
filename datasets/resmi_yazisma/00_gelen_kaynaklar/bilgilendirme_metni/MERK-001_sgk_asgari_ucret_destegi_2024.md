@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Sosyal Güvenlik Kurumu"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 # 2024 Yılı Asgari Ücret Desteği Uygulama Usul ve Esasları Genelgesi (Genelge No: 2024/12)
@@ -40,7 +43,7 @@ Sahte sigortalı bildirimi yapıldığı veya muvazaalı işlem tesis edildiği 
 
 Bilgilerini ve gereğini rica ederim.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Kurum Başkanı a.
 Genel Müdür V.
 

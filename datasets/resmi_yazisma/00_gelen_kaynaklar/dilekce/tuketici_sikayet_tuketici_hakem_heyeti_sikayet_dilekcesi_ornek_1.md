@@ -4,7 +4,11 @@ kategori: "dilekce"
 alt_kategori: "tuketici_sikayet"
 baslik: "Tüketici Hakem Heyeti Şikayet Dilekçesi (Ornek 1)"
 kaynak: "sentetik-sablon"
+dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
+kaynak_kurum: "Sentetik veri üretimi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # Tüketici Hakem Heyeti Şikayet Dilekçesi (Ornek 1)

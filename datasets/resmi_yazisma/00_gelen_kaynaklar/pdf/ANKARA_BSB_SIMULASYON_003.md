@@ -11,7 +11,11 @@ extractor: "pdfium"
 used_ocr: "false"
 page_count: "1"
 quality_score: "0.871"
-rag_status: "candidate"
+rag_status: "rejected"
+ret_nedeni: "sentetik_simulasyon_yalniz_test"
+kaynak_kurum: "Ankara Büyükşehir Belediyesi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # Çevre Temizlik Vergisi Bilgilendirmesi - Belge No 3

@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Millî Eğitim Bakanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "2"
 ---
 
 T.C.
@@ -29,7 +32,7 @@ Temel Eğitim Genel Müdürlüğü
 
 Söz konusu uygulamalara ilişkin hazırlanan "İlkokul Değerlendirme ve Gelişim Takip Rehberi" ekte gönderilmiş olup okul müdürlükleri ve sınıf öğretmenlerince ilgi yönetmelik ve rehber hükümleri doğrultusunda hareket edilmesi hususunda gereğini rica ederim.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Bakan a.
 Genel Müdür
 

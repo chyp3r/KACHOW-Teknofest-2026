@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Millî Eğitim Bakanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "6"
 ---
 
 T.C.
@@ -26,7 +29,7 @@ Bakanlığımızca 07 Haziran 2026 Pazar günü gerçekleştirilecek olan Lisele
 
 Aşağıda adı, soyadı ve unvanı yazılı personelin 06-08 Haziran 2026 tarihleri arasında İl Sınav Yürütme Komisyonunda görevlendirilmesini Olurlarınıza arz ederim.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 İl Millî Eğitim Müdürü
 
 **GÖREVLENDİRİLECEK PERSONEL LİSTESİ:**
@@ -37,6 +40,6 @@ Aşağıda adı, soyadı ve unvanı yazılı personelin 06-08 Haziran 2026 tarih
 OLUR
 02.06.2026
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Vali a.
 Vali Yardımcısı

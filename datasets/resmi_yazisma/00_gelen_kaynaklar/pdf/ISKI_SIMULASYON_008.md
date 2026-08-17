@@ -11,7 +11,11 @@ extractor: "pdfium"
 used_ocr: "false"
 page_count: "1"
 quality_score: "0.798"
-rag_status: "candidate"
+rag_status: "rejected"
+ret_nedeni: "sentetik_simulasyon_yalniz_test"
+kaynak_kurum: "İstanbul Su ve Kanalizasyon İdaresi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # Kaçak Su Kullanımı Tespit Tutanağı - Belge No 8

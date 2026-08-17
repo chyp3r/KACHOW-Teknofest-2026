@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Anayasa Mahkemesi Başkanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: 2020/18234
@@ -23,7 +26,7 @@ rag_status: "candidate"
 **R.G. Tarih-Sayı:** 18/01/2024 - 32433
 
 **BAŞVURAN:** [KİŞİ ADI]
-**VEKİLİ:** Av. [KİŞİSEL BİLGİ]
+**VEKİLİ:** Av. [VEKİL ADI]
 
 **BAŞVURUNUN KONUSU:** Başvuranın maliki olduğu taşınmazın imar planında uzun yıllar kamu hizmet alanı (yeşil alan/okul alanı) olarak ayrılmasına karşın kamulaştırılmaması ve inşaat izni verilmemesi nedeniyle mülkiyet hakkının ihlal edildiği iddiasına ilişkindir.
 

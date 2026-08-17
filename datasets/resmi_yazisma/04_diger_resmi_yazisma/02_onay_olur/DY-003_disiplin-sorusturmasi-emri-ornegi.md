@@ -16,6 +16,9 @@ used_ocr: "false"
 page_count: "1"
 quality_score: "1.0"
 rag_status: "candidate"
+kaynak_kurum: "Erzincan Binali Yıldırım Üniversitesi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "1"
 ---
 
 # Dekan /Müdür

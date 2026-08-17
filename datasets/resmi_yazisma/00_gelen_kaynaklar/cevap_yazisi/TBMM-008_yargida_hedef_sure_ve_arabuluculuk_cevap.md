@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "8"
 ---
 
 # Hukuk ve Ceza Mahkemelerinde Hedef Süre Uyumu ile Dava Şartı Arabuluculuk İstatistikleri Cevabı
@@ -18,11 +21,11 @@ rag_status: "candidate"
 **TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA**
 
 **Sayı:** [EVRAK SAYISI]
-**Konu:** [EVRAK SAYISI] Milletvekili [EVRAK SAYISI]'e Ait 7/26105 Esas Sayılı Yazılı Soru Önergesi Cevabı
+**Konu:** [İL ADI] Milletvekili [KİŞİ ADI]'e Ait 7/26105 Esas Sayılı Yazılı Soru Önergesi Cevabı
 
 **İlgi:** TBMM Başkanlığı'nın [EVRAK SAYISI] tarihli ve [EVRAK SAYISI] sayılı yazısı.
 
-İlgi yazı ekinde Bakanlığımıza iletilen, [EVRAK SAYISI] Milletvekili Sayın [EVRAK SAYISI]'e ait "Yargıda Hedef Süre uygulamasındaki gerçekleşme oranları ve dava şartı arabuluculuk kapsamında uzlaşı sağlanan dosya sayıları" hakkındaki 7/26105 Esas Sayılı Yazılı Soru Önergesi cevabı aşağıda sunulmaktadır:
+İlgi yazı ekinde Bakanlığımıza iletilen, [İL ADI] Milletvekili Sayın [KİŞİ ADI]'e ait "Yargıda Hedef Süre uygulamasındaki gerçekleşme oranları ve dava şartı arabuluculuk kapsamında uzlaşı sağlanan dosya sayıları" hakkındaki 7/26105 Esas Sayılı Yazılı Soru Önergesi cevabı aşağıda sunulmaktadır:
 
 1. **Yargıda Hedef Süre Gerçekleşme Oranları:**
 Soruşturma ve kovuşturma aşamaları ile hukuk mahkemelerinde dava türlerine göre belirlenen hedef sürelere uyum oranı genel toplamda %82,4 seviyesindedir. UYAP sisteminde şeffaf olarak izlenen bu süreler adli teşkilat genelinde performans kriteri olarak esas alınmaktadır.
@@ -37,5 +40,5 @@ Bilgilerinize arz ederim.
 
 **Saygılarımla,**
 
-**[KİŞİSEL BİLGİ]**
+**[İMZA SAHİBİ]**
 **Adalet Bakanı**

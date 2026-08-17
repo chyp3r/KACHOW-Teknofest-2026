@@ -5,8 +5,12 @@ alt_kategori: "dilekceornegi"
 baslik: "Künye"
 kaynak: "https://www.dilekceornegi.net/kunye/"
 kaynak_turu: "html_kazima"
+dogrulama: "mevcut_markdown_kaydi"
 rag_status: "rejected"
 ret_nedeni: "site_sayfasi"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Künye

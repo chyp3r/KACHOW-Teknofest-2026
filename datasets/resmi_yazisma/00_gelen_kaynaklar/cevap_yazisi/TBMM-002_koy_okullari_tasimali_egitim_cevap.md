@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "8"
 ---
 
 # Köy Okullarının İhyası ve Taşımalı Eğitim Kapsamındaki Öğrencilere İlişkin Yazılı Soru Önergesi Cevabı
@@ -18,11 +21,11 @@ rag_status: "candidate"
 **TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA**
 
 **Sayı:** [EVRAK SAYISI]
-**Konu:** [EVRAK SAYISI] Milletvekili [EVRAK SAYISI]'e Ait 7/13821 Esas Sayılı Yazılı Soru Önergesi Cevabı
+**Konu:** [İL ADI] Milletvekili [KİŞİ ADI]'e Ait 7/13821 Esas Sayılı Yazılı Soru Önergesi Cevabı
 
 **İlgi:** TBMM Başkanlığı'nın [EVRAK SAYISI] tarihli ve [EVRAK SAYISI] sayılı yazısı.
 
-İlgi yazı ekinde tarafıma yöneltilen, [EVRAK SAYISI] Milletvekili Sayın [EVRAK SAYISI]'e ait "Köy okullarının yeniden faaliyete geçirilmesi, Köy Yaşam Merkezleri projesi ve taşımalı eğitimden yararlanan öğrenci sayıları" konulu 7/13821 Esas Sayılı Yazılı Soru Önergesine cevaben hazırlanan bilgi metni aşağıda açıklanmaktadır:
+İlgi yazı ekinde tarafıma yöneltilen, [İL ADI] Milletvekili Sayın [KİŞİ ADI]'e ait "Köy okullarının yeniden faaliyete geçirilmesi, Köy Yaşam Merkezleri projesi ve taşımalı eğitimden yararlanan öğrenci sayıları" konulu 7/13821 Esas Sayılı Yazılı Soru Önergesine cevaben hazırlanan bilgi metni aşağıda açıklanmaktadır:
 
 1. **Köy Yaşam Merkezleri Projesi ve Açılan Okullar:**
 Bakanlığımızca yürütülen Köy Yaşam Merkezleri Projesi bünyesinde; anaokulu, ilkokul ve halk eğitimi merkezleri bir araya getirilerek atıl durumdaki köy okulu binaları yeniden eğitime kazandırılmıştır. Son iki yıl içerisinde Türkiye genelinde 3.250 köy yaşam merkezi ve ilkokulu faaliyete geçirilmiş, köy yerleşim yerlerinde anasınıfı açılması için gerekli öğrenci sayısı şartı 10'dan 5'e düşürülmüştür.
@@ -37,5 +40,5 @@ Bilgilerinize arz ederim.
 
 **Saygılarımla,**
 
-**[KİŞİSEL BİLGİ]**
+**[İMZA SAHİBİ]**
 **Milli Eğitim Bakanı**

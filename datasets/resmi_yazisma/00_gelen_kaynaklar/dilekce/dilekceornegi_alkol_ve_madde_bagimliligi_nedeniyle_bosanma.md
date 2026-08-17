@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-D747E949
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-D747E949"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "Alkol ve Madde Bağımlılığı Nedeniyle Boşanma"
 kaynak: "https://www.dilekceornegi.net/alkol-ve-madde-bagimliligi-nedeniyle-bosanma/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "reference_only"
+ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Alkol ve Madde Bağımlılığı Nedeniyle Boşanma
@@ -13,9 +19,9 @@ Resmi Dilekçeleri
 Alkol ve Madde Bağımlılığı Nedeniyle Boşanma
 Alkol ve Madde Bağımlılığı Nedeniyle Boşanma
 Dilekceornegi
-6 yıl önce
+6 yıl önce
 0
-4 dakikada okunabilir
+4 dakikada okunabilir
 Facebook'ta Paylaş
 Twitter'da Paylaş
 Pinterest
