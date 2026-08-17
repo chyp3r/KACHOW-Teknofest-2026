@@ -11,9 +11,34 @@ zinciriyle karşılaması. Faz 3'te (#199) kurulan `ArtifactTransferService`
 tek transfer yolu olarak aynen kullanıldı -- yeni bir execution path yok,
 yalnızca AI kanalından bu yola erişim.
 
-- **`extract_transfer_slots`** (`ai/transfer/slots.py`) -- transfer akışındaki
-  *tek* LLM çağrısı: alıcı adı/artifact türü/referansın fast-tier bir
-  ayrıştırması, hiçbir zaman bir karar değil.
+Giriş noktası **asistanın kendi tool-calling mekanizması** -- ayrı bir plan
+intent'i değil. İlk taslakta transfer, `_try_compound` gibi fusion'dan önce
+çalışan bağımsız bir lexical kapıydı (`planner._try_transfer`); iş akışı
+grafiğinde bunun görünürlüğü ve `search_document` gibi mevcut tool'larla
+tutarlılığı gözden geçirilince, mimari `propose_transfer` adlı bir
+**assistant tool**'una taşındı -- artık asistan hangi mesajın transfer
+istediğine kendi muhakemesiyle karar veriyor, sabit bir fiil+isim listesine
+değil.
+
+- **`propose_transfer`** (`ai/tools/transfer_tools.py`) -- assist adımının
+  modelinin çağırabileceği yeni tool, `search_document`'la aynı
+  `ToolSpec`/tool-loop mekanizmasından geçiyor. Modelin tek işi
+  `recipient_name`/`artifact_kind`'ı tool argümanı olarak çıkarmak --
+  hiçbir zaman bir karar değil. Tool **yalnızca önerir**: taslağı/evrakı ve
+  alıcıyı deterministik olarak çözer (`ArtifactResolutionService`,
+  `RecipientResolutionService`), bir `artifact_transfer_intents` satırı
+  açar, sonucu bir yan-kanal callback'le (`on_transfer_proposed`,
+  `on_tool_result`/`on_anchor_referenced` ile aynı desen) `_step_assist`'e
+  bildirir. Gerçek gönderim asla tool'un kendisinde olmuyor.
+- **Neden tool `interrupt()`'u kendisi çağırmıyor**: bir tool handler'ı
+  assist adımının kendi node'u içinde çalışıyor, ve `interrupt()` resume'da
+  *kendi sahibi node'u* baştan tekrar çalıştırıyor -- assist için bu,
+  modelin tüm yanıtının (ve o turdaki her tool çağrısının) ikinci kez
+  çalışması demek olurdu; `brief_gate`/`human_gate`'in tam olarak bu
+  maliyetten kaçınmak için ayrı node'lara bölünmüş olma nedeni. Bunun
+  yerine `_step_assist`, tool'un ürettiği öneriyi görünce turu
+  `transfer_gate_node`'a yönlendiriyor -- kendi ayrı node'unda, güvenle
+  `interrupt()` edilebilen.
 - **`ArtifactResolutionService`** (`domains/transfers/artifact_resolution.py`)
   -- "hangi taslak/evrak" sorusunun DB tabanlı, `SessionFocus.active_draft`'ın
   idle-limitinden tamamen bağımsız cevabı: açık referans → oturumun son
@@ -29,69 +54,63 @@ yalnızca AI kanalından bu yola erişim.
   state IN (...)`; `confirm()` politikayı TOCTOU korumasıyla sıfırdan
   yeniden değerlendirir (favori kaldırılmış/yetki değişmiş mi diye
   `policy_hash` karşılaştırması), `execute()` `CONFIRMED` olmayan hiçbir
-  şeyi çalıştırmaz -- "onaysız transfer" garantisi burada, LLM'in ya da
-  graph'ın inandığı şeyden bağımsız olarak.
-- **`transfer_resolve` / `transfer_gate` / `transfer_execute`** (planning
-  graph'a yeni node'lar) -- `transfer_gate_node` tek bir `interrupt()`
-  node'unda hem `artifact_transfer_disambiguate` (alıcı belirsizse, seçim
-  **her zaman insan**) hem `artifact_transfer_confirm`'i (asıl gönderim
-  onayı) barındırıyor; `brief`/`brief_gate` ile birebir aynı desen.
-  Checkpointer yoksa transfer iptal edilir, asla onaysız çalışmaz.
-- **`planner._try_transfer`** -- fusion'dan önce çalışan, ayrı ve
-  yüksek-hassasiyetli bir lexical gate (`_try_compound` ile aynı öncelik).
-  `transfer` **kasıtlı olarak** kalibre edilmiş dört-yönlü softmax'a
-  beşinci bir etiket olarak eklenmedi (planner.py'nin kendi modül
-  docstring'i zaten bunun neden yanlış olacağını açıklıyor). "Taslak
-  hazırla ve gönder" her zaman `draft` olarak çözülür -- transfer taslak
-  üretiminin otomatik devamı değildir (plan §C1).
-- **`AI_TRANSFER_ENABLED`** (varsayılan `false`) -- kademeli açılan feature
-  flag; kapalıyken `_try_transfer` hiç çalışmaz, sistem Faz 4 öncesiyle
-  bit-bit aynı davranır.
+  şeyi çalıştırmaz -- "onaysız transfer" garantisi burada, LLM'in, tool'un
+  ya da graph'ın inandığı şeyden tamamen bağımsız olarak.
+- **`transfer_gate` / `transfer_execute`** -- `transfer_gate_node` tek bir
+  `interrupt()` node'unda hem `artifact_transfer_disambiguate` (alıcı
+  belirsizse, seçim **her zaman insan**) hem `artifact_transfer_confirm`'i
+  (asıl gönderim onayı) barındırıyor. Checkpointer yoksa öneri iptal edilir,
+  asla onaysız çalışmaz.
+- **`AI_TRANSFER_ENABLED`** (varsayılan `true`) -- kapalıyken
+  `propose_transfer` modele hiç sunulmuyor, sistem Faz 4 öncesiyle bit-bit
+  aynı davranıyor.
 - **Frontend**: `TransferConfirmCard` -- `InterruptPanel`'e dal, iki
   interrupt türünü de render ediyor. Cross-unit uyarısı her zaman
   `payload.cross_unit`'ten (backend'de `TransferPolicy` tarafından
   hesaplanmış) okunuyor, hiçbir zaman üretilmiş metinden değil.
-  `DecisionFlow`'un dinamik iş akışı stepper'ı yeni üç node'u (`transfer_
-  resolve`/`transfer_gate`/`transfer_execute`) canlı akışta zaten doğru
-  gösteriyordu; `NODE_INFO`/`STAGE_DESCRIPTIONS`/`SUB_STEPS`'teki statik
-  fallback kayıtları da eklendi (`transfer_gate`, `brief_gate`'in `brief`
-  altına toplanması gibi `transfer_resolve`'ün altına toplanıyor).
+  `DecisionFlow`'un dinamik iş akışı stepper'ında `transfer_gate`, tetikleyen
+  adımı olan "Asistan" aşamasının altına toplanıyor (`brief_gate`'in
+  `brief` altına toplanması gibi).
 
 ### Bilinçli sınırlar
-- `transfer` intent'i tamamen ayrı bir lexical gate ile çözülüyor, kalibre
-  edilmiş 4-yönlü fusion softmax'a hiç girmiyor. Ayrı ve izole bir semantik
-  katman (embedding benzerliği, kendi `"transfer_gate"` prototip ailesinde,
-  "intent" ailesinin kalibrasyonuna dokunmadan) da denendi, **gerçek
-  `nomic-embed-text` vektörleriyle ölçüldü ve geri alındı**: 5 örnekli küçük
-  bir prototip seti bu embedding modeliyle temiz ayrışmıyor -- "Bu evrakı
-  analiz eder misin?" (belirsiz olmayan bir `analyze` isteği) `transfer`
-  prototiplerine karşı 0.858 benzerlik / 0.121 marj skorladı, mevcut
-  kalibre-aile eşiklerini bile geçerek. Gerçek transfer parafrazlarından
-  bazıları bu yanlış pozitiften **daha düşük** skorladı. `SemanticPolicy`'nin
-  "intent" ailesi için zaten belgelediği bulgu burada da geçerli: rastgele
-  karar veren bir katman, hiç katman olmamasından daha kötü -- bu, gerçek
-  `analyze`/`revise` turlarını yanlış yönlendirirdi, sadece bazı `transfer`
-  taleplerini kaçırmakla kalmazdı. Bulgu `TRANSFER_VERB_SURFACES`'in
-  docstring'inde kayıtlı; yeniden denenirse gerçek etiketlenmiş bir
-  değerlendirme setiyle (mevcut `evaluation/datasets/intents.jsonl`
-  kalibrasyonunda olduğu gibi) yapılmalı, tahmini bir eşikle değil.
+- Ayrı ve izole bir semantik katman (embedding benzerliği, kendi
+  `"transfer_gate"` prototip ailesinde, kalibre edilmiş "intent" ailesinin
+  kalibrasyonuna dokunmadan) denendi, **gerçek `nomic-embed-text`
+  vektörleriyle ölçüldü ve geri alındı** -- artık ihtiyaç da kalmadı
+  (giriş noktası zaten modelin kendi muhakemesi), ama ölçüm bulgusu ileride
+  benzer bir katman denenirse diye kayıtlı: 5 örnekli küçük bir prototip
+  seti bu embedding modeliyle temiz ayrışmıyor -- "Bu evrakı analiz eder
+  misin?" (belirsiz olmayan bir `analyze` isteği) `transfer` prototiplerine
+  karşı 0.858 benzerlik / 0.121 marj skorladı, mevcut kalibre-aile
+  eşiklerini bile geçerek. Gerçek transfer parafrazlarından bazıları bu
+  yanlış pozitiften **daha düşük** skorladı. `SemanticPolicy`'nin "intent"
+  ailesi için zaten belgelediği bulgu burada da geçerli: rastgele karar
+  veren bir katman, hiç katman olmamasından daha kötü.
 - Evrak (document) için ladder'ın "açık referans" katmanı bağlanmadı --
   yalnızca `SessionFocus.active_document_id` ipucu kullanılıyor; serbest
   metinden başlık/sürüm çözümlemesi bu fazın kapsamı dışında.
-- Artifact belirsizliği (birden fazla taslak eşleşmesi) bir metin yanıtıyla
-  çözülüyor, recipient belirsizliği gibi ayrı bir interrupt/seçim kartı
-  almıyor -- `artifact_transfer_intents` şeması yalnızca
-  `candidate_recipients` taşıyor, aday artifact listesi için bir alan yok.
+- Artifact belirsizliği (birden fazla taslak eşleşmesi) tool'un kendi
+  metin yanıtıyla çözülüyor, recipient belirsizliği gibi ayrı bir
+  interrupt/seçim kartı almıyor -- `artifact_transfer_intents` şeması
+  yalnızca `candidate_recipients` taşıyor, aday artifact listesi için bir
+  alan yok.
+- `MAX_TOOL_TURNS = 2` sınırı transfer için de geçerli: model iki tur
+  içinde `propose_transfer`'ı çağırıp yanıt üretmezse (örn. önce başka bir
+  tool deneyip sonra transfer'e karar verirse), o turda transfer önerisi
+  hiç oluşmaz -- kullanıcı isteğini tekrarlamalı. Kabul edilebilir: aynı
+  sınır `search_document`/`search_legislation` için de zaten geçerliydi.
 
 ### Test
 - `docker compose exec backend pytest tests/unit tests/integration -q` →
-  **2023 test geçti** (40 yeni: `TransferIntentService`'in her CAS geçişi +
-  TOCTOU + `execute()`'un onaysız reddi, `ArtifactResolutionService`'in her
-  ladder katmanı, slot extraction, lexical gate + drafting-veto +
-  compound-plan-dışılık + geri alınan semantik denemenin regresyon testi,
+  **2023 test geçti**: `TransferIntentService`'in her CAS geçişi + TOCTOU +
+  `execute()`'un onaysız reddi, `ArtifactResolutionService`'in her ladder
+  katmanı, `propose_transfer`'ın handler'ı (her dal: çözülen/belirsiz
+  alıcı, bulunamayan/belirsiz taslak, policy reddi, evrak türü),
   `app.ai.*`'nin `app.domains.*` import etmediğinin AST tabanlı statik
-  denetimi, ve gerçek derlenmiş planning graph üzerinde uçtan uca
-  disambiguate→confirm→execute/reject/policy-denial/unresolved akışları).
+  denetimi, ve gerçek derlenmiş planning graph üzerinde -- modelin tool
+  çağırma kararı `FakeLLMClient.generate_with_tools_side_effect` ile
+  senaryolanarak -- uçtan uca disambiguate→confirm→execute/reject/
+  policy-denial/flag-off/no-checkpointer akışları.
 - `docker compose exec frontend npm run typecheck && npm run test && npm run lint`
   → **178/178 test geçti** (6 yeni: `TransferConfirmCard`, cross-unit
   uyarısının `payload.cross_unit` ile birebir eşleştiği dahil).
