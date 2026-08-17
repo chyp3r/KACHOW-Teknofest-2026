@@ -11,6 +11,7 @@ import logging
 from app.domains.notifications.repository import NotificationRepository
 from app.domains.notifications.service import NotificationService
 from app.events.event import (
+    ArtifactTransferredEvent,
     ConversationMessageCreatedEvent,
     DocumentAnalyzedEvent,
     DraftSharedEvent,
@@ -130,6 +131,28 @@ async def _notify_new_message(event: ConversationMessageCreatedEvent) -> None:
         type="conversation_message",
         title=f"{sender_username} size bir mesaj gönderdi",
         body=preview,
+        resource_type="conversation",
+        resource_id=event.payload["conversation_id"],
+    )
+
+
+@subscribe("artifact.transferred")
+async def _notify_artifact_transferred(event: ArtifactTransferredEvent) -> None:
+    """An artifact (taslak/evrak) was transferred -- notify the recipient.
+
+    No `body` beyond a fixed Turkish sentence -- the artifact's own title/
+    content lives in the transfer row and the conversation's `kind=
+    "artifact"` message, never duplicated into a notification (see
+    `ArtifactTransferredEvent`'s own docstring).
+    """
+    sender_username = event.payload.get("sender_username", "Bir kullanıcı")
+    kind_label = "bir taslak" if event.payload.get("artifact_kind") == "draft" else "bir evrak"
+    await _write_notification(
+        company_id=event.payload["company_id"],
+        user_id=event.payload["recipient_id"],
+        type="artifact_transferred",
+        title="Yeni bir gönderiniz var",
+        body=f"{sender_username} size {kind_label} gönderdi.",
         resource_type="conversation",
         resource_id=event.payload["conversation_id"],
     )

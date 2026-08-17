@@ -9,7 +9,7 @@ from app.domains.drafts.draft_share_service import DraftShareService
 from app.domains.drafts.model.draft_model import DraftModel
 from app.domains.drafts.model.draft_share_model import DraftShareModel
 from app.domains.drafts.schema.draft_share_schema import DraftSendRequest
-from app.domains.units.model.unit_model import UnitModel
+from app.domains.transfers.model.transfer_model import ArtifactTransferModel
 from app.domains.users.model.user_model import UserModel
 
 
@@ -26,7 +26,8 @@ def _user(**overrides) -> UserModel:
 def _draft(**overrides) -> DraftModel:
     fields = dict(
         id="draft-1", company_id="company-1", user_id="emp-1", session_id=None,
-        document_id=None, version=1, content="içerik", destination=None, correspondence_type=None,
+        document_id=None, version=1, content="içerik", destination=None,
+        destination_unit_id=None, destination_justification=None, correspondence_type=None,
         is_deleted=False, created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
     )
     fields.update(overrides)
@@ -41,6 +42,16 @@ def _share(**overrides) -> DraftShareModel:
     )
     fields.update(overrides)
     return DraftShareModel(**fields)
+
+
+def _transfer(**overrides) -> ArtifactTransferModel:
+    fields = dict(
+        id="transfer-1", company_id="company-1", artifact_kind="draft", source_artifact_id="draft-1",
+        source_version=1, snapshot_ref="draft-2", sender_id="emp-1", recipient_id="emp-2",
+        channel="rest", status="executed", policy_decision="permit",
+    )
+    fields.update(overrides)
+    return ArtifactTransferModel(**fields)
 
 
 @pytest.fixture
@@ -59,21 +70,32 @@ def user_repo():
 
 
 @pytest.fixture
-def unit_repo():
-    return AsyncMock()
+def transfer_service():
+    """`ArtifactTransferService` is now injected, not built by
+    `DraftShareService` itself -- see its own docstring. `execute`
+    defaults to succeeding; individual tests override `side_effect` to
+    exercise the NotFound/Authorization paths it's responsible for."""
+    service = AsyncMock()
+    service.execute.side_effect = lambda cmd: _transfer(recipient_id=cmd.recipient_id)
+    return service
 
 
 @pytest.fixture
-def service(share_repo, draft_repo, user_repo, unit_repo):
-    return DraftShareService(share_repo, draft_repo, user_repo, unit_repo)
+def service(share_repo, draft_repo, user_repo, transfer_service):
+    return DraftShareService(share_repo, draft_repo, user_repo, transfer_service)
 
 
 @pytest.fixture(autouse=True)
 def _no_real_event_publish(monkeypatch):
-    """Every send/respond call publishes a domain event -- isolate these unit
-    tests from the real process-wide `event_bus` (whose listeners, if any
-    got registered by another test module, would try to open a real DB
-    session -- see `app.events.subscribers._write_notification`)."""
+    """`respond()` still publishes `DraftShareRespondedEvent` directly --
+    isolate these unit tests from the real process-wide `event_bus` (whose
+    listeners, if any got registered by another test module, would try to
+    open a real DB session -- see `app.events.subscribers._write_notification`).
+    `send()` itself no longer publishes anything (that now happens inside
+    `ArtifactTransferService.execute`, mocked separately via
+    `transfer_service` above), so this fixture is only exercised by the
+    `respond`-path tests below.
+    """
     published = AsyncMock()
     monkeypatch.setattr("app.domains.drafts.draft_share_service.event_bus.publish", published)
     return published
@@ -86,16 +108,19 @@ async def test_send_404s_when_draft_missing(service, draft_repo):
         await service.send("draft-1", _user(), DraftSendRequest(recipient_ids=["emp-2"]), "company-1")
 
 
-async def test_send_denies_a_non_owner_employee(service, draft_repo):
+async def test_send_propagates_a_transfer_authorization_denial(service, draft_repo, transfer_service):
+    """`send` no longer authorizes anything itself -- `ArtifactTransferService.
+    execute` does (see its own docstring), so a non-owner employee is
+    denied there, and `send` must not swallow that."""
     draft_repo.get_by_id.return_value = _draft(user_id="someone-else")
+    transfer_service.execute.side_effect = AuthorizationException(message="Bu taslağı gönderme izniniz yok.")
 
     with pytest.raises(AuthorizationException):
         await service.send("draft-1", _user(id="emp-1"), DraftSendRequest(recipient_ids=["emp-2"]), "company-1")
 
 
-async def test_send_allows_an_admin_that_does_not_own_the_draft(service, draft_repo, user_repo, share_repo):
+async def test_send_allows_an_admin_that_does_not_own_the_draft(service, draft_repo, share_repo, transfer_service):
     draft_repo.get_by_id.return_value = _draft(user_id="someone-else")
-    user_repo.get_by_id_in_company.return_value = _user(id="emp-2")
     share_repo.create.side_effect = lambda share: share
 
     shares = await service.send(
@@ -103,21 +128,23 @@ async def test_send_allows_an_admin_that_does_not_own_the_draft(service, draft_r
     )
 
     assert len(shares) == 1
+    transfer_service.execute.assert_awaited_once()
 
 
-async def test_send_404s_on_a_recipient_outside_the_company(service, draft_repo, user_repo):
+async def test_send_propagates_a_recipient_not_found_from_the_transfer_service(
+    service, draft_repo, transfer_service
+):
     draft_repo.get_by_id.return_value = _draft()
-    user_repo.get_by_id_in_company.return_value = None
+    transfer_service.execute.side_effect = NotFoundException(message="Kullanıcı bulunamadı.")
 
     with pytest.raises(NotFoundException):
         await service.send("draft-1", _user(), DraftSendRequest(recipient_ids=["ghost"]), "company-1")
 
 
-async def test_send_creates_one_share_per_recipient_and_publishes(
-    service, draft_repo, user_repo, share_repo, _no_real_event_publish
+async def test_send_creates_one_share_per_recipient_and_calls_transfer_once_each(
+    service, draft_repo, share_repo, transfer_service
 ):
     draft_repo.get_by_id.return_value = _draft()
-    user_repo.get_by_id_in_company.side_effect = [_user(id="emp-2"), _user(id="emp-3")]
     share_repo.create.side_effect = lambda share: share
 
     shares = await service.send(
@@ -126,15 +153,31 @@ async def test_send_creates_one_share_per_recipient_and_publishes(
 
     assert {s.recipient_id for s in shares} == {"emp-2", "emp-3"}
     assert all(s.message == "bkz" for s in shares)
-    assert _no_real_event_publish.await_count == 2
+    assert transfer_service.execute.await_count == 2
 
 
-async def test_send_resolves_suggested_unit_from_draft_destination(service, draft_repo, user_repo, unit_repo, share_repo):
-    draft_repo.get_by_id.return_value = _draft(destination="Mali İşler")
-    unit_repo.get_by_name.return_value = UnitModel(
-        id="unit-1", company_id="company-1", name="Mali İşler", description="x", is_active=True
-    )
-    user_repo.get_by_id_in_company.return_value = _user(id="emp-2")
+async def test_send_passes_the_draft_version_through_to_the_transfer_command(
+    service, draft_repo, share_repo, transfer_service
+):
+    draft_repo.get_by_id.return_value = _draft(version=3)
+    share_repo.create.side_effect = lambda share: share
+
+    await service.send("draft-1", _user(), DraftSendRequest(recipient_ids=["emp-2"]), "company-1")
+
+    cmd = transfer_service.execute.await_args.args[0]
+    assert cmd.source_version == 3
+    assert cmd.artifact_kind == "draft"
+    assert cmd.channel == "rest"
+
+
+async def test_send_carries_the_draft_s_already_resolved_destination_unit(
+    service, draft_repo, share_repo, transfer_service
+):
+    """`suggested_unit_id` is a straight passthrough of `drafts.
+    destination_unit_id` now -- resolved once, at draft-write time, by
+    `draft_recorder.record_draft`; `send` no longer re-resolves a unit
+    name at send time."""
+    draft_repo.get_by_id.return_value = _draft(destination_unit_id="unit-1")
     share_repo.create.side_effect = lambda share: share
 
     shares = await service.send("draft-1", _user(), DraftSendRequest(recipient_ids=["emp-2"]), "company-1")
@@ -142,12 +185,10 @@ async def test_send_resolves_suggested_unit_from_draft_destination(service, draf
     assert shares[0].suggested_unit_id == "unit-1"
 
 
-async def test_send_leaves_suggested_unit_null_when_destination_has_no_match(
-    service, draft_repo, user_repo, unit_repo, share_repo
+async def test_send_leaves_suggested_unit_null_when_the_draft_was_never_routed(
+    service, draft_repo, share_repo, transfer_service
 ):
-    draft_repo.get_by_id.return_value = _draft(destination="Bilinmeyen Birim")
-    unit_repo.get_by_name.return_value = None
-    user_repo.get_by_id_in_company.return_value = _user(id="emp-2")
+    draft_repo.get_by_id.return_value = _draft(destination_unit_id=None)
     share_repo.create.side_effect = lambda share: share
 
     shares = await service.send("draft-1", _user(), DraftSendRequest(recipient_ids=["emp-2"]), "company-1")
@@ -179,23 +220,19 @@ async def test_respond_denies_when_already_resolved(service, share_repo, draft_r
         await service.respond("share-1", "company-1", _user(id="emp-1"), "accepted", None)
 
 
-async def test_accept_forks_a_new_draft_version_owned_by_the_recipient(
-    service, share_repo, draft_repo, _no_real_event_publish
-):
+async def test_accept_no_longer_forks_a_draft_version(service, share_repo, draft_repo):
+    """The double-fork bug this change fixes (see `respond`'s own
+    docstring): the recipient already got their own copy at *send* time,
+    via `ArtifactTransferService.execute`'s fork -- accepting must not
+    fork a second one."""
     share = _share(recipient_id="emp-1", status="sent")
     share_repo.get_by_id.return_value = share
     share_repo.respond.side_effect = lambda s, status, note: s
-    original = _draft(id="draft-1", user_id="sender-1", content="orijinal içerik")
-    draft_repo.get_by_id.return_value = original
+    draft_repo.get_by_id.return_value = _draft(id="draft-1", user_id="sender-1", content="orijinal içerik")
 
     await service.respond("share-1", "company-1", _user(id="emp-1"), "accepted", "tamam")
 
-    draft_repo.create_version.assert_awaited_once()
-    call_kwargs = draft_repo.create_version.await_args.kwargs
-    assert call_kwargs["user_id"] == "emp-1"
-    assert call_kwargs["parent"] is original
-    assert call_kwargs["content"] == "orijinal içerik"
-    assert _no_real_event_publish.await_count == 1
+    draft_repo.create_version.assert_not_awaited()
 
 
 async def test_reject_does_not_fork_a_new_version(service, share_repo, draft_repo):
@@ -207,6 +244,19 @@ async def test_reject_does_not_fork_a_new_version(service, share_repo, draft_rep
     await service.respond("share-1", "company-1", _user(id="emp-1"), "rejected", "olmadı")
 
     draft_repo.create_version.assert_not_awaited()
+
+
+async def test_respond_still_publishes_the_responded_event(
+    service, share_repo, draft_repo, _no_real_event_publish
+):
+    share = _share(recipient_id="emp-1", status="sent")
+    share_repo.get_by_id.return_value = share
+    share_repo.respond.side_effect = lambda s, status, note: s
+    draft_repo.get_by_id.return_value = _draft()
+
+    await service.respond("share-1", "company-1", _user(id="emp-1"), "accepted", "tamam")
+
+    _no_real_event_publish.assert_awaited_once()
 
 
 async def test_withdraw_denies_a_non_sender_employee(service, share_repo, draft_repo):

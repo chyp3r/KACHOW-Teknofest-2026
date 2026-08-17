@@ -122,6 +122,57 @@ class PoolService:
         )
         return PoolPushResultItem(user_id=recipient.id, status="pushed")
 
+    async def file_transferred_document(
+        self, *, document: DocumentModel, recipient: UserModel, sender: UserModel, company_id: str
+    ) -> DocumentPoolItemModel:
+        """File `document` into `recipient`'s personal pool as an artifact
+        transfer, freezing its current metadata into `metadata_snapshot`
+        (see `DocumentPoolItemModel`'s own docstring for why -- the shared
+        blob is never mutated, but this row's metadata copy is what keeps
+        the recipient's view stable if the sender edits the source
+        afterward).
+
+        Called only by `app.domains.transfers.ArtifactTransferService.
+        execute` -- clearance is already checked by `TransferPolicy`
+        before this runs, unlike `_push_one`'s own inline check for the
+        bulk-push flow, so this method trusts its caller and does not
+        re-check it.
+
+        Re-filing an already-transferred document (sent to the same
+        recipient again, by the same or a different sender) refreshes the
+        existing item's snapshot and `transferred_by` in place rather than
+        hitting `UNIQUE(pool_id, document_id)` -- the recipient has one
+        copy, and it reflects the latest transfer.
+        """
+        pool = await self.get_or_create_personal_pool(recipient.id, company_id)
+        snapshot = {
+            "document_type": document.document_type,
+            "document_type_label": document.document_type_label,
+            "compliance_status": document.compliance_status,
+            "summary": document.summary,
+            "sensitivity_level": document.sensitivity_level,
+            "pii_flagged": document.pii_flagged,
+        }
+        existing = await self.item_repository.get_by_pool_and_document(pool.id, document.id)
+        if existing is not None:
+            existing.metadata_snapshot = snapshot
+            existing.transferred_by = sender.id
+            existing.source = "transfer"
+            return await self.item_repository.save(existing)
+
+        return await self.item_repository.create(
+            DocumentPoolItemModel(
+                id=uuid4().hex,
+                company_id=company_id,
+                pool_id=pool.id,
+                document_id=document.id,
+                added_by=sender.id,
+                source="transfer",
+                transferred_by=sender.id,
+                metadata_snapshot=snapshot,
+            )
+        )
+
     async def push(
         self, request: PoolPushRequest, sender: UserModel, company_id: str
     ) -> List[PoolPushResultItem]:

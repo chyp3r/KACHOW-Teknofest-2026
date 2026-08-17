@@ -48,7 +48,8 @@
   padding: var(--space-4);
   border-bottom: 1px solid var(--border-default);
 }
-.message-thread-header h2 { margin: 0; font-size: 1.05rem; }
+.message-thread-header h2 { margin: 0; font-size: 1.05rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.message-thread-header-actions { display: flex; align-items: center; gap: var(--space-1); flex-shrink: 0; }
 .message-thread {
   flex: 1;
   min-height: 0;
@@ -76,6 +77,49 @@
 .message-bubble-body p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .message-bubble-body time { display: block; margin-top: var(--space-1); color: var(--text-muted); font-size: 0.72rem; }
 .message-system-line { align-self: center; margin: var(--space-2) 0; color: var(--text-muted); font-size: 0.82rem; }
+
+.message-bubble-artifact { padding: var(--space-2); }
+
+/* ---------- Artifact kartı (taslak/evrak transfer mesajı) ---------- */
+
+.artifact-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 16rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+}
+.artifact-card-error { color: var(--text-error); }
+.artifact-card-icon {
+  display: inline-grid;
+  place-items: center;
+  width: var(--icon-container-sm);
+  height: var(--icon-container-sm);
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
+}
+.artifact-card-body { display: grid; gap: var(--space-1); min-width: 0; flex: 1; }
+.artifact-card-meta { display: flex; align-items: center; gap: var(--space-2); }
+.artifact-card-cross-unit {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  color: var(--text-warning);
+  background: color-mix(in srgb, var(--status-running) 14%, transparent);
+  font-size: 0.75rem;
+}
+
+/* ---------- Taslak/evrak gönder diyaloğu ---------- */
+
+.send-artifact-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-1); max-height: 22rem; overflow-y: auto; }
+.send-artifact-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2); border-radius: var(--radius-md); }
+.send-artifact-row:hover { background: var(--surface-hover); }
+.send-artifact-row-title { display: grid; gap: 2px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.send-artifact-row-title small { color: var(--text-muted); }
 
 .message-composer {
   display: flex;

@@ -37,6 +37,8 @@ from app.domains.messaging.model.conversation_participant_model import (  # noqa
 )
 from app.domains.messaging.model.conversation_message_model import ConversationMessageModel  # noqa: F401
 from app.domains.users.model.user_favorite_model import UserFavoriteModel  # noqa: F401
+from app.domains.transfers.model.transfer_model import ArtifactTransferModel  # noqa: F401
+from app.domains.transfers.model.transfer_intent_model import ArtifactTransferIntentModel  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

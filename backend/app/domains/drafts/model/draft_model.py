@@ -46,6 +46,21 @@ class DraftModel(Base, TimestampMixin):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     correspondence_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     destination: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    #: `destination` resolved against `units` at write time (see
+    #: `app.domains.drafts.draft_recorder.record_draft`) -- `None` when
+    #: `destination` didn't match any unit in this company (renamed/
+    #: deleted since, or routing came back empty), same honesty
+    #: `draft_shares.suggested_unit_id` already has. This is what a
+    #: transfer's cross-unit check and recipient recommendation
+    #: (`app.domains.transfers`) read; nothing re-resolves `destination`
+    #: by name anymore.
+    destination_unit_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("units.id"), nullable=True, index=True
+    )
+    #: The routing graph's own `RouteOutput.justification` for this
+    #: version -- persisted so a transfer confirmation can show "why this
+    #: unit" without re-running routing.
+    destination_justification: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     confidence_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     requires_human_approval: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)

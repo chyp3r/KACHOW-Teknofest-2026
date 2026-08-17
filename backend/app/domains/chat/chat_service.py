@@ -583,6 +583,7 @@ class ChatService:
             content=content,
             correspondence_type=draft.get("correspondence_type"),
             destination=routing.get("final_destination"),
+            destination_justification=routing.get("justification"),
             status=draft.get("status"),
             confidence_score=draft.get("confidence_score"),
             requires_human_approval=draft.get("requires_human_approval"),

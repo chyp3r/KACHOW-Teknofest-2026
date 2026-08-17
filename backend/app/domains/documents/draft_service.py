@@ -241,6 +241,7 @@ class DraftService:
                 request.correspondence_type.value if request.correspondence_type else None
             ),
             destination=destination,
+            destination_justification=routing_state.get("justification"),
             status=draft_state.get("status"),
             confidence_score=confidence,
             requires_human_approval=common_fields["requires_human_approval"],

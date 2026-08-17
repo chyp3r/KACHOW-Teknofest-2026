@@ -93,6 +93,26 @@ class DocumentPoolItemRepository:
         )
         return result.scalar_one_or_none() is not None
 
+    async def get_by_pool_and_document(
+        self, pool_id: str, document_id: str
+    ) -> Optional[DocumentPoolItemModel]:
+        """The one row `UNIQUE(pool_id, document_id)` guarantees is unique,
+        when it exists -- used by `PoolService.file_transferred_document`
+        to refresh an already-transferred item in place instead of hitting
+        that constraint on a re-send."""
+        result = await self.db.execute(
+            select(DocumentPoolItemModel).where(
+                DocumentPoolItemModel.pool_id == pool_id,
+                DocumentPoolItemModel.document_id == document_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def save(self, item: DocumentPoolItemModel) -> DocumentPoolItemModel:
+        """Flush pending attribute mutations on an already-attached item."""
+        await self.db.flush()
+        return item
+
     async def list_for_pool(
         self, pool_id: str, company_id: str, skip: int = 0, limit: int = 100
     ) -> List[Tuple[DocumentPoolItemModel, DocumentModel]]:

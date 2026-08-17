@@ -45,6 +45,22 @@ class DraftShareRespondedEvent(BaseEvent):
 class DocumentRoutedEvent(BaseEvent):
     event_type: str = "document.routed"
 
+class ArtifactTransferredEvent(BaseEvent):
+    """One `artifact_transfers` row created (`ArtifactTransferService.
+    execute`, any channel). `payload` carries `company_id`, `transfer_id`,
+    `artifact_kind` ("draft"|"document"), `sender_id`, `sender_username`,
+    `recipient_id`, `conversation_id` -- the subscriber in
+    `app.events.subscribers` turns this into one `notifications` row for
+    `recipient_id`. Deliberately no `body_preview`/content field: unlike a
+    plain chat message, an artifact transfer's own `conversation_messages`
+    row (`kind="artifact"`) already carries everything the recipient needs
+    to see, and the notification only has to point at it -- see
+    `ConversationMessageCreatedEvent`'s own docstring for why a durable,
+    broadly-read record should never carry content that belongs only in
+    the participation-gated thread.
+    """
+    event_type: str = "artifact.transferred"
+
 class ConversationMessageCreatedEvent(BaseEvent):
     """One `conversation_messages` row created for one active recipient.
 

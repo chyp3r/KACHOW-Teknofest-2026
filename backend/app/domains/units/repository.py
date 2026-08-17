@@ -109,6 +109,26 @@ class UnitMembershipRepository:
         )
         return [(membership, user) for membership, user in result.all()]
 
+    async def get_primary_for_user(
+        self, user_id: str, company_id: str
+    ) -> Optional[UnitMembershipModel]:
+        """The one `is_primary=true` membership for `user_id`, if any.
+
+        Used by `TransferPolicy`'s cross-unit check: a recipient with no
+        primary unit at all is not itself a policy failure (cross_unit
+        simply can't be computed and defaults to `False`, see
+        `TransferPolicy.evaluate`'s own docstring), just an honestly
+        incomplete signal.
+        """
+        result = await self.db.execute(
+            select(UnitMembershipModel).where(
+                UnitMembershipModel.user_id == user_id,
+                UnitMembershipModel.company_id == company_id,
+                UnitMembershipModel.is_primary.is_(True),
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def clear_primary_for_user(self, user_id: str, company_id: str) -> None:
         """Unset any existing `is_primary` membership for `user_id`.
 

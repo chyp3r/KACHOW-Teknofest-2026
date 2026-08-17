@@ -23,9 +23,7 @@ from app.domains.drafts.schema.draft_share_schema import (
     DraftShareResponse,
 )
 from app.domains.drafts.service import DraftService
-from app.domains.quotas.repository import CompanyQuotaRepository, UsageCounterRepository
-from app.domains.quotas.service import QuotaService
-from app.domains.units.repository import UnitRepository
+from app.domains.transfers.provider import build_transfer_service
 from app.domains.users.model.user_model import UserModel
 from app.domains.users.repository import UserRepository
 from app.infrastructure.database.session import get_db
@@ -107,8 +105,7 @@ def _draft_share_service(db: AsyncSession) -> DraftShareService:
         share_repository=DraftShareRepository(db),
         draft_repository=DraftRepository(db),
         user_repository=UserRepository(db),
-        unit_repository=UnitRepository(db),
-        quota_service=QuotaService(UsageCounterRepository(db), CompanyQuotaRepository(db)),
+        transfer_service=build_transfer_service(db),
     )
 
 
@@ -238,8 +235,10 @@ async def send_draft(
 ):
     """Send one draft version to one or more recipients within the caller's company.
 
-    `Action.DRAFT_SEND`-gated: an EMPLOYEE may only send its own draft,
-    ADMIN/MANAGER/ROOT may send any draft company-wide.
+    Delegates to `ArtifactTransferService.execute` (see `DraftShareService.
+    send`'s own docstring) -- `Action.ARTIFACT_TRANSFER`-gated there: an
+    EMPLOYEE may only send its own draft, ADMIN/MANAGER/ROOT may send any
+    draft company-wide.
     """
     service = _draft_share_service(db)
     shares = await service.send(draft_id, current_user, request, current_user.company_id)

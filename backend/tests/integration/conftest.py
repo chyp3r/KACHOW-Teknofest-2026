@@ -324,6 +324,39 @@ async def two_companies(owner_engine) -> AsyncGenerator[dict, None]:
                 {"id": favorite_id, "cid": company_id, "uid": user_id},
             )
 
+            #: Self-addressed, same trick every other row in this fixture
+            #: uses (see draft_share_id's own comment) -- only the
+            #: company_id boundary is under test here, not the sender/
+            #: recipient distinction ArtifactTransferService's own business
+            #: logic cares about.
+            artifact_transfer_id = uuid4().hex
+            await session.execute(
+                text(
+                    "INSERT INTO artifact_transfers (id, company_id, artifact_kind, source_artifact_id, "
+                    "sender_id, recipient_id, channel, ai_suggested, cross_unit, confirmed_by_user, "
+                    "policy_decision, status, created_at, updated_at) "
+                    "VALUES (:id, :cid, 'draft', :did, :uid, :uid, 'chat', false, false, true, "
+                    "'permit', 'executed', now(), now())"
+                ),
+                {"id": artifact_transfer_id, "cid": company_id, "did": draft_id, "uid": user_id},
+            )
+
+            artifact_transfer_intent_id = uuid4().hex
+            await session.execute(
+                text(
+                    "INSERT INTO artifact_transfer_intents (id, company_id, thread_id, requested_by, "
+                    "artifact_kind, source_artifact_id, state, cross_unit, created_at, updated_at) "
+                    "VALUES (:id, :cid, :tid, :uid, 'draft', :did, 'INTENT_DETECTED', false, now(), now())"
+                ),
+                {
+                    "id": artifact_transfer_intent_id,
+                    "cid": company_id,
+                    "tid": f"{user_id}:rls-test-thread",
+                    "uid": user_id,
+                    "did": draft_id,
+                },
+            )
+
             result[label] = {
                 "company_id": company_id,
                 "user_id": user_id,
@@ -337,6 +370,8 @@ async def two_companies(owner_engine) -> AsyncGenerator[dict, None]:
                 "conversation_participant_id": conversation_participant_id,
                 "conversation_message_id": conversation_message_id,
                 "favorite_id": favorite_id,
+                "artifact_transfer_id": artifact_transfer_id,
+                "artifact_transfer_intent_id": artifact_transfer_intent_id,
             }
         await session.commit()
 

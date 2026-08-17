@@ -4,6 +4,7 @@ import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
 import { Spinner } from "../../components/Surface";
 import type { Message } from "../../types/messaging";
+import { ArtifactMessageCard } from "./ArtifactMessageCard";
 
 function formatTime(iso: string): string {
   const value = new Date(iso);
@@ -71,6 +72,20 @@ export function MessageThread({
             <p key={message.id} className="message-system-line">
               {message.body}
             </p>
+          );
+        }
+        if (message.kind === "artifact" && message.artifact_transfer_id) {
+          return (
+            <article key={message.id} className={`message-bubble ${own ? "own" : "other"}`}>
+              <div className="message-bubble-body message-bubble-artifact">
+                {!own && <header>{message.sender_username ?? "Bilinmeyen kullanıcı"}</header>}
+                <ArtifactMessageCard
+                  transferId={message.artifact_transfer_id}
+                  currentUserId={currentUserId}
+                />
+                <time dateTime={message.created_at}>{formatTime(message.created_at)}</time>
+              </div>
+            </article>
           );
         }
         return (
