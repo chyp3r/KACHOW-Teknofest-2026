@@ -216,6 +216,26 @@ class SessionFocus:
             (see ``compute_focus_update``'s ``reset_requested`` branch) --
             otherwise "yeni bir taslak yazalım" would silently inherit the
             previous letter's addressee.
+        active_draft_id: The persisted ``drafts.id`` of ``active_draft``,
+            when the graph turn that produced it was also recorded to the
+            database (see ``app.domains.chat.chat_service.ChatService.
+            _maybe_record_draft``, the only writer). ``active_draft`` itself
+            never carries a database id -- ``DraftVersion`` is a pure
+            in-memory snapshot the graph builds before any DB write happens
+            (see its own docstring) -- so this is the one place a later
+            ``transfer_resolve`` step can find a real, transferable id
+            without re-deriving it. A convenience hint only, per the plan's
+            §C2: never the sole source a resolution ladder trusts, since it
+            can go stale (an idle-cleared ``active_draft``, a
+            ``record_draft`` call that failed) in ways
+            ``DraftRepository.get_latest_for_session`` cannot -- that lookup
+            is what actually backs "which draft" resolution; this field only
+            helps a *deictic* reference ("bu taslağı gönder") skip straight
+            to the same answer instead of re-deriving it. Deliberately never
+            cleared by ``compute_focus_update`` the way ``active_draft`` is
+            (idle limit, explicit reset) -- a stale id here is harmless,
+            since every reader treats it as one candidate to verify, not a
+            trusted pointer.
     """
 
     active_document_id: Optional[str] = None
@@ -228,6 +248,7 @@ class SessionFocus:
     active_draft_idle_turns: int = 0
     last_rejection: Optional[dict[str, Any]] = None
     writing_brief: Optional[dict[str, Any]] = None
+    active_draft_id: Optional[str] = None
 
 
 def _accumulate_objective(existing: str, addition: str) -> str:

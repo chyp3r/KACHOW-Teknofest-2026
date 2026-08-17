@@ -62,6 +62,25 @@ class Settings(BaseSettings):
     #: pays for an unbounded number of LLM calls in one request.
     HITL_MAX_GATE_REVISIONS: int = 2
 
+    #: Gate the `transfer` plan intent (Faz 4, #201): "son taslağı Ahmet'e
+    #: gönder" resolved and executed through the AI channel, behind a
+    #: mandatory `transfer_gate` confirmation. Off by default -- a gradual
+    #: per-deployment rollout, same reasoning `HITL_APPROVAL_GATE_ENABLED`
+    #: documents for its own gate. When False, `planner._resolve_intent`
+    #: never even runs the transfer lexical gate, so a message like "taslağı
+    #: gönder" falls through to the ordinary four-way ladder exactly as it
+    #: did before this phase existed.
+    AI_TRANSFER_ENABLED: bool = False
+
+    #: How long an `artifact_transfer_intents` row may sit in
+    #: `AWAITING_CONFIRMATION` before `TransferIntentService.confirm`
+    #: refuses it and cancels the intent instead (see the plan's §I). Ten
+    #: minutes -- long enough for a human to actually read the confirmation
+    #: card, short enough that a policy re-check at confirm time (favorite
+    #: removed, clearance changed) stays a real TOCTOU guard rather than a
+    #: theoretical one against an intent that could otherwise live forever.
+    TRANSFER_CONFIRMATION_TTL_SECONDS: int = 600
+
     #: Whether a revision checks the user's own instruction against the
     #: retrieved mevzuat/source document for contradictions (see
     #: app.ai.revision.conflict). The deterministic layer always runs;

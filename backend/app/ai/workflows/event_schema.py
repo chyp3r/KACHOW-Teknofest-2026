@@ -123,7 +123,19 @@ class GuardrailEvent(BaseModel):
 
 class InterruptEvent(BaseModel):
     event: Literal["interrupt"] = "interrupt"
-    kind: Literal["missing_information", "draft_approval", "writing_brief"]
+    kind: Literal[
+        "missing_information",
+        "draft_approval",
+        "writing_brief",
+        #: Faz 4 (#201) -- `planning_graph.transfer_gate_node`. Confirming
+        #: who/what a transfer goes to (`artifact_transfer_confirm`) and
+        #: picking one candidate when recipient resolution was ambiguous
+        #: (`artifact_transfer_disambiguate`) are distinct kinds so the
+        #: frontend's `TransferConfirmCard` can render each shape (a single
+        #: proposal vs. a candidate list) without inspecting `payload`.
+        "artifact_transfer_confirm",
+        "artifact_transfer_disambiguate",
+    ]
     interrupt_id: str
     payload: dict[str, Any]
     seq: Optional[int] = None
