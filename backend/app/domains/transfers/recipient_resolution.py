@@ -4,9 +4,11 @@ Not called by anything in this phase (Faz 3, #199) -- manual sends
 (`POST /transfers/send`) already carry an explicit `recipient_id`, resolved
 by the caller through `UserSearchDrawer`/`PersonPickerBody` (Faz 2). This
 service exists and is fully tested now so the Faz 4 AI channel's
-`transfer_resolve` node has a deterministic, already-proven service to call
-instead of asking the LLM to guess a name -> user match itself (see the
-plan's §2.2/§2.4: "İsim eşleşmesini LLM üzerinden tahmin etme").
+`propose_transfer` tool (`app.ai.tools.transfer_tools`) has a deterministic,
+already-proven service to call instead of asking the LLM to guess a name ->
+user match itself (see the plan's §2.2/§2.4: "İsim eşleşmesini LLM
+üzerinden tahmin etme" -- the model only ever supplies the raw name as a
+tool argument; this is what turns it into a real user).
 """
 
 from dataclasses import dataclass

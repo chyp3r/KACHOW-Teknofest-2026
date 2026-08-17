@@ -938,6 +938,18 @@ textarea { min-height: 105px; resize: vertical; }
    without boxing it in its own separate card. */
 .interrupt-brief { padding-left: var(--space-3); border-left: 2px solid color-mix(in srgb, var(--accent-blue) 45%, transparent); }
 
+/* Faz 4 (#201) -- artifact_transfer_confirm/artifact_transfer_disambiguate.
+   Same inset-accent treatment as .interrupt-brief, its own color so a
+   transfer gate is visually distinct from a drafting gate at a glance. */
+.interrupt-transfer { padding-left: var(--space-3); border-left: 2px solid color-mix(in srgb, var(--status-running) 45%, transparent); }
+.transfer-confirm-card { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
+.transfer-confirm-question { margin: 0; color: var(--text-primary); }
+.transfer-confirm-actions { justify-content: flex-end; gap: var(--space-2); }
+.transfer-candidate-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.transfer-candidate-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-primary); }
+.transfer-candidate-info { display: grid; gap: 2px; min-width: 0; }
+.transfer-candidate-info small { color: var(--text-muted); }
+
 /* The score/approval/routing facts that used to be baked into the chat
    reply as free text (see backend ChatService._select_reply) now render
    as chips here instead -- inline on a completed draft message

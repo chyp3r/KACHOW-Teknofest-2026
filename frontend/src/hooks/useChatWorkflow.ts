@@ -381,7 +381,7 @@ export function useChatWorkflow(
     }
   }, [clientId, handleEvent, loading, resetFlow, selectedDocument]);
 
-  const resume = useCallback(async (action: "answer" | "approve" | "revise" | "reject", answers: Record<string, string | string[]>, instructions: string, reason?: string) => {
+  const resume = useCallback(async (action: "answer" | "approve" | "revise" | "reject" | "select", answers: Record<string, string | string[]>, instructions: string, reason?: string) => {
     if (!threadId || !pendingInterrupt || loading || activeRequest.current) return;
     setLoading(true);
     const controller = new AbortController();

@@ -105,11 +105,39 @@ export interface RevisionChangelog {
   summary: string;
 }
 
+export interface TransferRecipientCandidate {
+  user_id: string;
+  username: string;
+  unit_name?: string | null;
+  source?: string;
+}
+
 export interface InterruptState {
-  kind: "missing_information" | "draft_approval" | "writing_brief";
+  kind:
+    | "missing_information"
+    | "draft_approval"
+    | "writing_brief"
+    // Faz 4 (#201) -- app.ai.workflows.planning_graph.transfer_gate_node.
+    // Two distinct kinds sharing one gate: candidates unresolved
+    // (disambiguate, human picks -- never the model) vs. a single resolved
+    // proposal awaiting the actual send confirmation.
+    | "artifact_transfer_confirm"
+    | "artifact_transfer_disambiguate";
   interruptId: string;
   payload: {
     questions?: PromptQuestion[];
+    // artifact_transfer_disambiguate only.
+    candidates?: TransferRecipientCandidate[];
+    // Both transfer interrupt kinds.
+    artifact_kind?: "draft" | "document";
+    // artifact_transfer_confirm only.
+    source_artifact_id?: string;
+    source_version?: number | null;
+    // Always present on artifact_transfer_confirm, computed server-side
+    // (app.domains.transfers.policy.TransferPolicy) -- never derived from
+    // model output, so a warning here can't be "forgotten" the way a
+    // generated sentence could be.
+    cross_unit?: boolean;
     // Slots the writing-brief gate already resolved without asking --
     // rendered as a read-only "bunları zaten biliyorum" strip. Only
     // present on kind "writing_brief".
@@ -252,9 +280,12 @@ export interface ChatRequest {
 
 export interface ResumeRequest {
   session_id: string;
-  action: "answer" | "approve" | "revise" | "reject";
+  action: "answer" | "approve" | "revise" | "reject" | "select";
   // A multi_select PromptQuestion answers with a list; every other question
   // shape (including the "__auto__" sentinel) answers with a single string.
+  // action="select" carries the chosen candidate as answers.recipient_id --
+  // reuses this generic channel rather than a new top-level resume field
+  // (see backend ChatResumeRequest.answers's own docstring).
   answers: Record<string, string | string[]>;
   instructions: string;
   reason?: string;

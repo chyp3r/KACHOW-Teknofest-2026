@@ -62,6 +62,25 @@ class Settings(BaseSettings):
     #: pays for an unbounded number of LLM calls in one request.
     HITL_MAX_GATE_REVISIONS: int = 2
 
+    #: Gate the assist step's `propose_transfer` tool (Faz 4, #201): "son
+    #: taslağı Ahmet'e gönder" resolved and executed through the AI channel,
+    #: behind a mandatory `transfer_gate` confirmation. Same reasoning
+    #: `HITL_APPROVAL_GATE_ENABLED` documents for its own gate. When False,
+    #: `planning_graph._run_assist` never builds/offers the tool at all
+    #: (see `app.ai.tools.transfer_tools.build_transfer_tools`), so the
+    #: model has nothing to call and a message like "taslağı gönder" is
+    #: answered like any other conversational turn.
+    AI_TRANSFER_ENABLED: bool = True
+
+    #: How long an `artifact_transfer_intents` row may sit in
+    #: `AWAITING_CONFIRMATION` before `TransferIntentService.confirm`
+    #: refuses it and cancels the intent instead (see the plan's §I). Ten
+    #: minutes -- long enough for a human to actually read the confirmation
+    #: card, short enough that a policy re-check at confirm time (favorite
+    #: removed, clearance changed) stays a real TOCTOU guard rather than a
+    #: theoretical one against an intent that could otherwise live forever.
+    TRANSFER_CONFIRMATION_TTL_SECONDS: int = 600
+
     #: Whether a revision checks the user's own instruction against the
     #: retrieved mevzuat/source document for contradictions (see
     #: app.ai.revision.conflict). The deterministic layer always runs;

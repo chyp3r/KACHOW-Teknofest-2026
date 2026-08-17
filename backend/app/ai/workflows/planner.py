@@ -119,6 +119,15 @@ __all__ = [
 #: no model call on purpose -- a refusal must not be a generation, or the
 #: model that was just told not to write the off-topic text gets one more
 #: opportunity to write it anyway.
+#: `transfer` (Faz 4, #201) is deliberately NOT one of these -- it is never
+#: a resolvable top-level intent at all. It is a tool the assist step's own
+#: model may call mid-conversation (`app.ai.tools.transfer_tools.
+#: build_transfer_tools`, wired in `_run_assist`), the same way
+#: `search_document` is; the planner never routes a message to it directly.
+#: `transfer_execute` (the one step this can still lead to, once a human
+#: confirms) is appended to `plan_steps` dynamically by `_step_assist` when
+#: the tool actually produces a pending proposal -- see
+#: `step_graph.STEP_SPECS`'s own entry for it.
 PLAN_BY_INTENT: dict[str, list[str]] = {
     "draft": ["classification", "brief", "draft", "routing"],
     "analyze": ["classification"],

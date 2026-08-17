@@ -522,7 +522,7 @@ class ChatService:
                 "details": final_output,
             }
         )
-        await self._maybe_record_draft(final_output, thread_id, user_id, document_id, company_id)
+        await self._maybe_record_draft(final_output, config, thread_id, user_id, document_id, company_id)
         return reply, workflow_status, final_output
 
     async def _response_from_state(
@@ -546,7 +546,7 @@ class ChatService:
             )
 
         final_output = state.get("final_output", {}) or {}
-        await self._maybe_record_draft(final_output, thread_id, user_id, document_id, company_id)
+        await self._maybe_record_draft(final_output, config, thread_id, user_id, document_id, company_id)
         return ChatMessageResponse(
             reply=self._select_reply(final_output),
             workflow_status=final_output.get("status", "FAILED"),
@@ -554,9 +554,10 @@ class ChatService:
             details=final_output,
         )
 
-    @staticmethod
     async def _maybe_record_draft(
+        self,
         final_output: dict[str, Any],
+        config: dict[str, Any],
         thread_id: str,
         user_id: Optional[str],
         document_id: Optional[str],
@@ -575,7 +576,7 @@ class ChatService:
         if not content:
             return
         routing = final_output.get("routing") or {}
-        await draft_recorder.record_draft(
+        draft_id = await draft_recorder.record_draft(
             user_id=user_id,
             company_id=company_id,
             session_id=thread_id,
@@ -592,6 +593,18 @@ class ChatService:
             judge=draft.get("judge"),
             missing_information=draft.get("missing_information"),
         )
+        if draft_id:
+            # Best-effort, same tolerance `_is_paused` already has for a
+            # missing/unreachable checkpointer: `SessionFocus.active_draft_id`
+            # is a convenience hint (see its own docstring), never load-bearing
+            # -- the `propose_transfer` tool (`app.ai.tools.transfer_tools`)
+            # falls back to `DraftRepository.get_latest_for_session` regardless.
+            try:
+                await self.planning_graph.aupdate_state(
+                    config, {"focus": {"active_draft_id": draft_id}}
+                )
+            except Exception:
+                logger.warning("Could not persist active_draft_id for thread %s", thread_id)
 
     async def _is_paused(self, config: dict[str, Any]) -> bool:
         """Whether the last graph call left the run suspended on an interrupt.

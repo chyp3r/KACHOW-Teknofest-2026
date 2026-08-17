@@ -72,7 +72,7 @@ export function MessageList({
   // caller with no human-in-the-loop gate wired up simply never passes one.
   interrupt?: InterruptState | null;
   onResume?: (
-    action: "answer" | "approve" | "revise" | "reject",
+    action: "answer" | "approve" | "revise" | "reject" | "select",
     answers: PromptAnswers,
     instructions: string,
     reason?: string,

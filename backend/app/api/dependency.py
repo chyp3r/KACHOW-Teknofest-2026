@@ -429,6 +429,7 @@ async def get_planning_graph(
     global _planning_graph
     if _planning_graph is None:
         from app.domains.companies.provider import get_company_adapter
+        from app.domains.transfers.provider import build_transfer_graph_provider
         from app.infrastructure.checkpointing import get_checkpointer
 
         _planning_graph = create_planning_graph(
@@ -443,6 +444,14 @@ async def get_planning_graph(
             checkpointer=get_checkpointer(),
             mevzuat_retriever=mevzuat_retriever,
             adapter_provider=get_company_adapter,
+            # Faz 4 (#201) -- always built and injected, gated where the
+            # propose_transfer tool is actually offered instead
+            # (settings.AI_TRANSFER_ENABLED; see planning_graph._run_assist).
+            # Same reason units_provider/adapter_provider are unconditional:
+            # an unused provider is inert, and gating construction here
+            # would just be a second place the flag has to be checked
+            # correctly.
+            transfer_provider=build_transfer_graph_provider(),
         )
     return _planning_graph
 
