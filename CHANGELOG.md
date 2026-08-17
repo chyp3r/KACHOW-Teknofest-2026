@@ -2,6 +2,89 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.16.0] - 2026-08-17
+### Eklendi
+İnternal communication + AI-assisted artifact transfer planının **Faz 4**'ü
+(#201): asistanın "son taslağı Ahmet'e gönder" isteğini deterministik
+resolution + policy + zorunlu human confirmation + idempotent execution
+zinciriyle karşılaması. Faz 3'te (#199) kurulan `ArtifactTransferService`
+tek transfer yolu olarak aynen kullanıldı -- yeni bir execution path yok,
+yalnızca AI kanalından bu yola erişim.
+
+- **`extract_transfer_slots`** (`ai/transfer/slots.py`) -- transfer akışındaki
+  *tek* LLM çağrısı: alıcı adı/artifact türü/referansın fast-tier bir
+  ayrıştırması, hiçbir zaman bir karar değil.
+- **`ArtifactResolutionService`** (`domains/transfers/artifact_resolution.py`)
+  -- "hangi taslak/evrak" sorusunun DB tabanlı, `SessionFocus.active_draft`'ın
+  idle-limitinden tamamen bağımsız cevabı: açık referans → oturumun son
+  taslağı (`get_latest_for_session` -- araya kaç tur girerse girsin durur)
+  → kullanıcının en son taslakları → birden fazlaysa `ambiguous`, hiç yoksa
+  `unresolved`. Bu, kullanıcının orijinal senaryosunu ("taslak yazdır, başka
+  işler yap, sonra gönder") çalışır kılan parça.
+- **`TransferIntentService`** (`domains/transfers/intent_service.py`) --
+  `artifact_transfer_intents` üzerinde CAS tabanlı state machine
+  (`INTENT_DETECTED → {AMBIGUOUS, RECIPIENT_RESOLVED, UNRESOLVED} →
+  {AWAITING_CONFIRMATION, POLICY_DENIED} → {CONFIRMED, CANCELLED} →
+  {TRANSFER_EXECUTED, FAILED}`). Her geçiş tek bir `UPDATE ... WHERE
+  state IN (...)`; `confirm()` politikayı TOCTOU korumasıyla sıfırdan
+  yeniden değerlendirir (favori kaldırılmış/yetki değişmiş mi diye
+  `policy_hash` karşılaştırması), `execute()` `CONFIRMED` olmayan hiçbir
+  şeyi çalıştırmaz -- "onaysız transfer" garantisi burada, LLM'in ya da
+  graph'ın inandığı şeyden bağımsız olarak.
+- **`transfer_resolve` / `transfer_gate` / `transfer_execute`** (planning
+  graph'a yeni node'lar) -- `transfer_gate_node` tek bir `interrupt()`
+  node'unda hem `artifact_transfer_disambiguate` (alıcı belirsizse, seçim
+  **her zaman insan**) hem `artifact_transfer_confirm`'i (asıl gönderim
+  onayı) barındırıyor; `brief`/`brief_gate` ile birebir aynı desen.
+  Checkpointer yoksa transfer iptal edilir, asla onaysız çalışmaz.
+- **`planner._try_transfer`** -- fusion'dan önce çalışan, ayrı ve
+  yüksek-hassasiyetli bir lexical gate (`_try_compound` ile aynı öncelik).
+  `transfer` **kasıtlı olarak** kalibre edilmiş dört-yönlü softmax'a
+  beşinci bir etiket olarak eklenmedi (planner.py'nin kendi modül
+  docstring'i zaten bunun neden yanlış olacağını açıklıyor). "Taslak
+  hazırla ve gönder" her zaman `draft` olarak çözülür -- transfer taslak
+  üretiminin otomatik devamı değildir (plan §C1).
+- **`AI_TRANSFER_ENABLED`** (varsayılan `false`) -- kademeli açılan feature
+  flag; kapalıyken `_try_transfer` hiç çalışmaz, sistem Faz 4 öncesiyle
+  bit-bit aynı davranır.
+- **Frontend**: `TransferConfirmCard` -- `InterruptPanel`'e dal, iki
+  interrupt türünü de render ediyor. Cross-unit uyarısı her zaman
+  `payload.cross_unit`'ten (backend'de `TransferPolicy` tarafından
+  hesaplanmış) okunuyor, hiçbir zaman üretilmiş metinden değil.
+
+### Bilinçli sınırlar
+- `transfer` intent'i tamamen ayrı bir lexical gate ile çözülüyor, semantik
+  prototip katmanına (embedding benzerliği) hiç girmiyor -- kalibre edilmiş
+  4-yönlü fusion softmax'ı yeniden kalibre etme riskinden kaçınmak için
+  bilinçli bir tercih. Yanlış negatifin maliyeti sıfıra yakın (kullanıcı
+  yeniden ifade eder), yanlış pozitifin maliyeti sıfır (zorunlu confirmation
+  yakalar).
+- Evrak (document) için ladder'ın "açık referans" katmanı bağlanmadı --
+  yalnızca `SessionFocus.active_document_id` ipucu kullanılıyor; serbest
+  metinden başlık/sürüm çözümlemesi bu fazın kapsamı dışında.
+- Artifact belirsizliği (birden fazla taslak eşleşmesi) bir metin yanıtıyla
+  çözülüyor, recipient belirsizliği gibi ayrı bir interrupt/seçim kartı
+  almıyor -- `artifact_transfer_intents` şeması yalnızca
+  `candidate_recipients` taşıyor, aday artifact listesi için bir alan yok.
+
+### Test
+- `docker compose exec backend pytest tests/unit tests/integration -q` →
+  **2022 test geçti** (39 yeni: `TransferIntentService`'in her CAS geçişi +
+  TOCTOU + `execute()`'un onaysız reddi, `ArtifactResolutionService`'in her
+  ladder katmanı, slot extraction, lexical gate + drafting-veto +
+  compound-plan-dışılık, `app.ai.*`'nin `app.domains.*` import etmediğinin
+  AST tabanlı statik denetimi, ve gerçek derlenmiş planning graph üzerinde
+  uçtan uca disambiguate→confirm→execute/reject/policy-denial/unresolved
+  akışları).
+- `docker compose exec frontend npm run typecheck && npm run test && npm run lint`
+  → **178/178 test geçti** (6 yeni: `TransferConfirmCard`, cross-unit
+  uyarısının `payload.cross_unit` ile birebir eşleştiği dahil).
+- Yeni migration yok (`artifact_transfer_intents` Faz 3'te zaten migrate
+  edilmişti, kullanılmadan) -- `alembic check`'te bu fazdan kaynaklı yeni
+  bir drift yok.
+
+Refs: [#201](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/201).
+
 ## [3.15.0] - 2026-08-17
 ### Eklendi
 İnternal communication planının **Faz 3**'ü (#199): taslak/evrak transferini
