@@ -43,6 +43,8 @@ from app.ai.policy.prototypes import FAMILIES
 #: see `intent_rules.TRANSFER_VERB_SURFACES`'s docstring for why it
 #: deliberately never joins the calibrated four-way softmax `draft`/
 #: `analyze`/`assist`/`revise` compete in, so it likewise has no prototypes.
+#: (A separate, isolated semantic rung for it was prototyped and reverted
+#: after measurement against real embeddings -- see that same docstring.)
 _EXPECTED_INTENT_LABELS = set(PLAN_BY_INTENT) - {"clarify", "refuse", "transfer"}
 
 

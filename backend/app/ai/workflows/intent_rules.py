@@ -411,6 +411,21 @@ RESET_SURFACES: tuple[str, ...] = (
 #: moves. Neither failure mode is silent or costly, which is what makes a
 #: simpler, separate mechanism the right call instead of forcing this into
 #: the carefully calibrated four-way scorer.
+#:
+#: A semantic (embedding-similarity) rung for this gate was prototyped and
+#: measured against real nomic-embed-text vectors, then reverted: a small
+#: (5-per-label) prototype set does not separate cleanly for this embedding
+#: model -- "Bu evrakı analiz eder misin?" (unambiguously `analyze`) scored
+#: 0.858 similarity / 0.121 margin against a `transfer` prototype, clearing
+#: even the existing calibrated-family thresholds, while genuine transfer
+#: paraphrases ("şu dosyayı ona aktarır mısın?") scored *lower* than that
+#: false positive. Per `SemanticPolicy`'s own documented finding for the
+#: "intent" family, a layer that decides at random is worse than none --
+#: shipping this would have misrouted real `analyze`/`revise` turns, not
+#: merely missed some `transfer` ones. Reintroducing it needs a real labeled
+#: evaluation set (the same way "intent"'s own thresholds were calibrated
+#: against `evaluation/datasets/intents.jsonl`), not a hand-picked prototype
+#: list and a guessed threshold.
 TRANSFER_VERB_SURFACES: tuple[str, ...] = ("gonder", "ilet", "yolla", "postala")
 
 #: Nouns that make a transfer verb's target unambiguous -- left-boundary
