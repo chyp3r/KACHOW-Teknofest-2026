@@ -51,6 +51,7 @@ _OWNERSHIP_SCOPED_ACTIONS: tuple[str, ...] = (
     Action.DRAFT_READ,
     Action.DRAFT_DELETE,
     Action.DRAFT_SEND,
+    Action.ARTIFACT_TRANSFER,
 )
 
 #: Management actions with no ownership concept -- company-wide or nothing.

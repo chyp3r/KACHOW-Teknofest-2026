@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, JSON, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base
@@ -34,11 +34,11 @@ class DocumentPoolItemModel(Base, TimestampMixin):
         String, ForeignKey("documents.id"), nullable=False, index=True
     )
     added_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
-    #: "upload" (the owner's own document, filed automatically) | "manager_push"
-    #: (`POST /pools/push`) | "share" (reserved, still unused -- Faz 5 ended
-    #: up implementing draft sharing via its own `draft_shares` table
-    #: instead of a pool-item source, since a share has sender/recipient/
-    #: status/response fields a pool item has no room for).
+    #: "upload" (the owner's own document, filed automatically) |
+    #: "manager_push" (`POST /pools/push`) | "transfer"
+    #: (`app.domains.transfers.ArtifactTransferService` -- what the
+    #: previously-reserved `"share"` value was for; renamed to match the
+    #: domain that actually implements it, see `metadata_snapshot` below).
     source: Mapped[str] = mapped_column(String, nullable=False, default="upload")
     note: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     #: Set when the pool's owner acknowledges/reads a pushed item (`POST
@@ -46,3 +46,19 @@ class DocumentPoolItemModel(Base, TimestampMixin):
     #: item -- acknowledgement only means something for something *pushed*
     #: to you.
     acknowledged_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: The sender for `source="transfer"` -- distinct from `added_by`,
+    #: which for a transfer is whichever process actually inserted the row
+    #: (the acting user on the chat/rest channels today; a future
+    #: system-initiated path could differ). `NULL` for every other source.
+    transferred_by: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("users.id"), nullable=True
+    )
+    #: `documents`' mutable metadata (document_type, document_type_label,
+    #: compliance_status, summary, sensitivity_level, pii_flagged), frozen
+    #: at transfer time. The blob itself is never mutated by anything in
+    #: this system, so sharing it is safe; this row's own metadata is what
+    #: could otherwise drift out from under the recipient if the sender
+    #: later edits the source document -- see the plan's §D5 for why a
+    #: full copy was rejected in favor of this snapshot. `NULL` for every
+    #: source other than "transfer".
+    metadata_snapshot: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)

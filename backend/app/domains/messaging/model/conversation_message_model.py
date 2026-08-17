@@ -17,10 +17,9 @@ class ConversationMessageModel(Base, TimestampMixin):
     evrak transfer notice -- see `artifact_transfer_id`; introduced fully in
     Faz 3), or `"system"` (membership events like "X gruba eklendi").
 
-    `artifact_transfer_id` is a plain nullable String, not yet a foreign
-    key -- `artifact_transfers` (Faz 3, migration `0024`) does not exist at
-    this point in the migration chain; the FK is added once both tables do.
-    An artifact message's card content (title, version, sender, status) is
+    `artifact_transfer_id` -> `artifact_transfers.id` (added by migration
+    `0024`, once that table exists -- this column itself predates it,
+    created FK-less by `0022`). An artifact message's card content (title, version, sender, status) is
     never cached into `body` -- the frontend reads it live from the
     transfer row, so a withdrawn/failed transfer's card reflects reality
     instead of a stale snapshot.
@@ -44,5 +43,9 @@ class ConversationMessageModel(Base, TimestampMixin):
     sender_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id"), nullable=True)
     kind: Mapped[str] = mapped_column(String, nullable=False, default="text")
     body: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    artifact_transfer_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    artifact_transfer_id: Mapped[Optional[str]] = mapped_column(
+        String,
+        ForeignKey("artifact_transfers.id", name="fk_conversation_messages_artifact_transfer_id"),
+        nullable=True,
+    )
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

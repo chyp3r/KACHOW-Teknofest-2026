@@ -87,6 +87,16 @@ class Action:
     DRAFT_READ = "draft:read"
     DRAFT_DELETE = "draft:delete"
     DRAFT_SEND = "draft:send"
+    #: Gates `ArtifactTransferService.execute` for *either* artifact kind
+    #: (draft or document) -- one action, not `draft:transfer`/`document:
+    #: transfer` split, since the decision itself ("may this subject move
+    #: this artifact to someone else") doesn't depend on which table the
+    #: artifact lives in. `DRAFT_SEND` is kept as its own, older action
+    #: (still gates nothing new -- `DraftShareService.send` now delegates
+    #: to this one instead) rather than merged into it, since removing an
+    #: `Action` value already referenced by existing `permission_grants`
+    #: rows would silently invalidate them.
+    ARTIFACT_TRANSFER = "artifact:transfer"
     UNIT_MANAGE = "unit:manage"
     USER_MANAGE = "user:manage"
     PERMISSION_GRANT = "permission:grant"
@@ -99,6 +109,7 @@ class Action:
         DRAFT_READ,
         DRAFT_DELETE,
         DRAFT_SEND,
+        ARTIFACT_TRANSFER,
         UNIT_MANAGE,
         USER_MANAGE,
         PERMISSION_GRANT,
