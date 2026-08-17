@@ -397,6 +397,40 @@ RESET_SURFACES: tuple[str, ...] = (
     "bu taslagi birak", "bunu birak", "vazgectim",
 )
 
+#: `transfer` (Faz 4, artifact send/forward) is deliberately NOT part of
+#: `ALL_RULES`/the calibrated fusion softmax `draft`/`analyze`/`assist`/
+#: `revise` compete in -- `planner.py`'s own module docstring already
+#: explains why a fifth label there "competes for softmax mass with the
+#: four real ones instead of vetoing them". These surfaces back a
+#: standalone, pre-fusion lexical gate instead (`planner._try_transfer`,
+#: checked the same way `_try_compound` is: before fusion runs at all),
+#: exactly as high-precision as a rule needs to be here and no more --
+#: a false negative just falls through to the ordinary four-way ladder
+#: (worst case: a clarifying question), and a false positive is caught by
+#: the transfer flow's own mandatory confirmation gate before anything
+#: moves. Neither failure mode is silent or costly, which is what makes a
+#: simpler, separate mechanism the right call instead of forcing this into
+#: the carefully calibrated four-way scorer.
+TRANSFER_VERB_SURFACES: tuple[str, ...] = ("gonder", "ilet", "yolla", "postala")
+
+#: Nouns that make a transfer verb's target unambiguous -- left-boundary
+#: substrings via the same folding as every other surface here ("taslag"
+#: matches "taslağı"/"taslağımı", "evrak" matches "evrakı", etc.).
+TRANSFER_ARTIFACT_SURFACES: tuple[str, ...] = ("taslag", "evrak", "belge", "dosya")
+
+#: A drafting-creation verb anywhere in the same message overrides a
+#: transfer reading outright: "taslak hazırla ve gönder" means "write it,
+#: then I'll separately ask you to send it" (transfer is never an automatic
+#: continuation of drafting -- see the plan's §C1), not "send something that
+#: doesn't exist yet". A small, explicit list on purpose -- only the verbs
+#: that mean "bring this into existence" need to veto, not every
+#: drafting-adjacent noun `DRAFT_RULES` scores.
+TRANSFER_CREATION_VETO_SURFACES: tuple[str, ...] = (
+    "taslak hazirla", "taslak olustur", "taslak cikar", "taslagi hazirla",
+    "yazi hazirla", "yazi olustur", "kaleme al", "cevap hazirla", "cevap yaz",
+    "cevap olustur",
+)
+
 #: Question markers, used as a shape hint rather than a routing decision.
 #: Bare "ne" is deliberately absent: "ne gerekiyorsa onu uygula" is an
 #: instruction, not a question, and treating it as one made an
