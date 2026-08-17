@@ -238,6 +238,12 @@ class BudgetPolicy:
                 # round trip, and a timeout degrades to zero style examples
                 # rather than failing the draft (see retrieve_examples_node).
                 "retrieve_examples": 25.0,
+                # No "summarize" entry: detailed summarization is on-demand
+                # (DocumentService.generate_detailed_summary), not a graph
+                # node, and bounds itself with
+                # settings.DETAILED_SUMMARY_TIMEOUT_SECONDS instead -- see
+                # that setting's own docstring for the real per-call numbers
+                # this project measured behind the 400s figure.
             }
         )
     )

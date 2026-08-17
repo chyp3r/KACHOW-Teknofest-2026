@@ -1045,6 +1045,15 @@ textarea { min-height: 105px; resize: vertical; }
 .detail-list li span, .detail-empty { color: var(--text-secondary); }
 .guardrail-summary { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
 .guardrail-summary > small { color: var(--text-muted); }
+/* Shared by the short "Evrak özeti" section and the on-demand "Detaylı
+   özet" one below -- without pre-wrap, a summary spanning multiple
+   paragraphs collapses to one run-on block. */
+.document-summary-text { margin-top: var(--space-3); white-space: pre-wrap; color: var(--text-secondary); }
+/* The on-demand detailed summary specifically can run to several thousand
+   characters (unlike the always-short one above) -- capped and scrollable
+   so it cannot make the whole accordion section unwieldy, matching
+   .draft-preview's own long-text handling elsewhere in this file. */
+.document-summary-text-detailed { max-height: 420px; overflow: auto; }
 .search-field { display: flex; align-items: center; gap: var(--space-2); min-width: 220px; padding: 0 var(--space-2); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
 .search-field input { border: 0; box-shadow: none; background: transparent; }
 .table-toolbar { display: flex; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }

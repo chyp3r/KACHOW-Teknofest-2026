@@ -4,11 +4,13 @@ import os
 from typing import Any, Optional
 from uuid import uuid4
 
+from app.ai.agents.summarizer import SummarizerAgent
 from app.ai.compliance.checker import check_required_fields
 from app.ai.compliance.evrak_field import EvrakField, MissingField
 from app.ai.documents.anchors import build_page_map
 from app.ai.guardrails.file_integrity import check_file_integrity
 from app.ai.guardrails.injection import scrub_extracted_text
+from app.ai.summarization import build_detailed_summary
 from app.domains.documents.model.document_model import DocumentModel
 from app.domains.documents.repository import DocumentRepository
 from app.domains.pools.model.document_pool_item_model import DocumentPoolItemModel
@@ -80,6 +82,7 @@ class DocumentService:
         pool_repository: Optional[DocumentPoolRepository] = None,
         pool_item_repository: Optional[DocumentPoolItemRepository] = None,
         quota_service: Optional[QuotaService] = None,
+        summarizer_agent: Optional[SummarizerAgent] = None,
     ) -> None:
         """Initialise the service with injected collaborators.
 
@@ -102,6 +105,13 @@ class DocumentService:
                 (see `app.domains.quotas`). Optional for the same reason as
                 above -- when absent, uploads are never quota-gated (every
                 pre-Faz-6 caller, and most unit tests).
+            summarizer_agent: Builds the on-demand detailed summary (see
+                `generate_detailed_summary`). Unlike `analysis_graph`, this
+                is not part of a LangGraph workflow -- `analyze_document`
+                never touches it, only `generate_detailed_summary` does.
+                Optional so tests exercising the rest of this service don't
+                need an LLM client; `generate_detailed_summary` itself
+                requires it (see that method's own docstring).
         """
         self.storage = storage
         self.extractor = extractor
@@ -112,6 +122,7 @@ class DocumentService:
         self.pool_repository = pool_repository
         self.pool_item_repository = pool_item_repository
         self.quota_service = quota_service
+        self.summarizer_agent = summarizer_agent
 
     async def analyze_document(
         self,
@@ -594,6 +605,12 @@ class DocumentService:
             document_type=document_type,
             document_type_label=state.get("document_type_label", ""),
             summary=state.get("summary", ""),
+            # detailed_summary is never set here -- a freshly-assembled
+            # response comes straight from analyze_document, before anyone
+            # has asked for the detailed summary at all. It is added later,
+            # in place, by generate_detailed_summary's cache mutation (see
+            # that method's own docstring for why it runs on-demand rather
+            # than as a graph branch here).
             fields=EvrakField(**(state.get("fields") or {})),
             missing_fields=[
                 MissingField(**item) for item in state.get("missing_fields") or []
@@ -885,6 +902,115 @@ class DocumentService:
             document = await self.document_repository.get_by_id(storage_path, company_id)
             if document is not None:
                 document.compliance_status = analysis.compliance_status.value
+
+        return analysis
+
+    async def generate_detailed_summary(
+        self, storage_path: str
+    ) -> Optional[DocumentAnalysisResponseSchema]:
+        """Build (or return the already-built) detailed summary for a
+        previously analysed document.
+
+        On-demand, not eager: `analyze_document` never calls this.
+        Detailed summarization used to run as a graph branch on every
+        upload, but measured directly it was the slowest thing in the whole
+        pipeline (184-288s, against every other branch's <100s) -- see
+        `create_document_analysis_graph`'s own docstring for the full
+        reasoning. This is triggered by its own endpoint instead, so the
+        cost is only ever paid when a user actually wants the result.
+
+        Follows the exact same cache-mutation shape as
+        `update_document_fields`: read the cache file -> None if absent or
+        invalid -> mutate only the field this method owns -> re-save,
+        passing `extracted_text`/`pages` straight back through so they
+        survive the rewrite untouched. Two things fall out of that shape:
+
+        - No re-extraction. The summary is built from the text already
+          cached by `_save_document_analysis_cache` -- no OCR, no vision
+          model, no re-upload.
+        - Idempotent. If `analysis.detailed_summary` is already set (a
+          previous call already built it), this returns immediately without
+          another model call -- a second click, or a page reload, costs
+          nothing.
+
+        Args:
+            storage_path: The document's storage key.
+
+        Returns:
+            The analysis with `detailed_summary` populated, or None if no
+            cache exists for `storage_path` (or it fails to parse) -- the
+            same "not found" signal `update_document_fields` uses, which the
+            router maps to a 404.
+
+        Raises:
+            AIException: If building the summary times out or the
+                underlying provider call fails. Raised, not swallowed --
+                unlike a failure inside the old graph branch, which
+                degraded silently to the short summary because the rest of
+                the analysis had to succeed regardless, this method's only
+                job is the summary itself, so a user who explicitly asked
+                for it needs to know it did not arrive. The cache file is
+                untouched either way: the write only happens after a
+                successful build.
+        """
+        import json
+        from app.core.config import settings
+
+        cache_file = os.path.join(settings.LOCAL_STORAGE_DIR, f"{storage_path}_analysis.json")
+
+        def _read():
+            if not os.path.exists(cache_file):
+                return None
+            with open(cache_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+
+        try:
+            cache_data = await asyncio.to_thread(_read)
+        except Exception:
+            logger.exception("Failed to read cached analysis for %s", storage_path)
+            return None
+
+        if not cache_data or not cache_data.get("analysis"):
+            return None
+
+        try:
+            analysis = DocumentAnalysisResponseSchema(**cache_data["analysis"])
+        except Exception:
+            logger.exception("Cached analysis for %s failed to validate", storage_path)
+            return None
+
+        if analysis.detailed_summary:
+            return analysis
+
+        try:
+            detailed_summary = await asyncio.wait_for(
+                build_detailed_summary(
+                    self.summarizer_agent,
+                    cache_data.get("extracted_text", ""),
+                    is_ocr_text=analysis.extraction.used_ocr,
+                ),
+                timeout=settings.DETAILED_SUMMARY_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError as exc:
+            raise AIException(
+                message="Ayrıntılı özet oluşturma zaman aşımına uğradı.",
+                details={"timeout_seconds": settings.DETAILED_SUMMARY_TIMEOUT_SECONDS},
+            ) from exc
+        except Exception as exc:
+            logger.exception("Detailed summary generation failed for %s", storage_path)
+            raise AIException(
+                message="Ayrıntılı özet oluşturulurken bir hata oluştu.",
+                details={"reason": str(exc)},
+            ) from exc
+
+        analysis.detailed_summary = detailed_summary
+
+        await self._save_document_analysis_cache(
+            storage_path,
+            cache_data.get("extracted_text", ""),
+            cache_data.get("pages", []),
+            analysis,
+        )
 
         return analysis
 

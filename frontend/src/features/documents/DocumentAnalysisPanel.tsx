@@ -59,22 +59,32 @@ export function DocumentAnalysisPanel({
   analysis,
   onSave,
   saving = false,
+  onGenerateDetailedSummary,
+  generatingDetailedSummary = false,
 }: {
   analysis: DocumentAnalysis | null;
   // Undefined when the caller doesn't wire editing (e.g. no permission
   // hook available) -- the panel then stays read-only exactly as before.
   onSave?: (fields: EvrakFields) => Promise<void>;
   saving?: boolean;
+  // Undefined the same way onSave is -- panel stays without the trigger
+  // button, showing only the short summary above, if the caller doesn't
+  // wire it. Takes no arguments: the caller already knows which document
+  // (see onSave's own analogous shape one level up, in DocumentTable).
+  onGenerateDetailedSummary?: () => Promise<void>;
+  generatingDetailedSummary?: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [detailedSummaryError, setDetailedSummaryError] = useState<string | null>(null);
 
   // A different document (or a fresh save) must never keep a stale edit
   // session open on top of it.
   useEffect(() => {
     setIsEditing(false);
     setSaveError(null);
+    setDetailedSummaryError(null);
   }, [analysis?.storage_path]);
 
   if (!analysis)
@@ -112,6 +122,18 @@ export function DocumentAnalysisPanel({
     }
   };
 
+  const generateDetailedSummary = async () => {
+    if (!onGenerateDetailedSummary) return;
+    setDetailedSummaryError(null);
+    try {
+      await onGenerateDetailedSummary();
+    } catch (error) {
+      setDetailedSummaryError(
+        error instanceof Error ? error.message : "Ayrıntılı özet oluşturulamadı.",
+      );
+    }
+  };
+
   return (
     <Card className="analysis-panel">
       <div className="section-heading">
@@ -138,6 +160,35 @@ export function DocumentAnalysisPanel({
             ? "Evrak OCR ile okundu; çıkarılan alanları doğrulayın."
             : "Olası talimat enjeksiyonu işaretleri metinden temizlendi."}
         </Alert>
+      )}
+      {analysis.summary && (
+        <details open>
+          <summary>Evrak özeti</summary>
+          <p className="document-summary-text">{analysis.summary}</p>
+        </details>
+      )}
+      {onGenerateDetailedSummary && (
+        <details>
+          <summary>Detaylı özet</summary>
+          <div className="detailed-summary-section">
+            {detailedSummaryError && <Alert variant="error">{detailedSummaryError}</Alert>}
+            {analysis.detailed_summary ? (
+              <p className="document-summary-text document-summary-text-detailed">
+                {analysis.detailed_summary}
+              </p>
+            ) : (
+              <>
+                <p className="detail-empty">
+                  Belgenin tamamını kapsayan, cümle sayısı sınırı olmayan bir özet üretilebilir.
+                  Uzun belgelerde üretim birkaç dakika sürebilir.
+                </p>
+                <Button loading={generatingDetailedSummary} onClick={() => void generateDetailedSummary()}>
+                  Detaylı özet oluştur
+                </Button>
+              </>
+            )}
+          </div>
+        </details>
       )}
       {analysis.guardrail && (
         <details open>

@@ -77,6 +77,11 @@ export interface DocumentAnalysis extends DocumentMetadata {
   // kept optional here so existing test fixtures that predate this field
   // don't all need updating just to type-check.
   signature?: SignatureAssessment;
+  // Absent (undefined) on old cached fixtures; `null` is the backend's own
+  // "not yet generated" value (see DocumentAnalysisResponseSchema's own
+  // comment) -- on-demand only, never populated by the initial analyze
+  // call. Populated in place by POST /documents/{path}/detailed-summary.
+  detailed_summary?: string | null;
 }
 
 export type ReasoningLevel = "fast" | "balanced" | "deep";

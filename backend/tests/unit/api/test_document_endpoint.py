@@ -1,7 +1,7 @@
 """API tests for the document analysis endpoint."""
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -235,3 +235,70 @@ def test_update_fields_returns_404_when_nothing_is_cached():
     response = client.patch(_FIELDS_ENDPOINT, json={"fields": {}})
 
     assert response.status_code == 404
+
+
+# ==========================================
+# POST /documents/{storage_path}/detailed-summary
+# ==========================================
+_SUMMARY_STORAGE_PATH = f"uploads/{'b' * 32}.pdf"
+_SUMMARY_ENDPOINT = f"/api/v1/documents/{_SUMMARY_STORAGE_PATH}/detailed-summary"
+
+
+@pytest.fixture
+def _unmetered_rate_limit():
+    """Bypass the endpoint's real Redis-backed rate limiter (5 req/60s) via
+    its own documented fail-open path (see rate_limit's own comment: "Fail
+    open, not closed... if the counter is unreachable... the safe answer is
+    to serve it") -- not a test-only shortcut, the same degradation
+    production takes when Redis is briefly unavailable. Without this,
+    repeated runs of this file within the same 60s window (routine during
+    active development) start returning 429 instead of exercising the mocked
+    service at all, exactly the mechanism already known to make
+    test_analyze_maps_ai_exception_to_502 and
+    test_upload_bounds.py::test_analyze_endpoint_rejects_an_oversized_declared_content_length
+    order-dependently flaky against /analyze's own rate limit."""
+    with patch("app.api.rate_limit.get_cache") as mock_get_cache:
+        mock_get_cache.return_value.connect = AsyncMock(side_effect=Exception("test: no redis"))
+        yield
+
+
+def test_generate_detailed_summary_returns_the_populated_analysis(_unmetered_rate_limit):
+    service = AsyncMock()
+    updated = ANALYSIS_RESULT.model_copy(
+        update={"detailed_summary": "Çok paragraflı ayrıntılı özet."}
+    )
+    service.generate_detailed_summary.return_value = updated
+    _override(service)
+
+    response = client.post(_SUMMARY_ENDPOINT)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["detailed_summary"] == "Çok paragraflı ayrıntılı özet."
+    assert service.generate_detailed_summary.await_args.args == (_SUMMARY_STORAGE_PATH,)
+
+
+def test_generate_detailed_summary_returns_404_when_nothing_is_cached(_unmetered_rate_limit):
+    service = AsyncMock()
+    service.generate_detailed_summary.return_value = None
+    _override(service)
+
+    response = client.post(_SUMMARY_ENDPOINT)
+
+    assert response.status_code == 404
+
+
+def test_generate_detailed_summary_surfaces_a_generation_failure_as_502(_unmetered_rate_limit):
+    """AIException (timeout or provider failure -- see
+    DocumentService.generate_detailed_summary's own docstring for why this
+    raises rather than degrading silently) must reach the caller as a clear
+    502, not a generic 500 or a silently empty 200."""
+    service = AsyncMock()
+    service.generate_detailed_summary.side_effect = AIException(
+        message="Ayrıntılı özet oluşturma zaman aşımına uğradı."
+    )
+    _override(service)
+
+    response = client.post(_SUMMARY_ENDPOINT)
+
+    assert response.status_code == 502

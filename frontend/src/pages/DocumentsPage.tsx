@@ -21,6 +21,8 @@ export function DocumentsPage({
   onDeleteDocument,
   onSelect,
   onCloseDocument,
+  onGenerateDetailedSummary,
+  generatingDetailedSummary,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
@@ -35,6 +37,8 @@ export function DocumentsPage({
   onDeleteDocument?: (storagePath: string) => Promise<void>;
   onSelect: (document: DocumentMetadata) => void;
   onCloseDocument?: () => void;
+  onGenerateDetailedSummary?: (storagePath: string) => Promise<void>;
+  generatingDetailedSummary?: boolean;
 }) {
   const [uploadOpen, setUploadOpen] = useState(false);
 
@@ -81,6 +85,8 @@ export function DocumentsPage({
         onClose={onCloseDocument}
         onUpdateFields={onUpdateFields}
         onDeleteDocument={onDeleteDocument}
+        onGenerateDetailedSummary={onGenerateDetailedSummary}
+        generatingDetailedSummary={generatingDetailedSummary}
       />
     </div>
   );

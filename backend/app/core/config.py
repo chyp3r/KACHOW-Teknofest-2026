@@ -108,6 +108,22 @@ class Settings(BaseSettings):
     #: app.domains.chat.chat_service.ORCHESTRATION_TIMEOUT_SECONDS).
     AI_WORKFLOW_TIMEOUT_SECONDS: int = 480
 
+    #: Ceiling on DocumentService.generate_detailed_summary's on-demand
+    #: build_detailed_summary call -- not a BudgetPolicy.node_seconds entry,
+    #: since this runs outside the analysis graph entirely (see
+    #: create_document_analysis_graph's own docstring for why). A long
+    #: document's map-reduce summary is several SummarizerAgent calls run
+    #: sequentially against Ollama's one generation slot (see
+    #: app.ai.summarization.SUMMARY_MAX_MAP_CHUNKS's own comment for why
+    #: sequential, not concurrent, and the real per-call numbers this is
+    #: based on). Worst case at that cap is 4 sequential calls (3 map + 1
+    #: reduce); observed individual calls ranged 20-185s on this project's
+    #: hardware, so 4 calls in a genuinely bad case could approach 400s. A
+    #: timeout here degrades to the short summary rather than failing the
+    #: request, so a document that genuinely needs the full budget isn't cut
+    #: off mid-map for no benefit.
+    DETAILED_SUMMARY_TIMEOUT_SECONDS: float = 400.0
+
     #: Mandatory as of the multi-tenancy work: every request to every
     #: router requires a JWT bearer token, and every row in the system now
     #: carries a `company_id` -- there is no longer an "unauthenticated

@@ -140,6 +140,45 @@ async def test_analyze_returns_full_first_review_result():
 
 
 @pytest.mark.asyncio
+async def test_analyze_always_uses_the_short_summary_from_analyze_node():
+    """A fresh analyze_document response always carries analyze_node's own
+    short summary, unconditionally -- detailed summarization is no longer a
+    graph branch (see create_document_analysis_graph's own docstring for
+    why: measured directly, it was the slowest branch by a wide margin and
+    every upload paid its cost whether or not anyone read the result). It is
+    on-demand now, via generate_detailed_summary, never eager."""
+    service, _, _, _ = _build_service()
+
+    result = await service.analyze_document(
+        owner_id="user-1",
+        company_id="company-1",
+        file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
+    )
+
+    assert result.summary == "İzin talebi yazısı."
+
+
+@pytest.mark.asyncio
+async def test_analyze_never_sets_detailed_summary_eagerly():
+    """A stray detailed_summary key in graph state (there shouldn't be one --
+    DocumentAnalysisState no longer declares it -- but defensively, in case a
+    future edit reintroduces it by accident) must not leak into the fresh
+    response; only generate_detailed_summary's own cache mutation may set
+    this field."""
+    service, _, _, _ = _build_service(
+        graph_state={**GRAPH_STATE, "detailed_summary": "Sızmamalı."}
+    )
+
+    result = await service.analyze_document(
+        owner_id="user-1",
+        company_id="company-1",
+        file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
+    )
+
+    assert result.detailed_summary is None
+
+
+@pytest.mark.asyncio
 async def test_analyze_populates_signature_assessment_from_detected_marks():
     """Built directly from extracted.detected_marks (see _assemble's own
     comment on why: detection already ran once during extraction, the graph
@@ -642,6 +681,128 @@ async def test_update_document_fields_returns_none_when_nothing_is_cached(tmp_pa
     result = await service.update_document_fields("uploads/missing.pdf", EvrakField(), "company-1")
 
     assert result is None
+
+
+# ==========================================
+# On-demand detailed summarization
+# ==========================================
+def _base_analysis(storage_path: str, **overrides) -> DocumentAnalysisResponseSchema:
+    defaults = dict(
+        file_name="evrak.pdf",
+        storage_path=storage_path,
+        extraction=ExtractionInfoSchema(
+            extractor="opendataloader", page_count=1, char_count=40, used_ocr=False
+        ),
+        document_type=DocumentType.OFFICIAL_LETTER,
+        document_type_label="Resmî Yazı",
+        summary="İzin talebi yazısı.",
+        fields=EvrakField(sayi="E-123", konu="İzin Talebi"),
+        compliance_status=ComplianceStatus.INCOMPLETE,
+    )
+    defaults.update(overrides)
+    return DocumentAnalysisResponseSchema(**defaults)
+
+
+@pytest.mark.asyncio
+@patch("app.domains.documents.service.build_detailed_summary")
+async def test_generate_detailed_summary_returns_cached_value_without_calling_the_model(
+    mock_build, tmp_path, monkeypatch
+):
+    """A second click (or a page reload) must not pay for a second
+    generation -- the whole point of persisting the result into the cache
+    file the same way update_document_fields does."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
+    storage_path = "uploads/abc.pdf"
+    analysis = _base_analysis(storage_path, detailed_summary="Zaten üretilmiş ayrıntılı özet.")
+    _write_cache(tmp_path, storage_path, analysis)
+    service, _, _, _ = _build_service()
+    service.summarizer_agent = MagicMock()
+
+    result = await service.generate_detailed_summary(storage_path)
+
+    assert result is not None
+    assert result.detailed_summary == "Zaten üretilmiş ayrıntılı özet."
+    mock_build.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("app.domains.documents.service.build_detailed_summary")
+async def test_generate_detailed_summary_builds_and_persists_when_absent(
+    mock_build, tmp_path, monkeypatch
+):
+    """Cache miss on detailed_summary specifically (the rest of the analysis
+    is already cached, from the original analyze_document call) -- builds
+    it from the cached extracted_text (no re-extraction, no re-upload),
+    persists it in place, and preserves extracted_text/pages the same way
+    update_document_fields does."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
+    storage_path = "uploads/abc.pdf"
+    analysis = _base_analysis(storage_path)
+    _write_cache(tmp_path, storage_path, analysis)
+    mock_build.return_value = "Yeni üretilen ayrıntılı özet."
+    service, _, _, _ = _build_service()
+    service.summarizer_agent = MagicMock()
+
+    result = await service.generate_detailed_summary(storage_path)
+
+    assert result is not None
+    assert result.detailed_summary == "Yeni üretilen ayrıntılı özet."
+    mock_build.assert_awaited_once()
+    assert mock_build.call_args.kwargs["is_ocr_text"] is False
+
+    cache_file = tmp_path / f"{storage_path}_analysis.json"
+    saved = json.loads(cache_file.read_text(encoding="utf-8"))
+    assert saved["analysis"]["detailed_summary"] == "Yeni üretilen ayrıntılı özet."
+    assert saved["extracted_text"] == "Sayı: E-123\nKonu: İzin"
+    assert saved["pages"] == ["Sayı: E-123\nKonu: İzin"]
+
+
+@pytest.mark.asyncio
+async def test_generate_detailed_summary_returns_none_when_nothing_is_cached(tmp_path, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
+    service, _, _, _ = _build_service()
+    service.summarizer_agent = MagicMock()
+
+    result = await service.generate_detailed_summary("uploads/missing.pdf")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_generate_detailed_summary_wraps_a_timeout_in_ai_exception_without_corrupting_cache(
+    tmp_path, monkeypatch
+):
+    """A genuinely slow/stuck generation must not hang the request forever,
+    and must not leave a half-written cache file behind -- the write only
+    happens after a successful build, so a timeout simply never reaches it."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
+    monkeypatch.setattr(settings, "DETAILED_SUMMARY_TIMEOUT_SECONDS", 0.01)
+    storage_path = "uploads/abc.pdf"
+    analysis = _base_analysis(storage_path)
+    _write_cache(tmp_path, storage_path, analysis)
+    cache_file = tmp_path / f"{storage_path}_analysis.json"
+    before = cache_file.read_text(encoding="utf-8")
+    service, _, _, _ = _build_service()
+    service.summarizer_agent = MagicMock()
+
+    async def _never_finishes(*_args, **_kwargs):
+        await asyncio.sleep(5)
+
+    with patch(
+        "app.domains.documents.service.build_detailed_summary", side_effect=_never_finishes
+    ):
+        with pytest.raises(AIException):
+            await service.generate_detailed_summary(storage_path)
+
+    assert cache_file.read_text(encoding="utf-8") == before
 
 
 # ==========================================

@@ -881,6 +881,9 @@
 .document-item-action { display: inline-grid; place-items: center; width: var(--touch-target); height: var(--touch-target); color: var(--text-muted); }
 .document-expanded-summary { display: grid; gap: var(--space-1); margin-bottom: var(--space-4); padding-bottom: var(--space-4); border-bottom: 1px solid var(--border-default); color: var(--text-secondary); }
 .document-expanded-summary strong { color: var(--text-primary); }
+/* A detailed (map-reduce) summary can span multiple paragraphs; without this
+   the whitespace collapses and it reads as one run-on block. */
+.document-expanded-summary span { white-space: pre-wrap; }
 
 .draft-list-section > .section-heading { padding: var(--space-3) var(--space-4); }
 .draft-table { width: 100%; }
