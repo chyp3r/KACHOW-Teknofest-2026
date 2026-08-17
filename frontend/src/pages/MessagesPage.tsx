@@ -1,4 +1,5 @@
-import { MessageCircle, Settings } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { MessageCircle, Paperclip, Settings } from "lucide-react";
 import { useRef, useState } from "react";
 import { ApiErrorNotice } from "../components/ApiErrorNotice";
 import { IconButton } from "../components/Button";
@@ -8,9 +9,11 @@ import { GroupParticipantsPanel } from "../features/messaging/GroupParticipantsP
 import { MessageComposer } from "../features/messaging/MessageComposer";
 import { MessageThread } from "../features/messaging/MessageThread";
 import { NewConversationDialog } from "../features/messaging/NewConversationDialog";
+import { SendArtifactDialog } from "../features/messaging/SendArtifactDialog";
 import { UserSearchDrawer } from "../features/messaging/UserSearchDrawer";
 import { useConversations } from "../hooks/useConversations";
 import { useMessageThread } from "../hooks/useMessageThread";
+import { queryKeys } from "../query/queryKeys";
 
 export function MessagesPage({
   currentUserId,
@@ -21,11 +24,13 @@ export function MessagesPage({
   activeConversationId?: string;
   onSelectConversation: (conversationId: string) => void;
 }) {
+  const queryClient = useQueryClient();
   const conversations = useConversations();
   const thread = useMessageThread(activeConversationId ?? null);
   const [newConversationOpen, setNewConversationOpen] = useState(false);
   const [peopleDrawerOpen, setPeopleDrawerOpen] = useState(false);
   const [participantsPanelOpen, setParticipantsPanelOpen] = useState(false);
+  const [sendArtifactOpen, setSendArtifactOpen] = useState(false);
   const [openingDmUserId, setOpeningDmUserId] = useState<string | null>(null);
   const [removingParticipantId, setRemovingParticipantId] = useState<string | null>(null);
   const peopleButtonRef = useRef<HTMLButtonElement>(null);
@@ -33,6 +38,12 @@ export function MessagesPage({
   const activeConversation = conversations.conversations.find(
     (item) => item.id === activeConversationId,
   );
+  // Transfers are 1:1 (`POST /transfers/send` takes a single recipient_id)
+  // -- only a DM's other participant is a valid target, never a group.
+  const dmRecipientId =
+    activeConversation?.kind === "dm"
+      ? activeConversation.participants.find((participant) => participant.user_id !== currentUserId)?.user_id
+      : undefined;
 
   const openDm = async (userId: string) => {
     setOpeningDmUserId(userId);
@@ -78,17 +89,27 @@ export function MessagesPage({
                     : activeConversation.participants.find((participant) => participant.user_id !== currentUserId)
                         ?.username ?? "Bilinmeyen kullanıcı"}
                 </h2>
-                {activeConversation.kind === "group" && (
-                  <IconButton
-                    icon={<Settings />}
-                    aria-label="Grup üyelerini yönet"
-                    title="Grup üyelerini yönet"
-                    onClick={() => {
-                      markThreadRead();
-                      setParticipantsPanelOpen(true);
-                    }}
-                  />
-                )}
+                <div className="message-thread-header-actions">
+                  {dmRecipientId && (
+                    <IconButton
+                      icon={<Paperclip />}
+                      aria-label="Taslak veya evrak gönder"
+                      title="Taslak veya evrak gönder"
+                      onClick={() => setSendArtifactOpen(true)}
+                    />
+                  )}
+                  {activeConversation.kind === "group" && (
+                    <IconButton
+                      icon={<Settings />}
+                      aria-label="Grup üyelerini yönet"
+                      title="Grup üyelerini yönet"
+                      onClick={() => {
+                        markThreadRead();
+                        setParticipantsPanelOpen(true);
+                      }}
+                    />
+                  )}
+                </div>
               </header>
               {thread.errorObject && <ApiErrorNotice error={thread.errorObject} />}
               <MessageThread
@@ -138,6 +159,28 @@ export function MessagesPage({
           void openDm(userId);
         }}
       />
+
+      {dmRecipientId && (
+        <SendArtifactDialog
+          open={sendArtifactOpen}
+          onClose={() => setSendArtifactOpen(false)}
+          recipientId={dmRecipientId}
+          onSent={() => {
+            // The sender's own thread never receives its own message via
+            // the messaging SSE stream (see ConversationService.
+            // _notify_recipients -- it explicitly skips the sender), so
+            // this refetch is what actually surfaces the new artifact
+            // message and the conversation list's updated last_message_at
+            // for the sender's own view.
+            if (activeConversation) {
+              void queryClient.invalidateQueries({
+                queryKey: queryKeys.conversationMessages(activeConversation.id),
+              });
+            }
+            void queryClient.invalidateQueries({ queryKey: queryKeys.conversations });
+          }}
+        />
+      )}
 
       {activeConversation && activeConversation.kind === "group" && (
         <GroupParticipantsPanel

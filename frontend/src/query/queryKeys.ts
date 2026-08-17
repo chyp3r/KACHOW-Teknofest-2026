@@ -20,4 +20,6 @@ export const queryKeys = {
   userSearch: (q: string, unitId: string, role: string) => ["user-search", q, unitId, role] as const,
   notifications: (unreadOnly: boolean, page = 1) => ["notifications", unreadOnly, page] as const,
   units: ["units"] as const,
+  transfer: (transferId: string) => ["transfer", transferId] as const,
+  transferRecommendations: (draftId: string) => ["transfer-recommendations", draftId] as const,
 };
