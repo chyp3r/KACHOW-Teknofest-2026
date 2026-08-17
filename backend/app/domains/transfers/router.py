@@ -12,8 +12,13 @@ from app.domains.transfers.recommendation import (
     RecipientRecommendationService,
 )
 from app.domains.transfers.repository import ArtifactTransferRepository
-from app.domains.transfers.schema.transfer_schema import TransferResponse, TransferSendRequest
-from app.domains.transfers.service import TransferCommand
+from app.domains.transfers.schema.transfer_schema import (
+    GroupTransferResultItemResponse,
+    GroupTransferSendRequest,
+    TransferResponse,
+    TransferSendRequest,
+)
+from app.domains.transfers.service import GroupTransferCommand, TransferCommand
 from app.domains.units.repository import UnitMembershipRepository, UnitRepository
 from app.domains.users.model.user_model import UserModel
 from app.domains.users.repository import UserFavoriteRepository
@@ -64,6 +69,41 @@ async def send_transfer(
         )
     )
     return SuccessResponse(data=_transfer_response(transfer))
+
+
+@router.post("/send-group", response_model=None)
+async def send_group_transfer(
+    request: GroupTransferSendRequest,
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send one draft or document to several recipients at once -- chat/
+    REST only (see `ArtifactTransferService.execute_group`'s own docstring
+    for why the AI channel never reaches this). Per-recipient partial
+    success: one recipient's denial/not-found never blocks the others."""
+    service = build_transfer_service(db)
+    results = await service.execute_group(
+        GroupTransferCommand(
+            company_id=current_user.company_id,
+            sender=current_user,
+            recipient_ids=tuple(request.recipient_ids),
+            artifact_kind=request.artifact_kind,
+            source_artifact_id=request.source_artifact_id,
+            source_version=request.source_version,
+            idempotency_key_prefix=request.idempotency_key_prefix,
+        )
+    )
+    return SuccessResponse(
+        data=[
+            GroupTransferResultItemResponse(
+                recipient_id=r.recipient_id,
+                status=r.status,
+                transfer_id=r.transfer_id,
+                reason=r.reason,
+            ).model_dump(mode="json")
+            for r in results
+        ]
+    )
 
 
 @router.get("/recommendations", response_model=None)

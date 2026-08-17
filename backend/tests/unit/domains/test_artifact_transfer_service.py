@@ -12,8 +12,14 @@ from app.domains.messaging.model.conversation_message_model import ConversationM
 from app.domains.messaging.model.conversation_model import ConversationModel
 from app.domains.transfers.model.transfer_model import ArtifactTransferModel
 from app.domains.transfers.policy import TransferPolicyDecision
-from app.domains.transfers.service import ArtifactTransferService, TransferCommand
+from app.domains.transfers.service import (
+    MAX_GROUP_TRANSFER_RECIPIENTS,
+    ArtifactTransferService,
+    GroupTransferCommand,
+    TransferCommand,
+)
 from app.domains.users.model.user_model import UserModel
+from app.observability import transfer_metrics
 
 
 def _user(**overrides) -> UserModel:
@@ -335,3 +341,174 @@ async def test_persisted_transfer_carries_the_policy_s_cross_unit_flag(service, 
     )
     transfer = await service.execute(_cmd())
     assert transfer.cross_unit is True
+
+
+# ---------- Prometheus metrics (Faz 5, #205) ----------
+
+
+def _counter_value(counter, **labels) -> float:
+    return counter.labels(**labels)._value.get()
+
+
+async def test_a_successful_transfer_increments_the_success_counter(service, draft_repo):
+    draft_repo.get_by_id.return_value = _draft()
+    before = _counter_value(transfer_metrics.ARTIFACT_TRANSFERS, channel="chat", result="success")
+
+    await service.execute(_cmd(channel="chat"))
+
+    after = _counter_value(transfer_metrics.ARTIFACT_TRANSFERS, channel="chat", result="success")
+    assert after == before + 1
+
+
+async def test_a_policy_denial_increments_both_the_reason_and_the_denied_counters(
+    service, draft_repo, policy
+):
+    draft_repo.get_by_id.return_value = _draft()
+    policy.evaluate.return_value = TransferPolicyDecision(
+        permit=False, reason_code="self_transfer", message_tr="Kendinize transfer yapamazsınız.", cross_unit=False
+    )
+    denials_before = _counter_value(transfer_metrics.TRANSFER_POLICY_DENIALS, reason="self_transfer")
+    denied_before = _counter_value(transfer_metrics.ARTIFACT_TRANSFERS, channel="chat", result="denied")
+
+    with pytest.raises(AuthorizationException):
+        await service.execute(_cmd(channel="chat"))
+
+    assert _counter_value(transfer_metrics.TRANSFER_POLICY_DENIALS, reason="self_transfer") == denials_before + 1
+    assert _counter_value(transfer_metrics.ARTIFACT_TRANSFERS, channel="chat", result="denied") == denied_before + 1
+
+
+async def test_a_pdp_denial_increments_the_denied_counter_but_not_a_policy_reason(service, draft_repo):
+    draft_repo.get_by_id.return_value = _draft(user_id="someone-else")
+    denied_before = _counter_value(transfer_metrics.ARTIFACT_TRANSFERS, channel="chat", result="denied")
+
+    with pytest.raises(AuthorizationException):
+        await service.execute(_cmd(sender=_user(id="emp-1", role="employee"), channel="chat"))
+
+    assert _counter_value(transfer_metrics.ARTIFACT_TRANSFERS, channel="chat", result="denied") == denied_before + 1
+
+
+async def test_a_missing_recipient_increments_the_not_found_counter(service, draft_repo, user_repo):
+    draft_repo.get_by_id.return_value = _draft()
+    user_repo.get_by_id_in_company.return_value = None
+    not_found_before = _counter_value(transfer_metrics.ARTIFACT_TRANSFERS, channel="chat", result="not_found")
+
+    with pytest.raises(NotFoundException):
+        await service.execute(_cmd(channel="chat"))
+
+    assert (
+        _counter_value(transfer_metrics.ARTIFACT_TRANSFERS, channel="chat", result="not_found")
+        == not_found_before + 1
+    )
+
+
+async def test_an_idempotent_replay_does_not_increment_any_counter(service, transfer_repo, draft_repo):
+    existing = ArtifactTransferModel(id="transfer-0", company_id="company-1", artifact_kind="draft",
+                                      source_artifact_id="draft-1", sender_id="emp-1", recipient_id="emp-2",
+                                      channel="chat", status="executed", policy_decision="permit")
+    transfer_repo.get_by_idempotency_key.return_value = existing
+    before = _counter_value(transfer_metrics.ARTIFACT_TRANSFERS, channel="chat", result="success")
+
+    await service.execute(_cmd(channel="chat", idempotency_key="intent:abc"))
+
+    assert _counter_value(transfer_metrics.ARTIFACT_TRANSFERS, channel="chat", result="success") == before
+
+
+# ---------- group transfer fan-out (Faz 5, #205) ----------
+
+
+def _group_cmd(**overrides) -> GroupTransferCommand:
+    fields = dict(
+        company_id="company-1", sender=_user(id="emp-1"), recipient_ids=("emp-2", "emp-3"),
+        artifact_kind="draft", source_artifact_id="draft-1",
+    )
+    fields.update(overrides)
+    return GroupTransferCommand(**fields)
+
+
+async def test_execute_group_raises_validation_error_for_an_empty_recipient_list(service):
+    with pytest.raises(ValidationException):
+        await service.execute_group(_group_cmd(recipient_ids=()))
+
+
+async def test_execute_group_raises_validation_error_over_the_recipient_cap(service):
+    too_many = tuple(f"user-{i}" for i in range(MAX_GROUP_TRANSFER_RECIPIENTS + 1))
+    with pytest.raises(ValidationException):
+        await service.execute_group(_group_cmd(recipient_ids=too_many))
+
+
+async def test_execute_group_reports_every_recipient_as_sent_on_a_clean_run(
+    service, draft_repo, user_repo
+):
+    draft_repo.get_by_id.return_value = _draft()
+    user_repo.get_by_id_in_company.side_effect = lambda user_id, company_id: _user(id=user_id)
+
+    results = await service.execute_group(_group_cmd())
+
+    assert {r.recipient_id: r.status for r in results} == {"emp-2": "sent", "emp-3": "sent"}
+    assert all(r.transfer_id for r in results)
+
+
+async def test_execute_group_always_uses_the_chat_channel(service, draft_repo, user_repo, policy):
+    """`GroupTransferCommand` has no `channel` field -- `execute_group` is
+    the chat/REST-only fan-out; the AI channel never builds one of these
+    (see `execute_group`'s own docstring)."""
+    draft_repo.get_by_id.return_value = _draft()
+    user_repo.get_by_id_in_company.side_effect = lambda user_id, company_id: _user(id=user_id)
+
+    await service.execute_group(_group_cmd(recipient_ids=("emp-2",)))
+
+    assert policy.evaluate.await_args.kwargs["channel"] == "chat"
+
+
+async def test_execute_group_a_denial_for_one_recipient_does_not_block_the_others(
+    service, draft_repo, user_repo, policy
+):
+    draft_repo.get_by_id.return_value = _draft()
+    user_repo.get_by_id_in_company.side_effect = lambda user_id, company_id: _user(id=user_id)
+
+    async def _evaluate(*, recipient, **kwargs):
+        if recipient.id == "emp-2":
+            return TransferPolicyDecision(
+                permit=False, reason_code="recipient_inactive", message_tr="Alıcı artık aktif değil.",
+                cross_unit=False,
+            )
+        return TransferPolicyDecision(permit=True, reason_code=None, message_tr=None, cross_unit=False)
+
+    policy.evaluate.side_effect = _evaluate
+
+    results = await service.execute_group(_group_cmd(recipient_ids=("emp-2", "emp-3")))
+
+    by_recipient = {r.recipient_id: r for r in results}
+    assert by_recipient["emp-2"].status == "denied"
+    assert by_recipient["emp-2"].reason == "Alıcı artık aktif değil."
+    assert by_recipient["emp-3"].status == "sent"
+    assert by_recipient["emp-3"].transfer_id is not None
+
+
+async def test_execute_group_reports_a_missing_recipient_as_not_found(service, draft_repo, user_repo):
+    draft_repo.get_by_id.return_value = _draft()
+
+    async def _lookup(user_id, company_id):
+        return None if user_id == "emp-2" else _user(id=user_id)
+
+    user_repo.get_by_id_in_company.side_effect = _lookup
+
+    results = await service.execute_group(_group_cmd(recipient_ids=("emp-2", "emp-3")))
+
+    by_recipient = {r.recipient_id: r for r in results}
+    assert by_recipient["emp-2"].status == "not_found"
+    assert by_recipient["emp-3"].status == "sent"
+
+
+async def test_execute_group_derives_a_distinct_idempotency_key_per_recipient(
+    service, draft_repo, user_repo, transfer_repo
+):
+    draft_repo.get_by_id.return_value = _draft()
+    user_repo.get_by_id_in_company.side_effect = lambda user_id, company_id: _user(id=user_id)
+
+    await service.execute_group(
+        _group_cmd(recipient_ids=("emp-2", "emp-3"), idempotency_key_prefix="intent:xyz")
+    )
+
+    keys = [call.args[1] for call in transfer_repo.get_by_idempotency_key.await_args_list]
+    assert keys == ["intent:xyz:emp-2", "intent:xyz:emp-3"]

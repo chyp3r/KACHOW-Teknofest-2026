@@ -2,6 +2,76 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.17.0] - 2026-08-17
+### Eklendi
+İnternal communication + AI-assisted artifact transfer planının **Faz 5**'i
+(#205) -- sertleştirme: transferi kalıcı bir gözlemlenebilirlik yüzeyine
+bağlamak, alıcının paylaşılan bir evrak snapshot'ını gerçekten kendi
+evrakına dönüştürebilmesi, ve chat/REST üzerinden tek seferde birden fazla
+kişiye gönderim.
+
+- **`POST /pools/items/{item_id}/adopt`** (`DocumentService.
+  adopt_pool_item`) -- copy-on-write. Faz 3'ün transfer akışı bir evrakı
+  gönderdiğinde alıcının `document_pool_items` satırı bugüne kadar hâlâ
+  **göndericinin** `documents` satırına işaret ediyordu
+  (`PoolService.file_transferred_document`): alıcı görüntüleyebiliyor ama
+  gerçek sahibi değildi, metadata'sını düzenleyemiyordu. `adopt` blob'u
+  `BaseStorage` üzerinden kopyalıyor (yerel dosya yolu varsayılmıyor -- S3
+  altında `storage_path` bir `s3://...` URI'dir), alıcı adına yeni bir
+  `documents` satırı açıyor (transfer anındaki `metadata_snapshot`'tan
+  dolduruluyor -- göndericinin o andan sonra değiştirmiş olabileceği canlı
+  satırından değil), analiz cache JSON'unu yeni storage_path altına
+  kopyalıyor, ve Q&A için yeniden indeksliyor. Pool item'ın kendisi yeni
+  belgeye yeniden işaretleniyor (`source="adopted"`, `metadata_snapshot`
+  temizleniyor, `transferred_by` provenance olarak kalıyor) -- ikinci bir
+  pool item satırı açılmıyor. Yalnızca pool'un kendi sahibi çağırabilir;
+  Admin/Manager bypass'ı yok (kişisel bir kopya oluşturuyor).
+  **Bilinçli sınır**: plan "arq indexing worker'a job at" diyordu ama bu
+  depoda evrak indeksleme için hiç arq worker'ı yok (tek bağlı arq job'u
+  LoRA training, `app.workers.queue`) -- yeni bir worker altyapısı kurmak
+  orantısız olurdu; reindeksleme, upload akışının zaten yaptığı gibi
+  senkron çalışıyor.
+- **Prometheus transfer metrikleri** (`observability/transfer_metrics.py`,
+  `ai_metrics.py`/`company_metrics.py` ile aynı desen):
+  `kachow_artifact_transfers_total{channel,result}` (her
+  `ArtifactTransferService.execute()` sonucu -- `success`/`denied`/
+  `not_found`; idempotent bir tekrar denemesi sayılmıyor, yeni bir deneme
+  değil) ve `kachow_transfer_policy_denials_total{reason}`
+  (`TransferPolicy` red sebepleri: `self_transfer`/`recipient_inactive`/
+  `clearance`/`favorite_required`). `monitoring/dashboards/
+  transfers_dashboard.json` -- yeni bir pano, `company_dashboard.json`'un
+  panel şablonunu izliyor.
+- **Grup transferi, yalnızca chat/REST** -- araştırma sırasında ortaya
+  çıktı: transfer o ana kadar tamamen tek alıcılıydı
+  (`TransferCommand.recipient_id: str`), grup transferi hiç yoktu.
+  `ArtifactTransferService.execute_group(GroupTransferCommand)` her alıcı
+  için var olan `execute()`'u tek tek çağırıyor -- ikinci bir transfer
+  implementasyonu yok -- ve `PoolService.push`/`_push_one`'daki
+  per-recipient partial-success desenini izliyor: bir alıcının reddi
+  (`NotFoundException`/`AuthorizationException`/`ValidationException`)
+  diğerlerini bloklamıyor. `POST /transfers/send-group`, en fazla
+  `MAX_GROUP_TRANSFER_RECIPIENTS = 50` alıcı. **AI kanalına bilinçli
+  olarak bağlanmadı**: `propose_transfer` tool'u ve `TransferGraphProvider`
+  değişmedi, tek alıcı olarak kalıyor -- kullanıcıyla konuşulup üzerinde
+  anlaşılan kapsam.
+
+### Test
+- `docker compose run --rm backend pytest tests/unit tests/integration -q`
+  → **2052 test geçti** (+29): `adopt_pool_item`'ın her dalı (yetki, pool
+  sahipliği, transfer-olmayan item reddi, storage hatası, snapshot'tan
+  doldurma, cache kopyalama + reindeksleme, quota), `execute_group`'un
+  boş/aşırı-kalabalık liste reddi, partial-success, her zaman `channel=
+  "chat"`, alıcı başına ayrık idempotency key; her yeni Prometheus sayacı
+  artışı (başarı/red/bulunamadı/policy-reason); gerçek Postgres üzerinde
+  uçtan uca grup transferi (bir alıcı `self_transfer` ile reddedilirken
+  diğeri başarıyla gönderiliyor) ve adopt (gerçek `LocalStorage` blob
+  kopyası + yeni `documents` satırı + orijinalin dokunulmamış kalması).
+- Yeni migration yok -- `metadata_snapshot`/`transferred_by` kolonları
+  Faz 4'te zaten vardı, yalnızca `source` sütununun kabul ettiği değer
+  kümesi genişledi (uygulama seviyesinde, DB constraint'i yok).
+
+Refs: [#205](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/205).
+
 ## [3.16.0] - 2026-08-17
 ### Eklendi
 İnternal communication + AI-assisted artifact transfer planının **Faz 4**'ü

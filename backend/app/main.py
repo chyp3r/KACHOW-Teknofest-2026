@@ -23,6 +23,7 @@ from app.lifespan import lifespan
 from app.observability.ai_metrics import init_ai_metrics
 from app.observability.company_metrics import init_company_metrics
 from app.observability.metrics import init_metrics
+from app.observability.transfer_metrics import init_transfer_metrics
 from app.observability.logger import setup_logging
 
 # Initialize system logging formatters
@@ -61,6 +62,7 @@ app.add_middleware(TenantContextMiddleware)
 init_metrics(app)
 init_ai_metrics()
 init_company_metrics()
+init_transfer_metrics()
 
 # Register Global Exception Handlers
 app.add_exception_handler(BaseAppException, app_exception_handler)
