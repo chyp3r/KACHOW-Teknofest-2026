@@ -1,6 +1,7 @@
 """Deterministic, DB-backed "which artifact does 'gönder' refer to" resolution.
 
-The AI channel's `transfer_resolve` step needs to answer "which draft" (or
+The AI channel's `propose_transfer` tool (`app.ai.tools.transfer_tools`,
+called by the assist step's own model) needs to answer "which draft" (or
 "which document") a message like "son taslağı Ahmet'e gönder" refers to --
 without relying on `SessionFocus.active_draft`, which is turn-scoped and
 self-clears after `ACTIVE_DRAFT_IDLE_LIMIT` idle turns (see

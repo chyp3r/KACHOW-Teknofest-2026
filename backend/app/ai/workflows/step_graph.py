@@ -61,17 +61,17 @@ STEP_SPECS: dict[str, StepSpec] = {
     #: `app.ai.workflows.scope.CAPABILITY_MANIFEST` and ends the turn. It is
     #: always the only step in its plan, so it has nothing to depend on.
     "refuse": StepSpec(name="refuse"),
-    #: Deterministic resolution + policy check (recipient/artifact lookup,
-    #: `TransferPolicy.evaluate`) -- no `interrupt()` here, see
-    #: `planning_graph.transfer_gate_node`'s docstring for why the actual
-    #: pause lives in a separate graph node reached via `route_after_step`,
-    #: the same relationship `brief`/`brief_gate` already have.
-    "transfer_resolve": StepSpec(name="transfer_resolve"),
-    #: Runs only once `transfer_gate` has moved the intent to `CONFIRMED` --
-    #: depends on `transfer_resolve` for scheduling purposes (`ready_steps`),
-    #: not because it reads `transfer_resolve_result` for anything other
-    #: than the intent id.
-    "transfer_execute": StepSpec(name="transfer_execute", depends_on=("transfer_resolve",)),
+    #: Not produced by the planner at all -- appended to `plan_steps`
+    #: dynamically by `planning_graph._step_assist` when the assist step's
+    #: own `propose_transfer` tool call (see `app.ai.tools.transfer_tools`)
+    #: produces a pending proposal, and only once `transfer_gate_node` has
+    #: moved the intent to `CONFIRMED`. No dependency to declare here: by
+    #: construction it is only ever added to `plan_steps` alongside a
+    #: `transfer_resolve_result` that already resolved a recipient/artifact
+    #: (deterministically, inside the tool -- never via `interrupt()`, see
+    #: `planning_graph.transfer_gate_node`'s docstring for why that pause
+    #: lives in its own graph node instead).
+    "transfer_execute": StepSpec(name="transfer_execute"),
 }
 
 

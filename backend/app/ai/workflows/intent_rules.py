@@ -397,55 +397,6 @@ RESET_SURFACES: tuple[str, ...] = (
     "bu taslagi birak", "bunu birak", "vazgectim",
 )
 
-#: `transfer` (Faz 4, artifact send/forward) is deliberately NOT part of
-#: `ALL_RULES`/the calibrated fusion softmax `draft`/`analyze`/`assist`/
-#: `revise` compete in -- `planner.py`'s own module docstring already
-#: explains why a fifth label there "competes for softmax mass with the
-#: four real ones instead of vetoing them". These surfaces back a
-#: standalone, pre-fusion lexical gate instead (`planner._try_transfer`,
-#: checked the same way `_try_compound` is: before fusion runs at all),
-#: exactly as high-precision as a rule needs to be here and no more --
-#: a false negative just falls through to the ordinary four-way ladder
-#: (worst case: a clarifying question), and a false positive is caught by
-#: the transfer flow's own mandatory confirmation gate before anything
-#: moves. Neither failure mode is silent or costly, which is what makes a
-#: simpler, separate mechanism the right call instead of forcing this into
-#: the carefully calibrated four-way scorer.
-#:
-#: A semantic (embedding-similarity) rung for this gate was prototyped and
-#: measured against real nomic-embed-text vectors, then reverted: a small
-#: (5-per-label) prototype set does not separate cleanly for this embedding
-#: model -- "Bu evrakı analiz eder misin?" (unambiguously `analyze`) scored
-#: 0.858 similarity / 0.121 margin against a `transfer` prototype, clearing
-#: even the existing calibrated-family thresholds, while genuine transfer
-#: paraphrases ("şu dosyayı ona aktarır mısın?") scored *lower* than that
-#: false positive. Per `SemanticPolicy`'s own documented finding for the
-#: "intent" family, a layer that decides at random is worse than none --
-#: shipping this would have misrouted real `analyze`/`revise` turns, not
-#: merely missed some `transfer` ones. Reintroducing it needs a real labeled
-#: evaluation set (the same way "intent"'s own thresholds were calibrated
-#: against `evaluation/datasets/intents.jsonl`), not a hand-picked prototype
-#: list and a guessed threshold.
-TRANSFER_VERB_SURFACES: tuple[str, ...] = ("gonder", "ilet", "yolla", "postala")
-
-#: Nouns that make a transfer verb's target unambiguous -- left-boundary
-#: substrings via the same folding as every other surface here ("taslag"
-#: matches "taslağı"/"taslağımı", "evrak" matches "evrakı", etc.).
-TRANSFER_ARTIFACT_SURFACES: tuple[str, ...] = ("taslag", "evrak", "belge", "dosya")
-
-#: A drafting-creation verb anywhere in the same message overrides a
-#: transfer reading outright: "taslak hazırla ve gönder" means "write it,
-#: then I'll separately ask you to send it" (transfer is never an automatic
-#: continuation of drafting -- see the plan's §C1), not "send something that
-#: doesn't exist yet". A small, explicit list on purpose -- only the verbs
-#: that mean "bring this into existence" need to veto, not every
-#: drafting-adjacent noun `DRAFT_RULES` scores.
-TRANSFER_CREATION_VETO_SURFACES: tuple[str, ...] = (
-    "taslak hazirla", "taslak olustur", "taslak cikar", "taslagi hazirla",
-    "yazi hazirla", "yazi olustur", "kaleme al", "cevap hazirla", "cevap yaz",
-    "cevap olustur",
-)
-
 #: Question markers, used as a shape hint rather than a routing decision.
 #: Bare "ne" is deliberately absent: "ne gerekiyorsa onu uygula" is an
 #: instruction, not a question, and treating it as one made an

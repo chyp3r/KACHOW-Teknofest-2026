@@ -129,7 +129,7 @@ class TransferIntentService:
         candidate_recipients: tuple = (),
         ttl_seconds: Optional[int] = None,
     ) -> ArtifactTransferIntentModel:
-        """Open a new intent from `transfer_resolve`'s resolution outcome.
+        """Open a new intent from the `propose_transfer` tool's resolution outcome.
 
         Exactly one of `resolved_recipient_id`/`candidate_recipients` should
         be populated -- a single confident recipient match moves straight to

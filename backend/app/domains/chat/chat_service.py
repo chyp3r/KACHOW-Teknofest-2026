@@ -597,8 +597,8 @@ class ChatService:
             # Best-effort, same tolerance `_is_paused` already has for a
             # missing/unreachable checkpointer: `SessionFocus.active_draft_id`
             # is a convenience hint (see its own docstring), never load-bearing
-            # -- a later `transfer_resolve` step falls back to
-            # `DraftRepository.get_latest_for_session` regardless.
+            # -- the `propose_transfer` tool (`app.ai.tools.transfer_tools`)
+            # falls back to `DraftRepository.get_latest_for_session` regardless.
             try:
                 await self.planning_graph.aupdate_state(
                     config, {"focus": {"active_draft_id": draft_id}}

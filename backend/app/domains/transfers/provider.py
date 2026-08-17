@@ -204,11 +204,11 @@ def _snapshot_transfer(transfer: ArtifactTransferModel) -> TransferOutcome:
 
 
 class TransferGraphProvider:
-    """Everything `planning_graph.py`'s `transfer_resolve`/`transfer_gate`/
-    `transfer_execute` nodes need from the transfers domain, injected the
-    same way `units_provider`/`adapter_provider` are (see
-    `create_planning_graph`'s own docstring) -- `app.ai.*` never imports
-    `app.domains.*` directly.
+    """Everything the `propose_transfer` tool (`app.ai.tools.transfer_tools`)
+    and `planning_graph.py`'s `transfer_gate`/`transfer_execute` need from
+    the transfers domain, injected the same way `units_provider`/
+    `adapter_provider` are (see `create_planning_graph`'s own docstring) --
+    `app.ai.*` never imports `app.domains.*` directly.
     """
 
     async def resolve_recipient(

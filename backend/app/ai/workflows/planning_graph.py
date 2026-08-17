@@ -28,7 +28,7 @@ from app.ai.policy.budget import node_budget
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.ai.semantic.prototype_matcher import PrototypeMatcher
 from app.ai.tools.document_tools import ToolResult, build_assistant_tools
-from app.ai.transfer.slots import extract_transfer_slots
+from app.ai.tools.transfer_tools import build_transfer_tools
 from app.ai.verification import InfoQuestion, apply_answers, verify_draft
 from app.ai.workflows.events import (
     child_config,
@@ -81,7 +81,6 @@ STEP_LABELS = {
     "clarify": "Açıklayıcı Soru",
     "refuse": "Kapsam Denetimi",
     "gate_revise": "Geri Bildirimli Revizyon",
-    "transfer_resolve": "Alıcı Belirleniyor",
     "transfer_execute": "Transfer Gönderiliyor",
     "transfer_gate": "Transfer Onayı",
 }
@@ -96,7 +95,6 @@ STEP_MESSAGES = {
     "clarify": "İsteğinizi netleştirmek için bir soru hazırlanıyor...",
     "refuse": "İstek sistemin görev alanına göre denetleniyor...",
     "gate_revise": "Onay kapısındaki geri bildiriminize göre taslak güncelleniyor...",
-    "transfer_resolve": "Alıcı ve gönderilecek içerik belirleniyor...",
     "transfer_execute": "Transfer gönderiliyor...",
 }
 
@@ -295,16 +293,20 @@ class PlanningState(TypedDict, total=False):
     #: goes into assist_result (it is a reply like any other), and this field
     #: exists only so the scheduler can see the step settle.
     refuse_result: dict[str, Any]
-    #: `_step_transfer_resolve`'s outcome -- slot extraction + deterministic
-    #: recipient/artifact resolution + policy check, never the execution
-    #: itself. `outcome` is one of `"unresolved"`, `"recipient_not_found"`,
-    #: `"artifact_ambiguous"`, `"policy_denied"` (all terminal, no gate),
-    #: `"needs_disambiguation"`/`"needs_confirmation"` (routed to
-    #: `transfer_gate_node` by `route_after_step`), or `"confirmed"` (set by
-    #: `transfer_gate_node` once the human approves, routing to
-    #: `transfer_execute` via `route_after_transfer_gate`). See the plan's
-    #: §I for the full `artifact_transfer_intents.state` lifecycle this
-    #: outcome tracks a turn-scoped view of.
+    #: A pending transfer proposal, when the assist step's own
+    #: `propose_transfer` tool call produced one this turn (see
+    #: `app.ai.tools.transfer_tools.build_transfer_tools`, wired into
+    #: `_run_assist`) -- deterministic recipient/artifact resolution +
+    #: policy check, never the execution itself. `outcome` is one of
+    #: `"unresolved"`, `"recipient_not_found"`, `"artifact_ambiguous"`,
+    #: `"policy_denied"` (all terminal, no gate -- the tool's own return
+    #: string already told the user), `"needs_disambiguation"`/
+    #: `"needs_confirmation"` (routed to `transfer_gate_node` by
+    #: `route_after_step`), or `"confirmed"` (set by `transfer_gate_node`
+    #: once the human approves, routing to `transfer_execute` via
+    #: `route_after_transfer_gate`). See the plan's §I for the full
+    #: `artifact_transfer_intents.state` lifecycle this outcome tracks a
+    #: turn-scoped view of.
     transfer_resolve_result: dict[str, Any]
     #: `_step_transfer_execute`'s outcome -- set only after
     #: `transfer_gate_node` reaches `"confirmed"`. Also the scheduler's
@@ -619,11 +621,13 @@ def create_planning_graph(
             recipient lookup/recommendation, and the intent state machine's
             transitions, each opening its own session per call, the same
             injected-callable pattern `adapter_provider`/`units_provider`
-            already use. `None` (the default, matching
-            `settings.AI_TRANSFER_ENABLED`'s own default) means
-            `_step_transfer_resolve` reports the transfer plan as
-            unavailable rather than raising -- degraded, not broken, same
-            as an absent `checkpointer`.
+            already use. Reached only from the assist step's own
+            `propose_transfer` tool (`app.ai.tools.transfer_tools`), never
+            from a dedicated plan step -- transfer is not a resolvable
+            intent (see `planner.PLAN_BY_INTENT`'s own docstring). `None`
+            (the default, matching `settings.AI_TRANSFER_ENABLED`'s own
+            default) means the tool is simply never offered to the model --
+            degraded, not broken, same as an absent `checkpointer`.
 
     Returns:
         The compiled LangGraph workflow.
@@ -1012,6 +1016,32 @@ def create_planning_graph(
             requester_clearance=requester_clearance,
         )
 
+        # Faz 4 (#201) -- offered only when the feature is actually usable;
+        # a message that would have called this tool otherwise resolves
+        # exactly like any other conversational turn (the model simply has
+        # nothing to call). See app.ai.tools.transfer_tools's own module
+        # docstring for why the tool only ever proposes, never executes.
+        pending_transfer: dict[str, Any] = {}
+
+        def _record_transfer_proposal(proposal: dict[str, Any]) -> None:
+            pending_transfer.update(proposal)
+
+        if settings.AI_TRANSFER_ENABLED and transfer_provider is not None:
+            focus = state.get("focus") or SessionFocus()
+            tools = [
+                *tools,
+                *build_transfer_tools(
+                    company_id=state.get("company_id"),
+                    user_id=state.get("user_id"),
+                    thread_id=(config.get("configurable") or {}).get("thread_id", ""),
+                    run_id=state.get("run_id"),
+                    active_draft_id=focus.active_draft_id,
+                    active_document_id=focus.active_document_id,
+                    transfer_provider=transfer_provider,
+                    on_transfer_proposed=_record_transfer_proposal,
+                ),
+            ]
+
         chunks: list[str] = []
         try:
             async with asyncio.timeout(
@@ -1088,6 +1118,20 @@ def create_planning_graph(
                     reasons=verdict.reasons,
                 )
 
+            if pending_transfer.get("outcome") in {"needs_disambiguation", "needs_confirmation"} and not has_checkpointer:
+                # Cannot pause for a human answer without a checkpointer --
+                # cancel the proposal outright rather than leave it standing
+                # unconfirmable, the same degrade every other HITL gate
+                # takes (see create_planning_graph's own docstring).
+                try:
+                    await transfer_provider.cancel(
+                        company_id=state.get("company_id"), intent_id=pending_transfer["intent_id"]
+                    )
+                except Exception:
+                    logger.exception("Failed to cancel an unconfirmable transfer proposal")
+                pending_transfer.clear()
+                reply = "Bu işlem şu an onay akışı olmadan kullanılamıyor; lütfen chat üzerinden manuel gönderin."
+
             result = {
                 "reply": reply,
                 "status": StepStatus.COMPLETED,
@@ -1097,6 +1141,8 @@ def create_planning_graph(
                 result["flagged"] = True
             if referenced_anchor.get("anchor"):
                 result["last_referenced_anchor"] = referenced_anchor["anchor"]
+            if pending_transfer:
+                result["pending_transfer"] = dict(pending_transfer)
             return result
         except asyncio.TimeoutError:
             logger.warning("Assist step timed out")
@@ -1318,6 +1364,18 @@ def create_planning_graph(
         # make it into checkpointed memory.
         if assist_result.get("history"):
             updates["history"] = assist_result["history"]
+        # Faz 4 (#201): the assist step's own propose_transfer tool call
+        # produced a pending proposal this turn -- append transfer_execute
+        # to plan_steps so the scheduler (step_graph.ready_steps) has
+        # something to dispatch once transfer_gate_node confirms it, and
+        # record the proposal under the same transfer_resolve_result key
+        # the (removed) deterministic path used, so transfer_gate_node/
+        # route_after_transfer_gate/_step_transfer_execute/
+        # _compile_final_output all keep working unchanged.
+        pending_transfer = assist_result.get("pending_transfer")
+        if pending_transfer:
+            updates["transfer_resolve_result"] = pending_transfer
+            updates["plan_steps"] = [*(state.get("plan_steps") or []), "transfer_execute"]
 
     async def _step_revise(
         state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
@@ -1421,160 +1479,6 @@ def create_planning_graph(
         updates["refuse_result"] = {"status": StepStatus.COMPLETED}
         updates["history"] = [{"role": "assistant", "content": reply}]
 
-    def _recipient_candidate_dicts(candidates: Any, *, source: str) -> list[dict[str, Any]]:
-        """Normalise `RecipientCandidate`/`RecipientRecommendation` tuples
-        (both plain dataclasses from `app.domains.transfers.provider`) into
-        the one dict shape `transfer_gate_node`'s disambiguation payload and
-        `artifact_transfer_intents.candidate_recipients` both use."""
-        return [
-            {
-                "user_id": candidate.user_id,
-                "username": candidate.username,
-                "unit_name": getattr(candidate, "unit_name", None),
-                "source": getattr(candidate, "source", source),
-            }
-            for candidate in candidates
-        ]
-
-    async def _step_transfer_resolve(
-        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
-    ) -> None:
-        """Slot extraction + deterministic resolution + policy check.
-
-        The one LLM call anywhere in the transfer flow is
-        `extract_transfer_slots` -- a parse, never a decision (see that
-        module's own docstring). Everything after it is
-        `app.domains.transfers`'s deterministic services, reached only
-        through `transfer_provider` (`app.ai.*` never imports
-        `app.domains.*` directly -- see `create_planning_graph`'s own
-        docstring). Never calls `interrupt()` itself -- every path either
-        settles the turn here with a plain-text reply, or hands off to
-        `transfer_gate_node` via `route_after_step`, exactly the relationship
-        `brief`/`brief_gate` already have.
-        """
-        focus = state.get("focus") or SessionFocus()
-        company_id = state.get("company_id")
-        user_id = state.get("user_id")
-        thread_id = (config.get("configurable") or {}).get("thread_id", "")
-
-        def _settle(reply: str, outcome: str) -> None:
-            updates["assist_result"] = {"reply": reply, "status": StepStatus.COMPLETED}
-            updates["transfer_resolve_result"] = {"status": StepStatus.COMPLETED, "outcome": outcome}
-            updates["transfer_execute_result"] = {"status": StepStatus.SKIPPED, "reason": outcome}
-
-        if transfer_provider is None or not company_id or not user_id:
-            _settle("Bu özellik şu anda kullanılamıyor.", "unavailable")
-            return
-
-        slots = await extract_transfer_slots(fast_llm_client or llm_client, state["input_text"])
-        artifact_kind = slots.artifact_kind if slots.artifact_kind in ("draft", "document") else "draft"
-
-        if artifact_kind == "draft":
-            resolution = await transfer_provider.resolve_draft(
-                company_id=company_id,
-                user_id=user_id,
-                thread_id=thread_id,
-                explicit_draft_id=focus.active_draft_id,
-            )
-        else:
-            resolution = await transfer_provider.resolve_document(
-                company_id=company_id,
-                user_id=user_id,
-                explicit_document_id=None,
-                focus_document_id=focus.active_document_id,
-            )
-
-        noun = "taslak" if artifact_kind == "draft" else "evrak"
-        if resolution.status == "unresolved":
-            _settle(f"Gönderilecek bir {noun} bulamadım.", "unresolved")
-            return
-        if resolution.status == "ambiguous":
-            candidates = resolution.draft_candidates or resolution.document_candidates
-            listing = "; ".join(
-                (f"v{c.version} ({c.correspondence_type or 'taslak'})" if artifact_kind == "draft" else c.file_name)
-                for c in candidates
-            )
-            _settle(
-                f"Birden fazla {noun} buldum, hangisini kastettiğinizi belirtir misiniz? ({listing})",
-                "artifact_ambiguous",
-            )
-            return
-
-        artifact = (resolution.draft_candidates or resolution.document_candidates)[0]
-        source_artifact_id = artifact.id
-        source_version = artifact.version if artifact_kind == "draft" else None
-
-        if slots.recipient_name:
-            status, candidates = await transfer_provider.resolve_recipient(
-                company_id=company_id, name=slots.recipient_name, requester_id=user_id
-            )
-            recipient_candidates = _recipient_candidate_dicts(candidates, source="name_match")
-        elif artifact_kind == "draft":
-            recommendations = await transfer_provider.recommend_recipients(
-                company_id=company_id, draft_id=source_artifact_id, requester_id=user_id, limit=5
-            )
-            recipient_candidates = _recipient_candidate_dicts(recommendations, source="recommendation")
-            status = "resolved" if len(recipient_candidates) == 1 else (
-                "ambiguous" if recipient_candidates else "not_found"
-            )
-        else:
-            recipient_candidates = []
-            status = "not_found"
-
-        if status == "not_found":
-            _settle("Kime göndermemi istediğinizi bulamadım; lütfen alıcının adını belirtin.", "recipient_not_found")
-            return
-
-        resolved_recipient_id = recipient_candidates[0]["user_id"] if status == "resolved" else None
-        intent = await transfer_provider.open_intent(
-            company_id=company_id,
-            thread_id=thread_id,
-            run_id=state.get("run_id"),
-            requester_id=user_id,
-            artifact_kind=artifact_kind,
-            source_artifact_id=source_artifact_id,
-            source_version=source_version,
-            resolved_recipient_id=resolved_recipient_id,
-            candidate_recipients=tuple(recipient_candidates) if status == "ambiguous" else (),
-        )
-
-        if intent.error_reason:
-            _settle(intent.error_message or "Transfer başlatılamadı.", intent.error_reason)
-            return
-        if intent.state == "POLICY_DENIED":
-            message = (intent.policy_snapshot or {}).get("message_tr") or "Bu transfer şu anda gerçekleştirilemiyor."
-            updates["transfer_resolve_result"] = {
-                "status": StepStatus.COMPLETED, "outcome": "policy_denied", "intent_id": intent.id,
-            }
-            updates["assist_result"] = {"reply": message, "status": StepStatus.COMPLETED}
-            updates["transfer_execute_result"] = {"status": StepStatus.SKIPPED, "reason": "policy_denied"}
-            return
-
-        if not has_checkpointer:
-            # Cannot pause for a human answer without a checkpointer --
-            # degrade like every other HITL gate does (see
-            # create_planning_graph's own docstring): cancel outright rather
-            # than silently execute unconfirmed.
-            await transfer_provider.cancel(company_id=company_id, intent_id=intent.id)
-            _settle(
-                "Bu işlem şu an onay akışı olmadan kullanılamıyor; lütfen chat üzerinden manuel gönderin.",
-                "checkpointer_unavailable",
-            )
-            return
-
-        # AMBIGUOUS or AWAITING_CONFIRMATION -- both pause at transfer_gate.
-        updates["transfer_resolve_result"] = {
-            "status": StepStatus.COMPLETED,
-            "outcome": "needs_confirmation" if intent.state == "AWAITING_CONFIRMATION" else "needs_disambiguation",
-            "intent_id": intent.id,
-            "artifact_kind": artifact_kind,
-            "source_artifact_id": source_artifact_id,
-            "source_version": source_version,
-            "candidate_recipients": intent.candidate_recipients,
-            "cross_unit": intent.cross_unit,
-            "policy_snapshot": intent.policy_snapshot,
-        }
-
     async def _step_transfer_execute(
         state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
     ) -> None:
@@ -1635,7 +1539,6 @@ def create_planning_graph(
         "revise": _step_revise,
         "clarify": _step_clarify,
         "refuse": _step_refuse,
-        "transfer_resolve": _step_transfer_resolve,
         "transfer_execute": _step_transfer_execute,
     }
 
@@ -2267,8 +2170,8 @@ def create_planning_graph(
 
         if transfer_provider is None or not intent_id or not company_id or not user_id:
             # Not reachable through route_after_step today (it only detours
-            # here when _step_transfer_resolve already populated intent_id)
-            # -- defensive only.
+            # here when the assist step's propose_transfer tool already
+            # populated intent_id) -- defensive only.
             return _cancelled("Transfer işlemi bulunamadı.", "missing_intent")
 
         if outcome == "needs_disambiguation":
@@ -2394,9 +2297,17 @@ def create_planning_graph(
         ):
             return "brief_gate"
 
-        if has_checkpointer and state.get("_last_ran_step") == "transfer_resolve":
+        # Detours to the confirmation gate whenever the assist step's own
+        # propose_transfer tool call just produced a pending proposal this
+        # turn -- checked by outcome/settlement, not by `_last_ran_step`,
+        # since "assist" (unlike "transfer_resolve" in the now-removed
+        # deterministic path) is a step that runs for plenty of turns that
+        # never touch transfer at all.
+        if has_checkpointer and state.get("_last_ran_step") == "assist":
             outcome = (state.get("transfer_resolve_result") or {}).get("outcome")
-            if outcome in {"needs_disambiguation", "needs_confirmation"}:
+            if outcome in {"needs_disambiguation", "needs_confirmation"} and not state.get(
+                "transfer_execute_result"
+            ):
                 return "transfer_gate"
 
         if has_checkpointer and state.get("_last_ran_step") in {"draft", "revise"}:

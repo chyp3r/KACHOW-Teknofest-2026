@@ -67,7 +67,6 @@ Two things do not go through fusion at all, on purpose:
 """
 
 import logging
-import re
 import time
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Optional
 
@@ -80,15 +79,8 @@ from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
 from app.ai.policy.router_weights import ROUTER_WEIGHTS
 from app.ai.session.focus import SessionFocus
-from app.ai.workflows.intent_rules import (
-    CONTINUATION_SURFACES,
-    TRANSFER_ARTIFACT_SURFACES,
-    TRANSFER_CREATION_VETO_SURFACES,
-    TRANSFER_VERB_SURFACES,
-    Intent,
-)
+from app.ai.workflows.intent_rules import CONTINUATION_SURFACES, Intent
 from app.ai.workflows.intent_scorer import COMPOUND_FLOOR, IntentScores, normalize, score_intents
-from app.core.config import settings
 from app.ai.workflows.router_features import RouterSignals, extract_features
 from app.ai.workflows.router_fusion import predict_proba
 from app.ai.workflows.scope import ScopeVerdict, resolve_scope
@@ -127,13 +119,15 @@ __all__ = [
 #: no model call on purpose -- a refusal must not be a generation, or the
 #: model that was just told not to write the off-topic text gets one more
 #: opportunity to write it anyway.
-#: `transfer`'s two dispatchable steps -- deliberately not `transfer_gate`
-#: too. `transfer_gate` is a graph node reached by `route_after_step`
-#: *between* them, the exact same relationship `brief`/`brief_gate` already
-#: have (see `planning_graph.py`): a plan step is something `STEP_RUNNERS`
-#: dispatches deterministically, and `interrupt()` can only ever live in a
-#: node reached by routing, never inside a step the executor's own replay
-#: logic might re-run.
+#: `transfer` (Faz 4, #201) is deliberately NOT one of these -- it is never
+#: a resolvable top-level intent at all. It is a tool the assist step's own
+#: model may call mid-conversation (`app.ai.tools.transfer_tools.
+#: build_transfer_tools`, wired in `_run_assist`), the same way
+#: `search_document` is; the planner never routes a message to it directly.
+#: `transfer_execute` (the one step this can still lead to, once a human
+#: confirms) is appended to `plan_steps` dynamically by `_step_assist` when
+#: the tool actually produces a pending proposal -- see
+#: `step_graph.STEP_SPECS`'s own entry for it.
 PLAN_BY_INTENT: dict[str, list[str]] = {
     "draft": ["classification", "brief", "draft", "routing"],
     "analyze": ["classification"],
@@ -141,7 +135,6 @@ PLAN_BY_INTENT: dict[str, list[str]] = {
     "revise": ["revise"],
     "clarify": ["clarify"],
     "refuse": ["refuse"],
-    "transfer": ["transfer_resolve", "transfer_execute"],
 }
 
 REASONING_BY_INTENT: dict[str, str] = {
@@ -151,10 +144,6 @@ REASONING_BY_INTENT: dict[str, str] = {
     "revise": "Mevcut taslakta bir revizyon talebi tespit edildi: hedefli düzeltme çalıştırılacak.",
     "clarify": "İstek belirsiz olduğu için kullanıcıya açıklayıcı bir soru soruldu.",
     "refuse": "İstek sistemin görev alanı dışında kaldığı için hiçbir üretim akışı çalıştırılmadı.",
-    "transfer": (
-        "Bir taslak/evrak gönderme talebi tespit edildi: alıcı ve gönderilecek içerik "
-        "belirlenip onayınıza sunulacak."
-    ),
 }
 
 #: Canonical execution order, used to merge two intents' step lists without
@@ -346,55 +335,6 @@ def _has_only_weak_evidence(intent: str, lexical: IntentScores, has_active_draft
         if rule_id.startswith(f"{intent}.") and rule_id not in _WEAK_EVIDENCE_IDS
     ]
     return not strong
-
-
-def _has_surface(normalized: str, surfaces: tuple[str, ...]) -> bool:
-    """Left-word-boundary substring match, same rule `intent_scorer.
-    _compile_surface` compiles for every other lexical surface in this
-    system -- kept as a tiny local helper rather than importing that
-    private function, since `_try_transfer` is not part of the scored
-    `EvidenceRule` table at all (see `TRANSFER_VERB_SURFACES`'s docstring)."""
-    return any(re.search(r"(?<![a-z0-9])" + re.escape(surface), normalized) for surface in surfaces)
-
-
-def _try_transfer(message: str) -> Optional[PlanDecision]:
-    """Pre-fusion lexical gate for a "send/forward an artifact" request.
-
-    Checked before `_try_compound`/fusion even run, exactly the way
-    `_try_compound` itself pre-empts fusion for a different reason -- see
-    `TRANSFER_VERB_SURFACES`'s docstring in `intent_rules.py` for why
-    `transfer` is not one of the four fused intents at all. High-precision
-    by design: a transfer verb, an artifact noun, and no drafting-creation
-    verb in the same message (see `TRANSFER_CREATION_VETO_SURFACES` -- "taslak
-    hazırla ve gönder" must resolve to `draft`, never `transfer`, since
-    nothing exists yet to send). A message that doesn't clear this bar
-    simply falls through to the ordinary four-way ladder; nothing here can
-    silently misroute since worst case is a clarifying question or an
-    `assist` reply.
-
-    Args:
-        message: The raw user message (normalized internally, same as every
-            other lexical check here).
-
-    Returns:
-        A `transfer` plan decision, or `None` when the message doesn't
-        clear the bar.
-    """
-    normalized = normalize(message)
-    if _has_surface(normalized, TRANSFER_CREATION_VETO_SURFACES):
-        return None
-    if not _has_surface(normalized, TRANSFER_VERB_SURFACES):
-        return None
-    if not _has_surface(normalized, TRANSFER_ARTIFACT_SURFACES):
-        return None
-    return PlanDecision(
-        steps=list(PLAN_BY_INTENT["transfer"]),
-        intent="transfer",  # type: ignore[arg-type]
-        reasoning=REASONING_BY_INTENT["transfer"],
-        source="transfer_lexical",
-        confidence=1.0,
-        evidence=("transfer.verb_plus_artifact",),
-    )
 
 
 def _try_compound(lexical: IntentScores) -> Optional[PlanDecision]:
@@ -825,18 +765,6 @@ async def _resolve_intent(
                 "Plan resolved via pending clarification: intent=%s", resolved.intent
             )
             return resolved
-
-    # Checked before anything else the ladder does, same priority
-    # `_try_compound` gets and for the same structural reason -- see
-    # `_try_transfer`'s own docstring. Gated on the feature flag so a
-    # deployment with `AI_TRANSFER_ENABLED=false` (the default) never routes
-    # a single message through the transfer plan; every such message falls
-    # straight through to the ordinary four-way ladder below, unchanged.
-    if settings.AI_TRANSFER_ENABLED:
-        transfer = _try_transfer(message)
-        if transfer is not None:
-            logger.info("Plan resolved as transfer (pre-fusion lexical gate).")
-            return transfer
 
     has_active_draft = bool(focus and focus.active_draft is not None)
     _lexical_start = time.perf_counter()

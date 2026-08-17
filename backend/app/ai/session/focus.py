@@ -222,9 +222,10 @@ class SessionFocus:
             _maybe_record_draft``, the only writer). ``active_draft`` itself
             never carries a database id -- ``DraftVersion`` is a pure
             in-memory snapshot the graph builds before any DB write happens
-            (see its own docstring) -- so this is the one place a later
-            ``transfer_resolve`` step can find a real, transferable id
-            without re-deriving it. A convenience hint only, per the plan's
+            (see its own docstring) -- so this is the one place the
+            ``propose_transfer`` tool (``app.ai.tools.transfer_tools``) can
+            find a real, transferable id without re-deriving it. A
+            convenience hint only, per the plan's
             §C2: never the sole source a resolution ladder trusts, since it
             can go stale (an idle-cleared ``active_draft``, a
             ``record_draft`` call that failed) in ways
