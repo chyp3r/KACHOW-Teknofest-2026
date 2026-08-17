@@ -1,7 +1,9 @@
 from datetime import datetime
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
+
+from app.domains.transfers.service import MAX_GROUP_TRANSFER_RECIPIENTS
 
 
 class TransferSendRequest(BaseModel):
@@ -23,6 +25,33 @@ class TransferSendRequest(BaseModel):
     #: Optional caller-supplied idempotency token -- a retried request with
     #: the same key returns the original transfer instead of re-executing.
     idempotency_key: Optional[str] = Field(default=None, max_length=200)
+
+
+class GroupTransferSendRequest(BaseModel):
+    """`POST /transfers/send-group` body -- chat/REST-only fan-out to
+    several recipients at once (Faz 5, #205). There is no AI-channel
+    equivalent of this request; see `ArtifactTransferService.execute_group`'s
+    own docstring.
+    """
+
+    recipient_ids: List[str] = Field(
+        min_length=1,
+        max_length=MAX_GROUP_TRANSFER_RECIPIENTS,
+        description="Alıcı kullanıcı ID'leri",
+    )
+    artifact_kind: Literal["draft", "document"]
+    source_artifact_id: str = Field(description="drafts.id veya evrak storage_path'i")
+    source_version: Optional[int] = None
+    #: Combined with each recipient id to derive that recipient's own
+    #: idempotency key -- see `GroupTransferCommand.idempotency_key_prefix`.
+    idempotency_key_prefix: Optional[str] = Field(default=None, max_length=200)
+
+
+class GroupTransferResultItemResponse(BaseModel):
+    recipient_id: str
+    status: str
+    transfer_id: Optional[str] = None
+    reason: Optional[str] = None
 
 
 class TransferResponse(BaseModel):
