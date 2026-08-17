@@ -38,14 +38,13 @@ from app.ai.policy.prototypes import FAMILIES
 #: *after* an intent (draft/analyze/assist/revise) is already resolved (see
 #: `app.ai.workflows.scope.resolve_scope` and `planner._apply_scope_gate`),
 #: so it likewise has no prototypes and never will. `transfer` (Faz 4, #201)
-#: is resolved by its own pre-fusion lexical gate (`planner._try_transfer`,
-#: checked the same way `_try_compound` is, before fusion runs at all) --
-#: see `intent_rules.TRANSFER_VERB_SURFACES`'s docstring for why it
-#: deliberately never joins the calibrated four-way softmax `draft`/
-#: `analyze`/`assist`/`revise` compete in, so it likewise has no prototypes.
-#: (A separate, isolated semantic rung for it was prototyped and reverted
-#: after measurement against real embeddings -- see that same docstring.)
-_EXPECTED_INTENT_LABELS = set(PLAN_BY_INTENT) - {"clarify", "refuse", "transfer"}
+#: is not a resolvable intent at all -- it is a tool the assist step's model
+#: may call mid-conversation (`app.ai.tools.transfer_tools`), so it was never
+#: a candidate for this table in the first place. (An isolated semantic gate
+#: for an earlier, since-removed deterministic `transfer` intent was
+#: prototyped and reverted after measurement against real embeddings; see
+#: `git log` on this file for that finding.)
+_EXPECTED_INTENT_LABELS = set(PLAN_BY_INTENT) - {"clarify", "refuse"}
 
 
 def _load(family: str) -> dict:

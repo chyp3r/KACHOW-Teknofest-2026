@@ -54,11 +54,11 @@ export const NODE_INFO: Record<string, { label: string; short: string; descripti
   assist: { label: "Asistan", short: "ASİST", description: "Belge ve mevzuat araçlarını kullanarak kaynaklı sohbet yanıtı hazırlar." },
   clarify: { label: "Açıklayıcı Soru", short: "SORU", description: "İsteği netleştirmek için kullanıcıya seçenekli bir soru sorar." },
   refuse: { label: "Kapsam Denetimi", short: "KAPSAM", description: "İsteğin sistemin görev alanı dışında kaldığını belirler ve yetenek listesini döndürür." },
-  // Faz 4 (#201) -- transfer_resolve/transfer_execute are dispatched
-  // through the shared "executor" node (like draft/routing/assist above),
-  // not separate graph nodes; transfer_gate is the one real new node,
-  // sharing human_gate's io coloring since it's also an interrupt() gate.
-  transfer_resolve: { label: "Alıcı Belirleniyor", short: "TRANSFER", description: "Gönderilecek taslak/evrak ve alıcı, kayıtlardan deterministik olarak belirlenir." },
+  // Faz 4 (#201) -- transfer is proposed by a tool the assist step's own
+  // model may call (app.ai.tools.transfer_tools), never a dedicated
+  // resolution step; transfer_gate is the one real new graph node (the
+  // mandatory confirmation), transfer_execute dispatches through the
+  // shared "executor" node like draft/routing/assist above.
   transfer_gate: { label: "Transfer Onayı", short: "ONAY", description: "Alıcı belirsizse seçim, her durumda gönderim için insan onayı ister." },
   transfer_execute: { label: "Transfer Gönderiliyor", short: "GÖNDER", description: "Onaylanan transfer gerçekleştirilir ve alıcıya iletilir." },
 };
@@ -136,7 +136,6 @@ const STAGE_DESCRIPTIONS: Record<string, string> = {
   human_gate: "Eksik bilgi veya kullanıcı kararı",
   routing: "Hedef birim önerisi",
   assist: "Belge ve mevzuat araçları gerektiğinde kullanılır",
-  transfer_resolve: "Alıcı seçimi ve gönderim onayı",
 };
 
 // Which nodes collapse into which stage's sub-items instead of getting
@@ -149,7 +148,10 @@ const SUB_STEPS: Record<string, string[]> = {
   draft: ["examples", "verify", "judge"],
   revise: ["revise_parse", "revise_retrieve", "revise_repair", "revise_audit", "verify", "judge"],
   human_gate: ["gate_revise"],
-  transfer_resolve: ["transfer_gate"],
+  // Faz 4 (#201) -- transfer_gate is triggered by the assist step's own
+  // propose_transfer tool call, so it nests under "assist"'s stage, not a
+  // dedicated resolution step (there isn't one -- see NODE_INFO's note).
+  assist: ["transfer_gate"],
 };
 
 function stageStatus(

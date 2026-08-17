@@ -1,25 +1,24 @@
-"""End-to-end interrupt/resume test for the `transfer` plan (Faz 4, #201).
+"""End-to-end interrupt/resume test for the `propose_transfer` tool (Faz 4,
+#201).
 
 Same shape as `test_hitl_flow.py`: exercises the real compiled planning
-graph -- the pre-fusion lexical gate, `transfer_resolve`, `transfer_gate`'s
-`interrupt()`, checkpointer-backed pause/resume, `transfer_execute` -- with
-only the LLM-backed pieces (the sub-graphs, `extract_transfer_slots`) left
-to degrade to their documented fallback (empty slots) rather than mocked
-out, since a `MagicMock(spec=BaseLLMClient)` client's async methods raise
-when awaited, which `extract_transfer_slots` already treats as "the user
-didn't name anyone" -- exactly the scenario these tests want anyway (falls
-through to `RecipientRecommendationService`, here faked via
-`FakeTransferProvider`).
+graph -- the assist step's tool loop, `transfer_gate_node`'s `interrupt()`,
+checkpointer-backed pause/resume, `transfer_execute` -- with the LLM's own
+tool-call *decision* scripted via `fake_llm.generate_with_tools_side_effect`
+(see `tests/conftest.py::FakeLLMClient`) rather than left to a real model:
+whether the model correctly chooses to call `propose_transfer` for a given
+message is a prompt/eval concern (the `evaluation/` harness's territory),
+not what this file is proving. What this file proves is that *once the tool
+is called*, the rest of the pipeline -- deterministic resolution inside the
+tool, the mandatory confirmation gate, execution -- behaves exactly as
+designed, the same division `test_hitl_flow.py` already draws by mocking
+`draft_graph`/`routing_graph` outright instead of running a real model
+through them.
 
-`FakeTransferProvider` stands in for `app.domains.transfers.provider.
-TransferGraphProvider` -- a tiny in-memory mirror of the real CAS state
-machine, just enough to drive `AMBIGUOUS -> AWAITING_CONFIRMATION ->
-CONFIRMED -> TRANSFER_EXECUTED` (and the deny/cancel branches) without a
-database. The real state machine itself (`TransferIntentService`) has its
-own unit tests; this file is about the *graph* wiring around it: that
-`transfer_gate_node`'s `interrupt()` actually pauses the run, that a reject
-never reaches `transfer_execute`, and that the turn's `final_output`
-reflects what actually happened.
+`FakeTransferProvider` is a tiny in-memory mirror of `TransferGraphProvider`
+-- see `test_transfer_tools.py`'s own docstring for why a real DB isn't
+needed here; `TransferIntentService`/`ArtifactResolutionService` have their
+own dedicated unit tests.
 """
 
 from unittest.mock import MagicMock
@@ -28,7 +27,7 @@ import pytest
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
-from app.ai.llms.base import BaseLLMClient
+from app.ai.llms.base import ToolCallResponse
 from app.ai.workflows.planning_graph import create_planning_graph
 from app.core.config import settings
 from app.domains.transfers.provider import ArtifactResolutionSnapshot, DraftCandidate, IntentSnapshot, TransferOutcome
@@ -41,11 +40,13 @@ class FakeTransferProvider:
         self,
         *,
         draft_candidates=(),
+        recipient_status="resolved",
         recipient_candidates=(),
         policy_permit=True,
         cross_unit=False,
     ):
         self.draft_candidates = draft_candidates
+        self.recipient_status = recipient_status
         self.recipient_candidates = recipient_candidates
         self.policy_permit = policy_permit
         self.cross_unit = cross_unit
@@ -68,10 +69,7 @@ class FakeTransferProvider:
         return ArtifactResolutionSnapshot(status="unresolved", artifact_kind="document")
 
     async def resolve_recipient(self, **_kwargs):
-        return "not_found", ()
-
-    async def recommend_recipients(self, **_kwargs):
-        return tuple(self.recipient_candidates)
+        return self.recipient_status, tuple(self.recipient_candidates)
 
     async def open_intent(self, **kwargs):
         self._next_id += 1
@@ -146,18 +144,28 @@ class FakeTransferProvider:
         )
 
 
-def _build_graph(transfer_provider):
-    document_analysis_graph = MagicMock()
-    rag_graph = MagicMock()
-    draft_graph = MagicMock()
-    routing_graph = MagicMock()
+def _draft(id="draft-1", version=1):
+    return DraftCandidate(id=id, correspondence_type="cover_letter", version=version, updated_at="")
+
+
+def _scripted_recipient_name(fake_llm, recipient_name: str, *, final_reply: str = "Tamamdır."):
+    """Scripts the tool loop: turn 1 calls `propose_transfer`, turn 2
+    converges with plain text -- see this module's own docstring for why
+    the model's decision is scripted rather than real."""
+    fake_llm.generate_with_tools_side_effect = [
+        ToolCallResponse(tool_calls=[{"name": "propose_transfer", "args": {"recipient_name": recipient_name}, "id": "1"}]),
+        ToolCallResponse(content=final_reply),
+    ]
+
+
+def _build_graph(transfer_provider, fake_llm):
     return create_planning_graph(
-        llm_client=MagicMock(spec=BaseLLMClient),
-        fast_llm_client=MagicMock(spec=BaseLLMClient),
-        document_analysis_graph=document_analysis_graph,
-        rag_graph=rag_graph,
-        draft_graph=draft_graph,
-        routing_graph=routing_graph,
+        llm_client=fake_llm,
+        fast_llm_client=fake_llm,
+        document_analysis_graph=MagicMock(),
+        rag_graph=MagicMock(),
+        draft_graph=MagicMock(),
+        routing_graph=MagicMock(),
         checkpointer=MemorySaver(),
         transfer_provider=transfer_provider,
     )
@@ -173,59 +181,46 @@ def _initial_state(message: str) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_draft_turn_does_not_offer_transfer(monkeypatch):
-    """The most important behavioural guarantee in the plan's §C1: drafting
-    never ends with an automatic offer to send. A plain drafting message
-    must resolve to the `draft` plan, never `transfer`, whether or not the
-    flag is on."""
-    monkeypatch.setattr(settings, "AI_TRANSFER_ENABLED", True)
-    from app.ai.workflows.planner import resolve_plan
+async def test_a_message_naming_nobody_never_calls_the_tool_at_all(fake_llm, fake_fast_llm):
+    """No tool_calls scripted at all -- an ordinary conversational turn --
+    proves the tool being *offered* never forces the model to use it."""
+    monkeypatch_settings = settings.AI_TRANSFER_ENABLED
+    settings.AI_TRANSFER_ENABLED = True
+    try:
+        provider = FakeTransferProvider()
+        fake_llm.generate_with_tools_side_effect = [ToolCallResponse(content="Merhaba! Size nasıl yardımcı olabilirim?")]
+        graph = _build_graph(provider, fake_llm)
+        config = {"configurable": {"thread_id": "transfer-tool-none"}}
 
-    decision = await resolve_plan("Bu evraka cevap yazısı hazırla ve gönder", None)
-    assert decision.intent == "draft"
-    assert "transfer_execute" not in decision.steps
+        result = await graph.ainvoke(_initial_state("Merhaba"), config=config)
+
+        assert result["final_output"]["status"] == "COMPLETED"
+        assert provider.execute_calls == []
+        snapshot = await graph.aget_state(config)
+        assert not snapshot.next
+    finally:
+        settings.AI_TRANSFER_ENABLED = monkeypatch_settings
 
 
 @pytest.mark.asyncio
-async def test_transfer_disabled_by_default_falls_through_to_ordinary_ladder():
-    from app.ai.workflows.planner import resolve_plan
-
-    decision = await resolve_plan("Taslağı Ahmet'e gönder", None)
-    assert decision.intent != "transfer"
-
-
-@pytest.mark.asyncio
-async def test_ambiguous_recipient_pauses_then_confirming_executes(monkeypatch):
+async def test_resolved_recipient_pauses_for_confirmation_then_executes(fake_llm, monkeypatch):
     monkeypatch.setattr(settings, "AI_TRANSFER_ENABLED", True)
-    from app.domains.transfers.recommendation import RecipientRecommendation
-
     provider = FakeTransferProvider(
-        draft_candidates=(DraftCandidate(id="draft-1", correspondence_type="cover_letter", version=1, updated_at=""),),
-        recipient_candidates=(
-            RecipientRecommendation(user_id="u-2", username="ahmet", source="unit_member", unit_id="unit-1", unit_name="IK"),
-            RecipientRecommendation(user_id="u-3", username="mehmet", source="unit_member", unit_id="unit-1", unit_name="IK"),
-        ),
+        draft_candidates=(_draft(version=3),),
+        recipient_status="resolved",
+        recipient_candidates=[type("C", (), {"user_id": "u-2", "username": "ahmet", "unit_name": "İK"})()],
     )
-    graph = _build_graph(provider)
-    config = {"configurable": {"thread_id": "transfer-ambiguous"}}
+    _scripted_recipient_name(fake_llm, "ahmet")
+    graph = _build_graph(provider, fake_llm)
+    config = {"configurable": {"thread_id": "transfer-tool-confirm"}}
 
-    await graph.ainvoke(_initial_state("Son taslağı gönder"), config=config)
+    await graph.ainvoke(_initial_state("Son taslağı Ahmet'e gönder"), config=config)
 
     snapshot = await graph.aget_state(config)
     assert snapshot.next == ("transfer_gate",)
     payload = snapshot.tasks[0].interrupts[0].value
-    assert payload["kind"] == "artifact_transfer_disambiguate"
-    assert len(payload["candidates"]) == 2
-
-    # Pick the first candidate -- immediately re-pauses for confirmation,
-    # never executes on a bare selection.
-    await graph.ainvoke(
-        Command(resume={"action": "select", "recipient_id": "u-2"}), config=config
-    )
-    snapshot = await graph.aget_state(config)
-    assert snapshot.next == ("transfer_gate",)
-    confirm_payload = snapshot.tasks[0].interrupts[0].value
-    assert confirm_payload["kind"] == "artifact_transfer_confirm"
+    assert payload["kind"] == "artifact_transfer_confirm"
+    assert payload["source_version"] == 3
     assert provider.execute_calls == []
 
     result = await graph.ainvoke(Command(resume={"action": "approve"}), config=config)
@@ -233,27 +228,53 @@ async def test_ambiguous_recipient_pauses_then_confirming_executes(monkeypatch):
     assert result["final_output"]["status"] == "COMPLETED"
     assert result["final_output"]["transfer"]["transfer_id"] == "transfer-intent-1"
     assert provider.execute_calls == ["intent-1"]
+    final_snapshot = await graph.aget_state(config)
+    assert not final_snapshot.next
 
 
 @pytest.mark.asyncio
-async def test_rejecting_confirmation_never_executes(monkeypatch):
+async def test_ambiguous_recipient_disambiguates_then_confirms(fake_llm, monkeypatch):
     monkeypatch.setattr(settings, "AI_TRANSFER_ENABLED", True)
-    from app.domains.transfers.recommendation import RecipientRecommendation
-
     provider = FakeTransferProvider(
-        draft_candidates=(DraftCandidate(id="draft-1", correspondence_type="cover_letter", version=1, updated_at=""),),
-        recipient_candidates=(
-            RecipientRecommendation(user_id="u-2", username="ahmet", source="unit_member", unit_id="unit-1", unit_name="IK"),
-        ),
+        draft_candidates=(_draft(),),
+        recipient_status="ambiguous",
+        recipient_candidates=[
+            type("C", (), {"user_id": "u-2", "username": "ahmet-a", "unit_name": "İK"})(),
+            type("C", (), {"user_id": "u-3", "username": "ahmet-b", "unit_name": "Hukuk"})(),
+        ],
     )
-    graph = _build_graph(provider)
-    config = {"configurable": {"thread_id": "transfer-reject"}}
+    _scripted_recipient_name(fake_llm, "ahmet")
+    graph = _build_graph(provider, fake_llm)
+    config = {"configurable": {"thread_id": "transfer-tool-disambiguate"}}
 
-    await graph.ainvoke(_initial_state("Son taslağı gönder"), config=config)
+    await graph.ainvoke(_initial_state("Taslağı Ahmet'e gönder"), config=config)
+    snapshot = await graph.aget_state(config)
+    assert snapshot.next == ("transfer_gate",)
+    assert snapshot.tasks[0].interrupts[0].value["kind"] == "artifact_transfer_disambiguate"
+
+    await graph.ainvoke(Command(resume={"action": "select", "recipient_id": "u-2"}), config=config)
     snapshot = await graph.aget_state(config)
     assert snapshot.next == ("transfer_gate",)
     assert snapshot.tasks[0].interrupts[0].value["kind"] == "artifact_transfer_confirm"
 
+    result = await graph.ainvoke(Command(resume={"action": "approve"}), config=config)
+    assert result["final_output"]["status"] == "COMPLETED"
+    assert provider.execute_calls == ["intent-1"]
+
+
+@pytest.mark.asyncio
+async def test_rejecting_confirmation_never_executes(fake_llm, monkeypatch):
+    monkeypatch.setattr(settings, "AI_TRANSFER_ENABLED", True)
+    provider = FakeTransferProvider(
+        draft_candidates=(_draft(),),
+        recipient_status="resolved",
+        recipient_candidates=[type("C", (), {"user_id": "u-2", "username": "ahmet", "unit_name": None})()],
+    )
+    _scripted_recipient_name(fake_llm, "ahmet")
+    graph = _build_graph(provider, fake_llm)
+    config = {"configurable": {"thread_id": "transfer-tool-reject"}}
+
+    await graph.ainvoke(_initial_state("Taslağı Ahmet'e gönder"), config=config)
     result = await graph.ainvoke(Command(resume={"action": "reject"}), config=config)
 
     assert result["final_output"]["status"] == "COMPLETED"
@@ -262,39 +283,74 @@ async def test_rejecting_confirmation_never_executes(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_policy_denial_ends_the_turn_without_a_gate(monkeypatch):
+async def test_policy_denial_never_opens_a_gate(fake_llm, monkeypatch):
+    """The tool's own handler already replied with the denial reason --
+    nothing pending, so the turn never pauses at all."""
     monkeypatch.setattr(settings, "AI_TRANSFER_ENABLED", True)
-    from app.domains.transfers.recommendation import RecipientRecommendation
-
     provider = FakeTransferProvider(
-        draft_candidates=(DraftCandidate(id="draft-1", correspondence_type="cover_letter", version=1, updated_at=""),),
-        recipient_candidates=(
-            RecipientRecommendation(user_id="u-2", username="ahmet", source="unit_member", unit_id="unit-1", unit_name="IK"),
-        ),
+        draft_candidates=(_draft(),),
+        recipient_status="resolved",
+        recipient_candidates=[type("C", (), {"user_id": "u-2", "username": "ahmet", "unit_name": None})()],
         policy_permit=False,
     )
-    graph = _build_graph(provider)
-    config = {"configurable": {"thread_id": "transfer-policy-denied"}}
+    _scripted_recipient_name(fake_llm, "ahmet", final_reply="Önce favorilerinize ekleyin.")
+    graph = _build_graph(provider, fake_llm)
+    config = {"configurable": {"thread_id": "transfer-tool-policy-denied"}}
 
-    result = await graph.ainvoke(_initial_state("Son taslağı gönder"), config=config)
+    result = await graph.ainvoke(_initial_state("Taslağı Ahmet'e gönder"), config=config)
 
     snapshot = await graph.aget_state(config)
     assert not snapshot.next
     assert result["final_output"]["status"] == "COMPLETED"
-    assert "favorilerinize" in result["final_output"]["assist"]["reply"]
     assert provider.execute_calls == []
 
 
 @pytest.mark.asyncio
-async def test_no_draft_found_ends_the_turn_without_a_gate(monkeypatch):
+async def test_without_a_checkpointer_the_proposal_is_cancelled_not_left_pending(fake_llm, monkeypatch):
+    """The degrade path every other HITL gate takes: cannot pause for a
+    human answer without a checkpointer, so the tool's proposal is
+    cancelled outright rather than silently executable."""
     monkeypatch.setattr(settings, "AI_TRANSFER_ENABLED", True)
-    provider = FakeTransferProvider()
-    graph = _build_graph(provider)
-    config = {"configurable": {"thread_id": "transfer-unresolved"}}
+    provider = FakeTransferProvider(
+        draft_candidates=(_draft(),),
+        recipient_status="resolved",
+        recipient_candidates=[type("C", (), {"user_id": "u-2", "username": "ahmet", "unit_name": None})()],
+    )
+    _scripted_recipient_name(fake_llm, "ahmet")
+    graph = create_planning_graph(
+        llm_client=fake_llm,
+        fast_llm_client=fake_llm,
+        document_analysis_graph=MagicMock(),
+        rag_graph=MagicMock(),
+        draft_graph=MagicMock(),
+        routing_graph=MagicMock(),
+        checkpointer=None,
+        transfer_provider=provider,
+    )
+    config = {"configurable": {"thread_id": "transfer-tool-no-checkpointer"}}
 
-    result = await graph.ainvoke(_initial_state("Son taslağı gönder"), config=config)
+    result = await graph.ainvoke(_initial_state("Taslağı Ahmet'e gönder"), config=config)
 
-    snapshot = await graph.aget_state(config)
-    assert not snapshot.next
     assert result["final_output"]["status"] == "COMPLETED"
-    assert "bulamadım" in result["final_output"]["assist"]["reply"]
+    assert provider.execute_calls == []
+    assert provider.cancel_calls == ["intent-1"]
+
+
+@pytest.mark.asyncio
+async def test_tool_disabled_by_flag_is_never_offered_to_the_model(fake_llm, monkeypatch):
+    monkeypatch.setattr(settings, "AI_TRANSFER_ENABLED", False)
+    provider = FakeTransferProvider(draft_candidates=(_draft(),))
+    # No tool call scripted -- generate_with_tools should never even see
+    # propose_transfer in its `tools` argument to have anything to call.
+    fake_llm.generate_with_tools_return = ToolCallResponse(content="Anladım.")
+    graph = _build_graph(provider, fake_llm)
+    config = {"configurable": {"thread_id": "transfer-tool-flag-off"}}
+
+    result = await graph.ainvoke(_initial_state("Taslağı Ahmet'e gönder"), config=config)
+
+    assert result["final_output"]["status"] == "COMPLETED"
+    assert provider.execute_calls == []
+    called_tool_names = {
+        tool.name for call in fake_llm.generate_with_tools_calls for tool in call["tools"]
+    }
+    assert "propose_transfer" not in called_tool_names
