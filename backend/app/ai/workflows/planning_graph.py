@@ -43,6 +43,7 @@ from app.ai.workflows.events import (
     emit_partial,
     emit_question,
 )
+from app.ai.workflows.dates import today_tr
 from app.ai.workflows.intent_rules import RESET_SURFACES
 from app.ai.workflows.intent_scorer import normalize
 from app.ai.workflows.planner import resolve_plan
@@ -879,6 +880,7 @@ def create_planning_graph(
                 "reasoning_level": state.get("reasoning_level", ReasoningLevel.BALANCED.value),
                 "writing_brief": brief_answers,
                 "company_id": state.get("company_id") or "",
+                "today": today_tr(),
             },
             config=child_config(config),
         )
@@ -1426,6 +1428,7 @@ def create_planning_graph(
             revise_graph=revise_graph,
             instruction_origin="user_turn",
             company_id=state.get("company_id"),
+            today=today_tr(),
         )
         updates["draft_result"] = result
         updates["revise_result"] = {"status": result["status"]}
@@ -2134,6 +2137,7 @@ def create_planning_graph(
             revise_graph=revise_graph,
             instruction_origin="human_gate",
             company_id=state.get("company_id"),
+            today=today_tr(),
         )
         if result.get("status") == StepStatus.FAILED:
             await emit_node_error(

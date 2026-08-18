@@ -84,6 +84,53 @@ def test_a_blank_message_does_not_change_the_objective():
     assert update["objective"] == "Mevcut hedef."
 
 
+def test_a_fresh_brief_step_overwrites_a_stale_writing_brief():
+    """A second, unrelated draft in the same session must not carry the
+    first draft's muhatap/yazan_taraf answers -- see the "taslak oluşturma
+    state'inin sıfırlanmaması" bug this guards against."""
+    focus = SessionFocus(writing_brief={"muhatap": "Rektörlük", "yazan_taraf": "KACMAK ekibi"})
+
+    update = compute_focus_update(
+        focus,
+        document_id=None,
+        plan_intent="draft",
+        input_text="Ahmet Yılmaz'a bir izin yazısı hazırla.",
+        draft_result={},
+        brief_answers={},
+    )
+
+    assert update["writing_brief"] == {}
+
+
+def test_a_new_brief_answer_replaces_the_prior_one():
+    focus = SessionFocus(writing_brief={"muhatap": "Rektörlük"})
+
+    update = compute_focus_update(
+        focus,
+        document_id=None,
+        plan_intent="draft",
+        input_text="Ahmet Yılmaz'a bir izin yazısı hazırla.",
+        draft_result={},
+        brief_answers={"muhatap": "Ahmet Yılmaz"},
+    )
+
+    assert update["writing_brief"] == {"muhatap": "Ahmet Yılmaz"}
+
+
+def test_no_brief_step_this_turn_leaves_the_existing_writing_brief_untouched():
+    focus = SessionFocus(writing_brief={"muhatap": "Rektörlük"})
+
+    update = compute_focus_update(
+        focus,
+        document_id=None,
+        plan_intent="assist",
+        input_text="Bu evrakta ne yazıyor?",
+        draft_result={},
+    )
+
+    assert "writing_brief" not in update
+
+
 def test_a_completed_draft_becomes_the_first_version():
     focus = SessionFocus()
 

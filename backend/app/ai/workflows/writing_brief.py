@@ -227,9 +227,13 @@ SLOT_CATALOG: tuple[BriefSlotSpec, ...] = (
         priority=5,
     ),
     BriefSlotSpec(
-        key="sayi_tarih",
-        header="Sayı ve tarih",
-        question="Sayı/tarih alanı nasıl işlensin?",
+        key="sayi",
+        header="Sayı",
+        # Tarih is deliberately not part of this slot -- it is never asked
+        # about at all (see app.ai.workflows.dates.today_tr and
+        # draft_graph._build_brief's "0. BUGÜNÜN TARİHİ" section, which
+        # fills the writer's own "Tarih:" line automatically).
+        question="Sayı alanı nasıl işlensin?",
         options=(
             AnswerOption("yer_tutucu", "Yer tutucu bırak", ""),
             AnswerOption("bos_birak", "Boş bırak", ""),
@@ -419,7 +423,7 @@ def _resolve_kapanis(
 
 #: One resolver per slot, tried only when the prior-brief carry-forward
 #: (checked first, uniformly, in ``resolve_brief``) didn't already answer
-#: it. Absent from this map -- imza/sayi_tarih -- means "never inferred,
+#: it. Absent from this map -- imza/sayi -- means "never inferred,
 #: only ever answered by the user or left to Sen karar ver". Each resolver
 #: also receives `known`, the slots already settled earlier this same pass
 #: (in `SLOT_CATALOG` priority order) -- `kapanis` reads `known["muhatap"]`
@@ -506,7 +510,7 @@ def resolve_brief(
             # "Sen karar ver" instead of competing for one of the
             # MAX_BRIEF_QUESTIONS slots -- required=False means "never
             # worth blocking on", not "ask anyway but let them skip it".
-            # Without this, imza/sayi_tarih (which have no resolver at
+            # Without this, imza/sayi (which have no resolver at
             # all) would always be unresolved and could crowd out a
             # genuinely unknown required slot, or open the gate on a turn
             # where every required fact is already known.

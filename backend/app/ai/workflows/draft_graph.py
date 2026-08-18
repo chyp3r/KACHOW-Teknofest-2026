@@ -22,6 +22,7 @@ from app.ai.verification import (
     DraftJudgeVerdict,
     InfoQuestion,
     build_missing_info_request,
+    fill_date_placeholders,
     judge_draft,
     merge_verdicts,
     normalize_unfilled_markers,
@@ -79,6 +80,13 @@ class DraftState(TypedDict, total=False):
 
     source_document: str
     classification: dict[str, Any]
+    #: Today's date (see app.ai.workflows.dates.today_tr), resolved once by
+    #: the caller before the graph runs and never re-derived inside it --
+    #: this is what the writer's own "Tarih:" line must always use, and the
+    #: only date value ever injected into the brief rather than asked
+    #: about. Absent/empty degrades to no date guidance at all (an older
+    #: caller that hasn't been updated to pass it), not a crash.
+    today: str
     #: The user's own drafting request, unmodified by orchestrator
     #: boilerplate -- see ``resolve_correspondence_type``'s ``user_request``
     #: argument for why this must be kept separate from ``instructions``.
@@ -191,6 +199,7 @@ def _build_brief(
     context: str,
     instructions: str,
     writing_brief: dict[str, Any] | None = None,
+    today: str = "",
 ) -> str:
     """Compose the grounding brief handed to the writer.
 
@@ -205,6 +214,12 @@ def _build_brief(
             "KACMAK ekibi olarak" bug, where the only proper noun in the
             user's own text had no declared direction and the writer put
             it in the one slot this brief used to describe (Muhatap).
+        today: The date this draft is being written on (see
+            app.ai.workflows.dates.today_tr), never a fact extracted from
+            the document. Rendered as section 0 -- the writer's own
+            "Tarih:" line must copy this verbatim rather than leave a
+            placeholder or ask the human, since it is never missing
+            information, only information nobody thought to hand it before.
 
     Returns:
         The brief text.
@@ -216,6 +231,11 @@ def _build_brief(
     )
 
     return (
+        f"0. BUGÜNÜN TARİHİ: {today or '(bilinmiyor -- Tarih alanı için yer tutucu bırak)'}\n"
+        f"   → Yanıtının KENDİ \"Tarih:\" alanına bu değeri AYNEN yaz. Bu bir çıkarım veya "
+        f"tahmin değildir; sistem tarafından sağlanan gerçek tarihtir. Gelen evrakın tarihiyle "
+        f"KARIŞTIRMA -- o bilgi yalnızca aşağıdaki bölüm 3'tedir ve İlgi satırı dışında hiçbir "
+        f"yerde kullanılmaz.\n"
         f"1. Belge Türü: "
         f"{classification.get('document_type_label') or classification.get('document_type') or 'Belirtilmedi'}\n"
         f"2. Belge Özeti: {classification.get('summary') or 'Özet çıkarılamadı.'}\n"
@@ -438,7 +458,11 @@ def create_draft_graph(
             "context": context,
             "instructions": instructions,
             "brief": _build_brief(
-                classification, context, instructions, state.get("writing_brief")
+                classification,
+                context,
+                instructions,
+                state.get("writing_brief"),
+                state.get("today", ""),
             ),
             "status": "IN_PROGRESS",
             "error": "",
@@ -597,9 +621,12 @@ def create_draft_graph(
                 rules = (
                     "- Yalnızca brief içindeki bilgilere ve mevzuat bağlamına sadık kal.\n"
                     "- Gelen evrakta veya mevzuatta yer almayan hiçbir kişi, kurum, sayı, "
-                    "tarih veya olay uydurma.\n"
-                    "- Zorunlu olup brief'te bulunmayan bilgileri köşeli parantezli yer "
-                    "tutucu olarak bırak (örn. '[Tarih Eksik - Lütfen Doldurun]')."
+                    "tarih veya olay uydurma. Tarih alanı bu kuralın istisnasıdır: brief'in "
+                    "\"0. BUGÜNÜN TARİHİ\" bölümündeki değeri her zaman kullan, uydurma.\n"
+                    "- Zorunlu olup brief'te bulunmayan bilgileri, kime ait olduğunu açıkça "
+                    "belirten köşeli parantezli bir yer tutucu olarak bırak (örn. "
+                    "'[Belge Sayısı]', '[İmzalayacak yetkilinin adı ve soyadı]') -- çıplak "
+                    "'Ad Soyad'/'Unvan' gibi kime ait olduğu belirsiz yer tutucular kullanma."
                 )
 
             prompt = (
@@ -765,6 +792,11 @@ def create_draft_graph(
         # all see the same, corrected text the human gate and the final
         # reply will show.
         draft_text, _ = normalize_unfilled_markers(state.get("draft", ""))
+        # Same backstop role, one field earlier in the pipeline than
+        # missing_info's [...] gate ever sees it -- the draft's own "Tarih:"
+        # line must never reach a human as a question (see
+        # app.ai.workflows.dates.today_tr's own docstring).
+        draft_text, _ = fill_date_placeholders(draft_text, state.get("today", ""))
         classification = state.get("classification") or {}
         sub_genre = state.get("correspondence_sub_genre", "")
         strict = state.get("correspondence_type") != "other_official"
@@ -790,6 +822,7 @@ def create_draft_graph(
             ]
             + list(adapter.preferred_examples),
             is_individual_petition="dilekçe" in sub_genre.lower(),
+            today=state.get("today", ""),
         )
 
         # None means the level has no opinion; defer to the global setting.

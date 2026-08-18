@@ -49,6 +49,21 @@ def test_transferable_fields_are_not_folded_into_the_identity_section():
     assert "Personel İzin Talebi" in rest
 
 
+def test_today_is_rendered_as_section_zero_and_never_asked_about():
+    brief = _build_brief(
+        CLASSIFICATION, context="", instructions="Cevap yazısı hazırla.", today="18.08.2026"
+    )
+
+    assert "0. BUGÜNÜN TARİHİ: 18.08.2026" in brief
+    assert "AYNEN yaz" in brief
+
+
+def test_missing_today_falls_back_to_a_placeholder_note():
+    brief = _build_brief(CLASSIFICATION, context="", instructions="Cevap yazısı hazırla.")
+
+    assert "0. BUGÜNÜN TARİHİ: (bilinmiyor" in brief
+
+
 def test_a_missing_incoming_number_still_renders_the_identity_section():
     classification = {**CLASSIFICATION, "fields": {**CLASSIFICATION["fields"], "sayi": None}}
 

@@ -4,6 +4,7 @@ from typing import Any, Optional
 
 from app.ai.guardrails.injection import scrub_extracted_text
 from app.ai.reasoning_levels import get_reasoning_level_preset
+from app.ai.workflows.dates import today_tr
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
 from app.core.config import settings
@@ -120,6 +121,7 @@ class DraftService:
                             else None
                         ),
                         "reasoning_level": request.reasoning_level.value,
+                        "today": today_tr(),
                     },
                     config=self._trace_config(user_id, company_id)
                 ),

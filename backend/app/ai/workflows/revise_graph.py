@@ -77,6 +77,7 @@ from app.ai.verification import (
     InfoQuestion,
     VerificationReport,
     build_missing_info_request,
+    fill_date_placeholders,
     judge_draft,
     merge_verdicts,
     normalize_unfilled_markers,
@@ -111,6 +112,12 @@ class ReviseState(TypedDict, total=False):
     #: on `create_revise_graph`). Absent/empty behaves exactly like no
     #: adapter configured, never an error.
     company_id: str
+    #: Today's date (see app.ai.workflows.dates.today_tr), read by
+    #: `verify_node`'s date-placeholder backstop -- a revision keeps the
+    #: original draft's date unchanged by construction (see this module's
+    #: own anti-date-change rule), so this only ever fires if a rewrite
+    #: pass reintroduces a "Tarih:" placeholder.
+    today: str
 
     #: Set by `parse`.
     instruction: RevisionInstruction
@@ -600,6 +607,7 @@ def create_revise_graph(
         # writer could, and revise never re-runs the original writer's
         # prompt to begin with.
         draft_text, _ = normalize_unfilled_markers(state.get("draft", ""))
+        draft_text, _ = fill_date_placeholders(draft_text, state.get("today", ""))
         correspondence_type = state.get("correspondence_type") or active_draft.correspondence_type
         sub_genre = state.get("correspondence_sub_genre") or getattr(
             active_draft, "correspondence_sub_genre", ""
@@ -627,6 +635,7 @@ def create_revise_graph(
             strict=strict,
             style_examples=list(active_draft.style_examples) + list(adapter.preferred_examples),
             is_individual_petition="dilekçe" in sub_genre.lower(),
+            today=state.get("today", ""),
         )
 
         judge_on = (

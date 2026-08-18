@@ -88,3 +88,54 @@ def normalize_unfilled_markers(draft: str) -> NormalizedDraft:
 
     normalized = _HEADER_LINE_PATTERN.sub(_replace, draft)
     return NormalizedDraft(text=normalized, substitutions=count)
+
+
+#: The draft's own "Tarih:" header line, with a bracketed placeholder as its
+#: value -- e.g. "Tarih: [Tarih]" or "Tarih: [Tarih Eksik - Lütfen
+#: Doldurun]" (see writer.md and draft_graph.writer_node's own rule).
+#: Anchored to a line starting with the "Tarih" label specifically, not any
+#: `[...]` span mentioning a date anywhere in the draft -- the incoming
+#: document's own date, when referenced at all, sits in the "İlgi:" line,
+#: never behind this label, so this can never mistake it for the response's
+#: own field and overwrite it with today's date.
+_DATE_LINE_PATTERN = re.compile(
+    r"^([ \t]*)(Tarih)([ \t]*:[ \t]*)\[[^\]]*\][ \t]*$",
+    re.MULTILINE | re.IGNORECASE,
+)
+
+
+def fill_date_placeholders(draft: str, today: str) -> NormalizedDraft:
+    """Fill the draft's own "Tarih:" placeholder with the server-resolved date.
+
+    A generated draft must never leave its own date for the human to supply
+    (see app.ai.workflows.dates.today_tr and the bug report item this
+    closes) -- the writer is told to copy `today` verbatim into this line
+    (see draft_graph._build_brief's section 0), but a prompt instruction is
+    not a guarantee, so this is the deterministic backstop, run right after
+    ``normalize_unfilled_markers`` so a model that wrote "belirtilmemiş"
+    instead of a placeholder is caught first and this still finds a
+    placeholder to fill.
+
+    Args:
+        draft: The generated draft text.
+        today: The date to substitute (see app.ai.workflows.dates.today_tr).
+
+    Returns:
+        The (possibly rewritten) draft, and how many "Tarih:" lines were
+        filled. When ``today`` is empty, the draft is returned unchanged --
+        there is nothing to fill with, and leaving the placeholder in place
+        is safer than writing an empty value into it.
+    """
+    if not today:
+        return NormalizedDraft(text=draft, substitutions=0)
+
+    count = 0
+
+    def _replace(match: "re.Match[str]") -> str:
+        nonlocal count
+        indent, label, separator = match.groups()
+        count += 1
+        return f"{indent}{label}{separator}{today}"
+
+    filled = _DATE_LINE_PATTERN.sub(_replace, draft)
+    return NormalizedDraft(text=filled, substitutions=count)

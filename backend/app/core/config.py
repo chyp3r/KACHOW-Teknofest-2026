@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     SECRET_KEY: str = "supersecretkeychangeinproduction"
 
+    #: IANA zone used to resolve "today" for a generated draft's own
+    #: Tarih field (see app.ai.workflows.dates.today_tr) -- the user is
+    #: never asked for this date, so the server's own clock, resolved in
+    #: this zone, is the single source of truth for it.
+    APP_TIMEZONE: str = "Europe/Istanbul"
+
     # Database Configuration
     #: The app's own runtime connection. From Faz 3 (Postgres RLS) onward
     #: this is expected to be a restricted, non-owner role (``kachow_app`` --
