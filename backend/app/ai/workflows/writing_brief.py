@@ -21,11 +21,16 @@ shape as ``app.ai.workflows.correspondence``: a resolver
 Every resolver call lands in one of three tiers, not two:
 
 * **Confident** -- a strong, specific signal (an explicit "X ekibi olarak",
-  a document's own header field). Never asked about at all.
+  a document's own header field, or -- for ``muhatap`` -- a single named
+  addressee said in the same breath as an actual drafting verb, e.g.
+  "Ahmet Yılmaz'a bir izin yazısı hazırla"; see ``_resolve_muhatap``'s own
+  docstring). Never asked about at all.
 * **Suggested** -- a weaker signal (a bare capitalized phrase, an inferred
-  hierarchy guess) worth surfacing, but not worth silently trusting. Still
-  asked about, but the guess rides along as the question's first option,
-  labelled "(Önerilen)" -- a click confirms it instead of retyping it.
+  hierarchy guess, more than one named candidate) worth surfacing, but not
+  worth silently trusting. Still asked about, but the guess rides along as
+  the question's first option, labelled "(Önerilen)", and the question
+  itself is phrased as an explicit confirmation ("Önerilen muhatap: X. Bu
+  doğru mu?") -- a click confirms it instead of retyping it.
 * **Unknown** -- nothing to go on. Asked plainly, no option pre-favoured.
 
 Only the confident tier ever suppresses a question; a suggestion never
@@ -101,10 +106,17 @@ class BriefSlotSpec:
         A suggestion whose value matches one of this slot's own catalog
         options (e.g. ``kapanis``'s "arz_ederim") promotes that option to
         the front and marks it recommended, rather than duplicating it. A
-        suggestion with no catalog match (a guessed name/institution) is
-        prepended as its own synthetic option instead.
+        suggestion with no catalog match (a guessed name/institution --
+        always ``yazan_taraf``/``muhatap``, the only slots with no fixed
+        options at all) is prepended as its own synthetic option instead,
+        and the question itself is rewritten as an explicit yes/no
+        confirmation ("Önerilen muhatap: Ahmet Yılmaz. Bu doğru mu?")
+        rather than the slot's own generic phrasing ("Yazı kime
+        gönderilecek?") -- a click on the recommended option should read as
+        confirming a specific guess, not answering an open question blind.
         """
         options = list(self.options)
+        question_text = self.question
         if suggestion is not None:
             matched_index = next(
                 (index for index, option in enumerate(options) if option.value == suggestion.value),
@@ -125,13 +137,22 @@ class BriefSlotSpec:
                     description="Sistemin önerisi",
                 )
                 options = [recommended, *options]
+                # Only for the no-catalog slots (see this method's own
+                # docstring) -- a catalog slot's question ("Kapanış ifadesi
+                # ne olsun?") already reads fine with a recommended option
+                # promoted to the front; it does not name a guessed value
+                # that needs confirming the way a bare name/institution does.
+                question_text = (
+                    f"Önerilen {self.header.lower()}: "
+                    f"{suggestion.label or suggestion.value}. Bu doğru mu?"
+                )
         # Always present, even for a slot with no catalog options
         # (yazan_taraf/muhatap) -- every slot offers "Sen karar ver".
         options = [*options, _AUTO_OPTION]
 
         return {
             "key": self.key,
-            "question": self.question,
+            "question": question_text,
             "header": self.header,
             "help": "",
             "example": suggestion.value if suggestion is not None and not self.options else None,
@@ -312,13 +333,74 @@ _INSTITUTION_VOCABULARY: dict[str, str] = {
     "tubitak": "TÜBİTAK",
 }
 
-#: Suggested only: a capitalized proper noun in the Turkish dative case,
-#: apostrophe-marked ("TEKNOFEST'e", "KACMAK'a") -- the orthographic
+#: A capitalized proper noun in the Turkish dative case, apostrophe-marked
+#: ("TEKNOFEST'e", "KACMAK'a", "Ahmet Yılmaz'a") -- the orthographic
 #: convention for a proper noun taking a case suffix, and a reasonable
-#: (not certain) signal that this is who the letter is addressed to.
-_MUHATAP_WEAK_PATTERN = re.compile(
+#: signal that this is who the letter is addressed to.
+_MUHATAP_DATIVE_APOSTROPHE_PATTERN = re.compile(
     rf"((?:{_NAME_TOKEN}\s+){{0,2}}{_NAME_TOKEN})'(?:e|a|ye|ya|ne|na)\b"
 )
+
+#: Same case, without the apostrophe -- a name/institution written the way
+#: most people actually type it ("Ahmet Yılmaza", "İnsan Kaynakları
+#: Müdürlüğüne"), not the orthographically "correct" apostrophe-marked
+#: form. Longest suffix first so "-ne"/"-ya" aren't shadowed by their own
+#: trailing "-e"/"-a".
+#:
+#: Deliberately stops at the two-letter buffer+case forms ("ne"/"na"/"ye"/
+#: "ya") rather than also matching the three-letter "üne"/"ına"/"ine"/"una"
+#: forms a buffer-consonant analysis would suggest: a Turkish institution
+#: name overwhelmingly already ends in its own possessive vowel before the
+#: dative attaches ("Müdürlüğü" + "ne" -> "Müdürlüğüne", "Fakültesi" + "ne"
+#: -> "Fakültesine") -- stripping the matching two-letter suffix recovers
+#: the exact base in that (dominant, in this domain) case. Stripping a
+#: three-letter suffix instead would eat into that base vowel too
+#: ("Müdürlüğüne" -> "Müdürlüğ", not a word). The trade-off is a stem that
+#: itself ends in a bare consonant before an inserted buffer vowel (e.g.
+#: "ev" + "ine" -> "evine") comes back one letter too long ("evi", not
+#: "ev") -- an acceptable miss for a suggestion-tier heuristic, and not the
+#: shape a person/institution name in this domain takes.
+_DATIVE_SUFFIXES: tuple[str, ...] = ("ya", "ye", "na", "ne", "a", "e")
+_MUHATAP_DATIVE_BARE_PATTERN = re.compile(
+    rf"((?:{_NAME_TOKEN}\s+){{0,2}}{_NAME_TOKEN}(?:{'|'.join(_DATIVE_SUFFIXES)}))\b"
+)
+
+#: "Sayın X" -- an explicit salutation naming the addressee outright, the
+#: same convention a real official letter's own muhatap line uses.
+_MUHATAP_SAYIN_PATTERN = re.compile(
+    rf"\bSay[ıi]n\s+((?:{_NAME_TOKEN}\s+){{0,3}}{_NAME_TOKEN})"
+)
+
+#: "X Bey'e" / "X Hanım'a" -- name plus Turkish honorific plus dative.
+#: Captures the honorific too (kept in the display value on purpose, e.g.
+#: "Ahmet Bey" -- dropping it would silently downgrade a respectful
+#: address the user chose deliberately).
+_MUHATAP_HONORIFIC_PATTERN = re.compile(
+    rf"((?:{_NAME_TOKEN}\s+){{0,2}}{_NAME_TOKEN}\s+(?:Bey|Hanım))'(?:e|ne)\b"
+)
+
+#: "X için" -- "(a letter/petition) for X" -- a common way to name who a
+#: piece of correspondence concerns without any case marking at all.
+_MUHATAP_ICIN_PATTERN = re.compile(
+    rf"((?:{_NAME_TOKEN}\s+){{0,3}}{_NAME_TOKEN})\s+i[cç]in\b"
+)
+
+#: Strips a leading "Sayın " from a candidate value -- "Sayın" itself is a
+#: capitalized token and satisfies `_NAME_TOKEN`, so a pattern with no
+#: reason to exclude it (`_MUHATAP_ICIN_PATTERN` in particular: "Sayın
+#: Ahmet Yılmaz için" reads as one long name-token run ending in "için")
+#: would otherwise capture "Sayın Ahmet Yılmaz" as a *different* candidate
+#: string than `_MUHATAP_SAYIN_PATTERN`'s own "Ahmet Yılmaz" -- two
+#: distinct-looking candidates for what is obviously the same person,
+#: which would wrongly downgrade a single-name mention to "ambiguous".
+_LEADING_SAYIN_PATTERN = re.compile(r"^Say[ıi]n\s+", re.IGNORECASE)
+
+#: A drafting-request verb stem -- corroborates a single muhatap candidate
+#: as confident (see `_resolve_muhatap`): "Ahmet Yılmaz'a bir izin yazısı
+#: hazırla" names its addressee unambiguously enough that asking "kime
+#: gönderilecek?" back would be redundant, the same way an explicit
+#: "X ekibi olarak" already skips asking about yazan_taraf.
+_WRITING_VERB_PATTERN = re.compile(r"\b(yaz|hazirla|olustur)\w*\b")
 
 #: Institution keywords that usually sit above the sender in the
 #: correspondence hierarchy -- back a weak "Arz ederim" guess for
@@ -364,6 +446,93 @@ def _resolve_yazan_taraf(
     return None
 
 
+def _strip_dative_suffix(phrase: str) -> str:
+    """Drop a recognised dative suffix from a matched phrase's last token.
+
+    Only ``_MUHATAP_DATIVE_BARE_PATTERN`` needs this -- every other muhatap
+    pattern captures the name without its case ending to begin with (the
+    apostrophe/honorific patterns exclude it from the capture group by
+    construction, and "Sayın X"/"X için" carry no case suffix at all).
+
+    Args:
+        phrase: The full matched phrase, e.g. "Ahmet Yılmaza" or
+            "İnsan Kaynakları Müdürlüğüne".
+
+    Returns:
+        The phrase with its last token's suffix removed, e.g.
+        "Ahmet Yılmaz" / "İnsan Kaynakları Müdürlüğü". Falls back to the
+        input unchanged if no listed suffix actually matches (defensive;
+        the pattern that produced ``phrase`` already guarantees one does).
+    """
+    words = phrase.rsplit(" ", 1)
+    last = words[-1]
+    for suffix in _DATIVE_SUFFIXES:
+        if last.lower().endswith(suffix) and len(last) > len(suffix) + 1:
+            words[-1] = last[: -len(suffix)]
+            return " ".join(words)
+    return phrase
+
+
+def _muhatap_candidates(evidence: BriefEvidence) -> list[str]:
+    """Every plausible addressee phrase the user's own text names.
+
+    Order matters only for which candidate is offered as the suggestion
+    when there is more than one (the first found); the *count* is what
+    decides confidence in ``_resolve_muhatap`` -- a single candidate
+    corroborated by a drafting verb is confident, anything else (zero
+    candidates aside) is a suggestion to confirm.
+
+    Args:
+        evidence: This turn's resolved input.
+
+    Returns:
+        Distinct candidate phrases (deduplicated by folded form), in the
+        order their patterns were tried.
+    """
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    def _add(raw: str) -> None:
+        value = _LEADING_SAYIN_PATTERN.sub("", raw.strip(" ,.-")).strip()
+        if not value:
+            return
+        folded = normalize(value)
+        if folded in seen:
+            return
+        seen.add(folded)
+        candidates.append(value)
+
+    for match in _MUHATAP_SAYIN_PATTERN.finditer(evidence.raw_text):
+        _add(match.group(1))
+    for match in _MUHATAP_HONORIFIC_PATTERN.finditer(evidence.raw_text):
+        _add(match.group(1))
+    for match in _MUHATAP_DATIVE_APOSTROPHE_PATTERN.finditer(evidence.raw_text):
+        _add(match.group(1))
+    for match in _MUHATAP_DATIVE_BARE_PATTERN.finditer(evidence.raw_text):
+        phrase = match.group(1)
+        # A *single* capitalized word at the very start of the message is
+        # not a reliable name signal -- with no apostrophe, honorific or
+        # "Sayın" to disambiguate it, an ordinary sentence-opener that
+        # happens to end in a dative-shaped suffix ("Yarışmaya katılmak
+        # için...") reads exactly like a genuine bare-dative name
+        # otherwise (see `test_a_dative_marked_proper_noun_suggests_the_
+        # addressee`'s own note on this same sharp edge for the
+        # apostrophe form). A *multi*-word capitalized run in the same
+        # position ("Ahmet Yılmaza bir izin yazısı hazırla", "İnsan
+        # Kaynakları Müdürlüğüne...") doesn't share that risk -- two or
+        # three ordinary words capitalized back to back for no reason is
+        # not something Turkish sentences do, position or not -- so only
+        # the single-token case is excluded here.
+        is_sentence_initial = not evidence.raw_text[: match.start()].strip()
+        if is_sentence_initial and len(phrase.split()) == 1:
+            continue
+        _add(_strip_dative_suffix(phrase))
+    for match in _MUHATAP_ICIN_PATTERN.finditer(evidence.raw_text):
+        _add(match.group(1))
+
+    return candidates
+
+
 def _resolve_muhatap(
     evidence: BriefEvidence, known: dict[str, SlotResolution]
 ) -> Optional[SlotResolution]:
@@ -375,12 +544,21 @@ def _resolve_muhatap(
     for surface, label in _INSTITUTION_VOCABULARY.items():
         if re.search(rf"\b{re.escape(surface)}\w*\b", evidence.normalized_text):
             return SlotResolution(value=label, source="user_text", label=label)
-    weak_match = _MUHATAP_WEAK_PATTERN.search(evidence.raw_text)
-    if weak_match:
-        value = weak_match.group(1).strip(" ,.-")
-        if value:
-            return SlotResolution(value=value, source="user_text", label=value, confident=False)
-    return None
+
+    candidates = _muhatap_candidates(evidence)
+    if not candidates:
+        return None
+
+    value = candidates[0]
+    # A single named candidate, said in the same breath as an actual
+    # drafting request ("Ahmet Yılmaz'a bir izin yazısı hazırla"), is
+    # unambiguous enough to skip the question entirely -- see
+    # _WRITING_VERB_PATTERN's own docstring. More than one candidate (the
+    # message names two people/institutions) or no drafting verb at all
+    # (a passing mention, not clearly a request) stays a suggestion.
+    if len(candidates) == 1 and _WRITING_VERB_PATTERN.search(evidence.normalized_text):
+        return SlotResolution(value=value, source="user_text", label=value)
+    return SlotResolution(value=value, source="user_text", label=value, confident=False)
 
 
 def _resolve_anlatim(
