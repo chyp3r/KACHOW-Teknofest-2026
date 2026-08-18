@@ -123,6 +123,14 @@ RULES: dict[str, ConfidenceRule] = {
         # Zero-penalty by design -- see module docstring.
         ConfidenceRule("yargic_kritik_bulgu", "Kalite yargıcı: kritik bulgu", "butunluk", 0.0),
         ConfidenceRule("talebi_karsilamiyor", "Kalite yargıcı: talebi karşılamıyor", "butunluk", 0.0),
+        # Same zero-penalty-by-design reasoning: a company rule violation
+        # (app.ai.adapters.company_rules) gates approval and drives the
+        # repair loop through its own JudgeFinding(kind="kurum_kurali")
+        # entries (see llm_judge.REVISABLE_JUDGE_KINDS); this rule exists
+        # only so the violation also lands in the auditable applied_rules
+        # breakdown, even on the rare turn the judge reports
+        # violated_rule_ids without a matching structured finding.
+        ConfidenceRule("sirket_kurali_ihlali", "Şirket kuralı ihlali", "butunluk", 0.0),
     )
 }
 

@@ -54,7 +54,12 @@ logger = logging.getLogger(__name__)
 #: but are deliberately excluded here -- a rewrite cannot fix a bad citation
 #: match without a new retrieval, and "make it more consistent" is too vague
 #: a revision instruction to hand a 9B model without risking overcorrection.
-REVISABLE_JUDGE_KINDS = frozenset({"kapanis", "uslup", "talep", "muhatap"})
+#: "kurum_kurali" (a company's own mandatory drafting rule, see
+#: app.ai.adapters.company_rules) is included -- unlike mevzuat/tutarlilik,
+#: a rule violation is exactly the kind of targeted, textual defect a repair
+#: pass can fix (e.g. "kapanışı 'Arz ederim' yap"), the same shape as the
+#: existing kapanis/uslup findings.
+REVISABLE_JUDGE_KINDS = frozenset({"kapanis", "uslup", "talep", "muhatap", "kurum_kurali"})
 
 #: Above this fraction of a judge verdict's own tokens appearing in the draft,
 #: treat the verdict as an echo of the draft rather than a judgement of it.
@@ -64,7 +69,9 @@ _ECHO_OVERLAP_THRESHOLD = get_policy().verification.judge_echo_overlap_threshold
 class JudgeFinding(BaseModel):
     """A single concrete defect the judge found, with a specific fix."""
 
-    kind: Literal["hitap", "kapanis", "talep", "uslup", "muhatap", "mevzuat", "tutarlilik"]
+    kind: Literal[
+        "hitap", "kapanis", "talep", "uslup", "muhatap", "mevzuat", "tutarlilik", "kurum_kurali"
+    ]
     severity: Literal["critical", "major", "minor"]
     detail: str = Field(max_length=200)
     suggested_fix: str = Field(max_length=200)
@@ -85,6 +92,18 @@ class DraftJudgeVerdict(BaseModel):
     )
     muhatap_consistent: bool = Field(
         description="Başlık, gövde hitabı ve kapanış yönü birbiriyle tutarlı mı."
+    )
+    company_rules_ok: bool = Field(
+        default=True,
+        description=(
+            "Taslak, verilen şirket kurallarının tamamına uyuyor mu. Kural "
+            "verilmemişse true."
+        ),
+    )
+    violated_rule_ids: list[str] = Field(
+        default_factory=list,
+        max_length=10,
+        description="İhlal edilen kuralların kimlikleri (örn. ['K2', 'K5']).",
     )
     score: float = Field(ge=0.0, le=100.0)
     findings: list[JudgeFinding] = Field(default_factory=list, max_length=5)
@@ -153,6 +172,7 @@ async def judge_draft(
     instructions: str,
     timeout_s: float | None = None,
     sub_genre: str = "",
+    company_rules_block: str = "",
 ) -> DraftJudgeVerdict | None:
     """Ask the fast-tier judge to assess a draft. Never raises.
 
@@ -166,6 +186,11 @@ async def judge_draft(
         sub_genre: Free-text genre label ("itiraz dilekçesi") when the draft
             targets a specific genre outside the four spec'd types -- see
             ``app.ai.workflows.correspondence.format_correspondence_profile``.
+        company_rules_block: The requesting company's mandatory rules,
+            already rendered (see
+            ``app.ai.adapters.injection.format_rules_block``). Empty when
+            no rules are configured -- ``judge.md``'s own criterion 5 skips
+            itself in that case.
 
     Returns:
         The verdict, or ``None`` on timeout, a schema failure, a provider
@@ -180,6 +205,8 @@ async def judge_draft(
         f"{format_correspondence_profile(correspondence_type, sub_genre)}\n\n"
         "### KULLANICI TALİMATLARI:\n"
         f"{instructions or '(talimat verilmedi)'}\n\n"
+        "### ŞİRKET KURALLARI:\n"
+        f"{company_rules_block or '(kural verilmedi)'}\n\n"
         "### DEĞERLENDİRİLECEK TASLAK:\n"
         f"{draft}"
     )
@@ -333,6 +360,13 @@ def merge_verdicts(
                         suggested_fix=finding.suggested_fix,
                     )
                 )
+        if not verdict.company_rules_ok and verdict.violated_rule_ids:
+            additional_findings.append(
+                RuleFinding(
+                    rule_id="sirket_kurali_ihlali",
+                    detail=", ".join(verdict.violated_rule_ids),
+                )
+            )
         if not verdict.addresses_request:
             additional_findings.append(RuleFinding(rule_id="talebi_karsilamiyor"))
             repair_items.append(

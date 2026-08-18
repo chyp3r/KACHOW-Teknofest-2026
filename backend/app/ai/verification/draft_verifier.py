@@ -21,7 +21,7 @@ import logging
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Sequence
 
 from pydantic import BaseModel, Field
 
@@ -514,6 +514,7 @@ def verify_draft(
     style_examples: list[str] | None = None,
     is_individual_petition: bool = False,
     today: str = "",
+    trusted_facts: Sequence[str] = (),
 ) -> VerificationReport:
     """Verify a draft's groundedness and structural completeness.
 
@@ -558,6 +559,15 @@ def verify_draft(
             forced into a repair loop trying to add institutional scaffolding
             it should never have) for lacking a case number only the
             receiving institution assigns.
+        trusted_facts: Values legitimately injected by the system rather
+            than extracted from source_document/context -- today's own
+            company identity fields (display name, letterhead, default
+            signer title; see ``app.ai.identity.company_profile.
+            CompanyProfile`` and ``draft_graph._build_brief``'s "KURUM
+            KİMLİĞİ" section). Folded into the grounding haystack exactly
+            like ``today`` is: without this, a company's own name would be
+            flagged as an unsupported claim on every single draft that uses
+            it.
 
     Returns:
         The verification report.
@@ -573,7 +583,7 @@ def verify_draft(
     # split out below via `instruction_only_claims` instead of being folded
     # in here, so its presence is visible to the caller rather than silently
     # indistinguishable from source/mevzuat grounding.
-    trusted: list[str] = [source_document, context, today]
+    trusted: list[str] = [source_document, context, today, *trusted_facts]
     if classification:
         trusted.append(_flatten_classification(classification))
 

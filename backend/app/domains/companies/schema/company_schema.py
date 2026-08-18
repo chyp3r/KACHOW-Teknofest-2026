@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -70,3 +70,68 @@ class CompanyAdapterResponse(BaseModel):
     avoided_patterns: List[str]
     trained_at: Optional[str] = None
     sample_count: int
+
+
+class CompanyProfileUpdate(BaseModel):
+    """Pydantic schema for setting a company's identity profile -- the
+    agent's own name and the company's letterhead/signer default a draft's
+    header/signature block falls back to when the writing brief leaves that
+    slot unspecified. Every field replaces the profile's current value.
+    """
+
+    display_name: str = Field(default="", max_length=200, description="Şirketin tam adı")
+    short_name: str = Field(default="", max_length=100, description="Şirketin kısa adı")
+    agent_name: str = Field(
+        default="", max_length=80, description="Asistanın kendini tanıtırken kullanacağı ad"
+    )
+    letterhead: str = Field(
+        default="", max_length=400, description="Taslakların kullanacağı T.C. kurum anteti"
+    )
+    default_signer_title: str = Field(
+        default="", max_length=100, description="Varsayılan imza unvanı (ör. 'Daire Başkanı')"
+    )
+
+
+class CompanyProfileResponse(BaseModel):
+    """Pydantic schema for one company's current identity profile --
+    mirrors ``app.ai.identity.company_profile.CompanyProfile`` field-for-field."""
+
+    company_id: str
+    version: int
+    display_name: str
+    short_name: str
+    agent_name: str
+    letterhead: str
+    default_signer_title: str
+    updated_at: Optional[str] = None
+
+
+class CompanyRuleItem(BaseModel):
+    """Pydantic schema for one mandatory/recommended drafting rule.
+
+    ``id`` is optional on write: leave it unset for a new rule (the server
+    assigns a stable ``Kx`` id) or supply the id an earlier read returned
+    to edit that same rule in place -- see
+    ``app.domains.companies.provider.set_company_rules``.
+    """
+
+    id: Optional[str] = Field(default=None, max_length=20)
+    text: str = Field(min_length=1, max_length=300)
+    severity: Literal["zorunlu", "onerilen"] = "zorunlu"
+    enabled: bool = True
+
+
+class CompanyRulesUpdate(BaseModel):
+    """Pydantic schema for replacing a company's full mandatory rule set."""
+
+    rules: List[CompanyRuleItem] = Field(default_factory=list, max_length=30)
+
+
+class CompanyRulesResponse(BaseModel):
+    """Pydantic schema for one company's current mandatory rule set --
+    mirrors ``app.ai.adapters.company_rules.CompanyRuleSet`` field-for-field."""
+
+    company_id: str
+    version: int
+    rules: List[CompanyRuleItem]
+    updated_at: Optional[str] = None

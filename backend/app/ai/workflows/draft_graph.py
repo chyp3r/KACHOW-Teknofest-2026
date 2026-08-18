@@ -7,12 +7,15 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 
 from app.ai.adapters.company_adapter import AdapterProvider, CompanyAdapter
-from app.ai.adapters.injection import format_adapter_block
+from app.ai.adapters.company_rules import CompanyRuleSet, RulesProvider
+from app.ai.adapters.injection import format_adapter_block, format_rules_block
 from app.ai.agents.judge import JudgeAgent
 from app.ai.agents.reviser import ReviserAgent
 from app.ai.agents.writer import WriterAgent
 from app.ai.guardrails.injection import GuardrailViolation, assert_no_prompt_leak
 from app.ai.guardrails.pii import find_pii, redact_pii
+from app.ai.identity.company_profile import CompanyProfile, ProfileProvider
+from app.ai.identity.injection import format_identity_brief_section
 from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
 from app.ai.llms.base import BaseLLMClient
@@ -155,6 +158,20 @@ class DraftState(TypedDict, total=False):
     #: ``ornek_sizintisi`` leak check ``style_examples`` already goes
     #: through, without re-resolving it a second time.
     company_adapter: dict[str, Any]
+    #: The resolved mandatory rule set (``CompanyRuleSet.to_dict()``), set
+    #: once by ``writer_node`` on the first attempt and carried forward so
+    #: ``verify_node`` can render the same rules block for the judge without
+    #: re-resolving. Absent/empty behaves like no rules configured, never
+    #: an error.
+    company_rules: dict[str, Any]
+    #: The resolved identity profile (``CompanyProfile.to_dict()``), set
+    #: once by ``validate_input_node`` (its ``display_name``/``letterhead``/
+    #: ``default_signer_title`` are already baked into ``brief``'s own
+    #: "KURUM KİMLİĞİ" section there) and carried forward so ``verify_node``
+    #: can pass the same values to ``verify_draft`` as ``trusted_facts``
+    #: without re-resolving. Absent/empty behaves like no profile
+    #: configured, never an error.
+    company_profile: dict[str, Any]
     #: The attached document's storage path -- the same id
     #: ``app.ai.tools.document_tools``'s ``search_document`` tool scopes its
     #: own query to, via the ``document_qa`` Qdrant collection each chunk is
@@ -242,6 +259,7 @@ def _build_brief(
     instructions: str,
     writing_brief: dict[str, Any] | None = None,
     today: str = "",
+    profile: CompanyProfile | None = None,
 ) -> str:
     """Compose the grounding brief handed to the writer.
 
@@ -262,6 +280,12 @@ def _build_brief(
             "Tarih:" line must copy this verbatim rather than leave a
             placeholder or ask the human, since it is never missing
             information, only information nobody thought to hand it before.
+        profile: The requesting company's identity profile (see
+            ``app.ai.identity.company_profile.CompanyProfile``), or None.
+            Rendered as section 9 when non-empty (see
+            ``format_identity_brief_section``) -- a *default* header/signer
+            for the slots section 8's writing brief leaves unspecified, not
+            an override of it.
 
     Returns:
         The brief text.
@@ -307,10 +331,13 @@ def _build_brief(
         f"7. Kullanıcı Talebi ve Talimatlar: {instructions}\n"
         f"8. YAZIM BRİEFİ (İNSAN ONAYLI -- KAYNAK BİLGİ SAYILIR):\n"
         f"{format_writing_brief(writing_brief or {})}\n"
+        f"{format_identity_brief_section(profile) if profile is not None else ''}"
     )
 
 
-def _build_repair_prompt(state: DraftState, adapter_block: str = "") -> str:
+def _build_repair_prompt(
+    state: DraftState, adapter_block: str = "", rules_block: str = ""
+) -> str:
     """Compose the targeted repair prompt handed to the reviser.
 
     Sends the full brief rather than a defect-conditional slice of it. The
@@ -322,6 +349,15 @@ def _build_repair_prompt(state: DraftState, adapter_block: str = "") -> str:
     Args:
         state: Current draft state, expected to carry ``previous_draft`` and
             ``repair_items`` from the preceding verify/revise pass.
+        adapter_block: Rendered company style-preference block (see
+            ``format_adapter_block``), or "".
+        rules_block: Rendered company mandatory-rules block (see
+            ``format_rules_block``), or "" -- placed *before* the style
+            block, since a mandatory rule outranks a learned style
+            preference. A rule violation is exactly the kind of defect that
+            reaches this prompt as a numbered ``repair_items`` entry (see
+            ``llm_judge.REVISABLE_JUDGE_KINDS``), so it is also the
+            company-facts equivalent of ``adapter_block`` here.
 
     Returns:
         The repair prompt.
@@ -346,6 +382,7 @@ def _build_repair_prompt(state: DraftState, adapter_block: str = "") -> str:
         "Yalnızca listelenen kusurları düzelt. Başka hiçbir cümleyi değiştirme. "
         "`[...]` yer tutucularını olduğu gibi bırak."
         f"{_format_style_examples(state.get('style_examples'))}"
+        f"{rules_block}"
         f"{adapter_block}"
     )
 
@@ -448,6 +485,8 @@ def create_draft_graph(
     fast_llm_client: BaseLLMClient | None = None,
     example_retriever: ExampleRetriever | None = None,
     adapter_provider: AdapterProvider | None = None,
+    profile_provider: ProfileProvider | None = None,
+    rules_provider: RulesProvider | None = None,
     document_qa_retriever: HybridRetriever | None = None,
 ):
     """Create and compile the drafting workflow.
@@ -484,6 +523,20 @@ def create_draft_graph(
             ``create_routing_graph``, so this module never imports
             ``app.domains`` directly. None reproduces pre-feature behaviour
             exactly (no adapter block, ever).
+        profile_provider: Optional async callable resolving a company's
+            identity profile (see
+            ``app.domains.companies.provider.get_company_profile``) --
+            injected the same way ``adapter_provider`` is. None reproduces
+            pre-feature behaviour exactly (no "KURUM KİMLİĞİ" brief section,
+            ever).
+        rules_provider: Optional async callable resolving a company's
+            mandatory drafting rules (see
+            ``app.domains.companies.provider.get_company_rules``) --
+            injected the same way ``adapter_provider`` is. A violation is
+            fed to the judge (see ``judge_draft``'s ``company_rules_block``)
+            and, when found, becomes a numbered ``repair_items`` entry the
+            same ``verify -> revise`` loop already runs. None reproduces
+            pre-feature behaviour exactly (no rules block, ever).
         document_qa_retriever: Optional retriever over the attached
             document's own chunks (see ``retrieve_source_chunks_node``),
             targeting the same ``document_qa`` Qdrant collection
@@ -500,6 +553,20 @@ def create_draft_graph(
     # judge always uses the fast tier regardless of level -- only whether it
     # runs at all varies (see verify_node) -- so it stays a single instance.
     judge_agent = JudgeAgent(fast_llm_client or llm_client)
+
+    async def _resolve_profile(state: DraftState) -> CompanyProfile:
+        """This company's identity profile, or an empty one when no
+        ``profile_provider`` was configured, no ``company_id`` is on this
+        turn's state, or resolution itself fails -- mirrors
+        ``_resolve_adapter`` exactly."""
+        company_id = state.get("company_id") or ""
+        if not company_id or profile_provider is None:
+            return CompanyProfile.empty(company_id)
+        try:
+            return await profile_provider(company_id)
+        except Exception:
+            logger.warning("Company profile resolution failed for %s", company_id, exc_info=True)
+            return CompanyProfile.empty(company_id)
 
     async def validate_input_node(state: DraftState) -> dict[str, Any]:
         classification = state.get("classification") or {}
@@ -538,6 +605,7 @@ def create_draft_graph(
             }
 
         context = (state.get("context") or "").strip()
+        profile = await _resolve_profile(state)
         return {
             "source_document": source_document,
             "classification": classification,
@@ -552,7 +620,9 @@ def create_draft_graph(
                 instructions,
                 state.get("writing_brief"),
                 state.get("today", ""),
+                profile,
             ),
+            "company_profile": profile.to_dict(),
             "status": "IN_PROGRESS",
             "error": "",
             "attempts": state.get("attempts", 0),
@@ -768,6 +838,20 @@ def create_draft_graph(
             logger.warning("Company adapter resolution failed for %s", company_id, exc_info=True)
             return CompanyAdapter.empty(company_id)
 
+    async def _resolve_rules(state: DraftState) -> CompanyRuleSet:
+        """This company's mandatory drafting rules, or an empty set when no
+        ``rules_provider`` was configured, no ``company_id`` is on this
+        turn's state, or resolution itself fails -- mirrors
+        ``_resolve_adapter`` exactly."""
+        company_id = state.get("company_id") or ""
+        if not company_id or rules_provider is None:
+            return CompanyRuleSet.empty(company_id)
+        try:
+            return await rules_provider(company_id)
+        except Exception:
+            logger.warning("Company rules resolution failed for %s", company_id, exc_info=True)
+            return CompanyRuleSet.empty(company_id)
+
     async def writer_node(state: DraftState, config: RunnableConfig) -> dict[str, Any]:
         attempt_number = state.get("attempts", 0) + 1
         is_revision = bool(state.get("previous_draft"))
@@ -784,6 +868,8 @@ def create_draft_graph(
         # a revision attempt still needs it for its own repair prompt below.
         adapter = await _resolve_adapter(state)
         adapter_block = format_adapter_block(adapter)
+        company_ruleset = await _resolve_rules(state)
+        rules_block = format_rules_block(company_ruleset)
 
         if is_revision:
             logger.info("Running Reviser Node (attempt %d)...", attempt_number)
@@ -795,7 +881,7 @@ def create_draft_graph(
                 meta=meta,
             )
             agent = ReviserAgent(client)
-            prompt = _build_repair_prompt(state, adapter_block)
+            prompt = _build_repair_prompt(state, adapter_block, rules_block)
             temperature = 0.2
         else:
             logger.info("Running Writer Node...")
@@ -834,6 +920,7 @@ def create_draft_graph(
                 f"{format_correspondence_profile(state['correspondence_type'], state.get('correspondence_sub_genre', ''))}\n\n"
                 f"### KURALLAR:\n{rules}"
                 f"{_format_style_examples(state.get('style_examples'))}"
+                f"{rules_block}"
                 f"{adapter_block}"
             )
             agent = WriterAgent(client)
@@ -936,6 +1023,7 @@ def create_draft_graph(
                 "attempts": attempt_number,
                 "status": "IN_PROGRESS",
                 "company_adapter": adapter.to_dict(),
+                "company_rules": company_ruleset.to_dict(),
             }
         except TimeoutError:
             # Distinguished from a generic failure because str(TimeoutError())
@@ -1015,6 +1103,19 @@ def create_draft_graph(
         adapter = CompanyAdapter.from_dict(
             state.get("company_id") or "", state.get("company_adapter")
         )
+        profile = CompanyProfile.from_dict(
+            state.get("company_id") or "", state.get("company_profile")
+        )
+        trusted_facts = [
+            value
+            for value in (
+                profile.display_name,
+                profile.short_name,
+                profile.letterhead,
+                profile.default_signer_title,
+            )
+            if value
+        ]
         report = verify_draft(
             draft_text,
             source_document=state.get("source_document", ""),
@@ -1028,6 +1129,7 @@ def create_draft_graph(
             + list(adapter.preferred_examples),
             is_individual_petition="dilekçe" in sub_genre.lower(),
             today=state.get("today", ""),
+            trusted_facts=trusted_facts,
         )
 
         # None means the level has no opinion; defer to the global setting.
@@ -1055,6 +1157,9 @@ def create_draft_graph(
             # buys more wall clock overall and the judge is part of what it
             # buys. settings.DRAFT_JUDGE_TIMEOUT_SECONDS stays the single owner
             # of the base value -- it is a deployment knob, not a policy one.
+            company_ruleset = CompanyRuleSet.from_dict(
+                state.get("company_id") or "", state.get("company_rules")
+            )
             verdict = await judge_draft(
                 judge_agent,
                 draft=draft_text,
@@ -1063,6 +1168,7 @@ def create_draft_graph(
                 instructions=state.get("instructions", ""),
                 timeout_s=settings.DRAFT_JUDGE_TIMEOUT_SECONDS * preset.timeout_multiplier,
                 sub_genre=sub_genre,
+                company_rules_block=format_rules_block(company_ruleset),
             )
             if verdict is None:
                 await emit_node_error(
