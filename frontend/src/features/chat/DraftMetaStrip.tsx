@@ -76,7 +76,6 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
               {rule.label}
               {rule.occurrences > 1 ? ` (×${rule.occurrences})` : ""}
               {rule.penalty_applied > 0 ? ` — -${rule.penalty_applied} puan` : ""}
-              {rule.forces_approval ? " · insan onayı gerektirir" : ""}
             </p>
           ))}
         </details>
@@ -87,12 +86,11 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
           Önerilen birim: {routedUnit}
         </span>
       )}
-      {draft.requires_human_approval && !isRejected && (
-        <span className="draft-meta-chip draft-meta-warning">
-          <AlertCircle size={13} />
-          İnsan onayı gerekiyor
-          {draft.evaluation_notes ? `: ${draft.evaluation_notes}` : ""}
-        </span>
+      {draft.requires_human_approval && !isRejected && draft.evaluation_notes && (
+        <details className="message-logs draft-meta-rules">
+          <summary>Kontrol notları</summary>
+          <p>{draft.evaluation_notes}</p>
+        </details>
       )}
       {isRejected && (
         <span className="draft-meta-chip draft-meta-danger">
@@ -107,7 +105,7 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
           Revizyon turu sınırına ulaşıldı; bu son sürüm korundu.
         </span>
       )}
-      {hasScore && !draft.requires_human_approval && !isRejected && !isReviseExhausted && (
+      {hasScore && !isRejected && !isReviseExhausted && (
         <span className="draft-meta-chip draft-meta-success">
           <CheckCircle2 size={13} />
           Hazır

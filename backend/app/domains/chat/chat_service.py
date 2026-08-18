@@ -426,8 +426,9 @@ class ChatService:
             thread_id = (config.get("configurable") or {}).get("thread_id")
             raise AIException(
                 message=(
-                    "Bu oturum bir insan onayı veya eksik bilgi talebi bekliyor. "
-                    "Devam etmek için /chat/resume uç noktasını kullanın."
+                    "Bu oturumda yanıt bekleyen tamamlanmamış bir adım var (eksik bilgi "
+                    "talebi ya da bir onay adımı). Devam etmek için /chat/resume uç "
+                    "noktasını kullanın."
                 ),
                 details={"session_id": thread_id},
             )

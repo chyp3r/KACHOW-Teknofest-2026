@@ -202,7 +202,9 @@ export function DocumentAnalysisPanel({
               {SENSITIVITY_LABELS[analysis.guardrail.sensitivity_level]}
             </StatusBadge>
             {analysis.guardrail.requires_human_review && (
-              <Alert variant="error" icon={<ShieldAlert />}>Bu evrak insan incelemesi gerektiriyor.</Alert>
+              <Alert variant="error" icon={<ShieldAlert />}>
+                Bu belge, gizlilik derecesi nedeniyle sınırlı erişime tabi tutuldu.
+              </Alert>
             )}
             {analysis.guardrail.reasons.length > 0 && (
               <ul className="detail-list">

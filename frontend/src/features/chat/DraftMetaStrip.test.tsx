@@ -22,7 +22,7 @@ describe("DraftMetaStrip", () => {
     expect(screen.getByText("Hazır")).toBeInTheDocument();
   });
 
-  it("shows the approval note instead of the ready badge when approval is required", () => {
+  it("shows neutral review notes alongside the ready badge -- never an approval prompt", () => {
     render(
       <DraftMetaStrip
         details={{
@@ -36,10 +36,12 @@ describe("DraftMetaStrip", () => {
         }}
       />,
     );
-    expect(
-      screen.getByText(/İnsan onayı gerekiyor: Eksik yapısal unsurlar/),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Hazır")).not.toBeInTheDocument();
+    expect(screen.getByText("Kontrol notları")).toBeInTheDocument();
+    expect(screen.getByText("Eksik yapısal unsurlar: Kapanış ifadesi.")).toBeInTheDocument();
+    expect(screen.queryByText(/İnsan onayı/)).not.toBeInTheDocument();
+    // The draft still shipped -- there is no blocking approval gate, so the
+    // ready badge shows alongside the review notes, not instead of them.
+    expect(screen.getByText("Hazır")).toBeInTheDocument();
   });
 
   it("shows the applied-rules score breakdown when present", () => {

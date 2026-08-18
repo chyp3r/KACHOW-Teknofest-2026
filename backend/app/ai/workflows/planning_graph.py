@@ -1907,10 +1907,18 @@ def create_planning_graph(
         few dict lookups; living inside ``execute_step_node`` (which is where
         the draft step itself runs), resuming would replay the entire ~30s
         draft generation the executor already committed to state.
+
+        Only ever reached with a non-empty ``missing_information`` --
+        ``route_after_step``/``route_after_gate_revise`` no longer route
+        here for a merely low-scoring or guessed-type draft (see their own
+        notes). There is deliberately no "İnsan onayı gerekiyor" surface
+        anywhere in this system: a draft that is otherwise usable ships
+        directly, and the only thing ever asked of the user is which
+        specific field is missing.
         """
         draft_result = state.get("draft_result") or {}
         missing_information = draft_result.get("missing_information") or []
-        kind = "missing_information" if missing_information else "draft_approval"
+        kind = "missing_information"
 
         # Emit-boundary conversion to the canonical PromptQuestion shape --
         # InfoQuestion stays the internal type everywhere else (apply_answers
@@ -1957,8 +1965,8 @@ def create_planning_graph(
         await emit_node_start(
             config,
             "human_gate",
-            "İnsan Onayı",
-            "Devam etmek için insan onayı/eksik bilgi bekleniyor...",
+            "Eksik Bilgiler",
+            "Eksik alanlar için bilgi bekleniyor...",
         )
         await emit_interrupt(config, kind=kind, interrupt_id=interrupt_id, payload=payload)
         answer = interrupt(payload)
@@ -1966,7 +1974,7 @@ def create_planning_graph(
         # Execution only reaches here after Command(resume=...) -- the gate is
         # now resolved, whatever the human decided.
         await emit_node_end(
-            config, "human_gate", "İnsan Onayı", "İnsan yanıtı alındı, işleme devam ediliyor.", answer
+            config, "human_gate", "Eksik Bilgiler", "Yanıt alındı, işleme devam ediliyor.", answer
         )
 
         if kind == "missing_information":
@@ -1976,11 +1984,11 @@ def create_planning_graph(
                 # actual value -- apply_answers would otherwise substitute
                 # that free text verbatim into the placeholder it was
                 # answering, producing a nonsense draft (Görev 2's
-                # "revizyon ve bilgi karışıyor" bug). Reuses the exact same
-                # gate_revise machinery the draft_approval gate's "revizyon
-                # iste" already runs through -- route_after_gate only
-                # inspects draft_result["status"], not kind, so setting the
-                # same REVISE_REQUESTED status here is enough.
+                # "revizyon ve bilgi karışıyor" bug). Reuses the same
+                # gate_revise machinery route_after_gate already routes a
+                # REVISE_REQUESTED status through -- it only inspects
+                # draft_result["status"], not kind, so setting the same
+                # status here is enough.
                 note = (answer.get("instructions") or "").strip()
                 return {
                     "gate_revision_note": note,
@@ -2027,63 +2035,9 @@ def create_planning_graph(
             }
             return {"draft_result": updated}
 
-        # draft_approval
-        action = answer.get("action")
-        if action == "revise":
-            # Does NOT append to draft_result["instructions"] and does NOT
-            # set final_output -- the turn is not over. gate_revise_node
-            # (see route_after_gate) picks this note up and actually runs
-            # the revision in the same run, producing a real new draft
-            # before the gate is shown again. Previously this branch only
-            # tagged the status and ended the turn; the note was appended to
-            # "instructions" but nothing ever read it again (planning_node
-            # resets draft_result every turn, and REVISE_REQUESTED wasn't
-            # versionable), so "revizyon iste" silently discarded the draft
-            # and produced no revision at all.
-            note = (answer.get("instructions") or "").strip()
-            updates: dict[str, Any] = {
-                "gate_revision_note": note,
-                "draft_result": {**draft_result, "status": StepStatus.REVISE_REQUESTED},
-            }
-            # A resume may ask for a different reasoning level on the retry
-            # (e.g. escalate to "deep" after a "fast" draft was rejected).
-            # Omitted -> state's existing reasoning_level is left untouched.
-            if answer.get("reasoning_level"):
-                updates["reasoning_level"] = answer["reasoning_level"]
-            if state.get("gate_revision_count", 0) >= settings.HITL_MAX_GATE_REVISIONS:
-                # The round cap is already spent -- route_after_gate sends
-                # this straight to "end"/"focus" without ever visiting
-                # executor (unlike a clean approval, which loops back
-                # through it), so nothing else would compute final_output
-                # for this turn. draft_result["draft"] is unchanged by this
-                # branch, so this still reflects the last successful
-                # gate_revise round's real text, not a fresh attempt this
-                # click asked for but the cap won't allow.
-                updates["final_output"] = _compile_final_output(state, updates)
-            return updates
-
-        if action == "reject":
-            reason = (answer.get("reason") or answer.get("instructions") or "").strip()
-            updated = {
-                **draft_result,
-                "status": StepStatus.REJECTED,
-                "rejection_reason": reason,
-                "rejected_by": answer.get("user_id"),
-            }
-            updates = {"draft_result": updated}
-            updates["final_output"] = _compile_final_output(state, updates)
-            return updates
-
-        # Default: approve. Falls through to routing via route_after_gate.
-        updated = {
-            **draft_result,
-            "status": StepStatus.APPROVED,
-            "approved_by": answer.get("user_id"),
-        }
-        return {"draft_result": updated}
-
     async def gate_revise_node(state: PlanningState, config: RunnableConfig) -> dict[str, Any]:
-        """Actually perform the approval gate's "revizyon iste" request.
+        """Actually perform the missing-information gate's "revizyon iste"
+        escape hatch request.
 
         A separate node from ``human_gate_node`` for the same reason the
         interrupt lives in its own node at all: resuming replays
@@ -2160,9 +2114,8 @@ def create_planning_graph(
     async def transfer_gate_node(state: PlanningState, config: RunnableConfig) -> dict[str, Any]:
         """Pause the transfer flow for its human checkpoint(s).
 
-        Two distinct interrupt kinds share this one node, the same way
-        `human_gate_node` shares one node between `missing_information` and
-        `draft_approval`: `"needs_disambiguation"` (recipient resolution
+        Two distinct interrupt kinds share this one node:
+        `"needs_disambiguation"` (recipient resolution
         wasn't unique -- ask the human to pick, never the model) and
         `"needs_confirmation"` (the actual send). A disambiguation answer
         that resolves to a single recipient loops back through this same
@@ -2330,12 +2283,13 @@ def create_planning_graph(
         if has_checkpointer and state.get("_last_ran_step") in {"draft", "revise"}:
             draft_result = state.get("draft_result") or {}
             draft_status = draft_result.get("status")
+            # NEEDS_HUMAN_APPROVAL (a low verifier score, a guessed
+            # correspondence type, ...) deliberately does NOT pause the run
+            # here -- only a genuinely unfilled `[...]` field does (see
+            # human_gate_node's own docstring). The score/flag itself is
+            # still recorded on draft_result for scoring/audit; it just no
+            # longer blocks delivery on a human clicking "approve".
             if draft_status == StepStatus.NEEDS_INPUT:
-                return "human_gate"
-            if (
-                draft_status == StepStatus.NEEDS_HUMAN_APPROVAL
-                and settings.HITL_APPROVAL_GATE_ENABLED
-            ):
                 return "human_gate"
 
         return "end" if all_steps_settled(steps, state) else "continue"
@@ -2367,14 +2321,12 @@ def create_planning_graph(
             return "continue"
         if status == StepStatus.NEEDS_INPUT:
             return "human_gate"
-        # A conflict finding is never grounds for the gate on its own --
-        # app.ai.revision.conflict's audit_node already reports it as a
-        # non-blocking chat notice (applied_anyway is a hard invariant: the
-        # instruction was applied in full regardless). Only a genuine
-        # quality/PII/groundedness verdict from verify_node, reflected in
-        # `status` itself, opens the gate here.
-        if status == StepStatus.NEEDS_HUMAN_APPROVAL and settings.HITL_APPROVAL_GATE_ENABLED:
-            return "human_gate"
+        # NEEDS_HUMAN_APPROVAL never re-opens the gate here either -- see
+        # route_after_step's identical note. A conflict finding was never
+        # grounds for the gate on its own either: app.ai.revision.conflict's
+        # audit_node already reports it as a non-blocking chat notice
+        # (applied_anyway is a hard invariant: the instruction was applied
+        # in full regardless).
         return "continue"
 
     builder = StateGraph(PlanningState)
