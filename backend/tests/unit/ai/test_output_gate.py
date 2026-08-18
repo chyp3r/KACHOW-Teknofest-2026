@@ -7,7 +7,11 @@ from app.core.enums.sensitivity_level import SensitivityLevel
 
 
 def _sensitivity(level: SensitivityLevel, requires_review: bool) -> SensitivityAssessment:
-    return SensitivityAssessment(level=level, requires_review=requires_review)
+    # effective_level mirrors level here, same as a real assess() call for
+    # any explicitly-marked (non-UNMARKED) document -- see #214.
+    return SensitivityAssessment(
+        level=level, effective_level=level, requires_review=requires_review
+    )
 
 
 def _judge_verdict(**overrides) -> GuardrailJudgeVerdict:
