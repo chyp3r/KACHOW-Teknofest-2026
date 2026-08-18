@@ -4,6 +4,20 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 
+class DraftDestinationUpdateRequest(BaseModel):
+    """Override a draft version's routed unit -- see
+    `DraftService.update_destination`."""
+
+    destination: str = Field(
+        min_length=1,
+        max_length=200,
+        description=(
+            "Yeni birim adı. Şirketin tanımlı birimlerinden biri, ya da serbest metin "
+            "(eşleşen bir birim yoksa yalnızca isim olarak saklanır)."
+        ),
+    )
+
+
 class DraftResponse(BaseModel):
     """One persisted draft version (see `DraftModel`)."""
 

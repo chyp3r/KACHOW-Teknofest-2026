@@ -29,6 +29,16 @@ const analysis: DocumentAnalysis = {
 };
 
 describe("DocumentAnalysisPanel", () => {
+  it("renders the document summary", () => {
+    render(<DocumentAnalysisPanel analysis={analysis} />);
+    expect(screen.getByText("Özet")).toBeInTheDocument();
+  });
+
+  it("does not render a summary section when the summary is empty", () => {
+    render(<DocumentAnalysisPanel analysis={{ ...analysis, summary: "" }} />);
+    expect(screen.queryByText("Özet")).not.toBeInTheDocument();
+  });
+
   it("shows sensitivity and only the masked PII preview", () => {
     render(<DocumentAnalysisPanel analysis={analysis} />);
 
@@ -71,6 +81,55 @@ describe("DocumentAnalysisPanel", () => {
     );
   });
 
+  it("does not render the signature section when the field is absent", () => {
+    // `signature` is optional (see types/documents.ts) specifically so a
+    // pre-existing analysis object, like this suite's own base fixture,
+    // still type-checks and renders without it.
+    render(<DocumentAnalysisPanel analysis={analysis} />);
+    expect(screen.queryByText("İmza ve mühür")).not.toBeInTheDocument();
+  });
+
+  it("shows a signed badge and detected marks when signature is present", () => {
+    render(
+      <DocumentAnalysisPanel
+        analysis={{
+          ...analysis,
+          signature: {
+            is_signed: true,
+            has_stamp: true,
+            marks: [
+              { kind: "signature", page: 1, bbox: [10, 900, 200, 950], confidence: 0.8 },
+              { kind: "stamp", page: 1, bbox: [600, 100, 700, 200], confidence: 0.7 },
+            ],
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("İmza ve mühür"));
+
+    expect(screen.getByText("İmzalı")).toBeInTheDocument();
+    expect(screen.getByText("Mühür/damga")).toBeInTheDocument();
+  });
+
+  it("shows an unsigned badge and empty state when no marks were detected", () => {
+    render(
+      <DocumentAnalysisPanel
+        analysis={{
+          ...analysis,
+          signature: { is_signed: false, has_stamp: false, marks: [] },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("İmza ve mühür"));
+
+    expect(screen.getByText("İmza tespit edilmedi")).toBeInTheDocument();
+    expect(
+      screen.getByText("Sayfada imza, mühür veya el yazısı bölgesi tespit edilmedi."),
+    ).toBeInTheDocument();
+  });
+
   it("discards edits on cancel without calling onSave", () => {
     const onSave = vi.fn();
     render(<DocumentAnalysisPanel analysis={analysis} onSave={onSave} />);
@@ -81,5 +140,217 @@ describe("DocumentAnalysisPanel", () => {
 
     expect(onSave).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("Konu")).not.toBeInTheDocument();
+  });
+
+  it("does not render the detailed summary section when not wired", () => {
+    render(<DocumentAnalysisPanel analysis={analysis} />);
+    expect(screen.queryByText("Detaylı özet")).not.toBeInTheDocument();
+  });
+
+  it("offers a generate button when detailed_summary is absent", () => {
+    render(
+      <DocumentAnalysisPanel analysis={analysis} onGenerateDetailedSummary={vi.fn()} />,
+    );
+
+    fireEvent.click(screen.getByText("Detaylı özet"));
+
+    expect(
+      screen.getByRole("button", { name: "Detaylı özet oluştur" }),
+    ).toBeInTheDocument();
+  });
+
+  it("triggers generation and surfaces a failure without losing the short summary", async () => {
+    const onGenerateDetailedSummary = vi.fn().mockRejectedValue(new Error("zaman aşımı"));
+    render(
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        onGenerateDetailedSummary={onGenerateDetailedSummary}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Detaylı özet"));
+    fireEvent.click(screen.getByRole("button", { name: "Detaylı özet oluştur" }));
+
+    await waitFor(() => expect(onGenerateDetailedSummary).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText("zaman aşımı")).toBeInTheDocument());
+    // The short summary above must still be intact -- a detailed-summary
+    // failure is scoped to its own section, never the whole panel.
+    expect(screen.getByText("Özet")).toBeInTheDocument();
+  });
+
+  it("shows the detailed summary text instead of the button once generated", () => {
+    render(
+      <DocumentAnalysisPanel
+        analysis={{ ...analysis, detailed_summary: "Çok paragraflı ayrıntılı özet." }}
+        onGenerateDetailedSummary={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Detaylı özet"));
+
+    expect(screen.getByText("Çok paragraflı ayrıntılı özet.")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Detaylı özet oluştur" }),
+    ).not.toBeInTheDocument();
+  });
+
+  // ==========================================
+  // Belge metni (OCR/extraction text view + hand correction)
+  // ==========================================
+  const documentText = {
+    pages: ["Sayı : E-123", "İkinci sayfa metni"],
+    extracted_text: "Sayı : E-123\n\nİkinci sayfa metni",
+    page_count: 2,
+    extractor: "tesseract",
+    used_ocr: true,
+  };
+
+  it("does not render the Belge metni section when documentText is not wired", () => {
+    // Data-gated, like guardrail/signature above -- not capability-gated
+    // like Detaylı özet, since there is genuinely nothing to show without it.
+    render(<DocumentAnalysisPanel analysis={analysis} />);
+    expect(screen.queryByText("Belge metni")).not.toBeInTheDocument();
+  });
+
+  it("shows one read-only block per page and stays read-only without onSaveText", () => {
+    render(<DocumentAnalysisPanel analysis={analysis} documentText={documentText} />);
+
+    fireEvent.click(screen.getByText("Belge metni"));
+
+    expect(screen.getByText("Sayfa 1/2")).toBeInTheDocument();
+    expect(screen.getByText("Sayfa 2/2")).toBeInTheDocument();
+    expect(screen.getByText("Sayı : E-123")).toBeInTheDocument();
+    expect(screen.getByText("İkinci sayfa metni")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Düzenle", hidden: true }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("edits one page and saves all pages, including the unchanged one", async () => {
+    const onSaveText = vi.fn().mockResolvedValue(undefined);
+    render(
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        documentText={documentText}
+        onSaveText={onSaveText}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Belge metni"));
+    fireEvent.click(screen.getByRole("button", { name: "Düzenle" }));
+    fireEvent.change(screen.getByLabelText("Sayfa 2/2"), {
+      target: { value: "Düzeltilmiş ikinci sayfa" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+
+    await waitFor(() =>
+      expect(onSaveText).toHaveBeenCalledWith(["Sayı : E-123", "Düzeltilmiş ikinci sayfa"]),
+    );
+  });
+
+  it("keeps the text edit session open and shows the error on a rejected save", async () => {
+    const onSaveText = vi.fn().mockRejectedValue(new Error("Sayfa sayısı eşleşmiyor."));
+    render(
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        documentText={documentText}
+        onSaveText={onSaveText}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Belge metni"));
+    fireEvent.click(screen.getByRole("button", { name: "Düzenle" }));
+    fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+
+    await waitFor(() => expect(onSaveText).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByText("Sayfa sayısı eşleşmiyor.")).toBeInTheDocument(),
+    );
+    // Still in edit mode -- the textarea is still there.
+    expect(screen.getByLabelText("Sayfa 1/2")).toBeInTheDocument();
+  });
+
+  it("discards text edits on cancel without calling onSaveText", () => {
+    const onSaveText = vi.fn();
+    render(
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        documentText={documentText}
+        onSaveText={onSaveText}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Belge metni"));
+    fireEvent.click(screen.getByRole("button", { name: "Düzenle" }));
+    fireEvent.change(screen.getByLabelText("Sayfa 1/2"), {
+      target: { value: "Değişecek ama iptal edilecek" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Vazgeç" }));
+
+    expect(onSaveText).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Sayfa 1/2")).not.toBeInTheDocument();
+  });
+
+  it("closes an open text edit session when a different document is selected", () => {
+    const { rerender } = render(
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        documentText={documentText}
+        onSaveText={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Belge metni"));
+    fireEvent.click(screen.getByRole("button", { name: "Düzenle" }));
+    expect(screen.getByLabelText("Sayfa 1/2")).toBeInTheDocument();
+
+    rerender(
+      <DocumentAnalysisPanel
+        analysis={{ ...analysis, storage_path: "uploads/other.pdf" }}
+        documentText={documentText}
+        onSaveText={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Sayfa 1/2")).not.toBeInTheDocument();
+  });
+
+  it("does not offer Yeniden OCR without onReextract", () => {
+    render(<DocumentAnalysisPanel analysis={analysis} documentText={documentText} />);
+    fireEvent.click(screen.getByText("Belge metni"));
+    expect(
+      screen.queryByRole("button", { name: "Yeniden OCR" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("triggers onReextract when Yeniden OCR is clicked", () => {
+    const onReextract = vi.fn().mockResolvedValue(undefined);
+    render(
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        documentText={documentText}
+        onReextract={onReextract}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Belge metni"));
+    fireEvent.click(screen.getByRole("button", { name: "Yeniden OCR" }));
+
+    expect(onReextract).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables Yeniden OCR while a re-extraction is already pending", () => {
+    render(
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        documentText={documentText}
+        onReextract={vi.fn()}
+        reextracting
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Belge metni"));
+
+    expect(screen.getByRole("button", { name: "Yeniden OCR" })).toBeDisabled();
   });
 });

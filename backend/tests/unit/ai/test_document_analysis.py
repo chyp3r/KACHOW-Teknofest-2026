@@ -161,6 +161,65 @@ async def test_graph_reports_compliant_document(mock_classify):
 
 @pytest.mark.asyncio
 @patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_graph_flags_a_typed_name_with_no_detected_signature(mock_classify):
+    """End-to-end: detected_marks threaded through the graph's initial state
+    (see DocumentAnalysisState's own comment on why this isn't a separate
+    node/branch) reaches check_compliance_node and produces the advisory
+    "İmza görseli" finding -- the gap a typed imza_sahibi name alone hides."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "Tam evrak.", **COMPLETE_FIELDS.model_dump()
+    )
+
+    graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
+    result = await graph.ainvoke(
+        {
+            "input_text": OFFICIAL_LETTER_TEXT,
+            "detected_marks": [{"kind": "stamp", "page": 1, "bbox": (0, 0, 10, 10), "confidence": 0.6}],
+        }
+    )
+
+    assert result["compliance_status"] == ComplianceStatus.PARTIALLY_COMPLIANT.value
+    assert [item["key"] for item in result["missing_fields"]] == ["imza_gorseli"]
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_graph_reports_no_signature_gap_when_a_signature_mark_is_present(mock_classify):
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "Tam evrak.", **COMPLETE_FIELDS.model_dump()
+    )
+
+    graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
+    result = await graph.ainvoke(
+        {
+            "input_text": OFFICIAL_LETTER_TEXT,
+            "detected_marks": [{"kind": "signature", "page": 1, "bbox": (0, 0, 10, 10), "confidence": 0.6}],
+        }
+    )
+
+    assert result["compliance_status"] == ComplianceStatus.COMPLIANT.value
+    assert result["missing_fields"] == []
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_graph_without_detected_marks_key_does_not_flag_the_signature_gap(mock_classify):
+    """detected_marks entirely absent from the initial state (e.g. a
+    born-digital PDF, or the planning_graph.py cached-document re-invocation
+    that never threads it) must read as unknown, not unsigned."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "Tam evrak.", **COMPLETE_FIELDS.model_dump()
+    )
+
+    graph = create_document_analysis_graph(MagicMock(spec=BaseLLMClient))
+    result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    assert result["compliance_status"] == ComplianceStatus.COMPLIANT.value
+    assert result["missing_fields"] == []
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
 async def test_graph_passes_analysis_call_parameters(mock_classify):
     """Run-to-run reproducibility requires temperature 0, not the 0.7 default."""
     mock_classify.return_value = _merged(DocumentType.PETITION, "Dilekçe.")
@@ -279,23 +338,33 @@ async def test_missing_fields_is_identical_regardless_of_the_mevzuat_source(
 @patch("app.ai.workflows.document_analysis_graph.node_budget")
 @patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
 @patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
-async def test_suggestion_inner_budget_reads_reasoning_level_from_state_explicitly(
+async def test_inner_budgets_read_reasoning_level_from_state_explicitly(
     mock_classify, mock_suggest, mock_node_budget
 ):
-    """suggest_mevzuat_node's inner asyncio.wait_for bound and the outer
+    """suggest_mevzuat_node's inner asyncio.wait_for bound and its outer
     @node_timeout decorator must resolve a budget for the same node from the
     same state, or a fast run makes the inner bound (0.85x) exceed the outer
-    node_timeout (0.6x) and the degradation path below becomes unreachable.
-    Before the fix, the inner call site was `node_budget("suggest_mevzuat")`
-    -- the level argument omitted outright rather than read from state -- so
-    the two call sites agreed only by coincidence. DocumentAnalysisState
-    carries no reasoning_level field yet: LangGraph builds its channels from
-    the state schema and drops any input key the schema doesn't declare, so
+    node_timeout and the degradation path below becomes unreachable. Before
+    the fix, the inner call site was `node_budget("suggest_mevzuat")` -- the
+    level argument omitted outright rather than read from state -- so the
+    two call sites agreed only by coincidence. DocumentAnalysisState carries
+    no reasoning_level field yet: LangGraph builds its channels from the
+    state schema and drops any input key the schema doesn't declare, so
     state.get("reasoning_level") reads None today regardless of what
     ainvoke() is given. What this locks in is that the call site explicitly
     performs that lookup and passes it through -- two positional args, not
-    one -- so the day the field is added, the two stay coupled by
-    construction instead of by luck.
+    one -- so the day the field is added, it stays coupled by construction
+    instead of by luck.
+
+    Detailed summarization used to follow this exact inner-budget-share
+    pattern too (a second node_budget("summarize", ...) call site), but it
+    is no longer a graph node at all -- see create_document_analysis_graph's
+    own docstring for why -- so only suggest_mevzuat_node remains, the only
+    node that calls `node_budget` directly from
+    document_analysis_graph.py's own function bodies. @node_timeout's own
+    internal node_budget call lives in resilience.py, a different import
+    binding, and is not intercepted by this patch (see that decorator's own
+    module).
     """
     mock_classify.return_value = _merged(
         DocumentType.OFFICIAL_LETTER, "x", **COMPLETE_FIELDS.model_dump()
@@ -313,7 +382,8 @@ async def test_suggestion_inner_budget_reads_reasoning_level_from_state_explicit
     )
     await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
 
-    mock_node_budget.assert_called_once_with("suggest_mevzuat", None)
+    mock_node_budget.assert_any_call("suggest_mevzuat", None)
+    assert mock_node_budget.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -538,3 +608,9 @@ async def test_a_degraded_judge_call_leaves_the_deterministic_result_untouched(
     result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
 
     assert result["sensitivity_assessment"]["requires_review"] is False
+
+
+#: Moved to tests/unit/ai/test_summarization.py -- detailed summarization is
+#: no longer a graph node (see create_document_analysis_graph's own
+#: docstring for why), so those tests now call build_detailed_summary
+#: directly instead of driving a whole graph run.

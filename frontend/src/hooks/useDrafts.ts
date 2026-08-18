@@ -43,6 +43,23 @@ export function useDrafts(activeDraftId?: string) {
       void queryClient.invalidateQueries({ queryKey: ["drafts"] });
     },
   });
+  const updateDestinationMutation = useMutation({
+    mutationFn: ({ draftId, destination }: { draftId: string; destination: string }) =>
+      draftService.updateDestination(draftId, destination),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(queryKeys.draft(updated.id), updated);
+      queryClient.setQueryData<PaginatedResponse<PersistedDraft>>(
+        queryKeys.drafts(),
+        (current) =>
+          current
+            ? {
+                ...current,
+                items: current.items.map((item) => (item.id === updated.id ? updated : item)),
+              }
+            : current,
+      );
+    },
+  });
   const errorObject = listQuery.error ?? detailQuery.error ?? versionsQuery.error;
 
   return {
@@ -67,6 +84,10 @@ export function useDrafts(activeDraftId?: string) {
     deleting: removeMutation.isPending,
     deleteDraft: async (draftId: string) => {
       await removeMutation.mutateAsync(draftId);
+    },
+    updatingDestination: updateDestinationMutation.isPending,
+    updateDestination: async (draftId: string, destination: string) => {
+      await updateDestinationMutation.mutateAsync({ draftId, destination });
     },
   };
 }

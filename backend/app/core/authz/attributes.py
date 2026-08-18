@@ -85,6 +85,11 @@ class Action:
     DOCUMENT_UPDATE = "document:update"
     DOCUMENT_DELETE = "document:delete"
     DRAFT_READ = "draft:read"
+    #: A draft's own routed unit only, today (see `drafts/router.py`'s
+    #: `PATCH /{draft_id}/destination`) -- the content itself is
+    #: append-only (a new version, never an edit-in-place), so this never
+    #: needs to widen beyond that one mutable field.
+    DRAFT_UPDATE = "draft:update"
     DRAFT_DELETE = "draft:delete"
     DRAFT_SEND = "draft:send"
     #: Gates `ArtifactTransferService.execute` for *either* artifact kind
@@ -107,6 +112,7 @@ class Action:
         DOCUMENT_UPDATE,
         DOCUMENT_DELETE,
         DRAFT_READ,
+        DRAFT_UPDATE,
         DRAFT_DELETE,
         DRAFT_SEND,
         ARTIFACT_TRANSFER,

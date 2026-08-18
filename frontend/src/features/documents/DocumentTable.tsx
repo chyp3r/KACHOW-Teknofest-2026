@@ -6,7 +6,7 @@ import {
 import { useMemo, useState } from "react";
 import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { EmptyState } from "../../components/EmptyState";
-import type { DocumentAnalysis, DocumentMetadata, EvrakFields } from "../../types/documents";
+import type { DocumentAnalysis, DocumentMetadata, DocumentText, EvrakFields } from "../../types/documents";
 import { DocumentAnalysisPanel } from "./DocumentAnalysisPanel";
 import { Button } from "../../components/Button";
 import { Input, Select } from "../../components/FormControls";
@@ -25,6 +25,13 @@ export function DocumentTable({
   onUpdateFields,
   onDeleteDocument,
   deletingDocument,
+  onGenerateDetailedSummary,
+  generatingDetailedSummary,
+  documentText,
+  onSaveText,
+  savingText,
+  onReextract,
+  reextracting,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
@@ -36,6 +43,13 @@ export function DocumentTable({
   onUpdateFields?: (storagePath: string, fields: EvrakFields) => Promise<void>;
   onDeleteDocument?: (storagePath: string) => Promise<void>;
   deletingDocument?: boolean;
+  onGenerateDetailedSummary?: (storagePath: string) => Promise<void>;
+  generatingDetailedSummary?: boolean;
+  documentText?: DocumentText | null;
+  onSaveText?: (storagePath: string, pages: string[]) => Promise<void>;
+  savingText?: boolean;
+  onReextract?: (storagePath: string) => Promise<void>;
+  reextracting?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
@@ -146,6 +160,25 @@ export function DocumentTable({
                         onSave={
                           onUpdateFields && analysis
                             ? (fields) => onUpdateFields(analysis.storage_path, fields)
+                            : undefined
+                        }
+                        generatingDetailedSummary={generatingDetailedSummary}
+                        onGenerateDetailedSummary={
+                          onGenerateDetailedSummary && analysis
+                            ? () => onGenerateDetailedSummary(analysis.storage_path)
+                            : undefined
+                        }
+                        documentText={documentText}
+                        savingText={savingText}
+                        onSaveText={
+                          onSaveText && analysis
+                            ? (pages) => onSaveText(analysis.storage_path, pages)
+                            : undefined
+                        }
+                        reextracting={reextracting}
+                        onReextract={
+                          onReextract && analysis
+                            ? () => onReextract(analysis.storage_path)
                             : undefined
                         }
                       />

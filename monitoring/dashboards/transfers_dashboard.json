@@ -1,0 +1,83 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Prometheus data source",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Transfer denemeleri (channel, result)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(kachow_artifact_transfers_total[1h])) by (channel, result)",
+          "legendFormat": "{{channel}} / {{result}}",
+          "refId": "A"
+        }
+      ],
+      "description": "Her ArtifactTransferService.execute() çağrısının sonucu -- success/denied/not_found, kanala göre (chat/ai/rest). İdempotent tekrar denemeler sayılmaz, bkz. app.observability.transfer_metrics.ARTIFACT_TRANSFERS'ın kendi belgesi."
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "title": "Transfer politikası redleri (reason)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(kachow_transfer_policy_denials_total[1h])) by (reason)",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "description": "TransferPolicy.evaluate red sebepleri: self_transfer, recipient_inactive, clearance, favorite_required (yalnızca AI kanalı)."
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "id": 3,
+      "title": "Başarılı transfer oranı (channel)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(kachow_artifact_transfers_total{result=\"success\"}[1h])) by (channel) / sum(rate(kachow_artifact_transfers_total[1h])) by (channel)",
+          "legendFormat": "{{channel}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "max": 1, "min": 0 },
+        "overrides": []
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["kachow", "transfers", "faz5"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "KACHOW - Artifact Transfer Metrikleri",
+  "uid": "kachow-transfer-metrics",
+  "version": 1,
+  "weekStart": ""
+}

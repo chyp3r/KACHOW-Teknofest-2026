@@ -7,7 +7,7 @@ import urllib.request
 from typing import Optional
 
 from app.core.config import settings
-from app.core.constants import OCR_RENDER_DPI
+from app.core.constants import HEADER_BAND_FRACTION, OCR_RENDER_DPI
 from app.infrastructure.extractors.base import (
     BaseDocumentExtractor,
     DocumentExtractionError,
@@ -15,6 +15,7 @@ from app.infrastructure.extractors.base import (
     has_pdf_magic_bytes,
     matches_extension,
 )
+from app.infrastructure.extractors.marks import detect_marks
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,11 @@ try:  # pragma: no cover - exercised via patching in tests
     import pypdfium2 as pdfium
 except ImportError:  # pragma: no cover
     pdfium = None
+
+try:  # pragma: no cover
+    from PIL import Image as _PILImage
+except ImportError:  # pragma: no cover
+    _PILImage = None
 
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "tif", "tiff", "bmp", "gif", "webp"}
 PDF_EXTENSIONS = {"pdf"}
@@ -82,7 +88,70 @@ class OllamaVisionExtractor(BaseDocumentExtractor):
     losses document by document -- noise at this sample size). They differ on
     whether the *value* is right, and there deepseek-ocr is decisively ahead:
     48 exact against 35. Same missing-field accuracy, far fewer wrong values, and
-    faster.
+    faster on the synthetic corpus above -- which decided the original default.
+
+    That synthetic corpus (12 documents, one degradation profile) did not hold up
+    against real scans. Re-measured on `scripts/evaluate_ocr_real.py`'s 19
+    hand-labelled real `CY-*.pdf` documents (76 fields, `datasets/resmi_yazisma/
+    ocr_ground_truth.json`), scored through the real production chain
+    (Tesseract + header-band repair), not raw full-page transcription:
+
+    ======================  ===========  ===========  =====
+    engine                  zincir bul.  zincir tam   süre
+    ======================  ===========  ===========  =====
+    tesseract               64/76        32/76         54s
+    deepseek-ocr (was)      65/76        42/76        730s
+    glm-ocr:latest (now)    67/76        50/76       1579s
+    ======================  ===========  ===========  =====
+
+    glm-ocr:latest recovers more fields and gets more of them exactly right --
+    roughly a 19% relative gain in exact match -- at roughly double the
+    wall-clock. That tradeoff was made deliberately in favour of accuracy: this
+    project's compliance checker reports a wrong value as if it were correct,
+    which is worse than reporting a field as missing.
+
+    This also settled a specific question raised during that investigation: a
+    torch/transformers deployment of the *same* GLM-OCR weights
+    (`zai-org/GLM-OCR`, see `scripts/ocr_sidecar.py`) does **not** beat this
+    Ollama-served version -- 46/76 exact against 50/76, after fixing a genuine
+    bug in the comparison harness (it fed the model an un-downscaled 300 DPI
+    page; capping input resolution -- see `ocr_sidecar.MAX_IMAGE_DIMENSION` --
+    fixed that and reversed an earlier, wrong "transformers is much faster"
+    reading, but did not close the accuracy gap). No transformers deployment
+    ships as a result: the Ollama-served model already wins.
+
+    A separate finding, after the table above shipped this model as default:
+    this extractor's *own* full-page transcription almost never ran in
+    production. `FallbackDocumentExtractor` returned on the first result
+    passing `char_count`/`quality_ratio` alone, and that document-wide
+    readability average cannot see header damage -- a real document scored
+    0.85 quality_ratio and 3316 characters while recovering **zero** of five
+    prescribed header fields. See `FallbackDocumentExtractor
+    ._has_enough_header_fields` for the field-aware acceptance criterion that
+    fixed this, and `is_scanned_text_layer` for the companion fix that widens
+    header-band repair to a scanner's own junk OCR text layer (previously
+    invisible to the `used_ocr` gate). Re-measured on the grown 23-document
+    ground truth (88 fields, 4 documents added specifically because they hit
+    this failure) with both fixes in place, scored through the real
+    production chain:
+
+    ======================  ===========  ===========  =======
+    engine                  zincir bul.  zincir tam    süre
+    ======================  ===========  ===========  =======
+    tesseract               74/88        36/88          71s
+    glm-ocr:latest          77/88        59/88        2110s
+    ======================  ===========  ===========  =======
+
+    The original 19-document/76-field subset holds exactly flat under both
+    engines (64/76 and 68/76 found, byte-identical to the table above) --
+    the new criterion changes nothing for a document that was already
+    correctly accepted. CY-034 specifically gained one exact match (0 -> 1)
+    from the markdown-heading strip in `OpenDataLoaderExtractor`. Of the 4
+    added documents, the worst case (CY-050: 0 of 3 recoverable fields under
+    the old rule, confirmed directly against the live cache before this fix)
+    now recovers all 3 under both engines' chains -- exactly the documents
+    the new criterion exists to catch escalated, and only those: 2 of the 23
+    documents triggered field-triggered escalation across the whole run.
     """
 
     name = "ollama_vision"
@@ -143,6 +212,17 @@ class OllamaVisionExtractor(BaseDocumentExtractor):
         try:
             if not is_pdf:
                 images = [content]
+                # Decoded only for mark detection below (see its own
+                # try/except) -- the transcription call above never needed a
+                # PIL object for this branch, so a decode failure here must
+                # not break transcription, which is why this is not folded
+                # into the same try/except as the rest of this method.
+                pil_pages = []
+                if _PILImage is not None:
+                    try:
+                        pil_pages = [await asyncio.to_thread(_PILImage.open, io.BytesIO(content))]
+                    except Exception:
+                        logger.warning("Could not decode image for mark detection.", exc_info=True)
             else:
                 if raster_cache is not None and self.dpi in raster_cache:
                     pil_pages = raster_cache[self.dpi]
@@ -185,13 +265,67 @@ class OllamaVisionExtractor(BaseDocumentExtractor):
             len(pages),
             len(text),
         )
+        # Best-effort, same rendered pages: detect_marks never raises (see
+        # its own docstring), so a detector bug here must never fail a
+        # transcription that otherwise succeeded.
+        mark_lists = await asyncio.gather(
+            *(
+                asyncio.to_thread(detect_marks, image, page_number)
+                for page_number, image in enumerate(pil_pages, start=1)
+            )
+        )
         return ExtractedDocument(
             text=text,
             pages=pages,
             page_count=len(pages),
             extractor=self.name,
             used_ocr=True,
+            detected_marks=[mark for marks in mark_lists for mark in marks],
         )
+
+    async def render_first_page(self, content: bytes) -> Optional["_PILImage.Image"]:
+        """Rasterise only page 1 of a PDF, for header-band repair's own use.
+
+        `_render_pages` renders every page and is used when a full OCR pass
+        is already under way; this exists for the opposite situation --
+        header repair needs page 1 of a result whose extractor never
+        rendered anything at all (a text-layer path, e.g. OpenDataLoader or
+        PdfiumExtractor reading a Class-A scanner text layer -- see
+        `FallbackDocumentExtractor.is_scanned_text_layer`). Rendering only
+        page 1 keeps this always-paid cost bounded to roughly one page
+        regardless of document length, since the repair only ever touches
+        the header band of the first page.
+
+        Args:
+            content: Raw PDF bytes.
+
+        Returns:
+            The rendered first page as a PIL image, or None when `content`
+            is not a renderable PDF (corrupt bytes, no pages, or pdfium
+            unavailable) -- callers must degrade to the original,
+            un-repaired text rather than raise.
+        """
+        if pdfium is None:
+            return None
+        try:
+            document = pdfium.PdfDocument(content)
+        except Exception:
+            return None
+
+        try:
+            if len(document) == 0:
+                return None
+            page = document[0]
+            try:
+                scale = self.dpi / PDF_POINTS_PER_INCH
+                bitmap = page.render(scale=scale)
+                return bitmap.to_pil()
+            finally:
+                page.close()
+        except Exception:
+            return None
+        finally:
+            document.close()
 
     def _render_pages(self, content: bytes) -> list:
         """Rasterise every page of a PDF to a PIL image, in document order.
@@ -280,3 +414,38 @@ class OllamaVisionExtractor(BaseDocumentExtractor):
         if mime_type and mime_type.startswith("image/"):
             return True
         return matches_extension(file_name, IMAGE_EXTENSIONS | PDF_EXTENSIONS)
+
+    async def transcribe_header_band(self, page_image) -> str:
+        """Transcribe just the header band of one already-rasterised page.
+
+        Used by `FallbackDocumentExtractor`'s header-repair step, not by this
+        class's own `extract()`. Crops the top `HEADER_BAND_FRACTION` of the
+        page and sends only that crop through the same model call a full-page
+        transcription uses -- a small crop costs a fraction of the time
+        (measured directly: ~12.6s, against ~26s for a full page on the same
+        model) for specifically the part of a scan this project's OCR chain
+        struggles with (letterhead emblems, handwritten annotations), without
+        paying that cost on the body text Tesseract already reads well.
+
+        Args:
+            page_image: A rasterised PIL page image, e.g. from `raster_cache`
+                (the same shape `TesseractExtractor` and this class's own
+                `extract()` share a cache entry for).
+
+        Returns:
+            The crop's transcription. May be empty on a genuine blank header;
+            callers should treat that the same as any other best-effort
+            failure, not retry.
+
+        Raises:
+            DocumentExtractionError: If the model call itself fails.
+        """
+        width, height = page_image.size
+        crop = page_image.crop((0, 0, width, int(height * HEADER_BAND_FRACTION)))
+        try:
+            encoded = await asyncio.to_thread(self._encode_png, [crop])
+            return await asyncio.to_thread(self._transcribe, encoded[0])
+        except Exception as exc:
+            raise DocumentExtractionError(
+                f"Görsel dil modeli ile başlık onarımı başarısız oldu: {exc}"
+            ) from exc

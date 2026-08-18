@@ -1,20 +1,28 @@
 import asyncio
+import json
 import logging
 import os
 from typing import Any, Optional
 from uuid import uuid4
 
+from app.ai.agents.summarizer import SummarizerAgent
 from app.ai.compliance.checker import check_required_fields
 from app.ai.compliance.evrak_field import EvrakField, MissingField
+from app.ai.compliance.field_parser import merge_parsed_over_model, parse_labelled_fields
 from app.ai.documents.anchors import build_page_map
 from app.ai.guardrails.file_integrity import check_file_integrity
 from app.ai.guardrails.injection import scrub_extracted_text
+from app.ai.guardrails.sensitivity import assess as assess_sensitivity
+from app.ai.summarization import build_detailed_summary
 from app.domains.documents.model.document_model import DocumentModel
 from app.domains.documents.repository import DocumentRepository
 from app.domains.pools.model.document_pool_item_model import DocumentPoolItemModel
 from app.domains.pools.repository import DocumentPoolItemRepository, DocumentPoolRepository
 from app.domains.quotas.service import DOCUMENTS_METRIC, QuotaService
+from app.domains.users.model.user_model import UserModel
 from app.api.exceptions.ai_error import AIException
+from app.api.exceptions.authorization import AuthorizationException
+from app.api.exceptions.not_found import NotFoundException
 from app.api.exceptions.validation import ValidationException
 from app.core.config import settings
 from app.core.constants import (
@@ -26,11 +34,14 @@ from app.core.enums.compliance_status import ComplianceStatus
 from app.core.enums.document_type import DocumentType
 from app.core.enums.sensitivity_level import SensitivityLevel
 from app.domains.documents.schema.document_schema import (
+    DetectedMarkSchema,
     DocumentAnalysisResponseSchema,
+    DocumentTextSchema,
     ExtractionInfoSchema,
     GuardrailAssessmentSchema,
     MevzuatReferenceSchema,
     PiiFindingSchema,
+    SignatureAssessmentSchema,
 )
 from app.events.event import DocumentAnalyzedEvent, DocumentUploadedEvent
 from app.events.event_bus import event_bus
@@ -38,6 +49,7 @@ from app.infrastructure.extractors.base import (
     BaseDocumentExtractor,
     DocumentExtractionError,
 )
+from app.infrastructure.extractors.vision import OllamaVisionExtractor
 from app.infrastructure.storage.base import BaseStorage
 from app.ai.embeddings.service import EmbeddingService
 from app.ai.embeddings.chunking.recursive import RecursiveChunker
@@ -75,6 +87,8 @@ class DocumentService:
         pool_repository: Optional[DocumentPoolRepository] = None,
         pool_item_repository: Optional[DocumentPoolItemRepository] = None,
         quota_service: Optional[QuotaService] = None,
+        summarizer_agent: Optional[SummarizerAgent] = None,
+        vision_extractor: Optional[OllamaVisionExtractor] = None,
     ) -> None:
         """Initialise the service with injected collaborators.
 
@@ -97,6 +111,21 @@ class DocumentService:
                 (see `app.domains.quotas`). Optional for the same reason as
                 above -- when absent, uploads are never quota-gated (every
                 pre-Faz-6 caller, and most unit tests).
+            summarizer_agent: Builds the on-demand detailed summary (see
+                `generate_detailed_summary`). Unlike `analysis_graph`, this
+                is not part of a LangGraph workflow -- `analyze_document`
+                never touches it, only `generate_detailed_summary` does.
+                Optional so tests exercising the rest of this service don't
+                need an LLM client; `generate_detailed_summary` itself
+                requires it (see that method's own docstring).
+            vision_extractor: Runs a full-page OCR pass directly, bypassing
+                `extractor` (the fallback chain) entirely -- see
+                `reextract_document_text`, the user's manual override for
+                when the chain's own automatic escalation rule (see
+                `FallbackDocumentExtractor._has_enough_header_fields`)
+                doesn't fire. Optional for the same reason
+                `summarizer_agent` is; only `reextract_document_text`
+                requires it.
         """
         self.storage = storage
         self.extractor = extractor
@@ -107,6 +136,8 @@ class DocumentService:
         self.pool_repository = pool_repository
         self.pool_item_repository = pool_item_repository
         self.quota_service = quota_service
+        self.summarizer_agent = summarizer_agent
+        self.vision_extractor = vision_extractor
 
     async def analyze_document(
         self,
@@ -157,9 +188,17 @@ class DocumentService:
         )
 
         try:
-            extracted = await self.extractor.extract(
-                content, file_name=file_name, mime_type=content_type
+            extracted = await asyncio.wait_for(
+                self.extractor.extract(
+                    content, file_name=file_name, mime_type=content_type
+                ),
+                timeout=settings.EXTRACTION_TIMEOUT_SECONDS,
             )
+        except asyncio.TimeoutError as exc:
+            raise ValidationException(
+                message="Belge metni çıkarma işlemi zaman aşımına uğradı.",
+                details={"timeout_seconds": settings.EXTRACTION_TIMEOUT_SECONDS},
+            ) from exc
         except DocumentExtractionError as exc:
             raise ValidationException(
                 message="Belgeden metin çıkarılamadı.", details={"reason": str(exc)}
@@ -197,7 +236,9 @@ class DocumentService:
                 },
             )
 
-        state = await self._run_analysis(extracted.text, extracted.used_ocr, owner_id, company_id)
+        state = await self._run_analysis(
+            extracted.text, extracted.used_ocr, extracted.detected_marks, owner_id, company_id
+        )
         response = self._assemble(file_name, storage_path, extracted, state, scrubbed_markers)
         await self._register_document(file_name, storage_path, owner_id, company_id, response)
         await self._save_document_analysis_cache(
@@ -446,6 +487,7 @@ class DocumentService:
         self,
         text: str,
         used_ocr: bool,
+        detected_marks: Optional[list[Any]] = None,
         owner_id: Optional[str] = None,
         company_id: Optional[str] = None,
     ) -> dict[str, Any]:
@@ -454,6 +496,12 @@ class DocumentService:
         Args:
             text: Extracted document text.
             used_ocr: Whether the text came from OCR.
+            detected_marks: Signature/stamp/handwriting regions already found
+                during extraction (``ExtractedDocument.detected_marks``).
+                ``None`` (not an empty list) when detection never ran at all
+                for this document -- ``check_compliance_node`` treats the two
+                differently (unknown vs. genuinely no marks found); see its
+                own comment and ``check_required_fields``'s docstring.
             owner_id, company_id: Attached as Langfuse trace metadata (see
                 ``_trace_config``) when known.
 
@@ -463,10 +511,16 @@ class DocumentService:
         Raises:
             AIException: If the workflow fails or exceeds the timeout.
         """
+        initial_state: dict[str, Any] = {"input_text": text, "is_ocr_text": used_ocr}
+        if detected_marks is not None:
+            initial_state["detected_marks"] = [
+                mark.model_dump() if hasattr(mark, "model_dump") else mark
+                for mark in detected_marks
+            ]
         try:
             return await asyncio.wait_for(
                 self.analysis_graph.ainvoke(
-                    {"input_text": text, "is_ocr_text": used_ocr},
+                    initial_state,
                     config=self._trace_config(owner_id, company_id),
                 ),
                 timeout=settings.AI_WORKFLOW_TIMEOUT_SECONDS,
@@ -574,11 +628,35 @@ class DocumentService:
             document_type=document_type,
             document_type_label=state.get("document_type_label", ""),
             summary=state.get("summary", ""),
+            # detailed_summary is never set here -- a freshly-assembled
+            # response comes straight from analyze_document, before anyone
+            # has asked for the detailed summary at all. It is added later,
+            # in place, by generate_detailed_summary's cache mutation (see
+            # that method's own docstring for why it runs on-demand rather
+            # than as a graph branch here).
             fields=EvrakField(**(state.get("fields") or {})),
             missing_fields=[
                 MissingField(**item) for item in state.get("missing_fields") or []
             ],
             compliance_status=compliance_status,
+            signature=SignatureAssessmentSchema(
+                # Built directly from `extracted`, not `state` -- detection
+                # already ran once during extraction (see
+                # app.infrastructure.extractors.marks.detect_marks); the
+                # graph only reads it (check_compliance_node), it never
+                # recomputes it. Same reasoning as `extraction=` above.
+                is_signed=any(mark.kind == "signature" for mark in extracted.detected_marks),
+                has_stamp=any(mark.kind == "stamp" for mark in extracted.detected_marks),
+                marks=[
+                    DetectedMarkSchema(
+                        kind=mark.kind,
+                        page=mark.page,
+                        bbox=mark.bbox,
+                        confidence=mark.confidence,
+                    )
+                    for mark in extracted.detected_marks
+                ],
+            ),
             mevzuat_references=[
                 MevzuatReferenceSchema(**item)
                 for item in state.get("mevzuat_suggestions") or []
@@ -735,6 +813,38 @@ class DocumentService:
         except Exception as e:
             logger.error(f"Failed to save document analysis cache: {e}")
 
+    async def _read_analysis_cache(self, storage_path: str) -> Optional[dict]:
+        """Read and JSON-parse the on-disk analysis cache file, if it exists.
+
+        Shared by every read-then-mutate method below (``get_cached_analysis``,
+        ``update_document_fields``, ``generate_detailed_summary``) -- each owns
+        a different slice of what happens after the read (a different field
+        gets mutated, a different re-save follows), but "does the cache file
+        exist, does it parse as JSON" was previously copy-pasted three times.
+
+        Args:
+            storage_path: The document's storage key.
+
+        Returns:
+            The parsed cache dict (with ``extracted_text``/``pages``/``analysis``
+            keys -- see ``_save_document_analysis_cache``), or None if no
+            cache file exists for ``storage_path`` or reading/parsing it
+            fails for any reason.
+        """
+        cache_file = os.path.join(settings.LOCAL_STORAGE_DIR, f"{storage_path}_analysis.json")
+
+        def _read():
+            if not os.path.exists(cache_file):
+                return None
+            with open(cache_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+
+        try:
+            return await asyncio.to_thread(_read)
+        except Exception:
+            logger.exception("Failed to read cached analysis for %s", storage_path)
+            return None
+
     async def get_cached_analysis(
         self, storage_path: str
     ) -> Optional[DocumentAnalysisResponseSchema]:
@@ -752,22 +862,7 @@ class DocumentService:
             The cached analysis response, or None if no cache exists for it
             or the cache fails to parse.
         """
-        import json
-        from app.core.config import settings
-
-        cache_file = os.path.join(settings.LOCAL_STORAGE_DIR, f"{storage_path}_analysis.json")
-
-        def _read():
-            if not os.path.exists(cache_file):
-                return None
-            with open(cache_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-
-        try:
-            cache_data = await asyncio.to_thread(_read)
-        except Exception:
-            logger.exception("Failed to read cached analysis for %s", storage_path)
-            return None
+        cache_data = await self._read_analysis_cache(storage_path)
 
         if not cache_data or not cache_data.get("analysis"):
             return None
@@ -805,22 +900,7 @@ class DocumentService:
             The updated analysis, or None if no cache exists for
             ``storage_path`` (or it fails to parse).
         """
-        import json
-        from app.core.config import settings
-
-        cache_file = os.path.join(settings.LOCAL_STORAGE_DIR, f"{storage_path}_analysis.json")
-
-        def _read():
-            if not os.path.exists(cache_file):
-                return None
-            with open(cache_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-
-        try:
-            cache_data = await asyncio.to_thread(_read)
-        except Exception:
-            logger.exception("Failed to read cached analysis for %s", storage_path)
-            return None
+        cache_data = await self._read_analysis_cache(storage_path)
 
         if not cache_data or not cache_data.get("analysis"):
             return None
@@ -847,6 +927,374 @@ class DocumentService:
             document = await self.document_repository.get_by_id(storage_path, company_id)
             if document is not None:
                 document.compliance_status = analysis.compliance_status.value
+
+        return analysis
+
+    async def get_document_text(
+        self, storage_path: str
+    ) -> Optional[DocumentTextSchema]:
+        """Return the extracted/OCR text of a previously analysed document.
+
+        Backs the "view OCR text" panel section. The text has always been
+        persisted -- ``_save_document_analysis_cache`` writes
+        ``extracted_text``/``pages`` as sibling keys to ``"analysis"`` on
+        every analyze/update -- it was just never exposed through any
+        endpoint before this, since ``get_cached_analysis`` deliberately
+        returns only the ``"analysis"`` key.
+
+        Args:
+            storage_path: The document's storage key.
+
+        Returns:
+            The cached pages/text plus extraction provenance, or None if no
+            cache exists for ``storage_path`` (or it fails to parse) -- the
+            same "not found" signal every other cache-reading method here
+            uses, which the router maps to a 404.
+        """
+        cache_data = await self._read_analysis_cache(storage_path)
+        if not cache_data or not cache_data.get("analysis"):
+            return None
+
+        try:
+            analysis = DocumentAnalysisResponseSchema(**cache_data["analysis"])
+        except Exception:
+            logger.exception("Cached analysis for %s failed to validate", storage_path)
+            return None
+
+        return DocumentTextSchema(
+            pages=cache_data.get("pages", []),
+            extracted_text=cache_data.get("extracted_text", ""),
+            page_count=analysis.extraction.page_count,
+            extractor=analysis.extraction.extractor,
+            used_ocr=analysis.extraction.used_ocr,
+        )
+
+    async def update_document_text(
+        self, storage_path: str, pages: list[str], company_id: str
+    ) -> Optional[DocumentAnalysisResponseSchema]:
+        """Apply hand-corrected OCR/extraction text and deterministically
+        re-derive everything downstream of it -- no model call.
+
+        The companion to the extraction-acceptance fix in
+        `FallbackDocumentExtractor`: a user looking at text the automatic
+        pipeline still got wrong (or that fell below the field-recovery
+        floor and was never escalated) can fix it directly. Re-derivation
+        mirrors `update_document_fields`'s cache-mutation shape, but text
+        first rather than fields first: `parse_labelled_fields` +
+        `merge_parsed_over_model` recompute `fields` from the corrected
+        text exactly as `analyze_node` does, `check_required_fields`
+        re-runs the same deterministic rule table, and
+        `app.ai.guardrails.sensitivity.assess` re-derives sensitivity/PII --
+        all pure functions, all synchronous, all already in this codebase.
+        Deliberately NOT a full `_run_analysis` re-run: that costs ~110s and
+        can re-classify the document from text the user only partially
+        fixed, whereas every step here costs microseconds. `summary`,
+        `detailed_summary` and `mevzuat_references` are left describing the
+        pre-correction text -- the same trade `update_document_fields`
+        already makes; the frontend surfaces a note and the existing
+        detailed-summary endpoint is the re-trigger.
+
+        Args:
+            storage_path: The document's storage key.
+            pages: The corrected page texts. Must have the same length as
+                the cached document's page count -- `PageMap`,
+                `get_document_outline`/`get_document_section` and
+                `signature.marks[].page` all index by page number, so a
+                silently different page count would desync every one of
+                them.
+            company_id: The caller's company, used the same way
+                `update_document_fields` uses it -- to touch up the
+                registry row's `compliance_status` after re-derivation.
+
+        Returns:
+            The updated analysis, or None if no cache exists for
+            `storage_path` (or it fails to parse).
+
+        Raises:
+            ValidationException: If `len(pages)` does not match the cached
+                document's page count.
+        """
+        cache_data = await self._read_analysis_cache(storage_path)
+        if not cache_data or not cache_data.get("analysis"):
+            return None
+
+        try:
+            analysis = DocumentAnalysisResponseSchema(**cache_data["analysis"])
+        except Exception:
+            logger.exception("Cached analysis for %s failed to validate", storage_path)
+            return None
+
+        cached_page_count = len(cache_data.get("pages") or [])
+        if len(pages) != cached_page_count:
+            raise ValidationException(
+                message="Sayfa sayısı önbellekteki belgeyle eşleşmiyor.",
+                details={
+                    "expected_page_count": cached_page_count,
+                    "got_page_count": len(pages),
+                },
+            )
+
+        extracted_text, scrubbed_pages, _ = self._rederive_from_pages(analysis, pages)
+        await self._save_rederived_analysis(
+            storage_path, extracted_text, scrubbed_pages, analysis, company_id
+        )
+        return analysis
+
+    def _rederive_from_pages(
+        self, analysis: DocumentAnalysisResponseSchema, pages: list[str]
+    ) -> tuple[str, list[str], list[str]]:
+        """Scrub, re-parse and re-derive fields/compliance/sensitivity from
+        page text -- the deterministic core shared by `update_document_text`
+        (hand-corrected text) and `reextract_document_text` (freshly
+        re-OCR'd text). No model call in either case.
+
+        Mutates `analysis` in place: `fields`, `missing_fields`,
+        `compliance_status`, `extraction.char_count`,
+        `extraction.scrubbed_markers` and `guardrail`. Leaves
+        `extraction.extractor`/`used_ocr`/`page_count` untouched -- callers
+        that changed provenance (only `reextract_document_text` does) set
+        those themselves before calling this.
+
+        Args:
+            analysis: The analysis to mutate. Its `document_type` decides
+                which required-field rule table `check_required_fields`
+                applies.
+            pages: Page texts to derive everything from.
+
+        Returns:
+            `(extracted_text, scrubbed_pages, scrubbed_markers)` -- the
+            join, the per-page scrubbed text, and every injection marker
+            found, in that order, for the caller to persist.
+        """
+        # Attacker-controlled input exactly like an upload is -- scrub per
+        # page, never the already-joined text, so char offsets stay
+        # consistent with what PageMap/chunking compute from these same
+        # pages (see analyze_document's identical reasoning).
+        scrubbed_pages: list[str] = []
+        scrubbed_markers: list[str] = []
+        for page_text in pages:
+            cleaned, markers = scrub_extracted_text(page_text)
+            scrubbed_pages.append(cleaned)
+            scrubbed_markers.extend(markers)
+        extracted_text = "\n\n".join(scrubbed_pages)
+
+        parsed = parse_labelled_fields(extracted_text)
+        merged_fields = merge_parsed_over_model(analysis.fields.model_dump(), parsed)
+        analysis.fields = EvrakField(**merged_fields)
+
+        report = check_required_fields(analysis.document_type, analysis.fields)
+        analysis.missing_fields = report.missing_fields
+        analysis.compliance_status = report.status
+
+        analysis.extraction.char_count = len(extracted_text.strip())
+        analysis.extraction.scrubbed_markers = scrubbed_markers
+
+        assessment = assess_sensitivity(
+            fields=analysis.fields, text=extracted_text, scrub_markers=scrubbed_markers
+        )
+        analysis.guardrail = GuardrailAssessmentSchema(
+            sensitivity_level=assessment.level,
+            pii_findings=[
+                PiiFindingSchema(kind=finding.kind, preview=finding.preview)
+                for finding in assessment.pii_findings
+            ],
+            requires_human_review=assessment.requires_review,
+            reasons=assessment.reasons,
+        )
+
+        return extracted_text, scrubbed_pages, scrubbed_markers
+
+    async def _save_rederived_analysis(
+        self,
+        storage_path: str,
+        extracted_text: str,
+        scrubbed_pages: list[str],
+        analysis: DocumentAnalysisResponseSchema,
+        company_id: str,
+    ) -> None:
+        """Persist a re-derived analysis and keep the Q&A index in sync.
+
+        Shared save + registry touch-up + reindex tail for
+        `update_document_text` and `reextract_document_text`.
+        """
+        await self._save_document_analysis_cache(
+            storage_path, extracted_text, scrubbed_pages, analysis
+        )
+
+        if self.document_repository is not None:
+            document = await self.document_repository.get_by_id(storage_path, company_id)
+            if document is not None:
+                document.compliance_status = analysis.compliance_status.value
+
+        # _index_for_qa only ever ADDS chunks; it never replaces them.
+        # Delete the stale ones first, or both the garbled and corrected
+        # passages would stay retrievable, and hybrid search could still
+        # cite the garbled one.
+        if self.vector_store is not None:
+            try:
+                await self.vector_store.delete_by_filter(
+                    QA_COLLECTION_NAME, {"storage_path": storage_path}
+                )
+            except Exception:
+                logger.exception("Failed to delete indexed chunks for %s", storage_path)
+
+        await self._index_for_qa(
+            storage_path,
+            extracted_text,
+            scrubbed_pages,
+            sensitivity_level=analysis.guardrail.sensitivity_level,
+        )
+
+    async def reextract_document_text(
+        self, storage_path: str, company_id: str
+    ) -> Optional[DocumentAnalysisResponseSchema]:
+        """Re-run OCR with the vision model directly, bypassing the
+        extraction chain entirely -- the user's manual override for when
+        `FallbackDocumentExtractor`'s own automatic escalation (see
+        `_has_enough_header_fields`) doesn't fire on its own.
+
+        Deliberately calls `self.vision_extractor.extract(...)` directly
+        rather than going through `self.extractor` (the fallback chain):
+        the chain would just try Tesseract first and might accept it again
+        for the same reason it did originally. Going straight to the vision
+        model always pays the full glm-ocr cost, which is exactly what a
+        user clicking "Yeniden OCR" is asking for. Re-reads the raw stored
+        bytes (`self.storage.get_file`) -- no re-upload needed.
+
+        Unlike `update_document_text`, this trusts the fresh extraction's
+        own page count and provenance rather than validating against what
+        was cached before: the whole point is that OCR is being redone, so
+        the old page count is not authoritative here.
+
+        Args:
+            storage_path: The document's storage key.
+            company_id: The caller's company, passed through to
+                `_save_rederived_analysis` the same way
+                `update_document_text` uses it.
+
+        Returns:
+            The updated analysis, or None if no cache exists for
+            `storage_path` (or it fails to parse).
+
+        Raises:
+            DocumentExtractionError: If the vision model call itself fails.
+        """
+        cache_data = await self._read_analysis_cache(storage_path)
+        if not cache_data or not cache_data.get("analysis"):
+            return None
+
+        try:
+            analysis = DocumentAnalysisResponseSchema(**cache_data["analysis"])
+        except Exception:
+            logger.exception("Cached analysis for %s failed to validate", storage_path)
+            return None
+
+        content = await self.storage.get_file(storage_path)
+        extracted = await self.vision_extractor.extract(content)
+
+        analysis.extraction.extractor = extracted.extractor
+        analysis.extraction.used_ocr = extracted.used_ocr
+        analysis.extraction.page_count = extracted.page_count
+
+        extracted_text, scrubbed_pages, _ = self._rederive_from_pages(
+            analysis, extracted.pages
+        )
+        await self._save_rederived_analysis(
+            storage_path, extracted_text, scrubbed_pages, analysis, company_id
+        )
+        return analysis
+
+    async def generate_detailed_summary(
+        self, storage_path: str
+    ) -> Optional[DocumentAnalysisResponseSchema]:
+        """Build (or return the already-built) detailed summary for a
+        previously analysed document.
+
+        On-demand, not eager: `analyze_document` never calls this.
+        Detailed summarization used to run as a graph branch on every
+        upload, but measured directly it was the slowest thing in the whole
+        pipeline (184-288s, against every other branch's <100s) -- see
+        `create_document_analysis_graph`'s own docstring for the full
+        reasoning. This is triggered by its own endpoint instead, so the
+        cost is only ever paid when a user actually wants the result.
+
+        Follows the exact same cache-mutation shape as
+        `update_document_fields`: read the cache file -> None if absent or
+        invalid -> mutate only the field this method owns -> re-save,
+        passing `extracted_text`/`pages` straight back through so they
+        survive the rewrite untouched. Two things fall out of that shape:
+
+        - No re-extraction. The summary is built from the text already
+          cached by `_save_document_analysis_cache` -- no OCR, no vision
+          model, no re-upload.
+        - Idempotent. If `analysis.detailed_summary` is already set (a
+          previous call already built it), this returns immediately without
+          another model call -- a second click, or a page reload, costs
+          nothing.
+
+        Args:
+            storage_path: The document's storage key.
+
+        Returns:
+            The analysis with `detailed_summary` populated, or None if no
+            cache exists for `storage_path` (or it fails to parse) -- the
+            same "not found" signal `update_document_fields` uses, which the
+            router maps to a 404.
+
+        Raises:
+            AIException: If building the summary times out or the
+                underlying provider call fails. Raised, not swallowed --
+                unlike a failure inside the old graph branch, which
+                degraded silently to the short summary because the rest of
+                the analysis had to succeed regardless, this method's only
+                job is the summary itself, so a user who explicitly asked
+                for it needs to know it did not arrive. The cache file is
+                untouched either way: the write only happens after a
+                successful build.
+        """
+        cache_data = await self._read_analysis_cache(storage_path)
+
+        if not cache_data or not cache_data.get("analysis"):
+            return None
+
+        try:
+            analysis = DocumentAnalysisResponseSchema(**cache_data["analysis"])
+        except Exception:
+            logger.exception("Cached analysis for %s failed to validate", storage_path)
+            return None
+
+        if analysis.detailed_summary:
+            return analysis
+
+        try:
+            detailed_summary = await asyncio.wait_for(
+                build_detailed_summary(
+                    self.summarizer_agent,
+                    cache_data.get("extracted_text", ""),
+                    is_ocr_text=analysis.extraction.used_ocr,
+                ),
+                timeout=settings.DETAILED_SUMMARY_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError as exc:
+            raise AIException(
+                message="Ayrıntılı özet oluşturma zaman aşımına uğradı.",
+                details={"timeout_seconds": settings.DETAILED_SUMMARY_TIMEOUT_SECONDS},
+            ) from exc
+        except Exception as exc:
+            logger.exception("Detailed summary generation failed for %s", storage_path)
+            raise AIException(
+                message="Ayrıntılı özet oluşturulurken bir hata oluştu.",
+                details={"reason": str(exc)},
+            ) from exc
+
+        analysis.detailed_summary = detailed_summary
+
+        await self._save_document_analysis_cache(
+            storage_path,
+            cache_data.get("extracted_text", ""),
+            cache_data.get("pages", []),
+            analysis,
+        )
 
         return analysis
 
@@ -891,3 +1339,159 @@ class DocumentService:
                 )
             except Exception:
                 logger.exception("Failed to delete indexed chunks for %s", storage_path)
+
+    async def adopt_pool_item(
+        self, *, item_id: str, current_user: UserModel, company_id: str
+    ) -> DocumentPoolItemModel:
+        """Copy-on-write for a transferred document (Faz 5, #205).
+
+        Until this runs, a `source="transfer"` pool item's `document_id`
+        still points at the *sender's* original `documents` row (see
+        `app.domains.pools.service.PoolService.file_transferred_document`)
+        -- the recipient can view it through the pool join but does not own
+        it: they cannot edit its metadata, and it fails any ownership check
+        keyed off `documents.owner_id`. This gives the pool item's own
+        owner a fully independent copy instead: own blob (copied through
+        `BaseStorage`, not assumed to be a bare local path -- see
+        `BaseStorage`'s own docstring on why S3 keys aren't), own
+        `documents` row, own analysis cache, reindexed for Q&A under the
+        new storage key. See the plan's own §D5/§M for why the transfer
+        itself deliberately stops short of this and leaves `adopt` as an
+        opt-in escape hatch rather than doing it automatically on every
+        transfer (most recipients never need to edit what they received).
+
+        Reindexing runs inline, synchronously -- the same way the original
+        upload path's own `_index_for_qa` already does. There is no
+        arq-backed indexing worker in this codebase to queue onto instead
+        (the only wired-up arq job today is LoRA training, see
+        `app.workers.queue.WorkerSettings`); standing one up is out of
+        scope for what is otherwise a same-shape copy operation.
+
+        Raises:
+            NotFoundException: The pool item, its pool, or the source
+                document doesn't resolve within `company_id`.
+            AuthorizationException: The caller isn't the pool's own owner
+                -- unlike most of this module's authorization, there is no
+                Admin/Manager bypass here, since adopting creates a
+                *personal* copy for the caller specifically.
+            ValidationException: The item isn't a `source="transfer"` item
+                (nothing else needs adopting), or the source file itself
+                can't be read back from storage.
+        """
+        if self.pool_item_repository is None or self.pool_repository is None or self.document_repository is None:
+            raise ValidationException(message="Evrak havuzu bu istek için yapılandırılmamış.")
+
+        item = await self.pool_item_repository.get_by_id(item_id, company_id)
+        if item is None:
+            raise NotFoundException(message="Havuz öğesi bulunamadı.")
+
+        pool = await self.pool_repository.get_by_id(item.pool_id, company_id)
+        if pool is None or pool.owner_type != "user" or pool.owner_id != current_user.id:
+            raise AuthorizationException(message="Bu öğeyi yalnızca havuzun sahibi kopyalayabilir.")
+
+        if item.source != "transfer":
+            raise ValidationException(message="Yalnızca transfer edilen evraklar bu şekilde kopyalanabilir.")
+
+        source_document = await self.document_repository.get_by_id(item.document_id, company_id)
+        if source_document is None:
+            raise NotFoundException(message="Kaynak evrak bulunamadı.")
+
+        if self.quota_service is not None:
+            await self.quota_service.check_and_increment(company_id, DOCUMENTS_METRIC)
+
+        try:
+            content = await self.storage.get_file(source_document.id)
+        except Exception as exc:
+            raise ValidationException(message="Kaynak evrak dosyasına ulaşılamadı.") from exc
+
+        new_storage_path = await self._store(source_document.file_name, content)
+
+        # The snapshot frozen at transfer time (see `file_transferred_
+        # document`) is the most up to date view the recipient actually
+        # saw -- falling back to the sender's live row only covers the
+        # (should-never-happen) case of an item.source="transfer" row with
+        # no snapshot.
+        snapshot = item.metadata_snapshot or {}
+        new_document = DocumentModel(
+            id=new_storage_path,
+            owner_id=current_user.id,
+            company_id=company_id,
+            file_name=source_document.file_name,
+            document_type=snapshot.get("document_type", source_document.document_type),
+            document_type_label=snapshot.get("document_type_label", source_document.document_type_label),
+            compliance_status=snapshot.get("compliance_status", source_document.compliance_status),
+            summary=snapshot.get("summary", source_document.summary),
+            sensitivity_level=snapshot.get("sensitivity_level", source_document.sensitivity_level),
+            pii_flagged=bool(snapshot.get("pii_flagged", source_document.pii_flagged)),
+        )
+        await self.document_repository.create(new_document)
+
+        cache_data = await self._copy_analysis_cache(source_document.id, new_storage_path)
+        if cache_data is not None:
+            try:
+                sensitivity_level = SensitivityLevel(new_document.sensitivity_level)
+            except ValueError:
+                sensitivity_level = SensitivityLevel.UNMARKED
+            await self._index_for_qa(
+                new_storage_path,
+                cache_data.get("extracted_text", ""),
+                cache_data.get("pages"),
+                sensitivity_level=sensitivity_level,
+            )
+
+        # Repoint the existing item at the new, owned copy rather than
+        # creating a second pool item -- the recipient still has exactly
+        # one entry for this document, now backed by their own row instead
+        # of a snapshot. `transferred_by` is left as-is: who originally
+        # sent it is still true and worth keeping after adoption, even
+        # though `source` no longer reads "transfer".
+        item.document_id = new_storage_path
+        item.source = "adopted"
+        item.metadata_snapshot = None
+        await self.pool_item_repository.save(item)
+
+        slug = company_metrics.cached_slug(company_id)
+        if slug is not None:
+            company_metrics.note_document_registered(slug)
+
+        return item
+
+    async def _copy_analysis_cache(
+        self, source_storage_path: str, new_storage_path: str
+    ) -> Optional[dict]:
+        """Copy the local analysis-cache JSON under a new storage key, for
+        `adopt_pool_item` -- the cache is keyed by storage_path (see
+        `_save_document_analysis_cache`), independent of the storage
+        backend, so an adopted copy needs its own cache file too, not just
+        the blob.
+
+        Returns:
+            The copied cache dict (so the caller can reindex immediately
+            without a second disk read), or `None` when the source had no
+            cache to copy -- a degraded but non-fatal case (adopt still
+            succeeds, just without Q&A indexing), the same "best-effort
+            past the registry row" tolerance `delete_document` already
+            applies to its own cleanup steps.
+        """
+        import json
+
+        old_path = os.path.join(settings.LOCAL_STORAGE_DIR, f"{source_storage_path}_analysis.json")
+        new_path = os.path.join(settings.LOCAL_STORAGE_DIR, f"{new_storage_path}_analysis.json")
+
+        def _copy() -> Optional[dict]:
+            if not os.path.exists(old_path):
+                return None
+            with open(old_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+            with open(new_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            return data
+
+        try:
+            return await asyncio.to_thread(_copy)
+        except Exception:
+            logger.exception(
+                "Failed to copy analysis cache from %s to %s", source_storage_path, new_storage_path
+            )
+            return None

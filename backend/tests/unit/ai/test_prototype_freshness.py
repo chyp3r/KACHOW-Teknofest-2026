@@ -37,7 +37,13 @@ from app.ai.policy.prototypes import FAMILIES
 #: layer classifies over at all -- it is a domain-admission verdict applied
 #: *after* an intent (draft/analyze/assist/revise) is already resolved (see
 #: `app.ai.workflows.scope.resolve_scope` and `planner._apply_scope_gate`),
-#: so it likewise has no prototypes and never will.
+#: so it likewise has no prototypes and never will. `transfer` (Faz 4, #201)
+#: is not a resolvable intent at all -- it is a tool the assist step's model
+#: may call mid-conversation (`app.ai.tools.transfer_tools`), so it was never
+#: a candidate for this table in the first place. (An isolated semantic gate
+#: for an earlier, since-removed deterministic `transfer` intent was
+#: prototyped and reverted after measurement against real embeddings; see
+#: `git log` on this file for that finding.)
 _EXPECTED_INTENT_LABELS = set(PLAN_BY_INTENT) - {"clarify", "refuse"}
 
 

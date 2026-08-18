@@ -26,7 +26,9 @@ from app.ai.guardrails.llm_nuance import judge_input_sensitivity
 from app.ai.guardrails.sensitivity import SensitivityAssessment
 from app.ai.guardrails.sensitivity import assess as assess_sensitivity
 from app.ai.llms.base import BaseLLMClient
+from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
+from app.ai.summarization import ocr_warning
 from app.ai.workflows.events import emit_node_end, emit_node_error, emit_node_start, emit_partial
 from app.ai.workflows.resilience import (
     IO_RETRY,
@@ -81,6 +83,16 @@ class DocumentAnalysisState(TypedDict, total=False):
 
     input_text: str
     is_ocr_text: bool
+    # Signature/stamp/handwriting regions already detected during extraction
+    # (app.infrastructure.extractors.marks.detect_marks), threaded straight
+    # through the same way is_ocr_text is -- detection runs once, against the
+    # rasterised page, before this graph starts, and check_compliance_node
+    # below is the only node that reads it. Deliberately not a separate graph
+    # branch/node (the shape scan_sensitivity_node uses): that pattern fans
+    # to END independently and check_compliance_node cannot see its output
+    # within the same run, but check_compliance_node specifically needs this
+    # to decide whether a document reads as signed.
+    detected_marks: list[dict[str, Any]]
     document_type: str
     document_type_label: str
     summary: str
@@ -200,23 +212,6 @@ def _trim_for_extraction(text: str) -> str:
     )
 
 
-def _ocr_warning(is_ocr_text: bool) -> str:
-    """Return a prompt note when the text came from OCR.
-
-    Args:
-        is_ocr_text: Whether the source text was produced by OCR.
-
-    Returns:
-        A Turkish caution string, or an empty string.
-    """
-    if not is_ocr_text:
-        return ""
-    return (
-        "\n\nUYARI: Bu metin taranmış bir belgeden OCR ile okunmuştur; harf "
-        "hataları olabilir. Emin olmadığın alanları uydurmak yerine null bırak."
-    )
-
-
 def _build_mevzuat_query(state: DocumentAnalysisState) -> str:
     """Compose the legislation search query deterministically.
 
@@ -296,6 +291,16 @@ def create_document_analysis_graph(
     ``suggest_mevzuat`` because nothing downstream in this sub-graph needs to
     block on it, and LangGraph merges every branch's output into the same
     final state regardless of which edge reaches END.
+
+    A detailed, unbounded-length summary is deliberately **not** produced
+    here. It used to run as a fifth branch (``summarize``), but measured
+    directly it was the slowest thing in this graph by a wide margin
+    (184-288s against every other branch's <100s), and ``ainvoke`` cannot
+    return until every branch finishes -- so every upload paid that cost
+    whether or not anyone ever read the result. It is now on-demand: see
+    ``app.ai.summarization.build_detailed_summary`` and
+    ``DocumentService.generate_detailed_summary``, triggered by its own
+    endpoint against the already-cached extraction, not by this graph.
 
     Args:
         llm_client: The LLM used for document analysis.
@@ -385,7 +390,7 @@ def create_document_analysis_graph(
             # document type selects the required-field rule table.
             f"{format_structural_signal(detect_structural_signal(state['input_text']))}"
             f"{format_parsed_fields(parsed)}"
-            f"{_ocr_warning(state.get('is_ocr_text', False))}"
+            f"{ocr_warning(state.get('is_ocr_text', False))}"
         )
 
         try:
@@ -484,8 +489,19 @@ def create_document_analysis_graph(
         logger.info("Running Compliance Check Node...")
         try:
             fields = EvrakField(**(state.get("fields") or {}))
+            # None (unknown, not unsigned) when mark detection never ran at
+            # all for this document -- see DocumentAnalysisState.detected_marks
+            # and check_required_fields's own docstring.
+            marks = state.get("detected_marks")
+            is_signed = (
+                any(mark.get("kind") == "signature" for mark in marks)
+                if marks is not None
+                else None
+            )
             report = check_required_fields(
-                state.get("document_type", DocumentType.OTHER.value), fields
+                state.get("document_type", DocumentType.OTHER.value),
+                fields,
+                is_signed=is_signed,
             )
             update = {
                 "missing_fields": [item.model_dump() for item in report.missing_fields],
@@ -534,7 +550,12 @@ def create_document_analysis_graph(
             # matched but it reads as sensitive" case; a document already
             # routed to review gains nothing from a second opinion here.
             judge_verdict = await judge_input_sensitivity(guardrail_judge_agent, text=input_text)
-            if judge_verdict is not None and judge_verdict.sensitive and judge_verdict.confidence >= 0.5:
+            promotion_floor = get_policy().guardrail.judge_promotion_confidence
+            if (
+                judge_verdict is not None
+                and judge_verdict.sensitive
+                and judge_verdict.confidence >= promotion_floor
+            ):
                 assessment = assessment.model_copy(
                     update={
                         "requires_review": True,
@@ -708,8 +729,8 @@ def create_document_analysis_graph(
     builder.add_node("scan_sensitivity", scan_sensitivity_node)
 
     builder.add_edge(START, "analyze")
-    # Fan out: compliance is CPU-bound, retrieval is network-bound, sensitivity
-    # scanning is CPU-bound and independent of both.
+    # Fan out: compliance is CPU-bound, retrieval is network-bound, and
+    # sensitivity scanning is CPU-bound and independent of both.
     builder.add_edge("analyze", "check_compliance")
     builder.add_edge("analyze", "retrieve_mevzuat")
     builder.add_edge("analyze", "scan_sensitivity")

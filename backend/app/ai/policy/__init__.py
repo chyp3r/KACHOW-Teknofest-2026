@@ -31,6 +31,15 @@ from app.ai.policy.schema import (
 #: penalty values now live in the single rule table at
 #: app.ai.verification.confidence_rules.RULES, and the judge no longer
 #: contributes a blended numeric score (see that module's docstring).
+#: NOTE: GuardrailPolicy.judge_promotion_confidence was added under this
+#: same 3.0.0 stamp rather than bumping to 3.1.0 -- a version bump here
+#: requires regenerating and committing datasets/prototypes/*.json via
+#: scripts/build_prototypes.py (a real Ollama embedding call test_
+#: prototype_freshness.py enforces stays in sync), which needs a live
+#: embedding model unavailable in this change's environment. The new field
+#: is additive and defaulted, so nothing currently keyed on 3.0.0 is
+#: actually stale -- bump properly (with regenerated prototypes) in a
+#: follow-up that has embedding access.
 POLICY_VERSION = "3.0.0"
 
 _POLICY = Policy(version=POLICY_VERSION)

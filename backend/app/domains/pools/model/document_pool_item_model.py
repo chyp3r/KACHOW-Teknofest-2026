@@ -38,7 +38,11 @@ class DocumentPoolItemModel(Base, TimestampMixin):
     #: "manager_push" (`POST /pools/push`) | "transfer"
     #: (`app.domains.transfers.ArtifactTransferService` -- what the
     #: previously-reserved `"share"` value was for; renamed to match the
-    #: domain that actually implements it, see `metadata_snapshot` below).
+    #: domain that actually implements it, see `metadata_snapshot` below) |
+    #: "adopted" (`POST /pools/items/{id}/adopt`, Faz 5, #205 -- a
+    #: `"transfer"` item the pool's own owner turned into a fully-owned
+    #: copy; `document_id` now points at their own `documents` row instead
+    #: of the sender's).
     source: Mapped[str] = mapped_column(String, nullable=False, default="upload")
     note: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     #: Set when the pool's owner acknowledges/reads a pushed item (`POST
@@ -49,7 +53,10 @@ class DocumentPoolItemModel(Base, TimestampMixin):
     #: The sender for `source="transfer"` -- distinct from `added_by`,
     #: which for a transfer is whichever process actually inserted the row
     #: (the acting user on the chat/rest channels today; a future
-    #: system-initiated path could differ). `NULL` for every other source.
+    #: system-initiated path could differ). `NULL` for "upload"/
+    #: "manager_push". Survives `adopt` (see `source` above) as provenance
+    #: -- who originally sent it stays true even after the recipient turns
+    #: the snapshot into their own owned copy.
     transferred_by: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("users.id"), nullable=True
     )
@@ -60,5 +67,7 @@ class DocumentPoolItemModel(Base, TimestampMixin):
     #: could otherwise drift out from under the recipient if the sender
     #: later edits the source document -- see the plan's §D5 for why a
     #: full copy was rejected in favor of this snapshot. `NULL` for every
-    #: source other than "transfer".
+    #: source other than "transfer" -- cleared back to `NULL` by `adopt`
+    #: too, since an adopted item's `documents` row is now live and owned,
+    #: not a frozen snapshot of someone else's.
     metadata_snapshot: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)

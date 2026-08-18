@@ -148,6 +148,61 @@ def test_complete_official_letter_is_compliant():
     assert report.checked_field_count > 0
 
 
+# ==========================================
+# is_signed -- the gap a typed imza_sahibi name alone cannot catch
+# ==========================================
+def test_a_typed_name_with_no_detected_signature_is_flagged_advisory():
+    """The imza_sahibi rule alone is satisfied by a typed name -- this is
+    specifically the gap that rule cannot see: a name is present, but no
+    signature-shaped ink mark was ever detected on the page."""
+    report = check_required_fields(
+        DocumentType.OFFICIAL_LETTER, COMPLETE_OFFICIAL_LETTER, is_signed=False
+    )
+
+    assert report.status is ComplianceStatus.PARTIALLY_COMPLIANT
+    detected = {item.key: item for item in report.missing_fields}
+    assert detected.keys() == {"imza_gorseli"}
+    assert detected["imza_gorseli"].severity == SEVERITY_ADVISORY
+    assert detected["imza_gorseli"].mevzuat.endswith("m.17")
+
+
+def test_is_signed_true_reports_no_extra_finding():
+    report = check_required_fields(
+        DocumentType.OFFICIAL_LETTER, COMPLETE_OFFICIAL_LETTER, is_signed=True
+    )
+
+    assert report.status is ComplianceStatus.COMPLIANT
+    assert report.missing_fields == []
+
+
+def test_is_signed_none_is_treated_as_unknown_not_unsigned():
+    """None (detection never ran -- e.g. a born-digital PDF) must not be
+    treated the same as False (detection ran and found nothing)."""
+    report = check_required_fields(
+        DocumentType.OFFICIAL_LETTER, COMPLETE_OFFICIAL_LETTER, is_signed=None
+    )
+
+    assert report.missing_fields == []
+
+
+def test_is_signed_false_does_not_duplicate_an_already_blank_imza_sahibi():
+    """When imza_sahibi is blank, the existing rule already reports it --
+    the additive check must not also fire and double-report the same gap."""
+    fields = COMPLETE_OFFICIAL_LETTER.model_copy(update={"imza_sahibi": None})
+    report = check_required_fields(DocumentType.OFFICIAL_LETTER, fields, is_signed=False)
+
+    keys = [item.key for item in report.missing_fields]
+    assert keys == ["imza_sahibi"]
+    assert "imza_gorseli" not in keys
+
+
+def test_default_is_signed_preserves_prior_behaviour():
+    """Callers that never learned about signature detection (is_signed
+    omitted) must see identical results to before this parameter existed."""
+    report = check_required_fields(DocumentType.OFFICIAL_LETTER, COMPLETE_OFFICIAL_LETTER)
+    assert report.missing_fields == []
+
+
 def test_missing_sayi_and_muhatap_are_detected_with_citations():
     fields = COMPLETE_OFFICIAL_LETTER.model_copy(update={"sayi": None, "muhatap": None})
     report = check_required_fields(DocumentType.OFFICIAL_LETTER, fields)

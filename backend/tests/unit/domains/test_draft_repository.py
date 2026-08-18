@@ -45,6 +45,46 @@ async def test_soft_delete_marks_a_single_draft(repo, mock_session):
     mock_session.flush.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_update_destination_mutates_the_row_in_place_and_flushes(repo, mock_session):
+    draft = DraftModel(
+        id="draft-1", company_id="company-1", version=1, content="içerik",
+        destination="Eski Birim", destination_unit_id="unit-old",
+        destination_justification="Eski gerekçe.",
+    )
+
+    updated = await repo.update_destination(
+        draft,
+        destination="Yeni Birim",
+        destination_unit_id="unit-new",
+        destination_justification="Yeni gerekçe.",
+    )
+
+    assert updated is draft
+    assert draft.destination == "Yeni Birim"
+    assert draft.destination_unit_id == "unit-new"
+    assert draft.destination_justification == "Yeni gerekçe."
+    mock_session.flush.assert_awaited_once()
+    # No `db.execute()` -- this mutates the already-loaded ORM object and
+    # relies on the caller's own commit/autoflush, same as
+    # `create_version`'s `self.db.add`, not a raw UPDATE statement.
+    mock_session.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_destination_leaves_the_justification_untouched_when_omitted(repo, mock_session):
+    draft = DraftModel(
+        id="draft-1", company_id="company-1", version=1, content="içerik",
+        destination_justification="Orijinal gerekçe.",
+    )
+
+    await repo.update_destination(
+        draft, destination="Yeni Birim", destination_unit_id=None, destination_justification=None
+    )
+
+    assert draft.destination_justification == "Orijinal gerekçe."
+
+
 def test_soft_delete_statement_shape_matches_the_model():
     """Sanity check that the update() target/column names used above are
     real DraftModel attributes, not typo'd strings that would only fail at

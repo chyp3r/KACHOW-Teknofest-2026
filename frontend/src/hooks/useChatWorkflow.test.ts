@@ -226,6 +226,37 @@ describe("useChatWorkflow", () => {
     expect(result.current.streamingText).toBe("");
   });
 
+  it("does not let a lagging server-history refetch wipe the message final_result just appended", async () => {
+    // The bug this closes: handleEvent's `final_result` case calls
+    // `refreshServerState`, which invalidates `messagesQuery` -- but that
+    // query is `enabled: !loading`, and `loading` only flips back to
+    // `false` in `send`'s own `finally`, at essentially the same moment
+    // the `!activeRequest.current` guard on the messages-sync effect opens.
+    // So the invalidation's refetch fires *after* that guard is already
+    // open, and if it resolves with fewer items than we already have (chat
+    // history mocked here, as in every other test, to always return `[]`
+    // -- a stand-in for a server read that simply hasn't caught up yet),
+    // the sync effect used to overwrite `messages` with that stale, empty
+    // list, making the assistant's just-shown reply vanish.
+    mocks.send.mockImplementationOnce(async (_request, onEvent) => {
+      onEvent({ event: "session", thread_id: "user-1:web:thread" });
+      onEvent({ event: "final_result", reply: "Tamamdır.", workflow_status: "COMPLETED" });
+    });
+    const { result } = renderHook(() => useChatWorkflow(null, "user-1"), { wrapper });
+
+    await act(() => result.current.send("bir şey sor", "balanced", false));
+    // Give any invalidation-triggered refetch every chance to resolve and
+    // (if the bug were still present) clobber `messages` before asserting.
+    await waitFor(() => expect(mocks.messages).toHaveBeenCalled());
+    await act(() => Promise.resolve());
+
+    expect(
+      result.current.messages.some(
+        (message) => message.sender === "assistant" && message.text === "Tamamdır.",
+      ),
+    ).toBe(true);
+  });
+
   it("does not blank an in-progress stream on a node_start, since no per-agent node streams its own raw output anymore", async () => {
     let emitToken: (() => void) | undefined;
     mocks.send.mockImplementationOnce(async (_request, onEvent) => {

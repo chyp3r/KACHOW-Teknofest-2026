@@ -28,6 +28,7 @@ from app.ai.policy.budget import node_budget
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.ai.semantic.prototype_matcher import PrototypeMatcher
 from app.ai.tools.document_tools import ToolResult, build_assistant_tools
+from app.ai.tools.transfer_tools import build_transfer_tools
 from app.ai.verification import InfoQuestion, apply_answers, verify_draft
 from app.ai.workflows.events import (
     child_config,
@@ -42,6 +43,7 @@ from app.ai.workflows.events import (
     emit_partial,
     emit_question,
 )
+from app.ai.workflows.dates import today_tr
 from app.ai.workflows.intent_rules import RESET_SURFACES
 from app.ai.workflows.intent_scorer import normalize
 from app.ai.workflows.planner import resolve_plan
@@ -80,6 +82,8 @@ STEP_LABELS = {
     "clarify": "Açıklayıcı Soru",
     "refuse": "Kapsam Denetimi",
     "gate_revise": "Geri Bildirimli Revizyon",
+    "transfer_execute": "Transfer Gönderiliyor",
+    "transfer_gate": "Transfer Onayı",
 }
 
 STEP_MESSAGES = {
@@ -92,6 +96,7 @@ STEP_MESSAGES = {
     "clarify": "İsteğinizi netleştirmek için bir soru hazırlanıyor...",
     "refuse": "İstek sistemin görev alanına göre denetleniyor...",
     "gate_revise": "Onay kapısındaki geri bildiriminize göre taslak güncelleniyor...",
+    "transfer_execute": "Transfer gönderiliyor...",
 }
 
 def _dependency_failed(
@@ -289,6 +294,32 @@ class PlanningState(TypedDict, total=False):
     #: goes into assist_result (it is a reply like any other), and this field
     #: exists only so the scheduler can see the step settle.
     refuse_result: dict[str, Any]
+    #: A pending transfer proposal, when the assist step's own
+    #: `propose_transfer` tool call produced one this turn (see
+    #: `app.ai.tools.transfer_tools.build_transfer_tools`, wired into
+    #: `_run_assist`) -- deterministic recipient/artifact resolution +
+    #: policy check, never the execution itself. `outcome` is one of
+    #: `"unresolved"`, `"recipient_not_found"`, `"artifact_ambiguous"`,
+    #: `"policy_denied"` (all terminal, no gate -- the tool's own return
+    #: string already told the user), `"needs_disambiguation"`/
+    #: `"needs_confirmation"` (routed to `transfer_gate_node` by
+    #: `route_after_step`), or `"confirmed"` (set by `transfer_gate_node`
+    #: once the human approves, routing to `transfer_execute` via
+    #: `route_after_transfer_gate`). See the plan's §I for the full
+    #: `artifact_transfer_intents.state` lifecycle this outcome tracks a
+    #: turn-scoped view of.
+    transfer_resolve_result: dict[str, Any]
+    #: `_step_transfer_execute`'s outcome -- set only after
+    #: `transfer_gate_node` reaches `"confirmed"`. Also the scheduler's
+    #: settlement marker for every terminal-without-execution path above
+    #: (`{"status": SKIPPED, ...}`), the same dual role `revise_result`/
+    #: `clarify_result`/`refuse_result` play for their own steps.
+    transfer_execute_result: dict[str, Any]
+    #: How many interrupt rounds `transfer_gate_node` has shown this turn --
+    #: plays the same role `brief_gate_round`/`gate_revision_count` play for
+    #: their own gates: a disambiguation round followed by a confirmation
+    #: round must not collide on the same deterministic `interrupt_id`.
+    transfer_gate_round: int
     final_output: dict[str, Any]
     #: How many times the human approval gate's own "revizyon iste" action
     #: has re-run the revise sub-graph *within this turn* (see
@@ -545,6 +576,7 @@ def create_planning_graph(
     checkpointer: Any = None,
     mevzuat_retriever: Any = None,
     adapter_provider: Any = None,
+    transfer_provider: Any = None,
 ):
     """Create and compile the master orchestration workflow.
 
@@ -585,6 +617,18 @@ def create_planning_graph(
             rather than registered as nodes, so they are independent Pregel
             instances that would each need their own unrelated checkpoint
             lineage.
+        transfer_provider: Optional object exposing the `TransferGraphProvider`
+            surface (`app.domains.transfers.provider`) -- resolution,
+            recipient lookup/recommendation, and the intent state machine's
+            transitions, each opening its own session per call, the same
+            injected-callable pattern `adapter_provider`/`units_provider`
+            already use. Reached only from the assist step's own
+            `propose_transfer` tool (`app.ai.tools.transfer_tools`), never
+            from a dedicated plan step -- transfer is not a resolvable
+            intent (see `planner.PLAN_BY_INTENT`'s own docstring). `None`
+            (the default, matching `settings.AI_TRANSFER_ENABLED`'s own
+            default) means the tool is simply never offered to the model --
+            degraded, not broken, same as an absent `checkpointer`.
 
     Returns:
         The compiled LangGraph workflow.
@@ -721,6 +765,9 @@ def create_planning_graph(
             "revise_result": {},
             "clarify_result": {},
             "refuse_result": {},
+            "transfer_resolve_result": {},
+            "transfer_execute_result": {},
+            "transfer_gate_round": 0,
             "final_output": {},
             "gate_revision_count": 0,
             "gate_revision_note": "",
@@ -819,6 +866,7 @@ def create_planning_graph(
             {
                 "source_document": source_document,
                 "classification": classification,
+                "document_id": state.get("document_id") or "",
                 # The user's own message, never the boilerplate below --
                 # see draft_graph.validate_input_node / resolve_correspondence_type.
                 "user_request": state["input_text"],
@@ -833,6 +881,7 @@ def create_planning_graph(
                 "reasoning_level": state.get("reasoning_level", ReasoningLevel.BALANCED.value),
                 "writing_brief": brief_answers,
                 "company_id": state.get("company_id") or "",
+                "today": today_tr(),
             },
             config=child_config(config),
         )
@@ -970,6 +1019,32 @@ def create_planning_graph(
             requester_clearance=requester_clearance,
         )
 
+        # Faz 4 (#201) -- offered only when the feature is actually usable;
+        # a message that would have called this tool otherwise resolves
+        # exactly like any other conversational turn (the model simply has
+        # nothing to call). See app.ai.tools.transfer_tools's own module
+        # docstring for why the tool only ever proposes, never executes.
+        pending_transfer: dict[str, Any] = {}
+
+        def _record_transfer_proposal(proposal: dict[str, Any]) -> None:
+            pending_transfer.update(proposal)
+
+        if settings.AI_TRANSFER_ENABLED and transfer_provider is not None:
+            focus = state.get("focus") or SessionFocus()
+            tools = [
+                *tools,
+                *build_transfer_tools(
+                    company_id=state.get("company_id"),
+                    user_id=state.get("user_id"),
+                    thread_id=(config.get("configurable") or {}).get("thread_id", ""),
+                    run_id=state.get("run_id"),
+                    active_draft_id=focus.active_draft_id,
+                    active_document_id=focus.active_document_id,
+                    transfer_provider=transfer_provider,
+                    on_transfer_proposed=_record_transfer_proposal,
+                ),
+            ]
+
         chunks: list[str] = []
         try:
             async with asyncio.timeout(
@@ -1046,6 +1121,20 @@ def create_planning_graph(
                     reasons=verdict.reasons,
                 )
 
+            if pending_transfer.get("outcome") in {"needs_disambiguation", "needs_confirmation"} and not has_checkpointer:
+                # Cannot pause for a human answer without a checkpointer --
+                # cancel the proposal outright rather than leave it standing
+                # unconfirmable, the same degrade every other HITL gate
+                # takes (see create_planning_graph's own docstring).
+                try:
+                    await transfer_provider.cancel(
+                        company_id=state.get("company_id"), intent_id=pending_transfer["intent_id"]
+                    )
+                except Exception:
+                    logger.exception("Failed to cancel an unconfirmable transfer proposal")
+                pending_transfer.clear()
+                reply = "Bu işlem şu an onay akışı olmadan kullanılamıyor; lütfen chat üzerinden manuel gönderin."
+
             result = {
                 "reply": reply,
                 "status": StepStatus.COMPLETED,
@@ -1055,6 +1144,8 @@ def create_planning_graph(
                 result["flagged"] = True
             if referenced_anchor.get("anchor"):
                 result["last_referenced_anchor"] = referenced_anchor["anchor"]
+            if pending_transfer:
+                result["pending_transfer"] = dict(pending_transfer)
             return result
         except asyncio.TimeoutError:
             logger.warning("Assist step timed out")
@@ -1172,15 +1263,28 @@ def create_planning_graph(
         carries) on any failure: a bug in a hint-gatherer must never be
         able to leave `brief_result` empty, which would leave `draft`
         looking permanently unready to `step_graph.ready_steps`.
+
+        The prior turn's brief is only carried forward when this turn is a
+        `revise` of the still-open `focus.active_draft` -- a fresh `draft`
+        request always starts from an empty brief, even mid-session. Without
+        this, a second, unrelated "başka birine yazı hazırla" request would
+        silently inherit the first draft's muhatap/yazan_taraf/kapanış,
+        since `RESET_SURFACES` only covers a handful of explicit
+        "yeni bir taslak" phrasings and most fresh-draft requests never say
+        one (see intent_rules.RESET_SURFACES's own docstring).
         """
         focus = state.get("focus") or SessionFocus()
+        continues_active_draft = (
+            state.get("plan_intent") == "revise" and focus.active_draft is not None
+        )
+        prior_brief = focus.writing_brief if continues_active_draft else None
         try:
-            resolution = resolve_brief(state["input_text"], classification, focus.writing_brief)
+            resolution = resolve_brief(state["input_text"], classification, prior_brief)
         except Exception:
             logger.exception("Writing-brief resolution failed; continuing without one.")
             updates["brief_result"] = {
                 "status": StepStatus.COMPLETED,
-                "answers": dict(focus.writing_brief or {}),
+                "answers": dict(prior_brief or {}),
                 "resolved": {},
                 "questions": [],
             }
@@ -1230,6 +1334,25 @@ def create_planning_graph(
                     verdict.reason,
                     verdict.detail,
                 )
+                await guardrail_recorder.record_event(
+                    stage="input",
+                    kind="relevance",
+                    decision="blocked",
+                    confidence=1.0,
+                    reasons=[verdict.reason, verdict.detail],
+                    run_id=state.get("run_id"),
+                    document_id=document_id,
+                    company_id=state.get("company_id"),
+                    requester_user_id=state.get("user_id"),
+                    related_document_ids=[document_id],
+                )
+                await emit_guardrail_event(
+                    config,
+                    stage="input",
+                    kind="relevance",
+                    decision="blocked",
+                    reasons=[verdict.reason, verdict.detail],
+                )
                 reason = "İstek yüklü belgeyle ilgili görünmüyor."
                 await emit_node_skipped(config, "draft", STEP_LABELS["draft"], reason)
                 reply = build_unrelated_reply(
@@ -1276,6 +1399,18 @@ def create_planning_graph(
         # make it into checkpointed memory.
         if assist_result.get("history"):
             updates["history"] = assist_result["history"]
+        # Faz 4 (#201): the assist step's own propose_transfer tool call
+        # produced a pending proposal this turn -- append transfer_execute
+        # to plan_steps so the scheduler (step_graph.ready_steps) has
+        # something to dispatch once transfer_gate_node confirms it, and
+        # record the proposal under the same transfer_resolve_result key
+        # the (removed) deterministic path used, so transfer_gate_node/
+        # route_after_transfer_gate/_step_transfer_execute/
+        # _compile_final_output all keep working unchanged.
+        pending_transfer = assist_result.get("pending_transfer")
+        if pending_transfer:
+            updates["transfer_resolve_result"] = pending_transfer
+            updates["plan_steps"] = [*(state.get("plan_steps") or []), "transfer_execute"]
 
     async def _step_revise(
         state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
@@ -1313,6 +1448,7 @@ def create_planning_graph(
             revise_graph=revise_graph,
             instruction_origin="user_turn",
             company_id=state.get("company_id"),
+            today=today_tr(),
         )
         updates["draft_result"] = result
         updates["revise_result"] = {"status": result["status"]}
@@ -1379,6 +1515,49 @@ def create_planning_graph(
         updates["refuse_result"] = {"status": StepStatus.COMPLETED}
         updates["history"] = [{"role": "assistant", "content": reply}]
 
+    async def _step_transfer_execute(
+        state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
+    ) -> None:
+        """Run the confirmed intent. Only ever reached after
+        `route_after_transfer_gate` sees `transfer_resolve_result["outcome"]
+        == "confirmed"` -- the real, server-enforced guarantee that nothing
+        executes without confirmation lives one layer deeper, in
+        `TransferIntentService.execute` itself (it raises unless the
+        intent's *persisted* state is `CONFIRMED`, independent of anything
+        this graph believes)."""
+        resolve_result = state.get("transfer_resolve_result") or {}
+        intent_id = resolve_result.get("intent_id")
+        company_id = state.get("company_id")
+        user_id = state.get("user_id")
+
+        if transfer_provider is None or not intent_id or not company_id or not user_id:
+            updates["transfer_execute_result"] = {"status": StepStatus.FAILED, "error": "missing_intent"}
+            updates["assist_result"] = {"reply": "Transfer gerçekleştirilemedi.", "status": StepStatus.COMPLETED}
+            return
+
+        outcome = await transfer_provider.execute(company_id=company_id, intent_id=intent_id, sender_id=user_id)
+        if outcome.error_reason:
+            updates["transfer_execute_result"] = {"status": StepStatus.FAILED, "error": outcome.error_reason}
+            updates["assist_result"] = {
+                "reply": outcome.error_message or "Transfer gerçekleştirilemedi.",
+                "status": StepStatus.COMPLETED,
+            }
+            return
+
+        updates["transfer_execute_result"] = {
+            "status": StepStatus.COMPLETED,
+            "transfer_id": outcome.id,
+            "recipient_id": outcome.recipient_id,
+            "artifact_kind": outcome.artifact_kind,
+            "snapshot_ref": outcome.snapshot_ref,
+            "conversation_id": outcome.conversation_id,
+            "cross_unit": outcome.cross_unit,
+        }
+        noun = "Taslak" if outcome.artifact_kind == "draft" else "Evrak"
+        # Template text, not a model generation -- see this module's own
+        # docstring on why "gönderdim" must never be something the LLM says.
+        updates["assist_result"] = {"reply": f"{noun} gönderildi.", "status": StepStatus.COMPLETED}
+
     #: One entry per dispatchable step name. Each runner reads whatever it
     #: needs from `state`/`classification` and writes its result(s) directly
     #: into `updates` -- the same contract the old `if/elif` chain's branches
@@ -1396,6 +1575,7 @@ def create_planning_graph(
         "revise": _step_revise,
         "clarify": _step_clarify,
         "refuse": _step_refuse,
+        "transfer_execute": _step_transfer_execute,
     }
 
     def _result_key(step: str) -> str:
@@ -1593,10 +1773,17 @@ def create_planning_graph(
             return updates.get(key) or state.get(key) or {}
 
         draft_result = _pick("draft_result")
-        draft_status = draft_result.get("status")
+        # A transfer-only plan never touches draft_result (it stays `{}`) --
+        # transfer_execute_result (or, if the turn ended before execution,
+        # transfer_resolve_result) is this plan's own equivalent "did the
+        # thing this turn was actually about succeed" signal. Every other
+        # plan is unaffected: transfer_result stays `{}` for them, so
+        # `status_source` resolves to `draft_result` exactly as before.
+        transfer_result = _pick("transfer_execute_result") or _pick("transfer_resolve_result")
+        status_source = draft_result if draft_result else transfer_result
         final_status = (
-            draft_status
-            if draft_status
+            status_source.get("status")
+            if status_source.get("status")
             in {
                 StepStatus.FAILED,
                 StepStatus.NEEDS_HUMAN_APPROVAL,
@@ -1615,6 +1802,7 @@ def create_planning_graph(
             "draft": draft_result,
             "routing": _pick("routing_result"),
             "assist": _pick("assist_result"),
+            "transfer": transfer_result,
         }
         if draft_result.get("conflicts") or draft_result.get("changelog"):
             output["revision"] = {
@@ -1739,10 +1927,18 @@ def create_planning_graph(
         few dict lookups; living inside ``execute_step_node`` (which is where
         the draft step itself runs), resuming would replay the entire ~30s
         draft generation the executor already committed to state.
+
+        Only ever reached with a non-empty ``missing_information`` --
+        ``route_after_step``/``route_after_gate_revise`` no longer route
+        here for a merely low-scoring or guessed-type draft (see their own
+        notes). There is deliberately no "İnsan onayı gerekiyor" surface
+        anywhere in this system: a draft that is otherwise usable ships
+        directly, and the only thing ever asked of the user is which
+        specific field is missing.
         """
         draft_result = state.get("draft_result") or {}
         missing_information = draft_result.get("missing_information") or []
-        kind = "missing_information" if missing_information else "draft_approval"
+        kind = "missing_information"
 
         # Emit-boundary conversion to the canonical PromptQuestion shape --
         # InfoQuestion stays the internal type everywhere else (apply_answers
@@ -1789,8 +1985,8 @@ def create_planning_graph(
         await emit_node_start(
             config,
             "human_gate",
-            "İnsan Onayı",
-            "Devam etmek için insan onayı/eksik bilgi bekleniyor...",
+            "Eksik Bilgiler",
+            "Eksik alanlar için bilgi bekleniyor...",
         )
         await emit_interrupt(config, kind=kind, interrupt_id=interrupt_id, payload=payload)
         answer = interrupt(payload)
@@ -1798,7 +1994,7 @@ def create_planning_graph(
         # Execution only reaches here after Command(resume=...) -- the gate is
         # now resolved, whatever the human decided.
         await emit_node_end(
-            config, "human_gate", "İnsan Onayı", "İnsan yanıtı alındı, işleme devam ediliyor.", answer
+            config, "human_gate", "Eksik Bilgiler", "Yanıt alındı, işleme devam ediliyor.", answer
         )
 
         if kind == "missing_information":
@@ -1808,11 +2004,11 @@ def create_planning_graph(
                 # actual value -- apply_answers would otherwise substitute
                 # that free text verbatim into the placeholder it was
                 # answering, producing a nonsense draft (Görev 2's
-                # "revizyon ve bilgi karışıyor" bug). Reuses the exact same
-                # gate_revise machinery the draft_approval gate's "revizyon
-                # iste" already runs through -- route_after_gate only
-                # inspects draft_result["status"], not kind, so setting the
-                # same REVISE_REQUESTED status here is enough.
+                # "revizyon ve bilgi karışıyor" bug). Reuses the same
+                # gate_revise machinery route_after_gate already routes a
+                # REVISE_REQUESTED status through -- it only inspects
+                # draft_result["status"], not kind, so setting the same
+                # status here is enough.
                 note = (answer.get("instructions") or "").strip()
                 return {
                     "gate_revision_note": note,
@@ -1859,63 +2055,9 @@ def create_planning_graph(
             }
             return {"draft_result": updated}
 
-        # draft_approval
-        action = answer.get("action")
-        if action == "revise":
-            # Does NOT append to draft_result["instructions"] and does NOT
-            # set final_output -- the turn is not over. gate_revise_node
-            # (see route_after_gate) picks this note up and actually runs
-            # the revision in the same run, producing a real new draft
-            # before the gate is shown again. Previously this branch only
-            # tagged the status and ended the turn; the note was appended to
-            # "instructions" but nothing ever read it again (planning_node
-            # resets draft_result every turn, and REVISE_REQUESTED wasn't
-            # versionable), so "revizyon iste" silently discarded the draft
-            # and produced no revision at all.
-            note = (answer.get("instructions") or "").strip()
-            updates: dict[str, Any] = {
-                "gate_revision_note": note,
-                "draft_result": {**draft_result, "status": StepStatus.REVISE_REQUESTED},
-            }
-            # A resume may ask for a different reasoning level on the retry
-            # (e.g. escalate to "deep" after a "fast" draft was rejected).
-            # Omitted -> state's existing reasoning_level is left untouched.
-            if answer.get("reasoning_level"):
-                updates["reasoning_level"] = answer["reasoning_level"]
-            if state.get("gate_revision_count", 0) >= settings.HITL_MAX_GATE_REVISIONS:
-                # The round cap is already spent -- route_after_gate sends
-                # this straight to "end"/"focus" without ever visiting
-                # executor (unlike a clean approval, which loops back
-                # through it), so nothing else would compute final_output
-                # for this turn. draft_result["draft"] is unchanged by this
-                # branch, so this still reflects the last successful
-                # gate_revise round's real text, not a fresh attempt this
-                # click asked for but the cap won't allow.
-                updates["final_output"] = _compile_final_output(state, updates)
-            return updates
-
-        if action == "reject":
-            reason = (answer.get("reason") or answer.get("instructions") or "").strip()
-            updated = {
-                **draft_result,
-                "status": StepStatus.REJECTED,
-                "rejection_reason": reason,
-                "rejected_by": answer.get("user_id"),
-            }
-            updates = {"draft_result": updated}
-            updates["final_output"] = _compile_final_output(state, updates)
-            return updates
-
-        # Default: approve. Falls through to routing via route_after_gate.
-        updated = {
-            **draft_result,
-            "status": StepStatus.APPROVED,
-            "approved_by": answer.get("user_id"),
-        }
-        return {"draft_result": updated}
-
     async def gate_revise_node(state: PlanningState, config: RunnableConfig) -> dict[str, Any]:
-        """Actually perform the approval gate's "revizyon iste" request.
+        """Actually perform the missing-information gate's "revizyon iste"
+        escape hatch request.
 
         A separate node from ``human_gate_node`` for the same reason the
         interrupt lives in its own node at all: resuming replays
@@ -1969,6 +2111,7 @@ def create_planning_graph(
             revise_graph=revise_graph,
             instruction_origin="human_gate",
             company_id=state.get("company_id"),
+            today=today_tr(),
         )
         if result.get("status") == StepStatus.FAILED:
             await emit_node_error(
@@ -1988,6 +2131,151 @@ def create_planning_graph(
             "gate_revision_note": "",
         }
 
+    async def transfer_gate_node(state: PlanningState, config: RunnableConfig) -> dict[str, Any]:
+        """Pause the transfer flow for its human checkpoint(s).
+
+        Two distinct interrupt kinds share this one node:
+        `"needs_disambiguation"` (recipient resolution
+        wasn't unique -- ask the human to pick, never the model) and
+        `"needs_confirmation"` (the actual send). A disambiguation answer
+        that resolves to a single recipient loops back through this same
+        node (via `route_after_transfer_gate`) to *also* show the
+        confirmation interrupt -- confirmation is never skipped just
+        because disambiguation already happened once this turn.
+        """
+        resolve_result = state.get("transfer_resolve_result") or {}
+        outcome = resolve_result.get("outcome")
+        intent_id = resolve_result.get("intent_id")
+        company_id = state.get("company_id")
+        user_id = state.get("user_id")
+        gate_round = state.get("transfer_gate_round", 0)
+
+        def _cancelled(reply: str, reason: str) -> dict[str, Any]:
+            updates: dict[str, Any] = {
+                "assist_result": {"reply": reply, "status": StepStatus.COMPLETED},
+                "transfer_execute_result": {"status": StepStatus.SKIPPED, "reason": reason},
+            }
+            updates["final_output"] = _compile_final_output(state, updates)
+            return updates
+
+        if transfer_provider is None or not intent_id or not company_id or not user_id:
+            # Not reachable through route_after_step today (it only detours
+            # here when the assist step's propose_transfer tool already
+            # populated intent_id) -- defensive only.
+            return _cancelled("Transfer işlemi bulunamadı.", "missing_intent")
+
+        if outcome == "needs_disambiguation":
+            candidates = resolve_result.get("candidate_recipients") or []
+            payload = {
+                "kind": "artifact_transfer_disambiguate",
+                "candidates": candidates,
+                "artifact_kind": resolve_result.get("artifact_kind"),
+                "round": gate_round,
+            }
+            interrupt_id = hashlib.sha256(
+                f"artifact_transfer_disambiguate:{intent_id}:{gate_round}".encode("utf-8")
+            ).hexdigest()[:16]
+            HITL_INTERRUPTS.labels(kind="artifact_transfer_disambiguate").inc()
+            await emit_node_start(
+                config, "transfer_gate", "Alıcı Seçimi", "Alıcı seçiminiz bekleniyor..."
+            )
+            await emit_interrupt(
+                config, kind="artifact_transfer_disambiguate", interrupt_id=interrupt_id, payload=payload
+            )
+            answer = interrupt(payload)
+            answer = answer if isinstance(answer, dict) else {}
+            await emit_node_end(
+                config, "transfer_gate", "Alıcı Seçimi", "Alıcı seçimi alındı.", answer
+            )
+
+            # `recipient_id` travels either as a top-level resume field or
+            # nested in `answers` (the shape `/chat/resume`'s
+            # `ChatResumeRequest.answers` -- shared with every other
+            # interrupt kind -- actually carries it in). Accepting both
+            # keeps this node usable from a direct `Command(resume=...)`
+            # call (tests) without requiring a second resume contract.
+            recipient_id = answer.get("recipient_id") or (answer.get("answers") or {}).get("recipient_id")
+            if answer.get("action") != "select" or not recipient_id:
+                await transfer_provider.cancel(company_id=company_id, intent_id=intent_id)
+                return _cancelled("Transfer işlemi iptal edildi.", "cancelled")
+
+            intent = await transfer_provider.select_recipient(
+                company_id=company_id,
+                intent_id=intent_id,
+                recipient_id=recipient_id,
+                requester_id=user_id,
+            )
+            if intent.error_reason:
+                return _cancelled(intent.error_message or "Bu seçim artık geçerli değil.", intent.error_reason)
+            if intent.state == "POLICY_DENIED":
+                message = (
+                    (intent.policy_snapshot or {}).get("message_tr")
+                    or "Bu transfer şu anda gerçekleştirilemiyor."
+                )
+                return _cancelled(message, "policy_denied")
+
+            # Now AWAITING_CONFIRMATION -- loop back into this same node
+            # (route_after_transfer_gate) for the confirmation interrupt.
+            return {
+                "transfer_resolve_result": {
+                    **resolve_result,
+                    "outcome": "needs_confirmation",
+                    "cross_unit": intent.cross_unit,
+                    "policy_snapshot": intent.policy_snapshot,
+                },
+                "transfer_gate_round": gate_round + 1,
+            }
+
+        # needs_confirmation
+        payload = {
+            "kind": "artifact_transfer_confirm",
+            "artifact_kind": resolve_result.get("artifact_kind"),
+            "source_artifact_id": resolve_result.get("source_artifact_id"),
+            "source_version": resolve_result.get("source_version"),
+            "cross_unit": bool(resolve_result.get("cross_unit")),
+            "round": gate_round,
+        }
+        interrupt_id = hashlib.sha256(
+            f"artifact_transfer_confirm:{intent_id}:{gate_round}".encode("utf-8")
+        ).hexdigest()[:16]
+        HITL_INTERRUPTS.labels(kind="artifact_transfer_confirm").inc()
+        await emit_node_start(
+            config, "transfer_gate", "Transfer Onayı", "Transfer onayınız bekleniyor..."
+        )
+        await emit_interrupt(
+            config, kind="artifact_transfer_confirm", interrupt_id=interrupt_id, payload=payload
+        )
+        answer = interrupt(payload)
+        answer = answer if isinstance(answer, dict) else {}
+        await emit_node_end(
+            config, "transfer_gate", "Transfer Onayı", "Transfer onayı alındı.", answer
+        )
+
+        if answer.get("action") != "approve":
+            await transfer_provider.cancel(company_id=company_id, intent_id=intent_id)
+            return _cancelled("Transfer işlemi iptal edildi.", "cancelled")
+
+        intent = await transfer_provider.confirm(company_id=company_id, intent_id=intent_id, requester_id=user_id)
+        if intent.error_reason:
+            return _cancelled(intent.error_message or "Bu onay artık geçerli değil.", intent.error_reason)
+
+        # CONFIRMED -- route_after_transfer_gate sends this to the executor
+        # for transfer_execute; TransferIntentService.execute is the actual
+        # enforcement point (it refuses anything not CONFIRMED, independent
+        # of what this graph believes -- see _step_transfer_execute).
+        return {
+            "transfer_resolve_result": {**resolve_result, "outcome": "confirmed"},
+        }
+
+    def route_after_transfer_gate(state: PlanningState) -> str:
+        if state.get("transfer_execute_result"):
+            # _cancelled already set final_output too.
+            return "end"
+        outcome = (state.get("transfer_resolve_result") or {}).get("outcome")
+        if outcome == "confirmed":
+            return "continue"
+        return "transfer_gate"
+
     def route_after_step(state: PlanningState) -> str:
         steps = state.get("plan_steps") or []
 
@@ -1999,15 +2287,29 @@ def create_planning_graph(
         ):
             return "brief_gate"
 
+        # Detours to the confirmation gate whenever the assist step's own
+        # propose_transfer tool call just produced a pending proposal this
+        # turn -- checked by outcome/settlement, not by `_last_ran_step`,
+        # since "assist" (unlike "transfer_resolve" in the now-removed
+        # deterministic path) is a step that runs for plenty of turns that
+        # never touch transfer at all.
+        if has_checkpointer and state.get("_last_ran_step") == "assist":
+            outcome = (state.get("transfer_resolve_result") or {}).get("outcome")
+            if outcome in {"needs_disambiguation", "needs_confirmation"} and not state.get(
+                "transfer_execute_result"
+            ):
+                return "transfer_gate"
+
         if has_checkpointer and state.get("_last_ran_step") in {"draft", "revise"}:
             draft_result = state.get("draft_result") or {}
             draft_status = draft_result.get("status")
+            # NEEDS_HUMAN_APPROVAL (a low verifier score, a guessed
+            # correspondence type, ...) deliberately does NOT pause the run
+            # here -- only a genuinely unfilled `[...]` field does (see
+            # human_gate_node's own docstring). The score/flag itself is
+            # still recorded on draft_result for scoring/audit; it just no
+            # longer blocks delivery on a human clicking "approve".
             if draft_status == StepStatus.NEEDS_INPUT:
-                return "human_gate"
-            if (
-                draft_status == StepStatus.NEEDS_HUMAN_APPROVAL
-                and settings.HITL_APPROVAL_GATE_ENABLED
-            ):
                 return "human_gate"
 
         return "end" if all_steps_settled(steps, state) else "continue"
@@ -2039,14 +2341,12 @@ def create_planning_graph(
             return "continue"
         if status == StepStatus.NEEDS_INPUT:
             return "human_gate"
-        # A conflict finding is never grounds for the gate on its own --
-        # app.ai.revision.conflict's audit_node already reports it as a
-        # non-blocking chat notice (applied_anyway is a hard invariant: the
-        # instruction was applied in full regardless). Only a genuine
-        # quality/PII/groundedness verdict from verify_node, reflected in
-        # `status` itself, opens the gate here.
-        if status == StepStatus.NEEDS_HUMAN_APPROVAL and settings.HITL_APPROVAL_GATE_ENABLED:
-            return "human_gate"
+        # NEEDS_HUMAN_APPROVAL never re-opens the gate here either -- see
+        # route_after_step's identical note. A conflict finding was never
+        # grounds for the gate on its own either: app.ai.revision.conflict's
+        # audit_node already reports it as a non-blocking chat notice
+        # (applied_anyway is a hard invariant: the instruction was applied
+        # in full regardless).
         return "continue"
 
     builder = StateGraph(PlanningState)
@@ -2055,6 +2355,7 @@ def create_planning_graph(
     builder.add_node("brief_gate", brief_gate_node)
     builder.add_node("human_gate", human_gate_node)
     builder.add_node("gate_revise", gate_revise_node)
+    builder.add_node("transfer_gate", transfer_gate_node)
     builder.add_node("focus", focus_node)
     builder.add_node("consolidate_memory", consolidate_memory_node)
 
@@ -2067,6 +2368,7 @@ def create_planning_graph(
             "continue": "executor",
             "brief_gate": "brief_gate",
             "human_gate": "human_gate",
+            "transfer_gate": "transfer_gate",
             "end": "focus",
         },
     )
@@ -2089,6 +2391,11 @@ def create_planning_graph(
         "gate_revise",
         route_after_gate_revise,
         {"human_gate": "human_gate", "continue": "executor", "end": "focus"},
+    )
+    builder.add_conditional_edges(
+        "transfer_gate",
+        route_after_transfer_gate,
+        {"transfer_gate": "transfer_gate", "continue": "executor", "end": "focus"},
     )
     builder.add_edge("focus", "consolidate_memory")
     builder.add_edge("consolidate_memory", END)

@@ -3,12 +3,13 @@ from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependency import require_auth_if_enabled, require_roles
+from app.api.dependency import get_document_analysis_service, require_auth_if_enabled, require_roles
 from app.api.responses import APIResponse, SuccessResponse
 from app.core.enums.user_role import UserRole
 from app.domains.audit.repository import AuditLogRepository
 from app.domains.audit.service import AuditService
 from app.domains.documents.repository import DocumentRepository
+from app.domains.documents.service import DocumentService
 from app.domains.pools.repository import DocumentPoolItemRepository, DocumentPoolRepository
 from app.domains.pools.schema.pool_schema import (
     DocumentPoolItemResponse,
@@ -147,3 +148,31 @@ async def acknowledge_pool_item(
     service = _pool_service(db)
     item = await service.acknowledge_item(item_id, current_user.company_id, current_user)
     return SuccessResponse(data=_item_response(item, None).model_dump(mode="json"))
+
+
+@router.post("/items/{item_id}/adopt", response_model=APIResponse[DocumentPoolItemResponse])
+async def adopt_pool_item(
+    item_id: str,
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    db: AsyncSession = Depends(get_db),
+    document_service: DocumentService = Depends(get_document_analysis_service),
+):
+    """Copy-on-write (Faz 5, #205): give a transferred item's own owner a
+    fully independent, editable copy (blob + registry row + analysis cache
+    + Q&A index) instead of the read-only shared-blob snapshot a transfer
+    leaves behind by default. The pool item's own owner only -- no Admin/
+    Manager bypass, see `DocumentService.adopt_pool_item`'s own docstring."""
+    item = await document_service.adopt_pool_item(
+        item_id=item_id, current_user=current_user, company_id=current_user.company_id
+    )
+    document = await DocumentRepository(db).get_by_id(item.document_id, current_user.company_id)
+    await _audit_service(db).record(
+        company_id=current_user.company_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="document:adopt",
+        resource_type="document",
+        resource_id=item.document_id,
+        after={"pool_item_id": item.id},
+    )
+    return SuccessResponse(data=_item_response(item, document).model_dump(mode="json"))

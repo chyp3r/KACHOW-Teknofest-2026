@@ -48,12 +48,19 @@ export const NODE_INFO: Record<string, { label: string; short: string; descripti
   revise_retrieve: { label: "Mevzuat Kontrolü", short: "MEVZUAT", description: "Revizyon için ilgili mevzuatı yeniden getirir." },
   revise_repair: { label: "Revizyon Onarımı", short: "ONARIM", description: "Doğrulama bulgularını yeni bir düzeltme turuna dönüştürür." },
   revise_audit: { label: "Çelişki Denetimi", short: "DENETİM", description: "Uygulanan talimatla mevzuat/kaynak arasında çelişki olup olmadığını denetler." },
-  human_gate: { label: "İnsan Onayı", short: "ONAY", description: "Eksik bilgi veya onay gerektiğinde akışı güvenli biçimde durdurur." },
-  gate_revise: { label: "Geri Bildirimli Revizyon", short: "GERİ BLD.", description: 'Onay kapısındaki "Revizyon iste" talebinizi aynı çalışmada uygular ve kapıya geri döner.' },
+  human_gate: { label: "Eksik Bilgiler", short: "EKSİK", description: "Bir alan eksikse akışı güvenli biçimde durdurup kullanıcıya sorar." },
+  gate_revise: { label: "Geri Bildirimli Revizyon", short: "GERİ BLD.", description: 'Eksik bilgi ekranındaki "Revizyon iste" talebinizi aynı çalışmada uygular ve ekrana geri döner.' },
   routing: { label: "Birim Sevki", short: "SEVK", description: "Tamamlanan taslak için hedef birimi gerekçesiyle önerir." },
   assist: { label: "Asistan", short: "ASİST", description: "Belge ve mevzuat araçlarını kullanarak kaynaklı sohbet yanıtı hazırlar." },
   clarify: { label: "Açıklayıcı Soru", short: "SORU", description: "İsteği netleştirmek için kullanıcıya seçenekli bir soru sorar." },
   refuse: { label: "Kapsam Denetimi", short: "KAPSAM", description: "İsteğin sistemin görev alanı dışında kaldığını belirler ve yetenek listesini döndürür." },
+  // Faz 4 (#201) -- transfer is proposed by a tool the assist step's own
+  // model may call (app.ai.tools.transfer_tools), never a dedicated
+  // resolution step; transfer_gate is the one real new graph node (the
+  // mandatory confirmation), transfer_execute dispatches through the
+  // shared "executor" node like draft/routing/assist above.
+  transfer_gate: { label: "Transfer Onayı", short: "ONAY", description: "Alıcı belirsizse seçim, her durumda gönderim için insan onayı ister." },
+  transfer_execute: { label: "Transfer Gönderiliyor", short: "GÖNDER", description: "Onaylanan transfer gerçekleştirilir ve alıcıya iletilir." },
 };
 
 // Only the nodes hand-positioned on the technical graph's SVG canvas.
@@ -141,6 +148,10 @@ const SUB_STEPS: Record<string, string[]> = {
   draft: ["examples", "verify", "judge"],
   revise: ["revise_parse", "revise_retrieve", "revise_repair", "revise_audit", "verify", "judge"],
   human_gate: ["gate_revise"],
+  // Faz 4 (#201) -- transfer_gate is triggered by the assist step's own
+  // propose_transfer tool call, so it nests under "assist"'s stage, not a
+  // dedicated resolution step (there isn't one -- see NODE_INFO's note).
+  assist: ["transfer_gate"],
 };
 
 function stageStatus(

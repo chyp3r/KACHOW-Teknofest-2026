@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -66,6 +66,44 @@ class MevzuatReferenceSchema(BaseModel):
     aciklama: str = Field(description="Bu hükmün evrakla ilişkisi.")
 
 
+class DetectedMarkSchema(BaseModel):
+    """One region flagged as possibly a signature, stamp, or handwritten
+    annotation (see ``app.infrastructure.extractors.marks.DetectedMark``, the
+    infrastructure-layer type this mirrors rather than reuses directly --
+    same reasoning as ``ExtractionInfoSchema`` not reusing ``ExtractedDocument``).
+
+    A heuristic review hint, not a forensic determination: there is no
+    hand-labelled signature/stamp dataset for this project's document
+    corpus, so nothing here carries a measured accuracy.
+    """
+
+    kind: str = Field(description="'signature', 'stamp' veya 'handwriting'.")
+    page: int = Field(description="1 tabanlı sayfa numarası.")
+    bbox: tuple[int, int, int, int] = Field(
+        description="(x0, y0, x1, y1) -- sayfa boyutundan bağımsız 0-1000 ölçeğinde."
+    )
+    confidence: float = Field(description="0.0-1.0 arası kaba güven skoru.")
+
+
+class SignatureAssessmentSchema(BaseModel):
+    """Signature/stamp detection outcome for one document -- a review aid,
+    never an authoritative substitute for `fields.imza_sahibi` (the typed
+    name) or for actually opening the document. See `DetectedMarkSchema`.
+    """
+
+    is_signed: bool = Field(
+        default=False,
+        description="Sayfada en az bir imza şeklinde bölge tespit edildi mi.",
+    )
+    has_stamp: bool = Field(
+        default=False,
+        description="Sayfada en az bir mühür/damga şeklinde bölge tespit edildi mi.",
+    )
+    marks: List[DetectedMarkSchema] = Field(
+        default_factory=list, description="Tespit edilen tüm bölgeler."
+    )
+
+
 class DocumentAnalysisResponseSchema(BaseModel):
     """Full first-review (ön inceleme) result for an incoming document.
 
@@ -83,6 +121,21 @@ class DocumentAnalysisResponseSchema(BaseModel):
     document_type: DocumentType = Field(description="Belirlenen evrak türü.")
     document_type_label: str = Field(description="Evrak türünün Türkçe adı.")
     summary: str = Field(description="Evrakın kısa Türkçe özeti.")
+    #: Defaulted to None, not empty string: distinguishes "never requested"
+    #: from "generated but somehow empty", and lets the ~20 on-disk
+    #: *_analysis.json caches predating this field keep validating --
+    #: get_cached_analysis returns None (-> HTTP 404) on any validation
+    #: failure, so this is load-bearing, not decorative (same constraint
+    #: that governed `signature` above). Populated on-demand by
+    #: DocumentService.generate_detailed_summary, never by analyze_document
+    #: itself -- see that method's own docstring for why.
+    detailed_summary: Optional[str] = Field(
+        default=None,
+        description=(
+            "İsteğe bağlı ayrıntılı Türkçe özet. Yalnızca kullanıcı özellikle "
+            "istediğinde üretilir; üretilmemişse null."
+        ),
+    )
     fields: EvrakField = Field(description="Evraktan çıkarılan üstveri alanları.")
     missing_fields: List[MissingField] = Field(
         default_factory=list,
@@ -95,6 +148,10 @@ class DocumentAnalysisResponseSchema(BaseModel):
     guardrail: GuardrailAssessmentSchema = Field(
         default_factory=GuardrailAssessmentSchema,
         description="Girdi guardrail değerlendirmesi (gizlilik derecesi, PII bulguları).",
+    )
+    signature: SignatureAssessmentSchema = Field(
+        default_factory=SignatureAssessmentSchema,
+        description="İmza/mühür tespit sonucu (bkz. SignatureAssessmentSchema).",
     )
 
 
@@ -109,6 +166,68 @@ class DocumentFieldsUpdateSchema(BaseModel):
     """
 
     fields: EvrakField = Field(description="Kullanıcı tarafından düzeltilmiş üstveri alanları.")
+
+
+class DocumentTextSchema(BaseModel):
+    """The extracted/OCR text of a previously analysed document.
+
+    Backs the "view and correct OCR text" panel section. Deliberately kept
+    off ``DocumentAnalysisResponseSchema`` rather than added as a field on
+    it: that schema is persisted verbatim under the analysis cache's
+    ``"analysis"`` key and re-sent on every document-list selection, so
+    hanging multi-thousand-character text off it would store the text twice
+    per document (see ``DocumentService._save_document_analysis_cache``,
+    which already persists ``extracted_text``/``pages`` as sibling keys) and
+    pay that transfer cost on every unrelated read.
+    """
+
+    pages: List[str] = Field(description="Sayfa sayfa çıkarılan/OCR edilmiş metin.")
+    extracted_text: str = Field(description="Sayfaların birleştirilmiş hali.")
+    page_count: int = Field(description="Sayfa sayısı.")
+    extractor: str = Field(description="Metni çıkaran bileşen (örn. 'tesseract', 'ollama_vision').")
+    used_ocr: bool = Field(description="Metin OCR ile okunduysa true.")
+
+
+#: Per-page and total caps on hand-corrected page text. Generous relative to
+#: any real official-correspondence page -- the longest real document in
+#: this project's own corpus (CY-034) is ~10,664 characters across 5
+#: pages -- while still bounding a single request's payload size. Follows
+#: DraftRequestSchema.instructions' max_length precedent above.
+MAX_TEXT_PAGE_LENGTH = 20_000
+MAX_TEXT_TOTAL_LENGTH = 100_000
+
+
+class DocumentTextUpdateSchema(BaseModel):
+    """Payload for saving hand-corrected OCR/extracted text.
+
+    Carries ``pages`` only, never a joined ``extracted_text`` -- the server
+    always re-derives the join from the submitted pages (see
+    ``DocumentService.update_document_text``). There is no lossless inverse
+    of ``"\\n\\n".join(pages)`` (a double-spaced source page splits back
+    into far more fragments than it started with), so accepting a
+    client-submitted joined text would risk silently diverging from what
+    the pages actually say. The server separately rejects a page count that
+    doesn't match the cached document, since ``PageMap``,
+    ``get_document_outline``/``get_document_section`` and
+    ``signature.marks[].page`` all index by page number.
+    """
+
+    pages: List[str] = Field(
+        min_length=1,
+        description="Düzeltilmiş sayfa metinleri; sayfa sayısı önbellekteki belgeyle eşleşmelidir.",
+    )
+
+    @field_validator("pages")
+    @classmethod
+    def _validate_page_lengths(cls, value: List[str]) -> List[str]:
+        for page in value:
+            if len(page) > MAX_TEXT_PAGE_LENGTH:
+                raise ValueError(
+                    f"Sayfa metni {MAX_TEXT_PAGE_LENGTH} karakteri aşamaz."
+                )
+        if sum(len(page) for page in value) > MAX_TEXT_TOTAL_LENGTH:
+            raise ValueError(f"Toplam metin {MAX_TEXT_TOTAL_LENGTH} karakteri aşamaz.")
+        return value
 
 
 class DraftClassificationSchema(BaseModel):
@@ -188,4 +307,8 @@ class DraftResponseSchema(BaseModel):
         ),
     )
     destination: str = Field(description="Evrakın yönlendirildiği birim veya aksiyon.")
+    alternative_units: List[str] = Field(
+        default_factory=list,
+        description="Birincil öneriye alternatif olabilecek ikinci en uygun birim(ler).",
+    )
     justification: str = Field(description="Yönlendirme kararının gerekçesi.")

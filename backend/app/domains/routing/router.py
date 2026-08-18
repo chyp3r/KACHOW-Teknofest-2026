@@ -54,6 +54,7 @@ async def suggest_routing(
 
     response = RoutingSuggestionResponse(
         routed_unit=state.get("routed_unit"),
+        alternative_units=state.get("alternative_units") or [],
         priority=state.get("priority", "Normal"),
         reasoning=state.get("reasoning", ""),
         justification=state.get("justification", state.get("reasoning", "")),

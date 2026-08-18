@@ -2,6 +2,7 @@ export const queryKeys = {
   currentUser: ["current-user"] as const,
   documents: (page = 1) => ["documents", page] as const,
   documentAnalysis: (storagePath: string) => ["documents", "analysis", storagePath] as const,
+  documentText: (storagePath: string) => ["documents", "text", storagePath] as const,
   chatSessions: (page = 1) => ["chat-sessions", page] as const,
   chatMessages: (sessionId: string, page = 1) => ["chat-messages", sessionId, page] as const,
   chatState: (sessionId: string) => ["chat-state", sessionId] as const,

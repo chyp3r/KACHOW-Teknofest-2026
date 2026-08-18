@@ -1,4 +1,9 @@
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle2, Route, XCircle } from "lucide-react";
+import { UnitPicker } from "../drafts/UnitPicker";
+import { draftService } from "../../services/draftService";
+import { queryKeys } from "../../query/queryKeys";
 
 // The shape of a completed turn's `details.draft`/`details.routing`, as
 // assembled by backend app.ai.workflows.planning_graph._compile_final_output.
@@ -18,6 +23,11 @@ interface AppliedRule {
 }
 
 interface DraftDetails {
+  // Injected by the backend (see ChatService._maybe_record_draft) once the
+  // turn's draft is persisted -- absent only when draft-history recording
+  // itself is disabled or failed, in which case there is nothing to attach
+  // a unit picker to and the strip falls back to the plain text chip.
+  id?: string;
   draft?: string;
   status?: string;
   combined_score?: number;
@@ -30,6 +40,7 @@ interface DraftDetails {
 
 interface RoutingDetails {
   routed_unit?: string;
+  alternative_units?: string[];
 }
 
 // The score/approval/routing/rejection facts that used to be concatenated
@@ -39,10 +50,29 @@ interface RoutingDetails {
 export function DraftMetaStrip({ details }: { details?: Record<string, unknown> }) {
   const draft = details?.draft as DraftDetails | undefined;
   const routing = details?.routing as RoutingDetails | undefined;
+  const draftId = draft?.id;
+  const queryClient = useQueryClient();
+  // Overrides the routing chip's display once the user picks a unit here --
+  // `details` is a frozen snapshot of the turn that produced this message,
+  // so a successful save has nothing else in this component to update.
+  const [savedDestination, setSavedDestination] = useState<string | null>(null);
+  const updateDestinationMutation = useMutation({
+    mutationFn: (destination: string) => {
+      if (!draftId) throw new Error("Taslak kimliği bulunamadı.");
+      return draftService.updateDestination(draftId, destination);
+    },
+    onSuccess: (updated) => {
+      setSavedDestination(updated.destination);
+      queryClient.setQueryData(queryKeys.draft(updated.id), updated);
+      void queryClient.invalidateQueries({ queryKey: ["drafts"] });
+    },
+  });
+
   if (!draft?.draft) return null;
 
   const hasScore = typeof draft.combined_score === "number";
-  const routedUnit = routing?.routed_unit;
+  const routedUnit = savedDestination ?? routing?.routed_unit;
+  const alternativeUnits = routing?.alternative_units ?? [];
   const isRejected = draft.status === "REJECTED";
   const isReviseExhausted = draft.status === "REVISE_REQUESTED";
   const changelogSummary = draft.changelog?.summary;
@@ -53,6 +83,7 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
   if (
     !hasScore &&
     !routedUnit &&
+    !draftId &&
     !draft.requires_human_approval &&
     !isRejected &&
     !isReviseExhausted &&
@@ -76,7 +107,6 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
               {rule.label}
               {rule.occurrences > 1 ? ` (×${rule.occurrences})` : ""}
               {rule.penalty_applied > 0 ? ` — -${rule.penalty_applied} puan` : ""}
-              {rule.forces_approval ? " · insan onayı gerektirir" : ""}
             </p>
           ))}
         </details>
@@ -85,14 +115,23 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
         <span className="draft-meta-chip">
           <Route size={13} />
           Önerilen birim: {routedUnit}
+          {alternativeUnits.length > 0 && !savedDestination
+            ? ` · Alternatif: ${alternativeUnits.join(", ")}`
+            : ""}
         </span>
       )}
-      {draft.requires_human_approval && !isRejected && (
-        <span className="draft-meta-chip draft-meta-warning">
-          <AlertCircle size={13} />
-          İnsan onayı gerekiyor
-          {draft.evaluation_notes ? `: ${draft.evaluation_notes}` : ""}
-        </span>
+      {draftId && (
+        <UnitPicker
+          currentDestination={routedUnit ?? null}
+          saving={updateDestinationMutation.isPending}
+          onSave={(destination) => updateDestinationMutation.mutate(destination)}
+        />
+      )}
+      {draft.requires_human_approval && !isRejected && draft.evaluation_notes && (
+        <details className="message-logs draft-meta-rules">
+          <summary>Kontrol notları</summary>
+          <p>{draft.evaluation_notes}</p>
+        </details>
       )}
       {isRejected && (
         <span className="draft-meta-chip draft-meta-danger">
@@ -107,7 +146,7 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
           Revizyon turu sınırına ulaşıldı; bu son sürüm korundu.
         </span>
       )}
-      {hasScore && !draft.requires_human_approval && !isRejected && !isReviseExhausted && (
+      {hasScore && !isRejected && !isReviseExhausted && (
         <span className="draft-meta-chip draft-meta-success">
           <CheckCircle2 size={13} />
           Hazır

@@ -63,10 +63,12 @@ class ChatResumeRequest(BaseModel):
     session_id: str = Field(
         min_length=1, max_length=128, description="Devam ettirilecek oturumun thread_id'si."
     )
-    action: Literal["answer", "approve", "revise", "reject"] = Field(
+    action: Literal["answer", "approve", "revise", "reject", "select"] = Field(
         description=(
             "answer: eksik bilgi/yazım briefi cevapları. approve/revise/reject: "
-            "taslak onay kararı. reject aynı zamanda yazım briefi kapısını da iptal eder."
+            "taslak onay kararı. reject aynı zamanda yazım briefi kapısını da iptal eder. "
+            "select: transfer akışında alıcı belirsizliğini çözen seçim (bkz. "
+            "artifact_transfer_disambiguate, answers.recipient_id)."
         )
     )
     answers: dict[str, str | list[str]] = Field(
@@ -74,7 +76,8 @@ class ChatResumeRequest(BaseModel):
         description=(
             "action='answer' için PromptQuestion.key -> kullanıcı cevabı eşlemesi. "
             "Çoklu seçim soruları bir liste taşır; her başka soru tek bir dizedir "
-            "(\"Sen karar ver\" seçeneği dahil, bkz. writing_brief.AUTO_ANSWER)."
+            "(\"Sen karar ver\" seçeneği dahil, bkz. writing_brief.AUTO_ANSWER). "
+            "action='select' için answers.recipient_id, seçilen adayın kullanıcı id'si."
         ),
     )
     instructions: str = Field(

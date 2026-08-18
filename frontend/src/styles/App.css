@@ -938,6 +938,18 @@ textarea { min-height: 105px; resize: vertical; }
    without boxing it in its own separate card. */
 .interrupt-brief { padding-left: var(--space-3); border-left: 2px solid color-mix(in srgb, var(--accent-blue) 45%, transparent); }
 
+/* Faz 4 (#201) -- artifact_transfer_confirm/artifact_transfer_disambiguate.
+   Same inset-accent treatment as .interrupt-brief, its own color so a
+   transfer gate is visually distinct from a drafting gate at a glance. */
+.interrupt-transfer { padding-left: var(--space-3); border-left: 2px solid color-mix(in srgb, var(--status-running) 45%, transparent); }
+.transfer-confirm-card { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
+.transfer-confirm-question { margin: 0; color: var(--text-primary); }
+.transfer-confirm-actions { justify-content: flex-end; gap: var(--space-2); }
+.transfer-candidate-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.transfer-candidate-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-primary); }
+.transfer-candidate-info { display: grid; gap: 2px; min-width: 0; }
+.transfer-candidate-info small { color: var(--text-muted); }
+
 /* The score/approval/routing facts that used to be baked into the chat
    reply as free text (see backend ChatService._select_reply) now render
    as chips here instead -- inline on a completed draft message
@@ -1032,6 +1044,24 @@ textarea { min-height: 105px; resize: vertical; }
 .detail-list li span, .detail-list li strong { display: block; }
 .detail-list li span, .detail-empty { color: var(--text-secondary); }
 .guardrail-summary { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+.guardrail-summary > small { color: var(--text-muted); }
+/* Shared by the short "Evrak özeti" section and the on-demand "Detaylı
+   özet" one below -- without pre-wrap, a summary spanning multiple
+   paragraphs collapses to one run-on block. */
+.document-summary-text { margin-top: var(--space-3); white-space: pre-wrap; color: var(--text-secondary); }
+/* The on-demand detailed summary specifically can run to several thousand
+   characters (unlike the always-short one above) -- capped and scrollable
+   so it cannot make the whole accordion section unwieldy, matching
+   .draft-preview's own long-text handling elsewhere in this file. */
+.document-summary-text-detailed { max-height: 420px; overflow: auto; }
+/* "Belge metni" -- one block per page, each independently capped/scrollable
+   like .document-summary-text-detailed above, since a single page's OCR
+   text can itself run long. */
+.document-text-pages { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
+.document-text-page-block { padding: var(--space-3); border-radius: var(--radius-md); background: rgba(148, 163, 184, .07); }
+.document-text-page-block h4 { color: var(--text-muted); margin: 0 0 var(--space-2); }
+.document-text-page { white-space: pre-wrap; color: var(--text-secondary); max-height: 420px; overflow: auto; margin: 0; }
+.reextract-action { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
 .search-field { display: flex; align-items: center; gap: var(--space-2); min-width: 220px; padding: 0 var(--space-2); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
 .search-field input { border: 0; box-shadow: none; background: transparent; }
 .table-toolbar { display: flex; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
@@ -1075,6 +1105,10 @@ td > span { color: var(--text-secondary); margin-top: var(--space-1); }
 .draft-metrics span { padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: rgba(148, 163, 184, .08); }
 .draft-metrics small, .draft-metrics strong { display: block; }
 .draft-metrics small { color: var(--text-muted); }
+.draft-detail-destination { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-3); border-radius: var(--radius-md); background: rgba(148, 163, 184, .08); }
+.draft-detail-destination small { display: block; color: var(--text-muted); }
+.unit-picker { display: flex; align-items: flex-end; gap: var(--space-2); flex-wrap: wrap; }
+.unit-picker-actions { display: flex; gap: var(--space-2); }
 
 .training-panel { margin-top: var(--space-5); }
 .training-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-3); margin: var(--space-4) 0; }

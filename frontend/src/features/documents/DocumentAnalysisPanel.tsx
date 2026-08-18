@@ -4,8 +4,14 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { Alert, Card } from "../../components/Surface";
 import { Button } from "../../components/Button";
 import { Input, Textarea } from "../../components/FormControls";
-import type { DocumentAnalysis, EvrakFields } from "../../types/documents";
+import type { DocumentAnalysis, DocumentText, EvrakFields } from "../../types/documents";
 import { SENSITIVITY_LABELS } from "../../types/security";
+
+const MARK_KIND_LABELS: Record<"signature" | "stamp" | "handwriting", string> = {
+  signature: "İmza",
+  stamp: "Mühür/damga",
+  handwriting: "El yazısı not",
+};
 
 const LABELS: Record<keyof EvrakFields, string> = {
   sayi: "Sayı",
@@ -53,22 +59,52 @@ export function DocumentAnalysisPanel({
   analysis,
   onSave,
   saving = false,
+  onGenerateDetailedSummary,
+  generatingDetailedSummary = false,
+  documentText,
+  onSaveText,
+  savingText = false,
+  onReextract,
+  reextracting = false,
 }: {
   analysis: DocumentAnalysis | null;
   // Undefined when the caller doesn't wire editing (e.g. no permission
   // hook available) -- the panel then stays read-only exactly as before.
   onSave?: (fields: EvrakFields) => Promise<void>;
   saving?: boolean;
+  // Undefined the same way onSave is -- panel stays without the trigger
+  // button, showing only the short summary above, if the caller doesn't
+  // wire it. Takes no arguments: the caller already knows which document
+  // (see onSave's own analogous shape one level up, in DocumentTable).
+  onGenerateDetailedSummary?: () => Promise<void>;
+  generatingDetailedSummary?: boolean;
+  // Data-gated, like `guardrail`/`signature` below -- not capability-gated
+  // like onGenerateDetailedSummary above, since there is genuinely nothing
+  // to show without it (a separate, slower-loading query in useDocuments).
+  documentText?: DocumentText | null;
+  onSaveText?: (pages: string[]) => Promise<void>;
+  savingText?: boolean;
+  onReextract?: () => Promise<void>;
+  reextracting?: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [detailedSummaryError, setDetailedSummaryError] = useState<string | null>(null);
+  const [isEditingText, setIsEditingText] = useState(false);
+  const [textDraft, setTextDraft] = useState<string[]>([]);
+  const [textSaveError, setTextSaveError] = useState<string | null>(null);
+  const [reextractError, setReextractError] = useState<string | null>(null);
 
   // A different document (or a fresh save) must never keep a stale edit
   // session open on top of it.
   useEffect(() => {
     setIsEditing(false);
     setSaveError(null);
+    setDetailedSummaryError(null);
+    setIsEditingText(false);
+    setTextSaveError(null);
+    setReextractError(null);
   }, [analysis?.storage_path]);
 
   if (!analysis)
@@ -106,6 +142,47 @@ export function DocumentAnalysisPanel({
     }
   };
 
+  const generateDetailedSummary = async () => {
+    if (!onGenerateDetailedSummary) return;
+    setDetailedSummaryError(null);
+    try {
+      await onGenerateDetailedSummary();
+    } catch (error) {
+      setDetailedSummaryError(
+        error instanceof Error ? error.message : "Ayrıntılı özet oluşturulamadı.",
+      );
+    }
+  };
+
+  const startEditingText = () => {
+    setTextSaveError(null);
+    setTextDraft(documentText?.pages ?? []);
+    setIsEditingText(true);
+  };
+
+  const saveText = async () => {
+    if (!onSaveText) return;
+    setTextSaveError(null);
+    try {
+      await onSaveText(textDraft);
+      setIsEditingText(false);
+    } catch (error) {
+      setTextSaveError(error instanceof Error ? error.message : "Metin kaydedilemedi.");
+    }
+  };
+
+  const reextractText = async () => {
+    if (!onReextract) return;
+    setReextractError(null);
+    try {
+      await onReextract();
+    } catch (error) {
+      setReextractError(
+        error instanceof Error ? error.message : "Belge yeniden OCR ile işlenemedi.",
+      );
+    }
+  };
+
   return (
     <Card className="analysis-panel">
       <div className="section-heading">
@@ -133,6 +210,35 @@ export function DocumentAnalysisPanel({
             : "Olası talimat enjeksiyonu işaretleri metinden temizlendi."}
         </Alert>
       )}
+      {analysis.summary && (
+        <details open>
+          <summary>Evrak özeti</summary>
+          <p className="document-summary-text">{analysis.summary}</p>
+        </details>
+      )}
+      {onGenerateDetailedSummary && (
+        <details>
+          <summary>Detaylı özet</summary>
+          <div className="detailed-summary-section">
+            {detailedSummaryError && <Alert variant="error">{detailedSummaryError}</Alert>}
+            {analysis.detailed_summary ? (
+              <p className="document-summary-text document-summary-text-detailed">
+                {analysis.detailed_summary}
+              </p>
+            ) : (
+              <>
+                <p className="detail-empty">
+                  Belgenin tamamını kapsayan, cümle sayısı sınırı olmayan bir özet üretilebilir.
+                  Uzun belgelerde üretim birkaç dakika sürebilir.
+                </p>
+                <Button loading={generatingDetailedSummary} onClick={() => void generateDetailedSummary()}>
+                  Detaylı özet oluştur
+                </Button>
+              </>
+            )}
+          </div>
+        </details>
+      )}
       {analysis.guardrail && (
         <details open>
           <summary>Bilgi güvenliği</summary>
@@ -145,7 +251,9 @@ export function DocumentAnalysisPanel({
               {SENSITIVITY_LABELS[analysis.guardrail.sensitivity_level]}
             </StatusBadge>
             {analysis.guardrail.requires_human_review && (
-              <Alert variant="error" icon={<ShieldAlert />}>Bu evrak insan incelemesi gerektiriyor.</Alert>
+              <Alert variant="error" icon={<ShieldAlert />}>
+                Bu belge, gizlilik derecesi nedeniyle sınırlı erişime tabi tutuldu.
+              </Alert>
             )}
             {analysis.guardrail.reasons.length > 0 && (
               <ul className="detail-list">
@@ -164,6 +272,34 @@ export function DocumentAnalysisPanel({
                 ))}
               </ul>
             )}
+          </div>
+        </details>
+      )}
+      {analysis.signature && (
+        <details>
+          <summary>İmza ve mühür</summary>
+          <div className="guardrail-summary">
+            <StatusBadge tone={analysis.signature.is_signed ? "success" : "warning"}>
+              {analysis.signature.is_signed ? "İmzalı" : "İmza tespit edilmedi"}
+            </StatusBadge>
+            {analysis.signature.marks.length ? (
+              <ul className="detail-list">
+                {analysis.signature.marks.map((mark, index) => (
+                  <li key={`${mark.kind}-${mark.page}-${index}`}>
+                    <strong>{MARK_KIND_LABELS[mark.kind]}</strong>
+                    <span>Sayfa {mark.page}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="detail-empty">
+                Sayfada imza, mühür veya el yazısı bölgesi tespit edilmedi.
+              </p>
+            )}
+            <small>
+              Bu tespit sezgisel bir inceleme ipucudur; imza veya mührün gerçekliğine
+              dair adli bir belirleme değildir.
+            </small>
           </div>
         </details>
       )}
@@ -238,6 +374,83 @@ export function DocumentAnalysisPanel({
           </dl>
         )}
       </details>
+      {documentText && (
+        <details>
+          <summary>
+            <span>Belge metni</span>
+            {onSaveText && !isEditingText && (
+              <Button
+                variant="ghost"
+                size="sm"
+                leadingIcon={<Pencil />}
+                onClick={(event) => {
+                  event.preventDefault();
+                  startEditingText();
+                }}
+              >
+                Düzenle
+              </Button>
+            )}
+          </summary>
+          {isEditingText ? (
+            <div className="metadata-edit-form">
+              {textSaveError && <Alert variant="error">{textSaveError}</Alert>}
+              {textDraft.map((page, index) => (
+                <Textarea
+                  key={index}
+                  label={`Sayfa ${index + 1}/${textDraft.length}`}
+                  rows={10}
+                  value={page}
+                  onChange={(event) =>
+                    setTextDraft((previous) =>
+                      previous.map((value, i) => (i === index ? event.target.value : value)),
+                    )
+                  }
+                />
+              ))}
+              <div className="metadata-edit-actions">
+                <Button
+                  variant="ghost"
+                  leadingIcon={<X />}
+                  disabled={savingText}
+                  onClick={() => {
+                    setIsEditingText(false);
+                    setTextSaveError(null);
+                  }}
+                >
+                  Vazgeç
+                </Button>
+                <Button loading={savingText} onClick={() => void saveText()}>
+                  Kaydet
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="document-text-pages">
+              {documentText.pages.map((page, index) => (
+                <div key={index} className="document-text-page-block">
+                  <h4>
+                    Sayfa {index + 1}/{documentText.pages.length}
+                  </h4>
+                  <p className="document-text-page">{page}</p>
+                </div>
+              ))}
+              {onReextract && (
+                <div className="reextract-action">
+                  <p className="detail-empty">
+                    Belge, görüntü tabanlı bir yapay zeka modeliyle yeniden okunabilir. Bu
+                    işlem birkaç dakika sürebilir.
+                  </p>
+                  {reextractError && <Alert variant="error">{reextractError}</Alert>}
+                  <Button loading={reextracting} onClick={() => void reextractText()}>
+                    Yeniden OCR
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </details>
+      )}
       <details>
         <summary>Eksik bilgiler ({analysis.missing_fields.length})</summary>
         {analysis.missing_fields.length ? (

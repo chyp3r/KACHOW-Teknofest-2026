@@ -3,7 +3,7 @@ import { useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { DocumentTable } from "../features/documents/DocumentTable";
 import { DocumentUploader } from "../features/documents/DocumentUploader";
-import type { DocumentAnalysis, DocumentMetadata, EvrakFields } from "../types/documents";
+import type { DocumentAnalysis, DocumentMetadata, DocumentText, EvrakFields } from "../types/documents";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Surface";
 
@@ -21,6 +21,13 @@ export function DocumentsPage({
   onDeleteDocument,
   onSelect,
   onCloseDocument,
+  onGenerateDetailedSummary,
+  generatingDetailedSummary,
+  documentText,
+  onSaveText,
+  savingText,
+  onReextract,
+  reextracting,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
@@ -35,6 +42,13 @@ export function DocumentsPage({
   onDeleteDocument?: (storagePath: string) => Promise<void>;
   onSelect: (document: DocumentMetadata) => void;
   onCloseDocument?: () => void;
+  onGenerateDetailedSummary?: (storagePath: string) => Promise<void>;
+  generatingDetailedSummary?: boolean;
+  documentText?: DocumentText | null;
+  onSaveText?: (storagePath: string, pages: string[]) => Promise<void>;
+  savingText?: boolean;
+  onReextract?: (storagePath: string) => Promise<void>;
+  reextracting?: boolean;
 }) {
   const [uploadOpen, setUploadOpen] = useState(false);
 
@@ -81,6 +95,13 @@ export function DocumentsPage({
         onClose={onCloseDocument}
         onUpdateFields={onUpdateFields}
         onDeleteDocument={onDeleteDocument}
+        onGenerateDetailedSummary={onGenerateDetailedSummary}
+        generatingDetailedSummary={generatingDetailedSummary}
+        documentText={documentText}
+        onSaveText={onSaveText}
+        savingText={savingText}
+        onReextract={onReextract}
+        reextracting={reextracting}
       />
     </div>
   );

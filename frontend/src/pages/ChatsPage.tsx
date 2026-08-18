@@ -96,7 +96,7 @@ export function ChatsPage({
     useDocument: boolean,
   ) => Promise<void>;
   onResume: (
-    action: "answer" | "approve" | "revise" | "reject",
+    action: "answer" | "approve" | "revise" | "reject" | "select",
     answers: Record<string, string | string[]>,
     instructions: string,
   ) => Promise<void>;

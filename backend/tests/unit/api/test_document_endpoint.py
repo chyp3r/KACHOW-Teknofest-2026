@@ -1,7 +1,7 @@
 """API tests for the document analysis endpoint."""
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -20,10 +20,12 @@ from app.core.enums.user_role import UserRole
 from app.domains.documents.model.document_model import DocumentModel
 from app.domains.documents.schema.document_schema import (
     DocumentAnalysisResponseSchema,
+    DocumentTextSchema,
     ExtractionInfoSchema,
     MevzuatReferenceSchema,
 )
 from app.domains.users.model.user_model import UserModel
+from app.infrastructure.extractors.base import DocumentExtractionError
 from app.main import app
 
 _CURRENT_USER = UserModel(
@@ -235,3 +237,228 @@ def test_update_fields_returns_404_when_nothing_is_cached():
     response = client.patch(_FIELDS_ENDPOINT, json={"fields": {}})
 
     assert response.status_code == 404
+
+
+# ==========================================
+# POST /documents/{storage_path}/detailed-summary
+# ==========================================
+_SUMMARY_STORAGE_PATH = f"uploads/{'b' * 32}.pdf"
+_SUMMARY_ENDPOINT = f"/api/v1/documents/{_SUMMARY_STORAGE_PATH}/detailed-summary"
+
+
+@pytest.fixture
+def _unmetered_rate_limit():
+    """Bypass the endpoint's real Redis-backed rate limiter (5 req/60s) via
+    its own documented fail-open path (see rate_limit's own comment: "Fail
+    open, not closed... if the counter is unreachable... the safe answer is
+    to serve it") -- not a test-only shortcut, the same degradation
+    production takes when Redis is briefly unavailable. Without this,
+    repeated runs of this file within the same 60s window (routine during
+    active development) start returning 429 instead of exercising the mocked
+    service at all, exactly the mechanism already known to make
+    test_analyze_maps_ai_exception_to_502 and
+    test_upload_bounds.py::test_analyze_endpoint_rejects_an_oversized_declared_content_length
+    order-dependently flaky against /analyze's own rate limit."""
+    with patch("app.api.rate_limit.get_cache") as mock_get_cache:
+        mock_get_cache.return_value.connect = AsyncMock(side_effect=Exception("test: no redis"))
+        yield
+
+
+def test_generate_detailed_summary_returns_the_populated_analysis(_unmetered_rate_limit):
+    service = AsyncMock()
+    updated = ANALYSIS_RESULT.model_copy(
+        update={"detailed_summary": "Çok paragraflı ayrıntılı özet."}
+    )
+    service.generate_detailed_summary.return_value = updated
+    _override(service)
+
+    response = client.post(_SUMMARY_ENDPOINT)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["detailed_summary"] == "Çok paragraflı ayrıntılı özet."
+    assert service.generate_detailed_summary.await_args.args == (_SUMMARY_STORAGE_PATH,)
+
+
+def test_generate_detailed_summary_returns_404_when_nothing_is_cached(_unmetered_rate_limit):
+    service = AsyncMock()
+    service.generate_detailed_summary.return_value = None
+    _override(service)
+
+    response = client.post(_SUMMARY_ENDPOINT)
+
+    assert response.status_code == 404
+
+
+def test_generate_detailed_summary_surfaces_a_generation_failure_as_502(_unmetered_rate_limit):
+    """AIException (timeout or provider failure -- see
+    DocumentService.generate_detailed_summary's own docstring for why this
+    raises rather than degrading silently) must reach the caller as a clear
+    502, not a generic 500 or a silently empty 200."""
+    service = AsyncMock()
+    service.generate_detailed_summary.side_effect = AIException(
+        message="Ayrıntılı özet oluşturma zaman aşımına uğradı."
+    )
+    _override(service)
+
+    response = client.post(_SUMMARY_ENDPOINT)
+
+    assert response.status_code == 502
+
+
+# ==========================================
+# GET/PUT /documents/{storage_path}/text, POST /documents/{storage_path}/re-extract
+# ==========================================
+_TEXT_STORAGE_PATH = f"uploads/{'c' * 32}.pdf"
+_TEXT_ENDPOINT = f"/api/v1/documents/{_TEXT_STORAGE_PATH}/text"
+_REEXTRACT_ENDPOINT = f"/api/v1/documents/{_TEXT_STORAGE_PATH}/re-extract"
+
+TEXT_RESULT = DocumentTextSchema(
+    pages=["Sayı : E-123", "İkinci sayfa"],
+    extracted_text="Sayı : E-123\n\nİkinci sayfa",
+    page_count=2,
+    extractor="tesseract",
+    used_ocr=True,
+)
+
+
+def test_get_document_text_returns_the_cached_pages():
+    service = AsyncMock()
+    service.get_document_text.return_value = TEXT_RESULT
+    _override(service)
+
+    response = client.get(_TEXT_ENDPOINT)
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body["pages"] == ["Sayı : E-123", "İkinci sayfa"]
+    assert body["extractor"] == "tesseract"
+    assert service.get_document_text.await_args.args == (_TEXT_STORAGE_PATH,)
+
+
+def test_get_document_text_returns_404_when_nothing_is_cached():
+    service = AsyncMock()
+    service.get_document_text.return_value = None
+    _override(service)
+
+    response = client.get(_TEXT_ENDPOINT)
+
+    assert response.status_code == 404
+
+
+def test_get_document_text_is_not_swallowed_by_the_catch_all_get_route():
+    """/{storage_path:path} is greedy; a GET sub-route must be declared
+    above it in router.py, or it silently returns the full analysis shape
+    instead of the text view (or worse, treats '.../text' as itself a
+    storage_path and 404s confusingly)."""
+    service = AsyncMock()
+    service.get_document_text.return_value = TEXT_RESULT
+    service.get_cached_analysis.return_value = ANALYSIS_RESULT
+    _override(service)
+
+    response = client.get(_TEXT_ENDPOINT)
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert "pages" in body
+    assert "document_type" not in body
+    service.get_cached_analysis.assert_not_called()
+    service.get_document_text.assert_awaited_once()
+
+
+def test_get_document_text_rejects_a_malformed_storage_path():
+    service = AsyncMock()
+    _override(service)
+
+    response = client.get("/api/v1/documents/..%2Fetc/text")
+
+    assert response.status_code == 400
+
+
+def test_update_document_text_returns_the_recomputed_analysis(_unmetered_rate_limit):
+    service = AsyncMock()
+    updated = ANALYSIS_RESULT.model_copy(
+        update={
+            "fields": EvrakField(sayi="E-123", konu="İzin Talebi", muhatap="İlgili Makama")
+        }
+    )
+    service.update_document_text.return_value = updated
+    _override(service)
+
+    response = client.put(
+        _TEXT_ENDPOINT, json={"pages": ["Sayı : E-123", "Konu : İzin Talebi"]}
+    )
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body["fields"]["muhatap"] == "İlgili Makama"
+    args = service.update_document_text.await_args.args
+    assert args[0] == _TEXT_STORAGE_PATH
+    assert args[1] == ["Sayı : E-123", "Konu : İzin Talebi"]
+
+
+def test_update_document_text_returns_404_when_nothing_is_cached(_unmetered_rate_limit):
+    service = AsyncMock()
+    service.update_document_text.return_value = None
+    _override(service)
+
+    response = client.put(_TEXT_ENDPOINT, json={"pages": ["x"]})
+
+    assert response.status_code == 404
+
+
+def test_update_document_text_surfaces_a_page_count_mismatch_as_422(_unmetered_rate_limit):
+    service = AsyncMock()
+    service.update_document_text.side_effect = ValidationException(
+        message="Sayfa sayısı önbellekteki belgeyle eşleşmiyor."
+    )
+    _override(service)
+
+    response = client.put(_TEXT_ENDPOINT, json={"pages": ["x", "y"]})
+
+    assert response.status_code == 422
+
+
+def test_reextract_document_text_returns_the_recomputed_analysis(_unmetered_rate_limit):
+    service = AsyncMock()
+    updated = ANALYSIS_RESULT.model_copy(
+        update={
+            "extraction": ExtractionInfoSchema(
+                extractor="ollama_vision", page_count=1, char_count=100, used_ocr=True
+            )
+        }
+    )
+    service.reextract_document_text.return_value = updated
+    _override(service)
+
+    response = client.post(_REEXTRACT_ENDPOINT)
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body["extraction"]["extractor"] == "ollama_vision"
+    assert service.reextract_document_text.await_args.args == (
+        _TEXT_STORAGE_PATH,
+        "company-1",
+    )
+
+
+def test_reextract_document_text_returns_404_when_nothing_is_cached(_unmetered_rate_limit):
+    service = AsyncMock()
+    service.reextract_document_text.return_value = None
+    _override(service)
+
+    response = client.post(_REEXTRACT_ENDPOINT)
+
+    assert response.status_code == 404
+
+
+def test_reextract_document_text_maps_extraction_failure_to_422(_unmetered_rate_limit):
+    service = AsyncMock()
+    service.reextract_document_text.side_effect = DocumentExtractionError(
+        "model unreachable"
+    )
+    _override(service)
+
+    response = client.post(_REEXTRACT_ENDPOINT)
+
+    assert response.status_code == 422

@@ -36,8 +36,15 @@ from app.domains.users.model.user_model import UserModel
 from app.domains.users.repository import UserRepository
 from app.events.event import ArtifactTransferredEvent
 from app.events.event_bus import event_bus
+from app.observability import transfer_metrics
 
 logger = logging.getLogger(__name__)
+
+#: Cap on `GroupTransferCommand.recipient_ids` -- same order of magnitude as
+#: `app.domains.messaging.service.MAX_GROUP_PARTICIPANTS` (group chat's own
+#: ceiling), kept as a separate constant since a transfer fan-out isn't tied
+#: to any particular conversation's membership size.
+MAX_GROUP_TRANSFER_RECIPIENTS = 50
 
 
 @dataclass(frozen=True)
@@ -62,6 +69,44 @@ class TransferCommand:
     ai_suggested: bool = False
     recommendation_source: Optional[str] = None
     recommendation_confidence: Optional[float] = None
+
+
+@dataclass(frozen=True)
+class GroupTransferCommand:
+    """`ArtifactTransferService.execute_group`'s input -- the chat/REST-only
+    fan-out to several recipients at once (Faz 5, #205).
+
+    Deliberately has no `channel` field: `execute_group` always calls
+    `execute()` with `channel="chat"` (see its own docstring for why the AI
+    channel never builds one of these).
+    """
+
+    company_id: str
+    sender: UserModel
+    recipient_ids: tuple
+    #: "draft" | "document"
+    artifact_kind: str
+    source_artifact_id: str
+    source_version: Optional[int] = None
+    #: Combined with each `recipient_id` (`f"{prefix}:{recipient_id}"`) to
+    #: derive a per-recipient idempotency key -- a single flat key can't be
+    #: reused across recipients, since each is its own `TransferCommand`/
+    #: `ArtifactTransferModel` row. `None` skips idempotency entirely, same
+    #: as `TransferCommand.idempotency_key`.
+    idempotency_key_prefix: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class GroupTransferResultItem:
+    """One recipient's outcome within a `execute_group` call -- mirrors
+    `app.domains.pools.schema.pool_schema.PoolPushResultItem`'s own
+    per-recipient partial-success shape."""
+
+    recipient_id: str
+    #: "sent" | "denied" | "not_found" | "failed"
+    status: str
+    transfer_id: Optional[str] = None
+    reason: Optional[str] = None
 
 
 class ArtifactTransferService:
@@ -120,21 +165,26 @@ class ArtifactTransferService:
             if existing is not None:
                 return existing
 
-        if cmd.artifact_kind == "draft":
-            draft = await self._load_draft(cmd.source_artifact_id, cmd.company_id)
-            owner_id = draft.user_id
-            sensitivity: Optional[SensitivityLevel] = None
-            destination_unit_id = draft.destination_unit_id
-        elif cmd.artifact_kind == "document":
-            document = await self._load_document(cmd.source_artifact_id, cmd.company_id)
-            owner_id = document.owner_id
-            sensitivity = self._document_sensitivity(document)
-            destination_unit_id = None
-        else:
-            raise ValidationException(message="Geçersiz artifact türü.")
+        try:
+            if cmd.artifact_kind == "draft":
+                draft = await self._load_draft(cmd.source_artifact_id, cmd.company_id)
+                owner_id = draft.user_id
+                sensitivity: Optional[SensitivityLevel] = None
+                destination_unit_id = draft.destination_unit_id
+            elif cmd.artifact_kind == "document":
+                document = await self._load_document(cmd.source_artifact_id, cmd.company_id)
+                owner_id = document.owner_id
+                sensitivity = self._document_sensitivity(document)
+                destination_unit_id = None
+            else:
+                raise ValidationException(message="Geçersiz artifact türü.")
+        except NotFoundException:
+            transfer_metrics.ARTIFACT_TRANSFERS.labels(channel=cmd.channel, result="not_found").inc()
+            raise
 
         recipient = await self.user_repository.get_by_id_in_company(cmd.recipient_id, cmd.company_id)
         if recipient is None:
+            transfer_metrics.ARTIFACT_TRANSFERS.labels(channel=cmd.channel, result="not_found").inc()
             raise NotFoundException(message="Kullanıcı bulunamadı.")
 
         resource = Resource(
@@ -142,6 +192,7 @@ class ArtifactTransferService:
         )
         decision = authorize(subject_from_user(cmd.sender), Action.ARTIFACT_TRANSFER, resource)
         if not decision.permit:
+            transfer_metrics.ARTIFACT_TRANSFERS.labels(channel=cmd.channel, result="denied").inc()
             raise AuthorizationException(message="Bu artifact'i gönderme izniniz yok.")
 
         policy_decision = await self.policy.evaluate(
@@ -153,6 +204,10 @@ class ArtifactTransferService:
             artifact_destination_unit_id=destination_unit_id,
         )
         if not policy_decision.permit:
+            transfer_metrics.TRANSFER_POLICY_DENIALS.labels(
+                reason=policy_decision.reason_code or "unknown"
+            ).inc()
+            transfer_metrics.ARTIFACT_TRANSFERS.labels(channel=cmd.channel, result="denied").inc()
             raise AuthorizationException(message=policy_decision.message_tr)
 
         if cmd.artifact_kind == "draft":
@@ -220,7 +275,79 @@ class ArtifactTransferService:
                 }
             )
         )
+        transfer_metrics.ARTIFACT_TRANSFERS.labels(channel=cmd.channel, result="success").inc()
         return transfer
+
+    async def execute_group(self, cmd: GroupTransferCommand) -> list:
+        """Fan out one artifact to several recipients in one call -- the
+        chat/REST group-send path only (`POST /transfers/send-group`).
+
+        Deliberately unreachable from the AI channel: `app.ai.tools.
+        transfer_tools.propose_transfer` and `TransferGraphProvider` only
+        ever build a single-recipient `TransferCommand`/open a
+        single-recipient intent -- there is no group variant of either, and
+        this method is never called from `app.ai.*` (enforced by the
+        existing `app.ai.*` never imports `app.domains.*` boundary, not by
+        a runtime check here).
+
+        Each recipient goes through the exact same `execute()` this class
+        already exposes -- no second transfer implementation, same
+        principle `execute()`'s own docstring states -- so a denial for one
+        recipient (clearance, self-send, not active, ...) never blocks the
+        others. Mirrors `PoolService.push`/`_push_one`'s own per-recipient
+        partial-success shape.
+
+        Raises:
+            ValidationException: `cmd.recipient_ids` is empty or exceeds
+                `MAX_GROUP_TRANSFER_RECIPIENTS`.
+        """
+        if not cmd.recipient_ids:
+            raise ValidationException(message="En az bir alıcı gerekli.")
+        if len(cmd.recipient_ids) > MAX_GROUP_TRANSFER_RECIPIENTS:
+            raise ValidationException(
+                message=(
+                    f"Bir grup transferinde en fazla {MAX_GROUP_TRANSFER_RECIPIENTS} "
+                    "alıcı olabilir."
+                )
+            )
+
+        results: list[GroupTransferResultItem] = []
+        for recipient_id in cmd.recipient_ids:
+            idempotency_key = (
+                f"{cmd.idempotency_key_prefix}:{recipient_id}"
+                if cmd.idempotency_key_prefix
+                else None
+            )
+            try:
+                transfer = await self.execute(
+                    TransferCommand(
+                        company_id=cmd.company_id,
+                        sender=cmd.sender,
+                        recipient_id=recipient_id,
+                        artifact_kind=cmd.artifact_kind,
+                        source_artifact_id=cmd.source_artifact_id,
+                        source_version=cmd.source_version,
+                        channel="chat",
+                        idempotency_key=idempotency_key,
+                    )
+                )
+            except NotFoundException as exc:
+                results.append(
+                    GroupTransferResultItem(recipient_id=recipient_id, status="not_found", reason=exc.message)
+                )
+            except AuthorizationException as exc:
+                results.append(
+                    GroupTransferResultItem(recipient_id=recipient_id, status="denied", reason=exc.message)
+                )
+            except ValidationException as exc:
+                results.append(
+                    GroupTransferResultItem(recipient_id=recipient_id, status="failed", reason=exc.message)
+                )
+            else:
+                results.append(
+                    GroupTransferResultItem(recipient_id=recipient_id, status="sent", transfer_id=transfer.id)
+                )
+        return results
 
     async def _load_draft(self, draft_id: str, company_id: str) -> DraftModel:
         draft = await self.draft_repository.get_by_id(draft_id)

@@ -2,7 +2,7 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
-## [3.16.0] - 2026-08-17
+## [3.21.0] - 2026-08-18
 ### Eklendi
 - **Tüm Markdown veri kümesi için semantik anonimleştirme**: Aktif, referans ve
   reddedilmiş kayıtlar dahil 1541 belge kartı tek bir deterministik hattan
@@ -58,6 +58,366 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   incelemesinden geçti.
 
 Refs: [#203](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/203).
+
+## [3.20.0] - 2026-08-18
+### Düzeltildi
+- **Birim önerisi taslak akışında "kayboluyordu"** -- `routing_graph` her
+  zaman bir birim öneriyor, ama chat içinde taslak üretildiği anda gösterilen
+  `DraftMetaStrip` bunu yalnızca statik bir metin olarak gösteriyordu;
+  interaktif `UnitPicker` yalnızca ayrı `/drafts` yönetim sayfasında vardı ve
+  oraya nasıl ulaşılacağı hiçbir yerde belli değildi. Kök neden: kalıcı
+  taslağın `id`'si chat yanıtının `details`'ine hiç akmıyordu --
+  `ChatService._maybe_record_draft` artık `draft_id`'yi döndürüyor ve hem
+  akış (SSE) hem doğrudan yanıt yolunda `final_result`/response
+  gönderilmeden ÖNCE `final_output["draft"]["id"]`'ye enjekte ediliyor.
+  `DraftMetaStrip` artık bu id varsa `UnitPicker`'ı doğrudan chat içinde,
+  "Önerilen birim" şeridinin yanında render ediyor -- birim seçimi
+  taslağın üretildiği yerde, ayrı bir sayfaya gitmeden yapılabiliyor.
+- **Taslak isimleri ayırt edici değildi** -- `/drafts` sayfasındaki başlık
+  yalnızca kaynak belge adı + yazışma türünden kuruluyordu; belgesiz ve aynı
+  türden birden fazla taslak (örn. birkaç ayrı "Bilgilendirme Metni") hepsi
+  aynı, ayırt edilemez "Kaynak yok - Bilgilendirme Metni" başlığıyla
+  listeleniyordu. Taslağın kendi içeriğindeki "Konu: ..." satırı (writer.md'nin
+  sabit yapısında her zaman bulunur) artık başlığa öncelikli olarak dahil
+  ediliyor; satır yoksa (veya doldurulmamış bir `[Konu]` yer tutucusuysa)
+  eski davranışa sorunsuzca geri dönülüyor.
+
+Ayrıca, bu iki hatayı test ederken bulunan üçüncü, ilgisiz bir bug:
+
+- **Asistan yanıtı bazen ekranda göründükten hemen sonra kayboluyordu** --
+  `useChatWorkflow`'un `final_result` işleyicisi bir turun bitiminde sunucu
+  durumunu tazeliyor (`refreshServerState`); bu tazeleme sorgusu
+  `!loading` iken etkinleşiyor, ki `loading` da tam olarak
+  `activeRequest.current` ile aynı anda temizleniyor -- yani bu sorgunun
+  yeniden getirimi, mesaj senkronizasyon efekti'nin kendi koruma kontrolü
+  zaten açıldıktan SONRA tetikleniyordu. Sunucudan gecikmeli/eski (boş)
+  bir geçmiş okuması gelirse, bu efekt az önce eklenen asistan mesajını
+  sessizce siliyordu. Efekt artık sunucudan gelen öğe sayısı zaten
+  sahip olunandan azsa `messages`'ı asla geriye yazmıyor (sohbet geçmişi
+  yalnızca-ekleme yapılan bir yapıdır, "azalması" her zaman bu yarış
+  durumudur, gerçek bir "geçmiş küçüldü" sinyali değil).
+
+### Test
+- `docker compose run --rm backend pytest -q` → **2264 test geçti, 0
+  başarısız**.
+- `cd frontend && npx vitest run` → **46 dosya, 214 test geçti** (3 art arda
+  tam koşuda doğrulandı -- `useChatWorkflow` yarış durumu düzeltmeden önce
+  aralıklı olarak başarısız oluyordu).
+- CHANGELOG.md güncellendi (3.20.0).
+
+## [3.19.0] - 2026-08-18
+### Düzeltildi
+- **Taslak brief'inde belge varlıkları eksikti** -- doküman analizi bir CV/
+  evrakta geçen önemli varlık isimlerini (kişi, kurum, tarih, tutar vb.)
+  zaten deterministik olarak çıkarıyordu (`EvrakField.entities`), ama
+  `draft_graph._build_brief` bunu hiç okumuyordu. "Bu CV'de çalıştığı
+  kurumları belirt" gibi bir istek, yazar bu bilgiyi hiç görmediği için
+  `[BİLGİ EKSİK: ...]` yer tutucusuna düşüyor ve insan onay kapısı
+  kullanıcıya belgenin zaten cevapladığı bir soruyu soruyordu. Brief'e yeni
+  bir "Belgede Geçen Diğer Önemli Varlıklar" satırı eklendi.
+- **Revizyonda yanlış paragraf hedefleniyordu ("sayıyı siliyor" hatası)** --
+  üretilen bir taslakta `Konu:`/`Sayı:`/`Tarih:` satırları aralarında boş
+  satır olmadan art arda geldiği için (bkz. `writer.md`'nin sabit yapısı),
+  `instruction.py::_split_paragraphs` bunları TEK bir blok olarak
+  `paragraphs[0]`'a yerleştiriyordu. "1. paragrafı sil"/"girişi değiştir"
+  gibi talimatlar bu yüzden mektubun gerçek gövdesi yerine bu metadata
+  bloğunu hedefliyor, reviser'a alakasız bir gövde talimatını `Sayı:`
+  satırına uygulaması söyleniyordu -- kullanıcının "rastgele saçma sapan
+  şeyler yapıyor" olarak tarif ettiği davranışın kök nedeni buydu. Ordinal/
+  "giriş" hedeflemesi artık saf metadata bloklarını (`Sayı`/`Tarih`/`Konu`/
+  `Muhatap`/`İlgi`/`Ekler` etiketli satırlar veya "T.C." anteti) atlıyor;
+  `konu`/`kapanış`/`imza` bölüm ipuçları değişmeden tam listede aramaya
+  devam ediyor.
+- **Revizyonda silme talimatı hâlâ güvenilir değildi** -- önceki dalda
+  (#209 PR'ı, artık main'de) eklenen düzeltmeye ek olarak, yukarıdaki yanlış
+  hedefleme bug'ı da silme talimatlarının "rastgele" görünmesine katkıda
+  bulunuyordu; doğru paragrafı hedeflemek bu ikinci kaynağı da kapatıyor.
+- **Kapanış talimatı bazen sessizce taslak turuna dönüşüyordu (uzun süredir
+  bilinen, ortam kaynaklı sanılan bir test hatası)** -- kök neden aslında
+  iki gerçek router hatasıydı, ortam kısıtı değil: (1) `REVISE_RULES` yalnızca
+  "kapanışı **değiştir**" yüzeyini tanıyordu, "kapanışı 'X' **yap**" gibi
+  aynı isteğin farklı bir fiille söylenmiş hali hiçbir kurala hiç değmiyordu;
+  (2) değse bile, mesaj kısa olduğu ve "yap" ile bittiği için (bir
+  `CONTINUATION_SURFACES` yüzeyi) `draft.continuation` sezgiseli aynı anda
+  ateşleniyor, "kapanış" alanını açıkça adlandıran çok daha spesifik
+  `revise.explicit_request` kanıtına rakip bir `draft` puanı ekliyordu ve
+  çoğu zaman onu geçiyordu. `intent_rules.py`'ye çıplak "kapanisi" yüzeyi
+  eklendi; `intent_scorer.py`'deki devam sezgiseli artık mesajda zaten
+  farklı bir amaç için açık bir kural ateşlenmişse devreye girmiyor.
+  `tests/integration/test_brief_survives_into_revise.py`'nin önceden
+  "bilinen, ortam kaynaklı" sayılan başarısızlığı bu düzeltmeyle gerçekten
+  çözüldü.
+
+### Test
+- `docker compose run --rm backend pytest -q` → **2262 test geçti, 0
+  başarısız** -- daha önce "bilinen ön-var olan hata" sayılan test artık
+  gerçekten geçiyor.
+
+## [3.18.0] - 2026-08-18
+### Düzeltildi
+Canlı kullanımda tespit edilen 10 ayrı taslak-akışı hatası (#209). Kök
+nedenlerin çoğu üç ortak desende toplandı: turn-scoped olması gereken
+state'in session-scoped tutulması, guardrail'lerin fail-secure tarafa aşırı
+agresif ayarlanmış olması, ve taslak prompt'unun özet dışında hiçbir kaynak
+metne erişememesi.
+
+- **State izolasyonu** -- ikinci bir taslak turn'ü artık önceki taslağın
+  muhatap/yazan taraf/kapanış cevaplarını miras almıyor
+  (`planning_graph._step_brief` yalnızca aktif bir `revise` turn'ünde
+  `prior_brief`'i taşıyor; `focus.py::compute_focus_update` `writing_brief`'i
+  her draft turn'ünde değiştiriyor); frontend'de `PromptQuestionCard`/
+  `InterruptPanel` artık `interrupt_id`/`message.id` ile keylenip soru
+  kimliği değiştiğinde local state'i sıfırlıyor.
+- **Otomatik tarih** -- kullanıcıya asla tarih sorulmuyor; `app.ai.workflows.
+  dates.today_tr()` sunucu tarafında çözülüp brief'in "0. BUGÜNÜN TARİHİ"
+  bölümüne enjekte ediliyor, `fill_date_placeholders` deterministik
+  backstop olarak kalan tüm `[Tarih]` yer tutucularını dolduruyor.
+- **"İnsan onayı" kaldırıldı** -- `draft_approval` gate'i tamamen silindi;
+  yalnızca `missing_information` (eksik bilgi) kapısı kaldı, UI'daki
+  "İnsan onayı gerekiyor" ibaresi hiçbir bileşende görünmüyor.
+  `requires_human_approval` veri modeli olarak (skorlama/audit için) korundu.
+- **Birim önerisi hiçbir zaman boş dönmüyor** -- `routing_graph` artık
+  model hatası/liste dışı yanıt/düşük skor durumlarının hepsinde
+  deterministik bir `_best_effort_unit` fallback'iyle en az bir birim +
+  bir alternatif döndürüyor; frontend'e `UnitPicker` bileşeni eklendi
+  (seçici + "Diğer birim…" serbest metin).
+- **Relevance guardrail'i** -- "bu CV'yi ekibe katılım metni yap" gibi
+  belgeye açıkça işaret eden istekler artık yanlışlıkla `unrelated`
+  sayılmıyor (yeni deiktik referans kuralı + genişletilmiş karşılaştırma
+  yüzeyi); model yalnızca `confidence >= 0.7` iken reddedebiliyor.
+- **PII guardrail'i** -- hard block artık yalnızca belgenin kendi
+  `gizlilik_derecesi` etiketi GİZLİ/ÇOK GİZLİ olduğunda ve deterministik bir
+  PII bulgusu varken tetikleniyor; LLM judge tek başına asla bloklamıyor.
+  Adres detector'ü `no:`/`kat:` gibi yalnız unit-keyword satırlarını artık
+  adres saymıyor; her blok/maskeleme kararı tetikleyici `rule_id`'yi
+  açıklayan bir mesaj üretiyor.
+- **Rol farkındalıklı placeholder'lar** -- çıplak `[Ad Soyad]`/`[Unvan]`/
+  `[İmza]`/`[Kurum Adı]` artık `normalize_role_placeholders` ile
+  "[İmzalayacak yetkilinin adı ve soyadı]" gibi kime ait olduğu açık
+  metinlere dönüştürülüyor (dilekçelerde dilekçe sahibine atfediliyor).
+- **Alıcı (muhatap) çıkarımı** -- "Ahmet Yılmaz'a bir izin yazısı hazırla"
+  artık muhatabı tekrar sormuyor: kesmesiz datif, "Sayın X", "X için",
+  "X Bey'e/Hanım'a" desenleri eklendi; tek aday + bir yazma fiili birlikte
+  geçtiğinde slot doğrudan çözülüyor, birden fazla aday veya fiilsiz bir
+  isim geçişi hâlâ bir onay sorusu üretiyor.
+- **Taslak RAG grounding'i** -- yazar artık yalnızca belgenin özetini değil,
+  `document_qa` koleksiyonundan (asistanın `search_document` aracının da
+  kullandığı) getirilen birebir alıntıları da görüyor. Yeni
+  `draft_graph.retrieve_source_chunks_node`, `retrieve_examples`'la aynı
+  degrade-on-failure desenini izliyor (bütçe aşımı/hata → sıfır alıntı,
+  asla başarısız taslak) ve brief'e "9. BELGEDEN İLGİLİ ALINTILAR" bölümünü
+  ekliyor; `DraftPolicy.source_chunks_enabled`/`source_chunk_count`/
+  `source_chunk_char_budget` ile yönetiliyor.
+
+Ayrıca, #209 listesinde olmayıp bu dalda test edilirken canlıda tespit
+edilen ek bir revizyon hatası:
+
+- **Revizyonda silme talimatı dinlenmiyordu** -- hedeflenecek paragraf/bölüm
+  isim/numara ile belirtilmediğinde ("...paragraftan bir kısmı sil" gibi),
+  tüm taslağı yeniden yazan prompt'un kendi "zaten doldurulmuş bilgileri
+  asla silme" kuralı kullanıcının silme talimatıyla doğrudan çelişiyordu;
+  reviser talimatı yine de uygularsa bu kez `detect_content_loss`'un
+  kısaltma anahtar kelime listesi yalnızca "kısalt"/"özetle" gibi fiilleri
+  tanıdığından, gerçek silme kaynaklı küçülme kazara içerik kaybı sayılıp
+  onarım döngüsüyle geri getiriliyordu -- talimat sessizce iptal edilmiş
+  oluyordu. Prompt'un kuralı silme talimatları için açık bir istisna
+  içerecek şekilde yeniden yazıldı; `_SHORTENING_KEYWORDS`'e "sil"/"çıkar"/
+  "kaldır" eklendi.
+
+### Test
+- `docker compose run --rm backend pytest -q` → **2196 test geçti**, 1
+  bilinen (bu değişikliklerden bağımsız, `main` üzerinde de aynı şekilde
+  başarısız) ön-var olan hata hariç.
+- `cd frontend && npx vitest run` → tüm testler geçti; `İnsan onayı`/
+  `insan onay` dizesi hiçbir bileşende kalmadı.
+
+## [3.17.0] - 2026-08-17
+### Eklendi
+İnternal communication + AI-assisted artifact transfer planının **Faz 5**'i
+(#205) -- sertleştirme: transferi kalıcı bir gözlemlenebilirlik yüzeyine
+bağlamak, alıcının paylaşılan bir evrak snapshot'ını gerçekten kendi
+evrakına dönüştürebilmesi, ve chat/REST üzerinden tek seferde birden fazla
+kişiye gönderim.
+
+- **`POST /pools/items/{item_id}/adopt`** (`DocumentService.
+  adopt_pool_item`) -- copy-on-write. Faz 3'ün transfer akışı bir evrakı
+  gönderdiğinde alıcının `document_pool_items` satırı bugüne kadar hâlâ
+  **göndericinin** `documents` satırına işaret ediyordu
+  (`PoolService.file_transferred_document`): alıcı görüntüleyebiliyor ama
+  gerçek sahibi değildi, metadata'sını düzenleyemiyordu. `adopt` blob'u
+  `BaseStorage` üzerinden kopyalıyor (yerel dosya yolu varsayılmıyor -- S3
+  altında `storage_path` bir `s3://...` URI'dir), alıcı adına yeni bir
+  `documents` satırı açıyor (transfer anındaki `metadata_snapshot`'tan
+  dolduruluyor -- göndericinin o andan sonra değiştirmiş olabileceği canlı
+  satırından değil), analiz cache JSON'unu yeni storage_path altına
+  kopyalıyor, ve Q&A için yeniden indeksliyor. Pool item'ın kendisi yeni
+  belgeye yeniden işaretleniyor (`source="adopted"`, `metadata_snapshot`
+  temizleniyor, `transferred_by` provenance olarak kalıyor) -- ikinci bir
+  pool item satırı açılmıyor. Yalnızca pool'un kendi sahibi çağırabilir;
+  Admin/Manager bypass'ı yok (kişisel bir kopya oluşturuyor).
+  **Bilinçli sınır**: plan "arq indexing worker'a job at" diyordu ama bu
+  depoda evrak indeksleme için hiç arq worker'ı yok (tek bağlı arq job'u
+  LoRA training, `app.workers.queue`) -- yeni bir worker altyapısı kurmak
+  orantısız olurdu; reindeksleme, upload akışının zaten yaptığı gibi
+  senkron çalışıyor.
+- **Prometheus transfer metrikleri** (`observability/transfer_metrics.py`,
+  `ai_metrics.py`/`company_metrics.py` ile aynı desen):
+  `kachow_artifact_transfers_total{channel,result}` (her
+  `ArtifactTransferService.execute()` sonucu -- `success`/`denied`/
+  `not_found`; idempotent bir tekrar denemesi sayılmıyor, yeni bir deneme
+  değil) ve `kachow_transfer_policy_denials_total{reason}`
+  (`TransferPolicy` red sebepleri: `self_transfer`/`recipient_inactive`/
+  `clearance`/`favorite_required`). `monitoring/dashboards/
+  transfers_dashboard.json` -- yeni bir pano, `company_dashboard.json`'un
+  panel şablonunu izliyor.
+- **Grup transferi, yalnızca chat/REST** -- araştırma sırasında ortaya
+  çıktı: transfer o ana kadar tamamen tek alıcılıydı
+  (`TransferCommand.recipient_id: str`), grup transferi hiç yoktu.
+  `ArtifactTransferService.execute_group(GroupTransferCommand)` her alıcı
+  için var olan `execute()`'u tek tek çağırıyor -- ikinci bir transfer
+  implementasyonu yok -- ve `PoolService.push`/`_push_one`'daki
+  per-recipient partial-success desenini izliyor: bir alıcının reddi
+  (`NotFoundException`/`AuthorizationException`/`ValidationException`)
+  diğerlerini bloklamıyor. `POST /transfers/send-group`, en fazla
+  `MAX_GROUP_TRANSFER_RECIPIENTS = 50` alıcı. **AI kanalına bilinçli
+  olarak bağlanmadı**: `propose_transfer` tool'u ve `TransferGraphProvider`
+  değişmedi, tek alıcı olarak kalıyor -- kullanıcıyla konuşulup üzerinde
+  anlaşılan kapsam.
+
+### Test
+- `docker compose run --rm backend pytest tests/unit tests/integration -q`
+  → **2052 test geçti** (+29): `adopt_pool_item`'ın her dalı (yetki, pool
+  sahipliği, transfer-olmayan item reddi, storage hatası, snapshot'tan
+  doldurma, cache kopyalama + reindeksleme, quota), `execute_group`'un
+  boş/aşırı-kalabalık liste reddi, partial-success, her zaman `channel=
+  "chat"`, alıcı başına ayrık idempotency key; her yeni Prometheus sayacı
+  artışı (başarı/red/bulunamadı/policy-reason); gerçek Postgres üzerinde
+  uçtan uca grup transferi (bir alıcı `self_transfer` ile reddedilirken
+  diğeri başarıyla gönderiliyor) ve adopt (gerçek `LocalStorage` blob
+  kopyası + yeni `documents` satırı + orijinalin dokunulmamış kalması).
+- Yeni migration yok -- `metadata_snapshot`/`transferred_by` kolonları
+  Faz 4'te zaten vardı, yalnızca `source` sütununun kabul ettiği değer
+  kümesi genişledi (uygulama seviyesinde, DB constraint'i yok).
+
+Refs: [#205](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/205).
+
+## [3.16.0] - 2026-08-17
+### Eklendi
+İnternal communication + AI-assisted artifact transfer planının **Faz 4**'ü
+(#201): asistanın "son taslağı Ahmet'e gönder" isteğini deterministik
+resolution + policy + zorunlu human confirmation + idempotent execution
+zinciriyle karşılaması. Faz 3'te (#199) kurulan `ArtifactTransferService`
+tek transfer yolu olarak aynen kullanıldı -- yeni bir execution path yok,
+yalnızca AI kanalından bu yola erişim.
+
+Giriş noktası **asistanın kendi tool-calling mekanizması** -- ayrı bir plan
+intent'i değil. İlk taslakta transfer, `_try_compound` gibi fusion'dan önce
+çalışan bağımsız bir lexical kapıydı (`planner._try_transfer`); iş akışı
+grafiğinde bunun görünürlüğü ve `search_document` gibi mevcut tool'larla
+tutarlılığı gözden geçirilince, mimari `propose_transfer` adlı bir
+**assistant tool**'una taşındı -- artık asistan hangi mesajın transfer
+istediğine kendi muhakemesiyle karar veriyor, sabit bir fiil+isim listesine
+değil.
+
+- **`propose_transfer`** (`ai/tools/transfer_tools.py`) -- assist adımının
+  modelinin çağırabileceği yeni tool, `search_document`'la aynı
+  `ToolSpec`/tool-loop mekanizmasından geçiyor. Modelin tek işi
+  `recipient_name`/`artifact_kind`'ı tool argümanı olarak çıkarmak --
+  hiçbir zaman bir karar değil. Tool **yalnızca önerir**: taslağı/evrakı ve
+  alıcıyı deterministik olarak çözer (`ArtifactResolutionService`,
+  `RecipientResolutionService`), bir `artifact_transfer_intents` satırı
+  açar, sonucu bir yan-kanal callback'le (`on_transfer_proposed`,
+  `on_tool_result`/`on_anchor_referenced` ile aynı desen) `_step_assist`'e
+  bildirir. Gerçek gönderim asla tool'un kendisinde olmuyor.
+- **Neden tool `interrupt()`'u kendisi çağırmıyor**: bir tool handler'ı
+  assist adımının kendi node'u içinde çalışıyor, ve `interrupt()` resume'da
+  *kendi sahibi node'u* baştan tekrar çalıştırıyor -- assist için bu,
+  modelin tüm yanıtının (ve o turdaki her tool çağrısının) ikinci kez
+  çalışması demek olurdu; `brief_gate`/`human_gate`'in tam olarak bu
+  maliyetten kaçınmak için ayrı node'lara bölünmüş olma nedeni. Bunun
+  yerine `_step_assist`, tool'un ürettiği öneriyi görünce turu
+  `transfer_gate_node`'a yönlendiriyor -- kendi ayrı node'unda, güvenle
+  `interrupt()` edilebilen.
+- **`ArtifactResolutionService`** (`domains/transfers/artifact_resolution.py`)
+  -- "hangi taslak/evrak" sorusunun DB tabanlı, `SessionFocus.active_draft`'ın
+  idle-limitinden tamamen bağımsız cevabı: açık referans → oturumun son
+  taslağı (`get_latest_for_session` -- araya kaç tur girerse girsin durur)
+  → kullanıcının en son taslakları → birden fazlaysa `ambiguous`, hiç yoksa
+  `unresolved`. Bu, kullanıcının orijinal senaryosunu ("taslak yazdır, başka
+  işler yap, sonra gönder") çalışır kılan parça.
+- **`TransferIntentService`** (`domains/transfers/intent_service.py`) --
+  `artifact_transfer_intents` üzerinde CAS tabanlı state machine
+  (`INTENT_DETECTED → {AMBIGUOUS, RECIPIENT_RESOLVED, UNRESOLVED} →
+  {AWAITING_CONFIRMATION, POLICY_DENIED} → {CONFIRMED, CANCELLED} →
+  {TRANSFER_EXECUTED, FAILED}`). Her geçiş tek bir `UPDATE ... WHERE
+  state IN (...)`; `confirm()` politikayı TOCTOU korumasıyla sıfırdan
+  yeniden değerlendirir (favori kaldırılmış/yetki değişmiş mi diye
+  `policy_hash` karşılaştırması), `execute()` `CONFIRMED` olmayan hiçbir
+  şeyi çalıştırmaz -- "onaysız transfer" garantisi burada, LLM'in, tool'un
+  ya da graph'ın inandığı şeyden tamamen bağımsız olarak.
+- **`transfer_gate` / `transfer_execute`** -- `transfer_gate_node` tek bir
+  `interrupt()` node'unda hem `artifact_transfer_disambiguate` (alıcı
+  belirsizse, seçim **her zaman insan**) hem `artifact_transfer_confirm`'i
+  (asıl gönderim onayı) barındırıyor. Checkpointer yoksa öneri iptal edilir,
+  asla onaysız çalışmaz.
+- **`AI_TRANSFER_ENABLED`** (varsayılan `true`) -- kapalıyken
+  `propose_transfer` modele hiç sunulmuyor, sistem Faz 4 öncesiyle bit-bit
+  aynı davranıyor.
+- **Frontend**: `TransferConfirmCard` -- `InterruptPanel`'e dal, iki
+  interrupt türünü de render ediyor. Cross-unit uyarısı her zaman
+  `payload.cross_unit`'ten (backend'de `TransferPolicy` tarafından
+  hesaplanmış) okunuyor, hiçbir zaman üretilmiş metinden değil.
+  `DecisionFlow`'un dinamik iş akışı stepper'ında `transfer_gate`, tetikleyen
+  adımı olan "Asistan" aşamasının altına toplanıyor (`brief_gate`'in
+  `brief` altına toplanması gibi).
+
+### Bilinçli sınırlar
+- Ayrı ve izole bir semantik katman (embedding benzerliği, kendi
+  `"transfer_gate"` prototip ailesinde, kalibre edilmiş "intent" ailesinin
+  kalibrasyonuna dokunmadan) denendi, **gerçek `nomic-embed-text`
+  vektörleriyle ölçüldü ve geri alındı** -- artık ihtiyaç da kalmadı
+  (giriş noktası zaten modelin kendi muhakemesi), ama ölçüm bulgusu ileride
+  benzer bir katman denenirse diye kayıtlı: 5 örnekli küçük bir prototip
+  seti bu embedding modeliyle temiz ayrışmıyor -- "Bu evrakı analiz eder
+  misin?" (belirsiz olmayan bir `analyze` isteği) `transfer` prototiplerine
+  karşı 0.858 benzerlik / 0.121 marj skorladı, mevcut kalibre-aile
+  eşiklerini bile geçerek. Gerçek transfer parafrazlarından bazıları bu
+  yanlış pozitiften **daha düşük** skorladı. `SemanticPolicy`'nin "intent"
+  ailesi için zaten belgelediği bulgu burada da geçerli: rastgele karar
+  veren bir katman, hiç katman olmamasından daha kötü.
+- Evrak (document) için ladder'ın "açık referans" katmanı bağlanmadı --
+  yalnızca `SessionFocus.active_document_id` ipucu kullanılıyor; serbest
+  metinden başlık/sürüm çözümlemesi bu fazın kapsamı dışında.
+- Artifact belirsizliği (birden fazla taslak eşleşmesi) tool'un kendi
+  metin yanıtıyla çözülüyor, recipient belirsizliği gibi ayrı bir
+  interrupt/seçim kartı almıyor -- `artifact_transfer_intents` şeması
+  yalnızca `candidate_recipients` taşıyor, aday artifact listesi için bir
+  alan yok.
+- `MAX_TOOL_TURNS = 2` sınırı transfer için de geçerli: model iki tur
+  içinde `propose_transfer`'ı çağırıp yanıt üretmezse (örn. önce başka bir
+  tool deneyip sonra transfer'e karar verirse), o turda transfer önerisi
+  hiç oluşmaz -- kullanıcı isteğini tekrarlamalı. Kabul edilebilir: aynı
+  sınır `search_document`/`search_legislation` için de zaten geçerliydi.
+
+### Test
+- `docker compose exec backend pytest tests/unit tests/integration -q` →
+  **2023 test geçti**: `TransferIntentService`'in her CAS geçişi + TOCTOU +
+  `execute()`'un onaysız reddi, `ArtifactResolutionService`'in her ladder
+  katmanı, `propose_transfer`'ın handler'ı (her dal: çözülen/belirsiz
+  alıcı, bulunamayan/belirsiz taslak, policy reddi, evrak türü),
+  `app.ai.*`'nin `app.domains.*` import etmediğinin AST tabanlı statik
+  denetimi, ve gerçek derlenmiş planning graph üzerinde -- modelin tool
+  çağırma kararı `FakeLLMClient.generate_with_tools_side_effect` ile
+  senaryolanarak -- uçtan uca disambiguate→confirm→execute/reject/
+  policy-denial/flag-off/no-checkpointer akışları.
+- `docker compose exec frontend npm run typecheck && npm run test && npm run lint`
+  → **178/178 test geçti** (6 yeni: `TransferConfirmCard`, cross-unit
+  uyarısının `payload.cross_unit` ile birebir eşleştiği dahil).
+- Yeni migration yok (`artifact_transfer_intents` Faz 3'te zaten migrate
+  edilmişti, kullanılmadan) -- `alembic check`'te bu fazdan kaynaklı yeni
+  bir drift yok.
+
+Refs: [#201](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/201).
 
 ## [3.15.0] - 2026-08-17
 ### Eklendi

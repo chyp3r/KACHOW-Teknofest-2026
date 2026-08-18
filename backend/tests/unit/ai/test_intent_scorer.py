@@ -137,6 +137,26 @@ def test_continuation_only_applies_to_continuable_previous_intents(previous_inte
     assert not [item for item in scores.evidence if item.endswith(".continuation")]
 
 
+def test_a_targeted_revise_instruction_is_not_read_as_draft_continuation():
+    """The router-level cause of a live bug report: "Kapanışı 'X' yap." right
+    after a draft turn is five words and ends in "yap" (a CONTINUATION_SURFACES
+    entry), so unfiltered it also fired `draft.continuation` -- stacking a
+    competing `draft` score on top of the message's own, much more specific
+    `revise.explicit_request` hit (it names a concrete field, "kapanış", with
+    an active draft open -- see REVISE_RULES's own docstring on why that's
+    unambiguous) and silently outscoring it. "yap" here is the sentence's own
+    verb, not a bare "go ahead" confirmation; nothing about brevity or the
+    surface list alone can tell the difference, so the fix is to defer to
+    whichever *other* explicit rule already fired instead."""
+    scores = score_intents(
+        "Kapanışı 'Saygılarımızla arz ederiz.' yap.", None, "draft", has_active_draft=True
+    )
+
+    assert "draft.continuation" not in scores.evidence
+    assert "revise.explicit_request" in scores.evidence
+    assert scores.ranked[0][0] == "revise"
+
+
 def test_confidence_tracks_the_margin_and_stays_bounded():
     confident = score_intents("Bu evraka bir cevap yazısı hazırla.", DOCUMENT)
     contested = score_intents("Bunu hallet.", DOCUMENT)

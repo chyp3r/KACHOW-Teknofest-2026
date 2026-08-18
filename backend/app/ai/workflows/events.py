@@ -296,7 +296,9 @@ async def emit_interrupt(
 
     Args:
         config: The node's runnable config.
-        kind: ``"missing_information"`` or ``"draft_approval"``.
+        kind: ``"missing_information"``, ``"writing_brief"``,
+            ``"artifact_transfer_confirm"`` or
+            ``"artifact_transfer_disambiguate"``.
         interrupt_id: Stable id for this interrupt occurrence.
         payload: The data the human needs to answer -- questions, draft text,
             verification/judge results.

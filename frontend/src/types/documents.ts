@@ -29,6 +29,19 @@ export interface MevzuatReference {
   aciklama: string;
 }
 
+export interface DetectedMarkItem {
+  kind: "signature" | "stamp" | "handwriting";
+  page: number;
+  bbox: [number, number, number, number];
+  confidence: number;
+}
+
+export interface SignatureAssessment {
+  is_signed: boolean;
+  has_stamp: boolean;
+  marks: DetectedMarkItem[];
+}
+
 export interface DocumentMetadata {
   file_name: string;
   storage_path: string;
@@ -60,6 +73,29 @@ export interface DocumentAnalysis extends DocumentMetadata {
     requires_human_review: boolean;
     reasons: string[];
   };
+  // Optional: the backend always sends it (a Pydantic default_factory), but
+  // kept optional here so existing test fixtures that predate this field
+  // don't all need updating just to type-check.
+  signature?: SignatureAssessment;
+  // Absent (undefined) on old cached fixtures; `null` is the backend's own
+  // "not yet generated" value (see DocumentAnalysisResponseSchema's own
+  // comment) -- on-demand only, never populated by the initial analyze
+  // call. Populated in place by POST /documents/{path}/detailed-summary.
+  detailed_summary?: string | null;
+}
+
+// Backs the "Belge metni" panel section -- GET/PUT /documents/{path}/text and
+// POST /documents/{path}/re-extract all return this shape. Kept as its own
+// type rather than folded into DocumentAnalysis: the backend deliberately
+// keeps it off DocumentAnalysisResponseSchema too (that schema is persisted
+// verbatim and re-sent on every list selection; a multi-thousand-character
+// text field would be stored and transferred twice per document).
+export interface DocumentText {
+  pages: string[];
+  extracted_text: string;
+  page_count: number;
+  extractor: string;
+  used_ocr: boolean;
 }
 
 export type ReasoningLevel = "fast" | "balanced" | "deep";

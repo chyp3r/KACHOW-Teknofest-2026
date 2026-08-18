@@ -17,13 +17,16 @@ from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
 from app.ai.llms.base import BaseLLMClient
 from app.ai.retrieval.examples import ExampleRetriever
+from app.ai.retrieval.hybrid import HybridRetriever
 from app.ai.revision.elision import detect_content_loss
 from app.ai.verification import (
     DraftJudgeVerdict,
     InfoQuestion,
     build_missing_info_request,
+    fill_date_placeholders,
     judge_draft,
     merge_verdicts,
+    normalize_role_placeholders,
     normalize_unfilled_markers,
     verify_draft,
 )
@@ -79,6 +82,13 @@ class DraftState(TypedDict, total=False):
 
     source_document: str
     classification: dict[str, Any]
+    #: Today's date (see app.ai.workflows.dates.today_tr), resolved once by
+    #: the caller before the graph runs and never re-derived inside it --
+    #: this is what the writer's own "Tarih:" line must always use, and the
+    #: only date value ever injected into the brief rather than asked
+    #: about. Absent/empty degrades to no date guidance at all (an older
+    #: caller that hasn't been updated to pass it), not a crash.
+    today: str
     #: The user's own drafting request, unmodified by orchestrator
     #: boilerplate -- see ``resolve_correspondence_type``'s ``user_request``
     #: argument for why this must be kept separate from ``instructions``.
@@ -145,6 +155,24 @@ class DraftState(TypedDict, total=False):
     #: ``ornek_sizintisi`` leak check ``style_examples`` already goes
     #: through, without re-resolving it a second time.
     company_adapter: dict[str, Any]
+    #: The attached document's storage path -- the same id
+    #: ``app.ai.tools.document_tools``'s ``search_document`` tool scopes its
+    #: own query to, via the ``document_qa`` Qdrant collection each chunk is
+    #: tagged with at upload time (see ``DocumentService._index_for_qa``).
+    #: Absent/empty behaves exactly like no document attached: retrieval is
+    #: skipped, never an error.
+    document_id: str
+    #: Verbatim excerpts retrieved from the attached document for this draft
+    #: (see ``retrieve_source_chunks_node``), each a plain dict with "text"
+    #: and "metadata". The writer already sees the document's short
+    #: AI-generated summary via ``_build_brief``'s section 2 -- these are the
+    #: source's own words instead, so a draft can quote a specific figure,
+    #: clause or name the summary compressed away. Set once before the first
+    #: writer pass and left untouched by revise_node, same lifecycle as
+    #: ``style_examples``. Empty (never absent) when retrieval is disabled,
+    #: no document is attached, finds nothing, or fails -- grounding quality,
+    #: never a dependency the draft turn can fail on.
+    source_chunks: list[dict[str, Any]]
 
 
 def _format_classification(classification: dict[str, Any]) -> str:
@@ -186,11 +214,34 @@ def _coerce_fields(classification: dict[str, Any]) -> dict[str, Any]:
     return fields if isinstance(fields, dict) else {}
 
 
+def _format_entities(entities: Any) -> str:
+    """Render the document analysis's flat NER-style entity list for the brief.
+
+    ``EvrakField.entities`` (person/institution/date/amount/product names,
+    see ``app.ai.compliance.evrak_field``) was already being extracted at
+    document-analysis time but never once read by this module -- a request
+    like "bu CV'de çalıştığı kurumları belirt" had no way to see the
+    employer names the analysis step already found, so the writer left a
+    ``[BİLGİ EKSİK: ...]`` placeholder and the human gate asked the user a
+    question the document itself already answered. Comma-joined, not
+    numbered or typed (the source list carries no per-entity category), so
+    the writer must still cross-check each name against the rest of the
+    brief/RAG excerpts before using it -- this section is a hint of what to
+    look for, not itself a substitute for the "yalnızca brief'te bulunan
+    bilgileri kullan" grounding rule.
+    """
+    if not isinstance(entities, (list, tuple)):
+        return "(tespit edilmedi)"
+    names = [str(entity).strip() for entity in entities if str(entity).strip()]
+    return ", ".join(names) if names else "(tespit edilmedi)"
+
+
 def _build_brief(
     classification: dict[str, Any],
     context: str,
     instructions: str,
     writing_brief: dict[str, Any] | None = None,
+    today: str = "",
 ) -> str:
     """Compose the grounding brief handed to the writer.
 
@@ -205,6 +256,12 @@ def _build_brief(
             "KACMAK ekibi olarak" bug, where the only proper noun in the
             user's own text had no declared direction and the writer put
             it in the one slot this brief used to describe (Muhatap).
+        today: The date this draft is being written on (see
+            app.ai.workflows.dates.today_tr), never a fact extracted from
+            the document. Rendered as section 0 -- the writer's own
+            "Tarih:" line must copy this verbatim rather than leave a
+            placeholder or ask the human, since it is never missing
+            information, only information nobody thought to hand it before.
 
     Returns:
         The brief text.
@@ -216,6 +273,11 @@ def _build_brief(
     )
 
     return (
+        f"0. BUGÜNÜN TARİHİ: {today or '(bilinmiyor -- Tarih alanı için yer tutucu bırak)'}\n"
+        f"   → Yanıtının KENDİ \"Tarih:\" alanına bu değeri AYNEN yaz. Bu bir çıkarım veya "
+        f"tahmin değildir; sistem tarafından sağlanan gerçek tarihtir. Gelen evrakın tarihiyle "
+        f"KARIŞTIRMA -- o bilgi yalnızca aşağıdaki bölüm 3'tedir ve İlgi satırı dışında hiçbir "
+        f"yerde kullanılmaz.\n"
         f"1. Belge Türü: "
         f"{classification.get('document_type_label') or classification.get('document_type') or 'Belirtilmedi'}\n"
         f"2. Belge Özeti: {classification.get('summary') or 'Özet çıkarılamadı.'}\n"
@@ -231,10 +293,14 @@ def _build_brief(
         f"bulunmadığını belirtir -- bu notu KENDİSİ bir değermiş gibi taslağa yazma, "
         f"yanındaki yönergeye göre ilgili yer tutucuyu bırak):\n"
         f"   - Konu: {fields.get('konu') or '(evrakta yok -- taslakta [Konu] yer tutucusunu bırak)'}\n"
-        f"   - Muhatap: {fields.get('muhatap') or '(evrakta yok -- taslakta [Muhatap] yer tutucusunu bırak; Yazım Briefi bölümünde belirtilmişse onu esas al)'}\n"
+        f"   - Muhatap: {fields.get('muhatap') or '(evrakta yok -- taslakta [Alıcının adı ve soyadı] yer tutucusunu bırak; Yazım Briefi bölümünde belirtilmişse onu esas al)'}\n"
         f"   - Gönderen Kurum: {fields.get('gonderen_kurum') or '(evrakta belirtilmemiş)'}\n"
         f"   - İmza Sahibi: {fields.get('imza_sahibi') or '(evrakta belirtilmemiş)'}"
         f" ({fields.get('imza_unvani') or '(unvan belirtilmemiş)'})\n"
+        f"   - Belgede Geçen Diğer Önemli Varlıklar (kişi, kurum, tarih, tutar vb. -- "
+        f"örn. bir CV'deki çalışılan kurumlar; talimat bunlardan birine atıfta "
+        f"bulunuyorsa burada ara, kullanıcıya SORMA): "
+        f"{_format_entities(classification.get('entities'))}\n"
         f"5. Evrakta Tespit Edilen Eksik Alanlar: {missing_labels or 'yok'}\n"
         f'6. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
         f"{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
@@ -324,6 +390,42 @@ def _format_style_examples(style_examples: list[dict[str, Any]] | None) -> str:
     )
 
 
+def _format_source_chunks_section(chunks: list[dict[str, Any]]) -> str:
+    """Render retrieved document excerpts as a brief section, appended to
+    the already-built ``_build_brief`` text by ``retrieve_source_chunks_node``.
+
+    Not folded into ``_build_brief`` itself: that function runs inside
+    ``validate_input_node``, before any retrieval happens, so it has no
+    chunks yet to render. Numbered "9." (one past ``_build_brief``'s own
+    0-8) rather than inserted positionally among them, for the same reason.
+
+    Returns "" (not an empty section) when there are no chunks -- same
+    "absent signal, not an empty one" reasoning as ``_format_style_examples``.
+    """
+    if not chunks:
+        return ""
+
+    blocks = []
+    for index, chunk in enumerate(chunks, start=1):
+        text = (chunk.get("text") or "").strip()
+        if not text:
+            continue
+        page = (chunk.get("metadata") or {}).get("page")
+        page_note = f" (sayfa {page})" if page else ""
+        blocks.append(f"[ALINTI {index}]{page_note}\n{text}")
+
+    if not blocks:
+        return ""
+
+    return (
+        "\n9. BELGEDEN İLGİLİ ALINTILAR (birebir alıntı -- özet değil; "
+        "kaynak evrakın kendi metninden doğrudan aktarılmıştır. Bölüm 2'deki "
+        "özetle çelişmez, onu somut ayrıntılarla tamamlar):\n"
+        + "\n\n".join(blocks)
+        + "\n"
+    )
+
+
 def _resolve_free_text_client(
     preset: ReasoningLevelPreset,
     llm_client: BaseLLMClient,
@@ -346,14 +448,15 @@ def create_draft_graph(
     fast_llm_client: BaseLLMClient | None = None,
     example_retriever: ExampleRetriever | None = None,
     adapter_provider: AdapterProvider | None = None,
+    document_qa_retriever: HybridRetriever | None = None,
 ):
     """Create and compile the drafting workflow.
 
     Flow::
 
-        START -> validate_input -+-> retrieve_examples -> writer -+-> verify -+-> revise -> writer
-                                  \\-> END                          \\-> END     |-> END (needs_input)
-                                                                                 \\-> END
+        START -> validate_input -+-> retrieve_examples -> retrieve_source_chunks -> writer -+-> verify -+-> revise -> writer
+                                  \\-> END                                                     \\-> END     |-> END (needs_input)
+                                                                                                            \\-> END
 
     The former single-pass "writer -> LLM editor" pipeline had no path back to
     the writer, so a low-scoring draft was only ever flagged, never repaired.
@@ -381,6 +484,12 @@ def create_draft_graph(
             ``create_routing_graph``, so this module never imports
             ``app.domains`` directly. None reproduces pre-feature behaviour
             exactly (no adapter block, ever).
+        document_qa_retriever: Optional retriever over the attached
+            document's own chunks (see ``retrieve_source_chunks_node``),
+            targeting the same ``document_qa`` Qdrant collection
+            ``app.ai.tools.document_tools``'s ``search_document`` assistant
+            tool already queries. None reproduces pre-feature behaviour
+            exactly -- the writer sees only the document summary, as before.
 
     Returns:
         The compiled LangGraph workflow.
@@ -438,7 +547,11 @@ def create_draft_graph(
             "context": context,
             "instructions": instructions,
             "brief": _build_brief(
-                classification, context, instructions, state.get("writing_brief")
+                classification,
+                context,
+                instructions,
+                state.get("writing_brief"),
+                state.get("today", ""),
             ),
             "status": "IN_PROGRESS",
             "error": "",
@@ -533,6 +646,114 @@ def create_draft_graph(
         )
         return {"style_examples": style_examples}
 
+    async def retrieve_source_chunks_node(
+        state: DraftState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Fetch verbatim excerpts from the attached document for the writer.
+
+        Same degrade-on-failure shape as ``retrieve_examples_node`` right
+        above it (inline ``asyncio.timeout`` rather than the ``@node_timeout``
+        decorator, broad ``except Exception``) -- for the same reason: an
+        optional grounding boost must never be able to fail the whole draft.
+        Runs after ``retrieve_examples`` rather than the writer's own quality
+        boost, this is the writer's primary defense against fabricating
+        details the summary alone doesn't carry, gated by its own
+        ``DraftPolicy.source_chunks_enabled`` flag.
+        """
+        await emit_node_start(
+            config,
+            "source_chunks",
+            "Kaynak Alıntılar",
+            "İlgili belge bölümleri aranıyor...",
+        )
+
+        policy = get_policy().draft
+        document_id = state.get("document_id")
+        if document_qa_retriever is None or not policy.source_chunks_enabled or not document_id:
+            await emit_node_skipped(
+                config,
+                "source_chunks",
+                "Kaynak Alıntılar",
+                "Belge alıntı getirimi devre dışı veya belge yüklü değil.",
+            )
+            return {"source_chunks": []}
+
+        classification = state.get("classification") or {}
+        fields = _coerce_fields(classification)
+        query = " ".join(
+            part
+            for part in (
+                state.get("user_request") or "",
+                fields.get("konu") or "",
+                classification.get("summary") or "",
+            )
+            if part
+        ).strip()
+        if not query:
+            await emit_node_skipped(
+                config, "source_chunks", "Kaynak Alıntılar", "Sorgulanacak metin yok."
+            )
+            return {"source_chunks": []}
+
+        preset = get_reasoning_level_preset(state.get("reasoning_level"))
+        budget = node_budget("retrieve_source_chunks", preset.level)
+        try:
+            async with asyncio.timeout(budget):
+                documents = await document_qa_retriever.retrieve(
+                    query,
+                    limit=policy.source_chunk_count,
+                    filter_dict={"storage_path": document_id},
+                )
+        except Exception:
+            # HybridRetriever.retrieve never raises on its own (it degrades
+            # to []) -- the only thing this can catch is the asyncio.timeout
+            # above firing. Caught broadly anyway for the same reason
+            # retrieve_examples_node is: a future change to the retriever
+            # must never be able to turn an optional lookup into a failed
+            # draft.
+            logger.exception(
+                "Source chunk retrieval failed; continuing with the summary alone."
+            )
+            await emit_node_error(
+                config,
+                "source_chunks",
+                "Kaynak Alıntılar",
+                "Belge alıntı getirimi başarısız; taslak yalnızca özetle devam ediyor.",
+                fatal=False,
+            )
+            return {"source_chunks": []}
+
+        trimmed = []
+        used = 0
+        for document in documents:
+            content = getattr(document, "page_content", "") or ""
+            if used + len(content) > policy.source_chunk_char_budget and trimmed:
+                break
+            trimmed.append(document)
+            used += len(content)
+
+        source_chunks = [
+            {
+                "text": getattr(document, "page_content", ""),
+                "metadata": dict(getattr(document, "metadata", {}) or {}),
+            }
+            for document in trimmed
+        ]
+        chunks_section = _format_source_chunks_section(source_chunks)
+        await emit_node_end(
+            config,
+            "source_chunks",
+            "Kaynak Alıntılar",
+            f"{len(source_chunks)} belge alıntısı bulundu."
+            if source_chunks
+            else "İlgili belge alıntısı bulunamadı.",
+            {"source_chunks": source_chunks},
+        )
+        return {
+            "source_chunks": source_chunks,
+            "brief": state.get("brief", "") + chunks_section,
+        }
+
     async def _resolve_adapter(state: DraftState) -> CompanyAdapter:
         """This company's runtime style adapter (Faz C2), or an empty one
         when no ``adapter_provider`` was configured, no ``company_id`` is on
@@ -597,9 +818,12 @@ def create_draft_graph(
                 rules = (
                     "- Yalnızca brief içindeki bilgilere ve mevzuat bağlamına sadık kal.\n"
                     "- Gelen evrakta veya mevzuatta yer almayan hiçbir kişi, kurum, sayı, "
-                    "tarih veya olay uydurma.\n"
-                    "- Zorunlu olup brief'te bulunmayan bilgileri köşeli parantezli yer "
-                    "tutucu olarak bırak (örn. '[Tarih Eksik - Lütfen Doldurun]')."
+                    "tarih veya olay uydurma. Tarih alanı bu kuralın istisnasıdır: brief'in "
+                    "\"0. BUGÜNÜN TARİHİ\" bölümündeki değeri her zaman kullan, uydurma.\n"
+                    "- Zorunlu olup brief'te bulunmayan bilgileri, kime ait olduğunu açıkça "
+                    "belirten köşeli parantezli bir yer tutucu olarak bırak (örn. "
+                    "'[Belge Sayısı]', '[İmzalayacak yetkilinin adı ve soyadı]') -- çıplak "
+                    "'Ad Soyad'/'Unvan' gibi kime ait olduğu belirsiz yer tutucular kullanma."
                 )
 
             prompt = (
@@ -765,8 +989,21 @@ def create_draft_graph(
         # all see the same, corrected text the human gate and the final
         # reply will show.
         draft_text, _ = normalize_unfilled_markers(state.get("draft", ""))
-        classification = state.get("classification") or {}
+        # Same backstop role, one field earlier in the pipeline than
+        # missing_info's [...] gate ever sees it -- the draft's own "Tarih:"
+        # line must never reach a human as a question (see
+        # app.ai.workflows.dates.today_tr's own docstring).
+        draft_text, _ = fill_date_placeholders(draft_text, state.get("today", ""))
         sub_genre = state.get("correspondence_sub_genre", "")
+        # Same backstop role again: writer.md tells the writer to name whose
+        # a signature/institution placeholder is (see draft_graph.writer_node's
+        # own rule), but a bare "[Ad Soyad]"/"[Unvan]"/"[İmza]"/"[Kurum Adı]"
+        # is still possible -- fixed here so the human gate's own question
+        # ("'Ad Soyad' bilgisi nedir?") never reaches the user unattributed.
+        draft_text, _ = normalize_role_placeholders(
+            draft_text, is_individual_petition="dilekçe" in sub_genre.lower()
+        )
+        classification = state.get("classification") or {}
         strict = state.get("correspondence_type") != "other_official"
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
 
@@ -790,6 +1027,7 @@ def create_draft_graph(
             ]
             + list(adapter.preferred_examples),
             is_individual_petition="dilekçe" in sub_genre.lower(),
+            today=state.get("today", ""),
         )
 
         # None means the level has no opinion; defer to the global setting.
@@ -997,6 +1235,9 @@ def create_draft_graph(
     builder = StateGraph(DraftState)
     builder.add_node("validate_input", validate_input_node)
     builder.add_node("retrieve_examples", retrieve_examples_node, retry_policy=IO_RETRY)
+    builder.add_node(
+        "retrieve_source_chunks", retrieve_source_chunks_node, retry_policy=IO_RETRY
+    )
     builder.add_node("writer", writer_node)
     builder.add_node("verify", verify_node)
     builder.add_node("revise", revise_node)
@@ -1007,7 +1248,8 @@ def create_draft_graph(
         route_after_validation,
         {"retrieve_examples": "retrieve_examples", "end": END},
     )
-    builder.add_edge("retrieve_examples", "writer")
+    builder.add_edge("retrieve_examples", "retrieve_source_chunks")
+    builder.add_edge("retrieve_source_chunks", "writer")
     builder.add_conditional_edges(
         "writer", route_after_writer, {"verify": "verify", "end": END}
     )

@@ -270,3 +270,54 @@ async def test_a_reviser_that_elides_previously_filled_content_is_flagged(fake_l
     # The elided text still ships (repair is bounded and "fast" allows only
     # one attempt) -- but flagged for a human, never silently as COMPLETED.
     assert result["status"] == StepStatus.NEEDS_HUMAN_APPROVAL
+
+
+@pytest.mark.asyncio
+async def test_an_explicit_deletion_instruction_is_honoured_not_reverted(fake_llm):
+    """The bug this closes: "vekalet eden personelle ilgili cümleleri sil"
+    used to be silently ignored on the whole-draft path (no ordinal/section
+    named, so no target span located, see instruction.py's scope="whole"
+    default) two ways at once -- the rewrite prompt's own "never delete
+    already-filled information" rule directly contradicted the user's own
+    deletion request, and even a reviser that did comply had the resulting
+    shrink misflagged as accidental content_loss and looped into a repair
+    pass whose prompt says to restore dropped content, silently undoing the
+    deletion. Neither happens anymore."""
+    fake_llm.stream_chunks = [
+        "Konu: Yıllık İzin Talebi\nSayı: E-1\nTarih: 30.07.2026\n\n"
+        "Sayın Ahmet Yılmaz,\n\n"
+        "İlgi yazı kapsamında yıllık izin kullanmak istediğimi arz ederim.\n\n"
+        "Arz ederim.\n\nAli Veli\nGenel Müdür"
+    ]
+    graph = create_revise_graph(fake_llm)
+
+    active_draft = _active_draft(
+        text=(
+            "Konu: Yıllık İzin Talebi\nSayı: E-1\nTarih: 30.07.2026\n\n"
+            "Sayın Ahmet Yılmaz,\n\n"
+            "İlgi yazı kapsamında 15-20 Ağustos 2026 tarihleri arasında yıllık izin "
+            "kullanmak istediğimi arz ederim. Bu süre zarfında yerime vekalet edecek "
+            "personel Mehmet Kaya'dır. Mehmet Kaya, kurumumuzda beş yıldır görev "
+            "yapmakta olup gerekli yetkiye sahiptir ve iznim süresince tüm iş ve "
+            "işlemlerimi eksiksiz şekilde yürütecektir.\n\n"
+            "Arz ederim.\n\nAli Veli\nGenel Müdür"
+        )
+    )
+
+    result = await graph.ainvoke(
+        {
+            "active_draft": active_draft,
+            "instructions": "Vekalet eden personelle ilgili cümleleri sil.",
+            "reasoning_level": "fast",
+        }
+    )
+
+    messages = fake_llm.stream_calls[0]["messages"]
+    prompt = "\n".join(message.get("content", "") for message in messages)
+    assert "açıkça bir cümlenin/kısmın silinmesini" in prompt
+
+    assert "Mehmet Kaya" not in result["draft"]
+    assert not any(item["kind"] == "content_loss" for item in result["repair_items"])
+    assert result["status"] == StepStatus.COMPLETED
+    # Only ever the one rewrite pass -- no repair round undid the deletion.
+    assert len(fake_llm.stream_calls) == 1

@@ -93,6 +93,32 @@ export function useChatWorkflow(
   // of the streamed draft just vanishing and reappearing edited.
   const streamingTextRef = useRef("");
 
+  // Declared before every effect below -- the session-switch effect's own
+  // dependency array references `resetFlow` directly, and a dependency
+  // array is evaluated eagerly as part of calling `useEffect` (unlike the
+  // effect body itself, which only runs after render). Declaring this
+  // after that effect throws "Cannot access 'resetFlow' before
+  // initialization" the moment the array literal is evaluated, since a
+  // `const` is in its temporal dead zone until its own declaration runs.
+  const resetFlow = useCallback(() => {
+    streamingTextRef.current = "";
+    setStreamingText("");
+    setNodeStatus({});
+    setNodeResults({});
+    setNodeMeta({});
+    setPlanSteps([]);
+    setNodeLabels({});
+    setNodeOrder([]);
+    setNodeStartedAt({});
+    setTurnStartedAt(Date.now());
+    setPlanIntent("");
+    setToolCalls([]);
+    setGuardrailEvents([]);
+    logsRef.current = [];
+    setLogs([]);
+    pendingQuestions.current = null;
+  }, []);
+
   const sessionsQuery = useQuery({
     queryKey: queryKeys.chatSessions(),
     queryFn: () => chatService.sessions(),
@@ -130,7 +156,13 @@ export function useChatWorkflow(
     setMessages([]);
     setPendingInterrupt(null);
     seenInterrupts.current.clear();
-  }, [activeSessionId, userId]);
+    // Switching to a different (or brand-new) session leaves a prior
+    // session's stepper/tool-call/guardrail state behind otherwise --
+    // planSteps, nodeStatus etc. are re-seeded from that session's own
+    // history a few lines below (see the next effect), but only after
+    // this clears whatever the previously active session left in place.
+    resetFlow();
+  }, [activeSessionId, resetFlow, userId]);
 
   // Records a node's backend-supplied label and its first-seen order --
   // idempotent, since a node can re-enter (e.g. "revise" runs once per
@@ -141,9 +173,21 @@ export function useChatWorkflow(
   }, []);
 
   useEffect(() => {
-    if (messagesQuery.data && !activeRequest.current) {
-      setMessages(messagesQuery.data.items.map(toChatMessage));
-    }
+    if (!messagesQuery.data || activeRequest.current) return;
+    // `refreshServerState` (called right after a turn's own final_result,
+    // see `handleEvent`) invalidates this query while `messagesQuery` is
+    // still `enabled: false` (gated on `!loading`, cleared in `send`'s
+    // `finally` at the same moment `activeRequest.current` clears) -- so
+    // the resulting refetch only actually fires once this effect's own
+    // guard has already opened, racing the message we just appended
+    // locally from the live SSE stream against a server-side history read
+    // that can still lag behind it. A read with *fewer* items than we
+    // already have is that stale race, not a genuine "history shrank"
+    // signal (chat history is append-only) -- session switches always
+    // start `messages` at `[]` first (see the effect above), so a real
+    // hydration is never mistaken for one of these.
+    const items = messagesQuery.data.items;
+    setMessages((previous) => (items.length >= previous.length ? items.map(toChatMessage) : previous));
   }, [messagesQuery.data]);
 
   // Rehydrates the workflow stepper's plan/order from the last persisted
@@ -176,13 +220,15 @@ export function useChatWorkflow(
     const state = stateQuery.data;
     if (!threadId || state?.status !== "interrupted" || !state.interrupt) return;
     const { kind: recoveredKind, ...payload } = state.interrupt;
-    const kind =
-      recoveredKind ??
-      ((payload.questions?.length ?? 0) > 0 ? "missing_information" : "draft_approval");
+    // human_gate only ever produces "missing_information" now -- a stale
+    // recovery payload with no explicit kind (from before this) still
+    // resolves to it rather than a "draft_approval" kind that no longer
+    // exists.
+    const kind = recoveredKind ?? "missing_information";
     const recoveredId = `recovered:${threadId}`;
     setPendingInterrupt({ kind, interruptId: recoveredId, payload });
     setNodeStatus((previous) => ({ ...previous, human_gate: "running" }));
-    noteNode("human_gate", "İnsan Onayı");
+    noteNode("human_gate", "Eksik Bilgiler");
   }, [noteNode, stateQuery.data, threadId]);
 
   useEffect(() => () => activeRequest.current?.abort(), []);
@@ -191,25 +237,6 @@ export function useChatWorkflow(
     const next = [...logsRef.current, { time: new Date().toLocaleTimeString("tr-TR"), text }];
     logsRef.current = next;
     setLogs(next);
-  }, []);
-
-  const resetFlow = useCallback(() => {
-    streamingTextRef.current = "";
-    setStreamingText("");
-    setNodeStatus({});
-    setNodeResults({});
-    setNodeMeta({});
-    setPlanSteps([]);
-    setNodeLabels({});
-    setNodeOrder([]);
-    setNodeStartedAt({});
-    setTurnStartedAt(Date.now());
-    setPlanIntent("");
-    setToolCalls([]);
-    setGuardrailEvents([]);
-    logsRef.current = [];
-    setLogs([]);
-    pendingQuestions.current = null;
   }, []);
 
   const refreshServerState = useCallback(
@@ -326,7 +353,13 @@ export function useChatWorkflow(
           seenInterrupts.current.add(event.interrupt_id);
           setPendingInterrupt({ kind: event.kind, interruptId: event.interrupt_id, payload: event.payload });
           setNodeStatus((previous) => ({ ...previous, human_gate: "running" }));
-          appendLog(event.kind === "missing_information" ? "Eksik bilgi bekleniyor." : "İnsan onayı bekleniyor.");
+          appendLog(
+            event.kind === "missing_information"
+              ? "Eksik bilgi bekleniyor."
+              : event.kind === "writing_brief"
+                ? "Yazım briefi bekleniyor."
+                : "Onayınız bekleniyor.",
+          );
           break;
         case "final_result": {
           // The "token" case above already streamed this exact text in (see
@@ -381,7 +414,7 @@ export function useChatWorkflow(
     }
   }, [clientId, handleEvent, loading, resetFlow, selectedDocument]);
 
-  const resume = useCallback(async (action: "answer" | "approve" | "revise" | "reject", answers: Record<string, string | string[]>, instructions: string, reason?: string) => {
+  const resume = useCallback(async (action: "answer" | "approve" | "revise" | "reject" | "select", answers: Record<string, string | string[]>, instructions: string, reason?: string) => {
     if (!threadId || !pendingInterrupt || loading || activeRequest.current) return;
     setLoading(true);
     const controller = new AbortController();

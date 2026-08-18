@@ -426,8 +426,9 @@ class ChatService:
             thread_id = (config.get("configurable") or {}).get("thread_id")
             raise AIException(
                 message=(
-                    "Bu oturum bir insan onayı veya eksik bilgi talebi bekliyor. "
-                    "Devam etmek için /chat/resume uç noktasını kullanın."
+                    "Bu oturumda yanıt bekleyen tamamlanmamış bir adım var (eksik bilgi "
+                    "talebi ya da bir onay adımı). Devam etmek için /chat/resume uç "
+                    "noktasını kullanın."
                 ),
                 details={"session_id": thread_id},
             )
@@ -509,6 +510,16 @@ class ChatService:
         final_output = state.get("final_output", {}) or {}
         reply = self._select_reply(final_output)
         workflow_status = final_output.get("status", "FAILED")
+        # Recorded *before* the reply streams out: the persisted draft's own
+        # id needs to already be sitting in `final_output["draft"]["id"]`
+        # when `details` goes out below, not after -- a second round after
+        # the client already has this turn's response is too late for it to
+        # ever see the id.
+        draft_id = await self._maybe_record_draft(
+            final_output, config, thread_id, user_id, document_id, company_id
+        )
+        if draft_id and isinstance(final_output.get("draft"), dict):
+            final_output["draft"]["id"] = draft_id
         # The only text ever streamed to the client this turn -- see
         # emit_reply_stream's docstring. Streamed *before* final_result so
         # the chat bubble fills in live rather than the whole reply
@@ -522,7 +533,6 @@ class ChatService:
                 "details": final_output,
             }
         )
-        await self._maybe_record_draft(final_output, thread_id, user_id, document_id, company_id)
         return reply, workflow_status, final_output
 
     async def _response_from_state(
@@ -546,7 +556,11 @@ class ChatService:
             )
 
         final_output = state.get("final_output", {}) or {}
-        await self._maybe_record_draft(final_output, thread_id, user_id, document_id, company_id)
+        draft_id = await self._maybe_record_draft(
+            final_output, config, thread_id, user_id, document_id, company_id
+        )
+        if draft_id and isinstance(final_output.get("draft"), dict):
+            final_output["draft"]["id"] = draft_id
         return ChatMessageResponse(
             reply=self._select_reply(final_output),
             workflow_status=final_output.get("status", "FAILED"),
@@ -554,14 +568,15 @@ class ChatService:
             details=final_output,
         )
 
-    @staticmethod
     async def _maybe_record_draft(
+        self,
         final_output: dict[str, Any],
+        config: dict[str, Any],
         thread_id: str,
         user_id: Optional[str],
         document_id: Optional[str],
         company_id: Optional[str] = None,
-    ) -> None:
+    ) -> Optional[str]:
         """Persist a draft this turn produced or revised, if any.
 
         ``final_output["draft"]`` is ``PlanningState.draft_result`` -- the
@@ -569,13 +584,21 @@ class ChatService:
         builds ``DraftResponseSchema`` from for the direct-API path. A no-op
         when this turn's step wasn't drafting/revising (``draft_result`` is
         then ``{}``, so ``.get("draft")`` is falsy).
+
+        Returns:
+            The persisted ``drafts.id``, or ``None`` when nothing was
+            recorded -- the caller injects this into ``final_output["draft"]
+            ["id"]`` (see both call sites) so the frontend's chat response
+            can address this exact draft (the "Birimi değiştir" picker,
+            among other things) without a second round-trip to guess which
+            of this session's drafts the turn just produced.
         """
         draft = final_output.get("draft") or {}
         content = draft.get("draft")
         if not content:
-            return
+            return None
         routing = final_output.get("routing") or {}
-        await draft_recorder.record_draft(
+        draft_id = await draft_recorder.record_draft(
             user_id=user_id,
             company_id=company_id,
             session_id=thread_id,
@@ -592,6 +615,19 @@ class ChatService:
             judge=draft.get("judge"),
             missing_information=draft.get("missing_information"),
         )
+        if draft_id:
+            # Best-effort, same tolerance `_is_paused` already has for a
+            # missing/unreachable checkpointer: `SessionFocus.active_draft_id`
+            # is a convenience hint (see its own docstring), never load-bearing
+            # -- the `propose_transfer` tool (`app.ai.tools.transfer_tools`)
+            # falls back to `DraftRepository.get_latest_for_session` regardless.
+            try:
+                await self.planning_graph.aupdate_state(
+                    config, {"focus": {"active_draft_id": draft_id}}
+                )
+            except Exception:
+                logger.warning("Could not persist active_draft_id for thread %s", thread_id)
+        return draft_id
 
     async def _is_paused(self, config: dict[str, Any]) -> bool:
         """Whether the last graph call left the run suspended on an interrupt.

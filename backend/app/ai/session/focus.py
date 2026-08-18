@@ -216,6 +216,27 @@ class SessionFocus:
             (see ``compute_focus_update``'s ``reset_requested`` branch) --
             otherwise "yeni bir taslak yazalım" would silently inherit the
             previous letter's addressee.
+        active_draft_id: The persisted ``drafts.id`` of ``active_draft``,
+            when the graph turn that produced it was also recorded to the
+            database (see ``app.domains.chat.chat_service.ChatService.
+            _maybe_record_draft``, the only writer). ``active_draft`` itself
+            never carries a database id -- ``DraftVersion`` is a pure
+            in-memory snapshot the graph builds before any DB write happens
+            (see its own docstring) -- so this is the one place the
+            ``propose_transfer`` tool (``app.ai.tools.transfer_tools``) can
+            find a real, transferable id without re-deriving it. A
+            convenience hint only, per the plan's
+            §C2: never the sole source a resolution ladder trusts, since it
+            can go stale (an idle-cleared ``active_draft``, a
+            ``record_draft`` call that failed) in ways
+            ``DraftRepository.get_latest_for_session`` cannot -- that lookup
+            is what actually backs "which draft" resolution; this field only
+            helps a *deictic* reference ("bu taslağı gönder") skip straight
+            to the same answer instead of re-deriving it. Deliberately never
+            cleared by ``compute_focus_update`` the way ``active_draft`` is
+            (idle limit, explicit reset) -- a stale id here is harmless,
+            since every reader treats it as one candidate to verify, not a
+            trusted pointer.
     """
 
     active_document_id: Optional[str] = None
@@ -228,6 +249,7 @@ class SessionFocus:
     active_draft_idle_turns: int = 0
     last_rejection: Optional[dict[str, Any]] = None
     writing_brief: Optional[dict[str, Any]] = None
+    active_draft_id: Optional[str] = None
 
 
 def _accumulate_objective(existing: str, addition: str) -> str:
@@ -362,13 +384,20 @@ def compute_focus_update(
             freshly produced version winning that contradiction is the safer
             of the two readings.
         brief_answers: This turn's settled ``brief_result["answers"]``, if
-            the plan included a ``brief`` step. Carried forward
-            unconditionally so a turn whose brief resolved silently (no
-            gate needed) still persists it for the next turn -- the gate
-            itself already writes the same value directly when it does
-            fire (see ``planning_graph.brief_gate_node``); this is what
-            covers the no-gate path. Overridden by an explicit
-            ``reset_requested`` below, which always wins.
+            the plan included a ``brief`` step. Written unconditionally
+            whenever a ``brief`` step ran this turn -- including replacing
+            an existing ``focus.writing_brief`` with an empty dict -- so a
+            turn whose brief resolved silently (no gate needed) still
+            persists it for the next turn, and a fresh ``draft`` turn
+            (whose ``_step_brief`` deliberately starts from no prior
+            brief, see its own docstring) never leaves the previous
+            draft's answers sitting in ``focus.writing_brief`` unwritten.
+            The gate itself already writes the same value directly when it
+            does fire (see ``planning_graph.brief_gate_node``); this is
+            what covers the no-gate path. ``None`` means no ``brief`` step
+            ran at all this turn (not "it ran and produced nothing"), so
+            the existing value is left untouched. Overridden by an
+            explicit ``reset_requested`` below, which always wins.
 
     Returns:
         A partial update for the ``focus`` channel (see ``merge_focus``).
@@ -376,7 +405,12 @@ def compute_focus_update(
     """
     update: dict[str, Any] = {}
 
-    if brief_answers:
+    # `is not None`, not truthy -- an empty dict is a real "brief step ran
+    # and resolved nothing" result that must still overwrite whatever
+    # `focus.writing_brief` carried in from a prior, unrelated draft (see
+    # this parameter's own docstring); only `None` (no brief step this
+    # turn at all) leaves the existing value alone.
+    if brief_answers is not None:
         update["writing_brief"] = brief_answers
 
     anchor = (assist_result or {}).get("last_referenced_anchor")

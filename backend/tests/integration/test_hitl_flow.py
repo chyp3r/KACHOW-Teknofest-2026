@@ -15,10 +15,10 @@ answering it does not re-run the ~30s draft generation.
 Every turn here starts a document-less "draft" plan with an empty
 classification (`fields: {}`), which today also means every writing-brief
 slot is unresolved -- the pre-draft brief_gate (see
-app.ai.workflows.writing_brief) fires before the missing_information/
-draft_approval gate this file actually tests. Two of the three tests disable
-it (`HITL_BRIEF_GATE_ENABLED=False`) since they are about the missing-info
-gate, not this one; the third resumes the brief gate first with "Sen karar
+app.ai.workflows.writing_brief) fires before the missing_information gate
+this file actually tests. Three of the four tests disable it
+(`HITL_BRIEF_GATE_ENABLED=False`) since they are about the missing-info
+gate, not this one; the first resumes the brief gate first with "Sen karar
 ver" answers, which is also the composability proof that two gates can
 chain within a single turn.
 """
@@ -232,8 +232,8 @@ async def test_a_revision_note_in_the_answer_box_runs_revise_instead_of_being_su
     to the pending placeholder -- apply_answers would substitute it verbatim
     into [MUHATAP], producing a nonsense draft. The frontend's escape hatch
     sends action="revise" instead of "answer"; this must run a real revision
-    (reusing the same gate_revise machinery the draft_approval gate's
-    "revizyon iste" already runs through), not apply_answers."""
+    (reusing the same gate_revise machinery the missing-information gate's
+    own "revizyon iste" already runs through), not apply_answers."""
     monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
     monkeypatch.setattr(settings, "DRAFT_JUDGE_ENABLED", False)
     graph, mocks = _build_graph(fake_llm, fake_fast_llm)
