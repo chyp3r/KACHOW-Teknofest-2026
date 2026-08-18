@@ -17,6 +17,7 @@ from app.ai.verification.missing_info import InfoQuestion, apply_answers, build_
 from app.ai.verification.placeholders import (
     NormalizedDraft,
     fill_date_placeholders,
+    normalize_role_placeholders,
     normalize_unfilled_markers,
 )
 
@@ -37,5 +38,6 @@ __all__ = [
     "build_missing_info_request",
     "NormalizedDraft",
     "fill_date_placeholders",
+    "normalize_role_placeholders",
     "normalize_unfilled_markers",
 ]

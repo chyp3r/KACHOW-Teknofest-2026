@@ -80,6 +80,7 @@ from app.ai.verification import (
     fill_date_placeholders,
     judge_draft,
     merge_verdicts,
+    normalize_role_placeholders,
     normalize_unfilled_markers,
     verify_draft,
 )
@@ -611,6 +612,10 @@ def create_revise_graph(
         correspondence_type = state.get("correspondence_type") or active_draft.correspondence_type
         sub_genre = state.get("correspondence_sub_genre") or getattr(
             active_draft, "correspondence_sub_genre", ""
+        )
+        # Same backstop as draft_graph.verify_node -- see its own note.
+        draft_text, _ = normalize_role_placeholders(
+            draft_text, is_individual_petition="dilekçe" in sub_genre.lower()
         )
         strict = correspondence_type != "other_official"
         preset = get_reasoning_level_preset(state.get("reasoning_level"))

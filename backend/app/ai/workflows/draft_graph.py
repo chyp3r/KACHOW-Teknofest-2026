@@ -25,6 +25,7 @@ from app.ai.verification import (
     fill_date_placeholders,
     judge_draft,
     merge_verdicts,
+    normalize_role_placeholders,
     normalize_unfilled_markers,
     verify_draft,
 )
@@ -251,7 +252,7 @@ def _build_brief(
         f"bulunmadığını belirtir -- bu notu KENDİSİ bir değermiş gibi taslağa yazma, "
         f"yanındaki yönergeye göre ilgili yer tutucuyu bırak):\n"
         f"   - Konu: {fields.get('konu') or '(evrakta yok -- taslakta [Konu] yer tutucusunu bırak)'}\n"
-        f"   - Muhatap: {fields.get('muhatap') or '(evrakta yok -- taslakta [Muhatap] yer tutucusunu bırak; Yazım Briefi bölümünde belirtilmişse onu esas al)'}\n"
+        f"   - Muhatap: {fields.get('muhatap') or '(evrakta yok -- taslakta [Alıcının adı ve soyadı] yer tutucusunu bırak; Yazım Briefi bölümünde belirtilmişse onu esas al)'}\n"
         f"   - Gönderen Kurum: {fields.get('gonderen_kurum') or '(evrakta belirtilmemiş)'}\n"
         f"   - İmza Sahibi: {fields.get('imza_sahibi') or '(evrakta belirtilmemiş)'}"
         f" ({fields.get('imza_unvani') or '(unvan belirtilmemiş)'})\n"
@@ -797,8 +798,16 @@ def create_draft_graph(
         # line must never reach a human as a question (see
         # app.ai.workflows.dates.today_tr's own docstring).
         draft_text, _ = fill_date_placeholders(draft_text, state.get("today", ""))
-        classification = state.get("classification") or {}
         sub_genre = state.get("correspondence_sub_genre", "")
+        # Same backstop role again: writer.md tells the writer to name whose
+        # a signature/institution placeholder is (see draft_graph.writer_node's
+        # own rule), but a bare "[Ad Soyad]"/"[Unvan]"/"[İmza]"/"[Kurum Adı]"
+        # is still possible -- fixed here so the human gate's own question
+        # ("'Ad Soyad' bilgisi nedir?") never reaches the user unattributed.
+        draft_text, _ = normalize_role_placeholders(
+            draft_text, is_individual_petition="dilekçe" in sub_genre.lower()
+        )
+        classification = state.get("classification") or {}
         strict = state.get("correspondence_type") != "other_official"
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
 
