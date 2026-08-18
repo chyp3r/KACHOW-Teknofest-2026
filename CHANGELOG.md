@@ -58,8 +58,23 @@ metne erişememesi.
   ekliyor; `DraftPolicy.source_chunks_enabled`/`source_chunk_count`/
   `source_chunk_char_budget` ile yönetiliyor.
 
+Ayrıca, #209 listesinde olmayıp bu dalda test edilirken canlıda tespit
+edilen ek bir revizyon hatası:
+
+- **Revizyonda silme talimatı dinlenmiyordu** -- hedeflenecek paragraf/bölüm
+  isim/numara ile belirtilmediğinde ("...paragraftan bir kısmı sil" gibi),
+  tüm taslağı yeniden yazan prompt'un kendi "zaten doldurulmuş bilgileri
+  asla silme" kuralı kullanıcının silme talimatıyla doğrudan çelişiyordu;
+  reviser talimatı yine de uygularsa bu kez `detect_content_loss`'un
+  kısaltma anahtar kelime listesi yalnızca "kısalt"/"özetle" gibi fiilleri
+  tanıdığından, gerçek silme kaynaklı küçülme kazara içerik kaybı sayılıp
+  onarım döngüsüyle geri getiriliyordu -- talimat sessizce iptal edilmiş
+  oluyordu. Prompt'un kuralı silme talimatları için açık bir istisna
+  içerecek şekilde yeniden yazıldı; `_SHORTENING_KEYWORDS`'e "sil"/"çıkar"/
+  "kaldır" eklendi.
+
 ### Test
-- `docker compose run --rm backend pytest -q` → **2192 test geçti**, 1
+- `docker compose run --rm backend pytest -q` → **2196 test geçti**, 1
   bilinen (bu değişikliklerden bağımsız, `main` üzerinde de aynı şekilde
   başarısız) ön-var olan hata hariç.
 - `cd frontend && npx vitest run` → tüm testler geçti; `İnsan onayı`/
