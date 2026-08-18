@@ -67,11 +67,29 @@ def test_raw_text_is_preserved_verbatim():
 # locate_target
 # ===========================================================================
 def test_locate_target_finds_an_ordinal_paragraph():
+    """Ordinal counting skips the letter's own metadata header ("Konu: ...",
+    a single blank-line-separated block) -- see instruction.py's
+    _is_header_paragraph docstring for the bug this guards against (a bare
+    "1. paragraf"/"ilk paragraf"/"giriş" used to land on that header block
+    instead, exposing "Sayı:" to an unrelated body edit). So "2. paragraf"
+    here is the *second* real content block after the header, not the
+    header-adjacent salutation."""
     instruction = parse_revision_instruction("2. paragrafı değiştir.")
     target = locate_target(DRAFT, instruction)
 
     assert target is not None
+    assert target.text == "İlgi yazı kapsamında personelimizin izin talebi tarafımıza iletilmiştir."
+
+
+def test_locate_target_skips_the_metadata_header_for_the_first_paragraph():
+    """The direct regression test for the bug: "1. paragrafı"/"ilk
+    paragraf" must never resolve to the "Konu: ..." header block."""
+    instruction = parse_revision_instruction("1. paragrafı değiştir.")
+    target = locate_target(DRAFT, instruction)
+
+    assert target is not None
     assert target.text == "Sayın Makam,"
+    assert "Konu" not in target.text
 
 
 def test_locate_target_finds_the_last_paragraph_by_negative_ordinal():
@@ -96,6 +114,17 @@ def test_locate_target_finds_the_subject_line():
 
     assert target is not None
     assert target.text.startswith("Konu:")
+
+
+def test_locate_target_skips_the_metadata_header_for_giris():
+    """Same regression as the "1. paragraf" case above, via the "giriş"
+    section-hint path instead of an ordinal -- both must skip the header."""
+    instruction = parse_revision_instruction("Girişi daha resmi yap.")
+    target = locate_target(DRAFT, instruction)
+
+    assert target is not None
+    assert target.text == "Sayın Makam,"
+    assert "Konu" not in target.text
 
 
 def test_locate_target_returns_none_for_whole_scope():
@@ -146,19 +175,22 @@ _ACTIVE_DRAFT = DraftVersion(
 
 @pytest.mark.asyncio
 async def test_run_revise_targets_only_the_requested_paragraph(fake_llm):
-    fake_llm.stream_chunks = ["Sayın Vali Bey,"]
+    fake_llm.stream_chunks = ["Personel izin talebi ivedilikle değerlendirilmelidir."]
 
     result = await run_revise(
         active_draft=_ACTIVE_DRAFT,
-        instructions="2. paragrafı 'Sayın Vali Bey,' olarak değiştir.",
+        instructions="2. paragrafı 'Personel izin talebi ivedilikle değerlendirilmelidir.' olarak değiştir.",
         correspondence_type="response_letter",
         llm_client=fake_llm,
         fast_llm_client=None,
         reasoning_level="fast",
     )
 
-    assert "Sayın Vali Bey," in result["draft"]
-    assert "İlgi yazı kapsamında" in result["draft"]  # untouched paragraph survives
+    assert "Personel izin talebi ivedilikle değerlendirilmelidir." in result["draft"]
+    assert "Sayın Makam," in result["draft"]  # untouched paragraph survives
+    # ...and the metadata header, which "2. paragraf" now correctly skips
+    # past (see instruction.py's _is_header_paragraph), is untouched too.
+    assert "Konu: Personel İzin Talebi" in result["draft"]
     assert result["classification"] == _ACTIVE_DRAFT.classification
     assert result["context"] == _ACTIVE_DRAFT.context
     assert result["source_document"] == _ACTIVE_DRAFT.source_document

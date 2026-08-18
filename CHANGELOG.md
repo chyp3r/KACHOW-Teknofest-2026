@@ -2,6 +2,39 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.19.0] - 2026-08-18
+### Düzeltildi
+- **Taslak brief'inde belge varlıkları eksikti** -- doküman analizi bir CV/
+  evrakta geçen önemli varlık isimlerini (kişi, kurum, tarih, tutar vb.)
+  zaten deterministik olarak çıkarıyordu (`EvrakField.entities`), ama
+  `draft_graph._build_brief` bunu hiç okumuyordu. "Bu CV'de çalıştığı
+  kurumları belirt" gibi bir istek, yazar bu bilgiyi hiç görmediği için
+  `[BİLGİ EKSİK: ...]` yer tutucusuna düşüyor ve insan onay kapısı
+  kullanıcıya belgenin zaten cevapladığı bir soruyu soruyordu. Brief'e yeni
+  bir "Belgede Geçen Diğer Önemli Varlıklar" satırı eklendi.
+- **Revizyonda yanlış paragraf hedefleniyordu ("sayıyı siliyor" hatası)** --
+  üretilen bir taslakta `Konu:`/`Sayı:`/`Tarih:` satırları aralarında boş
+  satır olmadan art arda geldiği için (bkz. `writer.md`'nin sabit yapısı),
+  `instruction.py::_split_paragraphs` bunları TEK bir blok olarak
+  `paragraphs[0]`'a yerleştiriyordu. "1. paragrafı sil"/"girişi değiştir"
+  gibi talimatlar bu yüzden mektubun gerçek gövdesi yerine bu metadata
+  bloğunu hedefliyor, reviser'a alakasız bir gövde talimatını `Sayı:`
+  satırına uygulaması söyleniyordu -- kullanıcının "rastgele saçma sapan
+  şeyler yapıyor" olarak tarif ettiği davranışın kök nedeni buydu. Ordinal/
+  "giriş" hedeflemesi artık saf metadata bloklarını (`Sayı`/`Tarih`/`Konu`/
+  `Muhatap`/`İlgi`/`Ekler` etiketli satırlar veya "T.C." anteti) atlıyor;
+  `konu`/`kapanış`/`imza` bölüm ipuçları değişmeden tam listede aramaya
+  devam ediyor.
+- **Revizyonda silme talimatı hâlâ güvenilir değildi** -- önceki dalda
+  (#209 PR'ı, artık main'de) eklenen düzeltmeye ek olarak, yukarıdaki yanlış
+  hedefleme bug'ı da silme talimatlarının "rastgele" görünmesine katkıda
+  bulunuyordu; doğru paragrafı hedeflemek bu ikinci kaynağı da kapatıyor.
+
+### Test
+- `docker compose run --rm backend pytest -q` → **2260 test geçti**, 1
+  bilinen (bu değişikliklerden bağımsız, `main` üzerinde de aynı şekilde
+  başarısız) ön-var olan hata hariç.
+
 ## [3.18.0] - 2026-08-18
 ### Düzeltildi
 Canlı kullanımda tespit edilen 10 ayrı taslak-akışı hatası (#209). Kök

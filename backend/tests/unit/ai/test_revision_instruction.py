@@ -17,6 +17,57 @@ DRAFT = (
     "Ali Veli\nGenel Müdür"
 )
 
+#: A generated draft's real header shape (Konu/Sayı/Tarih on consecutive
+#: lines, no blank line between them -- see writer.md's fixed structure),
+#: unlike DRAFT above which only carries a bare "Konu:" line. Used
+#: specifically to reproduce the "sayıyı siliyor" bug report: a target
+#: span that includes "Sayı:" being handed to the reviser for an unrelated
+#: body edit.
+FULL_HEADER_DRAFT = (
+    "Konu: Yıllık İzin Talebi\n"
+    "Sayı: E-2026-123\n"
+    "Tarih: 18.08.2026\n\n"
+    "Sayın Makam,\n\n"
+    "İlgi yazı kapsamında personelimizin izin talebi tarafımıza iletilmiştir.\n\n"
+    "Arz ederim.\n\n"
+    "Ali Veli\nGenel Müdür"
+)
+
+
+# ===========================================================================
+# The "sayıyı siliyor" bug: a header block spanning Konu/Sayı/Tarih together
+# must never be handed to the reviser as the target for "1. paragraf"/
+# "giriş" -- see instruction.py's _is_header_paragraph docstring.
+# ===========================================================================
+def test_the_full_header_block_is_never_the_first_paragraph_target():
+    instruction = parse_revision_instruction("İlk paragrafı daha resmi yap.")
+    target = locate_target(FULL_HEADER_DRAFT, instruction)
+
+    assert target is not None
+    assert "Sayı:" not in target.text
+    assert "Konu:" not in target.text
+    assert target.text == "Sayın Makam,"
+
+
+def test_a_numbered_ordinal_also_skips_the_full_header_block():
+    instruction = parse_revision_instruction("1. paragrafı sil.")
+    target = locate_target(FULL_HEADER_DRAFT, instruction)
+
+    assert target is not None
+    assert "Sayı:" not in target.text
+
+
+def test_the_konu_section_hint_still_finds_the_header_block_directly():
+    """konu's own hint must keep working unchanged -- it explicitly means
+    to find the header's Konu line, unlike ordinal/giriş which must skip
+    past it."""
+    instruction = parse_revision_instruction("Konu satırını değiştir.")
+    target = locate_target(FULL_HEADER_DRAFT, instruction)
+
+    assert target is not None
+    assert "Sayı:" in target.text
+    assert target.text.startswith("Konu:")
+
 
 # ===========================================================================
 # decompose_instruction
