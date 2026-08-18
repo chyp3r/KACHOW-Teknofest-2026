@@ -226,12 +226,29 @@ def score_intents(
     # but is asking the assistant's opinion, not confirming the next action --
     # scoring it as draft continuation ran a whole second drafting pipeline
     # off a question the user expected a conversational answer to.
+    #
+    # Also suppressed when a REVISE_RULES rule already fired for a *different*
+    # intent than `previous_intent`: "Kapanışı 'Saygılarımızla arz ederiz.'
+    # yap." after a draft turn names a concrete target ("kapanış") and is five
+    # words long, so it both fires `revise.explicit_request` (the message
+    # names a field to edit -- see REVISE_RULES's own docstring: gated on an
+    # active draft, there is nothing else that could plausibly mean) *and*
+    # matches this rule's own bare "yap" surface -- "yap" here is the
+    # sentence's actual verb, not a bare "go ahead" confirmation, but nothing
+    # above could tell the difference. Left unsuppressed, the continuation
+    # bonus stacked WEIGHT_HINT * 3 onto `draft` and out-scored the message's
+    # own, more specific `revise` evidence -- the "sayıyı siliyor"-adjacent
+    # report's actual router-level cause: a targeted revise instruction
+    # silently re-ran as a fresh draft instead.
+    fired_intents = {evidence_id.split(".", 1)[0] for evidence_id in result.evidence}
+    contested_by_other_intent = bool(fired_intents - {previous_intent})
     signing_off = {"assist.greeting", "assist.courtesy", "assist.farewell"}.intersection(
         result.evidence
     )
     if (
         previous_intent in CONTINUABLE_INTENTS
         and not signing_off
+        and not contested_by_other_intent
         and len(words) <= 6
         and not looks_like_question(message, normalized)
         and any(f" {surface} " in f" {normalized} " for surface in CONTINUATION_SURFACES)

@@ -150,7 +150,7 @@ REVISE_RULES: tuple[EvidenceRule, ...] = (
             "daha kisa yap", "kisa tut", "kisalt", "uzat", "sadelestir",
             "tonunu degistir", "uslubunu degistir", "bu kismi degistir",
             "su kismi degistir", "paragrafi degistir", "cumleyi degistir",
-            "kapanisi degistir", "imzayi degistir", "konuyu degistir",
+            "imzayi degistir", "konuyu degistir",
             # "az önce yazdığın X" collides with assist.memory_recall's "az
             # once" (which means "what did we talk about", not "the thing
             # you just produced") -- these longer, more specific phrases
@@ -166,6 +166,15 @@ REVISE_RULES: tuple[EvidenceRule, ...] = (
             # brevity alone routinely outscored an unscored revise reading.
             "sonuna ekle", "sonuna bir", "imza blogu", "sert geldi",
             "yumusat", "resmilestir", "farkli ele al", "biraz farkli ele",
+            # Bare mention of the closing, without requiring the specific
+            # verb "değiştir" -- "kapanışı değiştir" was already covered,
+            # but "kapanışı 'X' yap"/"kapanışı X olsun" (same request, a
+            # different verb) had nothing to match and, with the semantic
+            # layer unavailable, silently fell through to "draft" instead
+            # of "revise". Same bare-word idiom already used for
+            # "kısalt"/"uzat"/"yumusat" above -- gated on an active draft,
+            # there is nothing else "kapanış" could plausibly mean.
+            "kapanisi",
         ),
         requires_active_draft=True,
     ),

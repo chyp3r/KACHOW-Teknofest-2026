@@ -29,11 +29,26 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   (#209 PR'ı, artık main'de) eklenen düzeltmeye ek olarak, yukarıdaki yanlış
   hedefleme bug'ı da silme talimatlarının "rastgele" görünmesine katkıda
   bulunuyordu; doğru paragrafı hedeflemek bu ikinci kaynağı da kapatıyor.
+- **Kapanış talimatı bazen sessizce taslak turuna dönüşüyordu (uzun süredir
+  bilinen, ortam kaynaklı sanılan bir test hatası)** -- kök neden aslında
+  iki gerçek router hatasıydı, ortam kısıtı değil: (1) `REVISE_RULES` yalnızca
+  "kapanışı **değiştir**" yüzeyini tanıyordu, "kapanışı 'X' **yap**" gibi
+  aynı isteğin farklı bir fiille söylenmiş hali hiçbir kurala hiç değmiyordu;
+  (2) değse bile, mesaj kısa olduğu ve "yap" ile bittiği için (bir
+  `CONTINUATION_SURFACES` yüzeyi) `draft.continuation` sezgiseli aynı anda
+  ateşleniyor, "kapanış" alanını açıkça adlandıran çok daha spesifik
+  `revise.explicit_request` kanıtına rakip bir `draft` puanı ekliyordu ve
+  çoğu zaman onu geçiyordu. `intent_rules.py`'ye çıplak "kapanisi" yüzeyi
+  eklendi; `intent_scorer.py`'deki devam sezgiseli artık mesajda zaten
+  farklı bir amaç için açık bir kural ateşlenmişse devreye girmiyor.
+  `tests/integration/test_brief_survives_into_revise.py`'nin önceden
+  "bilinen, ortam kaynaklı" sayılan başarısızlığı bu düzeltmeyle gerçekten
+  çözüldü.
 
 ### Test
-- `docker compose run --rm backend pytest -q` → **2260 test geçti**, 1
-  bilinen (bu değişikliklerden bağımsız, `main` üzerinde de aynı şekilde
-  başarısız) ön-var olan hata hariç.
+- `docker compose run --rm backend pytest -q` → **2262 test geçti, 0
+  başarısız** -- daha önce "bilinen ön-var olan hata" sayılan test artık
+  gerçekten geçiyor.
 
 ## [3.18.0] - 2026-08-18
 ### Düzeltildi
