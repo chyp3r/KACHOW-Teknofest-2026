@@ -54,3 +54,25 @@ def test_an_explicit_shortening_instruction_permits_the_same_shrink():
 
 def test_an_empty_previous_draft_has_nothing_to_lose():
     assert detect_content_loss("", "Yeni bir taslak metni burada.", "") is None
+
+
+# ==========================================
+# Explicit deletion instructions (the "revizyon talimatımı dinlemedi" bug):
+# a user asking to delete/remove a part must not have that deletion flagged
+# as accidental content loss and looped back into a repair pass that tells
+# the reviser to restore "already-filled" content -- see this module's own
+# docstring on _SHORTENING_KEYWORDS.
+# ==========================================
+def test_an_explicit_deletion_instruction_permits_the_same_shrink():
+    rewritten = "Sayın Ahmet Yılmaz,\n\nArz ederim.\n\nMehmet Öztürk"
+    assert detect_content_loss(PREVIOUS_DRAFT, rewritten, "ikinci paragraftan bir kısmı sil") is None
+
+
+def test_a_removal_verb_instruction_permits_the_same_shrink():
+    rewritten = "Sayın Ahmet Yılmaz,\n\nArz ederim.\n\nMehmet Öztürk"
+    assert detect_content_loss(PREVIOUS_DRAFT, rewritten, "izin tarihleri kısmını çıkar") is None
+
+
+def test_a_kaldir_verb_instruction_permits_the_same_shrink():
+    rewritten = "Sayın Ahmet Yılmaz,\n\nArz ederim.\n\nMehmet Öztürk"
+    assert detect_content_loss(PREVIOUS_DRAFT, rewritten, "bu cümleyi kaldır") is None

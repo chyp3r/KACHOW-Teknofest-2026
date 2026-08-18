@@ -252,8 +252,11 @@ def _build_directive_prompt(
             "hiçbir alanda üslup/kapsam/uzunluk dışında bir değişiklik yapma. "
             "Talimatla ilgisi olmayan her cümleyi, önceki taslaktaki haliyle, KELİMESİ "
             "KELİMESİNE ve EKSİKSİZ olarak yeniden üret. '...', '(değişmedi)', '[aynı]' "
-            "gibi kısaltma veya atlama ifadeleriyle hiçbir bölümü özetleme; zaten "
-            "doldurulmuş bilgileri (isim, kurum, tarih vb.) asla silme."
+            "gibi kısaltma veya atlama ifadeleriyle hiçbir bölümü özetleme. Talimatla "
+            "ilgisi olmayan, zaten doldurulmuş bilgileri (isim, kurum, tarih vb.) asla "
+            "silme -- ANCAK talimat açıkça bir cümlenin/kısmın silinmesini, çıkarılmasını "
+            "veya kaldırılmasını istiyorsa, o kısmı gerçekten sil; bu durumda '[...]' "
+            "yer tutucusu bırakma, ilgili kısmı taslaktan tamamen çıkar."
         )
 
     return (
