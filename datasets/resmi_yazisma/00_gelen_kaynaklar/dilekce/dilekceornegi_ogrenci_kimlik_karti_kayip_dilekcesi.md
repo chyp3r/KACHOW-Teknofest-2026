@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-64560B35
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-64560B35"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "Öğrenci Kimlik Kartı Kayıp Dilekçesi"
 kaynak: "https://www.dilekceornegi.net/ogrenci-kimlik-karti-kayip-dilekcesi/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "reference_only"
+ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Öğrenci Kimlik Kartı Kayıp Dilekçesi
@@ -13,9 +19,9 @@ ANASAYFA
 Öğrenci Kimlik Kartı Kayıp Dilekçesi
 Öğrenci Kimlik Kartı Kayıp Dilekçesi
 Dilekceornegi
-4 yıl önce
+4 yıl önce
 0
-2 dakikada okunabilir
+2 dakikada okunabilir
 Facebook'ta Paylaş
 Twitter'da Paylaş
 Pinterest

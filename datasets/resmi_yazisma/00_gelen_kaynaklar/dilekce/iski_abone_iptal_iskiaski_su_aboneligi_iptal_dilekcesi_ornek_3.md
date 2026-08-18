@@ -4,7 +4,11 @@ kategori: "dilekce"
 alt_kategori: "iski_abone_iptal"
 baslik: "İSKİ/ASKİ Su Aboneliği İptal Dilekçesi (Ornek 3)"
 kaynak: "sentetik-sablon"
+dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
+kaynak_kurum: "İstanbul Su ve Kanalizasyon İdaresi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 # İSKİ/ASKİ Su Aboneliği İptal Dilekçesi (Ornek 3)
@@ -26,7 +30,7 @@ Abonelik Bilgileri:
 
 Son sayaç endeksi okunarak, varsa bakiye borcumun hesaplanmasını ve iade edilecek güvence bedelinin aşağıdaki banka hesabıma yatırılmasını rica ederim.
 
-IBAN: TR184019127474629540216368
+IBAN: [IBAN]
 
 15.08.2025
 Burak Sahin

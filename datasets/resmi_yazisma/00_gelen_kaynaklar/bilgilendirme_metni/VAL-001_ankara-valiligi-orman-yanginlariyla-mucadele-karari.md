@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Ankara Valiliği"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 # Ankara Valiliği Orman Yangınlarıyla Mücadele Komisyon Kararı
@@ -33,10 +36,10 @@ Ankara il sınırları dâhilinde yer alan ormanlık alanlarda çıkabilecek orm
 5. **İletişim ve İhbar:** Vatandaşlarımızın ormanlık alanlarda duman veya ateş görmeleri halinde 112 Acil Çağrı Merkezine derhal bilgi vermeleri önemle rica olunur.
 
 **Komisyon Başkanı:**
-[KİŞİSEL BİLGİ] - Ankara Valisi
+[KİŞİ ADI] - Ankara Valisi
 
 **Üyeler:**
-İl Emniyet Müdürü [KİŞİSEL BİLGİ]
-İl Jandarma Komutanı [KİŞİSEL BİLGİ]
-Orman Bölge Müdürü [KİŞİSEL BİLGİ]
-İl Tarım ve Orman Müdürü [KİŞİSEL BİLGİ]
+İl Emniyet Müdürü [KİŞİ ADI]
+İl Jandarma Komutanı [KİŞİ ADI]
+Orman Bölge Müdürü [KİŞİ ADI]
+İl Tarım ve Orman Müdürü [KİŞİ ADI]

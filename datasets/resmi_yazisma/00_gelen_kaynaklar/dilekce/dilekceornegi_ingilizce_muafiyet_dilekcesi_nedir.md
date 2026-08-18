@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-47039AC9
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-47039AC9"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "İngilizce Muafiyet Dilekçesi Nedir?"
 kaynak: "https://www.dilekceornegi.net/ingilizce-muafiyet-dilekcesi-nedir/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "reference_only"
+ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # İngilizce Muafiyet Dilekçesi Nedir?
@@ -13,9 +19,9 @@ ANASAYFA
 İngilizce Muafiyet Dilekçesi Nedir?
 İngilizce Muafiyet Dilekçesi Nedir?
 Dilekceornegi
-7 yıl önce
+7 yıl önce
 0
-2 dakikada okunabilir
+2 dakikada okunabilir
 Facebook'ta Paylaş
 Twitter'da Paylaş
 Pinterest

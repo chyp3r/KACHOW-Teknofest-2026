@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-5840D25F
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-5840D25F"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "İcra Takip Örneği"
 kaynak: "https://www.dilekceornegi.net/icra-takip-ornegi/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "reference_only"
+ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # İcra Takip Örneği
@@ -13,9 +19,9 @@ ANASAYFA
 İcra Takip Örneği
 İcra Takip Örneği
 Dilekceornegi
-7 yıl önce
+7 yıl önce
 0
-2 dakikada okunabilir
+2 dakikada okunabilir
 Facebook'ta Paylaş
 Twitter'da Paylaş
 Pinterest

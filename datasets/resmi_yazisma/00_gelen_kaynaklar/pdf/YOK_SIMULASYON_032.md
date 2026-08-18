@@ -11,7 +11,11 @@ extractor: "pdfium"
 used_ocr: "false"
 page_count: "1"
 quality_score: "0.884"
-rag_status: "candidate"
+rag_status: "rejected"
+ret_nedeni: "sentetik_simulasyon_yalniz_test"
+kaynak_kurum: "Yükseköğretim Kurulu"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # Denklik Değerlendirme Kararı - Belge No 32

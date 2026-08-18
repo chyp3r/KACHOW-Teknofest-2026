@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Salihli Belediye Başkanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 # T.C. Salihli Belediye Meclis Kararı (Karar No: 2026/27)
@@ -38,11 +41,11 @@ Salihli Belediye Meclisi gündem maddesi gereğince Imar Komisyonu Raporu okundu
 Kararın 30 gün süreyle belediye ilan panosunda ve internet sitesinde askıya çıkarılmasına, 5216 sayılı Büyükşehir Belediyesi Kanunu'nun 7 b maddesi gereği Manisa Büyükşehir Belediye Meclisi'nin onayına sunulmasına meclise katılan üyelerin oy birliği ile karar verilmiştir.
 
 Meclis Başkanı
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Belediye Başkanı
 
 Katip Üye
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 
 Katip Üye
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]

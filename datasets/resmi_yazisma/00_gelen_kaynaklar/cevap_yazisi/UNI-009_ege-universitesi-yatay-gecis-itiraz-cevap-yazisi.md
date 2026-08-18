@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Ege Üniversitesi Öğrenci İşleri Daire Başkanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "3"
 ---
 
 T.C.
@@ -20,7 +23,7 @@ EGE ÜNİVERSİTESİ REKTÖRLÜĞÜ
 **Sayı:** [EVRAK SAYISI]
 **Konu:** Yatay Geçiş İtirazı Hk.
 
-**Sayın [EVRAK SAYISI]**
+**Sayın [KİŞİ ADI]**
 
 **İlgi:** 18.09.2025 tarihli dilekçeniz.
 

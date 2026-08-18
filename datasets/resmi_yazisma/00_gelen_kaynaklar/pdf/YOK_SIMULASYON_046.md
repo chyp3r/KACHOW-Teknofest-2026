@@ -12,7 +12,10 @@ used_ocr: "false"
 page_count: "1"
 quality_score: "0.837"
 rag_status: "rejected"
-ret_nedeni: "tekrar_simulasyon_sablonu"
+ret_nedeni: "sentetik_simulasyon_yalniz_test"
+kaynak_kurum: "Yükseköğretim Kurulu"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "2"
 ---
 
 # Senato Kararı: Lisansüstü Eğitim Yönetmeliği Değişikliği - Belge No 46

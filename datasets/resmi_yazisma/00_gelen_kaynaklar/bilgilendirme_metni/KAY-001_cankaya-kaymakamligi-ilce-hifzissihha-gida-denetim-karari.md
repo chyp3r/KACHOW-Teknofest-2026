@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Çankaya Kaymakamlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "1"
 ---
 
 # Çankaya Kaymakamlığı İlçe Hıfzıssıhha Kurulu Gıda Güvenliği ve Denetim Kararı
@@ -31,4 +34,4 @@ rag_status: "candidate"
 3. **Son Tüketim Tarihi ve Depolama:** Tarihi geçmiş veya uygunsuz şartlarda depolanan gıda maddelerine el konularak imha edilecek ve işletmelere 5996 sayılı Kanun uyarınca idari para cezası kesilecektir.
 
 **Kurul Başkanı:**
-[KİŞİSEL BİLGİ] - Çankaya Kaymakamı
+[KİŞİ ADI] - Çankaya Kaymakamı

@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Muğla Valiliği"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "1"
 ---
 
 # Muğla Valiliği Ormanlık Alanlara Giriş Yasağı ve Yangın Tedbirleri Genelgesi
@@ -33,5 +36,5 @@ Muğla il genelinde yüksek hava sıcaklığı, düşük nem ve kuvvetli rüzgâ
 
 Kamuoyuna saygıyla duyurulur.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Muğla Valisi

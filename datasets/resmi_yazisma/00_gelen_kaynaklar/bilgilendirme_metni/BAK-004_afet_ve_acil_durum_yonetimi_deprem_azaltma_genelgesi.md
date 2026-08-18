@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. İçişleri Bakanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "2"
 ---
 
 # Afet Risk Azaltma ve Önleme Çalışmaları Hakkında Genelge (Genelge No: 2024/6)
@@ -37,7 +40,7 @@ rag_status: "candidate"
 
 Bilgilerini ve il düzeyinde gerekli tedbirlerin gecikmeksizin alınmasını rica ederim.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Bakan a.
 İçişleri Bakan Yardımcısı
 

@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-F17ACAE9
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-F17ACAE9"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "Çekişmeli Boşanma Davası Dilekçesi Örneği Nedir?"
 kaynak: "https://www.dilekceornegi.net/cekismeli-bosanma-davasi-dilekcesi-ornegi-nedir/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "reference_only"
+ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Çekişmeli Boşanma Davası Dilekçesi Örneği Nedir?
@@ -13,9 +19,9 @@ ANASAYFA
 Çekişmeli Boşanma Davası Dilekçesi Örneği Nedir?
 Çekişmeli Boşanma Davası Dilekçesi Örneği Nedir?
 Dilekceornegi
-7 yıl önce
+7 yıl önce
 0
-2 dakikada okunabilir
+2 dakikada okunabilir
 Facebook'ta Paylaş
 Twitter'da Paylaş
 Pinterest

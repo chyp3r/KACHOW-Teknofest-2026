@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "8"
 ---
 
 # Maden ve İnşaat Sektörlerinde İş Kazası Denetimleri ve İdari Yaptırımlar Soru Önergesi Cevabı
@@ -18,11 +21,11 @@ rag_status: "candidate"
 **TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA**
 
 **Sayı:** [EVRAK SAYISI]
-**Konu:** [EVRAK SAYISI] Milletvekili [EVRAK SAYISI]'e Ait 7/24890 Esas Sayılı Yazılı Soru Önergesi Cevabı
+**Konu:** [İL ADI] Milletvekili [KİŞİ ADI]'e Ait 7/24890 Esas Sayılı Yazılı Soru Önergesi Cevabı
 
 **İlgi:** TBMM Başkanlığı'nın [EVRAK SAYISI] tarihli ve [EVRAK SAYISI] sayılı yazısı.
 
-İlgi yazı eki [EVRAK SAYISI] Milletvekili Sayın [EVRAK SAYISI] tarafından yöneltilen "Maden ocakları ve şantiyelerde iş sağlığı ve güvenliği denetimleri, durdurulan işyerleri ve uygulanan idari para cezaları" konulu 7/24890 Esas Sayılı Yazılı Soru Önergesi Bakanlığımız Rehberlik ve Teftiş Başkanlığınca incelenmiş ve aşağıdaki yanıtlar hazırlanmıştır:
+İlgi yazı eki [İL ADI] Milletvekili Sayın [KİŞİ ADI] tarafından yöneltilen "Maden ocakları ve şantiyelerde iş sağlığı ve güvenliği denetimleri, durdurulan işyerleri ve uygulanan idari para cezaları" konulu 7/24890 Esas Sayılı Yazılı Soru Önergesi Bakanlığımız Rehberlik ve Teftiş Başkanlığınca incelenmiş ve aşağıdaki yanıtlar hazırlanmıştır:
 
 1. **İş Müfettişleri Tarafından Yapılan Denetim Sayıları:**
 6331 sayılı İş Sağlığı ve Güvenliği Kanunu çerçevesinde Bakanlığımız İş Müfettişlerince son bir yıl içerisinde Türkiye genelinde 12.450 işyerinde programlı ve ihbara dayalı teftiş gerçekleştirilmiştir. Bu teftişlerin 3.120'si yeraltı ve üstü maden işletmelerinde, 5.800'ü ise yapı/inşaat şantiyelerinde yürütülmüştür.
@@ -37,5 +40,5 @@ Bilgilerinize arz ederim.
 
 **Saygılarımla,**
 
-**[KİŞİSEL BİLGİ]**
+**[İMZA SAHİBİ]**
 **Çalışma ve Sosyal Güvenlik Bakanı**

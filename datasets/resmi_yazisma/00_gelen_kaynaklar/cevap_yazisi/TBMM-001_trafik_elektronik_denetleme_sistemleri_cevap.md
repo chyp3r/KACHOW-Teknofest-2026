@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "8"
 ---
 
 # Trafik Elektronik Denetleme Sistemleri (TEDES) ve Kent Güvenlik Yönetim Sistemi Hakkında Yazılı Soru Önergesi Cevabı
@@ -18,11 +21,11 @@ rag_status: "candidate"
 **TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA**
 
 **Sayı:** [EVRAK SAYISI]
-**Konu:** [EVRAK SAYISI] Milletvekili [EVRAK SAYISI]'e Ait 7/12450 Esas Sayılı Yazılı Soru Önergesi Cevabı
+**Konu:** [İL ADI] Milletvekili [KİŞİ ADI]'e Ait 7/12450 Esas Sayılı Yazılı Soru Önergesi Cevabı
 
 **İlgi:** TBMM Başkanlığı'nın [EVRAK SAYISI] tarihli ve [EVRAK SAYISI] sayılı yazısı.
 
-İlgi yazı ekinde alınan, [EVRAK SAYISI] Milletvekili Sayın [EVRAK SAYISI] tarafından İçişleri Bakanlığına yöneltilen "Kent Güvenlik Yönetim Sistemi (KGYS) ve Trafik Elektronik Denetleme Sistemleri (TEDES) kapsamındaki kameraların kurulumu, denetim usulleri ve uygulanan idari para cezaları" konulu 7/12450 Esas Sayılı Yazılı Soru Önergesine ilişkin cevabımız aşağıda sunulmuştur:
+İlgi yazı ekinde alınan, [İL ADI] Milletvekili Sayın [KİŞİ ADI] tarafından İçişleri Bakanlığına yöneltilen "Kent Güvenlik Yönetim Sistemi (KGYS) ve Trafik Elektronik Denetleme Sistemleri (TEDES) kapsamındaki kameraların kurulumu, denetim usulleri ve uygulanan idari para cezaları" konulu 7/12450 Esas Sayılı Yazılı Soru Önergesine ilişkin cevabımız aşağıda sunulmuştur:
 
 1. **KGYS ve TEDES Sistemlerinin Yaygınlaştırılması:**
 Bakanlığımız Emniyet Genel Müdürlüğü Trafik Başkanlığı ile Gençlik ve Spor, Ulaştırma ve Altyapı Bakanlığı ile belediyeler arasında imzalanan protokoller çerçevesinde, ülke genelinde 81 il ve 922 ilçemizde trafik güvenliğinin sağlanması, aşırı hız ve şerit ihlallerinin önlenmesi amacıyla toplam 14.850 KGYS denetim noktası ve 3.420 TEDES koridoru aktif olarak işletilmektedir.
@@ -40,5 +43,5 @@ Bilgilerinize arz ederim.
 
 **Saygılarımla,**
 
-**[KİŞİSEL BİLGİ]**
+**[İMZA SAHİBİ]**
 **İçişleri Bakanı**

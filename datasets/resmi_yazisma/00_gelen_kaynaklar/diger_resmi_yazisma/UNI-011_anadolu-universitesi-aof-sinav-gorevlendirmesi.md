@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Anadolu Üniversitesi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "2"
 ---
 
 T.C.
@@ -26,5 +29,5 @@ Açıköğretim Fakültesi Dekanlığı
 
 Sınavın güvenli ve düzenli bir şekilde icra edilebilmesi için Bina Sınav Sorumluları toplantısının 24 Nisan 2026 Cuma günü saat 14.00'te yapılması ve tüm görevlilere bilgilendirme yapılması hususunda gereğini rica ederim.
 
-Prof. Dr. [KİŞİSEL BİLGİ]
+Prof. Dr. [KİŞİ ADI]
 Dekan

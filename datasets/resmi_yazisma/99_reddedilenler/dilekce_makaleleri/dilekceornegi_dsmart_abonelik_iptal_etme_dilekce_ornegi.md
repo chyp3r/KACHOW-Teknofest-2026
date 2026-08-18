@@ -5,8 +5,12 @@ alt_kategori: "dilekceornegi"
 baslik: "D-Smart Abonelik İptal Etme Dilekçe Örneği"
 kaynak: "https://www.dilekceornegi.net/d-smart-abonelik-iptal-etme-dilekce-ornegi/"
 kaynak_turu: "html_kazima"
+dogrulama: "mevcut_markdown_kaydi"
 rag_status: "reference_only"
 ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # D-Smart Abonelik İptal Etme Dilekçe Örneği

@@ -4,7 +4,11 @@ kategori: "dilekce"
 alt_kategori: "iskur_ise_kayit"
 baslik: "İŞKUR İşsizlik Maaşı Başvuru Dilekçesi (Ornek 2)"
 kaynak: "sentetik-sablon"
+dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
+kaynak_kurum: "Sentetik veri üretimi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # İŞKUR İşsizlik Maaşı Başvuru Dilekçesi (Ornek 2)

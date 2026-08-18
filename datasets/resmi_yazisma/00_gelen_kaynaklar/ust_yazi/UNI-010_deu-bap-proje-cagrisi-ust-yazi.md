@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Dokuz Eylül Üniversitesi Rektörlüğü"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "2"
 ---
 
 T.C.
@@ -26,7 +29,7 @@ Bilimsel Araştırma Projeleri (BAP) Koordinasyon Birimi
 
 Proje başvuruları BAP Otomasyon Sistemi üzerinden 01-30 Nisan 2026 tarihleri arasında kabul edilecektir. Fakülteniz/Enstitünüz öğretim elemanlarına duyurulması hususunda gereğini rica ederim.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Rektör Yardımcısı / BAP Komisyon Başkanı
 
 **EK:** 2026 BAP Başvuru Kılavuzu (4 Sayfa)

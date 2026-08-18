@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "8"
 ---
 
 # MHRS Randevu Tedarik Oranları ve Yan Dal Uzman Hekim Atamaları Hakkında Yazılı Soru Önergesi Cevabı
@@ -18,11 +21,11 @@ rag_status: "candidate"
 **TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA**
 
 **Sayı:** [EVRAK SAYISI]
-**Konu:** [EVRAK SAYISI] Milletvekili [EVRAK SAYISI]'e Ait 7/15492 Esas Sayılı Yazılı Soru Önergesi Cevabı
+**Konu:** [İL ADI] Milletvekili [KİŞİ ADI]'e Ait 7/15492 Esas Sayılı Yazılı Soru Önergesi Cevabı
 
 **İlgi:** TBMM Başkanlığı'nın [EVRAK SAYISI] tarihli ve [EVRAK SAYISI] sayılı yazısı.
 
-[EVRAK SAYISI] Milletvekili Sayın [EVRAK SAYISI] tarafından Sağlık Bakanlığına iletilen "Merkezi Hekim Randevu Sistemi (MHRS) onaylı randevu dönemi verileri, uzman ve yan dal hekim eksikliklerinin giderilmesi usulü" hakkındaki 7/15492 Esas Sayılı Yazılı Soru Önergesine ilişkin cevaplarımız aşağıda sunulmaktadır:
+[İL ADI] Milletvekili Sayın [KİŞİ ADI] tarafından Sağlık Bakanlığına iletilen "Merkezi Hekim Randevu Sistemi (MHRS) onaylı randevu dönemi verileri, uzman ve yan dal hekim eksikliklerinin giderilmesi usulü" hakkındaki 7/15492 Esas Sayılı Yazılı Soru Önergesine ilişkin cevaplarımız aşağıda sunulmaktadır:
 
 1. **Onaylı Randevu Sistemi ve Kapasite Artışı:**
 Bakanlığımız bünyesinde uygulamaya konulan "Onaylı Randevu Sistemi" sayesinde, randevusuna gelmeyen hastalardan kaynaklanan boş kapasite oranı %21'den %3'ün altına düşürülmüştür. Bu sayede aylık ortalama 2,5 milyon ilave randevu kapasitesi oluşturularak vatandaşlarımızın poliklinik hizmetlerine erişimi kolaylaştırılmıştır.
@@ -37,5 +40,5 @@ Bilgilerinizi ve gereğini arz ederim.
 
 **Saygılarımla,**
 
-**[KİŞİSEL BİLGİ]**
+**[İMZA SAHİBİ]**
 **Sağlık Bakanı**

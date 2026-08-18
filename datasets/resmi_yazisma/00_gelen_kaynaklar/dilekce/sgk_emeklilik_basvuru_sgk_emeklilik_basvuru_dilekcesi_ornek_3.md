@@ -4,7 +4,11 @@ kategori: "dilekce"
 alt_kategori: "sgk_emeklilik_basvuru"
 baslik: "SGK Emeklilik Başvuru Dilekçesi (Ornek 3)"
 kaynak: "sentetik-sablon"
+dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
+kaynak_kurum: "Sosyal Güvenlik Kurumu"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # SGK Emeklilik Başvuru Dilekçesi (Ornek 3)

@@ -5,8 +5,12 @@ alt_kategori: "dilekceornegi"
 baslik: "Manevi Tazminat Cevap Dilekçesi"
 kaynak: "https://www.dilekceornegi.net/manevi-tazminat-cevap-dilekcesi/"
 kaynak_turu: "html_kazima"
+dogrulama: "mevcut_markdown_kaydi"
 rag_status: "reference_only"
 ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Manevi Tazminat Cevap Dilekçesi

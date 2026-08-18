@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. İzmir Valiliği"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "2"
 ---
 
 # İzmir Valiliği İl Umumi Hıfzıssıhha Kurulu Kamusal Alan Güvenliği ve Sağlık Tedbirleri Kararı
@@ -33,4 +36,4 @@ rag_status: "candidate"
 Aykarı hareket eden kurum ve kişilere 1593 sayılı Kanun’un 282. maddesi gereğince idari para cezası verilecektir.
 
 **Kurul Başkanı:**
-[KİŞİSEL BİLGİ] - İzmir Valisi
+[KİŞİ ADI] - İzmir Valisi

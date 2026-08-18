@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-26A68FAE
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-26A68FAE"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "Gizlilik Politikası"
 kaynak: "https://www.dilekceornegi.net/gizlilik-politikasi/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "rejected"
+ret_nedeni: "site_sayfasi"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Gizlilik Politikası

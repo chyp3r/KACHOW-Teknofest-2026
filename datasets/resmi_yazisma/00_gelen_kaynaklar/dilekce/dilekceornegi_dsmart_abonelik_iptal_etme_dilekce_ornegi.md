@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-229291C2
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-229291C2"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "D-Smart Abonelik İptal Etme Dilekçe Örneği"
 kaynak: "https://www.dilekceornegi.net/d-smart-abonelik-iptal-etme-dilekce-ornegi/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "reference_only"
+ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # D-Smart Abonelik İptal Etme Dilekçe Örneği
@@ -13,16 +19,16 @@ ANASAYFA
 D-Smart Abonelik İptal Etme Dilekçe Örneği
 D-Smart Abonelik İptal Etme Dilekçe Örneği
 Dilekceornegi
-7 yıl önce
+7 yıl önce
 0
-2 dakikada okunabilir
+2 dakikada okunabilir
 Facebook'ta Paylaş
 Twitter'da Paylaş
 Pinterest
 Reddit
 Whatsapp
 Telegram
-Bürokrasinin yaygınlaşması ve her şeyin artık hukuksal boyuta dayandırılması sonucunda hayatımızda birçok olay ve olgu için dilekçe yazmamız gerekmeye başladı. Bir üyelik yaptırırken her ne kadar dilekçeye ihtiyacımız olsa sadece  sözlü bir onayımız yeterli olsa bile sadece onaylıyorum diyerek başlattığımız üyeliğimizi iptal ettirmek için bir dilekçe yazmak zorundayız. İptal ettirmek istenen üyeliklerden bir tanesi de D-Smart üyeliğidir. D-Smart üyesiyseniz ve artık bu hizmeti almak istemiyorsanız,
+Bürokrasinin yaygınlaşması ve her şeyin artık hukuksal boyuta dayandırılması sonucunda hayatımızda birçok olay ve olgu için dilekçe yazmamız gerekmeye başladı. Bir üyelik yaptırırken her ne kadar dilekçeye ihtiyacımız olsa sadece sözlü bir onayımız yeterli olsa bile sadece onaylıyorum diyerek başlattığımız üyeliğimizi iptal ettirmek için bir dilekçe yazmak zorundayız. İptal ettirmek istenen üyeliklerden bir tanesi de D-Smart üyeliğidir. D-Smart üyesiyseniz ve artık bu hizmeti almak istemiyorsanız,
 D-Smart Abonelik İptal Etme Dilekçe Örneği
 incelemeniz ardından da bu örneği doldurarak D-Smart’a göndermeniz gerekmektedir. Ardından çıkış işlemlerinizi şirketin başlatması ve sizin üyeliğinizi sonlandırması gerekmektedir. Tabi üyelik sonlandırma yaptırımlarını en iyi şekilde okumanızı da tavsiye etmekteyiz.
 D-Smart Abonelik iptal Etme Dilekçe

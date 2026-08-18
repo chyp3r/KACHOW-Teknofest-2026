@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Antalya Valiliği"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "1"
 ---
 
 # Antalya Valiliği Mavi Akdeniz İnisiyatifi Dumansız Plaj Uygulama Genelgesi
@@ -33,5 +36,5 @@ Antalya Mavi Akdeniz İnisiyatifi (2026-2030) vizyonu doğrultusunda, kıyı şe
 
 Tüm belediyelerimize, kolluk kuvvetlerimize ve plaj işletmecilerine önemle duyurulur.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Antalya Valisi

@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-F1736E33
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-F1736E33"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "Dilekçe Nedir"
 kaynak: "https://www.dilekceornegi.net/dilekce-nedir/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "reference_only"
+ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Dilekçe Nedir
@@ -25,7 +31,7 @@ Bir isteği, ihtiyacı,
 şikayeti ya da arzuyu dile getirmek için yazılması amaçlanan; amacı
 doğrultusunda gerek resmi, gerekse de özel kurumlara gönderilen içerisinde ad
 soyad, imza, tarih barındıran yazılara dilekçe adı verilmektedir. Tanımından da
-anlaşılacağı üzere bir  dilekçenin
+anlaşılacağı üzere bir dilekçenin
 gönderilmesinde en başta bir amaç yer almaktadır.
 Dilekçe yazmak çoğu
 zaman aklımıza gelmese ya da mağdur olduğumuz durumlarda başvurduğumuz bir

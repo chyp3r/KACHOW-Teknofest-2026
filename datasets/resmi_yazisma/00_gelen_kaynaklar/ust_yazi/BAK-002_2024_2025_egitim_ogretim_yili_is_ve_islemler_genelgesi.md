@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Millî Eğitim Bakanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "2"
 ---
 
 # 2024-2025 Eğitim ve Öğretim Yılına İlişkin İş ve İşlemler (Genelge No: 2024/53)
@@ -40,7 +43,7 @@ rag_status: "candidate"
 
 Gereğini ve bilgilerinizi önemle rica ederim.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Millî Eğitim Bakanı
 
 **DAĞITIM:**

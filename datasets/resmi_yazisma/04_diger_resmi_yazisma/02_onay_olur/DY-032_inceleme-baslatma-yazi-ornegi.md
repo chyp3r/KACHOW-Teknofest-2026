@@ -17,6 +17,9 @@ page_count: "32"
 quality_score: "0.871"
 rag_status: "reference_only"
 ret_nedeni: "tekil_yazisma_ornegi_degil"
+kaynak_kurum: "Amasya Üniversitesi Hukuk Müşavirliği"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "6"
 ---
 
 # İÇİNDEKİLER

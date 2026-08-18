@@ -17,6 +17,9 @@ page_count: "1"
 quality_score: "1.0"
 rag_status: "rejected"
 ret_nedeni: "yetersiz_metin"
+kaynak_kurum: "Ulaştırma ve Altyapı Bakanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # DUYURU

@@ -16,6 +16,9 @@ used_ocr: "true"
 page_count: "3"
 quality_score: "0.816"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "6"
 ---
 
 # Soru Önergeleri
@@ -45,8 +48,7 @@ Ek: Soru Önergesi Cevabı
 Bu belge güvenli elektronık imza ile imzalanmıştır.
 Belge Doğrulama Kodu:0E00$A3A-2268-4557-8F66-1CC7EA6838F9 Belge Doğrulama Adresi:https://Wwww.turkiye.gov.tr/stb-ebys
 [KURUM ADRESİ]
-Telefon :[T.C. KİMLİK NO] Bilgi İçin:soruonergesi(&sanayi.gov.tr | ür ie
-Faks:[T.C. KİMLİK NO] İnternet adresi: Www.sanayi.gov.tr Si —
+[KURUM İLETİŞİM BİLGİLERİ]
 Kep:sanayiveteknolojibakanligi.strateji(ihs0!.kep.tr ki > EREM
 
 EDİRNE MİLLETVEKİLİ SAYIN [KİŞİ ADI]'IN

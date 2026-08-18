@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-47DEC7FC
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-47DEC7FC"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "Boşanma Dilekçesi Örneği"
 kaynak: "https://www.dilekceornegi.net/bosanma-dilekcesi-ornegi/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "reference_only"
+ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Boşanma Dilekçesi Örneği
@@ -13,16 +19,16 @@ Anasayfa
 Boşanma Dilekçesi Örneği
 Boşanma Dilekçesi Örneği
 Dilekceornegi
-7 yıl önce
+7 yıl önce
 0
-4 dakikada okunabilir
+4 dakikada okunabilir
 Facebook'ta Paylaş
 Twitter'da Paylaş
 Pinterest
 Reddit
 Whatsapp
 Telegram
-Boşanma Dilekçesi Örneği, boşanma davası açacak kişinin boşanma işlemlerini başlatmak için gerekli belgelerin başında gelir. Boşanma davası açacak kişi, boşanmak için hazırladığı dilekçe ile birlikte yetkili Aile Mahkemesine başvurur.  Bu yazının devamında
+Boşanma Dilekçesi Örneği, boşanma davası açacak kişinin boşanma işlemlerini başlatmak için gerekli belgelerin başında gelir. Boşanma davası açacak kişi, boşanmak için hazırladığı dilekçe ile birlikte yetkili Aile Mahkemesine başvurur. Bu yazının devamında
 boşanma dilekçesi
 hazırlarken nelere dikkat edilmeli, nasıl yapılmalı, hangi kurumlara verilmeli ve prosedürleri nedir gibi detaylı şekilde anlatıyoruz. Aşağıda 4 çeşit boşanma dilekçe çeşidi betimlenmiştir.
 Aldatma nedeniyle boşanma dilekçesi
@@ -38,7 +44,7 @@ BOŞANMA DİLEKÇESİ ÖRNEĞİ HAZIRLARKEN
 Boşanma Dilekçesi Örneği hazırlayan kişi dilekçede, dava süreci içinde söz edilecek olan boşanma nedenleri, boşanma davası türü, boşanma sonrası istek ve taleplerini net bir şekilde belirtilmelidir. Boşanma davası türü az önce belirtmiş olduğum boşanma nedenleri ve boşanma sonrasında oluşacak istek ve taleplere göre de farklılık göstermektedir. Bundan ötürü boşanma dilekçesi; boşanma türüne göre özel hazırlanmalıdır.
 Hukuki alt yapısı olmayan kişiler zaman zaman kalıp
 halinde hazırlanmış olan dilekçelerle başvuruyu gerçekleştirebiliyorlar ve bu
-da büyük bir hataya yol açıyor.  Bu hata; bireyin nafaka, velayet,
+da büyük bir hataya yol açıyor. Bu hata; bireyin nafaka, velayet,
 tazminat, mal paylaşımı gibi konuları riske sokmaktadır. Son bir uyarı olarak
 ise; internette bulmuş olduğunuz örnek boşanma dilekçesi örneği eğer ki kimin
 hazırladığı belli değilse, o dilekçeyi referans olarak almamanızdır.

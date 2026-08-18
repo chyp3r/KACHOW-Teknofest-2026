@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Kültür ve Turizm Bakanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "2"
 ---
 
 # Merkezi Turizm Veri Tabanı Uygulamaları Hakkında Genelge (Genelge No: 2026/1)
@@ -36,7 +39,7 @@ rag_status: "candidate"
 
 Bilgilerini ve ilinizdeki tüm konaklama tesislerine gerekli tebligatın yapılarak takibinin sağlanmasını rica ederim.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Bakan a.
 Bakan Yardımcısı
 

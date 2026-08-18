@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Millî Eğitim Bakanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 # Türkiye Yüzyılı Maarif Modeli'ne İlişkin İş ve İşlemler (Genelge No: 2024/54)
@@ -41,7 +44,7 @@ Bakanlığımızca yürütülen müfredat yenileme ve geliştirme çalışmalar�
 
 Bilgilerini ve genelge esaslarının il/ilçe millî eğitim müdürlükleri ile okul müdürlüklerince titizlikle takibini ve uygulanmasını önemle rica ederim.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Bakan a.
 Bakan Yardımcısı
 
