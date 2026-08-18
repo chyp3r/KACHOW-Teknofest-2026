@@ -37,16 +37,31 @@ _PHONE_PATTERN = re.compile(
 _PHONE_CONTEXT = re.compile(r"\b(tel|telefon|gsm|cep)\b", re.IGNORECASE)
 
 #: Address heuristic: a content line scores as an address when it carries a
-#: street/unit keyword. Mirrors the vocabulary ``field_parser.py`` already
-#: knows to expect in an ``Adres:``-labelled value, but scans free text since
-#: an address in a petition's body often carries no label at all.
-_ADDRESS_KEYWORDS = re.compile(
+#: street-level keyword (mahalle/cadde/sokak/...) -- the part of an address
+#: that only ever appears in an actual address. Split from the unit-level
+#: keywords below on purpose: an ordinary official-letter line like "Kat: 2"
+#: or a numbered reference like "No: 5" (a case/document number, an article
+#: number, a list item) uses the exact same words without being an address
+#: at all, and used to be enough on its own to false-positive as one (see
+#: Görev's "hatalı PII tespiti" bug report). A real address is expected to
+#: name a street too, so requiring at least one street-level hit before the
+#: unit-level keywords even count closes that gap.
+_ADDRESS_STREET_KEYWORDS = re.compile(
     r"\b(mahalle(si)?|mah\.|cadde(si)?|cad\.|sokak|sok\.|bulvar[ıi]?|"
-    r"apartman[ıi]?|blok|kat\s*:?\s*\d|daire\s*:?\s*\d|no\s*:?\s*\d+)\b",
+    r"apartman[ıi]?|blok)\b",
     re.IGNORECASE,
 )
 
-#: Below this many keyword hits a line is not confidently an address.
+#: Unit-level keywords: only meaningful once a street-level hit has already
+#: confirmed this line is actually about an address (see above) -- these
+#: alone are far too generic (kat/daire/no all appear constantly in official
+#: correspondence unrelated to any address) to carry any signal by themselves.
+_ADDRESS_UNIT_KEYWORDS = re.compile(
+    r"\b(kat\s*:?\s*\d|daire\s*:?\s*\d|no\s*:?\s*\d+)\b",
+    re.IGNORECASE,
+)
+
+#: Below this many combined keyword hits a line is not confidently an address.
 _ADDRESS_MIN_KEYWORD_HITS = 2
 
 
@@ -68,6 +83,18 @@ class PiiFinding(BaseModel):
     kind: str = Field(description="'tckn' | 'iban' | 'telefon' | 'adres'.")
     preview: str = Field(description="Maskelenmiş önizleme; ham değer taşımaz.")
     confidence: float = Field(default=1.0, description="0-1 arası güven skoru.")
+    #: Which detector/rule actually fired -- the answer to "hangi detector
+    #: nedeniyle tetiklendi" (Görev's own explainability requirement).
+    #: Defaults to "" rather than being required for the same reason
+    #: `confidence` does (see its own docstring): a finding reconstructed
+    #: from an already-serialized assessment never carried this either.
+    rule_id: str = Field(
+        default="",
+        description=(
+            "Tetiklenen kural: 'tckn_checksum' | 'iban_mod97' | "
+            "'phone_labeled' | 'phone_unlabeled' | 'address_street'."
+        ),
+    )
 
 
 def _mask(value: str, *, keep_start: int = 2, keep_end: int = 2) -> str:
@@ -152,7 +179,13 @@ def _find_tckn_positioned(text: str) -> list[_PositionedFinding]:
         digits = match.group(0)
         if _tckn_checksum_valid(digits):
             results.append(
-                (match.start(), match.end(), PiiFinding(kind="tckn", preview=_mask(digits), confidence=0.95))
+                (
+                    match.start(),
+                    match.end(),
+                    PiiFinding(
+                        kind="tckn", preview=_mask(digits), confidence=0.95, rule_id="tckn_checksum"
+                    ),
+                )
             )
     return results
 
@@ -167,7 +200,12 @@ def _find_iban_positioned(text: str) -> list[_PositionedFinding]:
                 (
                     match.start(),
                     match.end(),
-                    PiiFinding(kind="iban", preview=_mask(raw, keep_start=4, keep_end=2), confidence=0.95),
+                    PiiFinding(
+                        kind="iban",
+                        preview=_mask(raw, keep_start=4, keep_end=2),
+                        confidence=0.95,
+                        rule_id="iban_mod97",
+                    ),
                 )
             )
     return results
@@ -178,12 +216,18 @@ def _find_phone_positioned(text: str) -> list[_PositionedFinding]:
     for match in _PHONE_PATTERN.finditer(text):
         start = max(0, match.start() - 20)
         nearby = text[start : match.start()]
-        confidence = 0.85 if _PHONE_CONTEXT.search(nearby) else 0.55
+        labeled = bool(_PHONE_CONTEXT.search(nearby))
+        confidence = 0.85 if labeled else 0.55
         results.append(
             (
                 match.start(),
                 match.end(),
-                PiiFinding(kind="telefon", preview=_mask(match.group(0)), confidence=confidence),
+                PiiFinding(
+                    kind="telefon",
+                    preview=_mask(match.group(0)),
+                    confidence=confidence,
+                    rule_id="phone_labeled" if labeled else "phone_unlabeled",
+                ),
             )
         )
     return results
@@ -195,8 +239,13 @@ def _find_address_positioned(text: str) -> list[_PositionedFinding]:
     for line in text.splitlines(keepends=True):
         stripped = line.strip()
         if stripped:
-            hits = len(_ADDRESS_KEYWORDS.findall(stripped))
-            if hits >= _ADDRESS_MIN_KEYWORD_HITS:
+            street_hits = len(_ADDRESS_STREET_KEYWORDS.findall(stripped))
+            unit_hits = len(_ADDRESS_UNIT_KEYWORDS.findall(stripped))
+            hits = street_hits + unit_hits
+            # A street-level hit is mandatory -- see _ADDRESS_UNIT_KEYWORDS'
+            # own docstring on why kat/daire/no alone (however many times
+            # repeated) must never be enough on their own.
+            if street_hits >= 1 and hits >= _ADDRESS_MIN_KEYWORD_HITS:
                 # `line.index(stripped)` recovers exactly how much leading
                 # whitespace `.strip()` removed, so the span lines up with
                 # the original text even though matching ran on the
@@ -206,7 +255,15 @@ def _find_address_positioned(text: str) -> list[_PositionedFinding]:
                 end = start + len(stripped)
                 confidence = min(0.5 + 0.1 * hits, 0.9)
                 preview = _mask(stripped, keep_start=6, keep_end=0).rstrip("*") + "…"
-                results.append((start, end, PiiFinding(kind="adres", preview=preview, confidence=confidence)))
+                results.append(
+                    (
+                        start,
+                        end,
+                        PiiFinding(
+                            kind="adres", preview=preview, confidence=confidence, rule_id="address_street"
+                        ),
+                    )
+                )
         offset += len(line)
     return results
 

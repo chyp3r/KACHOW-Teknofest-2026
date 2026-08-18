@@ -274,6 +274,20 @@ class GuardrailPolicy:
             the guardrail judge: above this token-overlap share with the
             content it was asked to judge, a verdict is an echo, not a
             judgement, and is discarded.
+        judge_promotion_confidence: Minimum confidence the guardrail judge
+            (a fast-tier, pattern-blind model call) must clear before its
+            "this reads as sensitive" verdict is trusted for anything --
+            promoting an input document to ``requires_review``
+            (``document_analysis_graph.scan_sensitivity_node``), or, on the
+            output side, being treated as a leak at all
+            (``output_gate.evaluate_response``'s ``semantic_leak``). Raised
+            from an earlier 0.5 to 0.75: a low-confidence judge guess used
+            to be enough on its own to promote a document to human review
+            or block a reply outright, which is what produced the
+            unexplained "mesajda PII var, kısıldı" false positives Görev's
+            bug report names -- the judge is a second opinion, not a second
+            deterministic detector, and its uncertainty should read as
+            uncertainty.
         role_clearance_map: The maximum ``SensitivityLevel`` each
             ``UserRole`` may read. Every ``UserRole`` member must have an
             entry -- an omitted role is not "no access", it is a role
@@ -295,6 +309,7 @@ class GuardrailPolicy:
     output_groundedness_threshold: float = 0.75
     pii_confidence_floor: float = 0.6
     judge_echo_overlap_threshold: float = 0.40
+    judge_promotion_confidence: float = 0.75
     role_clearance_map: Mapping[UserRole, SensitivityLevel] = field(
         default_factory=lambda: MappingProxyType(
             {

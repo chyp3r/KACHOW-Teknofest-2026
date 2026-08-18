@@ -105,6 +105,48 @@ def test_a_single_incidental_word_is_not_an_address():
     assert "adres" not in _kinds(findings)
 
 
+def test_unit_level_keywords_alone_never_false_positive_as_an_address():
+    """The bug this guards against: 'No:'/'Kat:'/'Daire:' are common in
+    ordinary official correspondence (a case number, an article reference,
+    a list item) with nothing to do with an address -- two of them together
+    used to be enough on their own to flag a line as one."""
+    findings = find_pii("Karar No: 12\nKat: 3 personel bu ofiste çalışmaktadır.")
+    assert "adres" not in _kinds(findings)
+
+
+def test_a_real_address_still_needs_only_one_street_keyword_plus_a_unit_one():
+    findings = find_pii("Şirket merkezi İnönü Caddesi No: 12 adresindedir.")
+    assert "adres" in _kinds(findings)
+
+
+# ==========================================
+# rule_id explainability
+# ==========================================
+def test_every_finding_kind_carries_its_own_rule_id():
+    tckn_finding = next(
+        f for f in find_pii(f"Kimlik No: {VALID_TCKN}") if f.kind == "tckn"
+    )
+    assert tckn_finding.rule_id == "tckn_checksum"
+
+    iban_finding = next(f for f in find_pii(f"IBAN: {VALID_IBAN}") if f.kind == "iban")
+    assert iban_finding.rule_id == "iban_mod97"
+
+    labeled_phone = next(
+        f for f in find_pii("Telefon: 0532 123 45 67") if f.kind == "telefon"
+    )
+    assert labeled_phone.rule_id == "phone_labeled"
+
+    unlabeled_phone = next(
+        f for f in find_pii("Sırada 0532 123 45 67 var.") if f.kind == "telefon"
+    )
+    assert unlabeled_phone.rule_id == "phone_unlabeled"
+
+    address_finding = next(
+        f for f in find_pii("Adres: Atatürk Mahallesi İnönü Caddesi No: 12") if f.kind == "adres"
+    )
+    assert address_finding.rule_id == "address_street"
+
+
 # ==========================================
 # General
 # ==========================================
