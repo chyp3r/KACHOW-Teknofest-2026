@@ -420,6 +420,37 @@ AUTHORITATIVE_FIELD: frozenset[str] = frozenset(
 #: Fields whose empty value is a list rather than None.
 _LIST_FIELD: frozenset[str] = frozenset({"ilgi", "ekler"})
 
+#: The five header fields RYUEHY's compliance check reads and this project's
+#: extraction-acceptance gate (see FallbackDocumentExtractor's
+#: `header_field_probe`) uses to decide whether an extraction is trustworthy.
+#: A document-wide prose-readability score (`ExtractedDocument.quality_ratio`)
+#: cannot see whether the header block survived -- a garbled `sayi` sitting in
+#: an otherwise clean page still reads as fine Turkish prose overall. Counting
+#: these five instead is a direct measurement of the actual failure the
+#: compliance checker cares about.
+HEADER_FIELD: tuple[str, ...] = ("sayi", "tarih", "konu", "muhatap", "gonderen_kurum")
+
+
+def count_header_fields(text: str) -> int:
+    """Count how many of `HEADER_FIELD` are recoverable from `text`.
+
+    Reuses `parse_labelled_fields` rather than re-implementing detection, so
+    this always measures exactly what the compliance pipeline itself would
+    recover -- no separate, driftable notion of "found".
+
+    Args:
+        text: Extracted document text (typically just page 1 -- see the
+            extraction-acceptance gate's own reasoning for why whole-document
+            scoring hides a page-1 failure behind an attached letter's own
+            header on a later page).
+
+    Returns:
+        The number of `HEADER_FIELD` keys with a non-empty parsed value,
+        from 0 to `len(HEADER_FIELD)`.
+    """
+    parsed = parse_labelled_fields(text)
+    return sum(1 for name in HEADER_FIELD if parsed.get(name))
+
 
 def merge_parsed_over_model(
     model_fields: dict[str, Any], parsed: dict[str, Any]

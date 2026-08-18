@@ -193,4 +193,164 @@ describe("DocumentAnalysisPanel", () => {
       screen.queryByRole("button", { name: "Detaylı özet oluştur" }),
     ).not.toBeInTheDocument();
   });
+
+  // ==========================================
+  // Belge metni (OCR/extraction text view + hand correction)
+  // ==========================================
+  const documentText = {
+    pages: ["Sayı : E-123", "İkinci sayfa metni"],
+    extracted_text: "Sayı : E-123\n\nİkinci sayfa metni",
+    page_count: 2,
+    extractor: "tesseract",
+    used_ocr: true,
+  };
+
+  it("does not render the Belge metni section when documentText is not wired", () => {
+    // Data-gated, like guardrail/signature above -- not capability-gated
+    // like Detaylı özet, since there is genuinely nothing to show without it.
+    render(<DocumentAnalysisPanel analysis={analysis} />);
+    expect(screen.queryByText("Belge metni")).not.toBeInTheDocument();
+  });
+
+  it("shows one read-only block per page and stays read-only without onSaveText", () => {
+    render(<DocumentAnalysisPanel analysis={analysis} documentText={documentText} />);
+
+    fireEvent.click(screen.getByText("Belge metni"));
+
+    expect(screen.getByText("Sayfa 1/2")).toBeInTheDocument();
+    expect(screen.getByText("Sayfa 2/2")).toBeInTheDocument();
+    expect(screen.getByText("Sayı : E-123")).toBeInTheDocument();
+    expect(screen.getByText("İkinci sayfa metni")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Düzenle", hidden: true }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("edits one page and saves all pages, including the unchanged one", async () => {
+    const onSaveText = vi.fn().mockResolvedValue(undefined);
+    render(
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        documentText={documentText}
+        onSaveText={onSaveText}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Belge metni"));
+    fireEvent.click(screen.getByRole("button", { name: "Düzenle" }));
+    fireEvent.change(screen.getByLabelText("Sayfa 2/2"), {
+      target: { value: "Düzeltilmiş ikinci sayfa" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+
+    await waitFor(() =>
+      expect(onSaveText).toHaveBeenCalledWith(["Sayı : E-123", "Düzeltilmiş ikinci sayfa"]),
+    );
+  });
+
+  it("keeps the text edit session open and shows the error on a rejected save", async () => {
+    const onSaveText = vi.fn().mockRejectedValue(new Error("Sayfa sayısı eşleşmiyor."));
+    render(
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        documentText={documentText}
+        onSaveText={onSaveText}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Belge metni"));
+    fireEvent.click(screen.getByRole("button", { name: "Düzenle" }));
+    fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+
+    await waitFor(() => expect(onSaveText).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByText("Sayfa sayısı eşleşmiyor.")).toBeInTheDocument(),
+    );
+    // Still in edit mode -- the textarea is still there.
+    expect(screen.getByLabelText("Sayfa 1/2")).toBeInTheDocument();
+  });
+
+  it("discards text edits on cancel without calling onSaveText", () => {
+    const onSaveText = vi.fn();
+    render(
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        documentText={documentText}
+        onSaveText={onSaveText}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Belge metni"));
+    fireEvent.click(screen.getByRole("button", { name: "Düzenle" }));
+    fireEvent.change(screen.getByLabelText("Sayfa 1/2"), {
+      target: { value: "Değişecek ama iptal edilecek" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Vazgeç" }));
+
+    expect(onSaveText).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Sayfa 1/2")).not.toBeInTheDocument();
+  });
+
+  it("closes an open text edit session when a different document is selected", () => {
+    const { rerender } = render(
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        documentText={documentText}
+        onSaveText={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Belge metni"));
+    fireEvent.click(screen.getByRole("button", { name: "Düzenle" }));
+    expect(screen.getByLabelText("Sayfa 1/2")).toBeInTheDocument();
+
+    rerender(
+      <DocumentAnalysisPanel
+        analysis={{ ...analysis, storage_path: "uploads/other.pdf" }}
+        documentText={documentText}
+        onSaveText={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Sayfa 1/2")).not.toBeInTheDocument();
+  });
+
+  it("does not offer Yeniden OCR without onReextract", () => {
+    render(<DocumentAnalysisPanel analysis={analysis} documentText={documentText} />);
+    fireEvent.click(screen.getByText("Belge metni"));
+    expect(
+      screen.queryByRole("button", { name: "Yeniden OCR" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("triggers onReextract when Yeniden OCR is clicked", () => {
+    const onReextract = vi.fn().mockResolvedValue(undefined);
+    render(
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        documentText={documentText}
+        onReextract={onReextract}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Belge metni"));
+    fireEvent.click(screen.getByRole("button", { name: "Yeniden OCR" }));
+
+    expect(onReextract).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables Yeniden OCR while a re-extraction is already pending", () => {
+    render(
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        documentText={documentText}
+        onReextract={vi.fn()}
+        reextracting
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Belge metni"));
+
+    expect(screen.getByRole("button", { name: "Yeniden OCR" })).toBeDisabled();
+  });
 });

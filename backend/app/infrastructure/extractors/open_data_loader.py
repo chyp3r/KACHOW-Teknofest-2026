@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import re
 import tempfile
 from typing import Iterator, Optional
 
@@ -22,6 +23,23 @@ except ImportError:  # pragma: no cover
     OpenDataLoaderPDFLoader = None
 
 PDF_EXTENSIONS = {"pdf"}
+
+#: Matches a leading ATX heading marker ("#" through "######" followed by
+#: whitespace) at the start of a line, and nothing else -- table pipes and a
+#: '#' inside body text are untouched.
+#:
+#: `output_format="markdown"` injects this syntax onto ordinary header lines
+#: (observed: "##### TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA" and
+#: "### Konu : Soru Önergesi" on real CY-034/ANKARA_BSB documents), which then
+#: leaks verbatim into a parsed field value -- the parser's own anchors
+#: (`(?:^|\n)\s*Konu`) also cannot cross the marker, so a heading-prefixed
+#: line can silently prevent a field from parsing at all. It is this
+#: extractor's own formatting choice, not a property of the document, so it
+#: is stripped here rather than in the parser -- cleaning the text once for
+#: every downstream consumer (parser, classifier prompt, Q&A chunking,
+#: detailed summary, the text-view UI) instead of leaving '#'s visible in
+#: whichever one a person or another model reads first.
+_MARKDOWN_HEADING = re.compile(r"^[ \t]{0,3}#{1,6}[ \t]+", re.MULTILINE)
 
 
 @contextlib.contextmanager
@@ -140,7 +158,9 @@ class OpenDataLoaderExtractor(BaseDocumentExtractor):
                 quiet=True,
             )
             documents = loader.load()
-        return [document.page_content for document in documents]
+        return [
+            _MARKDOWN_HEADING.sub("", document.page_content) for document in documents
+        ]
 
     def supports(
         self,

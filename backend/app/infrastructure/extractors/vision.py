@@ -119,6 +119,39 @@ class OllamaVisionExtractor(BaseDocumentExtractor):
     fixed that and reversed an earlier, wrong "transformers is much faster"
     reading, but did not close the accuracy gap). No transformers deployment
     ships as a result: the Ollama-served model already wins.
+
+    A separate finding, after the table above shipped this model as default:
+    this extractor's *own* full-page transcription almost never ran in
+    production. `FallbackDocumentExtractor` returned on the first result
+    passing `char_count`/`quality_ratio` alone, and that document-wide
+    readability average cannot see header damage -- a real document scored
+    0.85 quality_ratio and 3316 characters while recovering **zero** of five
+    prescribed header fields. See `FallbackDocumentExtractor
+    ._has_enough_header_fields` for the field-aware acceptance criterion that
+    fixed this, and `is_scanned_text_layer` for the companion fix that widens
+    header-band repair to a scanner's own junk OCR text layer (previously
+    invisible to the `used_ocr` gate). Re-measured on the grown 23-document
+    ground truth (88 fields, 4 documents added specifically because they hit
+    this failure) with both fixes in place, scored through the real
+    production chain:
+
+    ======================  ===========  ===========  =======
+    engine                  zincir bul.  zincir tam    süre
+    ======================  ===========  ===========  =======
+    tesseract               74/88        36/88          71s
+    glm-ocr:latest          77/88        59/88        2110s
+    ======================  ===========  ===========  =======
+
+    The original 19-document/76-field subset holds exactly flat under both
+    engines (64/76 and 68/76 found, byte-identical to the table above) --
+    the new criterion changes nothing for a document that was already
+    correctly accepted. CY-034 specifically gained one exact match (0 -> 1)
+    from the markdown-heading strip in `OpenDataLoaderExtractor`. Of the 4
+    added documents, the worst case (CY-050: 0 of 3 recoverable fields under
+    the old rule, confirmed directly against the live cache before this fix)
+    now recovers all 3 under both engines' chains -- exactly the documents
+    the new criterion exists to catch escalated, and only those: 2 of the 23
+    documents triggered field-triggered escalation across the whole run.
     """
 
     name = "ollama_vision"
@@ -249,6 +282,50 @@ class OllamaVisionExtractor(BaseDocumentExtractor):
             used_ocr=True,
             detected_marks=[mark for marks in mark_lists for mark in marks],
         )
+
+    async def render_first_page(self, content: bytes) -> Optional["_PILImage.Image"]:
+        """Rasterise only page 1 of a PDF, for header-band repair's own use.
+
+        `_render_pages` renders every page and is used when a full OCR pass
+        is already under way; this exists for the opposite situation --
+        header repair needs page 1 of a result whose extractor never
+        rendered anything at all (a text-layer path, e.g. OpenDataLoader or
+        PdfiumExtractor reading a Class-A scanner text layer -- see
+        `FallbackDocumentExtractor.is_scanned_text_layer`). Rendering only
+        page 1 keeps this always-paid cost bounded to roughly one page
+        regardless of document length, since the repair only ever touches
+        the header band of the first page.
+
+        Args:
+            content: Raw PDF bytes.
+
+        Returns:
+            The rendered first page as a PIL image, or None when `content`
+            is not a renderable PDF (corrupt bytes, no pages, or pdfium
+            unavailable) -- callers must degrade to the original,
+            un-repaired text rather than raise.
+        """
+        if pdfium is None:
+            return None
+        try:
+            document = pdfium.PdfDocument(content)
+        except Exception:
+            return None
+
+        try:
+            if len(document) == 0:
+                return None
+            page = document[0]
+            try:
+                scale = self.dpi / PDF_POINTS_PER_INCH
+                bitmap = page.render(scale=scale)
+                return bitmap.to_pil()
+            finally:
+                page.close()
+        except Exception:
+            return None
+        finally:
+            document.close()
 
     def _render_pages(self, content: bytes) -> list:
         """Rasterise every page of a PDF to a PIL image, in document order.

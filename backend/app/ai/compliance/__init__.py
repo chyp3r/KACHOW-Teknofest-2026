@@ -2,6 +2,8 @@ from app.ai.compliance.checker import check_required_fields, is_blank, normalize
 from app.ai.compliance.evrak_field import ComplianceReport, EvrakField, MissingField
 from app.ai.compliance.field_parser import (
     AUTHORITATIVE_FIELD,
+    HEADER_FIELD,
+    count_header_fields,
     format_parsed_fields,
     merge_parsed_over_model,
     parse_labelled_fields,
@@ -29,12 +31,14 @@ __all__ = [
     "DOCUMENT_TYPE_QUERY_TERMS",
     "EvrakField",
     "FieldRule",
+    "HEADER_FIELD",
     "MissingField",
     "REQUIRED_FIELD_RULES",
     "SEVERITY_ADVISORY",
     "SEVERITY_REQUIRED",
     "StructuralSignal",
     "check_required_fields",
+    "count_header_fields",
     "detect_structural_signal",
     "format_parsed_fields",
     "format_structural_signal",

@@ -4,7 +4,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { Alert, Card } from "../../components/Surface";
 import { Button } from "../../components/Button";
 import { Input, Textarea } from "../../components/FormControls";
-import type { DocumentAnalysis, EvrakFields } from "../../types/documents";
+import type { DocumentAnalysis, DocumentText, EvrakFields } from "../../types/documents";
 import { SENSITIVITY_LABELS } from "../../types/security";
 
 const MARK_KIND_LABELS: Record<"signature" | "stamp" | "handwriting", string> = {
@@ -61,6 +61,11 @@ export function DocumentAnalysisPanel({
   saving = false,
   onGenerateDetailedSummary,
   generatingDetailedSummary = false,
+  documentText,
+  onSaveText,
+  savingText = false,
+  onReextract,
+  reextracting = false,
 }: {
   analysis: DocumentAnalysis | null;
   // Undefined when the caller doesn't wire editing (e.g. no permission
@@ -73,11 +78,23 @@ export function DocumentAnalysisPanel({
   // (see onSave's own analogous shape one level up, in DocumentTable).
   onGenerateDetailedSummary?: () => Promise<void>;
   generatingDetailedSummary?: boolean;
+  // Data-gated, like `guardrail`/`signature` below -- not capability-gated
+  // like onGenerateDetailedSummary above, since there is genuinely nothing
+  // to show without it (a separate, slower-loading query in useDocuments).
+  documentText?: DocumentText | null;
+  onSaveText?: (pages: string[]) => Promise<void>;
+  savingText?: boolean;
+  onReextract?: () => Promise<void>;
+  reextracting?: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [detailedSummaryError, setDetailedSummaryError] = useState<string | null>(null);
+  const [isEditingText, setIsEditingText] = useState(false);
+  const [textDraft, setTextDraft] = useState<string[]>([]);
+  const [textSaveError, setTextSaveError] = useState<string | null>(null);
+  const [reextractError, setReextractError] = useState<string | null>(null);
 
   // A different document (or a fresh save) must never keep a stale edit
   // session open on top of it.
@@ -85,6 +102,9 @@ export function DocumentAnalysisPanel({
     setIsEditing(false);
     setSaveError(null);
     setDetailedSummaryError(null);
+    setIsEditingText(false);
+    setTextSaveError(null);
+    setReextractError(null);
   }, [analysis?.storage_path]);
 
   if (!analysis)
@@ -130,6 +150,35 @@ export function DocumentAnalysisPanel({
     } catch (error) {
       setDetailedSummaryError(
         error instanceof Error ? error.message : "Ayrıntılı özet oluşturulamadı.",
+      );
+    }
+  };
+
+  const startEditingText = () => {
+    setTextSaveError(null);
+    setTextDraft(documentText?.pages ?? []);
+    setIsEditingText(true);
+  };
+
+  const saveText = async () => {
+    if (!onSaveText) return;
+    setTextSaveError(null);
+    try {
+      await onSaveText(textDraft);
+      setIsEditingText(false);
+    } catch (error) {
+      setTextSaveError(error instanceof Error ? error.message : "Metin kaydedilemedi.");
+    }
+  };
+
+  const reextractText = async () => {
+    if (!onReextract) return;
+    setReextractError(null);
+    try {
+      await onReextract();
+    } catch (error) {
+      setReextractError(
+        error instanceof Error ? error.message : "Belge yeniden OCR ile işlenemedi.",
       );
     }
   };
@@ -323,6 +372,83 @@ export function DocumentAnalysisPanel({
           </dl>
         )}
       </details>
+      {documentText && (
+        <details>
+          <summary>
+            <span>Belge metni</span>
+            {onSaveText && !isEditingText && (
+              <Button
+                variant="ghost"
+                size="sm"
+                leadingIcon={<Pencil />}
+                onClick={(event) => {
+                  event.preventDefault();
+                  startEditingText();
+                }}
+              >
+                Düzenle
+              </Button>
+            )}
+          </summary>
+          {isEditingText ? (
+            <div className="metadata-edit-form">
+              {textSaveError && <Alert variant="error">{textSaveError}</Alert>}
+              {textDraft.map((page, index) => (
+                <Textarea
+                  key={index}
+                  label={`Sayfa ${index + 1}/${textDraft.length}`}
+                  rows={10}
+                  value={page}
+                  onChange={(event) =>
+                    setTextDraft((previous) =>
+                      previous.map((value, i) => (i === index ? event.target.value : value)),
+                    )
+                  }
+                />
+              ))}
+              <div className="metadata-edit-actions">
+                <Button
+                  variant="ghost"
+                  leadingIcon={<X />}
+                  disabled={savingText}
+                  onClick={() => {
+                    setIsEditingText(false);
+                    setTextSaveError(null);
+                  }}
+                >
+                  Vazgeç
+                </Button>
+                <Button loading={savingText} onClick={() => void saveText()}>
+                  Kaydet
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="document-text-pages">
+              {documentText.pages.map((page, index) => (
+                <div key={index} className="document-text-page-block">
+                  <h4>
+                    Sayfa {index + 1}/{documentText.pages.length}
+                  </h4>
+                  <p className="document-text-page">{page}</p>
+                </div>
+              ))}
+              {onReextract && (
+                <div className="reextract-action">
+                  <p className="detail-empty">
+                    Belge, görüntü tabanlı bir yapay zeka modeliyle yeniden okunabilir. Bu
+                    işlem birkaç dakika sürebilir.
+                  </p>
+                  {reextractError && <Alert variant="error">{reextractError}</Alert>}
+                  <Button loading={reextracting} onClick={() => void reextractText()}>
+                    Yeniden OCR
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </details>
+      )}
       <details>
         <summary>Eksik bilgiler ({analysis.missing_fields.length})</summary>
         {analysis.missing_fields.length ? (

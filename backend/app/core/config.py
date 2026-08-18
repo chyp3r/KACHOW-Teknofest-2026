@@ -108,6 +108,22 @@ class Settings(BaseSettings):
     #: app.domains.chat.chat_service.ORCHESTRATION_TIMEOUT_SECONDS).
     AI_WORKFLOW_TIMEOUT_SECONDS: int = 480
 
+    #: Ceiling on DocumentService.analyze_document's call to
+    #: self.extractor.extract(...) -- previously unbounded. The field-aware
+    #: extraction-acceptance criterion (see
+    #: FallbackDocumentExtractor._has_enough_header_fields) makes the last
+    #: rung of the chain, full-page vision OCR, a genuinely reachable path on
+    #: the upload critical path now, not just a rare fallback for documents
+    #: with no text layer at all -- so this path needs its own ceiling the
+    #: way AI_WORKFLOW_TIMEOUT_SECONDS already bounds the analysis graph.
+    #: 300s covers a multi-page document through glm-ocr at the measured
+    #: worst case (~83s/document average, MAX_OCR_PAGES capping how many
+    #: pages a single escalation can be asked to transcribe). A timeout here
+    #: surfaces as a normal ValidationException (400-class, retryable),
+    #: mirroring how DocumentExtractionError is already translated just
+    #: below it, rather than hanging the request indefinitely.
+    EXTRACTION_TIMEOUT_SECONDS: float = 300.0
+
     #: Ceiling on DocumentService.generate_detailed_summary's on-demand
     #: build_detailed_summary call -- not a BudgetPolicy.node_seconds entry,
     #: since this runs outside the analysis graph entirely (see
