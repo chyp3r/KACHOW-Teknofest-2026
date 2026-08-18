@@ -8,10 +8,10 @@ import {
   type ReactNode,
   type WheelEvent,
 } from "react";
-import { IconButton } from "../../components/Button";
+import { IconButton } from "./Button";
 
-const BASE_WIDTH = 560;
-const BASE_HEIGHT = 700;
+const DEFAULT_BASE_WIDTH = 560;
+const DEFAULT_BASE_HEIGHT = 700;
 const MIN_SCALE = 0.6;
 const MAX_SCALE = 3;
 const SCALE_STEP = 0.2;
@@ -40,11 +40,6 @@ interface PinchStart {
   anchor: Point;
 }
 
-const INITIAL_CAMERA: Camera = {
-  centerX: BASE_WIDTH / 2,
-  centerY: BASE_HEIGHT / 2,
-  scale: 1,
-};
 const clampScale = (scale: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
 const distance = (left: Point, right: Point) =>
   Math.hypot(right.x - left.x, right.y - left.y);
@@ -60,11 +55,19 @@ const pointerPoint = (event: PointerEvent<HTMLDivElement>): Point => ({
 export function InteractiveGraphViewport({
   children,
   ariaLabel,
+  baseWidth = DEFAULT_BASE_WIDTH,
+  baseHeight = DEFAULT_BASE_HEIGHT,
 }: {
   children: ReactNode;
   ariaLabel: string;
+  // Lets a caller with a taller/wider canvas (e.g. the knowledge graph's
+  // bipartite layout, which grows with document/madde count) start framed
+  // correctly instead of at DecisionFlow's fixed 560x700.
+  baseWidth?: number;
+  baseHeight?: number;
 }) {
-  const [camera, setCamera] = useState<Camera>(INITIAL_CAMERA);
+  const initialCamera: Camera = { centerX: baseWidth / 2, centerY: baseHeight / 2, scale: 1 };
+  const [camera, setCamera] = useState<Camera>(initialCamera);
   const [dragging, setDragging] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -85,11 +88,15 @@ export function InteractiveGraphViewport({
       }
       if (nextSize === previousSize) return;
       previousSize = nextSize;
-      cameraRef.current = INITIAL_CAMERA;
-      setCamera(INITIAL_CAMERA);
+      cameraRef.current = initialCamera;
+      setCamera(initialCamera);
     });
     observer.observe(canvas);
     return () => observer.disconnect();
+    // baseWidth/baseHeight are stable per mount for every caller today; re-running
+    // this on their change would also need to re-derive initialCamera, which is
+    // intentionally not memoised.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const updateCamera = (next: Camera) => {
@@ -98,8 +105,8 @@ export function InteractiveGraphViewport({
   };
 
   const dimensionsAt = (scale: number) => ({
-    width: BASE_WIDTH / scale,
-    height: BASE_HEIGHT / scale,
+    width: baseWidth / scale,
+    height: baseHeight / scale,
   });
 
   const viewBoxAt = (value: Camera) => {
@@ -113,8 +120,8 @@ export function InteractiveGraphViewport({
 
   const renderedGeometry = (scale: number) => {
     const rect = svgRef.current?.getBoundingClientRect();
-    const width = Math.max(1, rect?.width ?? BASE_WIDTH);
-    const height = Math.max(1, rect?.height ?? BASE_HEIGHT);
+    const width = Math.max(1, rect?.width ?? baseWidth);
+    const height = Math.max(1, rect?.height ?? baseHeight);
     const dimensions = dimensionsAt(scale);
     const pixelsPerUnit = Math.min(width / dimensions.width, height / dimensions.height);
     return {
@@ -168,7 +175,7 @@ export function InteractiveGraphViewport({
     updateCamera(cameraForAnchor(anchor, clientPoint, scale));
   };
 
-  const reset = () => updateCamera(INITIAL_CAMERA);
+  const reset = () => updateCamera(initialCamera);
 
   const beginPointer = (event: PointerEvent<HTMLDivElement>) => {
     if ((event.target as Element).closest(".node")) return;

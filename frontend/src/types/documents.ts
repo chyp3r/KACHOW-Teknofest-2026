@@ -126,4 +126,67 @@ export interface DraftRequest {
   correspondence_type: string | null;
   reasoning_level: ReasoningLevel;
 }
+
+// Compliance knowledge graph -- see backend/app/domains/documents/knowledge_graph.py.
+// One flat shape per node/edge kind (document/madde/kanun, ihlal/atif) rather than
+// a discriminated union, mirroring the backend's own GraphNode/GraphEdge dataclasses.
+export interface GraphNode {
+  id: string;
+  node_type: "document" | "madde" | "kanun";
+  label: string;
+  storage_path: string | null;
+  file_name: string | null;
+  document_type_label: string | null;
+  compliance_status: string | null;
+  has_analysis: boolean | null;
+  kanun: string | null;
+  madde: string | null;
+  field_labels: string[];
+  document_count: number | null;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  edge_type: "ihlal" | "atif";
+  source_kind: "rule" | "llm";
+  field_key: string | null;
+  field_label: string | null;
+  severity: string | null;
+  reason: string | null;
+  aciklama: string | null;
+  raw: string | null;
+}
+
+export interface TopBreachedMadde {
+  madde_id: string;
+  kanun: string;
+  madde: string;
+  field_labels: string[];
+  document_count: number;
+}
+
+export interface GraphInsights {
+  document_count: number;
+  madde_count: number;
+  kanun_count: number;
+  rule_edge_count: number;
+  llm_edge_count: number;
+  unresolved_reference_count: number;
+  top_breached_madde: TopBreachedMadde | null;
+}
+
+export interface KnowledgeGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  insights: GraphInsights;
+}
+
+// GET /documents/graph's own envelope -- the corpus view adds pagination-ish
+// metadata the single-document neighbourhood (KnowledgeGraph alone) has no use for.
+export interface CorpusGraph extends KnowledgeGraph {
+  truncated: boolean;
+  total_document_count: number;
+  hidden_document_count: number;
+}
 import type { SensitivityLevel } from "./security";

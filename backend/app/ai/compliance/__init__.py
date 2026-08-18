@@ -15,6 +15,7 @@ from app.ai.compliance.field_rule import (
     SEVERITY_REQUIRED,
     FieldRule,
 )
+from app.ai.compliance.mevzuat_citation import CitationRef, resolve_citation
 from app.ai.compliance.signal import (
     StructuralSignal,
     detect_structural_signal,
@@ -24,6 +25,7 @@ from app.ai.compliance.signal import (
 __all__ = [
     "AUTHORITATIVE_FIELD",
     "BLANK_VALUE_MARKER",
+    "CitationRef",
     "ComplianceReport",
     "DOCUMENT_TYPE_LABELS",
     "DOCUMENT_TYPE_QUERY_TERMS",
@@ -42,4 +44,5 @@ __all__ = [
     "merge_parsed_over_model",
     "normalize_value",
     "parse_labelled_fields",
+    "resolve_citation",
 ]

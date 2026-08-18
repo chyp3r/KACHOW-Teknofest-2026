@@ -16,7 +16,7 @@ from app.core.authz.dependency import subject_from_user
 from app.core.authz.engine import authorize
 from app.core.constants import MAX_FILE_SIZE_BYTES
 from app.core.enums.sensitivity_level import SensitivityLevel
-from app.core.permissions.role_checker import assert_clearance, bypasses_ownership
+from app.core.permissions.role_checker import assert_clearance, bypasses_ownership, clearance_for
 from app.domains.documents.model.document_model import DocumentModel
 from app.domains.documents.service import DocumentService
 from app.domains.documents.draft_service import DraftService
@@ -254,6 +254,49 @@ async def list_correspondence_types():
     )
 
 
+@router.get("/graph", response_model=None)
+async def get_corpus_graph(
+    service: DocumentService = Depends(get_document_analysis_service),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    _: None = Depends(rate_limit(max_requests=30, window_seconds=60, key_prefix="documents:graph")),
+):
+    """The compliance knowledge graph over every document the caller may see.
+
+    Declared here, above every ``/{storage_path:path}`` route below --
+    FastAPI matches routes in registration order, and ``:path`` converters
+    swallow slashes, so a literal ``/graph`` registered after the catch-all
+    ``GET /{storage_path:path}`` would never be reached; every request would
+    match the catch-all first, with ``storage_path="graph"``.
+
+    Unlike every other route in this file, a document above the caller's
+    clearance is not a 403 for the whole graph -- it is silently excluded
+    (see ``DocumentService.build_corpus_graph``'s own docstring), and only
+    its count is reported back as ``hidden_document_count``. Revealing that
+    a hidden document *exists* would defeat the point of hiding it.
+
+    Args:
+        service: Injected document analysis service.
+        current_user: The authenticated caller. Company-wide when
+            ADMIN/MANAGER/ROOT (see ``bypasses_ownership``), otherwise
+            scoped to the caller's own documents -- the same semantics
+            ``GET /documents`` already uses.
+
+    Returns:
+        ``{nodes, edges, insights, truncated, total_document_count,
+        hidden_document_count}`` inside the unified success envelope.
+    """
+    owner_id = None if bypasses_ownership(current_user) else current_user.id
+    # clearance_for returns None for an unrecognised role (see its own
+    # docstring: "unknown clearance clears nothing") -- fail secure to the
+    # lowest level rather than passing None into a comparison the service
+    # expects to always be a real SensitivityLevel.
+    clearance = clearance_for(current_user) or SensitivityLevel.UNMARKED
+    result = await service.build_corpus_graph(
+        current_user.company_id, owner_id, clearance
+    )
+    return SuccessResponse(data=result)
+
+
 @router.patch("/{storage_path:path}/fields", response_model=None)
 async def update_document_fields(
     storage_path: str,
@@ -370,6 +413,64 @@ async def generate_detailed_summary(
     assert_clearance(current_user, result.guardrail.sensitivity_level)
 
     return SuccessResponse(data=result.model_dump(mode="json"))
+
+
+@router.get("/{storage_path:path}/graph", response_model=None)
+async def get_document_graph(
+    storage_path: str,
+    service: DocumentService = Depends(get_document_analysis_service),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+):
+    """The single-document neighbourhood: one document and every madde/kanun
+    it touches.
+
+    Declared above the catch-all ``GET /{storage_path:path}`` immediately
+    below -- both are GET routes matching the same path shape, so
+    registration order is the only thing that decides which one a request
+    like ``/documents/uploads/abc.pdf/graph`` reaches. Registered after it,
+    this route would never be hit; every such request would instead match
+    the catch-all with ``storage_path="uploads/abc.pdf/graph"``.
+
+    Args:
+        storage_path: The document's storage key.
+        service: Injected document analysis service.
+        document_repository: Ownership registry, checked before returning
+            content.
+        current_user: The authenticated caller.
+
+    Returns:
+        The same envelope shape as ``GET /documents/graph``, scoped to this
+        one document.
+
+    Raises:
+        HTTPException: 400 if storage_path is malformed, 404 if no analysis
+            is cached for it.
+        AuthorizationException: 403 if the document belongs to a different
+            company or user, or the requester's clearance doesn't cover the
+            document's confidentiality level.
+    """
+    try:
+        validate_storage_path(storage_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    document = await document_repository.get_by_id(storage_path, current_user.company_id)
+    if document is None:
+        raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+    _authorize_document(current_user, document, Action.DOCUMENT_READ)
+
+    result = await service.build_document_graph(storage_path)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Bu evrak için bir analiz bulunamadı.")
+
+    try:
+        document_sensitivity = SensitivityLevel(document.sensitivity_level)
+    except ValueError:
+        document_sensitivity = SensitivityLevel.UNMARKED
+    assert_clearance(current_user, document_sensitivity)
+
+    return SuccessResponse(data=result)
 
 
 @router.get("/{storage_path:path}", response_model=None)

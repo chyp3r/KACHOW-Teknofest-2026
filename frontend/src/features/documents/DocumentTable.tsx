@@ -6,7 +6,7 @@ import {
 import { useMemo, useState } from "react";
 import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { EmptyState } from "../../components/EmptyState";
-import type { DocumentAnalysis, DocumentMetadata, EvrakFields } from "../../types/documents";
+import type { DocumentAnalysis, DocumentMetadata, EvrakFields, KnowledgeGraph } from "../../types/documents";
 import { DocumentAnalysisPanel } from "./DocumentAnalysisPanel";
 import { Button } from "../../components/Button";
 import { Input, Select } from "../../components/FormControls";
@@ -27,6 +27,8 @@ export function DocumentTable({
   deletingDocument,
   onGenerateDetailedSummary,
   generatingDetailedSummary,
+  documentGraph,
+  loadingDocumentGraph,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
@@ -40,6 +42,8 @@ export function DocumentTable({
   deletingDocument?: boolean;
   onGenerateDetailedSummary?: (storagePath: string) => Promise<void>;
   generatingDetailedSummary?: boolean;
+  documentGraph?: KnowledgeGraph | null;
+  loadingDocumentGraph?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
@@ -158,6 +162,8 @@ export function DocumentTable({
                             ? () => onGenerateDetailedSummary(analysis.storage_path)
                             : undefined
                         }
+                        documentGraph={documentGraph}
+                        loadingDocumentGraph={loadingDocumentGraph}
                       />
                     )}
                   </div>

@@ -2,6 +2,98 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.18.0] - 2026-08-18
+### Eklendi
+**Mevzuat Haritası** (#210) — evraklar ile mevzuat maddeleri arasındaki uyum
+ilişkilerini gösteren bir bilgi grafiği. Tasarımdan önce her aday kenar tipi
+gerçek korpus üzerinde ölçüldü: evrak↔evrak atıfları (`ilgi`), önerge numarası,
+paylaşılan kanun/tür/kurum/varlık — hepsi ya sıfır ya da anlamsız (tam bağlı
+graf) sinyal verdi. Tek gerçek sinyal madde granülerliğinde: kural tablosundan
+gelen eksik-alan atıfları (`missing_fields[].mevzuat`) ve modelin ürettiği
+mevzuat atıfları (`mevzuat_references[]`). Grafik bu iki kaynak üzerine kurulu;
+ayrı bir depolama katmanı yok, her istekte önbellekteki analizlerden türetilir.
+
+- **`app/ai/compliance/mevzuat_citation.py`** — saf atıf çözümleyici.
+  `resolve_citation(text)`, serbest metindeki `"RYUEHY m.14"`,
+  `"3071 sayılı ... m.4"`, `"Devlet Memurları Kanunu"` gibi ifadeleri
+  `(kanun, madde)` çiftine çözer. `LEGISLATION_PATTERN`'in
+  `(?<![-/\d])` negatif lookbehind'ı taşıyıcı: `"E-22222222-903-118 sayılı
+  yazınız"` gibi belge numaralarını hayalet kanun olarak yorumlamaz.
+- **`app/domains/documents/knowledge_graph.py`** — saf grafik üretici,
+  I/O yok. Node'lar: `document` (Postgres PK id), `madde` (**bileşik id**
+  `madde:{kanun}:{n}` — ölçüldü: `madde:4` hem 2646 hem 3071 sayılı kanunda
+  var, bileşik id olmadan iki farklı madde tek node'da birleşirdi), `kanun`
+  (konteyner). Kenarlar: `ihlal` (Evrak→Madde, `source="rule"`, kural
+  tablosundan — deterministik) ve `atif` (Evrak→Madde/Kanun,
+  `source="llm"` — model çıktısı, üç kademeli çözümleme: kanun+madde →
+  Madde node, yalnız kanun → Kanun node, hiçbiri → `unresolved_reference_
+  count`'a sayılır, hiçbir atıf sessizce atılmaz). Başlık istatistiği
+  **farklı evrak sayısına** göre hesaplanır, kenar sayısına göre değil —
+  bir evrak aynı maddeyi iki alan yüzünden iki kez ihlal edebilir.
+  **Kurum bilinçli olarak node değil**: üç aday anahtar da OCR hasarını
+  node kimliğine taşırdı (ölçüldü: en iyi ihtimalle 3 kenar, ağır
+  normalizasyondan sonra); hiçbir node id'sinin OCR'lı metinden türememesi
+  değişmez bir kural.
+- **`GET /documents/graph`** ve **`GET /documents/{storage_path}/graph`** —
+  bkz. **`docs/api/documents.md`**. Korpus görünümü `MAX_GRAPH_DOCUMENTS
+  = 200` ile sınırlı ve payda'yı sessizce küçültmemek için bu limit
+  `list_for_owner`'a açıkça geçiliyor (repository varsayılanı 100).
+  Clearance seviyesinin üzerindeki evraklar 403 değil sessizce dışlanıyor,
+  yalnızca sayısı (`hidden_document_count`) bildiriliyor. 60 saniyelik
+  Redis önbelleği **clearance'ı anahtarın parçası yapıyor** — aksi hâlde
+  düşük yetkili bir kullanıcı yüksek yetkili birinin önbelleğe düşürdüğü
+  grafiği görebilirdi. `dataclasses.asdict()` ile önbellek-hit/miss
+  arasında tuple/list tutarsızlığı kendi testimle yakalandı ve tek bir
+  `_graph_to_json_dict()` yardımcıyla giderildi.
+- **Frontend `/graph` rotası** (`Mevzuat Haritası`, `AppShell` navigasyonu) —
+  iki sütunlu bespoke SVG bant diyagramı (force-directed/radial/matrix
+  değerlendirildi ve elendi — bkz. tasarım notları): sol sütun evraklar
+  (ihlal sayısına göre azalan), sağ sütun maddeler (kanun bantları
+  içinde derece'ye göre azalan), kübik Bézier bantlar. Başlık kartı
+  hesaplanan (asla sabit kodlanmamış) en çok ihlal edilen maddeyi,
+  kaynağını (`kural tablosu — deterministik, model çıktısı değil`) ve
+  evrak/madde/bağlantı sayılarını gösteriyor. Tek kanunluk korpuslarda
+  (bugünkü durum) tek satırlık başlık — sahte çeşitlilik göstermek yerine
+  yokluğu dürüstçe kabul ediyor. Hover ile ilgisiz kenarları soluklaştırma;
+  evrak node'una tıklama mevcut `/documents/:storagePath` seçim akışını
+  **hiç yeni bağlantı kodu olmadan** tetikliyor (`App.tsx`'in var olan
+  `useMatch`/`useEffect`'i zaten bunu yapıyordu).
+  `InteractiveGraphViewport` (`features/chat/` → `components/`,
+  `baseWidth`/`baseHeight` prop'ları eklendi) `DecisionFlow` ile paylaşılıyor.
+- **Tek-evrak komşuluk görünümü** — `DocumentAnalysisPanel`'de "Belge
+  ilişkileri" `<details>` bölümü, mevcut opsiyonel-prop kapasite kuralına
+  uygun (`undefined` = bağlanmamış, `null` = bağlanmış ama henüz yüklenmedi).
+- Karanlık temada `--workflow-rule`/`--workflow-llm` yalnızca `:root`'ta
+  tanımlıydı ve açık tema için hiç override edilmemişti — ölçüldü: sky-500
+  `#f8fafc` üzerinde ~2.65:1 kontrast, WCAG 3:1 eşiğinin altında. Açık tema
+  override'ı eklendi; bu benim özelliğimden önce var olan bir hataydı,
+  kendi tasarımımın erişilebilirlik gereksinimini uygularken bulundu.
+
+**Bilinçli kapsam dışı**: Plan `ilgi` atıflarını arşivde olmayan evraklara
+işaret eden "sarkan referanslar" olarak tek-evrak görünümünde göstermeyi
+öneriyordu (`canonical_document_number()` ile çözümleme). Bu, korpusun
+tek-yönlü olduğunu (yalnızca cevap yazıları tutuluyor, gelen TBMM yazıları
+değil) dürüstçe göstermenin en ucuz yolu olarak tasarlanmıştı ama bu
+sürümde **uygulanmadı** — kapsam kasıtlı olarak Evrak↔Madde uyum omurgasıyla
+sınırlı tutuldu. `Document<->Document` kenar tipi altyapıda hazır (`atif`/
+`ihlal` şeması buna izin verir) ama `ilgi`/`sayi` çözümlemesi bağlı değil.
+
+### Test
+- `docker compose exec -T backend pytest -q` → **2172 test geçti** (2
+  bilinen, önceden var olan MCP arıza — bu özellikle ilgisiz).
+- `docker compose exec -T frontend npm test -- --run` → **206 test geçti**
+  (46 dosya).
+- `npm run lint` → 0 hata; `DecisionFlow.tsx`'teki 2 uyarı `origin/main`'de
+  değişmeden mevcut, bu özellik yalnızca o dosyanın import satırını değiştirdi.
+- `npx tsc --noEmit` → temiz.
+- `npm run api:types:check` → `src/api/generated.ts` yeniden üretildi ve
+  commit edildi (yeni uç noktalar şemayı değiştirdi).
+- Tam korpus (14 evrak) üzerinde canlı doğrulama: gerçek başlık cümlesi
+  (RYUEHY m.17, 14 evrağın hepsinde ihlal), her iki tema, zoom/pan/hover/
+  tıkla-git akışı, tek-evrak komşuluk grafiği — hepsi tarayıcıda gözlemlendi.
+
+Refs: [#210](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/210).
+
 ## [3.17.0] - 2026-08-17
 ### Eklendi
 İnternal communication + AI-assisted artifact transfer planının **Faz 5**'i

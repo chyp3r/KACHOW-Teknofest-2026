@@ -302,3 +302,173 @@ def test_generate_detailed_summary_surfaces_a_generation_failure_as_502(_unmeter
     response = client.post(_SUMMARY_ENDPOINT)
 
     assert response.status_code == 502
+
+
+# ==========================================
+# GET /documents/graph
+# ==========================================
+_GRAPH_ENDPOINT = "/api/v1/documents/graph"
+
+_EMPTY_GRAPH_RESULT = {
+    "nodes": [], "edges": [],
+    "insights": {
+        "document_count": 0, "madde_count": 0, "kanun_count": 0,
+        "rule_edge_count": 0, "llm_edge_count": 0,
+        "unresolved_reference_count": 0, "top_breached_madde": None,
+    },
+    "truncated": False, "total_document_count": 0, "hidden_document_count": 0,
+}
+
+
+def test_get_corpus_graph_returns_the_graph_envelope_not_a_400(_unmetered_rate_limit):
+    """`/graph` is a literal path segment, not a storage_path -- if this
+    route were registered after (or `validate_storage_path` ever ran
+    against) the catch-all, "graph" would be rejected as a malformed storage
+    path instead of reaching this handler at all."""
+    service = AsyncMock()
+    service.build_corpus_graph.return_value = {
+        **_EMPTY_GRAPH_RESULT,
+        "total_document_count": 3,
+    }
+    _override(service)
+
+    response = client.get(_GRAPH_ENDPOINT)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["total_document_count"] == 3
+    assert "nodes" in body["data"] and "edges" in body["data"]
+
+
+def test_get_corpus_graph_passes_the_callers_company_and_ownership_scope(_unmetered_rate_limit):
+    service = AsyncMock()
+    service.build_corpus_graph.return_value = _EMPTY_GRAPH_RESULT
+    _override(service)
+
+    client.get(_GRAPH_ENDPOINT)
+
+    call_args = service.build_corpus_graph.await_args.args
+    assert call_args[0] == "company-1"
+    # _CURRENT_USER is ADMIN (bypasses_ownership) -- company-wide, not
+    # scoped to a single owner.
+    assert call_args[1] is None
+
+
+def test_get_corpus_graph_on_an_empty_corpus_returns_200_with_an_empty_graph(_unmetered_rate_limit):
+    service = AsyncMock()
+    service.build_corpus_graph.return_value = _EMPTY_GRAPH_RESULT
+    _override(service)
+
+    response = client.get(_GRAPH_ENDPOINT)
+
+    assert response.status_code == 200
+    assert response.json()["data"]["nodes"] == []
+
+
+def test_endpoint_registers_get_documents_graph_in_the_openapi_schema():
+    spec = app.openapi()
+    assert "/api/v1/documents/graph" in spec["paths"]
+    assert "get" in spec["paths"]["/api/v1/documents/graph"]
+
+
+# ==========================================
+# GET /documents/{storage_path}/graph
+# ==========================================
+_DOC_GRAPH_STORAGE_PATH = f"uploads/{'c' * 32}.pdf"
+_DOC_GRAPH_ENDPOINT = f"/api/v1/documents/{_DOC_GRAPH_STORAGE_PATH}/graph"
+
+_ONE_DOC_GRAPH_RESULT = {
+    "nodes": [
+        {
+            "id": f"doc:{_DOC_GRAPH_STORAGE_PATH}", "node_type": "document",
+            "label": "evrak.pdf", "storage_path": _DOC_GRAPH_STORAGE_PATH,
+            "file_name": "evrak.pdf", "document_type_label": "Resmî Yazı",
+            "compliance_status": "incomplete", "has_analysis": True,
+            "kanun": None, "madde": None, "field_labels": [], "document_count": None,
+        },
+        {
+            "id": "madde:2646:14", "node_type": "madde", "label": "m.14",
+            "storage_path": None, "file_name": None, "document_type_label": None,
+            "compliance_status": None, "has_analysis": None,
+            "kanun": "2646", "madde": "14", "field_labels": ["Muhatap"], "document_count": 1,
+        },
+        {
+            "id": "kanun:2646", "node_type": "kanun",
+            "label": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik",
+            "storage_path": None, "file_name": None, "document_type_label": None,
+            "compliance_status": None, "has_analysis": None,
+            "kanun": "2646", "madde": None, "field_labels": [], "document_count": None,
+        },
+    ],
+    "edges": [
+        {
+            "source": f"doc:{_DOC_GRAPH_STORAGE_PATH}", "target": "madde:2646:14",
+            "edge_type": "ihlal", "source_kind": "rule",
+            "field_key": "muhatap", "field_label": "Muhatap", "severity": "zorunlu",
+            "reason": "Muhatap belirtilmelidir.", "aciklama": None, "raw": None,
+        },
+    ],
+    "insights": {
+        "document_count": 1, "madde_count": 1, "kanun_count": 1,
+        "rule_edge_count": 1, "llm_edge_count": 0,
+        "unresolved_reference_count": 0,
+        "top_breached_madde": {
+            "madde_id": "madde:2646:14", "kanun": "2646", "madde": "14",
+            "field_labels": ["Muhatap"], "document_count": 1,
+        },
+    },
+}
+
+
+def test_get_document_graph_returns_the_neighbourhood_not_the_catch_all_analysis(_unmetered_rate_limit):
+    """The catch-all GET /{storage_path:path} returns an analysis envelope
+    (fields/missing_fields/...); this route must return the graph envelope
+    instead -- proof the route-ordering trap didn't swallow it."""
+    service = AsyncMock()
+    service.build_document_graph.return_value = _ONE_DOC_GRAPH_RESULT
+    _override(service)
+
+    response = client.get(_DOC_GRAPH_ENDPOINT)
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert "nodes" in body and "edges" in body and "insights" in body
+    assert "fields" not in body  # the analysis envelope's own shape
+    assert service.build_document_graph.await_args.args == (_DOC_GRAPH_STORAGE_PATH,)
+
+
+def test_get_document_graph_returns_404_when_uncached(_unmetered_rate_limit):
+    service = AsyncMock()
+    service.build_document_graph.return_value = None
+    _override(service)
+
+    response = client.get(_DOC_GRAPH_ENDPOINT)
+
+    assert response.status_code == 404
+
+
+def test_get_document_graph_returns_403_for_a_cross_tenant_document(_unmetered_rate_limit):
+    service = AsyncMock()
+    service.build_document_graph.return_value = _ONE_DOC_GRAPH_RESULT
+
+    def _absent_repository():
+        repo = AsyncMock()
+        repo.get_by_id.return_value = None
+        return repo
+
+    app.dependency_overrides[get_document_analysis_service] = lambda: service
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _CURRENT_USER
+    app.dependency_overrides[get_document_repository] = _absent_repository
+
+    response = client.get(_DOC_GRAPH_ENDPOINT)
+
+    assert response.status_code == 403
+
+
+def test_get_document_graph_returns_400_for_a_malformed_storage_path(_unmetered_rate_limit):
+    service = AsyncMock()
+    _override(service)
+
+    response = client.get("/api/v1/documents/../etc/passwd/graph")
+
+    assert response.status_code in (400, 404)

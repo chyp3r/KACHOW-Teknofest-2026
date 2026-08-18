@@ -709,6 +709,13 @@ body {
   --workflow-node-fill: #ffffff;
   --workflow-node-text: #172033;
   --workflow-node-label: #526078;
+  /* Only :root ever defined these (sky-500/slate-500 -- tuned for the dark
+     --workflow-canvas above); on this theme's #f8fafc canvas --workflow-rule
+     alone measures ~2.6:1, under the 3:1 non-text contrast floor. Darkened
+     both so the rule/model-suggestion ribbon distinction stays visible here
+     too, not just in dark mode. */
+  --workflow-rule: #0369a1;
+  --workflow-llm: #475569;
 }
 
 #root { height: 100dvh; }
@@ -1232,6 +1239,44 @@ td > span { color: var(--text-secondary); margin-top: var(--space-1); }
 .decision-graph-container .node-label { fill: var(--workflow-node-label); }
 .decision-graph-container .node.skipped { opacity: .42; }
 .decision-graph-container .link-line.failed { stroke: #ef4444; stroke-width: 2.5; opacity: 1; }
+
+/* Mevzuat Haritası -- the compliance knowledge graph. Reuses
+   .decision-graph-container's canvas/outline/.node-label rules above (both
+   graphs share the same InteractiveGraphViewport shell); the rules below add
+   only what is genuinely new: rect-shaped nodes, ribbons, and the headline. */
+.knowledge-graph-view { display: grid; gap: var(--space-3); }
+.knowledge-graph-headline-text { margin: 0; }
+.knowledge-graph-headline-note,
+.knowledge-graph-headline-stats { margin: var(--space-1) 0 0; color: var(--text-muted); }
+.knowledge-graph-kanun-header {
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  color: var(--text-secondary);
+  border-left: 3px solid var(--workflow-rule);
+}
+.knowledge-graph-loading { display: grid; place-items: center; min-height: 20rem; }
+
+.decision-graph-container .node rect.node-fill { stroke: var(--border-default); stroke-width: 1; }
+.decision-graph-container .node:focus-visible rect.node-fill,
+.decision-graph-container .node.is-selected rect.node-fill { filter: drop-shadow(0 0 6px var(--accent-blue)); }
+.decision-graph-container .node-fill.status-compliant { fill: var(--status-completed); }
+.decision-graph-container .node-fill.status-partially_compliant,
+.decision-graph-container .node-fill.status-incomplete { fill: var(--status-running); }
+.decision-graph-container .node-fill.status-unknown { fill: var(--status-todo); }
+.decision-graph-container .node-fill.no-analysis {
+  fill: var(--workflow-canvas);
+  stroke-dasharray: 3 2;
+  opacity: .7;
+}
+.decision-graph-container .node-fill-madde { fill: var(--workflow-node-fill); stroke: var(--workflow-rule); }
+.decision-graph-container .node.is-dimmed { opacity: .18; }
+
+.decision-graph-container .kanun-band { fill: var(--bg-primary); opacity: .5; }
+
+.decision-graph-container .ribbon { opacity: .35; }
+.decision-graph-container .ribbon.is-dimmed { opacity: .06; }
+.decision-graph-container .ribbon-rule { stroke: var(--workflow-rule); stroke-width: 1.5; }
+.decision-graph-container .ribbon-llm { stroke: var(--workflow-llm); stroke-width: 1; stroke-dasharray: 5 4; }
 .workflow-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--text-muted); }
 .workflow-legend span { display: inline-flex; align-items: center; gap: var(--space-1); }
 .workflow-legend span::before { width: 7px; height: 7px; border: 2px solid; border-radius: var(--radius-full); content: ""; }
