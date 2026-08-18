@@ -77,8 +77,10 @@ from app.ai.verification import (
     InfoQuestion,
     VerificationReport,
     build_missing_info_request,
+    fill_date_placeholders,
     judge_draft,
     merge_verdicts,
+    normalize_role_placeholders,
     normalize_unfilled_markers,
     verify_draft,
 )
@@ -111,6 +113,12 @@ class ReviseState(TypedDict, total=False):
     #: on `create_revise_graph`). Absent/empty behaves exactly like no
     #: adapter configured, never an error.
     company_id: str
+    #: Today's date (see app.ai.workflows.dates.today_tr), read by
+    #: `verify_node`'s date-placeholder backstop -- a revision keeps the
+    #: original draft's date unchanged by construction (see this module's
+    #: own anti-date-change rule), so this only ever fires if a rewrite
+    #: pass reintroduces a "Tarih:" placeholder.
+    today: str
 
     #: Set by `parse`.
     instruction: RevisionInstruction
@@ -244,8 +252,11 @@ def _build_directive_prompt(
             "hiçbir alanda üslup/kapsam/uzunluk dışında bir değişiklik yapma. "
             "Talimatla ilgisi olmayan her cümleyi, önceki taslaktaki haliyle, KELİMESİ "
             "KELİMESİNE ve EKSİKSİZ olarak yeniden üret. '...', '(değişmedi)', '[aynı]' "
-            "gibi kısaltma veya atlama ifadeleriyle hiçbir bölümü özetleme; zaten "
-            "doldurulmuş bilgileri (isim, kurum, tarih vb.) asla silme."
+            "gibi kısaltma veya atlama ifadeleriyle hiçbir bölümü özetleme. Talimatla "
+            "ilgisi olmayan, zaten doldurulmuş bilgileri (isim, kurum, tarih vb.) asla "
+            "silme -- ANCAK talimat açıkça bir cümlenin/kısmın silinmesini, çıkarılmasını "
+            "veya kaldırılmasını istiyorsa, o kısmı gerçekten sil; bu durumda '[...]' "
+            "yer tutucusu bırakma, ilgili kısmı taslaktan tamamen çıkar."
         )
 
     return (
@@ -600,9 +611,14 @@ def create_revise_graph(
         # writer could, and revise never re-runs the original writer's
         # prompt to begin with.
         draft_text, _ = normalize_unfilled_markers(state.get("draft", ""))
+        draft_text, _ = fill_date_placeholders(draft_text, state.get("today", ""))
         correspondence_type = state.get("correspondence_type") or active_draft.correspondence_type
         sub_genre = state.get("correspondence_sub_genre") or getattr(
             active_draft, "correspondence_sub_genre", ""
+        )
+        # Same backstop as draft_graph.verify_node -- see its own note.
+        draft_text, _ = normalize_role_placeholders(
+            draft_text, is_individual_petition="dilekçe" in sub_genre.lower()
         )
         strict = correspondence_type != "other_official"
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
@@ -627,6 +643,7 @@ def create_revise_graph(
             strict=strict,
             style_examples=list(active_draft.style_examples) + list(adapter.preferred_examples),
             is_individual_petition="dilekçe" in sub_genre.lower(),
+            today=state.get("today", ""),
         )
 
         judge_on = (

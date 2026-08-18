@@ -16,7 +16,7 @@ from app.domains.drafts.draft_share_service import DraftShareService
 from app.domains.drafts.model.draft_model import DraftModel
 from app.domains.drafts.model.draft_share_model import DraftShareModel
 from app.domains.drafts.repository import DraftRepository, DraftShareRepository
-from app.domains.drafts.schema.draft_schema import DraftResponse
+from app.domains.drafts.schema.draft_schema import DraftDestinationUpdateRequest, DraftResponse
 from app.domains.drafts.schema.draft_share_schema import (
     DraftSendRequest,
     DraftShareRespondRequest,
@@ -58,6 +58,17 @@ def _assert_owns_draft(draft: DraftModel, current_user: UserModel) -> None:
     decision = authorize(subject_from_user(current_user), Action.DRAFT_READ, resource)
     if not decision.permit:
         raise AuthorizationException(message="Bu taslağa erişim izniniz yok.")
+
+
+def _assert_can_update_draft(draft: DraftModel, current_user: UserModel) -> None:
+    """Same shape as `_assert_owns_draft`, gated on `Action.DRAFT_UPDATE`
+    instead of `DRAFT_READ` -- owner, or ADMIN/MANAGER/ROOT company-wide."""
+    resource = Resource(
+        type="draft", id=draft.id, company_id=draft.company_id, owner_id=draft.user_id
+    )
+    decision = authorize(subject_from_user(current_user), Action.DRAFT_UPDATE, resource)
+    if not decision.permit:
+        raise AuthorizationException(message="Bu taslağı düzenleme izniniz yok.")
 
 
 @router.get("", response_model=None)
@@ -188,6 +199,27 @@ async def get_draft(
     draft = await service.get_draft(draft_id)
     _assert_owns_draft(draft, current_user)
     return SuccessResponse(data=DraftResponse.model_validate(draft).model_dump(mode="json"))
+
+
+@router.patch("/{draft_id}/destination", response_model=None)
+async def update_draft_destination(
+    draft_id: str,
+    request: DraftDestinationUpdateRequest,
+    service: DraftService = Depends(get_draft_history_service),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+):
+    """Override this draft version's routed unit with the caller's own pick.
+
+    The routing graph always proposes a primary (and usually an
+    alternative) unit now -- this is the write path for a human choosing a
+    third option instead, e.g. from the chat UI's unit picker. Updates the
+    row in place; unlike a content revision this never creates a new
+    version, since routing metadata isn't the draft's own text.
+    """
+    draft = await service.get_draft(draft_id)
+    _assert_can_update_draft(draft, current_user)
+    updated = await service.update_destination(draft_id, request.destination, current_user.company_id)
+    return SuccessResponse(data=DraftResponse.model_validate(updated).model_dump(mode="json"))
 
 
 @router.delete("/{draft_id}", response_model=None)

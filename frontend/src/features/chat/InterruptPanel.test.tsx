@@ -101,91 +101,18 @@ describe("InterruptPanel", () => {
     );
   });
 
-  it("shows explicit approval actions for a completed draft", () => {
-    const onResume = vi.fn().mockResolvedValue(undefined);
+  it("never shows an approval prompt -- missing_information is the only draft-related gate", () => {
     render(
       <InterruptPanel
-        interrupt={{
-          kind: "draft_approval",
-          interruptId: "interrupt-2",
-          payload: { draft: "Onaylanacak taslak" },
-        }}
-        loading={false}
-        onResume={onResume}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Onayla" }));
-    expect(onResume).toHaveBeenCalledWith("approve", {}, "");
-  });
-
-  it("accepts the empty changelog object returned for a fresh draft", () => {
-    render(
-      <InterruptPanel
-        interrupt={{
-          kind: "draft_approval",
-          interruptId: "interrupt-fresh-draft",
-          payload: { draft: "Yeni taslak", changelog: {} },
-        }}
+        interrupt={missingInformation}
         loading={false}
         onResume={vi.fn().mockResolvedValue(undefined)}
       />,
     );
 
-    expect(screen.getByText("Yeni taslak")).toBeInTheDocument();
-    expect(screen.queryByText(/Değişiklik günlüğü/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Onayla" })).toBeEnabled();
-  });
-
-  it("supports revision and reasoned rejection while disabling duplicate submissions", () => {
-    const onResume = vi.fn().mockResolvedValue(undefined);
-    const { rerender } = render(
-      <InterruptPanel
-        interrupt={{ kind: "draft_approval", interruptId: "interrupt-3", payload: { draft: "Taslak" } }}
-        loading={false}
-        onResume={onResume}
-      />,
-    );
-
-    fireEvent.change(screen.getByLabelText("Revizyon notu"), { target: { value: "Tarihi düzelt" } });
-    fireEvent.click(screen.getByRole("button", { name: "Revizyon iste" }));
-    expect(onResume).toHaveBeenCalledWith("revise", {}, "Tarihi düzelt");
-
-    fireEvent.click(screen.getByRole("button", { name: "Reddet" }));
-    fireEvent.change(screen.getByLabelText("Red gerekçesi"), { target: { value: "Yetkisiz içerik" } });
-    fireEvent.click(screen.getByRole("button", { name: "Reddi onayla" }));
-    expect(onResume).toHaveBeenCalledWith("reject", {}, "", "Yetkisiz içerik");
-
-    rerender(
-      <InterruptPanel
-        interrupt={{ kind: "draft_approval", interruptId: "interrupt-3", payload: { draft: "Taslak" } }}
-        loading
-        onResume={onResume}
-      />,
-    );
-    expect(screen.getByRole("button", { name: "Gönderiliyor…" })).toBeDisabled();
-  });
-
-  it("compiles quick-pick revision selections with the free-text note into one instruction", () => {
-    const onResume = vi.fn().mockResolvedValue(undefined);
-    render(
-      <InterruptPanel
-        interrupt={{ kind: "draft_approval", interruptId: "interrupt-quickpick", payload: { draft: "Taslak" } }}
-        loading={false}
-        onResume={onResume}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Daha resmi bir üslup kullan" }));
-    fireEvent.click(screen.getByRole("button", { name: "Kapanışı 'Arz ederim' yap" }));
-    fireEvent.change(screen.getByLabelText("Revizyon notu"), { target: { value: "Tarihi düzelt" } });
-    fireEvent.click(screen.getByRole("button", { name: "Revizyon iste" }));
-
-    expect(onResume).toHaveBeenCalledWith(
-      "revise",
-      {},
-      "Daha resmi bir üslup kullan. Kapanışı 'Arz ederim' yap. Tarihi düzelt",
-    );
+    expect(screen.queryByRole("button", { name: "Onayla" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reddet" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/İnsan onayı/)).not.toBeInTheDocument();
   });
 
   it("lets the writing-brief gate fall back to the system's own choice for every slot", () => {

@@ -100,7 +100,12 @@ def test_pii_from_a_gizli_document_with_no_clearance_is_blocked():
     )
     assert verdict.action == "block"
     assert verdict.text == FALLBACK_REPLY
-    assert "yetkisiz kişisel veri sızıntısı tespit edildi" in verdict.reasons
+    # The reason names which PII kind(s) triggered the block -- Görev's own
+    # "hangi detector nedeniyle tetiklendi" explainability requirement.
+    assert any(
+        "yetkisiz kişisel veri sızıntısı tespit edildi" in reason and "telefon" in reason
+        for reason in verdict.reasons
+    )
 
 
 def test_pii_from_a_gizli_document_with_insufficient_clearance_is_blocked():
@@ -138,8 +143,30 @@ def test_a_document_with_no_pii_in_the_reply_is_unaffected_by_sensitivity():
 # ==========================================
 # LLM-judge nuance layer (Faz 3): semantic leakage with no literal PII
 # ==========================================
-def test_a_confident_semantic_leak_from_a_gizli_source_is_blocked():
+def test_a_confident_semantic_leak_alone_is_truncated_not_blocked():
+    """The judge alone -- with no deterministic PII finding to corroborate
+    it -- can never hard-block a reply, even against a GİZLİ source and an
+    uncleared requester (see output_gate's own docstring on why: a bare
+    LLM guess is what produced the unexplained "mesajda PII var, kısıldı"
+    false-block reports). It still degrades the reply, just to a truncated
+    notice instead of the full FALLBACK_REPLY."""
     reply = "Başvuranın ciddi bir sağlık sorunu olduğu belgeden anlaşılıyor."
+    verdict = evaluate_response(
+        reply,
+        sensitivity=_sensitivity(SensitivityLevel.GIZLI, requires_review=True),
+        requester_clearance=None,
+        judge_verdict=_judge_verdict(sensitive=True, confidence=0.9),
+    )
+    assert verdict.action == "redact"
+    assert verdict.text != FALLBACK_REPLY
+    assert any("llm-judge" in reason for reason in verdict.reasons)
+
+
+def test_a_semantic_leak_only_blocks_when_corroborated_by_a_real_pii_finding():
+    """Block requires BOTH a GİZLİ+ source AND a deterministic PII
+    finding -- the judge's own signal can raise the reply to the same
+    severity as a real finding, but never substitutes for one."""
+    reply = "Telefon numaranız 0532 123 45 67 olarak kaydedildi ve durumu ciddi."
     verdict = evaluate_response(
         reply,
         sensitivity=_sensitivity(SensitivityLevel.GIZLI, requires_review=True),
@@ -148,7 +175,29 @@ def test_a_confident_semantic_leak_from_a_gizli_source_is_blocked():
     )
     assert verdict.action == "block"
     assert verdict.text == FALLBACK_REPLY
-    assert any("llm-judge" in reason for reason in verdict.reasons)
+
+
+def test_a_judge_verdict_just_below_the_promotion_floor_does_not_count_as_a_leak():
+    reply = "Başvuranın ciddi bir sağlık sorunu olduğu belgeden anlaşılıyor."
+    verdict = evaluate_response(
+        reply,
+        sensitivity=_sensitivity(SensitivityLevel.GIZLI, requires_review=True),
+        requester_clearance=None,
+        judge_verdict=_judge_verdict(sensitive=True, confidence=0.74),
+    )
+    assert verdict.action == "pass"
+
+
+def test_a_judge_verdict_at_the_promotion_floor_counts_as_a_leak():
+    reply = "Başvuranın ciddi bir sağlık sorunu olduğu belgeden anlaşılıyor."
+    verdict = evaluate_response(
+        reply,
+        sensitivity=_sensitivity(SensitivityLevel.GIZLI, requires_review=True),
+        requester_clearance=None,
+        judge_verdict=_judge_verdict(sensitive=True, confidence=0.75),
+    )
+    assert verdict.action == "redact"
+    assert verdict.text != reply
 
 
 def test_a_low_confidence_judge_verdict_does_not_block():

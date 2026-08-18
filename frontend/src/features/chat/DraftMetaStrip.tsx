@@ -30,6 +30,7 @@ interface DraftDetails {
 
 interface RoutingDetails {
   routed_unit?: string;
+  alternative_units?: string[];
 }
 
 // The score/approval/routing/rejection facts that used to be concatenated
@@ -43,6 +44,7 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
 
   const hasScore = typeof draft.combined_score === "number";
   const routedUnit = routing?.routed_unit;
+  const alternativeUnits = routing?.alternative_units ?? [];
   const isRejected = draft.status === "REJECTED";
   const isReviseExhausted = draft.status === "REVISE_REQUESTED";
   const changelogSummary = draft.changelog?.summary;
@@ -76,7 +78,6 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
               {rule.label}
               {rule.occurrences > 1 ? ` (×${rule.occurrences})` : ""}
               {rule.penalty_applied > 0 ? ` — -${rule.penalty_applied} puan` : ""}
-              {rule.forces_approval ? " · insan onayı gerektirir" : ""}
             </p>
           ))}
         </details>
@@ -85,14 +86,14 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
         <span className="draft-meta-chip">
           <Route size={13} />
           Önerilen birim: {routedUnit}
+          {alternativeUnits.length > 0 ? ` · Alternatif: ${alternativeUnits.join(", ")}` : ""}
         </span>
       )}
-      {draft.requires_human_approval && !isRejected && (
-        <span className="draft-meta-chip draft-meta-warning">
-          <AlertCircle size={13} />
-          İnsan onayı gerekiyor
-          {draft.evaluation_notes ? `: ${draft.evaluation_notes}` : ""}
-        </span>
+      {draft.requires_human_approval && !isRejected && draft.evaluation_notes && (
+        <details className="message-logs draft-meta-rules">
+          <summary>Kontrol notları</summary>
+          <p>{draft.evaluation_notes}</p>
+        </details>
       )}
       {isRejected && (
         <span className="draft-meta-chip draft-meta-danger">
@@ -107,7 +108,7 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
           Revizyon turu sınırına ulaşıldı; bu son sürüm korundu.
         </span>
       )}
-      {hasScore && !draft.requires_human_approval && !isRejected && !isReviseExhausted && (
+      {hasScore && !isRejected && !isReviseExhausted && (
         <span className="draft-meta-chip draft-meta-success">
           <CheckCircle2 size={13} />
           Hazır

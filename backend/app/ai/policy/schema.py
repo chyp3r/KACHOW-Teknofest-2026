@@ -238,6 +238,12 @@ class BudgetPolicy:
                 # round trip, and a timeout degrades to zero style examples
                 # rather than failing the draft (see retrieve_examples_node).
                 "retrieve_examples": 25.0,
+                # Same Qdrant/Ollama round trip as retrieve_examples, against
+                # the document_qa collection instead -- a timeout degrades to
+                # zero source excerpts (the writer still has the analysis
+                # step's own summary), not a failed draft (see
+                # retrieve_source_chunks_node).
+                "retrieve_source_chunks": 25.0,
                 # No "summarize" entry: detailed summarization is on-demand
                 # (DocumentService.generate_detailed_summary), not a graph
                 # node, and bounds itself with
@@ -274,6 +280,20 @@ class GuardrailPolicy:
             the guardrail judge: above this token-overlap share with the
             content it was asked to judge, a verdict is an echo, not a
             judgement, and is discarded.
+        judge_promotion_confidence: Minimum confidence the guardrail judge
+            (a fast-tier, pattern-blind model call) must clear before its
+            "this reads as sensitive" verdict is trusted for anything --
+            promoting an input document to ``requires_review``
+            (``document_analysis_graph.scan_sensitivity_node``), or, on the
+            output side, being treated as a leak at all
+            (``output_gate.evaluate_response``'s ``semantic_leak``). Raised
+            from an earlier 0.5 to 0.75: a low-confidence judge guess used
+            to be enough on its own to promote a document to human review
+            or block a reply outright, which is what produced the
+            unexplained "mesajda PII var, kısıldı" false positives Görev's
+            bug report names -- the judge is a second opinion, not a second
+            deterministic detector, and its uncertainty should read as
+            uncertainty.
         role_clearance_map: The maximum ``SensitivityLevel`` each
             ``UserRole`` may read. Every ``UserRole`` member must have an
             entry -- an omitted role is not "no access", it is a role
@@ -295,6 +315,7 @@ class GuardrailPolicy:
     output_groundedness_threshold: float = 0.75
     pii_confidence_floor: float = 0.6
     judge_echo_overlap_threshold: float = 0.40
+    judge_promotion_confidence: float = 0.75
     role_clearance_map: Mapping[UserRole, SensitivityLevel] = field(
         default_factory=lambda: MappingProxyType(
             {
@@ -309,7 +330,7 @@ class GuardrailPolicy:
 
 @dataclass(frozen=True)
 class DraftPolicy:
-    """Few-shot style-example retrieval for the draft writer.
+    """Few-shot style-example and source-document retrieval for the draft writer.
 
     Attributes:
         style_examples_enabled: Master switch. False reproduces pre-feature
@@ -329,11 +350,31 @@ class DraftPolicy:
             inside ``OLLAMA_NUM_CTX`` (8192 tokens) even in Turkish, where
             ``CHARS_PER_TOKEN_TR`` (2.8) makes the same text cost noticeably
             more tokens than in English.
+        source_chunks_enabled: Master switch for
+            ``draft_graph.retrieve_source_chunks_node``. False reproduces
+            pre-feature behaviour exactly (the writer sees only the
+            analysis step's own summary, never document excerpts) -- same
+            A/B and emergency-rollback lever as ``style_examples_enabled``.
+        source_chunk_count: Document excerpts requested per draft from the
+            ``document_qa`` collection (the same index the assist step's
+            own ``search_document`` tool already queries). Sized well above
+            ``style_example_count`` -- grounding in the source document
+            itself is the primary defence against fabrication Görev's own
+            "yalnızca özet kullanmak kritik detayların kaybolmasına neden
+            olabilir" concern names, a few-shot style example is a
+            secondary quality boost.
+        source_chunk_char_budget: Ceiling on the combined character length
+            of retrieved excerpts, same role ``style_example_char_budget``
+            plays -- a whole chunk is dropped rather than truncated
+            mid-sentence past this (see the retrieval node itself).
     """
 
     style_examples_enabled: bool = True
     style_example_count: int = 2
     style_example_char_budget: int = 4000
+    source_chunks_enabled: bool = True
+    source_chunk_count: int = 6
+    source_chunk_char_budget: int = 6000
 
 
 @dataclass(frozen=True)
@@ -444,3 +485,7 @@ class Policy:
             raise ValueError("draft.style_example_count must be positive")
         if self.draft.style_example_char_budget <= 0:
             raise ValueError("draft.style_example_char_budget must be positive")
+        if self.draft.source_chunk_count <= 0:
+            raise ValueError("draft.source_chunk_count must be positive")
+        if self.draft.source_chunk_char_budget <= 0:
+            raise ValueError("draft.source_chunk_char_budget must be positive")

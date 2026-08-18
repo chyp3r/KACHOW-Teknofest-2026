@@ -2,6 +2,84 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.18.0] - 2026-08-18
+### Düzeltildi
+Canlı kullanımda tespit edilen 10 ayrı taslak-akışı hatası (#209). Kök
+nedenlerin çoğu üç ortak desende toplandı: turn-scoped olması gereken
+state'in session-scoped tutulması, guardrail'lerin fail-secure tarafa aşırı
+agresif ayarlanmış olması, ve taslak prompt'unun özet dışında hiçbir kaynak
+metne erişememesi.
+
+- **State izolasyonu** -- ikinci bir taslak turn'ü artık önceki taslağın
+  muhatap/yazan taraf/kapanış cevaplarını miras almıyor
+  (`planning_graph._step_brief` yalnızca aktif bir `revise` turn'ünde
+  `prior_brief`'i taşıyor; `focus.py::compute_focus_update` `writing_brief`'i
+  her draft turn'ünde değiştiriyor); frontend'de `PromptQuestionCard`/
+  `InterruptPanel` artık `interrupt_id`/`message.id` ile keylenip soru
+  kimliği değiştiğinde local state'i sıfırlıyor.
+- **Otomatik tarih** -- kullanıcıya asla tarih sorulmuyor; `app.ai.workflows.
+  dates.today_tr()` sunucu tarafında çözülüp brief'in "0. BUGÜNÜN TARİHİ"
+  bölümüne enjekte ediliyor, `fill_date_placeholders` deterministik
+  backstop olarak kalan tüm `[Tarih]` yer tutucularını dolduruyor.
+- **"İnsan onayı" kaldırıldı** -- `draft_approval` gate'i tamamen silindi;
+  yalnızca `missing_information` (eksik bilgi) kapısı kaldı, UI'daki
+  "İnsan onayı gerekiyor" ibaresi hiçbir bileşende görünmüyor.
+  `requires_human_approval` veri modeli olarak (skorlama/audit için) korundu.
+- **Birim önerisi hiçbir zaman boş dönmüyor** -- `routing_graph` artık
+  model hatası/liste dışı yanıt/düşük skor durumlarının hepsinde
+  deterministik bir `_best_effort_unit` fallback'iyle en az bir birim +
+  bir alternatif döndürüyor; frontend'e `UnitPicker` bileşeni eklendi
+  (seçici + "Diğer birim…" serbest metin).
+- **Relevance guardrail'i** -- "bu CV'yi ekibe katılım metni yap" gibi
+  belgeye açıkça işaret eden istekler artık yanlışlıkla `unrelated`
+  sayılmıyor (yeni deiktik referans kuralı + genişletilmiş karşılaştırma
+  yüzeyi); model yalnızca `confidence >= 0.7` iken reddedebiliyor.
+- **PII guardrail'i** -- hard block artık yalnızca belgenin kendi
+  `gizlilik_derecesi` etiketi GİZLİ/ÇOK GİZLİ olduğunda ve deterministik bir
+  PII bulgusu varken tetikleniyor; LLM judge tek başına asla bloklamıyor.
+  Adres detector'ü `no:`/`kat:` gibi yalnız unit-keyword satırlarını artık
+  adres saymıyor; her blok/maskeleme kararı tetikleyici `rule_id`'yi
+  açıklayan bir mesaj üretiyor.
+- **Rol farkındalıklı placeholder'lar** -- çıplak `[Ad Soyad]`/`[Unvan]`/
+  `[İmza]`/`[Kurum Adı]` artık `normalize_role_placeholders` ile
+  "[İmzalayacak yetkilinin adı ve soyadı]" gibi kime ait olduğu açık
+  metinlere dönüştürülüyor (dilekçelerde dilekçe sahibine atfediliyor).
+- **Alıcı (muhatap) çıkarımı** -- "Ahmet Yılmaz'a bir izin yazısı hazırla"
+  artık muhatabı tekrar sormuyor: kesmesiz datif, "Sayın X", "X için",
+  "X Bey'e/Hanım'a" desenleri eklendi; tek aday + bir yazma fiili birlikte
+  geçtiğinde slot doğrudan çözülüyor, birden fazla aday veya fiilsiz bir
+  isim geçişi hâlâ bir onay sorusu üretiyor.
+- **Taslak RAG grounding'i** -- yazar artık yalnızca belgenin özetini değil,
+  `document_qa` koleksiyonundan (asistanın `search_document` aracının da
+  kullandığı) getirilen birebir alıntıları da görüyor. Yeni
+  `draft_graph.retrieve_source_chunks_node`, `retrieve_examples`'la aynı
+  degrade-on-failure desenini izliyor (bütçe aşımı/hata → sıfır alıntı,
+  asla başarısız taslak) ve brief'e "9. BELGEDEN İLGİLİ ALINTILAR" bölümünü
+  ekliyor; `DraftPolicy.source_chunks_enabled`/`source_chunk_count`/
+  `source_chunk_char_budget` ile yönetiliyor.
+
+Ayrıca, #209 listesinde olmayıp bu dalda test edilirken canlıda tespit
+edilen ek bir revizyon hatası:
+
+- **Revizyonda silme talimatı dinlenmiyordu** -- hedeflenecek paragraf/bölüm
+  isim/numara ile belirtilmediğinde ("...paragraftan bir kısmı sil" gibi),
+  tüm taslağı yeniden yazan prompt'un kendi "zaten doldurulmuş bilgileri
+  asla silme" kuralı kullanıcının silme talimatıyla doğrudan çelişiyordu;
+  reviser talimatı yine de uygularsa bu kez `detect_content_loss`'un
+  kısaltma anahtar kelime listesi yalnızca "kısalt"/"özetle" gibi fiilleri
+  tanıdığından, gerçek silme kaynaklı küçülme kazara içerik kaybı sayılıp
+  onarım döngüsüyle geri getiriliyordu -- talimat sessizce iptal edilmiş
+  oluyordu. Prompt'un kuralı silme talimatları için açık bir istisna
+  içerecek şekilde yeniden yazıldı; `_SHORTENING_KEYWORDS`'e "sil"/"çıkar"/
+  "kaldır" eklendi.
+
+### Test
+- `docker compose run --rm backend pytest -q` → **2196 test geçti**, 1
+  bilinen (bu değişikliklerden bağımsız, `main` üzerinde de aynı şekilde
+  başarısız) ön-var olan hata hariç.
+- `cd frontend && npx vitest run` → tüm testler geçti; `İnsan onayı`/
+  `insan onay` dizesi hiçbir bileşende kalmadı.
+
 ## [3.17.0] - 2026-08-17
 ### Eklendi
 İnternal communication + AI-assisted artifact transfer planının **Faz 5**'i

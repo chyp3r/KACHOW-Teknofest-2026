@@ -513,6 +513,7 @@ def verify_draft(
     strict: bool = True,
     style_examples: list[str] | None = None,
     is_individual_petition: bool = False,
+    today: str = "",
 ) -> VerificationReport:
     """Verify a draft's groundedness and structural completeness.
 
@@ -520,6 +521,13 @@ def verify_draft(
         draft: The generated draft text.
         source_document: The incoming document the draft responds to.
         context: Retrieved legislation excerpts.
+        today: The server-resolved date the draft's own "Tarih:" line was
+            told to copy (see app.ai.workflows.dates.today_tr). Folded into
+            the grounding haystack alongside source_document/context/
+            classification, not treated as a hallucination the way any
+            other date claim without a matching source value would be --
+            this is the one date value that is legitimately injected
+            rather than extracted.
         classification: Analysis output, whose extracted fields also count as
             trusted material.
         instructions: The user's instructions, which may legitimately introduce
@@ -565,7 +573,7 @@ def verify_draft(
     # split out below via `instruction_only_claims` instead of being folded
     # in here, so its presence is visible to the caller rather than silently
     # indistinguishable from source/mevzuat grounding.
-    trusted: list[str] = [source_document, context]
+    trusted: list[str] = [source_document, context, today]
     if classification:
         trusted.append(_flatten_classification(classification))
 

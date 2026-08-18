@@ -70,7 +70,7 @@ her satır `data: <json>\n\n`, akış `data: [DONE]\n\n` ile kapanır.
 | `token` | Taslak/sohbet/belge-soru-cevap metni üretilirken | `node`, `text` (bir parça) |
 | `partial_result` | Nihai sonuçtan önce gösterilebilecek ara veri | `key` (örn. `"classification"`), `value` |
 | `planning_completed` | Plan çözüldükten hemen sonra | `plan_steps`, `intent`, `reasoning` |
-| `interrupt` | Akış bir HITL kapısında durduğunda | `kind` (`missing_information` \| `draft_approval`), `interrupt_id`, `payload` |
+| `interrupt` | Akış bir HITL kapısında durduğunda | `kind` (`missing_information` \| `writing_brief` \| `artifact_transfer_confirm` \| `artifact_transfer_disambiguate`), `interrupt_id`, `payload` |
 | `final_result` | Akış normal tamamlandığında | `reply`, `workflow_status`, `details` |
 | `error` | Akış beklenmedik biçimde başarısız olduğunda | `message`, `details` |
 
@@ -112,12 +112,19 @@ uğramış) `ChatMessageResponse`'u döndürür.
 | `answers` | object | `action=answer` için | `InfoQuestion.key → kullanıcı cevabı` eşlemesi |
 | `instructions` | string | `action=revise` için | En fazla 4000 karakter; onarım promptuna eklenen ek talimat |
 
+Sistemde ayrı bir "taslak onayı" kapısı **yoktur** — düşük skorlu veya
+tahmine dayalı türde bir taslak, kullanıcıya sorulmadan doğrudan
+teslim edilir (skor/`requires_human_approval` alanı yalnızca dahili
+denetim/loglama içindir). Bir kesinti yalnızca gerçekten eksik bir alan
+(`missing_information`), yazım briefi (`writing_brief`) veya bir transfer
+onayı (`artifact_transfer_confirm`/`_disambiguate`) için oluşur.
+
 ### Eylemler
 
-- **`answer`** — eksik bilgi kesintisini çözer. Yer tutucular `apply_answers()` ile **taslak yeniden üretilmeden** doldurulur; ardından yalnızca deterministik doğrulayıcı tekrar çalışır. Bazı cevaplar boş bırakılırsa kalan sorularla birlikte akış **tekrar** `NEEDS_INPUT`'a döner (aynı kesinti bir daha sorulur).
-- **`approve`** — taslak onayı kesintisini çözer, akış birim yönlendirmesine devam eder.
-- **`revise`** — `instructions` alanındaki notu insan geri bildirimi olarak taslağın talimatlarına ekler ve `status=REVISE_REQUESTED` ile sonlanır (yeniden üretim tetiklenmez; bir üst katman bunu yeni bir taslak isteğine dönüştürebilir).
-- **`reject`** — `status=REJECTED` ile sonlanır.
+- **`answer`** — eksik bilgi ya da yazım briefi kesintisini çözer. `missing_information` için yer tutucular `apply_answers()` ile **taslak yeniden üretilmeden** doldurulur; ardından yalnızca deterministik doğrulayıcı tekrar çalışır. Bazı cevaplar boş bırakılırsa kalan sorularla birlikte akış **tekrar** `NEEDS_INPUT`'a döner (aynı kesinti bir daha sorulur).
+- **`revise`** — `missing_information` kesintisinde, cevap kutusuna bilgi yerine bir revizyon talimatı yazıldığında kullanılan kaçış kapısı: `instructions` alanındaki not `gate_revise` alt grafiği üzerinden **gerçek bir revizyon** üretir (aynı çalışma içinde, yeniden taslak oluşturma tetiklenmeden).
+- **`reject`** — yazım briefi kesintisinde talebi tamamen iptal eder (`status=SKIPPED`); transfer kesintisinde transferi iptal eder.
+- **`approve`** / **`select`** — yalnızca transfer onayı/seçimi kesintilerinde kullanılır (bkz. `artifact_transfer_confirm`/`_disambiguate`).
 
 ## GET /api/v1/chat/sessions/{session_id}/state
 
@@ -138,8 +145,8 @@ da bu döner), `running`, veya `interrupted`.
 
 - **Checkpointer olmadan** (`CHECKPOINTER_ENABLED=False` veya Postgres
   erişilemez durumda ise) HITL adımları sessizce atlanır — `human_gate`
-  düğümüne hiç girilmez, akış her zamanki gibi tamamlanır veya insan onayı
-  gerektiren bir durumda `NEEDS_HUMAN_APPROVAL` olarak raporlanır. Derece
-  düşer, akış kırılmaz.
+  düğümüne hiç girilmez, akış her zamanki gibi tamamlanır (eksik bir alan
+  varsa taslak `NEEDS_INPUT`/`[...]` yer tutucularıyla teslim edilir).
+  Derece düşer, akış kırılmaz.
 - Bu domain'in uç noktaları da `require_auth_if_enabled` arkasındadır (bkz.
   `docs/api/documents.md` — Kimlik doğrulama notu).

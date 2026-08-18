@@ -157,26 +157,39 @@ def evaluate_response(
         _preview, pii_findings = redact_pii(reply, confidence_floor=active_policy.pii_confidence_floor)
         # The judge catches what no pattern matches: a reply that discloses
         # a source's meaning without ever emitting a literal PII string.
-        # Only trusted when the judge is confident -- a low-confidence
-        # "maybe sensitive" should not carry the same weight as a checksum-
-        # validated TCKN match.
-        semantic_leak = bool(judge_verdict and judge_verdict.sensitive and judge_verdict.confidence >= 0.5)
+        # Only trusted when the judge clears judge_promotion_confidence -- a
+        # low-confidence "maybe sensitive" guess should not carry the same
+        # weight as a checksum-validated TCKN match, and must never be able
+        # to block a reply entirely on its own (see the block condition
+        # below): a bare LLM guess is exactly what produced the unexplained
+        # "mesajda PII var, kısıldı" false positives Görev's bug report
+        # names.
+        semantic_leak = bool(
+            judge_verdict
+            and judge_verdict.sensitive
+            and judge_verdict.confidence >= active_policy.judge_promotion_confidence
+        )
 
         if pii_findings or semantic_leak:
             cleared = requester_clearance is not None and requester_clearance >= sensitivity.level
-            if sensitivity.requires_review and not cleared:
+            # Hard block requires BOTH a deterministic finding (a real,
+            # checksum/pattern-matched PII span, never the judge alone) AND
+            # the source document's own confidentiality marking
+            # (`sensitivity.requires_review`, i.e. GİZLİ/ÇOK GİZLİ). A
+            # semantic-only judge signal against an unmarked or unclear
+            # document falls through to the softer mask/truncate paths
+            # below instead of ever blocking outright.
+            if sensitivity.requires_review and pii_findings and not cleared:
+                rule_ids = sorted({finding.rule_id for finding in pii_findings if finding.rule_id})
                 logger.warning(
-                    "Reply blocked: %d PII finding(s), semantic_leak=%s against a "
+                    "Reply blocked: %d PII finding(s) (rules=%s) against a "
                     "%s-marked source with insufficient/unknown requester clearance.",
                     len(pii_findings),
-                    semantic_leak,
+                    rule_ids,
                     sensitivity.level.value,
                 )
-                block_reason = (
-                    "yetkisiz kişisel veri sızıntısı tespit edildi"
-                    if pii_findings
-                    else f"yetkisiz anlam bazlı sızıntı tespit edildi (llm-judge: {judge_verdict.reason})"
-                )
+                kinds = sorted({finding.kind for finding in pii_findings})
+                block_reason = f"yetkisiz kişisel veri sızıntısı tespit edildi ({', '.join(kinds)})"
                 return GateVerdict(
                     action="block",
                     text=FALLBACK_REPLY,
@@ -191,11 +204,16 @@ def evaluate_response(
                 # land in the same output instead of one silently
                 # discarding the other.
                 redacted, _findings = redact_pii(redacted, confidence_floor=active_policy.pii_confidence_floor)
-                reasons.append(f"{len(pii_findings)} pii bulgusu maskelendi")
+                kinds = sorted({finding.kind for finding in pii_findings})
+                reasons.append(f"{len(pii_findings)} pii bulgusu maskelendi ({', '.join(kinds)})")
             elif semantic_leak:
                 # No specific span to mask -- the judge flagged the reply's
                 # meaning as a whole, not a locatable string, so there is
-                # nothing narrower to redact than the full reply.
+                # nothing narrower to redact than the full reply. Never
+                # reached when sensitivity.requires_review and pii_findings
+                # both held (that's the block branch above), so this is
+                # either an unmarked source or a semantic-only signal
+                # against a marked one -- neither warrants a full block.
                 redacted = (
                     "Bu yanıt, kaynağın ifşa etmemesi gereken bir bilgiyi "
                     "içerebileceği için kısaltıldı."

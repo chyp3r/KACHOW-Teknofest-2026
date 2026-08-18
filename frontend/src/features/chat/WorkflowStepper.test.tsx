@@ -4,7 +4,7 @@ import { WorkflowStepper, type WorkflowStageItem } from "./WorkflowStepper";
 
 const stages: WorkflowStageItem[] = [
   { id: "analysis", label: "Evrak analizi", description: "Uzun Türkçe belge açıklaması güvenli biçimde sarılır.", status: "todo", target: "classification" },
-  { id: "approval", label: "İnsan onayı", description: "Kullanıcı kararı bekleniyor.", status: "interrupted", target: "human_gate" },
+  { id: "approval", label: "Eksik bilgi", description: "Kullanıcı kararı bekleniyor.", status: "interrupted", target: "human_gate" },
   { id: "routing", label: "Yönlendirme", description: "Hedef birim önerisi.", status: "completed", target: "routing" },
 ];
 
@@ -20,7 +20,7 @@ describe("WorkflowStepper", () => {
   it("activates the selected stage through its full-size button", () => {
     const onSelect = vi.fn();
     render(<WorkflowStepper stages={stages} onSelect={onSelect} />);
-    fireEvent.click(screen.getByRole("button", { name: /İnsan onayı/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Eksik bilgi/ }));
     expect(onSelect).toHaveBeenCalledWith("human_gate");
   });
 
