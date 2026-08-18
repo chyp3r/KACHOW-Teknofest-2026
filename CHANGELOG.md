@@ -2,6 +2,52 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.20.0] - 2026-08-18
+### Düzeltildi
+- **Birim önerisi taslak akışında "kayboluyordu"** -- `routing_graph` her
+  zaman bir birim öneriyor, ama chat içinde taslak üretildiği anda gösterilen
+  `DraftMetaStrip` bunu yalnızca statik bir metin olarak gösteriyordu;
+  interaktif `UnitPicker` yalnızca ayrı `/drafts` yönetim sayfasında vardı ve
+  oraya nasıl ulaşılacağı hiçbir yerde belli değildi. Kök neden: kalıcı
+  taslağın `id`'si chat yanıtının `details`'ine hiç akmıyordu --
+  `ChatService._maybe_record_draft` artık `draft_id`'yi döndürüyor ve hem
+  akış (SSE) hem doğrudan yanıt yolunda `final_result`/response
+  gönderilmeden ÖNCE `final_output["draft"]["id"]`'ye enjekte ediliyor.
+  `DraftMetaStrip` artık bu id varsa `UnitPicker`'ı doğrudan chat içinde,
+  "Önerilen birim" şeridinin yanında render ediyor -- birim seçimi
+  taslağın üretildiği yerde, ayrı bir sayfaya gitmeden yapılabiliyor.
+- **Taslak isimleri ayırt edici değildi** -- `/drafts` sayfasındaki başlık
+  yalnızca kaynak belge adı + yazışma türünden kuruluyordu; belgesiz ve aynı
+  türden birden fazla taslak (örn. birkaç ayrı "Bilgilendirme Metni") hepsi
+  aynı, ayırt edilemez "Kaynak yok - Bilgilendirme Metni" başlığıyla
+  listeleniyordu. Taslağın kendi içeriğindeki "Konu: ..." satırı (writer.md'nin
+  sabit yapısında her zaman bulunur) artık başlığa öncelikli olarak dahil
+  ediliyor; satır yoksa (veya doldurulmamış bir `[Konu]` yer tutucusuysa)
+  eski davranışa sorunsuzca geri dönülüyor.
+
+Ayrıca, bu iki hatayı test ederken bulunan üçüncü, ilgisiz bir bug:
+
+- **Asistan yanıtı bazen ekranda göründükten hemen sonra kayboluyordu** --
+  `useChatWorkflow`'un `final_result` işleyicisi bir turun bitiminde sunucu
+  durumunu tazeliyor (`refreshServerState`); bu tazeleme sorgusu
+  `!loading` iken etkinleşiyor, ki `loading` da tam olarak
+  `activeRequest.current` ile aynı anda temizleniyor -- yani bu sorgunun
+  yeniden getirimi, mesaj senkronizasyon efekti'nin kendi koruma kontrolü
+  zaten açıldıktan SONRA tetikleniyordu. Sunucudan gecikmeli/eski (boş)
+  bir geçmiş okuması gelirse, bu efekt az önce eklenen asistan mesajını
+  sessizce siliyordu. Efekt artık sunucudan gelen öğe sayısı zaten
+  sahip olunandan azsa `messages`'ı asla geriye yazmıyor (sohbet geçmişi
+  yalnızca-ekleme yapılan bir yapıdır, "azalması" her zaman bu yarış
+  durumudur, gerçek bir "geçmiş küçüldü" sinyali değil).
+
+### Test
+- `docker compose run --rm backend pytest -q` → **2264 test geçti, 0
+  başarısız**.
+- `cd frontend && npx vitest run` → **46 dosya, 214 test geçti** (3 art arda
+  tam koşuda doğrulandı -- `useChatWorkflow` yarış durumu düzeltmeden önce
+  aralıklı olarak başarısız oluyordu).
+- CHANGELOG.md güncellendi (3.20.0).
+
 ## [3.19.0] - 2026-08-18
 ### Düzeltildi
 - **Taslak brief'inde belge varlıkları eksikti** -- doküman analizi bir CV/

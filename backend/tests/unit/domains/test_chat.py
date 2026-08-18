@@ -78,6 +78,80 @@ async def test_chat_service_draft(chat_service, mock_planning_graph):
 
 
 @pytest.mark.asyncio
+async def test_chat_service_draft_response_carries_the_persisted_draft_id(
+    chat_service, mock_planning_graph, monkeypatch
+):
+    """The bug this closes: the chat response's own `details.draft` never
+    carried the persisted `drafts.id` back to the frontend, so nothing in
+    the chat UI (the "Birimi değiştir" picker, in particular) could address
+    the exact draft this turn just produced -- see ChatService.
+    _maybe_record_draft's own docstring on why this has to be injected
+    before the response is built, not after.
+
+    `draft_recorder.record_draft` itself (the real DB write) has its own
+    coverage elsewhere -- mocked here so this test is purely about the
+    wiring: the id a write returns must reach `response.details["draft"]
+    ["id"]`.
+    """
+    from app.domains.chat import chat_service as chat_service_module
+
+    monkeypatch.setattr(
+        chat_service_module.draft_recorder,
+        "record_draft",
+        AsyncMock(return_value="draft-abc-123"),
+    )
+    request = ChatMessageRequest(message="Bana taslak yaz")
+
+    mock_planning_graph.ainvoke.return_value = {
+        "final_output": {
+            "status": "COMPLETED",
+            "draft": {"draft": "Bu bir resmi taslaktır."},
+        }
+    }
+
+    response = await chat_service.handle_message(request)
+
+    draft_details = response.details.get("draft") or {}
+    assert draft_details.get("id") == "draft-abc-123"
+
+
+@pytest.mark.asyncio
+async def test_the_streamed_final_result_event_also_carries_the_draft_id(
+    chat_service, mock_planning_graph, monkeypatch
+):
+    """Same bug, the other call site: `_enqueue_terminal_event` used to push
+    `final_result` onto the SSE queue *before* recording the draft, so this
+    (the path the actual chat UI streams from) could never carry the id
+    either -- by the time recording finished, the client already had the
+    response. Recording now happens first."""
+    import asyncio
+
+    from app.domains.chat import chat_service as chat_service_module
+
+    monkeypatch.setattr(
+        chat_service_module.draft_recorder,
+        "record_draft",
+        AsyncMock(return_value="draft-xyz-789"),
+    )
+    queue: asyncio.Queue = asyncio.Queue()
+    state = {
+        "final_output": {
+            "status": "COMPLETED",
+            "draft": {"draft": "Bu bir resmi taslaktır."},
+        }
+    }
+    config = {"configurable": {}}
+
+    await chat_service._enqueue_terminal_event(queue, state, config, "thread-1")
+
+    events = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    final_result = next(event for event in events if event.get("event") == "final_result")
+    assert final_result["details"]["draft"]["id"] == "draft-xyz-789"
+
+
+@pytest.mark.asyncio
 async def test_chat_service_reports_interrupt_without_a_checkpointer_configured(
     chat_service, mock_planning_graph
 ):
