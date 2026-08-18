@@ -171,7 +171,10 @@ def evaluate_response(
         )
 
         if pii_findings or semantic_leak:
-            cleared = requester_clearance is not None and requester_clearance >= sensitivity.level
+            cleared = (
+                requester_clearance is not None
+                and requester_clearance >= sensitivity.effective_level
+            )
             # Hard block requires BOTH a deterministic finding (a real,
             # checksum/pattern-matched PII span, never the judge alone) AND
             # the source document's own confidentiality marking
@@ -186,7 +189,7 @@ def evaluate_response(
                     "%s-marked source with insufficient/unknown requester clearance.",
                     len(pii_findings),
                     rule_ids,
-                    sensitivity.level.value,
+                    sensitivity.effective_level.value,
                 )
                 kinds = sorted({finding.kind for finding in pii_findings})
                 block_reason = f"yetkisiz kişisel veri sızıntısı tespit edildi ({', '.join(kinds)})"

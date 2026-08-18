@@ -105,6 +105,15 @@ def test_the_two_judge_rules_carry_zero_penalty_but_still_force_approval():
         assert outcome.forces_approval is True, rule_id
 
 
+def test_sirket_kurali_ihlali_carries_zero_penalty_but_still_forces_approval():
+    """Same zero-penalty-by-design reasoning as the judge rules (#214): a
+    company rule violation gates approval and drives the repair loop
+    through its own JudgeFinding entries, it never moves the score."""
+    outcome = score_findings([RuleFinding(rule_id="sirket_kurali_ihlali")])
+    assert outcome.score == 100.0
+    assert outcome.forces_approval is True
+
+
 def test_applied_rules_aggregates_occurrences_of_the_same_rule_into_one_row():
     outcome = score_findings(
         [RuleFinding(rule_id="dayanaksiz_iddia", detail=f"claim {i}") for i in range(3)]
@@ -182,6 +191,6 @@ def test_every_rule_id_referenced_by_this_test_module_exists_in_the_table():
         "eksik_imza_blogu", "dayanaksiz_iddia", "ornek_sizintisi",
         "gelen_sayi_sizintisi", "doldurulmamis_yer_tutucu", "tur_tahmini",
         "mevzuat_baglami_yok", "pii_bulgusu", "icerik_kaybi",
-        "yargic_kritik_bulgu", "talebi_karsilamiyor",
+        "yargic_kritik_bulgu", "talebi_karsilamiyor", "sirket_kurali_ihlali",
     }
     assert set(RULES.keys()) == expected

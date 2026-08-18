@@ -369,13 +369,19 @@ async def get_draft_graph() -> Any:
     """
     global _draft_graph
     if _draft_graph is None:
-        from app.domains.companies.provider import get_company_adapter
+        from app.domains.companies.provider import (
+            get_company_adapter,
+            get_company_profile,
+            get_company_rules,
+        )
 
         _draft_graph = create_draft_graph(
             llm_client=get_llm_client(),
             fast_llm_client=get_fast_llm_client(),
             example_retriever=await get_example_retriever(),
             adapter_provider=get_company_adapter,
+            profile_provider=get_company_profile,
+            rules_provider=get_company_rules,
             document_qa_retriever=await get_document_qa_retriever(),
         )
     return _draft_graph
@@ -477,7 +483,11 @@ async def get_planning_graph(
     """
     global _planning_graph
     if _planning_graph is None:
-        from app.domains.companies.provider import get_company_adapter
+        from app.domains.companies.provider import (
+            get_company_adapter,
+            get_company_profile,
+            get_company_rules,
+        )
         from app.domains.transfers.provider import build_transfer_graph_provider
         from app.infrastructure.checkpointing import get_checkpointer
 
@@ -493,6 +503,8 @@ async def get_planning_graph(
             checkpointer=get_checkpointer(),
             mevzuat_retriever=mevzuat_retriever,
             adapter_provider=get_company_adapter,
+            profile_provider=get_company_profile,
+            rules_provider=get_company_rules,
             # Faz 4 (#201) -- always built and injected, gated where the
             # propose_transfer tool is actually offered instead
             # (settings.AI_TRANSFER_ENABLED; see planning_graph._run_assist).

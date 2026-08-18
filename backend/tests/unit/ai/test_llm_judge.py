@@ -67,6 +67,25 @@ async def test_judge_draft_returns_the_verdict_on_success(fake_fast_llm):
 
 
 @pytest.mark.asyncio
+async def test_judge_draft_includes_the_company_rules_block_in_the_prompt(fake_fast_llm):
+    agent = JudgeAgent(fake_fast_llm)
+    captured_prompts: list[str] = []
+
+    async def fake_run_structured(**kwargs):
+        captured_prompts.append(kwargs["messages"])
+        return _verdict()
+
+    agent.run_structured = fake_run_structured
+
+    await judge_draft(
+        agent, draft="Sayın Makam, arz ederim.", brief="brief", correspondence_type="cover_letter",
+        instructions="", company_rules_block="[K1] Kapanışta 'Arz ederim' kullan.",
+    )
+
+    assert "[K1] Kapanışta 'Arz ederim' kullan." in captured_prompts[0]
+
+
+@pytest.mark.asyncio
 async def test_judge_draft_degrades_to_none_on_timeout(fake_fast_llm):
     agent = JudgeAgent(fake_fast_llm)
 
@@ -310,3 +329,43 @@ def test_clean_draft_and_verdict_requires_neither_revision_nor_approval():
 
     assert combined.requires_revision is False
     assert combined.requires_human_approval is False
+
+
+# ==========================================
+# Company rules (#214)
+# ==========================================
+def test_company_rule_violation_becomes_a_revisable_repair_item():
+    """A 'kurum_kurali' judge finding is exactly the kind of targeted,
+    textual defect the existing verify -> revise repair loop already
+    handles -- no separate mechanism needed, see llm_judge.py's own
+    REVISABLE_JUDGE_KINDS docstring."""
+    verdict = _verdict(
+        score=90.0,
+        company_rules_ok=False,
+        violated_rule_ids=["K2"],
+        findings=[
+            JudgeFinding(
+                kind="kurum_kurali", severity="major",
+                detail="Kapanış 'Rica ederim' yerine 'Arz ederim' olmalıydı (K2).",
+                suggested_fix="Kapanışı 'Arz ederim' yap.",
+            )
+        ],
+    )
+    combined = merge_verdicts(_report(confidence_score=90.0), verdict)
+
+    assert combined.requires_revision is True
+    assert any(item.kind == "judge:kurum_kurali" for item in combined.repair_items)
+    assert any(rule.rule_id == "sirket_kurali_ihlali" for rule in combined.applied_rules)
+    assert all(
+        rule.rule_id != "sirket_kurali_ihlali" or rule.penalty_applied == 0.0
+        for rule in combined.applied_rules
+    )
+
+
+def test_company_rules_ok_true_by_default_when_no_rules_were_supplied():
+    """A judge asked to grade against no rules at all must not spuriously
+    flag a violation -- judge.md's own criterion 5 skips itself in that
+    case, and the verdict schema defaults company_rules_ok=True."""
+    combined = merge_verdicts(_report(), _verdict())
+
+    assert not any(rule.rule_id == "sirket_kurali_ihlali" for rule in combined.applied_rules)

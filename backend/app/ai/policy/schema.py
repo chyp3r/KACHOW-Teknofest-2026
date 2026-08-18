@@ -306,6 +306,18 @@ class GuardrailPolicy:
             clearance_for`` reads that per-user field for an EMPLOYEE
             rather than this map entry, since two employees can
             legitimately need different access.
+        default_sensitivity_level: The level a document with no
+            confidentiality marking at all (``gizlilik_derecesi`` extracted
+            as ``None``, so ``SensitivityLevel.UNMARKED``) is treated as for
+            every access-control and retrieval-filter decision. Only ever
+            *fills in* an absent grade -- it never lowers a grade the
+            document actually carries, and ``UNMARKED`` itself is never
+            overwritten as the raw extraction result (see
+            ``app.ai.guardrails.sensitivity.SensitivityAssessment.level``
+            vs. its ``effective_level``): the distinction between "never
+            stated a grade" and "positively marked unclassified" stays in
+            the audit trail even though every consumer downstream of
+            ``effective_level`` sees a real grade instead of "unmarked".
     """
 
     sensitivity_block_levels: tuple[SensitivityLevel, ...] = (
@@ -316,6 +328,7 @@ class GuardrailPolicy:
     pii_confidence_floor: float = 0.6
     judge_echo_overlap_threshold: float = 0.40
     judge_promotion_confidence: float = 0.75
+    default_sensitivity_level: SensitivityLevel = SensitivityLevel.TASNIF_DISI
     role_clearance_map: Mapping[UserRole, SensitivityLevel] = field(
         default_factory=lambda: MappingProxyType(
             {

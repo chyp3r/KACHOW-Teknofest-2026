@@ -249,7 +249,7 @@ class DocumentService:
             storage_path,
             extracted.text,
             extracted.pages,
-            sensitivity_level=response.guardrail.sensitivity_level,
+            sensitivity_level=response.guardrail.effective_sensitivity_level,
         )
         await self._record_sensitivity_assessment(storage_path, owner_id, company_id, response)
 
@@ -604,8 +604,16 @@ class DocumentService:
             )
         except ValueError:
             sensitivity_level = SensitivityLevel.UNMARKED
+        try:
+            effective_sensitivity_level = SensitivityLevel(
+                raw_assessment.get("effective_level", sensitivity_level.value)
+            )
+        except ValueError:
+            effective_sensitivity_level = sensitivity_level
         guardrail = GuardrailAssessmentSchema(
             sensitivity_level=sensitivity_level,
+            effective_sensitivity_level=effective_sensitivity_level,
+            sensitivity_is_defaulted=bool(raw_assessment.get("is_defaulted", False)),
             pii_findings=[
                 PiiFindingSchema(kind=item.get("kind", ""), preview=item.get("preview", ""))
                 for item in raw_assessment.get("pii_findings") or []
@@ -706,7 +714,7 @@ class DocumentService:
                     document_type_label=response.document_type_label,
                     compliance_status=response.compliance_status.value,
                     summary=response.summary,
-                    sensitivity_level=response.guardrail.sensitivity_level.value,
+                    sensitivity_level=response.guardrail.effective_sensitivity_level.value,
                     pii_flagged=bool(response.guardrail.pii_findings),
                 )
             )
@@ -1094,6 +1102,8 @@ class DocumentService:
         )
         analysis.guardrail = GuardrailAssessmentSchema(
             sensitivity_level=assessment.level,
+            effective_sensitivity_level=assessment.effective_level,
+            sensitivity_is_defaulted=assessment.is_defaulted,
             pii_findings=[
                 PiiFindingSchema(kind=finding.kind, preview=finding.preview)
                 for finding in assessment.pii_findings
@@ -1142,7 +1152,7 @@ class DocumentService:
             storage_path,
             extracted_text,
             scrubbed_pages,
-            sensitivity_level=analysis.guardrail.sensitivity_level,
+            sensitivity_level=analysis.guardrail.effective_sensitivity_level,
         )
 
     async def reextract_document_text(

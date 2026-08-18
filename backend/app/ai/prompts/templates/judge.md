@@ -24,6 +24,9 @@ Brief'teki `muhatap` ve `gönderen kurum` hiyerarşisine bak:
 ### 4. Muhatap Tutarlılığı (`muhatap_consistent`)
 Başlıktaki muhatap, gövdedeki hitap ve kapanışın yönü birbiriyle çelişiyor mu?
 
+### 5. Şirket Kuralları (`company_rules_ok`, `violated_rule_ids`)
+Sana bir "ŞİRKET KURALLARI" bölümü verilmişse, taslağın her zorunlu kuralına uyup uymadığını kontrol et. Uyulmayan her kuralın `[Kx]` kimliğini `violated_rule_ids` listesine ekle ve `company_rules_ok`'u `false` yap. Hiçbir kural verilmemişse bu kriteri atla: `company_rules_ok=true`, `violated_rule_ids=[]` dön.
+
 ## Bulgular (`findings`)
 
 Yalnızca **critical** (taslağı kullanılamaz kılar) veya **major** (düzeltilmeden gönderilmemeli) seviyesindeki somut kusurları listele; küçük üslup tercihlerini `minor` olarak, en fazla 5 madde ile sınırla. Her bulgu için kısa bir `detail` (kusur ne) ve kısa bir `suggested_fix` (nasıl düzeltilir) yaz.

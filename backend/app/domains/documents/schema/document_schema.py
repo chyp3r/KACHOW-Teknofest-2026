@@ -30,7 +30,27 @@ class GuardrailAssessmentSchema(BaseModel):
 
     sensitivity_level: SensitivityLevel = Field(
         default=SensitivityLevel.UNMARKED,
-        description="Belgeden çıkarılan veya varsayılan gizlilik derecesi.",
+        description=(
+            "Belgeden çıkarılan HAM gizlilik derecesi -- belgede hiç damga "
+            "yoksa 'unmarked'. Fiilen uygulanan derece için "
+            "effective_sensitivity_level'a bak."
+        ),
+    )
+    effective_sensitivity_level: SensitivityLevel = Field(
+        default=SensitivityLevel.UNMARKED,
+        description=(
+            "Erişim denetiminde fiilen kullanılan derece -- sensitivity_level "
+            "'unmarked' ise politika gereği en düşük dereceye otomatik "
+            "atanır (sensitivity_is_defaulted=true olur), aksi halde "
+            "sensitivity_level ile aynıdır."
+        ),
+    )
+    sensitivity_is_defaulted: bool = Field(
+        default=False,
+        description=(
+            "effective_sensitivity_level, belgede hiç gizlilik damgası "
+            "olmadığı için varsayılan olarak atandıysa true."
+        ),
     )
     pii_findings: List[PiiFindingSchema] = Field(
         default_factory=list, description="Tespit edilen kişisel veri bulguları."

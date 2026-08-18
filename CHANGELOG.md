@@ -2,6 +2,46 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.22.0] - 2026-08-18
+### Eklendi
+- **Şirkete özel ajan kimliği**: Şirket adminleri artık asistanın kendini
+  tanıtacağı adı, şirketin tam/kısa adını, taslakların kullanacağı T.C. kurum
+  antetini ve varsayılan imza unvanını `PUT /companies/{id}/profile`
+  üzerinden tanımlayabiliyor. Kimlik, asistan sohbetine ve taslak brief'ine
+  (yeni "KURUM KİMLİĞİ" bölümü) yansıyor; doğrulayıcı artık şirketin kendi
+  adını "kaynakta doğrulanamayan iddia" olarak işaretlemiyor.
+- **Şirkete özel zorunlu taslak kuralları**: Adminler `PUT
+  /companies/{id}/rules` ile madde madde zorunlu/önerilen yazım kuralı
+  girebiliyor. Kurallar yazar/revizyon ajanlarının promptuna eklenmekle
+  kalmıyor, kalite yargıcı taslağın her kurala uyup uymadığını da
+  değerlendiriyor; bir ihlal mevcut doğrulama-revizyon döngüsüne numaralı
+  bir kusur olarak düşüp otomatik düzeltiliyor. Kurallar, şirketin öğrenilen
+  üslup adaptöründen ayrı saklanıyor, böylece bir eğitim koşusu admin'in
+  elle girdiği kuralları asla ezemiyor.
+- **Damgasız evraklarda varsayılan gizlilik derecesi**: Bir evrakta hiçbir
+  gizlilik ibaresi bulunamadığında sistem artık bunu "bulunamadı" olarak
+  bırakmak yerine politika gereği en düşük dereceye (Tasnif Dışı) otomatik
+  atıyor. Belgenin hiç damgalanmamış olduğu gerçeği (ham çıkarım) denetim
+  izinde ayrıca korunuyor; erişim denetimi, evrak arama filtresi ve arayüz
+  etiketi artık tutarlı biçimde fiilen uygulanan dereceyi gösteriyor.
+
+### Değiştirildi
+- Yeni analiz edilen ve OCR ile yeniden çıkarılan evraklarda kaydedilen
+  `sensitivity_level`, artık ham çıkarım yerine (varsayılan atamayı da
+  içeren) fiilen uygulanan dereceyi taşıyor; mevcut kayıtlar bir migration
+  ile geriye dönük dolduruldu.
+
+### Test
+- Şirket kimliği ve kural seti için render/round-trip birim testleri; yazar
+  ve revizyon ajanı promptlarının kural/kimlik bloklarını doğru sırada
+  taşıdığını doğrulayan uçtan uca testler; kalite yargıcının şirket kuralı
+  ihlalini otomatik onarım döngüsüne düşürdüğünü doğrulayan testler;
+  varsayılan gizlilik derecesi için `assess`/`assessment_from_analysis`
+  regresyon testleri. Migration, gerçek bir Postgres'e karşı yükseltme/geri
+  alma/yükseltme döngüsüyle doğrulandı.
+
+Refs: [#214](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/214).
+
 ## [3.21.0] - 2026-08-18
 ### Eklendi
 - **Tüm Markdown veri kümesi için semantik anonimleştirme**: Aktif, referans ve

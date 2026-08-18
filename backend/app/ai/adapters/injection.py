@@ -11,6 +11,7 @@ convention.
 """
 
 from app.ai.adapters.company_adapter import CompanyAdapter
+from app.ai.adapters.company_rules import CompanyRuleSet
 
 #: Prefixed onto the whole block so a reader (human or model) sees at a
 #: glance which company's preferences these are, without needing to cross-
@@ -61,6 +62,41 @@ def format_adapter_block(adapter: CompanyAdapter) -> str:
     body = "\n\n".join(sections)
     return (
         "\n\n### BU ŞİRKETE ÖZGÜ YAZIM TERCİHLERİ:\n"
+        f"{body}\n\n"
+        f"{_BOUNDARY_NOTE}"
+    )
+
+
+def format_rules_block(ruleset: CompanyRuleSet) -> str:
+    """Render a company's mandatory drafting rules as a prompt section.
+
+    Args:
+        ruleset: The company's current rule set (see
+            ``app.domains.companies.provider.get_company_rules``).
+
+    Returns:
+        "" when the rule set is empty -- same convention as
+        ``format_adapter_block``: a header with nothing under it reads as a
+        missing-context signal, not as "this company has no rules configured
+        yet".
+    """
+    if ruleset.is_empty:
+        return ""
+
+    mandatory = [rule for rule in ruleset.enabled_rules if rule.severity == "zorunlu"]
+    recommended = [rule for rule in ruleset.enabled_rules if rule.severity != "zorunlu"]
+
+    sections: list[str] = []
+    if mandatory:
+        lines = "\n".join(f"[{rule.id}] {rule.text}" for rule in mandatory)
+        sections.append(f"**Zorunlu:**\n{lines}")
+    if recommended:
+        lines = "\n".join(f"[{rule.id}] {rule.text}" for rule in recommended)
+        sections.append(f"**Önerilen (mümkünse uy):**\n{lines}")
+
+    body = "\n\n".join(sections)
+    return (
+        "\n\n### ŞİRKETE ÖZGÜ ZORUNLU KURALLAR (UYULMASI ZORUNLUDUR):\n"
         f"{body}\n\n"
         f"{_BOUNDARY_NOTE}"
     )

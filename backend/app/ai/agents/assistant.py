@@ -4,6 +4,8 @@ from typing import Any, AsyncIterator, Optional
 from langchain_core.runnables import RunnableConfig
 
 from app.ai.agents.base import BaseAgent
+from app.ai.identity.company_profile import CompanyProfile
+from app.ai.identity.injection import format_agent_identity
 from app.ai.llms.base import BaseLLMClient
 from app.ai.prompts.manager import PromptManager, get_prompt_manager
 from app.ai.tools.registry import ToolSpec, to_langchain_tool
@@ -59,6 +61,7 @@ class AssistantAgent(BaseAgent):
         history_summary: Optional[str] = None,
         document_context: Optional[str] = None,
         security_boundary: Optional[str] = None,
+        agent_identity: Optional[str] = None,
         tools: list[ToolSpec],
         config: Optional[RunnableConfig] = None,
         node: str = "assist",
@@ -82,6 +85,10 @@ class AssistantAgent(BaseAgent):
                 checks (``document_tools.py``'s deny-at-retrieval,
                 ``output_gate.py``) are what actually enforce the boundary;
                 this exists to catch the paraphrase case a regex can't see.
+            agent_identity: Rendered ``{{agent_identity}}`` text -- the
+                requesting company's own identity (see
+                ``app.ai.identity.injection.format_agent_identity``), or the
+                system default when no company profile is configured.
             tools: Tools bindable for this turn. Empty when nothing is
                 attached (no document, no legislation retriever) -- the loop
                 is then skipped entirely and this behaves like a plain chat.
@@ -107,6 +114,7 @@ class AssistantAgent(BaseAgent):
             or "(Bu turda yüklenmiş bir belge yok.)",
             "security_boundary": security_boundary
             or "Bu oturum için bilinen bir yetki kısıtlaması yok.",
+            "agent_identity": agent_identity or format_agent_identity(CompanyProfile.empty("")),
         }
         messages = self._prepare_messages(
             [*history, {"role": "user", "content": query}], context=context

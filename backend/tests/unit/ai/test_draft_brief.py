@@ -10,6 +10,7 @@ its own -- a response letter must carry its own institution's number
 document it is replying to.
 """
 
+from app.ai.identity.company_profile import CompanyProfile
 from app.ai.workflows.draft_graph import _build_brief
 
 CLASSIFICATION = {
@@ -112,3 +113,37 @@ def test_a_non_list_entities_value_degrades_to_the_placeholder():
     classification = {**CLASSIFICATION, "entities": None}
     brief = _build_brief(classification, context="", instructions="Cevap yazısı hazırla.")
     assert "(tespit edilmedi)" in brief
+
+
+# ==========================================
+# KURUM KİMLİĞİ -- company identity (#214)
+# ==========================================
+def test_no_profile_renders_no_identity_section():
+    brief = _build_brief(CLASSIFICATION, context="", instructions="Cevap yazısı hazırla.")
+    assert "KURUM KİMLİĞİ" not in brief
+
+
+def test_empty_profile_renders_no_identity_section():
+    brief = _build_brief(
+        CLASSIFICATION,
+        context="",
+        instructions="Cevap yazısı hazırla.",
+        profile=CompanyProfile.empty("company-1"),
+    )
+    assert "KURUM KİMLİĞİ" not in brief
+
+
+def test_configured_profile_renders_the_identity_section():
+    profile = CompanyProfile(
+        company_id="company-1",
+        display_name="Acme A.Ş.",
+        letterhead="T.C.\nACME A.Ş.",
+        default_signer_title="Daire Başkanı",
+    )
+    brief = _build_brief(
+        CLASSIFICATION, context="", instructions="Cevap yazısı hazırla.", profile=profile
+    )
+    assert "KURUM KİMLİĞİ" in brief
+    assert "Acme A.Ş." in brief
+    assert "Daire Başkanı" in brief
+    assert "Yazım Briefi" in brief.split("KURUM KİMLİĞİ")[1]

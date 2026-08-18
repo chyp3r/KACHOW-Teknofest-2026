@@ -21,6 +21,8 @@ from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.guardrails.llm_nuance import judge_output_leakage
 from app.ai.guardrails.output_gate import classify_reason_kind, evaluate_response
 from app.ai.guardrails.sensitivity import SensitivityAssessment, assessment_from_analysis
+from app.ai.identity.company_profile import CompanyProfile, ProfileProvider
+from app.ai.identity.injection import format_agent_identity
 from app.ai.session.focus import DraftVersion, SessionFocus, compute_focus_update, merge_focus
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
@@ -558,7 +560,11 @@ def _build_security_boundary_note(
     parts = [f"Bu oturumdaki istek sahibinin yetki seviyesi: {clearance_label}."]
 
     if sensitivity is not None:
-        document_label = _SENSITIVITY_LABELS.get(sensitivity.level, sensitivity.level.value)
+        document_label = _SENSITIVITY_LABELS.get(
+            sensitivity.effective_level, sensitivity.effective_level.value
+        )
+        if sensitivity.is_defaulted:
+            document_label += " (belgede belirtilmemiş, varsayılan)"
         parts.append(f"Bu turda ekli belgenin gizlilik derecesi: {document_label}.")
 
     return " ".join(parts)
@@ -576,6 +582,8 @@ def create_planning_graph(
     checkpointer: Any = None,
     mevzuat_retriever: Any = None,
     adapter_provider: Any = None,
+    profile_provider: Optional[ProfileProvider] = None,
+    rules_provider: Any = None,
     transfer_provider: Any = None,
 ):
     """Create and compile the master orchestration workflow.
@@ -607,6 +615,19 @@ def create_planning_graph(
             gets its own copy at construction time (see
             ``app.api.dependency.get_draft_graph``), not through here. None
             always skips adapter resolution.
+        profile_provider: Optional async callable resolving a company's
+            identity profile (see
+            ``app.domains.companies.provider.get_company_profile``) --
+            resolved once per assist turn and rendered into the assistant's
+            ``{{agent_identity}}`` placeholder (see
+            ``format_agent_identity``). None reproduces pre-feature
+            behaviour exactly (the system default identity, every turn).
+        rules_provider: Optional async callable resolving a company's
+            mandatory drafting rules (see
+            ``app.domains.companies.provider.get_company_rules``) --
+            forwarded to the revise sub-graph built below, same as
+            ``adapter_provider``; ``draft_graph`` gets its own copy at
+            construction time. None always skips rules resolution.
         checkpointer: Optional LangGraph checkpointer (see
             ``app.infrastructure.checkpointing``). Required for the
             ``human_gate`` node's ``interrupt()`` calls to actually pause and
@@ -653,12 +674,26 @@ def create_planning_graph(
     # vector.
     qa_sparse_encoder = SparseBM25Encoder()
 
+    async def _resolve_profile(company_id: Optional[str]) -> CompanyProfile:
+        """This company's identity profile, or an empty one when no
+        ``profile_provider`` was configured, no ``company_id`` is on this
+        turn's state, or resolution itself fails -- a profile is never
+        allowed to block or alter the assist turn. Mirrors
+        ``draft_graph._resolve_adapter`` exactly."""
+        if not company_id or profile_provider is None:
+            return CompanyProfile.empty(company_id or "")
+        try:
+            return await profile_provider(company_id)
+        except Exception:
+            logger.warning("Company profile resolution failed for %s", company_id, exc_info=True)
+            return CompanyProfile.empty(company_id)
+
     # Built once per graph, like draft_graph/routing_graph -- run_revise
     # (both the plain "revise" step and the human approval gate's own
     # "revizyon iste" loop, see gate_revise_node) invokes this compiled
     # sub-graph rather than building a fresh one per call.
     revise_graph = create_revise_graph(
-        llm_client, fast_llm_client, mevzuat_retriever, adapter_provider
+        llm_client, fast_llm_client, mevzuat_retriever, adapter_provider, rules_provider
     )
 
     # Layer 2 of the intent ladder. Built once per graph, and only when there is
@@ -1045,6 +1080,8 @@ def create_planning_graph(
                 ),
             ]
 
+        profile = await _resolve_profile(state.get("company_id"))
+
         chunks: list[str] = []
         try:
             async with asyncio.timeout(
@@ -1058,6 +1095,7 @@ def create_planning_graph(
                     security_boundary=_build_security_boundary_note(
                         sensitivity, requester_clearance
                     ),
+                    agent_identity=format_agent_identity(profile),
                     tools=tools,
                     config=config,
                     node="assist",
