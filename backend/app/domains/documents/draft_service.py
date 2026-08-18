@@ -113,6 +113,7 @@ class DraftService:
                     {
                         "source_document": source_document,
                         "classification": classification_dict,
+                        "document_id": request.storage_path,
                         "context": context_str,
                         "instructions": request.instructions,
                         "correspondence_type": (

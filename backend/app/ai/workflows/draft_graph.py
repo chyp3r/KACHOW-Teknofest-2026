@@ -17,6 +17,7 @@ from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
 from app.ai.llms.base import BaseLLMClient
 from app.ai.retrieval.examples import ExampleRetriever
+from app.ai.retrieval.hybrid import HybridRetriever
 from app.ai.revision.elision import detect_content_loss
 from app.ai.verification import (
     DraftJudgeVerdict,
@@ -154,6 +155,24 @@ class DraftState(TypedDict, total=False):
     #: ``ornek_sizintisi`` leak check ``style_examples`` already goes
     #: through, without re-resolving it a second time.
     company_adapter: dict[str, Any]
+    #: The attached document's storage path -- the same id
+    #: ``app.ai.tools.document_tools``'s ``search_document`` tool scopes its
+    #: own query to, via the ``document_qa`` Qdrant collection each chunk is
+    #: tagged with at upload time (see ``DocumentService._index_for_qa``).
+    #: Absent/empty behaves exactly like no document attached: retrieval is
+    #: skipped, never an error.
+    document_id: str
+    #: Verbatim excerpts retrieved from the attached document for this draft
+    #: (see ``retrieve_source_chunks_node``), each a plain dict with "text"
+    #: and "metadata". The writer already sees the document's short
+    #: AI-generated summary via ``_build_brief``'s section 2 -- these are the
+    #: source's own words instead, so a draft can quote a specific figure,
+    #: clause or name the summary compressed away. Set once before the first
+    #: writer pass and left untouched by revise_node, same lifecycle as
+    #: ``style_examples``. Empty (never absent) when retrieval is disabled,
+    #: no document is attached, finds nothing, or fails -- grounding quality,
+    #: never a dependency the draft turn can fail on.
+    source_chunks: list[dict[str, Any]]
 
 
 def _format_classification(classification: dict[str, Any]) -> str:
@@ -345,6 +364,42 @@ def _format_style_examples(style_examples: list[dict[str, Any]] | None) -> str:
     )
 
 
+def _format_source_chunks_section(chunks: list[dict[str, Any]]) -> str:
+    """Render retrieved document excerpts as a brief section, appended to
+    the already-built ``_build_brief`` text by ``retrieve_source_chunks_node``.
+
+    Not folded into ``_build_brief`` itself: that function runs inside
+    ``validate_input_node``, before any retrieval happens, so it has no
+    chunks yet to render. Numbered "9." (one past ``_build_brief``'s own
+    0-8) rather than inserted positionally among them, for the same reason.
+
+    Returns "" (not an empty section) when there are no chunks -- same
+    "absent signal, not an empty one" reasoning as ``_format_style_examples``.
+    """
+    if not chunks:
+        return ""
+
+    blocks = []
+    for index, chunk in enumerate(chunks, start=1):
+        text = (chunk.get("text") or "").strip()
+        if not text:
+            continue
+        page = (chunk.get("metadata") or {}).get("page")
+        page_note = f" (sayfa {page})" if page else ""
+        blocks.append(f"[ALINTI {index}]{page_note}\n{text}")
+
+    if not blocks:
+        return ""
+
+    return (
+        "\n9. BELGEDEN İLGİLİ ALINTILAR (birebir alıntı -- özet değil; "
+        "kaynak evrakın kendi metninden doğrudan aktarılmıştır. Bölüm 2'deki "
+        "özetle çelişmez, onu somut ayrıntılarla tamamlar):\n"
+        + "\n\n".join(blocks)
+        + "\n"
+    )
+
+
 def _resolve_free_text_client(
     preset: ReasoningLevelPreset,
     llm_client: BaseLLMClient,
@@ -367,14 +422,15 @@ def create_draft_graph(
     fast_llm_client: BaseLLMClient | None = None,
     example_retriever: ExampleRetriever | None = None,
     adapter_provider: AdapterProvider | None = None,
+    document_qa_retriever: HybridRetriever | None = None,
 ):
     """Create and compile the drafting workflow.
 
     Flow::
 
-        START -> validate_input -+-> retrieve_examples -> writer -+-> verify -+-> revise -> writer
-                                  \\-> END                          \\-> END     |-> END (needs_input)
-                                                                                 \\-> END
+        START -> validate_input -+-> retrieve_examples -> retrieve_source_chunks -> writer -+-> verify -+-> revise -> writer
+                                  \\-> END                                                     \\-> END     |-> END (needs_input)
+                                                                                                            \\-> END
 
     The former single-pass "writer -> LLM editor" pipeline had no path back to
     the writer, so a low-scoring draft was only ever flagged, never repaired.
@@ -402,6 +458,12 @@ def create_draft_graph(
             ``create_routing_graph``, so this module never imports
             ``app.domains`` directly. None reproduces pre-feature behaviour
             exactly (no adapter block, ever).
+        document_qa_retriever: Optional retriever over the attached
+            document's own chunks (see ``retrieve_source_chunks_node``),
+            targeting the same ``document_qa`` Qdrant collection
+            ``app.ai.tools.document_tools``'s ``search_document`` assistant
+            tool already queries. None reproduces pre-feature behaviour
+            exactly -- the writer sees only the document summary, as before.
 
     Returns:
         The compiled LangGraph workflow.
@@ -557,6 +619,114 @@ def create_draft_graph(
             {"style_examples": style_examples},
         )
         return {"style_examples": style_examples}
+
+    async def retrieve_source_chunks_node(
+        state: DraftState, config: RunnableConfig
+    ) -> dict[str, Any]:
+        """Fetch verbatim excerpts from the attached document for the writer.
+
+        Same degrade-on-failure shape as ``retrieve_examples_node`` right
+        above it (inline ``asyncio.timeout`` rather than the ``@node_timeout``
+        decorator, broad ``except Exception``) -- for the same reason: an
+        optional grounding boost must never be able to fail the whole draft.
+        Runs after ``retrieve_examples`` rather than the writer's own quality
+        boost, this is the writer's primary defense against fabricating
+        details the summary alone doesn't carry, gated by its own
+        ``DraftPolicy.source_chunks_enabled`` flag.
+        """
+        await emit_node_start(
+            config,
+            "source_chunks",
+            "Kaynak Alıntılar",
+            "İlgili belge bölümleri aranıyor...",
+        )
+
+        policy = get_policy().draft
+        document_id = state.get("document_id")
+        if document_qa_retriever is None or not policy.source_chunks_enabled or not document_id:
+            await emit_node_skipped(
+                config,
+                "source_chunks",
+                "Kaynak Alıntılar",
+                "Belge alıntı getirimi devre dışı veya belge yüklü değil.",
+            )
+            return {"source_chunks": []}
+
+        classification = state.get("classification") or {}
+        fields = _coerce_fields(classification)
+        query = " ".join(
+            part
+            for part in (
+                state.get("user_request") or "",
+                fields.get("konu") or "",
+                classification.get("summary") or "",
+            )
+            if part
+        ).strip()
+        if not query:
+            await emit_node_skipped(
+                config, "source_chunks", "Kaynak Alıntılar", "Sorgulanacak metin yok."
+            )
+            return {"source_chunks": []}
+
+        preset = get_reasoning_level_preset(state.get("reasoning_level"))
+        budget = node_budget("retrieve_source_chunks", preset.level)
+        try:
+            async with asyncio.timeout(budget):
+                documents = await document_qa_retriever.retrieve(
+                    query,
+                    limit=policy.source_chunk_count,
+                    filter_dict={"storage_path": document_id},
+                )
+        except Exception:
+            # HybridRetriever.retrieve never raises on its own (it degrades
+            # to []) -- the only thing this can catch is the asyncio.timeout
+            # above firing. Caught broadly anyway for the same reason
+            # retrieve_examples_node is: a future change to the retriever
+            # must never be able to turn an optional lookup into a failed
+            # draft.
+            logger.exception(
+                "Source chunk retrieval failed; continuing with the summary alone."
+            )
+            await emit_node_error(
+                config,
+                "source_chunks",
+                "Kaynak Alıntılar",
+                "Belge alıntı getirimi başarısız; taslak yalnızca özetle devam ediyor.",
+                fatal=False,
+            )
+            return {"source_chunks": []}
+
+        trimmed = []
+        used = 0
+        for document in documents:
+            content = getattr(document, "page_content", "") or ""
+            if used + len(content) > policy.source_chunk_char_budget and trimmed:
+                break
+            trimmed.append(document)
+            used += len(content)
+
+        source_chunks = [
+            {
+                "text": getattr(document, "page_content", ""),
+                "metadata": dict(getattr(document, "metadata", {}) or {}),
+            }
+            for document in trimmed
+        ]
+        chunks_section = _format_source_chunks_section(source_chunks)
+        await emit_node_end(
+            config,
+            "source_chunks",
+            "Kaynak Alıntılar",
+            f"{len(source_chunks)} belge alıntısı bulundu."
+            if source_chunks
+            else "İlgili belge alıntısı bulunamadı.",
+            {"source_chunks": source_chunks},
+        )
+        return {
+            "source_chunks": source_chunks,
+            "brief": state.get("brief", "") + chunks_section,
+        }
 
     async def _resolve_adapter(state: DraftState) -> CompanyAdapter:
         """This company's runtime style adapter (Faz C2), or an empty one
@@ -1039,6 +1209,9 @@ def create_draft_graph(
     builder = StateGraph(DraftState)
     builder.add_node("validate_input", validate_input_node)
     builder.add_node("retrieve_examples", retrieve_examples_node, retry_policy=IO_RETRY)
+    builder.add_node(
+        "retrieve_source_chunks", retrieve_source_chunks_node, retry_policy=IO_RETRY
+    )
     builder.add_node("writer", writer_node)
     builder.add_node("verify", verify_node)
     builder.add_node("revise", revise_node)
@@ -1049,7 +1222,8 @@ def create_draft_graph(
         route_after_validation,
         {"retrieve_examples": "retrieve_examples", "end": END},
     )
-    builder.add_edge("retrieve_examples", "writer")
+    builder.add_edge("retrieve_examples", "retrieve_source_chunks")
+    builder.add_edge("retrieve_source_chunks", "writer")
     builder.add_conditional_edges(
         "writer", route_after_writer, {"verify": "verify", "end": END}
     )

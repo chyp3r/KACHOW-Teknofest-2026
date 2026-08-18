@@ -866,6 +866,7 @@ def create_planning_graph(
             {
                 "source_document": source_document,
                 "classification": classification,
+                "document_id": state.get("document_id") or "",
                 # The user's own message, never the boilerplate below --
                 # see draft_graph.validate_input_node / resolve_correspondence_type.
                 "user_request": state["input_text"],

@@ -202,6 +202,37 @@ async def get_example_retriever() -> ExampleRetriever:
     return _example_retriever
 
 
+#: Same collection name app.ai.tools.document_tools.QA_COLLECTION_NAME and
+#: app.domains.documents.service.DocumentService._index_for_qa use --
+#: duplicated as a literal, not imported, to keep this module's dependency
+#: surface limited to app.ai.* the same way the rest of this file already is.
+_DOCUMENT_QA_COLLECTION_NAME = "document_qa"
+
+_document_qa_retriever: Optional[HybridRetriever] = None
+
+
+async def get_document_qa_retriever() -> HybridRetriever:
+    """Build the draft workflow's document-grounding retriever once per process.
+
+    Same idiom as ``get_example_retriever`` above, targeting the
+    ``document_qa`` collection populated per-document at upload time (see
+    ``DocumentService._index_for_qa``) instead of a fixed offline corpus --
+    the assistant's own ``search_document`` tool already queries this same
+    collection (``app.ai.tools.document_tools``). No sparse vocab file exists
+    for it (there is no single fitted corpus to fit one against), so sparse
+    query weights default to 1.0, the same degrade ``get_mevzuat_retriever``
+    documents for its own optional vocab path.
+    """
+    global _document_qa_retriever
+    if _document_qa_retriever is None:
+        _document_qa_retriever = HybridRetriever(
+            vector_store=get_vector_store(),
+            embeddings_client=get_embeddings_client(),
+            collection_name=_DOCUMENT_QA_COLLECTION_NAME,
+        )
+    return _document_qa_retriever
+
+
 async def get_document_analysis_mevzuat_retriever(
     local: HybridRetriever = Depends(get_mevzuat_retriever),
 ) -> Any:
@@ -337,6 +368,7 @@ async def get_draft_graph() -> Any:
             fast_llm_client=get_fast_llm_client(),
             example_retriever=await get_example_retriever(),
             adapter_provider=get_company_adapter,
+            document_qa_retriever=await get_document_qa_retriever(),
         )
     return _draft_graph
 
