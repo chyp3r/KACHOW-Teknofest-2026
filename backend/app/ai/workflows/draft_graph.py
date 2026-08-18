@@ -214,6 +214,28 @@ def _coerce_fields(classification: dict[str, Any]) -> dict[str, Any]:
     return fields if isinstance(fields, dict) else {}
 
 
+def _format_entities(entities: Any) -> str:
+    """Render the document analysis's flat NER-style entity list for the brief.
+
+    ``EvrakField.entities`` (person/institution/date/amount/product names,
+    see ``app.ai.compliance.evrak_field``) was already being extracted at
+    document-analysis time but never once read by this module -- a request
+    like "bu CV'de çalıştığı kurumları belirt" had no way to see the
+    employer names the analysis step already found, so the writer left a
+    ``[BİLGİ EKSİK: ...]`` placeholder and the human gate asked the user a
+    question the document itself already answered. Comma-joined, not
+    numbered or typed (the source list carries no per-entity category), so
+    the writer must still cross-check each name against the rest of the
+    brief/RAG excerpts before using it -- this section is a hint of what to
+    look for, not itself a substitute for the "yalnızca brief'te bulunan
+    bilgileri kullan" grounding rule.
+    """
+    if not isinstance(entities, (list, tuple)):
+        return "(tespit edilmedi)"
+    names = [str(entity).strip() for entity in entities if str(entity).strip()]
+    return ", ".join(names) if names else "(tespit edilmedi)"
+
+
 def _build_brief(
     classification: dict[str, Any],
     context: str,
@@ -275,6 +297,10 @@ def _build_brief(
         f"   - Gönderen Kurum: {fields.get('gonderen_kurum') or '(evrakta belirtilmemiş)'}\n"
         f"   - İmza Sahibi: {fields.get('imza_sahibi') or '(evrakta belirtilmemiş)'}"
         f" ({fields.get('imza_unvani') or '(unvan belirtilmemiş)'})\n"
+        f"   - Belgede Geçen Diğer Önemli Varlıklar (kişi, kurum, tarih, tutar vb. -- "
+        f"örn. bir CV'deki çalışılan kurumlar; talimat bunlardan birine atıfta "
+        f"bulunuyorsa burada ara, kullanıcıya SORMA): "
+        f"{_format_entities(classification.get('entities'))}\n"
         f"5. Evrakta Tespit Edilen Eksik Alanlar: {missing_labels or 'yok'}\n"
         f'6. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
         f"{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"

@@ -26,6 +26,7 @@ import type { PersistedDraft } from "../types/drafts";
 import type { DocumentAnalysis, DocumentMetadata, ReasoningLevel } from "../types/documents";
 import { DraftTable } from "../features/drafts/DraftTable";
 import { UnitPicker } from "../features/drafts/UnitPicker";
+import { draftTitle } from "./draftTitle";
 
 const VERSION_PREVIEW_LIMIT = 420;
 
@@ -127,23 +128,8 @@ export function DraftsPage({
     window.setTimeout(() => setCopiedDraftId(null), 2000);
   };
 
-  const documentName = (documentId: string | null) => {
-    if (!documentId) return "Kaynak yok";
-    const document = documents.find((item) => item.storage_path === documentId);
-    return document?.file_name ?? documentId.split(/[\\/]/).pop() ?? documentId;
-  };
-
-  const correspondenceTypeLabel = (draft: PersistedDraft) => {
-    const knownType = creation.correspondenceTypes.find(
-      (item) => item.value === draft.correspondence_type,
-    );
-    if (knownType) return knownType.label;
-    if (!draft.correspondence_type) return "Resmî taslak";
-    return draft.correspondence_type.replace(/_/g, " ");
-  };
-
-  const draftTitle = (draft: PersistedDraft) =>
-    `${documentName(draft.document_id)} - ${correspondenceTypeLabel(draft)}`;
+  const draftTitleFor = (draft: PersistedDraft) =>
+    draftTitle(draft, documents, creation.correspondenceTypes);
 
   const expandedVersions = drafts.versions.length > 0
     ? sortVersionsNewestFirst(drafts.versions)
@@ -251,7 +237,7 @@ export function DraftsPage({
           <DraftTable
             drafts={drafts.drafts}
             activeDraftId={activeDraftId}
-            titleFor={draftTitle}
+            titleFor={draftTitleFor}
             onToggle={(draft, expanded) => {
               if (expanded) onCloseDraft?.();
               else onOpenDraft(draft.id);

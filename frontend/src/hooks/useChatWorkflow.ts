@@ -173,9 +173,21 @@ export function useChatWorkflow(
   }, []);
 
   useEffect(() => {
-    if (messagesQuery.data && !activeRequest.current) {
-      setMessages(messagesQuery.data.items.map(toChatMessage));
-    }
+    if (!messagesQuery.data || activeRequest.current) return;
+    // `refreshServerState` (called right after a turn's own final_result,
+    // see `handleEvent`) invalidates this query while `messagesQuery` is
+    // still `enabled: false` (gated on `!loading`, cleared in `send`'s
+    // `finally` at the same moment `activeRequest.current` clears) -- so
+    // the resulting refetch only actually fires once this effect's own
+    // guard has already opened, racing the message we just appended
+    // locally from the live SSE stream against a server-side history read
+    // that can still lag behind it. A read with *fewer* items than we
+    // already have is that stale race, not a genuine "history shrank"
+    // signal (chat history is append-only) -- session switches always
+    // start `messages` at `[]` first (see the effect above), so a real
+    // hydration is never mistaken for one of these.
+    const items = messagesQuery.data.items;
+    setMessages((previous) => (items.length >= previous.length ? items.map(toChatMessage) : previous));
   }, [messagesQuery.data]);
 
   // Rehydrates the workflow stepper's plan/order from the last persisted

@@ -2,6 +2,100 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.20.0] - 2026-08-18
+### Düzeltildi
+- **Birim önerisi taslak akışında "kayboluyordu"** -- `routing_graph` her
+  zaman bir birim öneriyor, ama chat içinde taslak üretildiği anda gösterilen
+  `DraftMetaStrip` bunu yalnızca statik bir metin olarak gösteriyordu;
+  interaktif `UnitPicker` yalnızca ayrı `/drafts` yönetim sayfasında vardı ve
+  oraya nasıl ulaşılacağı hiçbir yerde belli değildi. Kök neden: kalıcı
+  taslağın `id`'si chat yanıtının `details`'ine hiç akmıyordu --
+  `ChatService._maybe_record_draft` artık `draft_id`'yi döndürüyor ve hem
+  akış (SSE) hem doğrudan yanıt yolunda `final_result`/response
+  gönderilmeden ÖNCE `final_output["draft"]["id"]`'ye enjekte ediliyor.
+  `DraftMetaStrip` artık bu id varsa `UnitPicker`'ı doğrudan chat içinde,
+  "Önerilen birim" şeridinin yanında render ediyor -- birim seçimi
+  taslağın üretildiği yerde, ayrı bir sayfaya gitmeden yapılabiliyor.
+- **Taslak isimleri ayırt edici değildi** -- `/drafts` sayfasındaki başlık
+  yalnızca kaynak belge adı + yazışma türünden kuruluyordu; belgesiz ve aynı
+  türden birden fazla taslak (örn. birkaç ayrı "Bilgilendirme Metni") hepsi
+  aynı, ayırt edilemez "Kaynak yok - Bilgilendirme Metni" başlığıyla
+  listeleniyordu. Taslağın kendi içeriğindeki "Konu: ..." satırı (writer.md'nin
+  sabit yapısında her zaman bulunur) artık başlığa öncelikli olarak dahil
+  ediliyor; satır yoksa (veya doldurulmamış bir `[Konu]` yer tutucusuysa)
+  eski davranışa sorunsuzca geri dönülüyor.
+
+Ayrıca, bu iki hatayı test ederken bulunan üçüncü, ilgisiz bir bug:
+
+- **Asistan yanıtı bazen ekranda göründükten hemen sonra kayboluyordu** --
+  `useChatWorkflow`'un `final_result` işleyicisi bir turun bitiminde sunucu
+  durumunu tazeliyor (`refreshServerState`); bu tazeleme sorgusu
+  `!loading` iken etkinleşiyor, ki `loading` da tam olarak
+  `activeRequest.current` ile aynı anda temizleniyor -- yani bu sorgunun
+  yeniden getirimi, mesaj senkronizasyon efekti'nin kendi koruma kontrolü
+  zaten açıldıktan SONRA tetikleniyordu. Sunucudan gecikmeli/eski (boş)
+  bir geçmiş okuması gelirse, bu efekt az önce eklenen asistan mesajını
+  sessizce siliyordu. Efekt artık sunucudan gelen öğe sayısı zaten
+  sahip olunandan azsa `messages`'ı asla geriye yazmıyor (sohbet geçmişi
+  yalnızca-ekleme yapılan bir yapıdır, "azalması" her zaman bu yarış
+  durumudur, gerçek bir "geçmiş küçüldü" sinyali değil).
+
+### Test
+- `docker compose run --rm backend pytest -q` → **2264 test geçti, 0
+  başarısız**.
+- `cd frontend && npx vitest run` → **46 dosya, 214 test geçti** (3 art arda
+  tam koşuda doğrulandı -- `useChatWorkflow` yarış durumu düzeltmeden önce
+  aralıklı olarak başarısız oluyordu).
+- CHANGELOG.md güncellendi (3.20.0).
+
+## [3.19.0] - 2026-08-18
+### Düzeltildi
+- **Taslak brief'inde belge varlıkları eksikti** -- doküman analizi bir CV/
+  evrakta geçen önemli varlık isimlerini (kişi, kurum, tarih, tutar vb.)
+  zaten deterministik olarak çıkarıyordu (`EvrakField.entities`), ama
+  `draft_graph._build_brief` bunu hiç okumuyordu. "Bu CV'de çalıştığı
+  kurumları belirt" gibi bir istek, yazar bu bilgiyi hiç görmediği için
+  `[BİLGİ EKSİK: ...]` yer tutucusuna düşüyor ve insan onay kapısı
+  kullanıcıya belgenin zaten cevapladığı bir soruyu soruyordu. Brief'e yeni
+  bir "Belgede Geçen Diğer Önemli Varlıklar" satırı eklendi.
+- **Revizyonda yanlış paragraf hedefleniyordu ("sayıyı siliyor" hatası)** --
+  üretilen bir taslakta `Konu:`/`Sayı:`/`Tarih:` satırları aralarında boş
+  satır olmadan art arda geldiği için (bkz. `writer.md`'nin sabit yapısı),
+  `instruction.py::_split_paragraphs` bunları TEK bir blok olarak
+  `paragraphs[0]`'a yerleştiriyordu. "1. paragrafı sil"/"girişi değiştir"
+  gibi talimatlar bu yüzden mektubun gerçek gövdesi yerine bu metadata
+  bloğunu hedefliyor, reviser'a alakasız bir gövde talimatını `Sayı:`
+  satırına uygulaması söyleniyordu -- kullanıcının "rastgele saçma sapan
+  şeyler yapıyor" olarak tarif ettiği davranışın kök nedeni buydu. Ordinal/
+  "giriş" hedeflemesi artık saf metadata bloklarını (`Sayı`/`Tarih`/`Konu`/
+  `Muhatap`/`İlgi`/`Ekler` etiketli satırlar veya "T.C." anteti) atlıyor;
+  `konu`/`kapanış`/`imza` bölüm ipuçları değişmeden tam listede aramaya
+  devam ediyor.
+- **Revizyonda silme talimatı hâlâ güvenilir değildi** -- önceki dalda
+  (#209 PR'ı, artık main'de) eklenen düzeltmeye ek olarak, yukarıdaki yanlış
+  hedefleme bug'ı da silme talimatlarının "rastgele" görünmesine katkıda
+  bulunuyordu; doğru paragrafı hedeflemek bu ikinci kaynağı da kapatıyor.
+- **Kapanış talimatı bazen sessizce taslak turuna dönüşüyordu (uzun süredir
+  bilinen, ortam kaynaklı sanılan bir test hatası)** -- kök neden aslında
+  iki gerçek router hatasıydı, ortam kısıtı değil: (1) `REVISE_RULES` yalnızca
+  "kapanışı **değiştir**" yüzeyini tanıyordu, "kapanışı 'X' **yap**" gibi
+  aynı isteğin farklı bir fiille söylenmiş hali hiçbir kurala hiç değmiyordu;
+  (2) değse bile, mesaj kısa olduğu ve "yap" ile bittiği için (bir
+  `CONTINUATION_SURFACES` yüzeyi) `draft.continuation` sezgiseli aynı anda
+  ateşleniyor, "kapanış" alanını açıkça adlandıran çok daha spesifik
+  `revise.explicit_request` kanıtına rakip bir `draft` puanı ekliyordu ve
+  çoğu zaman onu geçiyordu. `intent_rules.py`'ye çıplak "kapanisi" yüzeyi
+  eklendi; `intent_scorer.py`'deki devam sezgiseli artık mesajda zaten
+  farklı bir amaç için açık bir kural ateşlenmişse devreye girmiyor.
+  `tests/integration/test_brief_survives_into_revise.py`'nin önceden
+  "bilinen, ortam kaynaklı" sayılan başarısızlığı bu düzeltmeyle gerçekten
+  çözüldü.
+
+### Test
+- `docker compose run --rm backend pytest -q` → **2262 test geçti, 0
+  başarısız** -- daha önce "bilinen ön-var olan hata" sayılan test artık
+  gerçekten geçiyor.
+
 ## [3.18.0] - 2026-08-18
 ### Düzeltildi
 Canlı kullanımda tespit edilen 10 ayrı taslak-akışı hatası (#209). Kök

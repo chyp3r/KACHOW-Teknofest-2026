@@ -314,14 +314,60 @@ def _split_paragraphs(draft: str) -> list[tuple[int, int]]:
     return [(m.start(), m.end()) for m in re.finditer(r"[^\n]+(?:\n(?!\n)[^\n]+)*", draft)]
 
 
+#: The draft's own fixed metadata-header field labels (see writer.md's
+#: numbered structure, fields 2-6: Sayı/Tarih/Konu/Muhatap/İlgi/Ekler) --
+#: same label set app.ai.verification.placeholders._HEADER_LINE_PATTERN
+#: recognises for its own, unrelated backstop, extended with İlgi/Ekler
+#: since those two can also sit on the same header block.
+_HEADER_FIELD_LINE = re.compile(
+    r"^\s*(Sayı|Sayi|Tarih|Konu|Muhatap|İlgi|Ilgi|Ekler)\s*:", re.IGNORECASE
+)
+
+
+def _is_header_paragraph(text: str) -> bool:
+    """Whether a blank-line-separated block is pure letter metadata, never
+    something a user means by "ilk paragraf"/"giriş".
+
+    The bug this closes: a typical draft's "Konu:"/"Sayı:"/"Tarih:" lines
+    sit on consecutive lines with *no* blank line between them (see
+    writer.md's fixed structure), so ``_split_paragraphs`` groups them into
+    one block that -- unfiltered -- lands at index 0, exactly where "1.
+    paragrafı sil"/"girişi değiştir" naturally point. Nobody asking to edit
+    a letter's opening means its metadata header; unfiltered, the reviser
+    was handed that block as its own rewrite target for an unrelated body
+    edit and, applying it to a "Sayı: ..." line instead of prose, would as
+    often as not mangle or drop it outright -- the concrete "sayıyı siliyor"
+    symptom this closes. A leading antet block ("T.C.\\nKURUM ADI", no
+    labelled field at all) is caught the same way, via the literal "T.C."
+    marker every antet starts with.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return False
+    if stripped.upper().startswith("T.C."):
+        return True
+    lines = [line for line in text.splitlines() if line.strip()]
+    return bool(lines) and all(_HEADER_FIELD_LINE.match(line) for line in lines)
+
+
+def _body_paragraphs(draft: str, paragraphs: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """``paragraphs`` with any pure-metadata block dropped, for ordinal/
+    "giriş" targeting only -- ``konu``/``kapanis``/``imza`` section hints
+    keep scanning the full list unfiltered, since ``konu`` specifically
+    means to find the header's own Konu line."""
+    body = [span for span in paragraphs if not _is_header_paragraph(draft[span[0] : span[1]])]
+    return body or paragraphs
+
+
 def _locate_one(
     draft: str, paragraphs: list[tuple[int, int]], *,
     scope: Scope, section_hint: Optional[str], ordinal: Optional[int],
 ) -> Optional[TargetSpan]:
     if scope == "paragraph" and ordinal is not None:
-        index = ordinal - 1 if ordinal > 0 else len(paragraphs) - 1
-        if 0 <= index < len(paragraphs):
-            start, end = paragraphs[index]
+        body = _body_paragraphs(draft, paragraphs)
+        index = ordinal - 1 if ordinal > 0 else len(body) - 1
+        if 0 <= index < len(body):
+            start, end = body[index]
             return TargetSpan(start, end, draft[start:end])
         return None
 
@@ -340,7 +386,8 @@ def _locate_one(
                     return TargetSpan(start, end, draft[start:end])
             return None
         if section_hint == "giris":
-            start, end = paragraphs[0]
+            body = _body_paragraphs(draft, paragraphs)
+            start, end = body[0]
             return TargetSpan(start, end, draft[start:end])
 
     return None
