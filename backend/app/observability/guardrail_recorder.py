@@ -43,7 +43,8 @@ async def record_event(
     Args:
         stage: "input" or "output".
         kind: "pii" | "sensitivity" | "injection" | "magic_byte" |
-            "archive_bomb" | "groundedness" | "leakage" | "llm_judge".
+            "archive_bomb" | "groundedness" | "leakage" | "llm_judge" |
+            "relevance" (see ``app.ai.workflows.relevance``).
         decision: "passed" | "flagged" | "blocked" | "redacted" |
             "needs_review".
         confidence: 0-1 confidence in the decision.

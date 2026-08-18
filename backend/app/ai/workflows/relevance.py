@@ -51,12 +51,28 @@ __all__ = [
 RelevanceReason = Literal[
     "bare_command",
     "domain_vocabulary",
+    "deictic_reference",
     "document_overlap",
     "model_relevant",
     "model_unrelated",
     "unrelated",
     "degraded",
 ]
+
+#: A message that explicitly points at the attached document ("bu belge",
+#: "bu kişinin", "yukarıdaki") is relevant by definition -- the user named
+#: their own anchor, so there is nothing left to classify. This is the fix
+#: for the CV-upload false refusal: "Bu kişinin ekibe katılımı ile ilgili
+#: bir bilgilendirme metni yaz" carries no word from `DOMAIN_SURFACES` and
+#: may share no vocabulary with the CV's own summary either, but "bu
+#: kişinin" is an unambiguous pointer at the uploaded document.
+_DEICTIC_SURFACES: tuple[str, ...] = (
+    "bu belge", "bu evrak", "bu dokuman", "bu kisi", "bu kisinin",
+    "bu kisiyle", "bu cv", "bu ozgecmis", "bu basvuru", "bu basvurunun",
+    "buna", "bunun", "bununla", "yukarida", "yukarideki", "yukaridaki",
+    "ekteki", "eklenen", "yukledigim", "yukledigin", "gonderdigim",
+    "paylastigim", "yazdigim belge",
+)
 
 
 @dataclass(frozen=True)
@@ -82,20 +98,61 @@ class RelevanceOutput(BaseModel):
     relevant: bool = Field(
         description=(
             "Kullanıcının isteği, verilen belge özetiyle aynı iş/konuyu mu "
-            "ele alıyor? Belgeyle konu olarak ilgisizse (tamamen farklı bir "
-            "konu -- ör. pazarlama, reklam, genel kültür, kişisel bir metin) "
-            "false döndür."
+            "ele alıyor? Emin değilsen (belirsizse) true döndür -- yalnızca "
+            "belgeyle konu olarak açıkça ilgisizse (tamamen farklı bir konu "
+            "-- ör. pazarlama, reklam, genel kültür) false döndür."
         )
+    )
+    confidence: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "0-1 arası güven skoru. relevant=false kararını yalnızca "
+            "gerçekten eminsen yüksek ver; belirsiz durumlarda düşük bir "
+            "güven skoru ver."
+        ),
     )
 
 
+def _coerce_fields(classification: dict[str, Any]) -> dict[str, Any]:
+    """Return the extracted header fields as a plain dict.
+
+    Duplicated from ``draft_graph``/``writing_brief`` on purpose -- see
+    ``writing_brief._coerce_fields``'s own docstring on why a shared
+    four-line helper isn't worth a cross-module dependency here.
+    """
+    fields = (classification or {}).get("fields", {})
+    if hasattr(fields, "model_dump"):
+        return fields.model_dump()
+    return fields if isinstance(fields, dict) else {}
+
+
 def _document_text(classification: dict[str, Any]) -> str:
+    """Every part of the classification a request could plausibly be *about*.
+
+    Widened beyond the summary/type label alone (the original source of the
+    CV false-refusal: a request naming the CV's own subject -- "bu kişinin
+    ekibe katılımı" -- shares no vocabulary with a document-type summary
+    like "Özgeçmiş belgesi.") to also cover the extracted header fields
+    (konu/muhatap/gönderen kurum/imza sahibi) and any named entities the
+    analysis step found -- the concrete nouns a request about *this
+    specific document* is most likely to actually use.
+    """
+    fields = _coerce_fields(classification)
+    entities = classification.get("entities") or []
+    entity_text = " ".join(str(entity) for entity in entities if entity)
     return normalize(
         " ".join(
             part
             for part in (
                 classification.get("summary", ""),
                 classification.get("document_type_label", ""),
+                fields.get("konu", ""),
+                fields.get("muhatap", ""),
+                fields.get("gonderen_kurum", ""),
+                fields.get("imza_sahibi", ""),
+                entity_text,
             )
             if part
         )
@@ -132,6 +189,13 @@ def assess_relevance_deterministic(
             True, "domain_vocabulary", detail="İstek resmî yazışma terminolojisi içeriyor."
         )
 
+    if any(surface in padded for surface in _DEICTIC_SURFACES):
+        return RelevanceVerdict(
+            True,
+            "deictic_reference",
+            detail="İstek yüklü belgeye doğrudan işaret ediyor (\"bu belge\", \"bu kişinin\" vb.).",
+        )
+
     document_text = _document_text(classification)
     if document_text and any(word in document_text for word in words):
         return RelevanceVerdict(
@@ -150,7 +214,7 @@ def assess_relevance_deterministic(
 
 async def classify_relevance_with_model(
     llm_client: BaseLLMClient, instruction: str, classification: dict[str, Any]
-) -> Optional[bool]:
+) -> Optional[RelevanceOutput]:
     """Ask the fast tier whether an unanchored-looking request fits the document.
 
     Args:
@@ -160,8 +224,9 @@ async def classify_relevance_with_model(
         classification: The turn's resolved classification.
 
     Returns:
-        The model's verdict, or ``None`` when the call failed -- distinct
-        from ``False`` so a provider outage never reads as a refusal.
+        The model's structured verdict (relevance + confidence), or
+        ``None`` when the call failed -- distinct from a negative verdict
+        so a provider outage never reads as a refusal.
     """
     from app.ai.agents.base import BaseAgent
 
@@ -171,8 +236,10 @@ async def classify_relevance_with_model(
         description="Decides whether a draft request concerns the attached document.",
         system_prompt=(
             "Sana bir belge özeti ve bir kullanıcı isteği verilecek. İsteğin "
-            "bu belgeyle aynı iş/konuyu ele alıp almadığına karar ver. "
-            "Yalnızca yapılandırılmış JSON döndür."
+            "bu belgeyle aynı iş/konuyu ele alıp almadığına karar ver. Emin "
+            "değilsen ilgili (relevant=true) say ve düşük bir güven skoru "
+            "ver -- yalnızca gerçekten emin olduğunda ilgisiz say. Yalnızca "
+            "yapılandırılmış JSON döndür."
         ),
     )
 
@@ -180,22 +247,30 @@ async def classify_relevance_with_model(
         f"Belge türü: {classification.get('document_type_label', 'bilinmiyor')}\n"
         f"Belge özeti: {classification.get('summary', '(özet yok)')}\n\n"
         f'Kullanıcı isteği: "{instruction}"\n\n'
-        "Bu istek belgeyle aynı konuyu mu ele alıyor?"
+        "Bu istek belgeyle aynı konuyu mu ele alıyor? Emin değilsen ilgili say."
     )
 
     try:
-        result: RelevanceOutput = await agent.run_structured(
+        return await agent.run_structured(
             messages=prompt,
             response_model=RelevanceOutput,
             temperature=0.0,
             max_retries=1,
         )
-        return result.relevant
     except Exception:
         logger.warning(
             "Relevance classification failed; falling back to deterministic verdict."
         )
         return None
+
+
+#: Below this confidence, a model's "unrelated" verdict is treated as "not
+#: sure enough to refuse" and the request is admitted instead. Refusing a
+#: legitimate request (the CV/"bu kişinin ekibe katılımı" false-refusal
+#: this guards against) is a worse failure mode than occasionally drafting
+#: something for a genuinely unrelated request, so the bar for a *negative*
+#: verdict is deliberately higher than the bar for a positive one.
+_MODEL_REJECTION_CONFIDENCE_FLOOR = 0.7
 
 
 async def resolve_relevance(
@@ -221,8 +296,8 @@ async def resolve_relevance(
     if verdict.relevant or llm_client is None:
         return verdict
 
-    admitted = await classify_relevance_with_model(llm_client, instruction, classification)
-    if admitted is None:
+    result = await classify_relevance_with_model(llm_client, instruction, classification)
+    if result is None:
         # A broken call, not a broken request -- see scope.resolve_scope's
         # identical reasoning for "degraded".
         return RelevanceVerdict(
@@ -231,12 +306,26 @@ async def resolve_relevance(
             source="model",
             detail="Konu uygunluk modeli yanıt vermedi; istek kapsam içi sayıldı.",
         )
-    if admitted:
+    if result.relevant:
         return RelevanceVerdict(
             True, "model_relevant", source="model", detail="Model belgeyle ilgili buldu."
         )
+    if result.confidence < _MODEL_REJECTION_CONFIDENCE_FLOOR:
+        # Not confident enough to refuse -- see the floor's own docstring.
+        return RelevanceVerdict(
+            True,
+            "model_relevant",
+            source="model",
+            detail=(
+                f"Model belgeyle ilgisiz buldu ancak güven düşük "
+                f"({result.confidence:.2f}); istek kapsam içi sayıldı."
+            ),
+        )
     return RelevanceVerdict(
-        False, "model_unrelated", source="model", detail="Model belgeyle ilgisiz buldu."
+        False,
+        "model_unrelated",
+        source="model",
+        detail=f"Model belgeyle ilgisiz buldu (güven: {result.confidence:.2f}).",
     )
 
 

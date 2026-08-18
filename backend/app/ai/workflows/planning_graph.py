@@ -1333,6 +1333,25 @@ def create_planning_graph(
                     verdict.reason,
                     verdict.detail,
                 )
+                await guardrail_recorder.record_event(
+                    stage="input",
+                    kind="relevance",
+                    decision="blocked",
+                    confidence=1.0,
+                    reasons=[verdict.reason, verdict.detail],
+                    run_id=state.get("run_id"),
+                    document_id=document_id,
+                    company_id=state.get("company_id"),
+                    requester_user_id=state.get("user_id"),
+                    related_document_ids=[document_id],
+                )
+                await emit_guardrail_event(
+                    config,
+                    stage="input",
+                    kind="relevance",
+                    decision="blocked",
+                    reasons=[verdict.reason, verdict.detail],
+                )
                 reason = "İstek yüklü belgeyle ilgili görünmüyor."
                 await emit_node_skipped(config, "draft", STEP_LABELS["draft"], reason)
                 reply = build_unrelated_reply(
