@@ -227,7 +227,15 @@ export function MessageList({
                 "thinking" here, it is stopped, waiting on the user -- see
                 ThinkingBubble below for the "still working" state. */}
             <p className="interrupt-paused-banner">Yanıtınız bekleniyor — akış duraklatıldı.</p>
-            <InterruptPanel interrupt={interrupt} loading={loading} onResume={onResume} />
+            {/* Keyed on interrupt_id so a new interrupt on the same mount
+                point -- a brief-gate re-ask, missing_information following
+                a writing_brief, or a second draft's gate later in the same
+                session -- fully remounts this panel instead of reusing it.
+                Without this, InterruptPanel's own useState (instructions/
+                rejectReason/quickPicks/revisionNote) and PromptQuestionCard's
+                nested stepIndex/answers carried the *previous* interrupt's
+                values into the new one. */}
+            <InterruptPanel key={interrupt.interruptId} interrupt={interrupt} loading={loading} onResume={onResume} />
           </div>
         </article>
       )}

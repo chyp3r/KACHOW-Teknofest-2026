@@ -130,7 +130,13 @@ export function useChatWorkflow(
     setMessages([]);
     setPendingInterrupt(null);
     seenInterrupts.current.clear();
-  }, [activeSessionId, userId]);
+    // Switching to a different (or brand-new) session leaves a prior
+    // session's stepper/tool-call/guardrail state behind otherwise --
+    // planSteps, nodeStatus etc. are re-seeded from that session's own
+    // history a few lines below (see the next effect), but only after
+    // this clears whatever the previously active session left in place.
+    resetFlow();
+  }, [activeSessionId, resetFlow, userId]);
 
   // Records a node's backend-supplied label and its first-seen order --
   // idempotent, since a node can re-enter (e.g. "revise" runs once per

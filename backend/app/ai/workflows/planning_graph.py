@@ -1260,15 +1260,28 @@ def create_planning_graph(
         carries) on any failure: a bug in a hint-gatherer must never be
         able to leave `brief_result` empty, which would leave `draft`
         looking permanently unready to `step_graph.ready_steps`.
+
+        The prior turn's brief is only carried forward when this turn is a
+        `revise` of the still-open `focus.active_draft` -- a fresh `draft`
+        request always starts from an empty brief, even mid-session. Without
+        this, a second, unrelated "başka birine yazı hazırla" request would
+        silently inherit the first draft's muhatap/yazan_taraf/kapanış,
+        since `RESET_SURFACES` only covers a handful of explicit
+        "yeni bir taslak" phrasings and most fresh-draft requests never say
+        one (see intent_rules.RESET_SURFACES's own docstring).
         """
         focus = state.get("focus") or SessionFocus()
+        continues_active_draft = (
+            state.get("plan_intent") == "revise" and focus.active_draft is not None
+        )
+        prior_brief = focus.writing_brief if continues_active_draft else None
         try:
-            resolution = resolve_brief(state["input_text"], classification, focus.writing_brief)
+            resolution = resolve_brief(state["input_text"], classification, prior_brief)
         except Exception:
             logger.exception("Writing-brief resolution failed; continuing without one.")
             updates["brief_result"] = {
                 "status": StepStatus.COMPLETED,
-                "answers": dict(focus.writing_brief or {}),
+                "answers": dict(prior_brief or {}),
                 "resolved": {},
                 "questions": [],
             }

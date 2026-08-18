@@ -393,7 +393,9 @@ CONTINUABLE_INTENTS = frozenset({"draft", "analyze", "revise"})
 #: says this is not idling, they are actively moving on.
 RESET_SURFACES: tuple[str, ...] = (
     "yeni bir taslak", "yeni bir yazi", "yeni bir belge", "yeni bir cevap",
-    "farkli bir yazi", "bastan baslayalim", "en bastan baslayalim",
+    "yeni taslak", "yeni yazi", "farkli bir yazi", "farkli bir taslak",
+    "baska bir yazi", "baska bir taslak", "baska birine yazi",
+    "bastan baslayalim", "en bastan baslayalim",
     "bu taslagi birak", "bunu birak", "vazgectim",
 )
 
