@@ -14,15 +14,31 @@ survive:
   free-text `mevzuat_references`. Not reproducible across re-analyses of the
   same document, so it never drives the headline -- only the rule edges do.
 
-Deliberately excluded: any node keyed by extracted document text (an
-institution name, a signer, an entity). Every candidate was measured and
-each one puts OCR damage straight into *node identity* -- `muhatap` needs
-whitespace-repair before it yields anything, `entities` needs four surface
-forms of "TBMM" resolved to one node, `gonderen_kurum` yields nothing at
-all. Excluding them makes an invariant hold absolutely: no node id in this
-graph is ever derived from extracted document text. Document ids come from
-the caller (a Postgres primary key); Madde/Kanun ids come from
-`app.ai.compliance.resolve_citation` and a curated law registry.
+**v2 update:** a fourth and fifth node type, Entity and Konu, were added --
+see `entity_resolution.py`. The v1 exclusion of any node keyed by extracted
+document text was reversed, not abandoned: every candidate (`muhatap`,
+`entities`, `gonderen_kurum`) was measured and each one puts OCR damage
+straight into naive *node identity* if used raw -- `muhatap` needs
+whitespace/markdown repair before it yields anything, `entities` needs four
+surface forms of "TBMM" resolved to one node. Rather than exclude these
+sources, `entity_resolution.resolve_entities` resolves them: the node id is
+a canonicalized key (a pure function of the raw string, never the raw
+string itself), and every raw surface form that merged into it is retained
+on the node for disclosure. The invariant that survives is narrower but
+still absolute: no node id is *directly* the raw extracted text. Document
+ids come from the caller (a Postgres primary key); Madde/Kanun ids come from
+`app.ai.compliance.resolve_citation` and a curated law registry; Entity/Konu
+ids come from the canonicalizer.
+
+`muhatap`, `gonderen_kurum` and every `entities[]` mention across the whole
+corpus are resolved through one shared canonicalization pass -- this is what
+lets a document's addressee and another document's mention of the same
+institution collapse onto one node (measured: `muhatap`'s
+"TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA" and an `entities[]` mention of
+"Türkiye Büyük Millet Meclisi Başkanlığı" canonicalize identically). `konu`
+is resolved through a separate pass into its own `konu:` namespace -- a
+shared topic string is not the same kind of thing as a shared institution,
+and mixing the namespaces would let a topic and an institution collide.
 
 The Madde node id is `madde:{kanun}:{madde}`, composed rather than bare --
 `canonical_legislation` keeps law and article in separate namespaces on
@@ -32,10 +48,11 @@ and a bare `madde:4` id would silently merge two unrelated articles.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 from app.ai.compliance import resolve_citation
 from app.ai.compliance.mevzuat_citation import KANUN_TITLE
+from app.domains.documents.entity_resolution import resolve_entities
 
 
 @dataclass(frozen=True)
@@ -73,6 +90,18 @@ class DocumentGraphInput:
     has_analysis: bool = True
     missing_fields: tuple[MissingFieldInput, ...] = ()
     mevzuat_references: tuple[MevzuatReferenceInput, ...] = ()
+    #: Entity/Konu/attribute-payload sources, all optional -- a fixture or
+    #: caller that never sets these (e.g. every v1 test, `_load_fixture`)
+    #: must produce zero entity/konu nodes and zero new edges, byte-for-byte
+    #: identical to the graph that shipped before this module grew them.
+    sayi: Optional[str] = None
+    tarih: Optional[str] = None
+    konu: Optional[str] = None
+    muhatap: Optional[str] = None
+    gonderen_kurum: Optional[str] = None
+    ivedilik: Optional[str] = None
+    summary: Optional[str] = None
+    entities: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -84,7 +113,7 @@ class GraphNode:
     serialise than three dataclasses plus a discriminator."""
 
     id: str
-    node_type: str  # "document" | "madde" | "kanun"
+    node_type: str  # "document" | "madde" | "kanun" | "entity" | "konu"
     label: str
     storage_path: Optional[str] = None
     file_name: Optional[str] = None
@@ -95,6 +124,18 @@ class GraphNode:
     madde: Optional[str] = None
     field_labels: tuple[str, ...] = ()
     document_count: Optional[int] = None
+    #: "entity" nodes only -- "kurum" | "kisi" | "diger", see
+    #: entity_resolution._classify_kind. Heuristic, not authoritative.
+    entity_kind: Optional[str] = None
+    #: "entity" nodes only -- every raw surface form that merged into this
+    #: node, so the inspector can disclose the merge rather than hide it.
+    surface_forms: tuple[str, ...] = ()
+    #: "document" nodes only, for now -- the node inspector's per-type
+    #: payload. A generic dict rather than more typed fields because this
+    #: is where the shape genuinely varies by node_type and is expected to
+    #: grow; madde/kanun/entity nodes already have everything they need in
+    #: the typed fields above.
+    attributes: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -104,7 +145,7 @@ class GraphEdge:
 
     source: str
     target: str
-    edge_type: str  # "ihlal" | "atif"
+    edge_type: str  # "ihlal" | "atif" | "muhatap" | "gonderen" | "bahseder" | "konu"
     source_kind: str  # "rule" | "llm"
     field_key: Optional[str] = None
     field_label: Optional[str] = None
@@ -132,6 +173,8 @@ class GraphInsights:
     document_count: int
     madde_count: int
     kanun_count: int
+    entity_count: int
+    konu_count: int
     rule_edge_count: int
     llm_edge_count: int
     unresolved_reference_count: int
@@ -153,8 +196,23 @@ class _MaddeAccumulator:
     rule_document_ids: set[str] = field(default_factory=set)
 
 
+@dataclass
+class _NamedGroupAccumulator:
+    """Shared by the Entity and Konu accumulation passes -- both are
+    "resolve a bag of raw strings, then count distinct documents per
+    resolved group" with the same shape, differing only in whether `kind`/
+    `surface_forms` are meaningful (Entity) or left at their defaults (Konu,
+    which has no analogous concept -- a topic isn't a kurum/kişi and its
+    canonical key already *is* its only surface form worth keeping)."""
+
+    label: str
+    kind: Optional[str] = None
+    surface_forms: tuple[str, ...] = ()
+    document_ids: set[str] = field(default_factory=set)
+
+
 def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
-    """Build the corpus-wide compliance graph from already-loaded document data.
+    """Build the corpus-wide graph from already-loaded document data.
 
     Args:
         entries: One `DocumentGraphInput` per document. A document with no
@@ -164,8 +222,8 @@ def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
 
     Returns:
         The graph: every document as an isolated-or-connected node, every
-        madde/kanun reached by at least one edge, and the insights the
-        headline stat is drawn from.
+        madde/kanun/entity/konu reached by at least one edge, and the
+        insights the headline stat is drawn from.
     """
     document_nodes: list[GraphNode] = []
     madde_index: dict[str, _MaddeAccumulator] = {}
@@ -193,6 +251,42 @@ def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
             madde_index[madde_id] = _MaddeAccumulator(kanun=kanun, madde=madde)
         return madde_id
 
+    # --- Entity/Konu resolution: one pass over every raw string in the
+    # whole corpus, *before* the per-document loop below assigns edges.
+    # This is what lets one document's `muhatap` and another document's
+    # `entities[]` mention of the same institution collapse onto one node
+    # -- resolving per-document would never see the cross-document overlap.
+    # Konu gets its own, separately-resolved namespace (see
+    # `_NamedGroupAccumulator`'s docstring).
+    all_entity_raw = [
+        raw
+        for entry in entries
+        for raw in (entry.muhatap, entry.gonderen_kurum, *entry.entities)
+        if raw
+    ]
+    resolved_entities = resolve_entities(all_entity_raw)
+    all_konu_raw = [entry.konu for entry in entries if entry.konu]
+    resolved_konu = resolve_entities(all_konu_raw)
+
+    entity_accumulators: dict[str, _NamedGroupAccumulator] = {}
+    konu_accumulators: dict[str, _NamedGroupAccumulator] = {}
+
+    def ensure_entity(raw: str) -> str:
+        resolved = resolved_entities[raw]
+        entity_id = f"entity:{resolved.key}"
+        if entity_id not in entity_accumulators:
+            entity_accumulators[entity_id] = _NamedGroupAccumulator(
+                label=resolved.label, kind=resolved.kind, surface_forms=resolved.surface_forms,
+            )
+        return entity_id
+
+    def ensure_konu(raw: str) -> str:
+        resolved = resolved_konu[raw]
+        konu_id = f"konu:{resolved.key}"
+        if konu_id not in konu_accumulators:
+            konu_accumulators[konu_id] = _NamedGroupAccumulator(label=resolved.label)
+        return konu_id
+
     for entry in entries:
         doc_id = f"doc:{entry.storage_path}"
         document_nodes.append(
@@ -205,8 +299,53 @@ def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
                 document_type_label=entry.document_type_label,
                 compliance_status=entry.compliance_status,
                 has_analysis=entry.has_analysis,
+                attributes={
+                    "sayi": entry.sayi,
+                    "tarih": entry.tarih,
+                    "konu": entry.konu,
+                    "muhatap": entry.muhatap,
+                    "gonderen_kurum": entry.gonderen_kurum,
+                    "ivedilik": entry.ivedilik,
+                    "summary": entry.summary,
+                    "missing_field_count": len(entry.missing_fields),
+                },
             )
         )
+
+        if entry.muhatap:
+            entity_id = ensure_entity(entry.muhatap)
+            entity_accumulators[entity_id].document_ids.add(doc_id)
+            edges.append(GraphEdge(source=doc_id, target=entity_id, edge_type="muhatap", source_kind="rule"))
+            rule_edge_count += 1
+
+        if entry.gonderen_kurum:
+            entity_id = ensure_entity(entry.gonderen_kurum)
+            entity_accumulators[entity_id].document_ids.add(doc_id)
+            edges.append(GraphEdge(source=doc_id, target=entity_id, edge_type="gonderen", source_kind="rule"))
+            rule_edge_count += 1
+
+        # `entities[]` can repeat a mention within one document (the model
+        # is not asked to deduplicate); collapse to at most one `bahseder`
+        # edge per resolved entity per document, or a repeated mention
+        # would silently inflate that entity's document_count-adjacent edge
+        # count without adding any real information.
+        seen_entity_ids: set[str] = set()
+        for raw_entity in entry.entities:
+            if not raw_entity:
+                continue
+            entity_id = ensure_entity(raw_entity)
+            if entity_id in seen_entity_ids:
+                continue
+            seen_entity_ids.add(entity_id)
+            entity_accumulators[entity_id].document_ids.add(doc_id)
+            edges.append(GraphEdge(source=doc_id, target=entity_id, edge_type="bahseder", source_kind="llm"))
+            llm_edge_count += 1
+
+        if entry.konu:
+            konu_id = ensure_konu(entry.konu)
+            konu_accumulators[konu_id].document_ids.add(doc_id)
+            edges.append(GraphEdge(source=doc_id, target=konu_id, edge_type="konu", source_kind="rule"))
+            rule_edge_count += 1
 
         for missing_field in entry.missing_fields:
             citation = resolve_citation(missing_field.mevzuat)
@@ -271,6 +410,28 @@ def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
         for madde_id, accumulator in madde_index.items()
     ]
 
+    entity_nodes = [
+        GraphNode(
+            id=entity_id,
+            node_type="entity",
+            label=accumulator.label,
+            entity_kind=accumulator.kind,
+            surface_forms=accumulator.surface_forms,
+            document_count=len(accumulator.document_ids),
+        )
+        for entity_id, accumulator in entity_accumulators.items()
+    ]
+
+    konu_nodes = [
+        GraphNode(
+            id=konu_id,
+            node_type="konu",
+            label=accumulator.label,
+            document_count=len(accumulator.document_ids),
+        )
+        for konu_id, accumulator in konu_accumulators.items()
+    ]
+
     top_breached_madde = None
     if madde_nodes:
         # Sorted ascending by id first so `max` (which returns the first
@@ -290,6 +451,8 @@ def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
         document_count=len(document_nodes),
         madde_count=len(madde_nodes),
         kanun_count=len(kanun_nodes),
+        entity_count=len(entity_nodes),
+        konu_count=len(konu_nodes),
         rule_edge_count=rule_edge_count,
         llm_edge_count=llm_edge_count,
         unresolved_reference_count=unresolved_reference_count,
@@ -297,7 +460,13 @@ def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
     )
 
     return KnowledgeGraph(
-        nodes=tuple(document_nodes) + tuple(madde_nodes) + tuple(kanun_nodes.values()),
+        nodes=(
+            tuple(document_nodes)
+            + tuple(madde_nodes)
+            + tuple(kanun_nodes.values())
+            + tuple(entity_nodes)
+            + tuple(konu_nodes)
+        ),
         edges=tuple(edges),
         insights=insights,
     )

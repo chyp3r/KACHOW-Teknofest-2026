@@ -1055,3 +1055,75 @@ async def test_build_document_graph_reflects_the_cached_analysis(tmp_path, monke
     assert result is not None
     madde_ids = {n["id"] for n in result["nodes"] if n["node_type"] == "madde"}
     assert "madde:2646:11" in madde_ids
+
+
+@pytest.mark.asyncio
+async def test_build_document_graph_feeds_entity_source_fields_into_the_graph(tmp_path, monkeypatch):
+    """v2: muhatap/gonderen_kurum/entities/konu/sayi/tarih/ivedilik must
+    reach the graph builder, not just missing_fields/mevzuat_references --
+    otherwise the single-document neighbourhood never grows an Entity node
+    even though the cached analysis has everything it needs."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
+    service, _, _, _ = _build_service()
+    storage_path = "uploads/entity.pdf"
+    analysis = DocumentAnalysisResponseSchema(
+        file_name="evrak.pdf",
+        storage_path=storage_path,
+        document_type=DocumentType.OFFICIAL_LETTER,
+        document_type_label="Resmî Yazı",
+        summary="Özet.",
+        fields=EvrakField(
+            sayi="E-1-2", tarih="18.03.2026", konu="Test konusu",
+            muhatap="ÖRNEK KAYMAKAMLIĞINA", gonderen_kurum="ÖRNEK BAKANLIĞI",
+            ivedilik="Acele", entities=["NATO"],
+        ),
+        missing_fields=[],
+        compliance_status=ComplianceStatus.COMPLIANT,
+        extraction=ExtractionInfoSchema(extractor="opendataloader", page_count=1, char_count=300, used_ocr=False),
+    )
+    _write_cache(tmp_path, storage_path, analysis)
+
+    result = await service.build_document_graph(storage_path)
+
+    assert result is not None
+    entity_labels = {n["label"] for n in result["nodes"] if n["node_type"] == "entity"}
+    assert "NATO" in entity_labels
+    doc_node = next(n for n in result["nodes"] if n["node_type"] == "document")
+    assert doc_node["attributes"]["sayi"] == "E-1-2"
+    assert doc_node["attributes"]["muhatap"] == "ÖRNEK KAYMAKAMLIĞINA"
+    konu_labels = {n["label"] for n in result["nodes"] if n["node_type"] == "konu"}
+    assert "Test konusu" in konu_labels
+
+
+@pytest.mark.asyncio
+async def test_build_corpus_graph_feeds_entity_source_fields_into_the_graph():
+    """Same wiring, exercised through build_corpus_graph's list_for_owner
+    path rather than build_document_graph's single-cache-read path -- the
+    two methods build DocumentGraphInput independently, so each needs its
+    own coverage."""
+    from app.core.enums.sensitivity_level import SensitivityLevel
+
+    service, _, _, _ = _build_service()
+    document_repository = AsyncMock()
+    document_repository.list_for_owner.return_value = [_graph_document("uploads/entity2.pdf")]
+    document_repository.count_for_owner.return_value = 1
+    service.document_repository = document_repository
+    analysis = DocumentAnalysisResponseSchema(
+        file_name="evrak.pdf",
+        storage_path="uploads/entity2.pdf",
+        document_type=DocumentType.OFFICIAL_LETTER,
+        document_type_label="Resmî Yazı",
+        summary="Özet.",
+        fields=EvrakField(muhatap="ÖRNEK KAYMAKAMLIĞINA", entities=["BTK"]),
+        missing_fields=[],
+        compliance_status=ComplianceStatus.COMPLIANT,
+        extraction=ExtractionInfoSchema(extractor="opendataloader", page_count=1, char_count=300, used_ocr=False),
+    )
+    service.get_cached_analysis = AsyncMock(return_value=analysis)
+
+    result = await service.build_corpus_graph("company-1", None, SensitivityLevel.COK_GIZLI)
+
+    entity_labels = {n["label"] for n in result["nodes"] if n["node_type"] == "entity"}
+    assert entity_labels == {"ÖRNEK KAYMAKAMLIĞINA", "BTK"}

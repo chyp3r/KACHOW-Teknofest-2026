@@ -220,9 +220,24 @@ istek/yanıt şeması ve HITL akışı için bkz. **`docs/api/drafts.md`**.
 ## GET /api/v1/documents/graph
 
 Mevzuat Haritası — çağıranın görebildiği tüm evraklar üzerinden hesaplanan
-uyum bilgi grafiği. Node/kenar üretimi tamamen saf ve deterministiktir
-(`app/domains/documents/knowledge_graph.py`); grafik her istekte önbellekteki
-analizlerden **türetilir**, ayrı bir depolama katmanı yoktur.
+birleşik bilgi grafiği: evraklar, kurum/kişi varlıkları, mevzuat maddeleri
+ve kanunlar arasındaki her ilişki. Node/kenar üretimi tamamen saf ve
+deterministiktir (`app/domains/documents/knowledge_graph.py`); grafik her
+istekte önbellekteki analizlerden **türetilir**, ayrı bir depolama katmanı
+yoktur.
+
+**Kurum/kişi (Entity) node'ları nasıl üretilir.** `fields.muhatap`,
+`fields.gonderen_kurum` ve `fields.entities[]` içindeki serbest metinler,
+`app/domains/documents/entity_resolution.py`'deki saf çözümleyiciden
+geçirilir: markdown/liste artıkları ve sızmış belge numaraları temizlenir,
+Türkçe büyük/küçük harf katlaması uygulanır, aciliyet ekleri (`GÜNLÜDÜR` vb.)
+ve datif hâl ekleri (`...BAŞKANLIĞINA` → `...BAŞKANLIĞI`) ayıklanır, son
+olarak kalan OCR gürültüsü (`Ğ`→`Ç` gibi tek karakter yanlış okumaları)
+deterministik bir bulanık eşleştirmeyle birleştirilir. Üç alan **aynı
+canonical isim uzayını** paylaşır — bir evrağın `muhatap`ı ile başka bir
+evrağın `entities[]` listesinde geçen aynı kurum tek node'da buluşur.
+Birleşen her ham yazım biçimi `surface_forms` alanında dürüstçe saklanır;
+hiçbir node id'si doğrudan ham metinden türemez.
 
 En fazla `MAX_GRAPH_DOCUMENTS = 200` evrak işlenir (`list_for_owner`'a bu
 limit açıkça geçilir — repository'nin kendi varsayılanı 100'dür ve buna
@@ -266,7 +281,30 @@ IP başına dakikada 30 istekle sınırlıdır (`rate_limit`).
         "kanun": "2646",
         "madde": "17",
         "field_labels": ["İmza sahibi", "İmza sahibinin unvanı"],
-        "document_count": 7
+        "document_count": 7,
+        "entity_kind": null,
+        "surface_forms": [],
+        "attributes": {}
+      },
+      {
+        "id": "entity:turkiye buyuk millet meclisi baskanligi",
+        "node_type": "entity",
+        "label": "TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA",
+        "storage_path": null,
+        "file_name": null,
+        "document_type_label": null,
+        "compliance_status": null,
+        "has_analysis": null,
+        "kanun": null,
+        "madde": null,
+        "field_labels": [],
+        "document_count": 11,
+        "entity_kind": "kurum",
+        "surface_forms": [
+          "TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA",
+          "TÜRKIYE BÜYÜK MILLET MECLISI BASKANLIÇINA"
+        ],
+        "attributes": {}
       }
     ],
     "edges": [
@@ -281,14 +319,28 @@ IP başına dakikada 30 istekle sınırlıdır (`rate_limit`).
         "reason": "Belge, yetkili amir tarafından ad ve soyad belirtilerek imzalanmalıdır.",
         "aciklama": null,
         "raw": null
+      },
+      {
+        "source": "doc:uploads/9f1c....pdf",
+        "target": "entity:turkiye buyuk millet meclisi baskanligi",
+        "edge_type": "muhatap",
+        "source_kind": "rule",
+        "field_key": null,
+        "field_label": null,
+        "severity": null,
+        "reason": null,
+        "aciklama": null,
+        "raw": null
       }
     ],
     "insights": {
       "document_count": 9,
       "madde_count": 6,
       "kanun_count": 1,
-      "rule_edge_count": 77,
-      "llm_edge_count": 87,
+      "entity_count": 38,
+      "konu_count": 6,
+      "rule_edge_count": 122,
+      "llm_edge_count": 163,
       "unresolved_reference_count": 0,
       "top_breached_madde": {
         "madde_id": "madde:2646:17",
@@ -311,15 +363,26 @@ IP başına dakikada 30 istekle sınırlıdır (`rate_limit`).
 
 | Alan | Açıklama |
 |---|---|
-| `nodes[].node_type` | `document`, `madde` veya `kanun` |
-| `nodes[].id` | `madde` id'leri `madde:{kanun}:{n}` biçiminde kanun ile birleşik — aynı madde numarası birden çok kanunda geçebilir (ör. `madde:4` hem 2646 hem 3071 sayılı kanunlarda vardır), bileşik id olmadan bu iki farklı madde tek node'da birleşirdi |
+| `nodes[].node_type` | `document`, `madde`, `kanun`, `entity` veya `konu` |
+| `nodes[].id` | `madde` id'leri `madde:{kanun}:{n}` biçiminde kanun ile birleşik — aynı madde numarası birden çok kanunda geçebilir (ör. `madde:4` hem 2646 hem 3071 sayılı kanunlarda vardır), bileşik id olmadan bu iki farklı madde tek node'da birleşirdi. `entity`/`konu` id'leri, ham metinden değil `entity_resolution`'ın canonical anahtarından türer |
 | `nodes[].has_analysis` | `false` ise evrağın önbellekte analizi yok; yine de izole bir node olarak grafiğe dahildir (payda'dan asla düşürülmez) |
-| `edges[].edge_type` | `ihlal` (Evrak → Madde, eksik zorunlu/önerilen alan) veya `atif` (Evrak → Madde/Kanun, model tarafından önerilen mevzuat atfı) |
-| `edges[].source_kind` | `rule` — `missing_fields[].mevzuat`'tan, tamamen deterministik kural tablosu kaynaklı; `llm` — `mevzuat_references[]`'tan, modelin ürettiği metin. Görselde birinci düz çizgi, ikincisi kesikli çizgi ile ayrılır |
-| `insights.top_breached_madde` | Yalnızca `rule` kenarlerinden, **farklı evrak sayısına** göre hesaplanır (aynı evrak iki alan yüzünden aynı maddeyi iki kez ihlal edebilir — kenar sayısı değil, evrak sayısı sayılır) |
+| `nodes[].entity_kind` | Yalnızca `entity` node'larında dolu — `kurum`, `kisi` veya `diger`. Sezgisel bir sınıflandırmadır, otoriter değil |
+| `nodes[].surface_forms` | Yalnızca `entity`/`konu` node'larında dolu — bu node'a birleşen her ham yazım biçimi, dürüstçe listelenir (OCR varyantları dahil) |
+| `nodes[].attributes` | Şu an yalnızca `document` node'larında dolu: `sayi`, `tarih`, `konu`, `muhatap`, `gonderen_kurum`, `ivedilik`, `summary`, `missing_field_count` — arayüzün "düğüme tıkla, alanlarını gör" panelinin okuduğu serbest biçimli alan |
+| `edges[].edge_type` | `ihlal` (Evrak→Madde, eksik alan), `atif` (Evrak→Madde/Kanun, model önerisi), `muhatap`/`gonderen` (Evrak→Entity, `muhatap`/`gonderen_kurum` alanından), `bahseder` (Evrak→Entity, `entities[]`'ten) veya `konu` (Evrak→Konu) |
+| `edges[].source_kind` | `rule` — `missing_fields[].mevzuat`, `muhatap`, `gonderen_kurum` veya `konu` alanından, tamamen deterministik; `llm` — `mevzuat_references[]` veya `entities[]`'ten, modelin ürettiği metin. Görselde birinci düz çizgi, ikincisi kesikli çizgi ile ayrılır |
+| `insights.rule_edge_count` / `llm_edge_count` | **Grafikteki her kenar türü** üzerinden toplam sayı — yalnızca `ihlal`/`atif` değil. Uyum başlığının kendi "X kural, Y model önerisi" cümlesi bu toplamı değil, yalnızca ilgili alt kümeyi okur (bkz. frontend `filterToComplianceOnly`) |
+| `insights.top_breached_madde` | Yalnızca `ihlal` kenarlerinden, **farklı evrak sayısına** göre hesaplanır (aynı evrak iki alan yüzünden aynı maddeyi iki kez ihlal edebilir — kenar sayısı değil, evrak sayısı sayılır) |
 | `insights.unresolved_reference_count` | `mevzuat_references[]` içinde ne kanun ne madde eşleşen atıf sayısı — `LAW_ALIASES` tablosu korpus büyüdükçe geride kalırsa bu sayı sıfırdan pozitife döner |
 | `truncated` | `true` ise evrak sayısı `MAX_GRAPH_DOCUMENTS`'ı aştı ve yalnızca ilk 200'ü işlendi |
 | `hidden_document_count` | Çağıranın yetki seviyesinin üzerinde olduğu için grafikten çıkarılan evrak sayısı — hangi evraklar olduğu asla belirtilmez |
+
+**`imza_sahibi` bilinçli olarak bir Entity kaynağı değildir.** Gerçek 14
+evrakın hiçbirinde bu alan dolu değil — taranmış evraklardaki el yazısı
+imza blokları OCR ile kurtarılamıyor. Kurum/kişi node'ları bunun yerine
+`entities[]`/`muhatap`/`gonderen_kurum`'dan üretilir; bu alanlar dolu ve
+kişi/kurum node'ları için gerçek sinyal taşıyor (bkz. proje planındaki
+ölçüm tablosu).
 
 **Boş kütüphane 404 değil, boş grafiktir** — sıfır evrak olan bir kurum için
 yanıt `200` ve `nodes: []`/`edges: []` döner.

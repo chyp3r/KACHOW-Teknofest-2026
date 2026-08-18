@@ -963,6 +963,27 @@ class DocumentService:
             for item in analysis.mevzuat_references
         )
 
+    @staticmethod
+    def _analysis_to_entity_source_kwargs(analysis: DocumentAnalysisResponseSchema) -> dict[str, Any]:
+        """Everything `DocumentGraphInput` needs beyond missing_fields/
+        mevzuat_references: the raw fields Entity/Konu resolution and the
+        node inspector's attribute payload are built from. One helper
+        shared by `build_corpus_graph` and `build_document_graph` so the
+        two never drift -- each builds its own `DocumentGraphInput` from a
+        different repository path, but both read the same
+        `DocumentAnalysisResponseSchema.fields` shape."""
+        fields = analysis.fields
+        return {
+            "sayi": fields.sayi,
+            "tarih": fields.tarih,
+            "konu": fields.konu,
+            "muhatap": fields.muhatap,
+            "gonderen_kurum": fields.gonderen_kurum,
+            "ivedilik": fields.ivedilik,
+            "summary": analysis.summary,
+            "entities": tuple(fields.entities),
+        }
+
     async def build_corpus_graph(
         self,
         company_id: str,
@@ -1063,6 +1084,7 @@ class DocumentService:
                     has_analysis=True,
                     missing_fields=self._analysis_to_missing_field_inputs(analysis),
                     mevzuat_references=self._analysis_to_mevzuat_reference_inputs(analysis),
+                    **self._analysis_to_entity_source_kwargs(analysis),
                 )
             )
 
@@ -1108,6 +1130,7 @@ class DocumentService:
             has_analysis=True,
             missing_fields=self._analysis_to_missing_field_inputs(analysis),
             mevzuat_references=self._analysis_to_mevzuat_reference_inputs(analysis),
+            **self._analysis_to_entity_source_kwargs(analysis),
         )
         graph = build_knowledge_graph([entry])
         return _graph_to_json_dict(graph)

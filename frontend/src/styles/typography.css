@@ -227,7 +227,8 @@ pre,
 .chat-history-header h2,
 .workflow-panel h2,
 .interrupt-header h2,
-.login-card h2 {
+.login-card h2,
+.node-inspector-header h3 {
   font-size: var(--text-heading-md);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-heading-md);
@@ -412,7 +413,9 @@ label,
 .doc-summary-preview,
 .chat-history-no-results,
 .sidebar-document-library .notice,
-.sidebar-document-library .upload-card .feedback {
+.sidebar-document-library .upload-card .feedback,
+.node-inspector-summary,
+.node-inspector-surface-forms li {
   font-size: var(--font-size-secondary);
   font-weight: var(--weight-regular);
   line-height: var(--leading-secondary);
@@ -478,7 +481,11 @@ label,
 .draft-history-list button small,
 .version-history article time,
 .doc-meta,
-.doc-type-badge {
+.doc-type-badge,
+.node-inspector-note,
+.node-inspector-attributes dt,
+.graph-filters-checkbox,
+.graph-filters-group legend {
   font-size: var(--text-caption);
   font-weight: var(--weight-regular);
   line-height: var(--leading-caption);

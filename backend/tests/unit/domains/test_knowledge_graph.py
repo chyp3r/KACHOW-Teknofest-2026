@@ -24,7 +24,20 @@ def _missing_field(key, label, mevzuat, reason="çünkü mevzuat öyle diyor", s
     return MissingFieldInput(key=key, label=label, severity=severity, mevzuat=mevzuat, reason=reason)
 
 
-def _entry(storage_path, missing_fields=(), mevzuat_references=(), has_analysis=True):
+def _entry(
+    storage_path,
+    missing_fields=(),
+    mevzuat_references=(),
+    has_analysis=True,
+    sayi=None,
+    tarih=None,
+    konu=None,
+    muhatap=None,
+    gonderen_kurum=None,
+    ivedilik=None,
+    summary=None,
+    entities=(),
+):
     return DocumentGraphInput(
         storage_path=storage_path,
         file_name=f"{storage_path}.pdf",
@@ -33,6 +46,14 @@ def _entry(storage_path, missing_fields=(), mevzuat_references=(), has_analysis=
         has_analysis=has_analysis,
         missing_fields=tuple(missing_fields),
         mevzuat_references=tuple(mevzuat_references),
+        sayi=sayi,
+        tarih=tarih,
+        konu=konu,
+        muhatap=muhatap,
+        gonderen_kurum=gonderen_kurum,
+        ivedilik=ivedilik,
+        summary=summary,
+        entities=tuple(entities),
     )
 
 
@@ -256,3 +277,174 @@ class TestGoldenCorpus:
         assert top.madde == "17"
         assert top.document_count == 3
         assert set(top.field_labels) == {"İmza sahibi", "İmza sahibinin unvanı"}
+
+
+# --- Entity nodes (v2: unified graph) ---------------------------------------
+#
+# Sourced from `entities[]`, `muhatap` and `gonderen_kurum`, all resolved
+# into one shared canonical namespace via `entity_resolution.resolve_entities`
+# -- see that module's own docstring for why raw-string identity would put
+# OCR damage straight into node identity. These tests use real corpus
+# surface forms (see test_entity_resolution.py) so the cross-field merge
+# claim is checked against real data, not a convenient fabrication.
+
+_TBMM_MUHATAP = "TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA"
+_TBMM_ENTITY_MENTION = "Türkiye Büyük Millet Meclisi Başkanlığı"
+
+
+def test_entities_produce_entity_nodes_and_bahseder_edges():
+    entry = _entry("uploads/e.pdf", entities=["NATO", "MNC-TÜR"])
+
+    graph = build_knowledge_graph([entry])
+
+    entity_nodes = [n for n in graph.nodes if n.node_type == "entity"]
+    assert len(entity_nodes) == 2
+    edges = [e for e in graph.edges if e.edge_type == "bahseder"]
+    assert len(edges) == 2
+    assert all(e.source == "doc:uploads/e.pdf" for e in edges)
+    assert all(e.source_kind == "llm" for e in edges)
+
+
+def test_two_documents_sharing_a_canonical_entity_get_one_node_two_edges_no_doc_doc_edge():
+    entries = [
+        _entry("uploads/f.pdf", entities=["NATO"]),
+        _entry("uploads/g.pdf", entities=["NATO"]),
+    ]
+
+    graph = build_knowledge_graph(entries)
+
+    entity_nodes = [n for n in graph.nodes if n.node_type == "entity"]
+    assert len(entity_nodes) == 1
+    assert entity_nodes[0].document_count == 2
+    edges_into_entity = [e for e in graph.edges if e.target == entity_nodes[0].id]
+    assert len(edges_into_entity) == 2
+    assert {e.source for e in edges_into_entity} == {"doc:uploads/f.pdf", "doc:uploads/g.pdf"}
+    # The point of routing through a shared node: no edge directly joins
+    # the two documents.
+    assert not any(
+        {e.source, e.target} == {"doc:uploads/f.pdf", "doc:uploads/g.pdf"} for e in graph.edges
+    )
+
+
+def test_muhatap_and_gonderen_kurum_share_the_entities_canonical_namespace():
+    entries = [
+        _entry("uploads/h.pdf", muhatap=_TBMM_MUHATAP),
+        _entry("uploads/i.pdf", entities=[_TBMM_ENTITY_MENTION]),
+    ]
+
+    graph = build_knowledge_graph(entries)
+
+    entity_nodes = [n for n in graph.nodes if n.node_type == "entity"]
+    assert len(entity_nodes) == 1  # muhatap and the entity mention resolve to the same node
+    assert entity_nodes[0].document_count == 2
+    edge_types = {e.edge_type for e in graph.edges}
+    assert edge_types == {"muhatap", "bahseder"}
+
+
+def test_muhatap_edge_is_rule_sourced_gonderen_and_bahseder_edges_carry_correct_kinds():
+    entry = _entry(
+        "uploads/j.pdf",
+        muhatap="ÖRNEK KAYMAKAMLIĞINA",
+        gonderen_kurum="ÖRNEK BAKANLIĞI",
+        entities=["NATO"],
+    )
+
+    graph = build_knowledge_graph([entry])
+
+    by_type = {e.edge_type: e for e in graph.edges}
+    assert by_type["muhatap"].source_kind == "rule"
+    assert by_type["gonderen"].source_kind == "rule"
+    assert by_type["bahseder"].source_kind == "llm"
+
+
+def test_konu_produces_a_konu_node_and_edge_in_its_own_namespace():
+    entries = [
+        _entry("uploads/k.pdf", konu="Personel İzin Talebi"),
+        _entry("uploads/l.pdf", konu="Personel İzin Talebi"),
+    ]
+
+    graph = build_knowledge_graph(entries)
+
+    konu_nodes = [n for n in graph.nodes if n.node_type == "konu"]
+    assert len(konu_nodes) == 1
+    assert konu_nodes[0].document_count == 2
+    konu_edges = [e for e in graph.edges if e.edge_type == "konu"]
+    assert len(konu_edges) == 2
+    assert all(e.source_kind == "rule" for e in konu_edges)
+
+
+def test_entity_source_field_conservation_no_edge_invented_or_dropped():
+    entries = [
+        _entry("uploads/m.pdf", muhatap=_TBMM_MUHATAP, gonderen_kurum="ÖRNEK BAKANLIĞI",
+               entities=["NATO", "BTK"]),
+        _entry("uploads/n.pdf", muhatap=None, gonderen_kurum=None, entities=["NATO"]),
+        _entry("uploads/o.pdf"),  # no entity-source fields at all
+    ]
+
+    graph = build_knowledge_graph(entries)
+
+    assert len([e for e in graph.edges if e.edge_type == "muhatap"]) == 1
+    assert len([e for e in graph.edges if e.edge_type == "gonderen"]) == 1
+    assert len([e for e in graph.edges if e.edge_type == "bahseder"]) == 3  # 2 + 1
+
+
+def test_entity_node_carries_kind_and_every_merged_surface_form():
+    entries = [
+        _entry("uploads/p.pdf", muhatap=_TBMM_MUHATAP),
+        _entry("uploads/q.pdf", entities=[_TBMM_ENTITY_MENTION]),
+    ]
+
+    graph = build_knowledge_graph(entries)
+
+    entity_node = next(n for n in graph.nodes if n.node_type == "entity")
+    assert entity_node.entity_kind == "kurum"
+    assert set(entity_node.surface_forms) == {_TBMM_MUHATAP, _TBMM_ENTITY_MENTION}
+    assert entity_node.label in {_TBMM_MUHATAP, _TBMM_ENTITY_MENTION}
+
+
+def test_document_node_carries_attribute_payload_for_the_inspector():
+    entry = _entry(
+        "uploads/r.pdf",
+        sayi="E-123-456", tarih="18.03.2026", konu="Test konusu",
+        muhatap="ÖRNEK KAYMAKAMLIĞINA", gonderen_kurum="ÖRNEK BAKANLIĞI",
+        ivedilik="Acele", summary="Kısa özet.",
+        missing_fields=[_missing_field("sayi", "Sayı", "RYUEHY m.11")],
+    )
+
+    graph = build_knowledge_graph([entry])
+
+    doc_node = next(n for n in graph.nodes if n.node_type == "document")
+    assert doc_node.attributes["sayi"] == "E-123-456"
+    assert doc_node.attributes["tarih"] == "18.03.2026"
+    assert doc_node.attributes["konu"] == "Test konusu"
+    assert doc_node.attributes["muhatap"] == "ÖRNEK KAYMAKAMLIĞINA"
+    assert doc_node.attributes["gonderen_kurum"] == "ÖRNEK BAKANLIĞI"
+    assert doc_node.attributes["ivedilik"] == "Acele"
+    assert doc_node.attributes["summary"] == "Kısa özet."
+    assert doc_node.attributes["missing_field_count"] == 1
+
+
+def test_insights_report_entity_and_konu_counts():
+    entries = [
+        _entry("uploads/s.pdf", muhatap=_TBMM_MUHATAP, konu="Bütçe"),
+        _entry("uploads/t.pdf", entities=["NATO"]),
+    ]
+
+    graph = build_knowledge_graph(entries)
+
+    assert graph.insights.entity_count == 2  # TBMM + NATO
+    assert graph.insights.konu_count == 1
+
+
+def test_golden_corpus_totals_unchanged_when_no_entity_source_fields_are_present():
+    """Regression guard: the v1 fixtures (`_load_fixture`) never populate
+    muhatap/gonderen_kurum/entities/konu, so the golden corpus's node/edge
+    totals -- and specifically the compliance headline -- must be byte-for-
+    byte identical to what `TestGoldenCorpus` already pins. If this test
+    ever needs an edit, something started leaking non-null defaults into
+    the new fields."""
+    graph = _golden_graph()
+    assert graph.insights.entity_count == 0
+    assert graph.insights.konu_count == 0
+    assert not any(n.node_type in ("entity", "konu") for n in graph.nodes)
+    assert not any(e.edge_type in ("muhatap", "gonderen", "bahseder", "konu") for e in graph.edges)

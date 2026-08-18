@@ -9,6 +9,7 @@ function documentNode(id: string, label: string): GraphNode {
     storage_path: id, file_name: label, document_type_label: "Resmî Yazı",
     compliance_status: "incomplete", has_analysis: true,
     kanun: null, madde: null, field_labels: [], document_count: null,
+    entity_kind: null, surface_forms: [], attributes: {},
   };
 }
 
@@ -18,6 +19,7 @@ function maddeNode(kanun: string, madde: string, documentCount: number, fieldLab
     storage_path: null, file_name: null, document_type_label: null,
     compliance_status: null, has_analysis: null,
     kanun, madde, field_labels: fieldLabels, document_count: documentCount,
+    entity_kind: null, surface_forms: [], attributes: {},
   };
 }
 
@@ -27,6 +29,7 @@ function kanunNode(kanun: string, label: string): GraphNode {
     storage_path: null, file_name: null, document_type_label: null,
     compliance_status: null, has_analysis: null,
     kanun, madde: null, field_labels: [], document_count: null,
+    entity_kind: null, surface_forms: [], attributes: {},
   };
 }
 
@@ -62,7 +65,7 @@ function buildGraph(): KnowledgeGraph {
       atifEdge("doc:a.pdf", "madde:2646:17"),
     ],
     insights: {
-      document_count: 2, madde_count: 1, kanun_count: 1,
+      document_count: 2, madde_count: 1, kanun_count: 1, entity_count: 0, konu_count: 0,
       rule_edge_count: 2, llm_edge_count: 1, unresolved_reference_count: 0,
       top_breached_madde: {
         madde_id: "madde:2646:17", kanun: "2646", madde: "17",
@@ -146,7 +149,7 @@ describe("KnowledgeGraphView", () => {
     const empty: KnowledgeGraph = {
       nodes: [], edges: [],
       insights: {
-        document_count: 0, madde_count: 0, kanun_count: 0,
+        document_count: 0, madde_count: 0, kanun_count: 0, entity_count: 0, konu_count: 0,
         rule_edge_count: 0, llm_edge_count: 0, unresolved_reference_count: 0,
         top_breached_madde: null,
       },

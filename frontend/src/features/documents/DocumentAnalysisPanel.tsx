@@ -6,7 +6,7 @@ import { Button } from "../../components/Button";
 import { Input, Textarea } from "../../components/FormControls";
 import type { DocumentAnalysis, EvrakFields, KnowledgeGraph } from "../../types/documents";
 import { SENSITIVITY_LABELS } from "../../types/security";
-import { KnowledgeGraphView } from "../graph/KnowledgeGraphView";
+import { EntityGraphView } from "../graph/EntityGraphView";
 
 const MARK_KIND_LABELS: Record<"signature" | "stamp" | "handwriting", string> = {
   signature: "İmza",
@@ -368,7 +368,7 @@ export function DocumentAnalysisPanel({
       {documentGraph !== undefined && (
         <details>
           <summary>Belge ilişkileri</summary>
-          <KnowledgeGraphView graph={documentGraph} loading={loadingDocumentGraph} />
+          <EntityGraphView graph={documentGraph} loading={loadingDocumentGraph} />
         </details>
       )}
     </Card>

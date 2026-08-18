@@ -2,6 +2,102 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.19.0] - 2026-08-18
+### Değiştirildi
+**Mevzuat Haritası → birleşik varlık grafiği** (#210) — bir önceki sürümün
+Evrak↔Madde uyum omurgası, kullanıcının asıl talebi doğrultusunda genişletildi:
+"her varlık bir node olsun, bir node'a tıklayınca özniteliklerini göreyim,
+aynı muhatap/gönderen/yetkiliyi paylaşan evraklar arasında kenar olsun."
+
+**Ölçülmeden önce doğrulanan tek karar tersine döndü.** v1, Kurum'u bilinçli
+olarak node tipi dışında bırakmıştı; gerekçe OCR hasarının node kimliğine
+karışmasıydı. Bu gerekçe aslında **entity resolution** için bir argümandı,
+düğüm tipini dışlamak için değil — bu sürüm tam da bunu yapıyor.
+
+**Belirleyici ölçüm: `imza_sahibi` — kullanıcının isteğinde ilk andığı alan —
+gerçek 14 evrakın **hiçbirinde** dolu değil.** Taranmış evraklardaki el
+yazısı imza blokları OCR ile kurtarılamıyor; bu, uyum grafiğinin kendi
+başlığıyla da bağımsız doğrulandı ("m.17 (İmza sahibi) — 14 evrakın
+14'ünde eksik"). Aynı talebin arkasındaki niyet yine de karşılanabilir
+durumdaydı: `entities[]` alanı zaten kişi node'ları üretiyor (İdris ŞAHİN 5
+evrağı birbirine bağlıyor) — boş bir alan yerine dolu bir alandan.
+
+- **`app/domains/documents/entity_resolution.py`** — saf çözümleyici.
+  `resolve_entities(raw_names)`, korpus genelindeki her ham `muhatap`/
+  `gonderen_kurum`/`entities[]` dizesini tek bir canonical isim uzayına
+  çözer: markdown/liste artıklarını ve sızmış belge numaralarını temizler,
+  `normalizers._fold` ile Türkçe katlar, aciliyet eklerini (`GÜNLÜDÜR`) ve
+  datif hâl ekini (yalnız `-na`/`-ne`/`-ya`/`-ye`, üç harfli `-ına`/`-ine`
+  değil — sözcük zaten iyelik `-ı/-i` ile bitiyor, uzun varyant o sesli
+  harfi de yerdi) ayıklar, son olarak sıralı anahtarlar üzerinde
+  deterministik bir `SequenceMatcher` bulanık geçişiyle kalan tek karakterlik
+  OCR gürültüsünü (`Ğ`→`Ç` gibi) birleştirir. Gösterim etiketi en sık geçen
+  ham yazım biçimidir — **ama** ölçüldü: gerçek korpusta markdown önekli
+  biçim (5/11) düz biçimden (4/11) daha sık, naif "en sık kazanır" bir
+  jüri karşısında `##### TÜRKİYE ... BAŞKANLIĞINA` gösterirdi; yalnızca
+  baştaki markdown gürültüsü etiketten temizlenir, sondaki parantez (gerçek
+  bilgi — bir alt birim) korunur, ham biçim yine de `surface_forms`'ta
+  dürüstçe kalır.
+- **Entity/Konu node'ları ve `muhatap`/`gonderen`/`bahseder`/`konu` kenarları**
+  `knowledge_graph.py`'ye eklendi. Üç kaynak (`muhatap`, `gonderen_kurum`,
+  `entities[]`) **tek bir paylaşılan çözümleme geçişinden** geçiyor — bu,
+  bir evrağın `muhatap`ı ile başka bir evrağın `entities[]` listesinde
+  geçen aynı kurumun tek node'da buluşmasını sağlıyor (canlı korpusta
+  doğrulandı: TBMM muhatap'ı + iki `entities[]` anması → 11 evraklık tek
+  node). `konu` ayrı bir ad uzayında kalıyor — bir konu ile bir kurum farklı
+  şeyler, aynı uzayı paylaşmaları yanlış birleşmelere yol açardı.
+  **Evrak↔Evrak kenarı yok** — iki evrak paylaştıkları entity node'u
+  üzerinden bağlanıyor, doğrudan değil; bu hem O(n) kalıyor (bir merkez
+  düğüme 5 evrak = 5 kenar, 10 değil) hem de bağlantının *nedenini* ekranda
+  tutuyor. `GraphNode.attributes` — yalnızca `document` node'larında dolu,
+  düğüm denetleyicisinin okuduğu serbest alan (sayı/tarih/konu/muhatap/
+  gönderen/ivedilik/özet/eksik-alan-sayısı).
+- **Frontend force-directed katman** (`features/graph/forceLayout.ts`) —
+  bipartit düzen (v1) artık yalnızca "sadece uyum" ön ayarında kullanılıyor;
+  birleşik görünüm belirleyici bir kuvvet benzetimiyle çiziliyor. Belirleyicilik
+  rastgelelik pahasına değil, tasarımla sağlanıyor: `Math.random()` hiç
+  çağrılmıyor (seed'li mulberry32, düğüm kimliklerine göre sıralı tüketiliyor),
+  yineleme sayısı sabit (yakınsama tabanlı değil), kenarlar kuvvet toplamından
+  önce deterministik sıralanıyor (kayan nokta toplaması değişmeli değildir —
+  ölçülmeden atlanabilecek ince bir hata kaynağıydı, kendi sıra-bağımsızlık
+  testimle yakalandı). **Ölçülmeden varsayılmadı**: naif O(n²) itiş 600
+  düğümde ~4.7sn sürdü (200 evrak sınırının ulaşabileceği ölçek), 150ms
+  bütçesinin çok üzerinde; Barnes-Hut dörtlü ağacı O(n log n)'e indirdi
+  (~262ms), yineleme sayısı 300'den 150'ye düşürülerek ~149ms'e ulaşıldı.
+  Gerçek korpus (14 evrak, ~60 düğüm) her hâlükârda milisaniyenin altında.
+- **`NodeInspector.tsx`** — kullanıcının isteğinin merkezindeki, v1'de hiç
+  olmayan yetenek: herhangi bir düğüme tıklamak özniteliklerini gösteren bir
+  panel açıyor. Entity düğümleri için birleşen **her** ham yazım biçimini
+  listeliyor — OCR birleşimini gizlemek yerine açıkça gösteriyor.
+- **`GraphFilters.tsx` + `filters.ts`** — düğüm/kenar türü anahtarları ve iki
+  ön ayar: "Tüm graf" ve "Sadece uyum". İkincisi, `filterToComplianceOnly`
+  saf fonksiyonuyla PR #212'nin gönderdiği bipartit görünümü **yeniden
+  uygulamadan, filtreleyerek** üretiyor. Tek incelik: `rule_edge_count`/
+  `llm_edge_count` artık grafik genelinde (entity kenarları dahil) sayılıyor
+  — filtre bu sayıları filtrelenmiş kenar kümesinden yeniden hesaplamazsa
+  "sadece uyum" başlığı v1'de hiç var olmayan entity kenarlarıyla şişmiş bir
+  "kural" sayısı gösterirdi. Canlı korpusta doğrulandı: filtrelenmemiş
+  birleşik grafik 78 kural/116 model önerisi (194 kenar, tüm düğüm/kenar
+  türleri açıkken) gösterirken, "sadece uyum" ön ayarı tam olarak PR #212'nin
+  gönderdiği "45 kural, 40 model önerisi"ni gösteriyor.
+
+### Test
+- `docker compose exec -T backend pytest -q` → **2200 test geçti** (2 bilinen,
+  önceden var olan MCP arızası).
+- `docker compose exec -T frontend npm test -- --run` → **240 test geçti**
+  (51 dosya).
+- `npm run lint` → 0 hata (`DecisionFlow.tsx`'teki 2 uyarı önceden mevcut).
+- `npx tsc --noEmit` → temiz.
+- Canlı korpus (14 evrak) doğrulaması: entity çözümlemesi TBMM'yi 6 farklı
+  yazım biçiminden 11 evraklık tek node'a birleştirdi; düğüm denetleyicisi
+  gerçek evrak özniteliklerini (Sayı, Konu, Muhatap, Gönderen kurum) doğru
+  gösterdi; "sadece uyum" ön ayarı v1'in gönderdiği sayılarla birebir eşleşti;
+  filtre anahtarları DOM'dan kenarları doğru kaldırdı; evrak düğümünden
+  "Belgeyi aç" ile `/documents/<path>`'e geçiş sıfır yeni kod olmadan çalıştı;
+  açık ve koyu tema.
+
+Refs: [#210](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/210).
+
 ## [3.18.0] - 2026-08-18
 ### Eklendi
 **Mevzuat Haritası** (#210) — evraklar ile mevzuat maddeleri arasındaki uyum

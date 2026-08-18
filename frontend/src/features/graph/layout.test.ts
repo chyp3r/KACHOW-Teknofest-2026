@@ -16,6 +16,9 @@ function documentNode(id: string, label = id): GraphNode {
     madde: null,
     field_labels: [],
     document_count: null,
+    entity_kind: null,
+    surface_forms: [],
+    attributes: {},
   };
 }
 
@@ -33,6 +36,9 @@ function maddeNode(kanun: string, madde: string, documentCount: number, fieldLab
     madde,
     field_labels: fieldLabels,
     document_count: documentCount,
+    entity_kind: null,
+    surface_forms: [],
+    attributes: {},
   };
 }
 
@@ -50,6 +56,9 @@ function kanunNode(kanun: string, label: string): GraphNode {
     madde: null,
     field_labels: [],
     document_count: null,
+    entity_kind: null,
+    surface_forms: [],
+    attributes: {},
   };
 }
 
@@ -76,7 +85,7 @@ describe("layoutBipartite", () => {
         ihlalEdge("doc:b.pdf", "madde:2646:17"),
       ],
       insights: {
-        document_count: 3, madde_count: 1, kanun_count: 1,
+        document_count: 3, madde_count: 1, kanun_count: 1, entity_count: 0, konu_count: 0,
         rule_edge_count: 3, llm_edge_count: 0, unresolved_reference_count: 0,
         top_breached_madde: null,
       },
@@ -96,7 +105,7 @@ describe("layoutBipartite", () => {
       nodes: [documentNode("z.pdf"), documentNode("a.pdf")],
       edges: [],
       insights: {
-        document_count: 2, madde_count: 0, kanun_count: 0,
+        document_count: 2, madde_count: 0, kanun_count: 0, entity_count: 0, konu_count: 0,
         rule_edge_count: 0, llm_edge_count: 0, unresolved_reference_count: 0,
         top_breached_madde: null,
       },
@@ -117,7 +126,7 @@ describe("layoutBipartite", () => {
       ],
       edges: [],
       insights: {
-        document_count: 0, madde_count: 3, kanun_count: 1,
+        document_count: 0, madde_count: 3, kanun_count: 1, entity_count: 0, konu_count: 0,
         rule_edge_count: 0, llm_edge_count: 0, unresolved_reference_count: 0,
         top_breached_madde: null,
       },
@@ -137,7 +146,7 @@ describe("layoutBipartite", () => {
       ],
       edges: [ihlalEdge("doc:a.pdf", "madde:2646:17")],
       insights: {
-        document_count: 1, madde_count: 1, kanun_count: 1,
+        document_count: 1, madde_count: 1, kanun_count: 1, entity_count: 0, konu_count: 0,
         rule_edge_count: 1, llm_edge_count: 0, unresolved_reference_count: 0,
         top_breached_madde: null,
       },
@@ -155,7 +164,7 @@ describe("layoutBipartite", () => {
       nodes: documents.slice(0, 5),
       edges: [],
       insights: {
-        document_count: 5, madde_count: 0, kanun_count: 0,
+        document_count: 5, madde_count: 0, kanun_count: 0, entity_count: 0, konu_count: 0,
         rule_edge_count: 0, llm_edge_count: 0, unresolved_reference_count: 0,
         top_breached_madde: null,
       },
@@ -164,7 +173,7 @@ describe("layoutBipartite", () => {
       nodes: documents,
       edges: [],
       insights: {
-        document_count: 50, madde_count: 0, kanun_count: 0,
+        document_count: 50, madde_count: 0, kanun_count: 0, entity_count: 0, konu_count: 0,
         rule_edge_count: 0, llm_edge_count: 0, unresolved_reference_count: 0,
         top_breached_madde: null,
       },
@@ -192,7 +201,7 @@ describe("layoutBipartite", () => {
       ],
       edges: [],
       insights: {
-        document_count: 0, madde_count: 2, kanun_count: 1,
+        document_count: 0, madde_count: 2, kanun_count: 1, entity_count: 0, konu_count: 0,
         rule_edge_count: 0, llm_edge_count: 0, unresolved_reference_count: 0,
         top_breached_madde: null,
       },

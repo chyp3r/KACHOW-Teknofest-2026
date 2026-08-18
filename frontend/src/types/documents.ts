@@ -127,12 +127,16 @@ export interface DraftRequest {
   reasoning_level: ReasoningLevel;
 }
 
-// Compliance knowledge graph -- see backend/app/domains/documents/knowledge_graph.py.
-// One flat shape per node/edge kind (document/madde/kanun, ihlal/atif) rather than
-// a discriminated union, mirroring the backend's own GraphNode/GraphEdge dataclasses.
+// Knowledge graph -- see backend/app/domains/documents/knowledge_graph.py.
+// One flat shape per node/edge kind rather than a discriminated union,
+// mirroring the backend's own GraphNode/GraphEdge dataclasses. v2 added
+// Entity/Konu node types (entity_kind/surface_forms only meaningful on
+// "entity" nodes) and the generic `attributes` payload the node inspector
+// reads (currently populated on "document" nodes only -- madde/kanun/entity
+// already have everything they need in the typed fields above it).
 export interface GraphNode {
   id: string;
-  node_type: "document" | "madde" | "kanun";
+  node_type: "document" | "madde" | "kanun" | "entity" | "konu";
   label: string;
   storage_path: string | null;
   file_name: string | null;
@@ -143,12 +147,15 @@ export interface GraphNode {
   madde: string | null;
   field_labels: string[];
   document_count: number | null;
+  entity_kind: "kurum" | "kisi" | "diger" | null;
+  surface_forms: string[];
+  attributes: Record<string, string | number | boolean | null>;
 }
 
 export interface GraphEdge {
   source: string;
   target: string;
-  edge_type: "ihlal" | "atif";
+  edge_type: "ihlal" | "atif" | "muhatap" | "gonderen" | "bahseder" | "konu";
   source_kind: "rule" | "llm";
   field_key: string | null;
   field_label: string | null;
@@ -170,6 +177,8 @@ export interface GraphInsights {
   document_count: number;
   madde_count: number;
   kanun_count: number;
+  entity_count: number;
+  konu_count: number;
   rule_edge_count: number;
   llm_edge_count: number;
   unresolved_reference_count: number;

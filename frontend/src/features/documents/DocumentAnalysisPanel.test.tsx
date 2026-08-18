@@ -210,11 +210,12 @@ describe("DocumentAnalysisPanel", () => {
               storage_path: null, file_name: null, document_type_label: null,
               compliance_status: null, has_analysis: null,
               kanun: "2646", madde: "17", field_labels: ["İmza sahibi"], document_count: 1,
+              entity_kind: null, surface_forms: [], attributes: {},
             },
           ],
           edges: [],
           insights: {
-            document_count: 1, madde_count: 1, kanun_count: 0,
+            document_count: 1, madde_count: 1, kanun_count: 0, entity_count: 0, konu_count: 0,
             rule_edge_count: 0, llm_edge_count: 0, unresolved_reference_count: 0,
             top_breached_madde: null,
           },
