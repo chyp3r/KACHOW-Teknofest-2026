@@ -50,6 +50,7 @@ def test_suggest_routing_returns_the_graph_decision():
     graph = AsyncMock()
     graph.ainvoke.return_value = {
         "routed_unit": "İnsan Kaynakları Daire Başkanlığı",
+        "alternative_units": ["Destek Hizmetleri"],
         "priority": "Normal",
         "reasoning": "Personel izin talebiyle ilgili.",
         "justification": "Personel izin talebiyle ilgili.",
@@ -64,7 +65,19 @@ def test_suggest_routing_returns_the_graph_decision():
     body = response.json()
     assert body["success"] is True
     assert body["data"]["routed_unit"] == "İnsan Kaynakları Daire Başkanlığı"
+    assert body["data"]["alternative_units"] == ["Destek Hizmetleri"]
     assert body["data"]["priority"] == "Normal"
+
+
+def test_suggest_routing_defaults_alternative_units_to_an_empty_list_when_the_graph_omits_it():
+    graph = AsyncMock()
+    graph.ainvoke.return_value = {"routed_unit": "X", "priority": "Normal", "reasoning": "r"}
+    _override(graph)
+
+    response = client.post(ENDPOINT, json={"draft": "Bir taslak metni."})
+
+    assert response.status_code == 200
+    assert response.json()["data"]["alternative_units"] == []
 
 
 def test_suggest_routing_passes_the_draft_and_score_to_the_graph():

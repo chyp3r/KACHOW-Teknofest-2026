@@ -25,6 +25,7 @@ import { useDrafts } from "../hooks/useDrafts";
 import type { PersistedDraft } from "../types/drafts";
 import type { DocumentAnalysis, DocumentMetadata, ReasoningLevel } from "../types/documents";
 import { DraftTable } from "../features/drafts/DraftTable";
+import { UnitPicker } from "../features/drafts/UnitPicker";
 
 const VERSION_PREVIEW_LIMIT = 420;
 
@@ -285,6 +286,17 @@ export function DraftsPage({
                                 <small>Deneme</small>
                                 <strong>{drafts.activeDraft.attempts ?? "—"}</strong>
                               </span>
+                            </div>
+                            <div className="draft-detail-destination">
+                              <small>Hedef birim</small>
+                              <strong>{drafts.activeDraft.destination || "Belirtilmedi"}</strong>
+                              <UnitPicker
+                                currentDestination={drafts.activeDraft.destination}
+                                saving={drafts.updatingDestination}
+                                onSave={(destination) =>
+                                  void drafts.updateDestination(drafts.activeDraft!.id, destination)
+                                }
+                              />
                             </div>
                           </div>
 

@@ -30,6 +30,7 @@ interface DraftDetails {
 
 interface RoutingDetails {
   routed_unit?: string;
+  alternative_units?: string[];
 }
 
 // The score/approval/routing/rejection facts that used to be concatenated
@@ -43,6 +44,7 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
 
   const hasScore = typeof draft.combined_score === "number";
   const routedUnit = routing?.routed_unit;
+  const alternativeUnits = routing?.alternative_units ?? [];
   const isRejected = draft.status === "REJECTED";
   const isReviseExhausted = draft.status === "REVISE_REQUESTED";
   const changelogSummary = draft.changelog?.summary;
@@ -84,6 +86,7 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
         <span className="draft-meta-chip">
           <Route size={13} />
           Önerilen birim: {routedUnit}
+          {alternativeUnits.length > 0 ? ` · Alternatif: ${alternativeUnits.join(", ")}` : ""}
         </span>
       )}
       {draft.requires_human_approval && !isRejected && draft.evaluation_notes && (

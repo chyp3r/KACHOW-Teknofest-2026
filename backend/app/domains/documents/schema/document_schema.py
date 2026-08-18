@@ -245,4 +245,8 @@ class DraftResponseSchema(BaseModel):
         ),
     )
     destination: str = Field(description="Evrakın yönlendirildiği birim veya aksiyon.")
+    alternative_units: List[str] = Field(
+        default_factory=list,
+        description="Birincil öneriye alternatif olabilecek ikinci en uygun birim(ler).",
+    )
     justification: str = Field(description="Yönlendirme kararının gerekçesi.")

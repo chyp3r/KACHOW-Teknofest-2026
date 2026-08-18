@@ -44,6 +44,20 @@ describe("DraftMetaStrip", () => {
     expect(screen.getByText("Hazır")).toBeInTheDocument();
   });
 
+  it("shows the alternative unit alongside the primary suggestion", () => {
+    render(
+      <DraftMetaStrip
+        details={{
+          draft: { draft: "Taslak metni", status: "COMPLETED", combined_score: 92 },
+          routing: { routed_unit: "Mali İşler", alternative_units: ["Destek Hizmetleri"] },
+        }}
+      />,
+    );
+    expect(
+      screen.getByText(/Önerilen birim: Mali İşler · Alternatif: Destek Hizmetleri/),
+    ).toBeInTheDocument();
+  });
+
   it("shows the applied-rules score breakdown when present", () => {
     render(
       <DraftMetaStrip

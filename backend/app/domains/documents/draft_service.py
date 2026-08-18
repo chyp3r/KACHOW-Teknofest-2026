@@ -257,6 +257,7 @@ class DraftService:
             **common_fields,
             draft_id=draft_id or "",
             destination=destination,
+            alternative_units=routing_state.get("alternative_units") or [],
             justification=routing_state.get("justification", "Yönlendirme kararı alınamadı."),
         )
 

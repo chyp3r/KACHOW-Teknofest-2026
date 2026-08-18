@@ -1,7 +1,21 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { DraftsPage } from "./DraftsPage";
+
+// UnitPicker (rendered inside the expanded draft detail) fetches units via
+// a live useQuery -- every render here now needs a real QueryClient in
+// scope, same as MessageList.test.tsx's own wrapper.
+vi.mock("../services/unitsService", () => ({
+  unitsService: { list: vi.fn().mockResolvedValue([]) },
+}));
+
+function renderWithQueryClient(ui: ReactNode) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 const longDraftContent = "İkinci sürüm taslak içeriği. ".repeat(24);
 const draft = {
@@ -24,11 +38,13 @@ const sourceDocument = {
 };
 
 const deleteDraft = vi.fn().mockResolvedValue(undefined);
+const updateDestination = vi.fn().mockResolvedValue(undefined);
 vi.mock("../hooks/useDrafts", () => ({ useDrafts: () => ({
   drafts: [draft], total: 1, activeDraft: draft,
   versions: [{ ...draft, id: "draft-1", version: 1, content: "İlk sürüm" }, draft],
   loading: false, detailLoading: false, refreshing: false, error: null,
   deleteDraft, deleting: false,
+  updateDestination, updatingDestination: false,
 }) }));
 vi.mock("../hooks/useDraftCreation", () => ({ useDraftCreation: () => ({
   correspondenceTypes: [], typesLoading: false, draft: null, creating: false,
@@ -37,7 +53,7 @@ vi.mock("../hooks/useDraftCreation", () => ({ useDraftCreation: () => ({
 
 describe("DraftsPage", () => {
   it("shows the source document and expands version history below the selected row", () => {
-    render(
+    renderWithQueryClient(
       <MemoryRouter>
         <DraftsPage
           documents={[sourceDocument]}
@@ -63,9 +79,34 @@ describe("DraftsPage", () => {
     expect(screen.getByRole("button", { name: "Daha az göster" })).toBeInTheDocument();
   });
 
+  it("lets the user override the routed unit from the draft detail", async () => {
+    updateDestination.mockClear();
+    renderWithQueryClient(
+      <MemoryRouter>
+        <DraftsPage
+          documents={[sourceDocument]}
+          selected={null}
+          analysis={null}
+          activeDraftId="draft-2"
+          onSelect={vi.fn()}
+          onOpenDraft={vi.fn()}
+          onCloseDraft={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Birimi değiştir" }));
+    const select = await screen.findByLabelText("Hedef birim");
+    fireEvent.change(select, { target: { value: "__custom__" } });
+    fireEvent.change(screen.getByLabelText("Birim adı"), { target: { value: "Basın Birimi" } });
+    fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+
+    expect(updateDestination).toHaveBeenCalledWith("draft-2", "Basın Birimi");
+  });
+
   it("keeps the creation form hidden until the header action is used", () => {
     const onOpenDraft = vi.fn();
-    render(
+    renderWithQueryClient(
       <MemoryRouter>
         <DraftsPage
           documents={[sourceDocument]}
@@ -88,7 +129,7 @@ describe("DraftsPage", () => {
   it("deletes a draft after confirmation and closes it if it was open", async () => {
     deleteDraft.mockClear();
     const onCloseDraft = vi.fn();
-    render(
+    renderWithQueryClient(
       <MemoryRouter>
         <DraftsPage
           documents={[sourceDocument]}
@@ -112,7 +153,7 @@ describe("DraftsPage", () => {
 
   it("does not delete anything when the confirmation is cancelled", () => {
     deleteDraft.mockClear();
-    render(
+    renderWithQueryClient(
       <MemoryRouter>
         <DraftsPage
           documents={[sourceDocument]}
