@@ -22,6 +22,7 @@ from app.core.enums.user_role import UserRole
 from app.core.security import decode_token
 from app.infrastructure.database.session import get_db
 from app.infrastructure.extractors import get_document_extractor
+from app.infrastructure.extractors.vision import OllamaVisionExtractor
 from app.infrastructure.storage import get_storage_client
 from app.infrastructure.vectorstore import get_vector_store
 from app.domains.documents.service import DocumentService
@@ -344,6 +345,13 @@ def get_document_analysis_service(
         # request is fine, mirroring how analysis_graph builds its own
         # per-agent instances internally.
         summarizer_agent=SummarizerAgent(get_llm_client()),
+        # Backs reextract_document_text -- the user's manual "Yeniden OCR"
+        # override, always a full glm-ocr pass bypassing get_document_extractor()'s
+        # chain entirely (see that method's own docstring for why). A fresh
+        # instance per request, same as summarizer_agent above and the
+        # vision extractor get_document_extractor() builds internally --
+        # cheap to construct, no I/O until .extract() is actually called.
+        vision_extractor=OllamaVisionExtractor(),
     )
 
 # ---------------------------------------------------------------------------
