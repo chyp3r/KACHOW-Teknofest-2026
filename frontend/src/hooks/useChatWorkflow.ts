@@ -8,6 +8,7 @@ import type {
   InterruptState,
   PersistedChatMessage,
   PromptQuestion,
+  ResolvedPromptInteraction,
   ToolCallEvent,
   WorkflowEvent,
   WorkflowLog,
@@ -34,6 +35,147 @@ function toChatMessage(message: PersistedChatMessage): ChatMessage {
     status: message.workflow_status ?? undefined,
     details: message.details ?? undefined,
   };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function resolvedInteraction(
+  interrupt: InterruptState,
+  action: ResolvedPromptInteraction["action"],
+  answers: Record<string, string | string[]>,
+  instructions = "",
+  reason?: string,
+): ResolvedPromptInteraction {
+  return {
+    kind: interrupt.kind,
+    title: interrupt.payload.title,
+    intro: interrupt.payload.intro,
+    questions: interrupt.payload.questions ?? [],
+    resolved: interrupt.payload.resolved,
+    answers,
+    action,
+    instructions: instructions || undefined,
+    reason,
+  };
+}
+
+function persistedInteraction(
+  message: PersistedChatMessage,
+  pendingInterrupt: InterruptState | null,
+): ResolvedPromptInteraction | null {
+  const response = asRecord(asRecord(message.details)?.interaction_response);
+  if (!response || !pendingInterrupt) return null;
+  const action = response.action;
+  if (
+    action !== "answer" &&
+    action !== "approve" &&
+    action !== "revise" &&
+    action !== "reject" &&
+    action !== "select"
+  ) return null;
+  const rawAnswers = asRecord(response.answers) ?? {};
+  const answers: Record<string, string | string[]> = {};
+  for (const [key, value] of Object.entries(rawAnswers)) {
+    if (typeof value === "string") answers[key] = value;
+    else if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+      answers[key] = value as string[];
+    }
+  }
+  return resolvedInteraction(
+    pendingInterrupt,
+    action,
+    answers,
+    typeof response.instructions === "string" ? response.instructions : "",
+    typeof response.reason === "string" ? response.reason : undefined,
+  );
+}
+
+function legacyPersistedInteraction(
+  message: PersistedChatMessage,
+  pendingInterrupt: InterruptState | null,
+): ResolvedPromptInteraction | null {
+  if (!pendingInterrupt || message.role !== "user") return null;
+  const questions = pendingInterrupt.payload.questions ?? [];
+  if (questions.length === 0) return null;
+  const questionByKey = new Map(questions.map((question) => [question.key, question]));
+  const answers: Record<string, string | string[]> = {};
+
+  for (const segment of message.content.split(";")) {
+    const separator = segment.indexOf(":");
+    if (separator < 1) continue;
+    const key = segment.slice(0, separator).trim();
+    const value = segment.slice(separator + 1).trim();
+    const question = questionByKey.get(key);
+    if (!question || !value) continue;
+    answers[key] = question.multi_select
+      ? value.split(",").map((item) => item.trim()).filter(Boolean)
+      : value;
+  }
+
+  return Object.keys(answers).length > 0
+    ? resolvedInteraction(pendingInterrupt, "answer", answers)
+    : null;
+}
+
+function toChatMessages(items: PersistedChatMessage[]): ChatMessage[] {
+  let pendingInterrupt: InterruptState | null = null;
+  let pendingInterruptMessage: PersistedChatMessage | null = null;
+  const messages: ChatMessage[] = [];
+
+  for (const item of items) {
+    const interrupt = asRecord(asRecord(item.details)?.interrupt);
+    if (item.role === "assistant" && interrupt) {
+      const kind = interrupt.kind;
+      if (
+        kind === "missing_information" ||
+        kind === "writing_brief" ||
+        kind === "artifact_transfer_confirm" ||
+        kind === "artifact_transfer_disambiguate"
+      ) {
+        if (pendingInterruptMessage) messages.push(toChatMessage(pendingInterruptMessage));
+        pendingInterrupt = {
+          kind,
+          interruptId: `history:${item.id}`,
+          payload: interrupt as InterruptState["payload"],
+        };
+        pendingInterruptMessage = item;
+        continue;
+      }
+    }
+
+    const resolvedPrompt =
+      item.role === "user"
+        ? persistedInteraction(item, pendingInterrupt) ??
+          legacyPersistedInteraction(item, pendingInterrupt)
+        : null;
+    if (resolvedPrompt) {
+      pendingInterrupt = null;
+      pendingInterruptMessage = null;
+      messages.push({
+        ...toChatMessage(item),
+        sender: "assistant",
+        text: "",
+        resolvedPrompt,
+      });
+      continue;
+    }
+
+    if (pendingInterruptMessage) {
+      messages.push(toChatMessage(pendingInterruptMessage));
+      pendingInterrupt = null;
+      pendingInterruptMessage = null;
+    }
+    messages.push(toChatMessage(item));
+  }
+
+  // A final unresolved interrupt is rendered by `pendingInterrupt` as the
+  // live form. Keeping its persisted generic assistant sentence as well
+  // would produce two messages for the same question.
+  return messages;
 }
 
 export function useChatWorkflow(
@@ -187,7 +329,7 @@ export function useChatWorkflow(
     // start `messages` at `[]` first (see the effect above), so a real
     // hydration is never mistaken for one of these.
     const items = messagesQuery.data.items;
-    setMessages((previous) => (items.length >= previous.length ? items.map(toChatMessage) : previous));
+    setMessages((previous) => (items.length >= previous.length ? toChatMessages(items) : previous));
   }, [messagesQuery.data]);
 
   // Rehydrates the workflow stepper's plan/order from the last persisted
@@ -369,6 +511,11 @@ export function useChatWorkflow(
           // a plain hand-off, not a replace.
           streamingTextRef.current = "";
           setStreamingText("");
+          if (event.workflow_status === "INTERRUPTED") {
+            pendingQuestions.current = null;
+            if (threadIdRef.current) refreshServerState(threadIdRef.current);
+            break;
+          }
           setPendingInterrupt(null);
           const questions = pendingQuestions.current ?? undefined;
           pendingQuestions.current = null;
@@ -395,7 +542,7 @@ export function useChatWorkflow(
     [appendLog, noteNode, onSessionResolved, refreshServerState],
   );
 
-  const send = useCallback(async (text: string, reasoningLevel: ReasoningLevel, useDocument: boolean) => {
+  const send = useCallback(async (text: string, reasoningLevel: ReasoningLevel, useDocument: boolean, documentIdOverride?: string, draftId?: string | null) => {
     if (!text.trim() || loading || activeRequest.current) return;
     setLoading(true);
     setPendingInterrupt(null);
@@ -404,7 +551,7 @@ export function useChatWorkflow(
     const controller = new AbortController();
     activeRequest.current = controller;
     try {
-      await chatService.send({ message: text.trim(), session_id: clientId, document_id: useDocument ? (selectedDocument?.storage_path ?? null) : null, reasoning_level: reasoningLevel }, handleEvent, controller.signal);
+      await chatService.send({ message: text.trim(), session_id: clientId, document_id: useDocument ? (documentIdOverride ?? selectedDocument?.storage_path ?? null) : null, draft_id: draftId ?? null, reasoning_level: reasoningLevel }, handleEvent, controller.signal);
     } catch (caught) {
       if (caught instanceof DOMException && caught.name === "AbortError") return;
       setMessages((previous) => [...previous, { sender: "assistant", text: caught instanceof Error ? caught.message : "İletişim sırasında bir hata oluştu.", status: "FAILED" }]);
@@ -420,17 +567,40 @@ export function useChatWorkflow(
     const controller = new AbortController();
     activeRequest.current = controller;
     const currentInterrupt = pendingInterrupt;
+    const receiptId = `interaction:${currentInterrupt.interruptId}`;
     try {
       const state = await chatService.state(threadId);
       if (state.status !== "interrupted") throw new Error("Bekleyen onay artık geçerli değil. Oturum yenileniyor.");
       setPendingInterrupt(null);
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: receiptId,
+          sender: "assistant",
+          text: "",
+          resolvedPrompt: resolvedInteraction(
+            currentInterrupt,
+            action,
+            answers,
+            instructions,
+            reason,
+          ),
+        },
+      ]);
       resetFlow();
       await chatService.resume({ session_id: threadId, action, answers, instructions, reason }, handleEvent, controller.signal);
       refreshServerState(threadId);
     } catch (caught) {
-      if (caught instanceof DOMException && caught.name === "AbortError") return;
+      if (caught instanceof DOMException && caught.name === "AbortError") {
+        setPendingInterrupt(currentInterrupt);
+        setMessages((previous) => previous.filter((message) => message.id !== receiptId));
+        return;
+      }
       setPendingInterrupt(currentInterrupt);
-      setMessages((previous) => [...previous, { sender: "assistant", text: caught instanceof Error ? caught.message : "Devam işlemi tamamlanamadı.", status: "FAILED" }]);
+      setMessages((previous) => [
+        ...previous.filter((message) => message.id !== receiptId),
+        { sender: "assistant", text: caught instanceof Error ? caught.message : "Devam işlemi tamamlanamadı.", status: "FAILED" },
+      ]);
     } finally {
       if (activeRequest.current === controller) activeRequest.current = null;
       setLoading(false);

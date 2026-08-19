@@ -2,24 +2,33 @@ import { Send } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { DocumentSelector } from "../documents/DocumentSelector";
 import type { DocumentMetadata, ReasoningLevel } from "../../types/documents";
+import type { PersistedDraft } from "../../types/drafts";
 import { IconButton } from "../../components/Button";
 import { Select, Textarea } from "../../components/FormControls";
 
 export function ChatComposer({
   documents,
+  drafts,
   selectedDocument,
+  selectedDraft,
   loading,
   onSelectDocument,
+  onSelectDraft,
   onClearDocument,
+  onClearDraft,
   onSend,
   promptTemplate,
   onPromptTemplateConsumed,
 }: {
   documents: DocumentMetadata[];
+  drafts: PersistedDraft[];
   selectedDocument: DocumentMetadata | null;
+  selectedDraft: PersistedDraft | null;
   loading: boolean;
   onSelectDocument: (document: DocumentMetadata) => void;
+  onSelectDraft: (draft: PersistedDraft) => void;
   onClearDocument: () => void;
+  onClearDraft: () => void;
   onSend: (
     text: string,
     level: ReasoningLevel,
@@ -55,12 +64,16 @@ export function ChatComposer({
       <div className="composer-controls">
         <DocumentSelector
           documents={documents}
+          drafts={drafts}
           selected={selectedDocument}
+          selectedDraft={selectedDraft}
           onSelect={onSelectDocument}
+          onSelectDraft={onSelectDraft}
           onClear={onClearDocument}
+          onClearDraft={onClearDraft}
         />
         <label className="composer-mode">
-          <span>AI modu</span>
+          <span>Çalışma modu</span>
           <Select
             controlSize="sm"
             value={level}
@@ -68,7 +81,7 @@ export function ChatComposer({
           >
             <option value="fast">Hızlı</option>
             <option value="balanced">Dengeli</option>
-            <option value="deep">Derin</option>
+            <option value="deep">Derinlemesine</option>
           </Select>
         </label>
       </div>
@@ -84,7 +97,9 @@ export function ChatComposer({
           placeholder={
             loading
               ? "Bekleyen işlem tamamlandığında yeniden yazabilirsiniz."
-              : "Bir soru yazın veya resmî yazı hazırlanmasını isteyin…"
+              : selectedDraft
+                ? "Seçili taslak için revizyon talimatınızı yazın…"
+                : "Bir soru yazın veya resmî yazı hazırlanmasını isteyin…"
           }
           aria-label="Sohbet mesajı"
           aria-describedby="composer-keyboard-help"

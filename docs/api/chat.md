@@ -16,7 +16,7 @@ sonucu döndürür.
 ## İstek
 
 ```json
-{ "message": "Bu evraka cevap yazısı hazırla", "session_id": "s-123", "document_id": "uploads/9f1c....pdf" }
+{ "message": "Muhatap satırını Ankara Valiliği olarak değiştir", "session_id": "s-123", "draft_id": "a41f..." }
 ```
 
 | Alan | Tür | Zorunlu | Açıklama |
@@ -24,6 +24,16 @@ sonucu döndürür.
 | `message` | string | Evet | 1-8000 karakter |
 | `session_id` | string | Hayır | 1-128 karakter, `^[A-Za-z0-9:_-]+$`. Belirtilmezse sunucu bir tane üretir (`anon:<uuid>`) ve ilk `session` olayında/response'da geri döner. LangGraph checkpointer'ında `thread_id` olarak kullanılır — hem konuşma geçmişini hem de bekleyen bir HITL kesintisini bu kimlik üzerinden taşır |
 | `document_id` | string | Hayır | Belge soru-cevap/taslak akışları için önceden yüklenmiş bir evrağın `storage_path`'i |
+| `draft_id` | string | Hayır | Revize edilecek kayıtlı taslağın kimliği. Yetkili kullanıcının seçtiği sürümü oturumun aktif taslak bağlamına yükler |
+| `reasoning_level` | string | Hayır | `fast` \| `balanced` \| `deep`; varsayılan `balanced` |
+
+`document_id` ve `draft_id` birbirini dışlar; aynı istekte ikisi birlikte
+gönderilirse `422 VALIDATION_ERROR` döner. `draft_id` için `draft:update`
+yetkisi aranır. Çalışan yalnızca kendi taslağını, yönetici roller ise aynı
+şirket içindeki yetkili taslakları revizyon bağlamına alabilir.
+`session_id` taşımayan doğrudan-API taslakları ilk revizyon mesajında bu
+sohbet oturumuna bağlanır; kaydedilen sonuç ayrı bir v1 yerine seçilen
+taslağın bir sonraki sürümü olur.
 
 ## Yanıt
 

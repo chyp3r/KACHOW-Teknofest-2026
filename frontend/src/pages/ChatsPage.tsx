@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
-import { AlertCircle, GitBranch, History, Plus, RotateCcw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { AlertCircle, GitBranch, History, PauseCircle, Plus, RotateCcw } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { ChatDropZone } from "../features/chat/ChatDropZone";
@@ -14,6 +15,7 @@ import type {
   WorkflowNodeStatus,
 } from "../types/chat";
 import type { DocumentMetadata, ReasoningLevel } from "../types/documents";
+import { useDrafts } from "../hooks/useDrafts";
 import { Button } from "../components/Button";
 import { Alert, Spinner } from "../components/Surface";
 
@@ -26,6 +28,7 @@ export function ChatsPage({
   sessionsError,
   historyLoading,
   historyError,
+  documentError,
   selectedDocument,
   messages,
   streamingText,
@@ -66,6 +69,7 @@ export function ChatsPage({
   sessionsError: string | null;
   historyLoading: boolean;
   historyError: string | null;
+  documentError?: string | null;
   selectedDocument: DocumentMetadata | null;
   messages: ChatMessage[];
   streamingText: string;
@@ -94,6 +98,7 @@ export function ChatsPage({
     text: string,
     level: ReasoningLevel,
     useDocument: boolean,
+    draftId?: string | null,
   ) => Promise<void>;
   onResume: (
     action: "answer" | "approve" | "revise" | "reject" | "select",
@@ -111,8 +116,28 @@ export function ChatsPage({
   onUploadDocument?: (file: File) => Promise<void>;
   documentUploading?: boolean;
 }) {
+  const [searchParams] = useSearchParams();
+  const requestedDraftId = searchParams.get("draft");
+  const [selectedDraftId, setSelectedDraftId] = useState<string | null>(requestedDraftId);
+  const draftContext = useDrafts(selectedDraftId ?? undefined);
+  const selectedDraft = draftContext.activeDraft
+    ?? draftContext.drafts.find((draft) => draft.id === selectedDraftId)
+    ?? null;
   const [promptTemplate, setPromptTemplate] = useState<string | null>(null);
   const historyTriggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (requestedDraftId) setSelectedDraftId(requestedDraftId);
+  }, [requestedDraftId]);
+
+  const startNewChat = () => {
+    setSelectedDraftId(null);
+    onNewChat();
+  };
+  const openSession = (sessionId: string) => {
+    setSelectedDraftId(null);
+    onOpenSession(sessionId);
+  };
 
   // ThinkingBubble's "taking longer than usual" shortcut -- cancels the
   // stalled turn and resends the same last user message at the "fast"
@@ -127,7 +152,7 @@ export function ChatsPage({
     if (!lastUserMessage) return;
     onCancel();
     window.setTimeout(() => {
-      void onSend(lastUserMessage.text, "fast", Boolean(selectedDocument));
+      void onSend(lastUserMessage.text, "fast", Boolean(selectedDocument), selectedDraft?.id);
     }, 50);
   };
 
@@ -161,7 +186,7 @@ export function ChatsPage({
             </Button>
           </>
         }
-        primaryAction={<Button leadingIcon={<Plus />} onClick={onNewChat}>Yeni sohbet</Button>}
+        primaryAction={<Button leadingIcon={<Plus />} onClick={startNewChat}>Yeni sohbet</Button>}
       />
       {historyOpen && (
         <ConversationHistoryDrawer
@@ -174,14 +199,20 @@ export function ChatsPage({
           returnFocusRef={historyTriggerRef}
           onClose={onCloseHistory}
           onRetry={onRetrySessions}
-          onNewChat={onNewChat}
-          onOpenSession={onOpenSession}
+          onNewChat={startNewChat}
+          onOpenSession={openSession}
         />
       )}
       <div className="chat-workspace">
         <div className="chat-content">
         {historyError && !historyOpen && (
           <Alert variant="error" icon={<AlertCircle />} action={<Button variant="ghost" size="sm" leadingIcon={<RotateCcw />} onClick={() => void onRetryHistory()}>Tekrar dene</Button>}>{historyError}</Alert>
+        )}
+        {documentError && (
+          <Alert variant="error" icon={<AlertCircle />}>{documentError}</Alert>
+        )}
+        {draftContext.error && (
+          <Alert variant="error" icon={<AlertCircle />}>{draftContext.error}</Alert>
         )}
         {historyLoading && <div className="processing-line"><Spinner label="Sohbet yükleniyor" />Sohbet yükleniyor…</div>}
         {guardrailEvents.length > 0 && (
@@ -201,7 +232,7 @@ export function ChatsPage({
           messages={messages}
           streamingText={streamingText}
           loading={loading}
-          hasSelectedDocument={Boolean(selectedDocument)}
+          hasSelectedDocument={Boolean(selectedDocument || selectedDraft)}
           interrupt={interrupt}
           onResume={onResume}
           onSuggestion={setPromptTemplate}
@@ -210,7 +241,7 @@ export function ChatsPage({
           // own defaults, since a one-click answer to "taslak mı,
           // revizyon mu?" isn't the moment to also silently change the
           // reasoning level or attach/detach the document.
-          onSelectOption={(label) => void onSend(label, "balanced", Boolean(selectedDocument))}
+          onSelectOption={(label) => void onSend(label, "balanced", Boolean(selectedDocument), selectedDraft?.id)}
           planSteps={planSteps}
           nodeOrder={nodeOrder}
           nodeLabels={nodeLabels}
@@ -226,16 +257,38 @@ export function ChatsPage({
         />
         </div>
         <div className="composer-dock">
-          <ChatComposer
-          documents={documents}
-          selectedDocument={selectedDocument}
-          loading={loading || Boolean(interrupt)}
-          onSelectDocument={onSelectDocument}
-          onClearDocument={onClearDocument}
-          onSend={onSend}
-          promptTemplate={promptTemplate}
-          onPromptTemplateConsumed={() => setPromptTemplate(null)}
-          />
+          {interrupt ? (
+            <div className="composer-paused-state" role="status">
+              <PauseCircle size={18} />
+              <span>
+                <strong>Yanıtınız bekleniyor</strong>
+                <small>Yukarıdaki soruları tamamladığınızda mesaj alanı yeniden açılır.</small>
+              </span>
+            </div>
+          ) : (
+            <ChatComposer
+              documents={documents}
+              drafts={draftContext.drafts}
+              selectedDocument={selectedDocument}
+              selectedDraft={selectedDraft}
+              loading={loading}
+              onSelectDocument={(document) => { setSelectedDraftId(null); onSelectDocument(document); }}
+              onSelectDraft={(draft) => {
+                onClearDocument();
+                if (draft.session_id && draft.session_id !== activeSessionId) {
+                  onOpenSession(draft.session_id);
+                } else if (!draft.session_id && activeSessionId) {
+                  onNewChat();
+                }
+                setSelectedDraftId(draft.id);
+              }}
+              onClearDocument={onClearDocument}
+              onClearDraft={() => setSelectedDraftId(null)}
+              onSend={(text, level, useDocument) => onSend(text, level, useDocument, selectedDraft?.id)}
+              promptTemplate={promptTemplate}
+              onPromptTemplateConsumed={() => setPromptTemplate(null)}
+            />
+          )}
         </div>
       </div>
     </div>

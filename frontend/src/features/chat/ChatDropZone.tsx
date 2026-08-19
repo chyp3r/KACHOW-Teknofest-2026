@@ -87,7 +87,7 @@ export function ChatDropZone({
             ) : (
               <>
                 <strong>Dosyanızı buraya bırakın</strong>
-                <span>Evrak analizi otomatik başlar.</span>
+                <span>Evrak sohbete eklenir ve analiz edilir.</span>
               </>
             )}
           </div>

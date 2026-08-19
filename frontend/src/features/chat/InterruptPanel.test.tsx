@@ -147,7 +147,7 @@ describe("InterruptPanel", () => {
     );
 
     expect(screen.getByText("Bilinenler")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Sen karar ver, devam et" }));
+    fireEvent.click(screen.getByRole("button", { name: "Otomatik belirle ve devam et" }));
     expect(onResume).toHaveBeenCalledWith("answer", { muhatap: "__auto__" }, "");
   });
 });
