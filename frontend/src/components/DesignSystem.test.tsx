@@ -6,6 +6,7 @@ import { Button, IconButton } from "./Button";
 import { Input } from "./FormControls";
 import { ListRow } from "./ListRow";
 import { Dialog, Drawer } from "./Overlay";
+import { Tabs } from "./Tabs";
 
 describe("design-system primitives", () => {
   it("keeps button content stable while exposing variant, loading, and disabled state", () => {
@@ -36,6 +37,14 @@ describe("design-system primitives", () => {
     fireEvent.keyDown(row, { key: "Enter" });
     fireEvent.click(row);
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes shared tabs with native selected state", () => {
+    const onChange = vi.fn();
+    render(<Tabs label="Bölümler" active="users" onChange={onChange} items={[{ id: "users", label: "Kullanıcılar" }, { id: "training", label: "Eğitim" }]} />);
+    expect(screen.getByRole("tab", { name: "Kullanıcılar" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "Eğitim" }));
+    expect(onChange).toHaveBeenCalledWith("training");
   });
 });
 
