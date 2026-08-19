@@ -2,6 +2,80 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.23.0] - 2026-08-19
+### Eklendi
+- Backend yönetim kataloğundaki analytics, audit, şirket profili/kuralları,
+  üslup adaptörü, kullanıcı izinleri, birim yönetimi, geri bildirim ve eğitim
+  dışa aktarma uçları rol bazlı Yönetim ekranlarına bağlandı. Root kullanıcılar
+  için kurum CRUD, yönetici atama, platform istatistikleri, sağlık ve denetim
+  zincirini ayrı `/platform` çalışma alanında birleştiren Platform Yönetimi
+  ekranı eklendi.
+- Evrak Kütüphanesi'ne kişisel gelen havuz, havuz öğesini görüntüleme,
+  okundu işaretleme, sahiplenme, kaldırma ve kişi/birim havuzuna gönderme
+  akışları eklendi. Taslak paylaşımı okundu/geri çekme, aktarım alıcı önerileri
+  ve Mesajlar üzerinden grup aktarımı arayüze bağlandı.
+- Sohbet bağlam seçicisine **Evraklar / Taslaklar** sekmeleri ve kayıtlı
+  taslak araması eklendi. `ChatMessageRequest.draft_id`, yetki kontrolünden
+  geçen bir taslağı aktif revizyon bağlamına yükleyerek sohbet içinden hedefli
+  revizyon yapılmasını sağlıyor.
+- Gerçek evrak, taslak ve konuşma verilerini birleştiren renkli **Ana Sayfa**
+  eklendi. Sayfa; dört canlı metrik, yedi günlük hareket grafiği, evrak durum
+  dağılımı, tür dağılımı, son evraklar ve dört hızlı eylem içeriyor. Yeni bir
+  veri kopyası veya API ucu oluşturmadan mevcut sorgu cache'lerini kullanıyor.
+
+### Değiştirildi
+- Ana Sayfa, admin ve manager rollerinde şirket analytics özetini, zaman
+  serilerini ve birim dağılımını backend'den gösteriyor; çalışan görünümü
+  mevcut kişisel çalışma alanı metriklerini koruyor. Yönetim bilgi mimarisi
+  Kullanıcılar, Birimler, Kurum, AI ve Eğitim, Analitik ve Denetim olarak
+  ayrıldı.
+- Mobil uygulama kabuğunda masaüstünden kalan dar menü tercihi artık içerik
+  sütununu daraltmıyor. 760 piksel ve altında navigasyon tam çekmeceye,
+  sayfalar güvenli üst boşluklu tek sütuna; hesap, yönetim ve taslak metrikleri
+  de kullanılabilir tek/akışkan gridlere dönüşüyor.
+- Ana Sayfa banner'ı çakışmayan grid yerleşimine geçirildi; dekoratif yörünge
+  eylemlerden uzaklaştırıldı, mobilde gizlendi. Banner eylemleri, metrikler,
+  grafik kartları ve hızlı işlemler 480 piksel altındaki ekranlar için ayrıca
+  sıkılaştırıldı; bağlantı alt çizgileri ve dar sütun taşmaları kaldırıldı.
+  Ana Sayfa grid satırları içerik yüksekliğini koruduğu için kısa viewport'larda
+  banner 40 piksele sıkışmıyor ve eylemler kesilmeden sayfayla birlikte kayıyor.
+- Mobil mesajlaşmada konuşma listesi ile aktif konuşma ayrı görünümler olarak
+  çalışıyor. Aktif konuşmaya geri dönüş düğmesi eklendi; ekli evrak/taslak
+  kartlarının ve kişi filtrelerinin dar ekran taşmaları giderildi.
+- Taslak ayrıntısındaki **Revize et** eylemi artık yalnızca eski sohbeti
+  açmak yerine ilgili `draft_id` ile revizyon modunu açıyor; sohbet mesaj alanı
+  seçili taslağı gösterip revizyon talimatı istiyor.
+- Giriş sonrası ve kök rota artık `/home` Ana Sayfa'ya açılıyor; rolü yetersiz
+  kullanıcıların güvenli dönüş rotası da Ana Sayfa oldu. Sol navigasyona ilk
+  sırada Ana Sayfa eklendi.
+- Arayüz paleti mavi/nötr yapıyı koruyarak indigo, mor, yeşil, amber ve mercan
+  semantik tonlarla genişletildi. Navigasyon ikonları, metrik kartları, hızlı
+  eylemler, grafikler, ana butonlar ve uygulama zemini açık/koyu tema uyumlu
+  yumuşak renk yüzeyleri kullanıyor.
+- Bağımsız Yönlendirme sayfası ve sol menü girişi kaldırıldı. Yönlendirme
+  önerisi artık seçili taslağın **Yönlendirme** sekmesinde, taslak metni ve
+  güven göstergesi otomatik kullanılarak alınıyor. Önerilen birim tek eylemle
+  hedefe uygulanabiliyor veya kullanıcı şirket birimlerinden başka bir hedef
+  seçebiliyor. Eski `/routing` bağlantıları geriye uyumluluk için Taslaklar'a
+  yönlendiriliyor; Ana Sayfa hızlı eylemi de doğrudan Taslaklar'ı açıyor.
+
+### Test
+- Yeni yönetim ve havuz entegrasyonları sonrasında frontend typecheck, ESLint,
+  247 testlik Vitest paketi ve production Vite derlemesi başarıyla doğrulandı.
+- Kalıcı dar menü tercihinin mobilde etkisizleştirilmesi, güvenli sayfa
+  boşlukları, dar Ana Sayfa gridleri ve mobil mesajlaşma liste/konuşma geçişi
+  için responsive regresyon testleri eklendi.
+- Taslak bağlamı şema doğrulaması ve yetkilendirmesi, aktif revizyon odağının
+  kurulması, taslak sekmesinden seçim, `draft_id` taşıyan sohbet isteği ve
+  **Revize et** derin bağlantısı için backend/frontend regresyon testleri eklendi.
+- Ana Sayfa'nın canlı sayaçları, grafik verileri, hızlı eylemleri ve boş
+  durumları; kök rota yönlendirmesi ve yeni navigasyon girişi için frontend
+  regresyon testleri eklendi. TypeScript, lint, tam frontend test paketi ve
+  üretim derlemesi doğrulandı.
+- Taslak içinden yönlendirme önerisi alma, önerilen hedefi uygulama, bağımsız
+  menü girişinin kaldırılması ve eski `/routing` adresinin Taslaklar'a
+  yönlenmesi regresyon testleriyle kapsandı.
+
 ## [3.22.0] - 2026-08-18
 ### Eklendi
 - **Şirkete özel ajan kimliği**: Şirket adminleri artık asistanın kendini
@@ -26,6 +100,54 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   etiketi artık tutarlı biçimde fiilen uygulanan dereceyi gösteriyor.
 
 ### Değiştirildi
+- Frontend görsel sistemi kamu çalışanlarının uzun süreli kullanımına uygun
+  kurumsal mavi/nötr semantik tokenlara taşındı; açık ve koyu tema yüzeyleri,
+  odak durumları ve responsive kabuk aynı layout sözleşmesini paylaşacak
+  biçimde güncellendi.
+- Giriş ekranı referans tasarımdaki iki kolonlu kurumsal düzene geçirildi;
+  CSS ile üretilen geçici harf işareti kaldırılarak mavi kalkan biçimli KACHOW
+  amblemi ortak marka varlığına dönüştürüldü. Sidebar marka kilidi, viewport
+  içinde kalan bildirim popover'ı, hesap görünümü ve Yönetim'deki
+  Kullanıcılar/AI Eğitimi ayrımı ortak bileşenlerle sadeleştirildi. Kullanıcı
+  erişimleri tablosunun başlık ve arama alanı kart kenarlarından dengeli iç
+  boşluk alacak, mobilde de tam genişliği koruyacak biçimde hizalandı.
+- Evrak Kütüphanesi, seçim yokken filtreli ve sayfalı tam tablo; seçim
+  yapıldığında sol evrak listesi ile sağda Özet/Analiz/Belge Metni/Ayrıntılar
+  sekmelerini kullanan master-detail düzene taşındı. Sohbet ve taslak
+  geçişleri seçili evrak bağlamını korur. Taslak oluşturma formuna seçilen
+  yazışma bilgilerinin özeti; taslak incelemeye belge yüzeyi ve yan metrik
+  paneli; Yönetim ekranına mevcut kullanıcı verisinden türetilen rol sayaçları
+  eklendi. Responsive kırılımlar açık/koyu temada aynı bilgi sırasını korur.
+- Evrak Kütüphanesi master-detail görünümü daha yoğun ve karar odaklı hale
+  getirildi: satır eylemleri üç nokta menüsünde toplandı, seçili durum ve
+  inceleme sayısı belirginleştirildi, ana eylem analiz durumuna göre dinamik
+  hale geldi. Sekmeler Özet/Analiz/Belge Metni/Ayrıntılar sırasına alındı;
+  ham analiz alanları kullanıcı dilindeki temel bilgiler, tespit edilen
+  unsurlar ve inceleme başlıklarına dönüştürüldü. Belge metni sayfa bazında
+  düzenlenebilir ve yeniden çıkarılabilir; etkin filtreler tek hamlede
+  temizlenebilir. Eski, iç içe analiz accordion'u kaldırıldı; temel alanlar
+  analiz sekmesine doğrudan yerleşen iki kolonlu kompakt gridde gösteriliyor
+  ve düzenleme sırasında aynı grid yerinde korunuyor.
+- Kullanıcı arayüzündeki teknik terminoloji; “Çalışma modu”, “Yazışma
+  Bilgileri”, “Taslak Hazırlama”, “Birim Yönlendirme” ve “Otomatik belirle”
+  ifadeleri etrafında tutarlı hale getirildi; transport enum değerleri ve API
+  sözleşmeleri değiştirilmedi.
+- Sohbette bilgi/onay soruları yanıtlandıktan sonra artık kaybolmuyor; soru ve
+  seçilen yanıtlar tamamlanmış, salt-okunur bir kart olarak hem canlı akışta
+  hem yeniden yüklenen geçmişte korunuyor. Kesinti sırasında devre dışı büyük
+  mesaj kutusu yerine kısa bir bekleme şeridi gösteriliyor; taslak güven skoru,
+  yönlendirme ve açılır kontrol notları sabit hizalı bir özet kartına taşındı.
+  Kesinti açıklaması ile soru formu tek asistan mesajında birleştirildi; yanıt
+  verildiğinde form aynı konumda tamamlanan cevap kartına dönüşüyor ve sonraki
+  bilgi talebi bunun altında ayrı bir mesaj olarak açılıyor. Eski ham
+  `alan: değer` cevapları da geçmiş yüklenirken aynı karta dönüştürülüyor.
+- Taslaklar sayfası açılır tablo yerine kararlı master-detail çalışma alanına
+  geçirildi. Taslaklarım/Gelenler/Gönderilenler sekmeleri gerçek paylaşım
+  uçlarına bağlandı; soldaki seçim listesi sabit kalırken sağda orantılı resmî
+  belge önizlemesi, kontrol durumu, kaynak evrak ve hedef birim bilgileri
+  gösteriliyor. Sürümler ayrı sekmeye, silme/kopyalama ikincil menüye taşındı;
+  Revize et ve Gönder ana eylemleri ile gelen taslağı kabul/red akışları eklendi.
+  Tablet ve mobil kırılımlar aynı bilgi hiyerarşisini koruyor.
 - Yeni analiz edilen ve OCR ile yeniden çıkarılan evraklarda kaydedilen
   `sensitivity_level`, artık ham çıkarım yerine (varsayılan atamayı da
   içeren) fiilen uygulanan dereceyi taşıyor; mevcut kayıtlar bir migration
@@ -39,6 +161,16 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   varsayılan gizlilik derecesi için `assess`/`assessment_from_analysis`
   regresyon testleri. Migration, gerçek bir Postgres'e karşı yükseltme/geri
   alma/yükseltme döngüsüyle doğrulandı.
+- Tamamlanan bilgi kartının canlı akış ve geçmiş yükleme davranışı ile taslak
+  özet kartının skor, yönlendirme ve kontrol notlarını koruması için frontend
+  regresyon testleri eklendi.
+- Evrak görünümünün dinamik inceleme eylemi, konu sayısı, filtre temizleme,
+  menü içi silme/analiz ve sayfa bazlı belge metni düzenleme davranışları için
+  frontend regresyon testleri eklendi. Kompakt temel bilgi gridinin salt-okunur
+  ve yerinde düzenleme durumları da kapsama alındı.
+- Taslak master-detail görünümü, kaynak evrak ve sürüm sekmesi; hedef birim
+  değişikliği, gönderme, gelen taslağı kabul etme ve menü içi silme davranışları
+  için frontend regresyon testleri eklendi.
 
 Refs: [#214](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/214).
 
@@ -1091,17 +1223,20 @@ Refs: [#162](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/162)
 - **Evrak alanlarını elle düzenleme**: Analiz sırasında tespit edilemeyen veya yanlış çıkarılan üst veri alanları (Sayı, Tarih, Muhatap vb.) artık evrak analiz panelinden elle düzeltilebiliyor. Yeni `PATCH /api/v1/documents/{storage_path}/fields` uç noktası düzeltilen alan setini kaydediyor ve aynı deterministik kural tablosuyla (`check_required_fields`, model çağrısı yok) uygunluk kontrolünü anında yeniden çalıştırıyor.
 - **Taslak ve evrak silme**: Taslaklar sayfasından bir taslağı (ve tüm sürüm geçmişini) silme, Evraklar sayfasından bir evrakı (DB kaydı, ham dosya, analiz önbelleği ve dizinlenmiş Q&A parçaları dahil) kalıcı olarak silme eklendi. Taslak silme `DraftModel.is_deleted` üzerinden yumuşak silme (zaten var olan ama hiç yazılmayan bir alan); evrak silme geri alınamaz gerçek bir silme.
 - **Sohbet ekranına dosya sürükleyerek yükleme**: Sohbet ekranı açıkken bir dosya sürüklendiğinde tam ekran "dosyanızı buraya bırakın" katmanı beliriyor; bırakıldığında dosya doğrulanıp mevcut evrak yükleme/analiz akışına yönlendiriliyor, yeni evrak otomatik seçiliyor ve sohbete bilgilendirme mesajı düşüyor.
+- **İsteğe bağlı evrak analizi**: Evraklar sayfasında seçilen dosya artık otomatik analiz edilmiyor; frontend'de geçici “Analiz bekliyor” satırı olarak tutuluyor. Analiz yalnızca satırdaki **Analiz Et** eylemiyle veya evrak sohbete gönderildiğinde mevcut `POST /api/v1/documents/analyze` üzerinden başlıyor. Backend sözleşmesi değiştirilmedi; analiz edilmemiş geçici kayıt sayfa yenilendiğinde kayboluyor.
 
 ### Değiştirildi
 - **Taslak adlandırması**: Taslaklar sayfasındaki satır başlığı artık yalnızca yazışma türünü ("Cevap yazısı") değil, "Belge Adı - Yazı Türü" biçimini (örn. "izin-talebi.pdf - Cevap yazısı") gösteriyor; ayrı "Kaynak evrak" sütunu kaldırıldı.
 - **Taslaklar sayfasındaki durum rozetleri kaldırıldı**: yeşil "Hazır" / sarı "İnsan onayı" rozetleri hem satırlarda hem genişletilmiş detay panelinde gösterilmiyor artık.
 - **Yönlendirme sayfasındaki güven skoru kaydırıcısı kaldırıldı**: serbest metinle öneri istenirken artık rastgele bir güven skoru gönderilmiyor (backend zaten 100 varsayıyor); kalıcı bir taslak seçildiğinde o taslağın gerçek güven skoru arka planda kullanılmaya devam ediyor.
+- **Evrak listesi sütunları sabitlendi**: Dosya özeti esnek alanı korurken tür, tarih, durum ve satır aksiyonları masaüstünde sabit sütun ölçülerine geçirildi; içerik uzunluğuna bağlı satırdan satıra genişlik değişimi kaldırıldı ve mobil responsive düzen korundu.
 
 ### Düzeltildi
 - **Uzun sohbette sayfa yarım kalması**: `.messages-area`/`.chat-workspace`'in sıfır-tabanlı flex ayarı (`flex:1` = `1 1 0%`) mesaj listesinin hiç küçülmemesine, tüm daralmanın küçülemeyen kardeşlerine (guardrail uyarıları, İnsan Onayı paneli) yıkılmasına ve konteynerin taşarak `overflow:hidden` tarafından sertçe kırpılmasına yol açıyordu; buna `scrollIntoView`'ın `overflow:hidden` atalarını da (scrollbar'ı olmadan) kaydırması ekleniyordu. Mesaj listesi artık kendi kabına göre kayıyor (`scrollTop` doğrudan yazılıyor, kullanıcı yukarı kaydırdıysa aşağı zorlanmıyor), guardrail listesi ve onay paneli kendi üst sınırlarıyla bağımsız kayıyor, ve `100vh` yerine `100dvh` kullanılarak mobil tarayıcı araç çubuğunun sayfayı kırpması önlendi.
 
 ### Test
 - Dinamik iş akışı türetmesi (plan dışı düğümler, alt adım gruplama, araç çağrıları, bilinmeyen düğümler), evrak alan düzenleme formu, taslak/evrak silme akışları (onay diyaloğu dahil, backend'de sahiplik/yetki testleri), sohbet dosya sürükleme akışı ve mesaj listesi kaydırma davranışı için kapsamlı birim ve entegrasyon testleri eklendi.
+- Evrak seçiminin analiz çağrısı yapmadan beklemesi, manuel analiz düğmesi ve sohbet gönderiminden önce gerçek `storage_path` ile analiz tamamlama akışları için frontend regresyon testleri eklendi.
 
 Refs: [#159](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/159)
 
