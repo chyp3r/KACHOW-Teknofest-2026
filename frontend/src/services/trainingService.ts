@@ -1,4 +1,4 @@
-import { apiRequest } from "./apiClient";
+import { apiFetch, apiRequest, apiErrorFromResponse } from "./apiClient";
 import type { PaginatedResponse } from "../types/api";
 import type { TrainingRun, TrainingSample, TrainingSampleStats } from "../types/training";
 
@@ -28,4 +28,17 @@ export const trainingService = {
     apiRequest<PaginatedResponse<TrainingRun>>(
       `/api/v1/companies/${encodeURIComponent(companyId)}/training-runs?page=${page}&size=${size}`,
     ),
+  async exportSamples(companyId: string): Promise<void> {
+    const response = await apiFetch(
+      `/api/v1/companies/${encodeURIComponent(companyId)}/training-samples/export`,
+    );
+    if (!response.ok) throw await apiErrorFromResponse(response);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${companyId}-training-samples.jsonl`;
+    link.click();
+    URL.revokeObjectURL(url);
+  },
 };

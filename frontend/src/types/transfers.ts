@@ -28,3 +28,10 @@ export interface RecipientRecommendation {
   unit_id: string;
   unit_name: string;
 }
+
+export interface GroupTransferResult {
+  recipient_id: string;
+  status: string;
+  transfer_id: string | null;
+  reason: string | null;
+}

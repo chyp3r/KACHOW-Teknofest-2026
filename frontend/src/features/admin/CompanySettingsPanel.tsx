@@ -1,0 +1,21 @@
+import { Building2, Plus, Save, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Button, IconButton } from "../../components/Button";
+import { Input, Select, Textarea } from "../../components/FormControls";
+import { Alert, Card, Spinner } from "../../components/Surface";
+import { useCompanySettings } from "../../hooks/useCompanySettings";
+import type { CompanyRule } from "../../types/management";
+
+export function CompanySettingsPanel({ companyId, canManage }: { companyId: string; canManage: boolean }) {
+  const settings = useCompanySettings(companyId);
+  const [profile, setProfile] = useState({ display_name: "", short_name: "", agent_name: "", letterhead: "", default_signer_title: "" });
+  const [rules, setRules] = useState<CompanyRule[]>([]);
+  useEffect(() => { if (settings.profile) setProfile({ display_name: settings.profile.display_name, short_name: settings.profile.short_name, agent_name: settings.profile.agent_name, letterhead: settings.profile.letterhead, default_signer_title: settings.profile.default_signer_title }); }, [settings.profile]);
+  useEffect(() => { if (settings.rules) setRules(settings.rules.rules); }, [settings.rules]);
+  if (settings.loading) return <div className="table-loading"><Spinner />Kurum ayarları yükleniyor…</div>;
+  return <div className="admin-section management-two-column">
+    {settings.error && <Alert variant="error">{settings.error instanceof Error ? settings.error.message : "Kurum ayarları yüklenemedi."}</Alert>}
+    <Card className="management-panel"><header className="management-panel-header"><div><h2><Building2 /> Kurum profili</h2><p>Taslak anteti ve kurumsal kimlik varsayılanları.</p></div></header><div className="management-form"><Input label="Kurumun tam adı" value={profile.display_name} onChange={(event) => setProfile({ ...profile, display_name: event.target.value })} /><Input label="Kısa ad" value={profile.short_name} onChange={(event) => setProfile({ ...profile, short_name: event.target.value })} /><Input label="Asistan adı" value={profile.agent_name} onChange={(event) => setProfile({ ...profile, agent_name: event.target.value })} /><Textarea label="Resmî antet" rows={4} value={profile.letterhead} onChange={(event) => setProfile({ ...profile, letterhead: event.target.value })} /><Input label="Varsayılan imza unvanı" value={profile.default_signer_title} onChange={(event) => setProfile({ ...profile, default_signer_title: event.target.value })} />{canManage && <Button leadingIcon={<Save />} loading={settings.saving} onClick={() => void settings.updateProfile(profile)}>Profili kaydet</Button>}</div></Card>
+    <Card className="management-panel"><header className="management-panel-header"><div><h2>Yazışma kuralları</h2><p>AI doğrulama ve revizyon döngüsünde uygulanır.</p></div>{canManage && <Button size="sm" variant="outline" leadingIcon={<Plus />} onClick={() => setRules((current) => [...current, { text: "", severity: "zorunlu", enabled: true }])}>Kural ekle</Button>}</header><div className="management-rule-list">{rules.length === 0 && <p className="detail-empty">Tanımlı kurum kuralı yok.</p>}{rules.map((rule, index) => <div key={rule.id ?? index} className="management-rule-row"><Textarea aria-label={`${index + 1}. kural`} rows={2} maxLength={300} value={rule.text} disabled={!canManage} onChange={(event) => setRules((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, text: event.target.value } : item))} /><Select aria-label="Kural önemi" value={rule.severity} disabled={!canManage} onChange={(event) => setRules((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, severity: event.target.value as CompanyRule["severity"] } : item))}><option value="zorunlu">Zorunlu</option><option value="onerilen">Önerilen</option></Select>{canManage && <IconButton icon={<Trash2 />} aria-label="Kuralı kaldır" onClick={() => setRules((current) => current.filter((_, itemIndex) => itemIndex !== index))} />}</div>)}{canManage && <Button leadingIcon={<Save />} loading={settings.saving} disabled={rules.some((rule) => !rule.text.trim())} onClick={() => void settings.updateRules(rules)}>Kuralları kaydet</Button>}</div></Card>
+  </div>;
+}
