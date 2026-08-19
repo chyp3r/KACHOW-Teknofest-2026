@@ -4,7 +4,11 @@ kategori: "dilekce"
 alt_kategori: "noterden_ihtarname"
 baslik: "Noterden İhtarname Örneği (Ornek 1)"
 kaynak: "sentetik-sablon"
+dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
+kaynak_kurum: "Sentetik veri üretimi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # Noterden İhtarname Örneği (Ornek 1)

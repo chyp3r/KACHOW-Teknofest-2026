@@ -4,7 +4,11 @@ kategori: "dilekce"
 alt_kategori: "vergi_itiraz"
 baslik: "Vergi Dairesi İdari Para Cezası İtiraz Dilekçesi (Ornek 2)"
 kaynak: "sentetik-sablon"
+dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
+kaynak_kurum: "Sentetik veri üretimi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "3"
 ---
 
 # Vergi Dairesi İdari Para Cezası İtiraz Dilekçesi (Ornek 2)

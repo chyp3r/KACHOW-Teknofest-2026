@@ -12,7 +12,10 @@ used_ocr: "false"
 page_count: "1"
 quality_score: "0.811"
 rag_status: "rejected"
-ret_nedeni: "tekrar_simulasyon_sablonu"
+ret_nedeni: "sentetik_simulasyon_yalniz_test"
+kaynak_kurum: "Sosyal Güvenlik Kurumu"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # İş Kazası Bildirim Tutanağı - Belge No 33

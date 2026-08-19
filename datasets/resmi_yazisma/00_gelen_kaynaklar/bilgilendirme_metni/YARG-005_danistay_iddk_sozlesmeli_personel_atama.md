@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Danıştay Başkanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "8"
 ---
 
 # Danıştay İdari Dava Daireleri Kurulu Kararı - E.2022/1120, K.2023/450
@@ -23,9 +26,9 @@ rag_status: "candidate"
 **Karar No:** 2023/450
 **Karar Tarihi:** 12/04/2023
 
-**TEMYİZ EDEN (DAVACI):** [KİŞİSEL BİLGİ]
-**VEKİLİ:** Av. [KİŞİSEL BİLGİ]
-**DAVALI:** [KİŞİSEL BİLGİ] Bakanlığı / Ankara
+**TEMYİZ EDEN (DAVACI):** [KİŞİ ADI]
+**VEKİLİ:** Av. [VEKİL ADI]
+**DAVALI:** [KURUM ADI] Bakanlığı / Ankara
 
 **İSTEMİN KONUSU:** Davacının, 657 sayılı Devlet Memurları Kanunu'nun 4/B maddesi uyarınca kamu kurumuna sözleşmeli büro personeli atanması istemiyle yaptığı başvurunun güvenlik soruşturması ve arşiv araştırması gerekçe gösterilerek reddedilmesine ilişkin işlemin iptali talebiyle açılan davada verilen direnme kararının temyizen incelenerek bozulması istenilmektedir.
 

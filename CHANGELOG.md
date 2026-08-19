@@ -2,7 +2,7 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
-## [3.20.0] - 2026-08-19
+## [3.25.0] - 2026-08-19
 ### Değiştirildi
 **Mevzuat Haritası → canlı, sürüklenebilir simülasyon** (#210) —
 [csacademy.com/app/graph_editor](https://csacademy.com/app/graph_editor/)'ün
@@ -97,7 +97,7 @@ görünüyordu:**
 
 Refs: [#210](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/210).
 
-## [3.19.0] - 2026-08-18
+## [3.24.0] - 2026-08-18
 ### Değiştirildi
 **Mevzuat Haritası → birleşik varlık grafiği** (#210) — bir önceki sürümün
 Evrak↔Madde uyum omurgası, kullanıcının asıl talebi doğrultusunda genişletildi:
@@ -193,7 +193,7 @@ evrağı birbirine bağlıyor) — boş bir alan yerine dolu bir alandan.
 
 Refs: [#210](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/210).
 
-## [3.18.0] - 2026-08-18
+## [3.23.0] - 2026-08-18
 ### Eklendi
 **Mevzuat Haritası** (#210) — evraklar ile mevzuat maddeleri arasındaki uyum
 ilişkilerini gösteren bir bilgi grafiği. Tasarımdan önce her aday kenar tipi
@@ -284,6 +284,275 @@ sınırlı tutuldu. `Document<->Document` kenar tipi altyapıda hazır (`atif`/
   tıkla-git akışı, tek-evrak komşuluk grafiği — hepsi tarayıcıda gözlemlendi.
 
 Refs: [#210](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/210).
+
+## [3.22.0] - 2026-08-18
+### Eklendi
+- **Şirkete özel ajan kimliği**: Şirket adminleri artık asistanın kendini
+  tanıtacağı adı, şirketin tam/kısa adını, taslakların kullanacağı T.C. kurum
+  antetini ve varsayılan imza unvanını `PUT /companies/{id}/profile`
+  üzerinden tanımlayabiliyor. Kimlik, asistan sohbetine ve taslak brief'ine
+  (yeni "KURUM KİMLİĞİ" bölümü) yansıyor; doğrulayıcı artık şirketin kendi
+  adını "kaynakta doğrulanamayan iddia" olarak işaretlemiyor.
+- **Şirkete özel zorunlu taslak kuralları**: Adminler `PUT
+  /companies/{id}/rules` ile madde madde zorunlu/önerilen yazım kuralı
+  girebiliyor. Kurallar yazar/revizyon ajanlarının promptuna eklenmekle
+  kalmıyor, kalite yargıcı taslağın her kurala uyup uymadığını da
+  değerlendiriyor; bir ihlal mevcut doğrulama-revizyon döngüsüne numaralı
+  bir kusur olarak düşüp otomatik düzeltiliyor. Kurallar, şirketin öğrenilen
+  üslup adaptöründen ayrı saklanıyor, böylece bir eğitim koşusu admin'in
+  elle girdiği kuralları asla ezemiyor.
+- **Damgasız evraklarda varsayılan gizlilik derecesi**: Bir evrakta hiçbir
+  gizlilik ibaresi bulunamadığında sistem artık bunu "bulunamadı" olarak
+  bırakmak yerine politika gereği en düşük dereceye (Tasnif Dışı) otomatik
+  atıyor. Belgenin hiç damgalanmamış olduğu gerçeği (ham çıkarım) denetim
+  izinde ayrıca korunuyor; erişim denetimi, evrak arama filtresi ve arayüz
+  etiketi artık tutarlı biçimde fiilen uygulanan dereceyi gösteriyor.
+
+### Değiştirildi
+- Yeni analiz edilen ve OCR ile yeniden çıkarılan evraklarda kaydedilen
+  `sensitivity_level`, artık ham çıkarım yerine (varsayılan atamayı da
+  içeren) fiilen uygulanan dereceyi taşıyor; mevcut kayıtlar bir migration
+  ile geriye dönük dolduruldu.
+
+### Test
+- Şirket kimliği ve kural seti için render/round-trip birim testleri; yazar
+  ve revizyon ajanı promptlarının kural/kimlik bloklarını doğru sırada
+  taşıdığını doğrulayan uçtan uca testler; kalite yargıcının şirket kuralı
+  ihlalini otomatik onarım döngüsüne düşürdüğünü doğrulayan testler;
+  varsayılan gizlilik derecesi için `assess`/`assessment_from_analysis`
+  regresyon testleri. Migration, gerçek bir Postgres'e karşı yükseltme/geri
+  alma/yükseltme döngüsüyle doğrulandı.
+
+Refs: [#214](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/214).
+
+## [3.21.0] - 2026-08-18
+### Eklendi
+- **Tüm Markdown veri kümesi için semantik anonimleştirme**: Aktif, referans ve
+  reddedilmiş kayıtlar dahil 1541 belge kartı tek bir deterministik hattan
+  geçiriliyor. Kişi adı, başvuru sahibi, vekil, imza sahibi, T.C. kimlik
+  numarası, IBAN, kayıt numarası, telefon, e-posta ve adres alanları bağlama
+  duyarlı yer tutuculara dönüştürülüyor; kurum adları korunuyor.
+- **Kurum ve veri dağılımı raporları**: 869 tekil kaynak belge; ham format,
+  kategori, RAG durumu, kaynak kurum ve semantik yer tutucu dağılımları
+  `veri-istatistikleri.json`/`VERI_ISTATISTIKLERI.md` içinde üretiliyor.
+- **Dosya bazlı anonimleştirme manifesti ve manuel QA örneklemi**:
+  `anonimlestirme-manifesti.jsonl` her kartın PII sonucunu gerçek değeri tekrar
+  etmeden kaydediyor; `manuel-qa-manifesti.csv` kategori/risk dengeli 100 kartı
+  insan doğrulamasına ayırıyor.
+- **İzlenebilir RAG provenansı ve sızıntısız değerlendirme ayrımı**: Kalite
+  kapısını geçen her örnek kaynak kökeni/URL/SHA-256, lisans inceleme durumu,
+  şablon ailesi ve kaynak grubu taşır. Aynı kaynak veya şablon ailesi retrieval,
+  dev ve heldout kümelerine bölünmez; çıktılar sırasıyla 429/89/51 kayıttır.
+- **Doğrulanabilir resmî kaynak korpusu**: GİB'in genel yazı, sirküler, iç
+  genelge ve özelge API'lerinden 200 kayıt; TÜRKPATENT ilanen tebligat
+  bültenlerinden 22 tekil eksik-belge/yetkisizlik şablonu toplandı. Ham JSON/PDF,
+  URL, erişim tarihi ve SHA-256 izleri korunuyor; yeni kaynaklar açık lisans
+  varsayılmadan `usage_review_required` olarak işaretleniyor.
+
+### Değiştirildi
+- Her veri kartına `kaynak_kurum`, `anonimlestirme_durumu` ve
+  `anonimlestirilen_alan_sayisi` metadata alanları eklendi; katalog çıktısı da
+  bu alanları taşıyor.
+- Kurum adları resmî alan adları, simülasyon kaynakları ve belge antetlerinden
+  deterministik olarak kanonikleştiriliyor. Dosya sayısı ile tekil kaynak belge
+  sayısı ayrı raporlanıyor.
+- Yüksek güvenli PII veya güvenle çözülemeyen kişi/kurum sinyali bulunan adaylar
+  fail-closed biçimde `review_required` durumuna alınıyor ve RAG'a yazılmıyor.
+- OCR/anonimleştirme testi için üretilen 300 simülasyon PDF'si, içerik değerleri
+  gerçeği temsil etmediğinden `sentetik_simulasyon_yalniz_test` gerekçesiyle
+  üretimden çıkarıldı. Kalan 352 örnekteki 5 şablon tekrarı da tekilleştirildi.
+- Karantina türevleri aktif kart ve QA sayılarını artık iki kez artırmıyor;
+  QA örneklemi ham dilekçe sayfası yerine temiz kanonik türevi seçiyor ve önceki
+  inceleme sonuçlarını yeniden üretimde koruyor.
+- Kalite kapısını geçen tekil korpus 347'den 569'a; gerçek/resmî kayıt sayısı
+  231'den 453'e yükseldi. Gerçek veri oranı %66,6'dan %79,6'ya çıktı ve üst yazı,
+  cevap yazısı, bilgilendirme metni ile diğer resmî yazışma türlerinin her biri
+  en az 100 gerçek/resmî örneğe ulaştı.
+
+### Test
+- Rol bazlı kişi adı maskeleme, IBAN/kayıt numarası, kurum kanonikleştirme,
+  reddedilmiş kartların da kapsanması, simülasyon kalite kapısı, provenans,
+  kaynak-aile düzeyinde ayrım, şablon tekilleştirme ve kanonik QA seçimi için
+  birim/regresyon testleri eklendi. GİB metin kısaltmasının başlangıç/sonuç
+  bölümlerini koruması, resmî kaynak maskelemesi, TÜRKPATENT PII temizliği,
+  tür başına gerçek veri kotası ve eksik-belge senaryo kapısı da regresyonla
+  güvenceye alındı. Üretim RAG'ında genel maske, eski silme işareti, yüksek
+  güvenli PII ve tekrar şablon ailesi 0'dır. 100/100 QA kartı agent ön
+  incelemesinden geçti.
+
+Refs: [#203](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/203).
+
+## [3.20.0] - 2026-08-18
+### Düzeltildi
+- **Birim önerisi taslak akışında "kayboluyordu"** -- `routing_graph` her
+  zaman bir birim öneriyor, ama chat içinde taslak üretildiği anda gösterilen
+  `DraftMetaStrip` bunu yalnızca statik bir metin olarak gösteriyordu;
+  interaktif `UnitPicker` yalnızca ayrı `/drafts` yönetim sayfasında vardı ve
+  oraya nasıl ulaşılacağı hiçbir yerde belli değildi. Kök neden: kalıcı
+  taslağın `id`'si chat yanıtının `details`'ine hiç akmıyordu --
+  `ChatService._maybe_record_draft` artık `draft_id`'yi döndürüyor ve hem
+  akış (SSE) hem doğrudan yanıt yolunda `final_result`/response
+  gönderilmeden ÖNCE `final_output["draft"]["id"]`'ye enjekte ediliyor.
+  `DraftMetaStrip` artık bu id varsa `UnitPicker`'ı doğrudan chat içinde,
+  "Önerilen birim" şeridinin yanında render ediyor -- birim seçimi
+  taslağın üretildiği yerde, ayrı bir sayfaya gitmeden yapılabiliyor.
+- **Taslak isimleri ayırt edici değildi** -- `/drafts` sayfasındaki başlık
+  yalnızca kaynak belge adı + yazışma türünden kuruluyordu; belgesiz ve aynı
+  türden birden fazla taslak (örn. birkaç ayrı "Bilgilendirme Metni") hepsi
+  aynı, ayırt edilemez "Kaynak yok - Bilgilendirme Metni" başlığıyla
+  listeleniyordu. Taslağın kendi içeriğindeki "Konu: ..." satırı (writer.md'nin
+  sabit yapısında her zaman bulunur) artık başlığa öncelikli olarak dahil
+  ediliyor; satır yoksa (veya doldurulmamış bir `[Konu]` yer tutucusuysa)
+  eski davranışa sorunsuzca geri dönülüyor.
+
+Ayrıca, bu iki hatayı test ederken bulunan üçüncü, ilgisiz bir bug:
+
+- **Asistan yanıtı bazen ekranda göründükten hemen sonra kayboluyordu** --
+  `useChatWorkflow`'un `final_result` işleyicisi bir turun bitiminde sunucu
+  durumunu tazeliyor (`refreshServerState`); bu tazeleme sorgusu
+  `!loading` iken etkinleşiyor, ki `loading` da tam olarak
+  `activeRequest.current` ile aynı anda temizleniyor -- yani bu sorgunun
+  yeniden getirimi, mesaj senkronizasyon efekti'nin kendi koruma kontrolü
+  zaten açıldıktan SONRA tetikleniyordu. Sunucudan gecikmeli/eski (boş)
+  bir geçmiş okuması gelirse, bu efekt az önce eklenen asistan mesajını
+  sessizce siliyordu. Efekt artık sunucudan gelen öğe sayısı zaten
+  sahip olunandan azsa `messages`'ı asla geriye yazmıyor (sohbet geçmişi
+  yalnızca-ekleme yapılan bir yapıdır, "azalması" her zaman bu yarış
+  durumudur, gerçek bir "geçmiş küçüldü" sinyali değil).
+
+### Test
+- `docker compose run --rm backend pytest -q` → **2264 test geçti, 0
+  başarısız**.
+- `cd frontend && npx vitest run` → **46 dosya, 214 test geçti** (3 art arda
+  tam koşuda doğrulandı -- `useChatWorkflow` yarış durumu düzeltmeden önce
+  aralıklı olarak başarısız oluyordu).
+- CHANGELOG.md güncellendi (3.20.0).
+
+## [3.19.0] - 2026-08-18
+### Düzeltildi
+- **Taslak brief'inde belge varlıkları eksikti** -- doküman analizi bir CV/
+  evrakta geçen önemli varlık isimlerini (kişi, kurum, tarih, tutar vb.)
+  zaten deterministik olarak çıkarıyordu (`EvrakField.entities`), ama
+  `draft_graph._build_brief` bunu hiç okumuyordu. "Bu CV'de çalıştığı
+  kurumları belirt" gibi bir istek, yazar bu bilgiyi hiç görmediği için
+  `[BİLGİ EKSİK: ...]` yer tutucusuna düşüyor ve insan onay kapısı
+  kullanıcıya belgenin zaten cevapladığı bir soruyu soruyordu. Brief'e yeni
+  bir "Belgede Geçen Diğer Önemli Varlıklar" satırı eklendi.
+- **Revizyonda yanlış paragraf hedefleniyordu ("sayıyı siliyor" hatası)** --
+  üretilen bir taslakta `Konu:`/`Sayı:`/`Tarih:` satırları aralarında boş
+  satır olmadan art arda geldiği için (bkz. `writer.md`'nin sabit yapısı),
+  `instruction.py::_split_paragraphs` bunları TEK bir blok olarak
+  `paragraphs[0]`'a yerleştiriyordu. "1. paragrafı sil"/"girişi değiştir"
+  gibi talimatlar bu yüzden mektubun gerçek gövdesi yerine bu metadata
+  bloğunu hedefliyor, reviser'a alakasız bir gövde talimatını `Sayı:`
+  satırına uygulaması söyleniyordu -- kullanıcının "rastgele saçma sapan
+  şeyler yapıyor" olarak tarif ettiği davranışın kök nedeni buydu. Ordinal/
+  "giriş" hedeflemesi artık saf metadata bloklarını (`Sayı`/`Tarih`/`Konu`/
+  `Muhatap`/`İlgi`/`Ekler` etiketli satırlar veya "T.C." anteti) atlıyor;
+  `konu`/`kapanış`/`imza` bölüm ipuçları değişmeden tam listede aramaya
+  devam ediyor.
+- **Revizyonda silme talimatı hâlâ güvenilir değildi** -- önceki dalda
+  (#209 PR'ı, artık main'de) eklenen düzeltmeye ek olarak, yukarıdaki yanlış
+  hedefleme bug'ı da silme talimatlarının "rastgele" görünmesine katkıda
+  bulunuyordu; doğru paragrafı hedeflemek bu ikinci kaynağı da kapatıyor.
+- **Kapanış talimatı bazen sessizce taslak turuna dönüşüyordu (uzun süredir
+  bilinen, ortam kaynaklı sanılan bir test hatası)** -- kök neden aslında
+  iki gerçek router hatasıydı, ortam kısıtı değil: (1) `REVISE_RULES` yalnızca
+  "kapanışı **değiştir**" yüzeyini tanıyordu, "kapanışı 'X' **yap**" gibi
+  aynı isteğin farklı bir fiille söylenmiş hali hiçbir kurala hiç değmiyordu;
+  (2) değse bile, mesaj kısa olduğu ve "yap" ile bittiği için (bir
+  `CONTINUATION_SURFACES` yüzeyi) `draft.continuation` sezgiseli aynı anda
+  ateşleniyor, "kapanış" alanını açıkça adlandıran çok daha spesifik
+  `revise.explicit_request` kanıtına rakip bir `draft` puanı ekliyordu ve
+  çoğu zaman onu geçiyordu. `intent_rules.py`'ye çıplak "kapanisi" yüzeyi
+  eklendi; `intent_scorer.py`'deki devam sezgiseli artık mesajda zaten
+  farklı bir amaç için açık bir kural ateşlenmişse devreye girmiyor.
+  `tests/integration/test_brief_survives_into_revise.py`'nin önceden
+  "bilinen, ortam kaynaklı" sayılan başarısızlığı bu düzeltmeyle gerçekten
+  çözüldü.
+
+### Test
+- `docker compose run --rm backend pytest -q` → **2262 test geçti, 0
+  başarısız** -- daha önce "bilinen ön-var olan hata" sayılan test artık
+  gerçekten geçiyor.
+
+## [3.18.0] - 2026-08-18
+### Düzeltildi
+Canlı kullanımda tespit edilen 10 ayrı taslak-akışı hatası (#209). Kök
+nedenlerin çoğu üç ortak desende toplandı: turn-scoped olması gereken
+state'in session-scoped tutulması, guardrail'lerin fail-secure tarafa aşırı
+agresif ayarlanmış olması, ve taslak prompt'unun özet dışında hiçbir kaynak
+metne erişememesi.
+
+- **State izolasyonu** -- ikinci bir taslak turn'ü artık önceki taslağın
+  muhatap/yazan taraf/kapanış cevaplarını miras almıyor
+  (`planning_graph._step_brief` yalnızca aktif bir `revise` turn'ünde
+  `prior_brief`'i taşıyor; `focus.py::compute_focus_update` `writing_brief`'i
+  her draft turn'ünde değiştiriyor); frontend'de `PromptQuestionCard`/
+  `InterruptPanel` artık `interrupt_id`/`message.id` ile keylenip soru
+  kimliği değiştiğinde local state'i sıfırlıyor.
+- **Otomatik tarih** -- kullanıcıya asla tarih sorulmuyor; `app.ai.workflows.
+  dates.today_tr()` sunucu tarafında çözülüp brief'in "0. BUGÜNÜN TARİHİ"
+  bölümüne enjekte ediliyor, `fill_date_placeholders` deterministik
+  backstop olarak kalan tüm `[Tarih]` yer tutucularını dolduruyor.
+- **"İnsan onayı" kaldırıldı** -- `draft_approval` gate'i tamamen silindi;
+  yalnızca `missing_information` (eksik bilgi) kapısı kaldı, UI'daki
+  "İnsan onayı gerekiyor" ibaresi hiçbir bileşende görünmüyor.
+  `requires_human_approval` veri modeli olarak (skorlama/audit için) korundu.
+- **Birim önerisi hiçbir zaman boş dönmüyor** -- `routing_graph` artık
+  model hatası/liste dışı yanıt/düşük skor durumlarının hepsinde
+  deterministik bir `_best_effort_unit` fallback'iyle en az bir birim +
+  bir alternatif döndürüyor; frontend'e `UnitPicker` bileşeni eklendi
+  (seçici + "Diğer birim…" serbest metin).
+- **Relevance guardrail'i** -- "bu CV'yi ekibe katılım metni yap" gibi
+  belgeye açıkça işaret eden istekler artık yanlışlıkla `unrelated`
+  sayılmıyor (yeni deiktik referans kuralı + genişletilmiş karşılaştırma
+  yüzeyi); model yalnızca `confidence >= 0.7` iken reddedebiliyor.
+- **PII guardrail'i** -- hard block artık yalnızca belgenin kendi
+  `gizlilik_derecesi` etiketi GİZLİ/ÇOK GİZLİ olduğunda ve deterministik bir
+  PII bulgusu varken tetikleniyor; LLM judge tek başına asla bloklamıyor.
+  Adres detector'ü `no:`/`kat:` gibi yalnız unit-keyword satırlarını artık
+  adres saymıyor; her blok/maskeleme kararı tetikleyici `rule_id`'yi
+  açıklayan bir mesaj üretiyor.
+- **Rol farkındalıklı placeholder'lar** -- çıplak `[Ad Soyad]`/`[Unvan]`/
+  `[İmza]`/`[Kurum Adı]` artık `normalize_role_placeholders` ile
+  "[İmzalayacak yetkilinin adı ve soyadı]" gibi kime ait olduğu açık
+  metinlere dönüştürülüyor (dilekçelerde dilekçe sahibine atfediliyor).
+- **Alıcı (muhatap) çıkarımı** -- "Ahmet Yılmaz'a bir izin yazısı hazırla"
+  artık muhatabı tekrar sormuyor: kesmesiz datif, "Sayın X", "X için",
+  "X Bey'e/Hanım'a" desenleri eklendi; tek aday + bir yazma fiili birlikte
+  geçtiğinde slot doğrudan çözülüyor, birden fazla aday veya fiilsiz bir
+  isim geçişi hâlâ bir onay sorusu üretiyor.
+- **Taslak RAG grounding'i** -- yazar artık yalnızca belgenin özetini değil,
+  `document_qa` koleksiyonundan (asistanın `search_document` aracının da
+  kullandığı) getirilen birebir alıntıları da görüyor. Yeni
+  `draft_graph.retrieve_source_chunks_node`, `retrieve_examples`'la aynı
+  degrade-on-failure desenini izliyor (bütçe aşımı/hata → sıfır alıntı,
+  asla başarısız taslak) ve brief'e "9. BELGEDEN İLGİLİ ALINTILAR" bölümünü
+  ekliyor; `DraftPolicy.source_chunks_enabled`/`source_chunk_count`/
+  `source_chunk_char_budget` ile yönetiliyor.
+
+Ayrıca, #209 listesinde olmayıp bu dalda test edilirken canlıda tespit
+edilen ek bir revizyon hatası:
+
+- **Revizyonda silme talimatı dinlenmiyordu** -- hedeflenecek paragraf/bölüm
+  isim/numara ile belirtilmediğinde ("...paragraftan bir kısmı sil" gibi),
+  tüm taslağı yeniden yazan prompt'un kendi "zaten doldurulmuş bilgileri
+  asla silme" kuralı kullanıcının silme talimatıyla doğrudan çelişiyordu;
+  reviser talimatı yine de uygularsa bu kez `detect_content_loss`'un
+  kısaltma anahtar kelime listesi yalnızca "kısalt"/"özetle" gibi fiilleri
+  tanıdığından, gerçek silme kaynaklı küçülme kazara içerik kaybı sayılıp
+  onarım döngüsüyle geri getiriliyordu -- talimat sessizce iptal edilmiş
+  oluyordu. Prompt'un kuralı silme talimatları için açık bir istisna
+  içerecek şekilde yeniden yazıldı; `_SHORTENING_KEYWORDS`'e "sil"/"çıkar"/
+  "kaldır" eklendi.
+
+### Test
+- `docker compose run --rm backend pytest -q` → **2196 test geçti**, 1
+  bilinen (bu değişikliklerden bağımsız, `main` üzerinde de aynı şekilde
+  başarısız) ön-var olan hata hariç.
+- `cd frontend && npx vitest run` → tüm testler geçti; `İnsan onayı`/
+  `insan onay` dizesi hiçbir bileşende kalmadı.
 
 ## [3.17.0] - 2026-08-17
 ### Eklendi

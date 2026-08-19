@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Sağlık Bakanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "2"
 ---
 
 # Sağlık Kurumlarında Hasta Hakları ve Güvenliği Uygulamaları Genelgesi (Genelge No: 2024/2)
@@ -38,7 +41,7 @@ Sağlık hizmeti sunumunda hasta memnuniyetinin artırılması, hasta hakları i
 
 Bilgilerini ve iliniz dahilindeki tüm sağlık kuruluşlarına tebliğini önemle rica ederim.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Bakan a.
 Sağlık Hizmetleri Genel Müdürü
 

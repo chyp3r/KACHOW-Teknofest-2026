@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Seyhan Kaymakamlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "1"
 ---
 
 # Seyhan Kaymakamlığı İlçe Sağlık Müdürlüğü Aşırı Sıcaklar Sağlık Tedbirleri Duyurusu
@@ -31,5 +34,5 @@ Adana ili Seyhan ilçesinde mevsim normallerinin üzerinde seyreden hava sıcakl
 
 Sağlıklı günler dileriz.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Seyhan İlçe Sağlık Müdürü

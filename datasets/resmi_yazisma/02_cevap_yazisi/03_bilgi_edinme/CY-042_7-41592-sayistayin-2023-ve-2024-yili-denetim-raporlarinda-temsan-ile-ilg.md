@@ -16,6 +16,9 @@ used_ocr: "true"
 page_count: "2"
 quality_score: "0.779"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "6"
 ---
 
 # 7/41592 Esas Sayılı Soru Önergesi

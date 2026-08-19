@@ -16,6 +16,9 @@ used_ocr: "false"
 page_count: "1"
 quality_score: "1.0"
 rag_status: "candidate"
+kaynak_kurum: "Ticaret Bakanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # E – TİCARETİ GÜÇLENDİRME PROJESİ – ORDU PROGRAMI - 23 HAZİRAN 2026

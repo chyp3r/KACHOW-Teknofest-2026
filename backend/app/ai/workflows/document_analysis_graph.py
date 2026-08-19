@@ -26,6 +26,7 @@ from app.ai.guardrails.llm_nuance import judge_input_sensitivity
 from app.ai.guardrails.sensitivity import SensitivityAssessment
 from app.ai.guardrails.sensitivity import assess as assess_sensitivity
 from app.ai.llms.base import BaseLLMClient
+from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
 from app.ai.summarization import ocr_warning
 from app.ai.workflows.events import emit_node_end, emit_node_error, emit_node_start, emit_partial
@@ -549,7 +550,12 @@ def create_document_analysis_graph(
             # matched but it reads as sensitive" case; a document already
             # routed to review gains nothing from a second opinion here.
             judge_verdict = await judge_input_sensitivity(guardrail_judge_agent, text=input_text)
-            if judge_verdict is not None and judge_verdict.sensitive and judge_verdict.confidence >= 0.5:
+            promotion_floor = get_policy().guardrail.judge_promotion_confidence
+            if (
+                judge_verdict is not None
+                and judge_verdict.sensitive
+                and judge_verdict.confidence >= promotion_floor
+            ):
                 assessment = assessment.model_copy(
                     update={
                         "requires_review": True,

@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "İstanbul Üniversitesi Rektörlüğü"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 T.C.
@@ -32,7 +35,7 @@ Söz konusu organizasyonların düzenli ve koordineli bir şekilde yürütülmes
 
 Görevlendirilen personelin belirtilen tarihlerde komisyon çalışmalarına aktif katılımının sağlanması hususunda gereğini rica ederim.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Genel Sekreter
 
 **Dağıtım:**

@@ -4,7 +4,11 @@ kategori: "dilekce"
 alt_kategori: "kamuya_bilgi_edinme"
 baslik: "Bilgi Edinme Hakkı Başvuru Dilekçesi (Ornek 1)"
 kaynak: "sentetik-sablon"
+dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
+kaynak_kurum: "Sentetik veri üretimi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 # Bilgi Edinme Hakkı Başvuru Dilekçesi (Ornek 1)

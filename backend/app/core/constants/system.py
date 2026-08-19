@@ -69,6 +69,41 @@ HEADER_BAND_FRACTION: float = 0.28
 # flat list[str]), so this is the same line-count approximation used to
 # calibrate HEADER_BAND_FRACTION above, not a precise mapping.
 HEADER_REPAIR_LINE_COUNT: int = 14
+# Minimum count of `count_header_fields` (out of 5: sayi/tarih/konu/muhatap/
+# gonderen_kurum) on an extraction's page 1 for FallbackDocumentExtractor to
+# accept it outright. `quality_ratio`/`char_count` alone cannot catch this
+# failure -- a document can read as fine Turkish prose overall while its
+# header block is corrupted or unparseable (observed on real CY-050: 0.85
+# quality_ratio, 3316 characters, zero of five header fields recovered).
+# Calibrated against the CEILING of what real documents can ever provide, not
+# an arbitrary target: parsing all 19 hand-labelled ground-truth documents'
+# clean_text through parse_labelled_fields gives a per-document field-count
+# distribution of {2: 2 docs, 4: 13, 5: 4} -- `tarih` alone is recoverable on
+# only 6 of 19 (many official letterhead templates simply carry no "Tarih"
+# label). Requiring more than 2 would force expensive OCR escalation on
+# documents whose extraction is already correct. 2 is the highest floor that
+# cannot reject a document whose text is genuinely fine.
+MIN_HEADER_FIELD_COUNT: int = 2
+# Page count above which FallbackDocumentExtractor skips the *full-page*
+# vision-model escalation (header-band repair still runs regardless of page
+# count -- it only ever touches page 1). Bounds the worst case of the new
+# field-triggered escalation at roughly one page's OCR time instead of
+# unbounded: a long attachment bundle should not pay full-document vision
+# cost to fix header fields that only ever live on page 1.
+MAX_OCR_PAGES: int = 3
+# Minimum share of a PDF page's area covered by a single embedded image
+# object for that page to be treated as image-dominated -- the discriminator
+# between a genuine born-digital page (real vector/text content, no
+# full-page image) and a page that is actually a scanned raster wrapped in a
+# PDF ("Class A": a scanner's own bundled OCR pass writes a junk embedded
+# text layer over a full-page image of the original scan, so
+# `has_pdf_text_layer` alone cannot tell it apart from a real text layer).
+# Measured across 86 real PDFs (50 corpus scans + 36 live uploads): every
+# text-layer page from this project's scanner pipeline (`PFUPDF Engine`)
+# lands at exactly 1.0 image coverage, and every genuinely born-digital page
+# (`ReportLab`) lands at exactly 0.0 -- no document falls between the two, so
+# no fine calibration was needed.
+FULL_PAGE_IMAGE_MIN_COVERAGE: float = 0.5
 
 # ---------- Pagination ----------
 DEFAULT_PAGE_SIZE: int = 20

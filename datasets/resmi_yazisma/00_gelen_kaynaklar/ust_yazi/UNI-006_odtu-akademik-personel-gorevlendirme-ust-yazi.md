@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Orta Doğu Teknik Üniversitesi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 T.C.
@@ -30,7 +33,7 @@ Fakülteniz Bilgisayar Mühendisliği Bölümü öğretim üyesi Prof. Dr. [Kİ�
 
 Bilgilerinizi ve gereğini rica ederim.
 
-Prof. Dr. [KİŞİSEL BİLGİ]
+Prof. Dr. [İMZA SAHİBİ]
 Rektör a.
 Rektör Yardımcısı
 

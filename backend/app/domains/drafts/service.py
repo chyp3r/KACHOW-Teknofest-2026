@@ -1,8 +1,10 @@
 from typing import List, Optional
 
 from app.api.exceptions.not_found import NotFoundException
+from app.api.exceptions.validation import ValidationException
 from app.domains.drafts.model.draft_model import DraftModel
 from app.domains.drafts.repository import DraftRepository
+from app.domains.units.repository import UnitRepository
 
 
 class DraftService:
@@ -82,3 +84,44 @@ class DraftService:
             await self.repository.soft_delete(draft_id)
         else:
             await self.repository.soft_delete_session(draft.session_id)
+
+    async def update_destination(self, draft_id: str, destination: str, company_id: str) -> DraftModel:
+        """Override this draft version's routed unit with the caller's own pick.
+
+        The routing graph always proposes a primary + (usually) an
+        alternative now (see `app.ai.workflows.routing_graph.
+        _best_effort_unit`), but a human may still want a third option --
+        this is the write path for that, e.g. from the chat UI's unit
+        picker. `destination` need not match a real unit: a custom,
+        free-text destination is accepted the same way routing's own
+        fallback already tolerates an unmatched name (see
+        `DraftModel.destination_unit_id`'s docstring) -- it just resolves
+        to no `destination_unit_id`.
+
+        Args:
+            draft_id: The specific version being corrected -- not
+                necessarily the session's latest (an older version's
+                routing can still be corrected after the fact).
+            destination: The chosen unit's name, non-empty.
+            company_id: The caller's tenant, used to resolve `destination`
+                against this company's own `units` (never another
+                tenant's).
+
+        Raises:
+            NotFoundException: If `draft_id` doesn't exist.
+            ValidationException: If `destination` is blank.
+
+        Returns:
+            The updated draft row.
+        """
+        destination = destination.strip()
+        if not destination:
+            raise ValidationException(message="Birim adı boş olamaz.")
+        draft = await self.get_draft(draft_id)
+        unit = await UnitRepository(self.repository.db).get_by_name(destination, company_id)
+        return await self.repository.update_destination(
+            draft,
+            destination=destination,
+            destination_unit_id=unit.id if unit else None,
+            destination_justification="Kullanıcı tarafından manuel olarak seçildi.",
+        )

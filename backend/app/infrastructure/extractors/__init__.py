@@ -1,9 +1,11 @@
 from typing import Optional
 
+from app.ai.compliance import count_header_fields
 from app.infrastructure.extractors.base import (
     BaseDocumentExtractor,
     DocumentExtractionError,
     ExtractedDocument,
+    is_scanned_text_layer,
 )
 from app.infrastructure.extractors.fallback import FallbackDocumentExtractor
 from app.infrastructure.extractors.open_data_loader import OpenDataLoaderExtractor
@@ -42,6 +44,20 @@ def get_document_extractor() -> BaseDocumentExtractor:
                 vision_extractor,
             ],
             header_repair=vision_extractor,
+            # `app.ai.compliance.count_header_fields` -- the only place this
+            # infrastructure-layer chain reaches into `app.ai`, and done by
+            # injection rather than import inside fallback.py itself so that
+            # module stays independent of the AI layer and trivially testable
+            # with a bare lambda (see test_extractor.py). Lets the chain
+            # escalate past a result that reads as fine Turkish prose overall
+            # but whose header block (sayi/tarih/konu/muhatap/gonderen_kurum)
+            # didn't actually parse -- quality_ratio alone cannot see that.
+            header_field_probe=count_header_fields,
+            # `is_scanned_text_layer` -- widens header-band repair to also
+            # cover a scanner's own junk OCR text layer sitting over a
+            # full-page scan image (Class A), which OpenDataLoader/Pdfium
+            # otherwise read exactly like a genuine born-digital text layer.
+            scan_text_layer_probe=is_scanned_text_layer,
         )
     return _document_extractor
 

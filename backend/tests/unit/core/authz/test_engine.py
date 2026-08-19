@@ -62,6 +62,27 @@ def test_resource_with_no_company_id_skips_the_tenant_gate():
     assert decision.permit is True
 
 
+def test_employee_may_update_its_own_drafts_destination():
+    subject = _subject(UserRole.EMPLOYEE, user_id="u-1")
+    resource = Resource(type="draft", id="d-1", company_id="company-1", owner_id="u-1")
+    decision = authorize(subject, Action.DRAFT_UPDATE, resource)
+    assert decision.permit is True
+
+
+def test_employee_may_not_update_another_employees_draft_destination():
+    subject = _subject(UserRole.EMPLOYEE, user_id="u-2")
+    resource = Resource(type="draft", id="d-1", company_id="company-1", owner_id="u-1")
+    decision = authorize(subject, Action.DRAFT_UPDATE, resource)
+    assert decision.permit is False
+
+
+def test_manager_may_update_any_drafts_destination_company_wide():
+    subject = _subject(UserRole.MANAGER, user_id="mgr-1")
+    resource = Resource(type="draft", id="d-1", company_id="company-1", owner_id="u-1")
+    decision = authorize(subject, Action.DRAFT_UPDATE, resource)
+    assert decision.permit is True
+
+
 # ==========================================
 # Built-in role rules
 # ==========================================

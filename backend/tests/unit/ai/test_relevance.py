@@ -12,6 +12,7 @@ invoked from planning_graph._step_draft once the document's classification
 import pytest
 
 from app.ai.workflows.relevance import (
+    RelevanceOutput,
     RelevanceVerdict,
     assess_relevance_deterministic,
     build_unrelated_reply,
@@ -54,6 +55,45 @@ def test_a_request_overlapping_only_the_documents_summary_wording_is_relevant():
     assert verdict.reason == "document_overlap"
 
 
+def test_a_request_explicitly_pointing_at_the_document_is_relevant_regardless_of_vocabulary():
+    """The CV false-refusal this guards against: a request naming the
+    document's own subject ("bu kişinin") with no vocabulary overlap and no
+    DOMAIN_SURFACES hit must still be admitted, not escalated to a model."""
+    cv_classification = {
+        "summary": "Özgeçmiş belgesi.",
+        "document_type_label": "Özgeçmiş",
+        "fields": {},
+    }
+    verdict = assess_relevance_deterministic(
+        "Bu kişinin ekibe katılımı ile ilgili bir bilgilendirme metni yaz", cv_classification
+    )
+    assert verdict.relevant is True
+    assert verdict.reason == "deictic_reference"
+
+
+def test_a_request_naming_a_field_or_entity_not_in_the_summary_is_still_relevant():
+    """_document_text now also covers extracted fields/entities, not just
+    the summary/type label."""
+    classification = {
+        "summary": "Bir yazışma.",
+        "document_type_label": "Resmî Yazı",
+        "fields": {"konu": "Bütçe Artışı Talebi"},
+    }
+    verdict = assess_relevance_deterministic("Bütçe artışı talebini yanıtlayan bir yazı hazırla", classification)
+    assert verdict.relevant is True
+    assert verdict.reason == "document_overlap"
+
+
+def test_an_unambiguous_off_topic_request_still_stays_unrelated():
+    """A deictic-looking word alone must not blanket-admit everything --
+    only an actual pointer-at-the-document phrase does."""
+    verdict = assess_relevance_deterministic(
+        "Çiğköfte kampanyası için bir metin yaz", CLASSIFICATION
+    )
+    assert verdict.relevant is False
+    assert verdict.reason == "unrelated"
+
+
 @pytest.mark.asyncio
 async def test_resolve_relevance_without_a_model_refuses_outright():
     verdict = await resolve_relevance(
@@ -75,6 +115,48 @@ async def test_resolve_relevance_degrades_to_relevant_when_the_model_call_fails(
     )
     assert verdict.relevant is True
     assert verdict.reason == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_a_low_confidence_model_rejection_is_admitted_not_refused(monkeypatch):
+    async def _unsure(*args, **kwargs):
+        return RelevanceOutput(relevant=False, confidence=0.4)
+
+    monkeypatch.setattr("app.ai.workflows.relevance.classify_relevance_with_model", _unsure)
+
+    verdict = await resolve_relevance(
+        "Çiğköfte kampanyası için bir metin yaz", CLASSIFICATION, llm_client=object()
+    )
+    assert verdict.relevant is True
+    assert verdict.reason == "model_relevant"
+
+
+@pytest.mark.asyncio
+async def test_a_high_confidence_model_rejection_is_still_refused(monkeypatch):
+    async def _sure(*args, **kwargs):
+        return RelevanceOutput(relevant=False, confidence=0.95)
+
+    monkeypatch.setattr("app.ai.workflows.relevance.classify_relevance_with_model", _sure)
+
+    verdict = await resolve_relevance(
+        "Çiğköfte kampanyası için bir metin yaz", CLASSIFICATION, llm_client=object()
+    )
+    assert verdict.relevant is False
+    assert verdict.reason == "model_unrelated"
+
+
+@pytest.mark.asyncio
+async def test_a_relevant_model_verdict_is_admitted_regardless_of_confidence(monkeypatch):
+    async def _relevant(*args, **kwargs):
+        return RelevanceOutput(relevant=True, confidence=0.3)
+
+    monkeypatch.setattr("app.ai.workflows.relevance.classify_relevance_with_model", _relevant)
+
+    verdict = await resolve_relevance(
+        "Çiğköfte kampanyası için bir metin yaz", CLASSIFICATION, llm_client=object()
+    )
+    assert verdict.relevant is True
+    assert verdict.reason == "model_relevant"
 
 
 def test_build_unrelated_reply_includes_the_document_summary_and_type():

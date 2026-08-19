@@ -68,6 +68,7 @@ async def run_revise(
     instruction_origin: str = "user_turn",
     company_id: Optional[str] = None,
     adapter_provider: Optional[AdapterProvider] = None,
+    today: str = "",
 ) -> dict[str, Any]:
     """Produce a targeted revision of the active draft.
 
@@ -122,6 +123,14 @@ async def run_revise(
             own graph. Ignored when ``revise_graph`` is supplied pre-built
             -- that graph's own adapter_provider (or lack of one) already
             applies.
+        today: The date this revision is happening on (see
+            app.ai.workflows.dates.today_tr), forwarded so
+            revise_graph.verify_node's own date-placeholder backstop can
+            fill a "Tarih:" placeholder if the rewrite pass reintroduces
+            one -- an ordinary revision keeps the original draft's date
+            unchanged (see revise_graph's own anti-date-change rule) and
+            never needs this, but a rewrite that legitimately regenerates
+            the header still must not turn into a question to the user.
 
     Returns:
         The revision result.
@@ -141,6 +150,7 @@ async def run_revise(
                 "instructions": instructions,
                 "reasoning_level": preset.level.value,
                 "company_id": company_id or "",
+                "today": today,
             },
             config=child_config(config),
         )

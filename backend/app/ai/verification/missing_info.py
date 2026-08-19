@@ -98,6 +98,14 @@ def build_missing_info_request(
         placeholder_text = match.strip("[]").strip()
         if not placeholder_text:
             continue
+        # The draft's own date is never something to ask the user about
+        # (see app.ai.workflows.dates.today_tr) -- draft_graph.verify_node/
+        # revise_graph.verify_node already fill the "Tarih:" line's own
+        # placeholder with the server-resolved date before this runs, so
+        # this is a defensive second layer for a caller that skipped that
+        # step or a differently-worded date placeholder the writer left.
+        if _fold(placeholder_text).startswith("tarih"):
+            continue
         key = _slugify(placeholder_text)
         if key in seen:
             continue

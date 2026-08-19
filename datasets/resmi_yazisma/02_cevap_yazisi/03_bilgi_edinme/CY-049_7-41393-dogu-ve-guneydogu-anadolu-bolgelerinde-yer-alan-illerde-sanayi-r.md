@@ -16,6 +16,9 @@ used_ocr: "true"
 page_count: "4"
 quality_score: "0.857"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "7"
 ---
 
 # Soru Önergeleri
@@ -47,8 +50,7 @@ Ek: Soru Önergesi Cevabı
 Bu belge güvenli elektronik imza ile imzalanmıştır.
 Belge Doğrulama Kodu:78CEA2DF-2F4D-47F3-B2D7-120B7FD66D9E Belge Doğrulama Adresi https://www turkiye. gov.tr/stb-ebys
 [KURUM ADRESİ]
-Telefon :[T.C. KİMLİK NO] Bilgi İçin:soruonergesi(&sanayi. gov.tr EL ek
-Faks:[T.C. KİMLİK NO] İnternet adresi: www.sanayi.gov.tr v3 ia ,
+[KURUM İLETİŞİM BİLGİLERİ]
 Kep:sanayiveteknolojibakanligi.strateji(&;hs01 .kep.tr rabia azlı
 
 BATMAN MİLLETVEKİLİ SAYIN [KİŞİ ADI]'NIN

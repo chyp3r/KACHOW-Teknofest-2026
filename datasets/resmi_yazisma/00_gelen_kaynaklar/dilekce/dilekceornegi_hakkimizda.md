@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-82C9E158
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-82C9E158"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "Hakkımızda"
 kaynak: "https://www.dilekceornegi.net/hakkimizda/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "rejected"
+ret_nedeni: "site_sayfasi"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Hakkımızda

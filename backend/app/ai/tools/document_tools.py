@@ -163,7 +163,7 @@ def build_assistant_tools(
     if document_id:
         document_sensitivity = assessment_from_analysis(
             cached_document.get("analysis") or {}
-        ).level
+        ).effective_level
         clearance_ok = (
             requester_clearance is None or requester_clearance >= document_sensitivity
         )

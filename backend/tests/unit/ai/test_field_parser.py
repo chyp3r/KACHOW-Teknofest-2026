@@ -12,6 +12,8 @@ import pytest
 from app.ai.compliance import EvrakField, is_blank
 from app.ai.compliance.field_parser import (
     AUTHORITATIVE_FIELD,
+    HEADER_FIELD,
+    count_header_fields,
     format_parsed_fields,
     merge_parsed_over_model,
     parse_labelled_fields,
@@ -483,3 +485,32 @@ def test_unsigned_petition_signature_is_not_resurrected_by_the_model():
     parsed = parse_labelled_fields(UNSIGNED_PETITION)
     merged = merge_parsed_over_model({"imza_sahibi": "Ali Vural"}, parsed)
     assert merged["imza_sahibi"] is None
+
+
+# --- count_header_fields ---------------------------------------------------
+#
+# Backs the extraction-acceptance gate's field-aware criterion (see
+# FallbackDocumentExtractor._has_enough_header_fields): whether an extraction
+# is good enough is decided by how many of these five fields survive, not by
+# prose readability, which is structurally blind to header damage (a garbled
+# `sayi` still reads as fine Turkish prose overall).
+
+
+def test_header_field_is_exactly_the_five_ryuehy_header_fields():
+    assert HEADER_FIELD == ("sayi", "tarih", "konu", "muhatap", "gonderen_kurum")
+
+
+def test_count_header_fields_counts_all_five_on_a_clean_letter():
+    assert count_header_fields(OFFICIAL_LETTER) == 5
+
+
+def test_count_header_fields_is_zero_on_free_text_with_no_labels():
+    assert count_header_fields("Bu bir deneme metnidir, hiçbir etiket içermez.") == 0
+
+
+def test_count_header_fields_only_counts_the_five_header_keys():
+    """A document that parses `ilgi`/`ekler`/`imza_sahibi` etc. but none of the
+    five header fields must still count as zero -- those aren't header fields."""
+    text = "İlgi : 01.03.2026 tarihli yazı.\nEkler : 1- Nüfus cüzdanı örneği"
+    assert parse_labelled_fields(text).get("ilgi")  # sanity: something did parse
+    assert count_header_fields(text) == 0

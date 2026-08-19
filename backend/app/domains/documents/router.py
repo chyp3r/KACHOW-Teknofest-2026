@@ -23,8 +23,10 @@ from app.domains.documents.draft_service import DraftService
 from app.domains.documents.repository import DocumentRepository
 from app.domains.documents.schema.document_schema import (
     DocumentFieldsUpdateSchema,
+    DocumentTextUpdateSchema,
     DraftRequestSchema,
 )
+from app.infrastructure.extractors.base import DocumentExtractionError
 from app.domains.users.model.user_model import UserModel
 from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 from app.shared.validator.storage_path_validator import validate_storage_path
@@ -425,12 +427,12 @@ async def get_document_graph(
     """The single-document neighbourhood: one document and every madde/kanun
     it touches.
 
-    Declared above the catch-all ``GET /{storage_path:path}`` immediately
-    below -- both are GET routes matching the same path shape, so
-    registration order is the only thing that decides which one a request
-    like ``/documents/uploads/abc.pdf/graph`` reaches. Registered after it,
-    this route would never be hit; every such request would instead match
-    the catch-all with ``storage_path="uploads/abc.pdf/graph"``.
+    Declared above the catch-all ``GET /{storage_path:path}`` below -- both
+    are GET routes matching the same path shape, so registration order is
+    the only thing that decides which one a request like
+    ``/documents/uploads/abc.pdf/graph`` reaches. Registered after it, this
+    route would never be hit; every such request would instead match the
+    catch-all with ``storage_path="uploads/abc.pdf/graph"``.
 
     Args:
         storage_path: The document's storage key.
@@ -471,6 +473,188 @@ async def get_document_graph(
     assert_clearance(current_user, document_sensitivity)
 
     return SuccessResponse(data=result)
+
+
+@router.get("/{storage_path:path}/text", response_model=None)
+async def get_document_text(
+    storage_path: str,
+    service: DocumentService = Depends(get_document_analysis_service),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+):
+    """Return the extracted/OCR text of a previously analysed document.
+
+    Backs the "Belge metni" panel section. Declared ABOVE the catch-all
+    ``GET /{storage_path:path}`` below on purpose: that route is greedy and
+    would otherwise swallow ``.../text`` as if it were itself a
+    ``storage_path``. The ``/fields`` and ``/detailed-summary`` routes get
+    away with sitting below it only because they use different HTTP
+    methods; a ``GET`` sub-route does not have that luxury.
+
+    Args:
+        storage_path: The document's storage key.
+        service: Injected document analysis service.
+        document_repository: Ownership registry, checked before returning
+            content.
+        current_user: The authenticated caller.
+
+    Returns:
+        The cached pages/text plus extraction provenance, inside the
+        unified success envelope.
+
+    Raises:
+        HTTPException: 400 if storage_path is malformed, 404 if no analysis
+            is cached for it.
+        AuthorizationException: 403 if the document belongs to a different
+            company or user, or the requester's clearance doesn't cover the
+            document's confidentiality level.
+    """
+    try:
+        validate_storage_path(storage_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    document = await document_repository.get_by_id(storage_path, current_user.company_id)
+    if document is None:
+        raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+    _authorize_document(current_user, document, Action.DOCUMENT_READ)
+
+    result = await service.get_document_text(storage_path)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Bu evrak için bir analiz bulunamadı.")
+
+    try:
+        document_level = SensitivityLevel(document.sensitivity_level)
+    except ValueError:
+        document_level = SensitivityLevel.UNMARKED
+    assert_clearance(current_user, document_level)
+
+    return SuccessResponse(data=result.model_dump(mode="json"))
+
+
+@router.put("/{storage_path:path}/text", response_model=None)
+async def update_document_text(
+    storage_path: str,
+    payload: DocumentTextUpdateSchema,
+    service: DocumentService = Depends(get_document_analysis_service),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    _: None = Depends(
+        rate_limit(max_requests=10, window_seconds=60, key_prefix="documents:text")
+    ),
+):
+    """Save hand-corrected OCR/extraction text.
+
+    UI-driven fix for text the extraction pipeline still got wrong -- the
+    companion to the field-aware extraction-acceptance fix in
+    ``FallbackDocumentExtractor``: a document whose header still didn't
+    parse (or that never escalated because the automatic rule's floor
+    wasn't crossed) can be corrected directly. Re-derives ``fields``,
+    ``missing_fields``, ``compliance_status`` and ``guardrail``
+    deterministically from the corrected text -- no model call (see
+    ``DocumentService.update_document_text``'s own docstring).
+
+    Args:
+        storage_path: The document's storage key.
+        payload: The corrected per-page text.
+        service: Injected document analysis service.
+        document_repository: Ownership registry, checked before the update.
+        current_user: The authenticated caller.
+
+    Returns:
+        The updated analysis, in the same shape as
+        ``GET /documents/{storage_path}``.
+
+    Raises:
+        HTTPException: 400 if storage_path is malformed, 404 if no analysis
+            is cached for it.
+        AuthorizationException: 403 if the document belongs to a different
+            company or user, or the requester's clearance doesn't cover the
+            document's confidentiality level.
+        ValidationException: 422 if the submitted page count doesn't match
+            the cached document's.
+    """
+    try:
+        validate_storage_path(storage_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    document = await document_repository.get_by_id(storage_path, current_user.company_id)
+    if document is None:
+        raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+    _authorize_document(current_user, document, Action.DOCUMENT_UPDATE)
+
+    result = await service.update_document_text(
+        storage_path, payload.pages, current_user.company_id
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Bu evrak için bir analiz bulunamadı.")
+
+    assert_clearance(current_user, result.guardrail.sensitivity_level)
+
+    return SuccessResponse(data=result.model_dump(mode="json"))
+
+
+@router.post("/{storage_path:path}/re-extract", response_model=None)
+async def reextract_document_text(
+    storage_path: str,
+    service: DocumentService = Depends(get_document_analysis_service),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    _: None = Depends(
+        rate_limit(max_requests=2, window_seconds=60, key_prefix="documents:reextract")
+    ),
+):
+    """Re-run OCR with the vision model directly -- the manual override for
+    when the extraction chain's own automatic escalation didn't fire.
+
+    Bypasses ``get_document_extractor()``'s chain entirely and always pays
+    the full glm-ocr cost (see ``DocumentService.reextract_document_text``'s
+    own docstring) -- this is deliberately more expensive and more tightly
+    rate-limited than ``PUT .../text`` (2/60s vs 10/60s) or
+    ``POST .../detailed-summary`` (5/60s), matching how expensive the call
+    it triggers actually is.
+
+    Args:
+        storage_path: The document's storage key.
+        service: Injected document analysis service.
+        document_repository: Ownership registry, checked before re-running.
+        current_user: The authenticated caller.
+
+    Returns:
+        The updated analysis, in the same shape as
+        ``GET /documents/{storage_path}``.
+
+    Raises:
+        HTTPException: 400 if storage_path is malformed, 404 if no analysis
+            is cached for it.
+        AuthorizationException: 403 if the document belongs to a different
+            company or user, or the requester's clearance doesn't cover the
+            document's confidentiality level.
+        ValidationException: 422 if the vision model call itself fails.
+    """
+    try:
+        validate_storage_path(storage_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    document = await document_repository.get_by_id(storage_path, current_user.company_id)
+    if document is None:
+        raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+    _authorize_document(current_user, document, Action.DOCUMENT_UPDATE)
+
+    try:
+        result = await service.reextract_document_text(storage_path, current_user.company_id)
+    except DocumentExtractionError as exc:
+        raise ValidationException(
+            message="Belge yeniden OCR ile işlenemedi.", details={"reason": str(exc)}
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Bu evrak için bir analiz bulunamadı.")
+
+    assert_clearance(current_user, result.guardrail.sensitivity_level)
+
+    return SuccessResponse(data=result.model_dump(mode="json"))
 
 
 @router.get("/{storage_path:path}", response_model=None)

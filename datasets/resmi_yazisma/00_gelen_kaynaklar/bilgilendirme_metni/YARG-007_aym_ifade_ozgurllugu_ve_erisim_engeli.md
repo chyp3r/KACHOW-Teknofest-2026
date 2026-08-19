@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Anayasa Mahkemesi Başkanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "3"
 ---
 
 # Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: 2019/29104
@@ -23,7 +26,7 @@ rag_status: "candidate"
 **R.G. Tarih-Sayı:** 12/01/2024 - 32427
 
 **BAŞVURAN:** [KİŞİ ADI]
-**VEKİLİ:** Av. [KİŞİSEL BİLGİ]
+**VEKİLİ:** Av. [VEKİL ADI]
 
 **BAŞVURUNUN KONUSU:** Başvuranın internet haber sitesinde yayımlanan iki adet haber içeriğine 5651 sayılı İnternet Ortamında Yapılan Yayınların Düzenlenmesi ve Bu Yayınlar Yoluyla İşlenen Suçlarla Mücadele Edilmesi Hakkında Kanun'un 9. maddesi uyarınca kişilik haklarının ihlal edildiği gerekçesiyle erişimin engellenmesine karar verilmesi nedeniyle ifade ve basın özgürlüğünün ihlal edildiği iddiasına ilişkindir.
 
@@ -35,7 +38,7 @@ rag_status: "candidate"
 Açıklanan gerekçelerle;
 1. İfade ve basın özgürlüğünün ihlal edildiğine ilişkin iddianın KABUL EDİLEBİLİR OLDUĞUNA,
 2. Anayasa'nın 26. ve 28. maddelerinde güvence altına alınan **İFADE VE BASIN ÖZGÜRLÜĞÜNÜN İHLAL EDİLDİĞİNE**,
-3. İhlalin sonuçlarının ortadan kaldırılması için erişimin engellenmesi kararının kaldırılması amacıyla dosyanın [KİŞİSEL BİLGİ] Sulh Ceza Hakimliğine GÖNDERİLMESİNE,
+3. İhlalin sonuçlarının ortadan kaldırılması için erişimin engellenmesi kararının kaldırılması amacıyla dosyanın [YARGI MERCİİ] Sulh Ceza Hakimliğine GÖNDERİLMESİNE,
 4. Başvurana 30.000 TL manevi tazminat ÖDENMESİNE OYBİRLİĞİYLE karar verildi.
 
 **Başkan:** Zühtü ARSLAN

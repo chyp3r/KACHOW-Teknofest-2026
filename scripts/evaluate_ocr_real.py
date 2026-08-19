@@ -7,7 +7,7 @@ different question: does a candidate model actually help on the real,
 handwriting-and-letterhead-carrying documents this project was built to
 handle, not a synthetically degraded stand-in for them.
 
-Ground truth: `datasets/resmi_yazisma/ocr_ground_truth.json`, 15 hand-labelled
+Ground truth: `datasets/resmi_yazisma/ocr_ground_truth.json`, 23 hand-labelled
 real CY-*.pdf documents (see that file's own "_meta" block for the labelling
 methodology). Expected fields are derived by running each entry's
 `clean_text` through the same `parse_labelled_fields()` the OCR output is
@@ -73,7 +73,11 @@ import time
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "backend"))
 
-from app.ai.compliance import parse_labelled_fields  # noqa: E402
+from app.ai.compliance import (  # noqa: E402
+    HEADER_FIELD,
+    count_header_fields,
+    parse_labelled_fields,
+)
 from app.infrastructure.extractors import (  # noqa: E402
     FallbackDocumentExtractor,
     OllamaVisionExtractor,
@@ -82,6 +86,7 @@ from app.infrastructure.extractors import (  # noqa: E402
     PlainTextExtractor,
     TesseractExtractor,
 )
+from app.infrastructure.extractors.base import is_scanned_text_layer  # noqa: E402
 
 CORPUS_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -101,7 +106,11 @@ GROUND_TRUTH_PATH = os.path.join(
 DEFAULT_RESULTS_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "scratchpad", "ocr_real_results.json"
 )
-FIELD_KEYS = ("sayi", "tarih", "konu", "muhatap", "gonderen_kurum")
+#: The same tuple `get_document_extractor()`'s `header_field_probe` is scored
+#: against in production -- imported, not redeclared, so this benchmark can
+#: never silently drift from what the extraction-acceptance gate actually
+#: checks.
+FIELD_KEYS = HEADER_FIELD
 #: Collapses whitespace and case so a near-miss (an extra handwritten-
 #: annotation token, a stray space) doesn't score identically to a total
 #: loss -- see the module docstring.
@@ -167,7 +176,18 @@ def _parse_engine_spec(spec: str):
 def _build_chain(engine) -> FallbackDocumentExtractor:
     """The same chain get_document_extractor() builds, with `engine` swapped
     in for whichever OllamaVisionExtractor production would otherwise use --
-    this is what "score the full production chain per engine" means."""
+    this is what "score the full production chain per engine" means.
+
+    Also wires the same `header_field_probe`/`scan_text_layer_probe`
+    production passes. Omitting these was a real, previously-shipped bug in
+    this exact function: `FallbackDocumentExtractor` is built by hand here
+    rather than via `get_document_extractor()`, so a wiring change made only
+    in production silently never reaches this benchmark -- the chain still
+    constructs, still runs, and still prints a confident-looking comparison
+    table, just scoring the OLD acceptance behaviour under a NEW model's
+    name. There is no test that catches this class of bug; only wiring it
+    identically to production does.
+    """
     if isinstance(engine, TesseractExtractor):
         return FallbackDocumentExtractor(
             extractors=[
@@ -177,6 +197,8 @@ def _build_chain(engine) -> FallbackDocumentExtractor:
                 engine,
             ],
             header_repair=None,
+            header_field_probe=count_header_fields,
+            scan_text_layer_probe=is_scanned_text_layer,
         )
     return FallbackDocumentExtractor(
         extractors=[
@@ -187,6 +209,8 @@ def _build_chain(engine) -> FallbackDocumentExtractor:
             engine,
         ],
         header_repair=engine,
+        header_field_probe=count_header_fields,
+        scan_text_layer_probe=is_scanned_text_layer,
     )
 
 

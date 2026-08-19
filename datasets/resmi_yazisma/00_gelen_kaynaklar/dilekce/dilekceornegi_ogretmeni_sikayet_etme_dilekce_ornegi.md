@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-760FAC31
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-760FAC31"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "Öğretmeni Şikayet Etme Dilekçe Örneği"
 kaynak: "https://www.dilekceornegi.net/ogretmeni-sikayet-etme-dilekce-ornegi/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "reference_only"
+ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Öğretmeni Şikayet Etme Dilekçe Örneği
@@ -13,9 +19,9 @@ ANASAYFA
 Öğretmeni Şikayet Etme Dilekçe Örneği
 Öğretmeni Şikayet Etme Dilekçe Örneği
 Dilekceornegi
-7 yıl önce
+7 yıl önce
 0
-2 dakikada okunabilir
+2 dakikada okunabilir
 Facebook'ta Paylaş
 Twitter'da Paylaş
 Pinterest
@@ -27,7 +33,7 @@ Telegram
 Örneği Nasıldır?
 Öğretmeni Şikayet Etme Dilekçe Örneği için öncelikle şikayet dilekçenizde de belirtmeniz gereken bir sebebiniz olmalıdır. Öğretmenin yaptığı hareket, uyguladığı tavır ya da söylediği sözler gerçekten şikayet etmeye yeter nitelikteyse şikayet dilekçesi hazırlamanız gerekiyor. Aksi halde o öğretmen sizden şikayetçi olma hakkını kendinde saklı tutma imkanına sahiptir.
 Öğretmen şikayet dilekçesinin en başına hangi makama öğretmeni şikayet etmek istiyorsanız o makamı belirtmeniz gerekiyor.
-Makamı belirtmenizin ardından şikayetçi olduğunuz öğretmenin görev yaptığı il, ilçe yazılmalı  ve okul adı da belirtilmelidir. Öğretmenin şikayet eden öğrencinin hangi dersine girdiği açıkça yazılmalıdır.
+Makamı belirtmenizin ardından şikayetçi olduğunuz öğretmenin görev yaptığı il, ilçe yazılmalı ve okul adı da belirtilmelidir. Öğretmenin şikayet eden öğrencinin hangi dersine girdiği açıkça yazılmalıdır.
 Öğretmen ve okul bilgilerinin yazılmasının ardından olayın geçtiği saat, gün ve olay birkaç cümle ile anlatılarak yazılmalıdır. Tüm bunların ardından tekrar okul ismi ve öğretmen ismi yazılarak bahsedilen öğretmenden şikayetçi olduğunu belirtilmelidir.
 Arz cümlesinin sonuna ise; dilekçenin yazıldığı tarih açık şekilde eklenmelidir.
 Öğretmeni şikayet etme dilekçe örneği

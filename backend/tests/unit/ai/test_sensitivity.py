@@ -22,7 +22,44 @@ def test_no_marking_and_no_pii_is_unmarked_and_needs_no_review():
     assert result.level is SensitivityLevel.UNMARKED
     assert result.requires_review is False
     assert result.pii_findings == []
-    assert result.reasons == []
+    assert any("otomatik atandı" in reason for reason in result.reasons)
+
+
+# ==========================================
+# effective_level / is_defaulted (#214)
+# ==========================================
+def test_no_marking_defaults_effective_level_to_policy_default():
+    result = assess(fields=_fields(), text="")
+    assert result.level is SensitivityLevel.UNMARKED
+    assert result.effective_level is SensitivityLevel.TASNIF_DISI
+    assert result.is_defaulted is True
+    assert result.requires_review is False
+
+
+def test_explicit_tasnif_disi_marking_is_not_defaulted():
+    result = assess(fields=_fields(gizlilik_derecesi="Tasnif Dışı"), text="")
+    assert result.level is SensitivityLevel.TASNIF_DISI
+    assert result.effective_level is SensitivityLevel.TASNIF_DISI
+    assert result.is_defaulted is False
+
+
+def test_explicit_marking_above_default_is_never_lowered():
+    result = assess(fields=_fields(gizlilik_derecesi="Çok Gizli"), text="")
+    assert result.level is SensitivityLevel.COK_GIZLI
+    assert result.effective_level is SensitivityLevel.COK_GIZLI
+    assert result.is_defaulted is False
+    assert result.requires_review is True
+
+
+def test_custom_default_level_is_honored():
+    policy = get_policy().guardrail
+    result = assess(
+        fields=_fields(),
+        text="",
+        policy=replace(policy, default_sensitivity_level=SensitivityLevel.HIZMETE_OZEL),
+    )
+    assert result.effective_level is SensitivityLevel.HIZMETE_OZEL
+    assert result.is_defaulted is True
 
 
 def test_gizli_marking_requires_review():
@@ -111,3 +148,36 @@ def test_marking_and_pii_both_contribute_reasons():
     assert result.requires_review is True
     assert result.pii_findings
     assert len(result.reasons) >= 2
+
+
+# ==========================================
+# assessment_from_analysis (#214)
+# ==========================================
+def test_assessment_from_analysis_round_trips_effective_level():
+    from app.ai.guardrails.sensitivity import assessment_from_analysis
+
+    analysis = {
+        "sensitivity_assessment": {
+            "level": "unmarked",
+            "effective_level": "tasnif_disi",
+            "is_defaulted": True,
+            "requires_review": False,
+        }
+    }
+    result = assessment_from_analysis(analysis)
+    assert result.level is SensitivityLevel.UNMARKED
+    assert result.effective_level is SensitivityLevel.TASNIF_DISI
+    assert result.is_defaulted is True
+
+
+def test_assessment_from_analysis_falls_back_to_level_when_effective_level_absent():
+    """A cached analysis written before effective_level existed carries no
+    such key -- degrades to treating it as never-defaulted rather than
+    raising or silently blocking."""
+    from app.ai.guardrails.sensitivity import assessment_from_analysis
+
+    analysis = {"guardrail": {"sensitivity_level": "gizli", "requires_human_review": True}}
+    result = assessment_from_analysis(analysis)
+    assert result.level is SensitivityLevel.GIZLI
+    assert result.effective_level is SensitivityLevel.GIZLI
+    assert result.is_defaulted is False

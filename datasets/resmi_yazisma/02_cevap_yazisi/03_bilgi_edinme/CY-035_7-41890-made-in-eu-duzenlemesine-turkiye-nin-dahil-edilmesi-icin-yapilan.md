@@ -16,6 +16,9 @@ used_ocr: "true"
 page_count: "2"
 quality_score: "0.8"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "6"
 ---
 
 # Soru Önergesi (7/41890)

@@ -16,6 +16,9 @@ used_ocr: "false"
 page_count: "1"
 quality_score: "1.0"
 rag_status: "candidate"
+kaynak_kurum: "Ticaret Bakanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Ticaret Bakanlığı İhracat Süreçleri ve Devlet Destekleri Eğitim Programı – 23-24-25 Haziran 2026

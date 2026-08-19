@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Tekirdağ Namık Kemal Üniversitesi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "6"
 ---
 
 # T.C. TEKİRDAĞ NAMIK KEMAL ÜNİVERSİTESİ SENATO KARARI
@@ -26,4 +29,4 @@ Yapılan görüşmeler neticesinde; Üniversitemiz yerleşkelerinde meydana gele
 
 **Başkan:** Prof. Dr. [KİŞİ ADI] (Rektör)
 **Üyeler:** Prof. Dr. [KİŞİ ADI], Prof. Dr. [KİŞİ ADI], Doç. Dr. [KİŞİ ADI], Dr. Öğr. Üyesi [KİŞİ ADI]
-**Raportör:** [KİŞİSEL BİLGİ] (Genel Sekreter V.)
+**Raportör:** [KİŞİ ADI] (Genel Sekreter V.)

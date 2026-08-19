@@ -99,6 +99,9 @@ def main():
                     "quality_score": data.get("quality_score", ""),
                     "rag_status": data.get("rag_status", "candidate"),
                     "ret_nedeni": data.get("ret_nedeni", ""),
+                    "kaynak_kurum": data.get("kaynak_kurum", ""),
+                    "anonimlestirme_durumu": data.get("anonimlestirme_durumu", ""),
+                    "anonimlestirilen_alan_sayisi": data.get("anonimlestirilen_alan_sayisi", "0"),
                     "kart": data["kart"]
                 }
                 records.append(record)

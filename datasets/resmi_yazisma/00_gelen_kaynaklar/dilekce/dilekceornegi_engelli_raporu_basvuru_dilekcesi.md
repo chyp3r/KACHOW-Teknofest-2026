@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-B91A3913
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-B91A3913"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "Engelli Raporu Başvuru Dilekçesi"
 kaynak: "https://www.dilekceornegi.net/engelli-raporu-basvuru-dilekcesi/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "reference_only"
+ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Engelli Raporu Başvuru Dilekçesi
@@ -13,9 +19,9 @@ Resmi Dilekçeleri
 Engelli Raporu Başvuru Dilekçesi
 Engelli Raporu Başvuru Dilekçesi
 Dilekceornegi
-5 yıl önce
+5 yıl önce
 0
-2 dakikada okunabilir
+2 dakikada okunabilir
 Facebook'ta Paylaş
 Twitter'da Paylaş
 Pinterest

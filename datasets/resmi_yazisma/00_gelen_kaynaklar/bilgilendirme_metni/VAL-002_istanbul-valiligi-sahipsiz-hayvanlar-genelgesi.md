@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. İstanbul Valiliği"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "2"
 ---
 
 # İstanbul Valiliği Sahipsiz Hayvanların Korunması ve Rehabilitasyonu Genelgesi
@@ -35,5 +38,5 @@ rag_status: "candidate"
 
 Gereğini ve bilgilerinizi rica ederim.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 İstanbul Valisi

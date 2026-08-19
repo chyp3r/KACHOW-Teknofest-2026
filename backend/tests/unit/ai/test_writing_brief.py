@@ -138,6 +138,68 @@ def test_kapanis_suggests_arz_from_an_authority_muhatap_without_an_explicit_word
     assert sum(1 for option in question["options"] if option["value"] == "arz_ederim") == 1
 
 
+# ==========================================
+# Muhatap extraction (Görev's "metinden alıcı bilgisinin çıkarılamaması" bug)
+# ==========================================
+def test_a_single_named_addressee_with_a_drafting_verb_resolves_confidently():
+    """The bug this closes: "Ahmet Yılmaz'a bir yazı hazırla" used to still
+    ask "Yazı kime gönderilecek?" despite the recipient being named
+    outright -- a single candidate said in the same breath as an actual
+    drafting request should never need confirming."""
+    resolution = resolve_brief("Ahmet Yılmaz'a bir izin yazısı hazırla")
+
+    assert resolution.resolved["muhatap"].value == "Ahmet Yılmaz"
+    assert resolution.resolved["muhatap"].source == "user_text"
+    assert not any(question["key"] == "muhatap" for question in resolution.questions)
+
+
+def test_the_same_addressee_without_the_apostrophe_still_resolves_confidently():
+    resolution = resolve_brief("Ahmet Yılmaza bir izin yazısı hazırla")
+    assert resolution.resolved["muhatap"].value == "Ahmet Yılmaz"
+
+
+def test_a_multi_word_institution_in_the_bare_dative_form_resolves_confidently():
+    resolution = resolve_brief("İnsan Kaynakları Müdürlüğüne bir bilgilendirme yazısı hazırla")
+    assert resolution.resolved["muhatap"].value == "İnsan Kaynakları Müdürlüğü"
+
+
+def test_a_sayin_salutation_resolves_confidently_with_a_drafting_verb():
+    resolution = resolve_brief("Sayın Ahmet Yılmaz için bir yazı hazırla")
+    assert resolution.resolved["muhatap"].value == "Ahmet Yılmaz"
+
+
+def test_a_bey_honorific_resolves_confidently_with_a_drafting_verb():
+    resolution = resolve_brief("Ahmet Bey'e bir davet yazısı oluştur")
+    assert resolution.resolved["muhatap"].value == "Ahmet Bey"
+
+
+def test_a_named_addressee_with_no_drafting_verb_is_only_a_suggestion():
+    """Naming someone isn't itself a request -- without a verb corroborating
+    it, the guess still needs confirming."""
+    resolution = resolve_brief("Ahmet Yılmaz'a bu konuyu ilettim.")
+
+    assert "muhatap" not in resolution.resolved
+    question = _question(resolution, "muhatap")
+    option = _option(question, "Ahmet Yılmaz")
+    assert "Önerilen" in option["label"]
+
+
+def test_two_named_candidates_stay_a_suggestion_even_with_a_drafting_verb():
+    """More than one plausible addressee is exactly the ambiguity a
+    confirmation question exists for."""
+    resolution = resolve_brief("Ahmet Yılmaz'a ve Ayşe Kaya'ya bir yazı hazırla")
+
+    assert "muhatap" not in resolution.resolved
+    question = _question(resolution, "muhatap")
+    assert question["key"] == "muhatap"
+
+
+def test_a_suggested_muhatap_question_is_phrased_as_a_yes_no_confirmation():
+    resolution = resolve_brief("Ahmet Yılmaz'a bu konuyu ilettim.")
+    question = _question(resolution, "muhatap")
+    assert question["question"] == "Önerilen muhatap: Ahmet Yılmaz. Bu doğru mu?"
+
+
 def test_a_genuinely_unknown_slot_has_no_option_marked_as_a_suggestion():
     # "cevap yazısı hazırla" resolves `yazisma_turu` confidently (see
     # test_writing_brief_yazisma_turu.py's crowding-out test for the

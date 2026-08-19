@@ -4,6 +4,7 @@ from typing import Any, Optional
 
 from app.ai.guardrails.injection import scrub_extracted_text
 from app.ai.reasoning_levels import get_reasoning_level_preset
+from app.ai.workflows.dates import today_tr
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.validation import ValidationException
 from app.core.config import settings
@@ -112,6 +113,7 @@ class DraftService:
                     {
                         "source_document": source_document,
                         "classification": classification_dict,
+                        "document_id": request.storage_path,
                         "context": context_str,
                         "instructions": request.instructions,
                         "correspondence_type": (
@@ -120,6 +122,7 @@ class DraftService:
                             else None
                         ),
                         "reasoning_level": request.reasoning_level.value,
+                        "today": today_tr(),
                     },
                     config=self._trace_config(user_id, company_id)
                 ),
@@ -255,6 +258,7 @@ class DraftService:
             **common_fields,
             draft_id=draft_id or "",
             destination=destination,
+            alternative_units=routing_state.get("alternative_units") or [],
             justification=routing_state.get("justification", "Yönlendirme kararı alınamadı."),
         )
 

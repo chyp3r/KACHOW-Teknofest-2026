@@ -125,7 +125,6 @@ class InterruptEvent(BaseModel):
     event: Literal["interrupt"] = "interrupt"
     kind: Literal[
         "missing_information",
-        "draft_approval",
         "writing_brief",
         #: Faz 4 (#201) -- `planning_graph.transfer_gate_node`. Confirming
         #: who/what a transfer goes to (`artifact_transfer_confirm`) and

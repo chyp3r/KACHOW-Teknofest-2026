@@ -16,6 +16,9 @@ used_ocr: "true"
 page_count: "2"
 quality_score: "0.773"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "7"
 ---
 
 # Soru Önergesi (7/42115) İ
@@ -45,7 +48,6 @@ Belge Doğrulama Kodu: 3BCA0B12-49FB-4D9C-90C2-C22CAB36B392 https://Wwww.turkiye
 Adres: [ADRES]
 [KURUM İLETİŞİM BİLGİLERİ]
 e-Posta: g-ozcan(ticaret.gov.ir Bilgisayar İşletmeni #İĞÖ ei
-İnternet Adresi: www.ticaret.gov.tr Telefon No: [T.C. KİMLİK NO] e il
 [KURUM İLETİŞİM BİLGİLERİ]
 1/1
 

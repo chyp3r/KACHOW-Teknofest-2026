@@ -25,6 +25,8 @@ import { useDrafts } from "../hooks/useDrafts";
 import type { PersistedDraft } from "../types/drafts";
 import type { DocumentAnalysis, DocumentMetadata, ReasoningLevel } from "../types/documents";
 import { DraftTable } from "../features/drafts/DraftTable";
+import { UnitPicker } from "../features/drafts/UnitPicker";
+import { draftTitle } from "./draftTitle";
 
 const VERSION_PREVIEW_LIMIT = 420;
 
@@ -126,23 +128,8 @@ export function DraftsPage({
     window.setTimeout(() => setCopiedDraftId(null), 2000);
   };
 
-  const documentName = (documentId: string | null) => {
-    if (!documentId) return "Kaynak yok";
-    const document = documents.find((item) => item.storage_path === documentId);
-    return document?.file_name ?? documentId.split(/[\\/]/).pop() ?? documentId;
-  };
-
-  const correspondenceTypeLabel = (draft: PersistedDraft) => {
-    const knownType = creation.correspondenceTypes.find(
-      (item) => item.value === draft.correspondence_type,
-    );
-    if (knownType) return knownType.label;
-    if (!draft.correspondence_type) return "Resmî taslak";
-    return draft.correspondence_type.replace(/_/g, " ");
-  };
-
-  const draftTitle = (draft: PersistedDraft) =>
-    `${documentName(draft.document_id)} - ${correspondenceTypeLabel(draft)}`;
+  const draftTitleFor = (draft: PersistedDraft) =>
+    draftTitle(draft, documents, creation.correspondenceTypes);
 
   const expandedVersions = drafts.versions.length > 0
     ? sortVersionsNewestFirst(drafts.versions)
@@ -250,7 +237,7 @@ export function DraftsPage({
           <DraftTable
             drafts={drafts.drafts}
             activeDraftId={activeDraftId}
-            titleFor={draftTitle}
+            titleFor={draftTitleFor}
             onToggle={(draft, expanded) => {
               if (expanded) onCloseDraft?.();
               else onOpenDraft(draft.id);
@@ -285,6 +272,17 @@ export function DraftsPage({
                                 <small>Deneme</small>
                                 <strong>{drafts.activeDraft.attempts ?? "—"}</strong>
                               </span>
+                            </div>
+                            <div className="draft-detail-destination">
+                              <small>Hedef birim</small>
+                              <strong>{drafts.activeDraft.destination || "Belirtilmedi"}</strong>
+                              <UnitPicker
+                                currentDestination={drafts.activeDraft.destination}
+                                saving={drafts.updatingDestination}
+                                onSave={(destination) =>
+                                  void drafts.updateDestination(drafts.activeDraft!.id, destination)
+                                }
+                              />
                             </div>
                           </div>
 

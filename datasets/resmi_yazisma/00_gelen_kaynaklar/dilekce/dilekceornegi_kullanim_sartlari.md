@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-1402B617
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-1402B617"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "Kullanım Şartları"
 kaynak: "https://www.dilekceornegi.net/kullanim-sartlari/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "rejected"
+ret_nedeni: "site_sayfasi"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Kullanım Şartları

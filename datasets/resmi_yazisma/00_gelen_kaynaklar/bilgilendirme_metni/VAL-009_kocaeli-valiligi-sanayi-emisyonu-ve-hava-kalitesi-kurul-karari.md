@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Kocaeli Valiliği"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "1"
 ---
 
 # Kocaeli Valiliği Mahalli Çevre Kurulu Sanayi Emisyon Denetim Kararı
@@ -31,4 +34,4 @@ Kocaeli ili sınırlarında sanayi tesislerinden kaynaklanan hava kirliliğinin 
 3. **Kömür ve Yakıt Denetimi:** Sanayi sitelerinde ve ısınmada kullanılan kömürlerin kükürt dioksit oranları İl Müdürlüğü ekiplerince noktada denetlenecektir.
 
 **Kurul Başkanı:**
-[KİŞİSEL BİLGİ] - Kocaeli Valisi
+[KİŞİ ADI] - Kocaeli Valisi

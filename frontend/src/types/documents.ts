@@ -84,6 +84,20 @@ export interface DocumentAnalysis extends DocumentMetadata {
   detailed_summary?: string | null;
 }
 
+// Backs the "Belge metni" panel section -- GET/PUT /documents/{path}/text and
+// POST /documents/{path}/re-extract all return this shape. Kept as its own
+// type rather than folded into DocumentAnalysis: the backend deliberately
+// keeps it off DocumentAnalysisResponseSchema too (that schema is persisted
+// verbatim and re-sent on every list selection; a multi-thousand-character
+// text field would be stored and transferred twice per document).
+export interface DocumentText {
+  pages: string[];
+  extracted_text: string;
+  page_count: number;
+  extractor: string;
+  used_ocr: boolean;
+}
+
 export type ReasoningLevel = "fast" | "balanced" | "deep";
 
 export interface CorrespondenceType {

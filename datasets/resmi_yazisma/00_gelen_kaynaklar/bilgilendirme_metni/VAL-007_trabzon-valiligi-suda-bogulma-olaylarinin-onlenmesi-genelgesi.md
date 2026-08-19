@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Trabzon Valiliği"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "1"
 ---
 
 # Trabzon Valiliği Suda Boğulma Olaylarının Önlenmesi ve Deniz Güvenliği Genelgesi
@@ -33,5 +36,5 @@ Karadeniz kıyı yapısı nedeniyle oluşan rip (çeken) akıntısı ve olumsuz 
 
 Vatandaşlarımızın can güvenliği açısından uyarı levhalarına ve görevlilerin talimatlarına uyması gerekmektedir.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Trabzon Valisi

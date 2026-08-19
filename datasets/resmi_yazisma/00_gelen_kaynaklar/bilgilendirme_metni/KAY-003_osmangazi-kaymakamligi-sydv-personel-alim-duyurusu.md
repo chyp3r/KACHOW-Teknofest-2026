@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Osmangazi Kaymakamlığı Sosyal Yardımlaşma ve Dayanışma Vakfı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "1"
 ---
 
 # Osmangazi Kaymakamlığı SYDV Belirsiz Süreli Personel Alım İlanı Duyurusu
@@ -37,5 +40,5 @@ Osmangazi SYDV bünyesinde belirsiz süreli iş sözleşmesi ile istihdam edilme
 
 İlgililere ilanen duyurulur.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Osmangazi Kaymakamı / Vakıf Başkanı

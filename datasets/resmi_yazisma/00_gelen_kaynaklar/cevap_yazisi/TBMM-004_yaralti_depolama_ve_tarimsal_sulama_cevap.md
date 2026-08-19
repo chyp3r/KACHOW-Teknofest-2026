@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "8"
 ---
 
 # Yeraltı Depolama Tesisleri ve Tarımsal Sulama Destekleri Hakkında Yazılı Soru Önergesi Cevabı
@@ -18,11 +21,11 @@ rag_status: "candidate"
 **TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA**
 
 **Sayı:** [EVRAK SAYISI]
-**Konu:** [EVRAK SAYISI] Milletvekili [EVRAK SAYISI]'e Ait 7/18903 Esas Sayılı Yazılı Soru Önergesi Cevabı
+**Konu:** [İL ADI] Milletvekili [KİŞİ ADI]'e Ait 7/18903 Esas Sayılı Yazılı Soru Önergesi Cevabı
 
 **İlgi:** TBMM Başkanlığı'nın [EVRAK SAYISI] tarihli ve [EVRAK SAYISI] sayılı yazısı.
 
-İlgi yazınız eki [EVRAK SAYISI] Milletvekili Sayın [EVRAK SAYISI] tarafından yöneltilen "Tarımsal sulamada kapalı borulu sistemlere geçiş, yeraltı barajları ve kuraklık riski altındaki havzalara sağlanan hibe destekleri" konulu 7/18903 Esas Sayılı Yazılı Soru Önergesi Bakanlığımızca incelenmiş olup cevabımız aşağıdadır:
+İlgi yazınız eki [İL ADI] Milletvekili Sayın [KİŞİ ADI] tarafından yöneltilen "Tarımsal sulamada kapalı borulu sistemlere geçiş, yeraltı barajları ve kuraklık riski altındaki havzalara sağlanan hibe destekleri" konulu 7/18903 Esas Sayılı Yazılı Soru Önergesi Bakanlığımızca incelenmiş olup cevabımız aşağıdadır:
 
 1. **Yeraltı Barajları ve Suni Besleme Tesisleri:**
 Bakanlığımız Devlet Su İşleri (DSİ) Genel Müdürlüğü tarafından yürütülen Yeraltı Barajları ve Suni Besleme Projesi kapsamında, özellikle İç ve Güneydoğu Anadolu bölgelerimizde suyun buharlaşmasını önlemek amacıyla 150 adet yeraltı depolama tesisi tamamlanarak işletmeye alınmıştır. Bu tesisler vasıtasıyla yıllık 50 milyon m³ su kurak mevsimlerde kullanılmak üzere depolanmaktadır.
@@ -37,5 +40,5 @@ Bilgilerinize arz ederim.
 
 **Saygılarımla,**
 
-**[KİŞİSEL BİLGİ]**
+**[İMZA SAHİBİ]**
 **Tarım ve Orman Bakanı**

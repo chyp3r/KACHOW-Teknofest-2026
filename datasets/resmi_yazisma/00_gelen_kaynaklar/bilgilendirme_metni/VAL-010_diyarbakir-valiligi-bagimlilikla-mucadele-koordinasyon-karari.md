@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Diyarbakır Valiliği"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "1"
 ---
 
 # Diyarbakır Valiliği Bağımlılıkla Mücadele İl Koordinasyon Kurulu Kararı
@@ -31,4 +34,4 @@ Diyarbakır il genelinde uyuşturucu, tütün, alkol ve davranışsal bağımlı
 3. **Danışmanlık ve Tedavi:** Yeşilay Danışmanlık Merkezi (YEDAM) ile AMATEM/ÇAMATEM birimleri arasındaki hasta sevk zinciri güçlendirilecektir.
 
 **Kurul Başkanı:**
-[KİŞİSEL BİLGİ] - Diyarbakır Valisi
+[KİŞİ ADI] - Diyarbakır Valisi

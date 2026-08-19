@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "T.C. Kadıköy Kaymakamlığı Sosyal Yardımlaşma ve Dayanışma Vakfı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "1"
 ---
 
 # Kadıköy Kaymakamlığı SYDV Aşırı Sıcak Yardımı ve Sosyal İnceleme Duyurusu
@@ -32,5 +35,5 @@ Kadıköy Kaymakamlığı Sosyal Yardımlaşma ve Dayanışma Vakfı (SYDV), 329
 
 Vatandaşlarımızın bilgisine duyurulur.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Vakıf Başkanı / Kadıköy Kaymakamı

@@ -22,6 +22,7 @@ from app.core.enums.user_role import UserRole
 from app.core.security import decode_token
 from app.infrastructure.database.session import get_db
 from app.infrastructure.extractors import get_document_extractor
+from app.infrastructure.extractors.vision import OllamaVisionExtractor
 from app.infrastructure.storage import get_storage_client
 from app.infrastructure.vectorstore import get_vector_store
 from app.domains.documents.service import DocumentService
@@ -202,6 +203,37 @@ async def get_example_retriever() -> ExampleRetriever:
     return _example_retriever
 
 
+#: Same collection name app.ai.tools.document_tools.QA_COLLECTION_NAME and
+#: app.domains.documents.service.DocumentService._index_for_qa use --
+#: duplicated as a literal, not imported, to keep this module's dependency
+#: surface limited to app.ai.* the same way the rest of this file already is.
+_DOCUMENT_QA_COLLECTION_NAME = "document_qa"
+
+_document_qa_retriever: Optional[HybridRetriever] = None
+
+
+async def get_document_qa_retriever() -> HybridRetriever:
+    """Build the draft workflow's document-grounding retriever once per process.
+
+    Same idiom as ``get_example_retriever`` above, targeting the
+    ``document_qa`` collection populated per-document at upload time (see
+    ``DocumentService._index_for_qa``) instead of a fixed offline corpus --
+    the assistant's own ``search_document`` tool already queries this same
+    collection (``app.ai.tools.document_tools``). No sparse vocab file exists
+    for it (there is no single fitted corpus to fit one against), so sparse
+    query weights default to 1.0, the same degrade ``get_mevzuat_retriever``
+    documents for its own optional vocab path.
+    """
+    global _document_qa_retriever
+    if _document_qa_retriever is None:
+        _document_qa_retriever = HybridRetriever(
+            vector_store=get_vector_store(),
+            embeddings_client=get_embeddings_client(),
+            collection_name=_DOCUMENT_QA_COLLECTION_NAME,
+        )
+    return _document_qa_retriever
+
+
 async def get_document_analysis_mevzuat_retriever(
     local: HybridRetriever = Depends(get_mevzuat_retriever),
 ) -> Any:
@@ -313,6 +345,13 @@ def get_document_analysis_service(
         # request is fine, mirroring how analysis_graph builds its own
         # per-agent instances internally.
         summarizer_agent=SummarizerAgent(get_llm_client()),
+        # Backs reextract_document_text -- the user's manual "Yeniden OCR"
+        # override, always a full glm-ocr pass bypassing get_document_extractor()'s
+        # chain entirely (see that method's own docstring for why). A fresh
+        # instance per request, same as summarizer_agent above and the
+        # vision extractor get_document_extractor() builds internally --
+        # cheap to construct, no I/O until .extract() is actually called.
+        vision_extractor=OllamaVisionExtractor(),
     )
 
 # ---------------------------------------------------------------------------
@@ -330,13 +369,20 @@ async def get_draft_graph() -> Any:
     """
     global _draft_graph
     if _draft_graph is None:
-        from app.domains.companies.provider import get_company_adapter
+        from app.domains.companies.provider import (
+            get_company_adapter,
+            get_company_profile,
+            get_company_rules,
+        )
 
         _draft_graph = create_draft_graph(
             llm_client=get_llm_client(),
             fast_llm_client=get_fast_llm_client(),
             example_retriever=await get_example_retriever(),
             adapter_provider=get_company_adapter,
+            profile_provider=get_company_profile,
+            rules_provider=get_company_rules,
+            document_qa_retriever=await get_document_qa_retriever(),
         )
     return _draft_graph
 
@@ -437,7 +483,11 @@ async def get_planning_graph(
     """
     global _planning_graph
     if _planning_graph is None:
-        from app.domains.companies.provider import get_company_adapter
+        from app.domains.companies.provider import (
+            get_company_adapter,
+            get_company_profile,
+            get_company_rules,
+        )
         from app.domains.transfers.provider import build_transfer_graph_provider
         from app.infrastructure.checkpointing import get_checkpointer
 
@@ -453,6 +503,8 @@ async def get_planning_graph(
             checkpointer=get_checkpointer(),
             mevzuat_retriever=mevzuat_retriever,
             adapter_provider=get_company_adapter,
+            profile_provider=get_company_profile,
+            rules_provider=get_company_rules,
             # Faz 4 (#201) -- always built and injected, gated where the
             # propose_transfer tool is actually offered instead
             # (settings.AI_TRANSFER_ENABLED; see planning_graph._run_assist).

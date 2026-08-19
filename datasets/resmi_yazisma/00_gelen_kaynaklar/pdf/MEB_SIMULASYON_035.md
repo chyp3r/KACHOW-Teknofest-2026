@@ -12,7 +12,10 @@ used_ocr: "false"
 page_count: "1"
 quality_score: "0.802"
 rag_status: "rejected"
-ret_nedeni: "tekrar_simulasyon_sablonu"
+ret_nedeni: "sentetik_simulasyon_yalniz_test"
+kaynak_kurum: "Millî Eğitim Bakanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "2"
 ---
 
 # Hizmetiçi Eğitim Faaliyetleri - Belge No 35

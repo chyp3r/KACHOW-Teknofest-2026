@@ -467,3 +467,34 @@ def test_a_value_grounded_in_the_source_is_not_also_instruction_only():
     )
 
     assert report.instruction_only_claims == []
+
+
+# ==========================================
+# trusted_facts (#214) -- system-injected company identity values
+# ==========================================
+def test_a_company_letterhead_without_trusted_facts_is_flagged_as_unsupported():
+    draft = _draft_mentioning("Acme Fen İşleri Dairesi Başkanlığı")
+    report = verify_draft(
+        draft, source_document="Sayı: E-123-456, Tarih: 30.07.2026 tarihli evrak."
+    )
+
+    assert any(
+        "Acme Fen İşleri Dairesi Başkanlığı" in claim.value for claim in report.unsupported_claims
+    )
+
+
+def test_a_company_letterhead_passed_as_a_trusted_fact_is_not_flagged():
+    """A company's own identity fields (see app.ai.identity.company_profile)
+    are injected by the system, not extracted from the source -- same
+    legitimacy as `today`, so they must never trigger the unsupported-claim
+    penalty or an unnecessary repair loop."""
+    draft = _draft_mentioning("Acme Fen İşleri Dairesi Başkanlığı")
+    report = verify_draft(
+        draft,
+        source_document="Sayı: E-123-456, Tarih: 30.07.2026 tarihli evrak.",
+        trusted_facts=["Acme Fen İşleri Dairesi Başkanlığı"],
+    )
+
+    assert not any(
+        "Acme Fen İşleri Dairesi Başkanlığı" in claim.value for claim in report.unsupported_claims
+    )

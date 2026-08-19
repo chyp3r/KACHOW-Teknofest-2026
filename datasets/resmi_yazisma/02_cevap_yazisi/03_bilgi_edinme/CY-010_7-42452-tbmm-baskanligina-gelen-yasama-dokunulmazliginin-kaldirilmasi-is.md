@@ -16,6 +16,9 @@ used_ocr: "true"
 page_count: "3"
 quality_score: "0.813"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # Soru Önergesi
@@ -23,7 +26,7 @@ rag_status: "candidate"
 2,
 TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞI
 Kanunlar ve Kararlar Başkanlığı
-**Sayı:** [EVRAK SAYISI]
+[KURUM İLETİŞİM BİLGİLERİ]
 Konu : Soru Önergesi
 Sayın [KİŞİ ADI] Milletvekili
 İlgi (O: 25.03.2026 tarihli ve 7/42452 esas numaralı yazılı soru önergeniz.

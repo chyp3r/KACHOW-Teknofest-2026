@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-5D47412C
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-5D47412C"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "Yazışma Kuralları"
 kaynak: "https://www.dilekceornegi.net/yazisma-kurallari/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "reference_only"
+ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Yazışma Kuralları
@@ -44,7 +50,7 @@ Resmi Yazışmada Kullanılması Gereken Bölümler Nelerdir?
 Resmi Yazışma Kuralları
 Başlık Bölümü; Yazının başlığında yazınız hangi kuruma gidecekse onun adı ve adresi yazılır. Kurumun adı ortalanmış şekilde üstte bulunmaktadır.
 Sayı ve Evrak Numarası: Devlet kurumlarında yazılan yazılarda sayı ve evrak numarası arasına – çekilerek yazılmaktadır. Tabi Word programında otomatik olarak yapabilirsiniz.
-Tarih  Bölümü: Sağ üst kısma gün, ay ve yıl sıralaması ile yazılan tarihler arasında / işareti bulunmalıdır.
+Tarih Bölümü: Sağ üst kısma gün, ay ve yıl sıralaması ile yazılan tarihler arasında / işareti bulunmalıdır.
 Konu Bölümü: Birkaç sözcükle ifade edilen kurumun altında sol ortalanmış şekilde yazılan ve yazının içeriğini anlatan ifadedir.
 Gönderilen Makam: Konunun altından devam edilerek yazılan ve ortalanan ilgili kurumun hangi makamına, birimine yazının gönderileceğini açıklayan ibaredir.
 Metin Bölümü:

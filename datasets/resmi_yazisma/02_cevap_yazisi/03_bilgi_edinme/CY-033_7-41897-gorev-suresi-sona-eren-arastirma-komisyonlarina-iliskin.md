@@ -16,6 +16,9 @@ used_ocr: "false"
 page_count: "3"
 quality_score: "0.877"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLİĞI

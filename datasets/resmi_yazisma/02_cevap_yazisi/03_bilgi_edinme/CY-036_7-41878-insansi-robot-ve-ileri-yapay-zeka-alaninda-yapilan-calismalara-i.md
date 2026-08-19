@@ -16,6 +16,9 @@ used_ocr: "true"
 page_count: "3"
 quality_score: "0.85"
 rag_status: "candidate"
+kaynak_kurum: "Türkiye Büyük Millet Meclisi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "7"
 ---
 
 # . e PR 3.
@@ -45,9 +48,8 @@ Bakan
 Ek: Soru Önergesi Cevabı
 Bu belge güvenli elektronik imza ile imzalanmıştır,
 Belge Doğrulama Kodu:65F771D0-AE21-4EC0-B917-4A9F14779C3C Belge Doğrulama Adresi :htps://www turkiye. gov tw/stb-ebys
-Mustafa Kemal Mahallesi Dumlupınar Bulvarı Eskişehir Yolu 2151.Cadde No.154 06510 Çankaya /ANKARA EE Gi)
-Telefon :[T.C. KİMLİK NO] Bilgi İçin:soruonergesi(&sanayi.gov.tr ye e)
-Faks:[T.C. KİMLİK NO] İnternet adresi: Www.sanayi.gov.tr Sap Me m
+[KURUM ADRESİ]
+[KURUM İLETİŞİM BİLGİLERİ]
 Kep:sanayiveteknolojibakanligi.strateji(&hs01 .kep.tr li
 
 KONYA MİLLETVEKİLİ SAYIN [KİŞİ ADI]'İN

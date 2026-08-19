@@ -540,6 +540,10 @@ async def test_a_deterministically_unflagged_document_is_not_escalated_by_a_calm
     result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
 
     assert result["sensitivity_assessment"]["requires_review"] is False
+    # #214: an unmarked document's effective level defaults to the policy
+    # floor ("Tasnif Dışı") rather than staying an apparent analysis gap.
+    assert result["sensitivity_assessment"]["effective_level"] == "tasnif_disi"
+    assert result["sensitivity_assessment"]["is_defaulted"] is True
 
 
 @pytest.mark.asyncio

@@ -49,8 +49,16 @@ _ELISION_MARKERS = re.compile(
 )
 
 #: Instruction keywords that legitimately ask for a shorter draft -- a big
-#: length drop under one of these is the user's own request, not content loss.
-_SHORTENING_KEYWORDS = ("kisalt", "ozetle", "sadelestir", "daha kisa", "kucult")
+#: length drop under one of these is the user's own request, not content
+#: loss. Includes explicit deletion/removal verbs ("sil", "cikar",
+#: "kaldir") alongside the length/summary ones: a "şu paragraftan bir kısmı
+#: sil" request that the reviser actually honoured must never be flagged as
+#: an elision defect and looped back into a repair pass whose own prompt
+#: tells the model to restore "already-filled" content -- that would
+#: silently undo the very deletion the user asked for.
+_SHORTENING_KEYWORDS = (
+    "kisalt", "ozetle", "sadelestir", "daha kisa", "kucult", "sil", "cikar", "kaldir",
+)
 
 #: Below this fraction of the previous draft's length, with no shortening
 #: instruction in play, a rewrite is presumed to have silently dropped

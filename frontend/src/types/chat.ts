@@ -115,7 +115,6 @@ export interface TransferRecipientCandidate {
 export interface InterruptState {
   kind:
     | "missing_information"
-    | "draft_approval"
     | "writing_brief"
     // Faz 4 (#201) -- app.ai.workflows.planning_graph.transfer_gate_node.
     // Two distinct kinds sharing one gate: candidates unresolved

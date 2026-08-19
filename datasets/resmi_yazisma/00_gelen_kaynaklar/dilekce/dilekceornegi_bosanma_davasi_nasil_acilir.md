@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-C98A83A1
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-C98A83A1"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "Boşanma Davası Nasıl Açılır?"
 kaynak: "https://www.dilekceornegi.net/bosanma-davasi-nasil-acilir/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "reference_only"
+ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Boşanma Davası Nasıl Açılır?
@@ -13,9 +19,9 @@ Resmi Dilekçeleri
 Boşanma Davası Nasıl Açılır?
 Boşanma Davası Nasıl Açılır?
 Dilekceornegi
-7 yıl önce
+7 yıl önce
 0
-4 dakikada okunabilir
+4 dakikada okunabilir
 Facebook'ta Paylaş
 Twitter'da Paylaş
 Pinterest

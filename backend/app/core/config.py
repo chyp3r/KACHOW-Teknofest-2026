@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     SECRET_KEY: str = "supersecretkeychangeinproduction"
 
+    #: IANA zone used to resolve "today" for a generated draft's own
+    #: Tarih field (see app.ai.workflows.dates.today_tr) -- the user is
+    #: never asked for this date, so the server's own clock, resolved in
+    #: this zone, is the single source of truth for it.
+    APP_TIMEZONE: str = "Europe/Istanbul"
+
     # Database Configuration
     #: The app's own runtime connection. From Faz 3 (Postgres RLS) onward
     #: this is expected to be a restricted, non-owner role (``kachow_app`` --
@@ -35,17 +41,11 @@ class Settings(BaseSettings):
     #: meant to be this value in a real deployment.
     KACHOW_APP_DB_PASSWORD: str = "kachow_app_dev_only"
 
-    #: LangGraph's AsyncPostgresSaver, backing HITL (missing-info requests and
-    #: draft approval) on the planning graph. Best-effort at startup: when
-    #: False or when Postgres is unreachable, graphs compile without a
-    #: checkpointer and everything except HITL keeps working.
+    #: LangGraph's AsyncPostgresSaver, backing HITL (missing-info requests) on
+    #: the planning graph. Best-effort at startup: when False or when
+    #: Postgres is unreachable, graphs compile without a checkpointer and
+    #: everything except HITL keeps working.
     CHECKPOINTER_ENABLED: bool = True
-
-    #: Gate the "draft needs a human's sign-off" interrupt separately from the
-    #: "draft is missing information" one -- a demo can disable the approval
-    #: gate without losing the information-request flow, which is the part
-    #: the competition brief explicitly asks for.
-    HITL_APPROVAL_GATE_ENABLED: bool = True
 
     #: Gate the pre-draft writing-brief interrupt (who's writing, who it's
     #: going to, closing formula -- see app.ai.workflows.writing_brief)
@@ -54,18 +54,20 @@ class Settings(BaseSettings):
     #: a demo that wants zero pauses can still disable it outright.
     HITL_BRIEF_GATE_ENABLED: bool = True
 
-    #: How many times the human approval gate's "revizyon iste" action may
-    #: send the draft back through the revise sub-graph within the same run
-    #: before the gate stops offering it (see planning_graph.gate_revise_node
-    #: /route_after_gate). Bounds worst-case latency per turn -- without a
-    #: cap, a human clicking "revizyon iste" repeatedly on a stubborn draft
-    #: pays for an unbounded number of LLM calls in one request.
+    #: How many times the missing-information gate's own "revizyon iste"
+    #: escape hatch (see planning_graph.human_gate_node's "missing_information"
+    #: branch) may send the draft back through the revise sub-graph within
+    #: the same run before the gate stops offering it (see
+    #: planning_graph.gate_revise_node/route_after_gate). Bounds worst-case
+    #: latency per turn -- without a cap, a human clicking "revizyon iste"
+    #: repeatedly on a stubborn draft pays for an unbounded number of LLM
+    #: calls in one request.
     HITL_MAX_GATE_REVISIONS: int = 2
 
     #: Gate the assist step's `propose_transfer` tool (Faz 4, #201): "son
     #: taslağı Ahmet'e gönder" resolved and executed through the AI channel,
     #: behind a mandatory `transfer_gate` confirmation. Same reasoning
-    #: `HITL_APPROVAL_GATE_ENABLED` documents for its own gate. When False,
+    #: `HITL_BRIEF_GATE_ENABLED` documents for its own gate. When False,
     #: `planning_graph._run_assist` never builds/offers the tool at all
     #: (see `app.ai.tools.transfer_tools.build_transfer_tools`), so the
     #: model has nothing to call and a message like "taslağı gönder" is
@@ -107,6 +109,22 @@ class Settings(BaseSettings):
     #: orchestrated chat flow multiplies this (see
     #: app.domains.chat.chat_service.ORCHESTRATION_TIMEOUT_SECONDS).
     AI_WORKFLOW_TIMEOUT_SECONDS: int = 480
+
+    #: Ceiling on DocumentService.analyze_document's call to
+    #: self.extractor.extract(...) -- previously unbounded. The field-aware
+    #: extraction-acceptance criterion (see
+    #: FallbackDocumentExtractor._has_enough_header_fields) makes the last
+    #: rung of the chain, full-page vision OCR, a genuinely reachable path on
+    #: the upload critical path now, not just a rare fallback for documents
+    #: with no text layer at all -- so this path needs its own ceiling the
+    #: way AI_WORKFLOW_TIMEOUT_SECONDS already bounds the analysis graph.
+    #: 300s covers a multi-page document through glm-ocr at the measured
+    #: worst case (~83s/document average, MAX_OCR_PAGES capping how many
+    #: pages a single escalation can be asked to transcribe). A timeout here
+    #: surfaces as a normal ValidationException (400-class, retryable),
+    #: mirroring how DocumentExtractionError is already translated just
+    #: below it, rather than hanging the request indefinitely.
+    EXTRACTION_TIMEOUT_SECONDS: float = 300.0
 
     #: Ceiling on DocumentService.generate_detailed_summary's on-demand
     #: build_detailed_summary call -- not a BudgetPolicy.node_seconds entry,

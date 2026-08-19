@@ -133,6 +133,55 @@ def test_get_draft_allows_an_admin_that_does_not_own_it():
     assert response.status_code == 200
 
 
+def test_update_draft_destination_allows_the_owner():
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user(user_id="emp-1")
+    service = AsyncMock()
+    service.get_draft.return_value = _draft(user_id="emp-1")
+    service.update_destination.return_value = _draft(user_id="emp-1", destination="Hukuk Müşavirliği")
+    app.dependency_overrides[get_draft_history_service] = lambda: service
+
+    response = client.patch("/drafts/draft-1/destination", json={"destination": "Hukuk Müşavirliği"})
+
+    assert response.status_code == 200
+    assert response.json()["data"]["destination"] == "Hukuk Müşavirliği"
+    service.update_destination.assert_awaited_once_with("draft-1", "Hukuk Müşavirliği", "company-1")
+
+
+def test_update_draft_destination_refuses_a_non_owner_employee():
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user(user_id="emp-2")
+    service = AsyncMock()
+    service.get_draft.return_value = _draft(user_id="emp-1")
+    app.dependency_overrides[get_draft_history_service] = lambda: service
+
+    response = client.patch("/drafts/draft-1/destination", json={"destination": "Hukuk Müşavirliği"})
+
+    assert response.status_code == 403
+    service.update_destination.assert_not_awaited()
+
+
+def test_update_draft_destination_allows_an_admin_that_does_not_own_it():
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user(user_id="admin-1", role=UserRole.ADMIN)
+    service = AsyncMock()
+    service.get_draft.return_value = _draft(user_id="emp-1")
+    service.update_destination.return_value = _draft(user_id="emp-1", destination="Mali İşler")
+    app.dependency_overrides[get_draft_history_service] = lambda: service
+
+    response = client.patch("/drafts/draft-1/destination", json={"destination": "Mali İşler"})
+
+    assert response.status_code == 200
+
+
+def test_update_draft_destination_rejects_a_blank_value():
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user(user_id="emp-1")
+    service = AsyncMock()
+    app.dependency_overrides[get_draft_history_service] = lambda: service
+
+    response = client.patch("/drafts/draft-1/destination", json={"destination": ""})
+
+    assert response.status_code == 422
+    service.get_draft.assert_not_awaited()
+
+
 def test_delete_draft_refuses_a_non_owner_employee():
     app.dependency_overrides[require_auth_if_enabled] = lambda: _user(user_id="emp-2")
     service = AsyncMock()

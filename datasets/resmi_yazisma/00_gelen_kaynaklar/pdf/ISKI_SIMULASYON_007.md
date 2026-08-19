@@ -12,7 +12,10 @@ used_ocr: "false"
 page_count: "1"
 quality_score: "0.812"
 rag_status: "rejected"
-ret_nedeni: "tekrar_simulasyon_sablonu"
+ret_nedeni: "sentetik_simulasyon_yalniz_test"
+kaynak_kurum: "İstanbul Su ve Kanalizasyon İdaresi"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # Abone Sayaç Değişim Bildirimi - Belge No 7

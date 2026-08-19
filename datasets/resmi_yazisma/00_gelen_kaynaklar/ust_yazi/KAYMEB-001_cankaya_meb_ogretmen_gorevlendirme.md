@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Millî Eğitim Bakanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # T.C. Çankaya İlçe Milli Eğitim Müdürlüğü 2024 Yılı LGS Sınav Binası Görevlendirme Üst Yazısı
@@ -39,7 +42,7 @@ Sınavın huzur ve güven ortamı içerisinde, standartlara uygun olarak yürüt
 
 Bilgilerinizi ve durumun okulunuzda görev yapan tüm öğretmen ve idari personele imza karşılığı tebliğ edilerek gereğini önemle rica ederim.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 İlçe Milli Eğitim Müdürü
 
 Ek: Görevli Listesi (MEBBİS dökümü)

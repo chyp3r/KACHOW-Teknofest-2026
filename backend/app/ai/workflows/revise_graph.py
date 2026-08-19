@@ -53,7 +53,8 @@ from app.ai.guardrails.pii import find_pii
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
 from app.ai.adapters.company_adapter import AdapterProvider, CompanyAdapter
-from app.ai.adapters.injection import format_adapter_block
+from app.ai.adapters.company_rules import CompanyRuleSet, RulesProvider
+from app.ai.adapters.injection import format_adapter_block, format_rules_block
 from app.ai.policy.budget import node_budget
 from app.ai.reasoning_levels import ReasoningLevelPreset, get_reasoning_level_preset
 from app.ai.revision.changelog import build_changelog
@@ -77,8 +78,10 @@ from app.ai.verification import (
     InfoQuestion,
     VerificationReport,
     build_missing_info_request,
+    fill_date_placeholders,
     judge_draft,
     merge_verdicts,
+    normalize_role_placeholders,
     normalize_unfilled_markers,
     verify_draft,
 )
@@ -111,6 +114,12 @@ class ReviseState(TypedDict, total=False):
     #: on `create_revise_graph`). Absent/empty behaves exactly like no
     #: adapter configured, never an error.
     company_id: str
+    #: Today's date (see app.ai.workflows.dates.today_tr), read by
+    #: `verify_node`'s date-placeholder backstop -- a revision keeps the
+    #: original draft's date unchanged by construction (see this module's
+    #: own anti-date-change rule), so this only ever fires if a rewrite
+    #: pass reintroduces a "Tarih:" placeholder.
+    today: str
 
     #: Set by `parse`.
     instruction: RevisionInstruction
@@ -138,6 +147,10 @@ class ReviseState(TypedDict, total=False):
     #: `ornek_sizintisi` leak check `style_examples` already goes through,
     #: without re-resolving it a second time.
     company_adapter: dict[str, Any]
+    #: The resolved mandatory rule set (`CompanyRuleSet.to_dict()`), carried
+    #: forward so `verify` can render the same rules block for the judge
+    #: without re-resolving. Absent/empty behaves like no rules configured.
+    company_rules: dict[str, Any]
 
     #: Set by `verify`.
     confidence_score: float
@@ -223,7 +236,7 @@ def _format_style_examples_flat(texts: tuple[str, ...]) -> str:
 def _build_directive_prompt(
     *, source_draft: str, target: Optional[TargetSpan], directive: EditDirective,
     brief: str, correspondence_type: str, sub_genre: str, style_examples: tuple[str, ...],
-    adapter_block: str = "",
+    adapter_block: str = "", rules_block: str = "",
 ) -> str:
     """Compose the reviser's prompt for one directive, scoped to its target
     span when one was found."""
@@ -244,8 +257,11 @@ def _build_directive_prompt(
             "hiçbir alanda üslup/kapsam/uzunluk dışında bir değişiklik yapma. "
             "Talimatla ilgisi olmayan her cümleyi, önceki taslaktaki haliyle, KELİMESİ "
             "KELİMESİNE ve EKSİKSİZ olarak yeniden üret. '...', '(değişmedi)', '[aynı]' "
-            "gibi kısaltma veya atlama ifadeleriyle hiçbir bölümü özetleme; zaten "
-            "doldurulmuş bilgileri (isim, kurum, tarih vb.) asla silme."
+            "gibi kısaltma veya atlama ifadeleriyle hiçbir bölümü özetleme. Talimatla "
+            "ilgisi olmayan, zaten doldurulmuş bilgileri (isim, kurum, tarih vb.) asla "
+            "silme -- ANCAK talimat açıkça bir cümlenin/kısmın silinmesini, çıkarılmasını "
+            "veya kaldırılmasını istiyorsa, o kısmı gerçekten sil; bu durumda '[...]' "
+            "yer tutucusu bırakma, ilgili kısmı taslaktan tamamen çıkar."
         )
 
     return (
@@ -259,6 +275,7 @@ def _build_directive_prompt(
         "### ÇIKTI:\nYalnızca istenen bölümün (veya kural tüm taslağı kapsıyorsa taslağın "
         "tamamının) yeni metnini döndür. Meta yorum, markdown kod bloğu veya açıklama ekleme."
         f"{_format_style_examples_flat(style_examples)}"
+        f"{rules_block}"
         f"{adapter_block}"
     )
 
@@ -266,7 +283,7 @@ def _build_directive_prompt(
 def _build_repair_prompt(
     *, brief: str, correspondence_type: str, sub_genre: str, previous_draft: str,
     repair_items: list[dict[str, Any]], style_examples: tuple[str, ...],
-    adapter_block: str = "",
+    adapter_block: str = "", rules_block: str = "",
 ) -> str:
     """Compose the repair prompt for a second-plus attempt, after `verify`
     found deterministic/judge defects. Mirrors draft_graph._build_repair_prompt."""
@@ -290,6 +307,7 @@ def _build_repair_prompt(
         "'...', '(değişmedi)', '[aynı]' gibi kısaltma veya atlama ifadeleriyle hiçbir "
         "bölümü özetleme; zaten doldurulmuş bilgileri asla silme."
         f"{_format_style_examples_flat(style_examples)}"
+        f"{rules_block}"
         f"{adapter_block}"
     )
 
@@ -307,6 +325,7 @@ def create_revise_graph(
     fast_llm_client: Optional[BaseLLMClient] = None,
     mevzuat_retriever: Optional[Any] = None,
     adapter_provider: Optional[AdapterProvider] = None,
+    rules_provider: Optional[RulesProvider] = None,
 ):
     """Create and compile the revision workflow.
 
@@ -323,6 +342,12 @@ def create_revise_graph(
             ``app.domains.companies.provider.get_company_adapter``) --
             injected the same way ``draft_graph``'s own ``adapter_provider``
             is. None reproduces pre-feature behaviour exactly (no adapter
+            block, ever).
+        rules_provider: Optional async callable resolving a company's
+            mandatory drafting rules (see
+            ``app.domains.companies.provider.get_company_rules``) --
+            injected the same way ``draft_graph``'s own ``rules_provider``
+            is. None reproduces pre-feature behaviour exactly (no rules
             block, ever).
 
     Returns:
@@ -344,6 +369,20 @@ def create_revise_graph(
         except Exception:
             logger.warning("Company adapter resolution failed for %s", company_id, exc_info=True)
             return CompanyAdapter.empty(company_id)
+
+    async def _resolve_rules(state: ReviseState) -> CompanyRuleSet:
+        """This company's mandatory drafting rules, or an empty set when no
+        ``rules_provider`` was configured, no ``company_id`` is on this
+        turn's state, or resolution itself fails -- see
+        ``draft_graph``'s identical helper for the same rationale."""
+        company_id = state.get("company_id") or ""
+        if not company_id or rules_provider is None:
+            return CompanyRuleSet.empty(company_id)
+        try:
+            return await rules_provider(company_id)
+        except Exception:
+            logger.warning("Company rules resolution failed for %s", company_id, exc_info=True)
+            return CompanyRuleSet.empty(company_id)
 
     async def parse_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
         active_draft = state["active_draft"]
@@ -484,6 +523,8 @@ def create_revise_graph(
         # draft_graph.writer_node's identical call.
         adapter = await _resolve_adapter(state)
         adapter_block = format_adapter_block(adapter)
+        company_ruleset = await _resolve_rules(state)
+        rules_block = format_rules_block(company_ruleset)
 
         await emit_node_start(
             config, "revise", "Taslak Revizyonu",
@@ -502,6 +543,7 @@ def create_revise_graph(
                         repair_items=state.get("repair_items") or [],
                         style_examples=style_examples,
                         adapter_block=adapter_block,
+                        rules_block=rules_block,
                     )
                     agent = ReviserAgent(client)
                     merged_draft = await _generate_validated(agent, prompt, preset)
@@ -530,6 +572,7 @@ def create_revise_graph(
                                 sub_genre=sub_genre,
                                 style_examples=style_examples,
                                 adapter_block=adapter_block,
+                                rules_block=rules_block,
                             )
                             rewritten = await _generate_validated(agent, prompt, preset)
                             working_draft = _merge(working_draft, targets[i], rewritten)
@@ -547,6 +590,7 @@ def create_revise_graph(
                             sub_genre=sub_genre,
                             style_examples=style_examples,
                             adapter_block=adapter_block,
+                            rules_block=rules_block,
                         )
                         rewritten = await _generate_validated(agent, prompt, preset)
                         merged_draft = _merge(active_draft.text, target, rewritten)
@@ -588,6 +632,7 @@ def create_revise_graph(
             "attempts": attempt_number,
             "status": "IN_PROGRESS",
             "company_adapter": adapter.to_dict(),
+            "company_rules": company_ruleset.to_dict(),
         }
 
     def route_after_rewrite(state: ReviseState) -> str:
@@ -600,9 +645,14 @@ def create_revise_graph(
         # writer could, and revise never re-runs the original writer's
         # prompt to begin with.
         draft_text, _ = normalize_unfilled_markers(state.get("draft", ""))
+        draft_text, _ = fill_date_placeholders(draft_text, state.get("today", ""))
         correspondence_type = state.get("correspondence_type") or active_draft.correspondence_type
         sub_genre = state.get("correspondence_sub_genre") or getattr(
             active_draft, "correspondence_sub_genre", ""
+        )
+        # Same backstop as draft_graph.verify_node -- see its own note.
+        draft_text, _ = normalize_role_placeholders(
+            draft_text, is_individual_petition="dilekçe" in sub_genre.lower()
         )
         strict = correspondence_type != "other_official"
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
@@ -627,6 +677,7 @@ def create_revise_graph(
             strict=strict,
             style_examples=list(active_draft.style_examples) + list(adapter.preferred_examples),
             is_individual_petition="dilekçe" in sub_genre.lower(),
+            today=state.get("today", ""),
         )
 
         judge_on = (
@@ -638,6 +689,9 @@ def create_revise_graph(
                 config, "judge", "Kalite Yargıcı",
                 "[Yargıç] Revizyonun talebe uygunluğu değerlendiriliyor...",
             )
+            company_ruleset = CompanyRuleSet.from_dict(
+                state.get("company_id") or "", state.get("company_rules")
+            )
             verdict = await judge_draft(
                 judge_agent,
                 draft=draft_text,
@@ -646,6 +700,7 @@ def create_revise_graph(
                 instructions=state.get("instructions", ""),
                 timeout_s=settings.DRAFT_JUDGE_TIMEOUT_SECONDS * preset.timeout_multiplier,
                 sub_genre=sub_genre,
+                company_rules_block=format_rules_block(company_ruleset),
             )
             if verdict is None:
                 await emit_node_error(

@@ -1,9 +1,15 @@
 ---
-id: DILEKCE-E305EFD1
-kategori: dilekce
-alt_kategori: dilekceornegi
+id: "DILEKCE-E305EFD1"
+kategori: "dilekce"
+alt_kategori: "dilekceornegi"
 baslik: "Dilekçe Süresi"
 kaynak: "https://www.dilekceornegi.net/dilekce-suresi/"
+dogrulama: "mevcut_markdown_kaydi"
+rag_status: "reference_only"
+ret_nedeni: "aciklayici_makale_tekil_dilekce_degil"
+kaynak_kurum: "dilekceornegi.net"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Dilekçe Süresi
@@ -17,7 +23,7 @@ Pinterest
 Reddit
 Whatsapp
 Telegram
-Dilekçe bir kurumdan ya da kuruluştan verdiği hizmet ya da sattığı mal kapsamında herhangi bir istekte, arzuda, şikayette, talepte bulunmak amacını taşıyarak yazılan başvuru yazısıdır. Resmi dil kullanılarak yazılan dilekçeleri yazarken ya da cevaplarken bazı kurallara uymak gerekmektedir. Size yazılan bir dilekçenin veya sizin yazarak gönderdiğiniz dilekçenin bir cevaplama süresi bulunmaktadır. Hem siz, hem de karşı taraf dilekçe süresi kapsamında yanıt vermelisiniz. Aksi halde hangi  taraf cevaplama süresini geçirdiyse o kişi hakkında şikayet yapılabilir. Yazılan
+Dilekçe bir kurumdan ya da kuruluştan verdiği hizmet ya da sattığı mal kapsamında herhangi bir istekte, arzuda, şikayette, talepte bulunmak amacını taşıyarak yazılan başvuru yazısıdır. Resmi dil kullanılarak yazılan dilekçeleri yazarken ya da cevaplarken bazı kurallara uymak gerekmektedir. Size yazılan bir dilekçenin veya sizin yazarak gönderdiğiniz dilekçenin bir cevaplama süresi bulunmaktadır. Hem siz, hem de karşı taraf dilekçe süresi kapsamında yanıt vermelisiniz. Aksi halde hangi taraf cevaplama süresini geçirdiyse o kişi hakkında şikayet yapılabilir. Yazılan
 dilekçeye cevap verme süresi
 kurumlara ve dilekçe yazılan birimlere göre değişiklik gösterdiğinden dolayı birçok kişi gerçek zamanı bilmemektedir. Bu yüzden sizleri süreler hakkında bilgilendirmek ve aklınızdaki soru işaretlerini silmek istedik.
 Dilekçeye

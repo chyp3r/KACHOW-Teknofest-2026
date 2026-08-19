@@ -30,7 +30,27 @@ class GuardrailAssessmentSchema(BaseModel):
 
     sensitivity_level: SensitivityLevel = Field(
         default=SensitivityLevel.UNMARKED,
-        description="Belgeden çıkarılan veya varsayılan gizlilik derecesi.",
+        description=(
+            "Belgeden çıkarılan HAM gizlilik derecesi -- belgede hiç damga "
+            "yoksa 'unmarked'. Fiilen uygulanan derece için "
+            "effective_sensitivity_level'a bak."
+        ),
+    )
+    effective_sensitivity_level: SensitivityLevel = Field(
+        default=SensitivityLevel.UNMARKED,
+        description=(
+            "Erişim denetiminde fiilen kullanılan derece -- sensitivity_level "
+            "'unmarked' ise politika gereği en düşük dereceye otomatik "
+            "atanır (sensitivity_is_defaulted=true olur), aksi halde "
+            "sensitivity_level ile aynıdır."
+        ),
+    )
+    sensitivity_is_defaulted: bool = Field(
+        default=False,
+        description=(
+            "effective_sensitivity_level, belgede hiç gizlilik damgası "
+            "olmadığı için varsayılan olarak atandıysa true."
+        ),
     )
     pii_findings: List[PiiFindingSchema] = Field(
         default_factory=list, description="Tespit edilen kişisel veri bulguları."
@@ -168,6 +188,68 @@ class DocumentFieldsUpdateSchema(BaseModel):
     fields: EvrakField = Field(description="Kullanıcı tarafından düzeltilmiş üstveri alanları.")
 
 
+class DocumentTextSchema(BaseModel):
+    """The extracted/OCR text of a previously analysed document.
+
+    Backs the "view and correct OCR text" panel section. Deliberately kept
+    off ``DocumentAnalysisResponseSchema`` rather than added as a field on
+    it: that schema is persisted verbatim under the analysis cache's
+    ``"analysis"`` key and re-sent on every document-list selection, so
+    hanging multi-thousand-character text off it would store the text twice
+    per document (see ``DocumentService._save_document_analysis_cache``,
+    which already persists ``extracted_text``/``pages`` as sibling keys) and
+    pay that transfer cost on every unrelated read.
+    """
+
+    pages: List[str] = Field(description="Sayfa sayfa çıkarılan/OCR edilmiş metin.")
+    extracted_text: str = Field(description="Sayfaların birleştirilmiş hali.")
+    page_count: int = Field(description="Sayfa sayısı.")
+    extractor: str = Field(description="Metni çıkaran bileşen (örn. 'tesseract', 'ollama_vision').")
+    used_ocr: bool = Field(description="Metin OCR ile okunduysa true.")
+
+
+#: Per-page and total caps on hand-corrected page text. Generous relative to
+#: any real official-correspondence page -- the longest real document in
+#: this project's own corpus (CY-034) is ~10,664 characters across 5
+#: pages -- while still bounding a single request's payload size. Follows
+#: DraftRequestSchema.instructions' max_length precedent above.
+MAX_TEXT_PAGE_LENGTH = 20_000
+MAX_TEXT_TOTAL_LENGTH = 100_000
+
+
+class DocumentTextUpdateSchema(BaseModel):
+    """Payload for saving hand-corrected OCR/extracted text.
+
+    Carries ``pages`` only, never a joined ``extracted_text`` -- the server
+    always re-derives the join from the submitted pages (see
+    ``DocumentService.update_document_text``). There is no lossless inverse
+    of ``"\\n\\n".join(pages)`` (a double-spaced source page splits back
+    into far more fragments than it started with), so accepting a
+    client-submitted joined text would risk silently diverging from what
+    the pages actually say. The server separately rejects a page count that
+    doesn't match the cached document, since ``PageMap``,
+    ``get_document_outline``/``get_document_section`` and
+    ``signature.marks[].page`` all index by page number.
+    """
+
+    pages: List[str] = Field(
+        min_length=1,
+        description="Düzeltilmiş sayfa metinleri; sayfa sayısı önbellekteki belgeyle eşleşmelidir.",
+    )
+
+    @field_validator("pages")
+    @classmethod
+    def _validate_page_lengths(cls, value: List[str]) -> List[str]:
+        for page in value:
+            if len(page) > MAX_TEXT_PAGE_LENGTH:
+                raise ValueError(
+                    f"Sayfa metni {MAX_TEXT_PAGE_LENGTH} karakteri aşamaz."
+                )
+        if sum(len(page) for page in value) > MAX_TEXT_TOTAL_LENGTH:
+            raise ValueError(f"Toplam metin {MAX_TEXT_TOTAL_LENGTH} karakteri aşamaz.")
+        return value
+
+
 class DraftClassificationSchema(BaseModel):
     """The narrow slice of Görev 1's output the draft flow actually consumes.
 
@@ -245,4 +327,8 @@ class DraftResponseSchema(BaseModel):
         ),
     )
     destination: str = Field(description="Evrakın yönlendirildiği birim veya aksiyon.")
+    alternative_units: List[str] = Field(
+        default_factory=list,
+        description="Birincil öneriye alternatif olabilecek ikinci en uygun birim(ler).",
+    )
     justification: str = Field(description="Yönlendirme kararının gerekçesi.")

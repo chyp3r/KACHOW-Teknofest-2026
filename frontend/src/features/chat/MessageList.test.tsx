@@ -23,11 +23,24 @@ function renderWithQueryClient(ui: ReactNode) {
 }
 
 describe("MessageList", () => {
-  it("renders a pending draft approval as a chat bubble in the scrolling conversation, not a standalone panel", () => {
+  it("renders a pending missing-information gate as a chat bubble in the scrolling conversation, not a standalone panel", () => {
     const interrupt: InterruptState = {
-      kind: "draft_approval",
+      kind: "missing_information",
       interruptId: "interrupt-1",
-      payload: { draft: "Onaylanacak taslak metni" },
+      payload: {
+        draft: "Onaylanacak taslak metni",
+        questions: [
+          {
+            key: "muhatap",
+            question: "'Muhatap' bilgisi nedir?",
+            header: "Muhatap",
+            options: [],
+            multi_select: false,
+            allow_free_text: true,
+            required: true,
+          },
+        ],
+      },
     };
     const { container } = renderWithQueryClient(
       <MessageList
@@ -45,7 +58,7 @@ describe("MessageList", () => {
     expect(bubble).not.toBeNull();
     expect(bubble?.closest(".messages-area")).not.toBeNull();
     expect(screen.getByText("Onaylanacak taslak metni")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Onayla" })).toBeInTheDocument();
+    expect(screen.getByText("Birkaç bilgi daha gerekiyor")).toBeInTheDocument();
   });
 
   it("does not show the empty state when a fresh session already has a pending interrupt", () => {

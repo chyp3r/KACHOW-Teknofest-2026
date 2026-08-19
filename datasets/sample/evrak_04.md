@@ -24,5 +24,5 @@ direkleri iki haftadır çalışmamaktadır. Akşam saatlerinde güvenlik sorunu
 oluşmaktadır. Gerekli onarımın yapılmasını arz ederim.
 [KİŞİ ADI]
 Adres : [ADRES]
-Telefon : [TELEFON]
+[KURUM İLETİŞİM BİLGİLERİ]
 İmza

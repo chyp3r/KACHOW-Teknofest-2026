@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Danıştay Başkanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "8"
 ---
 
 # Danıştay 10. Daire Kararı - E.2021/4890, K.2022/3120
@@ -24,7 +27,7 @@ rag_status: "candidate"
 **Karar Tarihi:** 18/10/2022
 
 **DAVACI:** [KURUM ADI] Şirketi
-**VEKİLİ:** Av. [KİŞİSEL BİLGİ]
+**VEKİLİ:** Av. [VEKİL ADI]
 **DAVALI:** [KİŞİ ADI] Kurulu Başkanlığı / Ankara
 
 **DAVA İSTEMİ:** Davacı şirket tarafından yapılan bilgi edinme başvurusunun, 4982 sayılı Bilgi Edinme Hakkı Kanunu'nun 23. maddesindeki "ticari sır" istisnası gösterilerek reddedilmesine ilişkin idari işlemin iptali talebidir.

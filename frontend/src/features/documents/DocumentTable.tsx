@@ -6,7 +6,7 @@ import {
 import { useMemo, useState } from "react";
 import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { EmptyState } from "../../components/EmptyState";
-import type { DocumentAnalysis, DocumentMetadata, EvrakFields, KnowledgeGraph } from "../../types/documents";
+import type { DocumentAnalysis, DocumentMetadata, DocumentText, EvrakFields, KnowledgeGraph } from "../../types/documents";
 import { DocumentAnalysisPanel } from "./DocumentAnalysisPanel";
 import { Button } from "../../components/Button";
 import { Input, Select } from "../../components/FormControls";
@@ -29,6 +29,11 @@ export function DocumentTable({
   generatingDetailedSummary,
   documentGraph,
   loadingDocumentGraph,
+  documentText,
+  onSaveText,
+  savingText,
+  onReextract,
+  reextracting,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
@@ -44,6 +49,11 @@ export function DocumentTable({
   generatingDetailedSummary?: boolean;
   documentGraph?: KnowledgeGraph | null;
   loadingDocumentGraph?: boolean;
+  documentText?: DocumentText | null;
+  onSaveText?: (storagePath: string, pages: string[]) => Promise<void>;
+  savingText?: boolean;
+  onReextract?: (storagePath: string) => Promise<void>;
+  reextracting?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
@@ -164,6 +174,19 @@ export function DocumentTable({
                         }
                         documentGraph={documentGraph}
                         loadingDocumentGraph={loadingDocumentGraph}
+                        documentText={documentText}
+                        savingText={savingText}
+                        onSaveText={
+                          onSaveText && analysis
+                            ? (pages) => onSaveText(analysis.storage_path, pages)
+                            : undefined
+                        }
+                        reextracting={reextracting}
+                        onReextract={
+                          onReextract && analysis
+                            ? () => onReextract(analysis.storage_path)
+                            : undefined
+                        }
                       />
                     )}
                   </div>

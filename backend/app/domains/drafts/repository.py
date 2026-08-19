@@ -193,6 +193,43 @@ class DraftRepository:
         await self.db.flush()
         return draft
 
+    async def update_destination(
+        self,
+        draft: DraftModel,
+        *,
+        destination: str,
+        destination_unit_id: Optional[str],
+        destination_justification: Optional[str],
+    ) -> DraftModel:
+        """Overwrite this one version's routed unit -- in place, not a new version.
+
+        Deliberately not an append like `create_version`: `destination` is
+        routing metadata *about* this version's text, not the text itself,
+        so correcting it (the human picking a different unit than the
+        best-effort suggestion) does not warrant a whole new draft version
+        the way an actual content revision would.
+
+        Args:
+            draft: The already-fetched, already-authorized row to update.
+            destination: The new unit name (may be free text that matches
+                no real `units` row -- see `destination_unit_id`'s own
+                docstring on `DraftModel`; a custom destination is allowed
+                the same way routing's own fallback already tolerates one).
+            destination_unit_id: The resolved `units.id`, or `None` when
+                `destination` doesn't match any unit in this company.
+            destination_justification: Turkish rationale to persist
+                alongside the new destination, or `None` to leave whatever
+                was already stored untouched (a manual pick from the
+                suggested list doesn't need a fresh sentence explaining
+                itself the way the router's own guess did).
+        """
+        draft.destination = destination
+        draft.destination_unit_id = destination_unit_id
+        if destination_justification is not None:
+            draft.destination_justification = destination_justification
+        await self.db.flush()
+        return draft
+
     async def soft_delete_session(self, session_id: str) -> None:
         """Mark every version in a session's revision chain as deleted.
 

@@ -13,6 +13,9 @@ page_count: "49"
 quality_score: "0.833"
 rag_status: "reference_only"
 ret_nedeni: "mevzuat_referansi"
+kaynak_kurum: "T.C. Resmî Gazete"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "96"
 ---
 
 # İKİNCİ BÖLÜM Belgenin Özellikleri
@@ -1165,7 +1168,7 @@ Paragraf Başı
 
 < ►
 
-Adı SOYADI
+[İMZA SAHİBİ]
 Bakan a.
 Bakan Yardımcısı
 
@@ -1225,27 +1228,27 @@ Ek:
 
 İmza Yetkisi Devrinde İmza Örneği:
 
-Adı SOYADI
+[İMZA SAHİBİ]
 Bakan a.
 Bakan Yardımcısı
 
-Adı SOYADI
+[İMZA SAHİBİ]
 İdari İşler Başkanı a.
 Destek ve Mali Hizmetler Genel Müdürü
 
-Adı SOYADI
+[İMZA SAHİBİ]
 Nüfus ve Vatandaşlık İşleri Genel Müdürü a.
 Kimlik Kartları Daire Başkanı
 
-Adı SOYADI
+[İMZA SAHİBİ]
 Vali a.
 Vali Yardımcısı
 
-Adı SOYADI
+[İMZA SAHİBİ]
 Büyükşehir Belediye Başkanı a.
 Genel Sekreter
 
-Prof. Dr. Adı SOYADI
+[İMZA SAHİBİ]
 Rektör a.
 Rektör Yardımcısı
 
@@ -1260,7 +1263,7 @@ Strateji Geliştirme Başkan V.
 Adı SOYADI
 Belediye Başkan V.
 
-Prof. Dr. Adı SOYADI
+[İMZA SAHİBİ]
 Rektör V.
 
 ### İKİ YETKİLİNİN BİRLİKTE İMZALADIĞI BELGE ÖRNEĞİ
@@ -1330,7 +1333,7 @@ POSTA VE TELGRAF TEŞKİLATI ANONİM ŞİRKETİ GENEL MÜDÜRLÜĞÜNE
 - b) 28.06.2019 tarihli ve E-67915368-645-119581 sayılı yazımız.
 - c) 18.07.2019 tarihli ve E-39998445-123.09-2463 sayılı yazınız.
 
-Adı SOYADI
+[İMZA SAHİBİ]
 İdari İşler Başkanı a.
 
 Destek ve Mali Hizmetler Genel Müdürü
@@ -1577,7 +1580,7 @@ T.C.
 İÇİŞLERİ BAKANLIĞI
 Emniyet Genel Müdürlüğü
 
-**Sayı:** [EVRAK SAYISI]
+[KURUM İLETİŞİM BİLGİLERİ]
 Konu : İç Güvenlik
 
 BAKANLIK MAKAMINA

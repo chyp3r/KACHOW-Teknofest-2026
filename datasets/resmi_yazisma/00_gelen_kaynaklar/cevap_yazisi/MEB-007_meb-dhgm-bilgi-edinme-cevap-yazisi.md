@@ -11,6 +11,9 @@ belge_turu: "gercek_acik_kaynak"
 erisim_tarihi: "2026-08-03"
 dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
+kaynak_kurum: "Millî Eğitim Bakanlığı"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 T.C.
@@ -18,11 +21,11 @@ MİLLÎ EĞİTİM BAKANLIĞI
 Destek Hizmetleri Genel Müdürlüğü
 
 **Sayı:** [EVRAK SAYISI]
-**Konu:** Bilgi Edinme Başvurusu Hk. ([KİŞİSEL BİLGİ])
+**Konu:** Bilgi Edinme Başvurusu Hk. ([KAYIT NUMARASI])
 
-**Sayın [EVRAK SAYISI]**
+**Sayın [KİŞİ ADI]**
 
-**İlgi:** 28.04.2026 tarihli ve [KİŞİSEL BİLGİ] başvuru numaralı Bilgi Edinme Talebiniz.
+**İlgi:** 28.04.2026 tarihli ve [KAYIT NUMARASI] başvuru numaralı Bilgi Edinme Talebiniz.
 
 İlgi başvurunuzda talep edilen okul kantinlerinin ihaleusul ve esasları ile kira artış oranlarının belirlenmesine ilişkin hususlar incelenmiştir.
 
@@ -30,6 +33,6 @@ Millî Eğitim Bakanlığı Okul-Aile Birliği Yönetmeliği'nin 20. maddesi uya
 
 Bilgilerinizi rica ederim.
 
-[KİŞİSEL BİLGİ]
+[İMZA SAHİBİ]
 Bakan a.
 Daire Başkanı

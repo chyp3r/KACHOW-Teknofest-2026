@@ -1,5 +1,7 @@
 """Unit tests for the Markdown-first official-correspondence preparation."""
 
+import csv
+import json
 import os
 import sys
 from io import BytesIO
@@ -40,10 +42,36 @@ def test_semantic_anonymization_uses_context_instead_of_deleted_marker():
 
     assert "[SİLİNMİŞTİR]" not in anonymized
     assert "**Sayı:** [EVRAK SAYISI]" in anonymized
-    assert "Başvuran: [KİŞİ ADI]" in anonymized
+    assert "Başvuran: [BAŞVURU SAHİBİ]" in anonymized
     assert "[KURUM İLETİŞİM BİLGİLERİ]" in anonymized
     assert "E-posta: [E-POSTA]" in anonymized
     assert "[İMZA SAHİBİ]\nDaire Başkanı" in anonymized
+
+
+def test_semantic_anonymization_repairs_legacy_placeholders_by_role():
+    text = (
+        "Sayın [EVRAK SAYISI]\n"
+        "[EVRAK SAYISI] Milletvekili Sayın [EVRAK SAYISI]\n"
+        "[EVRAK SAYISI] Milletvekili [EVRAK SAYISI]'e Ait\n"
+        "Prof. Dr. [KURUM ADI]\n"
+        "**VEKİLİ:** Av. [KİŞİSEL BİLGİ]\n"
+        "[KİŞİSEL BİLGİ] başvuru numaralı dilekçe\n"
+        "Prof. Dr. [KİŞİSEL BİLGİ]\nRektör Yardımcısı\n"
+        "Katip Üye\n[KİŞİSEL BİLGİ]\n"
+        "[KİŞİSEL BİLGİ]\nİstanbul Valisi"
+    )
+
+    anonymized = prepare.semantic_anonymize(text)
+
+    assert "Sayın [KİŞİ ADI]" in anonymized
+    assert "[İL ADI] Milletvekili Sayın [KİŞİ ADI]" in anonymized
+    assert "[İL ADI] Milletvekili [KİŞİ ADI]'e Ait" in anonymized
+    assert "Prof. Dr. [KİŞİ ADI]" in anonymized
+    assert "**VEKİLİ:** Av. [VEKİL ADI]" in anonymized
+    assert "[KAYIT NUMARASI] başvuru numaralı" in anonymized
+    assert "Prof. Dr. [İMZA SAHİBİ]\nRektör Yardımcısı" in anonymized
+    assert "Katip Üye\n[İMZA SAHİBİ]" in anonymized
+    assert "[İMZA SAHİBİ]\nİstanbul Valisi" in anonymized
 
 
 def test_bold_number_and_subject_on_one_line_are_preserved_as_two_fields():
@@ -107,6 +135,164 @@ def test_honorific_and_extended_signature_title_person_names_are_masked():
     assert "[İMZA SAHİBİ]\nCumhurbaşkanı Yardımcısı" in anonymized
     assert "Fethi" not in anonymized
     assert "Cevdet" not in anonymized
+
+
+def test_role_specific_names_and_identifiers_use_semantic_placeholders():
+    text = (
+        "Başvuran: Ayşe Demir\n"
+        "Vekili: Av. Mehmet Öztürk\n"
+        "İmza Sahibi: Fatma Kaya\n"
+        "Personel Sicil No: 987654\n"
+        "IBAN: TR330006100519786457841326"
+    )
+
+    anonymized = prepare.semantic_anonymize(text)
+
+    assert "Başvuran: [BAŞVURU SAHİBİ]" in anonymized
+    assert "Vekili: [VEKİL ADI]" in anonymized
+    assert "İmza Sahibi: [İMZA SAHİBİ]" in anonymized
+    assert "Personel Sicil No: [KAYIT NUMARASI]" in anonymized
+    assert "IBAN: [IBAN]" in anonymized
+    assert not any(name in anonymized for name in ("Ayşe", "Mehmet", "Fatma"))
+
+
+def test_source_institution_prefers_provenance_and_preserves_institutions(tmp_path):
+    official = prepare.source_institution(
+        {"kaynak": "https://www.tbmm.gov.tr/belge/1"},
+        "T.C. TİCARET BAKANLIĞI",
+        tmp_path / "CY-1.md",
+    )
+    simulation = prepare.source_institution(
+        {},
+        "T.C. ANKARA BÜYÜKŞEHİR BELEDİYE BAŞKANLIĞI",
+        tmp_path / "ANKARA_BSB_SIMULASYON_001.md",
+    )
+
+    assert official == "Türkiye Büyük Millet Meclisi"
+    assert simulation == "Ankara Büyükşehir Belediyesi"
+
+
+def test_all_markdown_analysis_is_idempotent_and_accounts_for_rejected_cards(
+    tmp_path, monkeypatch
+):
+    repo_root = tmp_path / "repo"
+    corpus = repo_root / "datasets" / "resmi_yazisma"
+    active = corpus / "01_ust_yazi" / "UY-1.md"
+    rejected = corpus / "99_reddedilenler" / "RET-1.md"
+    active.parent.mkdir(parents=True)
+    rejected.parent.mkdir(parents=True)
+    active.write_text(
+        prepare.render_card(
+            {"id": "UY-1", "kategori": "ust_yazi", "kaynak": "sentetik-sablon"},
+            "# Talep\n\nBaşvuran: Ayşe Demir\nSayı: 123",
+        ),
+        encoding="utf-8",
+    )
+    rejected.write_text(
+        prepare.render_card(
+            {
+                "id": "RET-1",
+                "kategori": "diger_resmi_yazisma",
+                "kaynak": "sentetik-sablon",
+                "rag_status": "rejected",
+            },
+            "# Ret\n\nİmza Sahibi: Mehmet Öztürk",
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(prepare, "REPO_ROOT", repo_root)
+    monkeypatch.setattr(prepare, "CORPUS_ROOT", corpus)
+
+    first = prepare.anonymize_all_markdown_cards(apply=True)
+    first_bytes = {path: path.read_bytes() for path in (active, rejected)}
+    second = prepare.anonymize_all_markdown_cards(apply=True)
+
+    assert len(first) == len(second) == 2
+    assert {path: path.read_bytes() for path in (active, rejected)} == first_bytes
+    assert "Ayşe" not in active.read_text(encoding="utf-8")
+    assert "Mehmet" not in rejected.read_text(encoding="utf-8")
+    assert all(record["anonimlestirme_durumu"] == "uygun" for record in second)
+
+
+def test_raw_petition_uses_quarantine_copy_as_the_canonical_rag_decision(
+    tmp_path, monkeypatch
+):
+    repo_root = tmp_path / "repo"
+    corpus = repo_root / "datasets" / "resmi_yazisma"
+    source = corpus / "00_gelen_kaynaklar" / "dilekce" / "article.md"
+    quarantine = corpus / "99_reddedilenler" / "dilekce_makaleleri" / "article.md"
+    source.parent.mkdir(parents=True)
+    quarantine.parent.mkdir(parents=True)
+    source.write_text(
+        prepare.render_card(
+            {"id": "D-1", "kategori": "dilekce", "kaynak": "https://example.test"},
+            "# Açıklayıcı makale\n\nBu metin tekil dilekçe değildir.",
+        ),
+        encoding="utf-8",
+    )
+    quarantine.write_text(
+        prepare.render_card(
+            {
+                "id": "D-1",
+                "kategori": "dilekce",
+                "rag_status": "reference_only",
+                "ret_nedeni": "aciklayici_makale_tekil_dilekce_degil",
+            },
+            "# Temizlenmiş açıklama\n\nReferans metni.",
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(prepare, "REPO_ROOT", repo_root)
+    monkeypatch.setattr(prepare, "CORPUS_ROOT", corpus)
+    monkeypatch.setattr(prepare, "SOURCE_ROOT", corpus / "00_gelen_kaynaklar")
+    monkeypatch.setattr(prepare, "REJECTED_ROOT", corpus / "99_reddedilenler")
+
+    records = prepare.anonymize_all_markdown_cards(apply=False)
+    source_record = next(record for record in records if record["path"].endswith("00_gelen_kaynaklar/dilekce/article.md"))
+
+    assert source_record["rag_status"] == "reference_only"
+
+
+def test_simulation_card_is_kept_for_tests_but_never_enters_production_rag(tmp_path):
+    path = tmp_path / "ANKARA_BSB_SIMULASYON_001.md"
+
+    status, reason = prepare._effective_rag_decision(
+        path,
+        {"id": "ANKARA_BSB_SIMULASYON_001", "rag_status": "candidate"},
+    )
+
+    assert status == "rejected"
+    assert reason == "sentetik_simulasyon_yalniz_test"
+
+
+def test_qa_sample_prefers_clean_quarantine_derivative_over_raw_petition():
+    base = {
+        "id": "D-1",
+        "kategori": "dilekce",
+        "anonimlestirme_durumu": "uygun",
+    }
+    raw = {
+        **base,
+        "path": "datasets/resmi_yazisma/00_gelen_kaynaklar/dilekce/article.md",
+    }
+    clean = {
+        **base,
+        "path": "datasets/resmi_yazisma/99_reddedilenler/dilekce_makaleleri/article.md",
+    }
+
+    selected = prepare._qa_sample([raw, clean], limit=1)
+
+    assert selected == [clean]
+
+
+def test_generated_analysis_markdown_is_not_counted_as_a_data_card(tmp_path, monkeypatch):
+    (tmp_path / "RAG_VERI_ANALIZI.md").write_text("# Rapor", encoding="utf-8")
+    card = tmp_path / "00_gelen_kaynaklar" / "card.md"
+    card.parent.mkdir()
+    card.write_text("---\nid: X-1\n---\nBelge", encoding="utf-8")
+    monkeypatch.setattr(prepare, "CORPUS_ROOT", tmp_path)
+
+    assert prepare.data_markdown_files() == [card]
 
 
 def test_petition_article_cleaner_removes_site_chrome_and_comment_tail():
@@ -284,3 +470,61 @@ def test_source_without_catalog_card_gets_an_adjacent_markdown_file(tmp_path):
     source = tmp_path / "pdf" / "MEB_SIMULASYON_001.pdf"
 
     assert prepare.target_for_source(source, {}) == source.with_suffix(".md")
+
+
+def test_source_institution_prefers_curated_metadata_over_ocr_unit_heading(tmp_path):
+    card = tmp_path / "CY-001.md"
+    body = "T.C.\nHAZİNE VE MALİYE BAKANLIĞI\nStrateji Geliştirme Başkanlığı"
+
+    institution = prepare.source_institution(
+        {"kurum": "Türkiye Büyük Millet Meclisinde yayımlanan kurum cevabı"},
+        body,
+        card,
+    )
+
+    assert institution == "Türkiye Büyük Millet Meclisi"
+
+
+def test_analysis_outputs_write_statistics_manifest_and_balanced_qa(tmp_path, monkeypatch):
+    corpus_root = tmp_path / "datasets" / "resmi_yazisma"
+    monkeypatch.setattr(prepare, "ANONYMIZATION_MANIFEST", corpus_root / "manifest.jsonl")
+    monkeypatch.setattr(prepare, "STATISTICS_JSON", corpus_root / "statistics.json")
+    monkeypatch.setattr(prepare, "STATISTICS_MD", corpus_root / "statistics.md")
+    monkeypatch.setattr(prepare, "QA_MANIFEST", corpus_root / "qa.csv")
+    monkeypatch.setattr(
+        prepare,
+        "_source_files",
+        lambda: [corpus_root / "source.pdf", corpus_root / "source.html"],
+    )
+    corpus_root.mkdir(parents=True)
+    records = []
+    for index in range(105):
+        category = "ust_yazi" if index % 2 == 0 else "cevap_yazisi"
+        records.append(
+            {
+                "path": f"datasets/resmi_yazisma/01_ust_yazi/UY-{index:03}.md",
+                "id": f"UY-{index:03}",
+                "kategori": category,
+                "kaynak_kurum": "Örnek Kurum",
+                "kaynak_anahtari": f"source-{index}",
+                "rag_status": "candidate",
+                "anonimlestirme_durumu": "uygun",
+                "neden": "",
+                "anonimlestirilmis": True,
+                "anonimlestirilen_alanlar": {"KİŞİ ADI": 1},
+                "kalan_pii_turleri": [],
+            }
+        )
+
+    statistics = prepare.write_analysis_outputs(records, apply=True)
+
+    assert statistics["markdown_kaydi"] == 105
+    assert statistics["aktif_korpus_kaydi"] == 105
+    assert statistics["karantina_kaydi"] == 0
+    assert statistics["ham_kaynak_turu_dagilimi"] == {"html": 1, "pdf": 1}
+    assert json.loads(prepare.STATISTICS_JSON.read_text(encoding="utf-8"))["tekil_belge"] == 105
+    assert len(prepare.ANONYMIZATION_MANIFEST.read_text(encoding="utf-8").splitlines()) == 105
+    with prepare.QA_MANIFEST.open(encoding="utf-8", newline="") as handle:
+        qa_rows = list(csv.DictReader(handle))
+    assert len(qa_rows) == 100
+    assert {row["kategori"] for row in qa_rows} == {"ust_yazi", "cevap_yazisi"}

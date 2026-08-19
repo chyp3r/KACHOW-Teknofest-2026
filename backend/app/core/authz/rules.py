@@ -49,6 +49,7 @@ _OWNERSHIP_SCOPED_ACTIONS: tuple[str, ...] = (
     Action.DOCUMENT_UPDATE,
     Action.DOCUMENT_DELETE,
     Action.DRAFT_READ,
+    Action.DRAFT_UPDATE,
     Action.DRAFT_DELETE,
     Action.DRAFT_SEND,
     Action.ARTIFACT_TRANSFER,

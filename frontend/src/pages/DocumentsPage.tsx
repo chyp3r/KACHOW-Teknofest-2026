@@ -3,7 +3,7 @@ import { useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { DocumentTable } from "../features/documents/DocumentTable";
 import { DocumentUploader } from "../features/documents/DocumentUploader";
-import type { DocumentAnalysis, DocumentMetadata, EvrakFields, KnowledgeGraph } from "../types/documents";
+import type { DocumentAnalysis, DocumentMetadata, DocumentText, EvrakFields, KnowledgeGraph } from "../types/documents";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Surface";
 
@@ -25,6 +25,11 @@ export function DocumentsPage({
   generatingDetailedSummary,
   documentGraph,
   loadingDocumentGraph,
+  documentText,
+  onSaveText,
+  savingText,
+  onReextract,
+  reextracting,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
@@ -43,6 +48,11 @@ export function DocumentsPage({
   generatingDetailedSummary?: boolean;
   documentGraph?: KnowledgeGraph | null;
   loadingDocumentGraph?: boolean;
+  documentText?: DocumentText | null;
+  onSaveText?: (storagePath: string, pages: string[]) => Promise<void>;
+  savingText?: boolean;
+  onReextract?: (storagePath: string) => Promise<void>;
+  reextracting?: boolean;
 }) {
   const [uploadOpen, setUploadOpen] = useState(false);
 
@@ -93,6 +103,11 @@ export function DocumentsPage({
         generatingDetailedSummary={generatingDetailedSummary}
         documentGraph={documentGraph}
         loadingDocumentGraph={loadingDocumentGraph}
+        documentText={documentText}
+        onSaveText={onSaveText}
+        savingText={savingText}
+        onReextract={onReextract}
+        reextracting={reextracting}
       />
     </div>
   );

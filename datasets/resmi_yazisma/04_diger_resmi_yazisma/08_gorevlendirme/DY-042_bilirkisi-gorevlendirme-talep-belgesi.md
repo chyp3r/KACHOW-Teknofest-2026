@@ -10,6 +10,9 @@ belge_turu: "resmi_sablon"
 erisim_tarihi: "2026-07-31"
 dogrulama: "resmi_kaynaktan_indirildi"
 rag_status: "candidate"
+kaynak_kurum: "Amasya Üniversitesi Hukuk Müşavirliği"
+anonimlestirme_durumu: "uygun"
+anonimlestirilen_alan_sayisi: "0"
 ---
 
 # Bilirkişi Görevlendirme Talep Belgesi

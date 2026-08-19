@@ -1,0 +1,199 @@
+{
+  "before_after": {
+    "after": {
+      "generic_person_placeholder_count": 0,
+      "missing_metadata_records": 0,
+      "real_or_official": 453,
+      "records_in_duplicate_template_families": 0,
+      "separate_dev_heldout_records": 140,
+      "simulation_records_in_production": 0,
+      "synthetic": 116,
+      "total_curated": 569
+    },
+    "before": {
+      "generic_person_placeholder_count": 58,
+      "missing_metadata_records": 32,
+      "real_or_official": 236,
+      "records_in_duplicate_template_families": 9,
+      "separate_dev_heldout_records": 0,
+      "simulation_records_in_production": 32,
+      "synthetic": 148,
+      "total_curated": 384
+    }
+  },
+  "correspondence_type_distribution": {
+    "cover_letter": 129,
+    "information_notice": 130,
+    "other_official": 134,
+    "response_letter": 176
+  },
+  "duplicate_template_families": 0,
+  "generic_person_placeholder_count": 0,
+  "institution_distribution": {
+    "Afyonkarahisar İl Sağlık Müdürlüğü": 8,
+    "Anadolu Üniversitesi": 1,
+    "Anayasa Mahkemesi Başkanlığı": 5,
+    "Ankara Defterdarlığı": 9,
+    "Boğaziçi Üniversitesi Rektörlüğü": 1,
+    "Bursa Defterdarlığı": 3,
+    "Danıştay Başkanlığı": 2,
+    "Dokuz Eylül Üniversitesi Rektörlüğü": 1,
+    "Doğubayazıt İlçe Millî Eğitim Müdürlüğü": 5,
+    "Düzce Üniversitesi": 11,
+    "Edirne Defterdarlığı": 1,
+    "Ege Üniversitesi Öğrenci İşleri Daire Başkanlığı": 1,
+    "Erzincan Binali Yıldırım Üniversitesi": 18,
+    "Gazi Üniversitesi": 1,
+    "Gaziantep Defterdarlığı": 1,
+    "Gelir İdaresi Başkanlığı": 147,
+    "Hacettepe Üniversitesi": 1,
+    "Kahramanmaraş Sütçü İmam Üniversitesi": 8,
+    "Kayseri Defterdarlığı": 1,
+    "Kocaeli Defterdarlığı": 1,
+    "Konya Defterdarlığı": 2,
+    "Kütahya Defterdarlığı": 1,
+    "Malatya Defterdarlığı": 1,
+    "Marmara Üniversitesi": 1,
+    "Millî Eğitim Bakanlığı": 14,
+    "Muğla Defterdarlığı": 1,
+    "Orta Doğu Teknik Üniversitesi": 1,
+    "Osmaniye Defterdarlığı": 1,
+    "Sağlık Bakanlığı": 1,
+    "Sağlık Bilimleri Üniversitesi": 5,
+    "Selçuk Üniversitesi": 1,
+    "Sentetik veri üretimi": 116,
+    "Sivas Defterdarlığı": 1,
+    "Sosyal Güvenlik Kurumu": 1,
+    "T.C. Adalar Belediye Başkanlığı": 1,
+    "T.C. Ankara Valiliği": 1,
+    "T.C. Antalya Valiliği": 1,
+    "T.C. Başakşehir Belediye Başkanlığı": 1,
+    "T.C. Bodrum Kaymakamlığı": 1,
+    "T.C. Bursa Valiliği": 1,
+    "T.C. Denizli Valiliği": 1,
+    "T.C. Diyarbakır Valiliği": 1,
+    "T.C. Eskişehir Valiliği": 1,
+    "T.C. Kadıköy Belediye Başkanlığı": 1,
+    "T.C. Kadıköy Kaymakamlığı Sosyal Yardımlaşma ve Dayanışma Vakfı": 1,
+    "T.C. Kocaeli Valiliği": 1,
+    "T.C. Kültür ve Turizm Bakanlığı": 1,
+    "T.C. Muğla Valiliği": 1,
+    "T.C. Ortaca Belediye Başkanlığı": 2,
+    "T.C. Osmangazi Kaymakamlığı Sosyal Yardımlaşma ve Dayanışma Vakfı": 1,
+    "T.C. Salihli Belediye Başkanlığı": 2,
+    "T.C. Seyhan Kaymakamlığı": 1,
+    "T.C. Trabzon Valiliği": 1,
+    "T.C. Çankaya Kaymakamlığı": 1,
+    "T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı": 1,
+    "T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı - Tapu ve Kadastro Genel Müdürlüğü": 1,
+    "T.C. İstanbul Valiliği": 1,
+    "T.C. İzmir Valiliği": 1,
+    "T.C. İçişleri Bakanlığı": 1,
+    "Tekirdağ Namık Kemal Üniversitesi": 1,
+    "Ticaret Bakanlığı": 26,
+    "Türk Patent ve Marka Kurumu": 22,
+    "Türkiye Büyük Millet Meclisi": 49,
+    "Türkiye İş Kurumu": 1,
+    "Ulaştırma ve Altyapı Bakanlığı": 23,
+    "Van Eğitim ve Araştırma Hastanesi": 15,
+    "Yozgat Defterdarlığı": 1,
+    "Çanakkale Onsekiz Mart Üniversitesi": 1,
+    "Çankırı Defterdarlığı": 1,
+    "İstanbul Defterdarlığı": 24,
+    "İstanbul Üniversitesi Rektörlüğü": 1,
+    "İzmir Defterdarlığı": 4
+  },
+  "legacy_deleted_placeholder_count": 0,
+  "license_status_distribution": {
+    "project_internal": 116,
+    "usage_review_required": 453
+  },
+  "missing_metadata": {},
+  "origin_distribution": {
+    "official_verified_local": 380,
+    "official_web_pending_review": 73,
+    "synthetic": 116
+  },
+  "pii_flagged_count": 0,
+  "real_count_by_type": {
+    "cover_letter": 107,
+    "information_notice": 108,
+    "other_official": 107,
+    "response_letter": 131
+  },
+  "real_gap_to_100_by_type": {
+    "cover_letter": 0,
+    "information_notice": 0,
+    "other_official": 0,
+    "response_letter": 0
+  },
+  "real_or_official_count": 453,
+  "real_or_official_ratio": 0.7961,
+  "records_in_duplicate_template_families": 0,
+  "records_with_source_sha256": 433,
+  "records_with_source_url": 295,
+  "response_real_count_by_intent": {
+    "belediye_proje_ve_ihale_karari": 1,
+    "bilgi_edinme": 34,
+    "cevap_yazisi": 0,
+    "eksik_belge_yetkisizlik": 22,
+    "gorus_talebi": 1,
+    "istek_talep": 1,
+    "itiraz": 0,
+    "itiraz_cevabi": 0,
+    "olumlu_cevap": 20,
+    "ret": 20,
+    "ret_kismen_kabul": 16,
+    "sikayet": 7,
+    "soru_onergesi_cevabi": 8,
+    "tasinmaz_kiralama_karari": 1
+  },
+  "schema_version": 1,
+  "split_distribution": {
+    "dev": 89,
+    "heldout": 51,
+    "retrieval": 429
+  },
+  "split_origin_distribution": {
+    "dev": {
+      "official_verified_local": 61,
+      "official_web_pending_review": 15,
+      "synthetic": 13
+    },
+    "heldout": {
+      "official_verified_local": 35,
+      "official_web_pending_review": 7,
+      "synthetic": 9
+    },
+    "retrieval": {
+      "official_verified_local": 284,
+      "official_web_pending_review": 51,
+      "synthetic": 94
+    }
+  },
+  "synthetic_ratio": 0.2039,
+  "total_curated": 569,
+  "type_origin_distribution": {
+    "cover_letter": {
+      "official_verified_local": 95,
+      "official_web_pending_review": 12,
+      "synthetic": 22
+    },
+    "information_notice": {
+      "official_verified_local": 73,
+      "official_web_pending_review": 35,
+      "synthetic": 22
+    },
+    "other_official": {
+      "official_verified_local": 94,
+      "official_web_pending_review": 13,
+      "synthetic": 27
+    },
+    "response_letter": {
+      "official_verified_local": 118,
+      "official_web_pending_review": 13,
+      "synthetic": 45
+    }
+  },
+  "unique_template_families": 569
+}
