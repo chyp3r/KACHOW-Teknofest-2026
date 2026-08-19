@@ -89,4 +89,25 @@ describe("NodeInspector", () => {
 
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("hides the pin row entirely when onUnpin is not wired", () => {
+    render(<NodeInspector node={baseNode({})} onClose={() => undefined} />);
+    expect(screen.queryByText(/sabit/i)).not.toBeInTheDocument();
+  });
+
+  it("shows an unpin action when the node is pinned", () => {
+    const onUnpin = vi.fn();
+    render(<NodeInspector node={baseNode({})} onClose={() => undefined} pinned onUnpin={onUnpin} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /sabitlemeyi kaldır/i }));
+
+    expect(onUnpin).toHaveBeenCalled();
+  });
+
+  it("shows an unpinned hint, not an unpin button, when the node is not pinned", () => {
+    render(<NodeInspector node={baseNode({})} onClose={() => undefined} pinned={false} onUnpin={() => undefined} />);
+
+    expect(screen.getByText(/sabitlenmedi/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /sabitlemeyi kaldır/i })).not.toBeInTheDocument();
+  });
 });

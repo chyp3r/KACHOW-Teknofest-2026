@@ -31,10 +31,18 @@ export function NodeInspector({
   node,
   onClose,
   onOpenDocument,
+  pinned,
+  onUnpin,
 }: {
   node: GraphNode | null;
   onClose: () => void;
   onOpenDocument?: (storagePath: string) => void;
+  // Undefined (both) when the caller doesn't wire dragging at all (e.g. a
+  // future non-force-directed consumer of this same panel) -- the pin row
+  // is hidden entirely rather than shown disabled, the same optional-prop
+  // convention used elsewhere in this codebase (documentGraph, onSave...).
+  pinned?: boolean;
+  onUnpin?: () => void;
 }) {
   if (!node) return null;
 
@@ -46,6 +54,21 @@ export function NodeInspector({
           <X />
         </Button>
       </div>
+
+      {onUnpin && (
+        <p className="node-inspector-pin-status">
+          {pinned ? (
+            <>
+              Sabitlendi
+              <Button variant="ghost" size="sm" onClick={onUnpin}>
+                Sabitlemeyi kaldır
+              </Button>
+            </>
+          ) : (
+            "Sabitlenmedi -- sürükleyerek sabitleyin"
+          )}
+        </p>
+      )}
 
       {node.node_type === "document" && (
         <div className="node-inspector-body">

@@ -484,6 +484,7 @@ label,
 .doc-type-badge,
 .node-inspector-note,
 .node-inspector-attributes dt,
+.node-inspector-pin-status,
 .graph-filters-checkbox,
 .graph-filters-group legend {
   font-size: var(--text-caption);

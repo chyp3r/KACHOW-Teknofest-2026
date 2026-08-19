@@ -1280,8 +1280,14 @@ td > span { color: var(--text-secondary); margin-top: var(--space-1); }
 
 /* Unified entity graph (v2) -- force-directed view, all node types. */
 .entity-graph-view { display: grid; gap: var(--space-3); }
-.entity-graph-canvas-row { display: flex; gap: var(--space-3); align-items: flex-start; }
-.entity-graph-canvas-row > .decision-graph-container { flex: 1 1 auto; min-width: 0; }
+/* position: relative, not flex -- the inspector floats OVER the canvas
+   (see .node-inspector below) rather than sharing a row with it, so
+   opening/closing it never resizes the canvas. That resize was exactly
+   what drove InteractiveGraphViewport's old ResizeObserver to reset the
+   camera on every click -- fixed by removing that reset, but keeping the
+   canvas a fixed size regardless of the inspector is the belt to that
+   fix's suspenders. */
+.entity-graph-canvas-row { position: relative; }
 
 .decision-graph-container .entity-graph-node.is-dimmed { opacity: .18; }
 .decision-graph-container .entity-graph-node-fill { stroke: var(--border-default); stroke-width: 1; }
@@ -1295,14 +1301,33 @@ td > span { color: var(--text-secondary); margin-top: var(--space-1); }
 .decision-graph-container .entity-graph-node.node-konu .entity-graph-node-fill { fill: var(--bg-primary); stroke: var(--text-muted); }
 .decision-graph-container .entity-graph-node:focus-visible .entity-graph-node-fill,
 .decision-graph-container .entity-graph-node.is-selected .entity-graph-node-fill { filter: drop-shadow(0 0 6px var(--accent-blue)); }
+/* Pinned -- csacademy's own "the node becomes fixed" cue, dashed since a
+   dash already means "not the deterministic thing" elsewhere in this same
+   graph (ribbon-llm/edge-llm) and pinning is a per-viewer, not a data,
+   fact -- solid would visually claim it's part of the graph's data. */
+.decision-graph-container .entity-graph-node.is-pinned .entity-graph-node-fill {
+  stroke: var(--accent-blue);
+  stroke-width: 2;
+  stroke-dasharray: 3 2;
+}
 
 .decision-graph-container .entity-graph-edge { opacity: .45; }
 .decision-graph-container .entity-graph-edge.is-dimmed { opacity: .06; }
 .decision-graph-container .entity-graph-edge.edge-rule { stroke: var(--workflow-rule); stroke-width: 1.5; }
 .decision-graph-container .entity-graph-edge.edge-llm { stroke: var(--workflow-llm); stroke-width: 1; stroke-dasharray: 5 4; }
 
-.node-inspector { flex: 0 0 18rem; }
+.node-inspector {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  width: 18rem;
+  max-height: calc(100% - 2 * var(--space-3));
+  overflow-y: auto;
+  z-index: 2;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .3);
+}
 .node-inspector-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+.node-inspector-pin-status { display: flex; align-items: center; gap: var(--space-2); color: var(--text-muted); margin: var(--space-2) 0; }
 .node-inspector-attributes { display: grid; gap: var(--space-1) var(--space-2); margin: var(--space-2) 0; }
 .node-inspector-attributes dt { color: var(--text-muted); }
 .node-inspector-attributes dd { margin: 0; }

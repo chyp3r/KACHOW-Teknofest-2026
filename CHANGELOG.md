@@ -2,6 +2,101 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.20.0] - 2026-08-19
+### Değiştirildi
+**Mevzuat Haritası → canlı, sürüklenebilir simülasyon** (#210) —
+[csacademy.com/app/graph_editor](https://csacademy.com/app/graph_editor/)'ün
+"Force mode" davranışına göre modellendi: düğümler birbirini iter, kenarlar
+çeker, tüm graf merkeze doğru hafifçe çekilir; bir düğümü sürüklemek onu
+bıraktığınız yerde sabitler. Referans sitenin kendi belgelediği davranış
+esas alındı ("nodes support drag and drop... at the end of the drop the
+node becomes fixed... you can fix/unfix a node by simple click") ve canlı
+olarak doğrulandı (art arda iki ekran görüntüsünde düğümlerin hâlâ
+yerleşmekte olduğu gözlemlendi).
+
+**Tek gerçek çakışma**: referans sitede tek tıklama sabitleme/serbest
+bırakma anlamına geliyor; bu uygulamada tıklama zaten öznitelik panelini
+açıyor. Çözüm: tıklama = öznitelikler, sürükleme = sabitleme. Serbest
+bırakma iki yoldan erişilebilir: düğüme çift tıklama, ve öznitelik
+panelindeki "Sabitlemeyi kaldır" düğmesi.
+
+**"Düğüme tıkla, özniteliklerini gör" isteği bir önceki sürümde zaten
+uygulanmıştı — az önce bulunan iki hataya kadar hiç çalışmıyor gibi
+görünüyordu:**
+
+- `InteractiveGraphViewport`'un kaydırma-engelleme kontrolü `.closest(".node")`
+  ile eşleşiyordu; v1 bipartit görünüm bu ham sınıfı taşıyordu ama v2'nin
+  `EntityGraphView`'ı `entity-graph-node`/`node-entity` gibi farklı sınıflar
+  kullanıyordu — hiçbiri `.node` ile eşleşmiyordu, bu yüzden bir düğüme
+  basmak sessizce tüm tuvali kaydırmaya başlıyordu. Düzeltme: seçici artık
+  açık bir `[data-graph-node]` özniteliğine bakıyor (her iki görünüm de
+  taşıyor), tesadüfi bir sınıf adına değil.
+- Aynı bileşendeki bir `ResizeObserver`, tuval boyutu her değiştiğinde
+  kamerayı sıfırlıyordu — 18rem'lik öznitelik panelini açmak tuvali
+  daraltıyor, bu da her tıklamada yakınlaştırma/kaydırma durumunu sıfırlıyordu.
+  Kaldırıldı; panel artık tuvalin üzerinde **yüzen bir kaplama** olarak
+  konumlanıyor (`position: absolute`), bu yüzden açılması/kapanması tuvali
+  hiç yeniden boyutlandırmıyor.
+
+- **`forceLayout.ts`** ikiye ayrıldı, tek fizik çekirdeğini paylaşarak:
+  `createForceSimulation` (canlı, adım adım ilerleyen, sabitlenebilir,
+  yeniden ısıtılabilir) ve `layoutForceDirected` (eskisi gibi sabit
+  yinelemeli toplu sarmalayıcı, artık bu çekirdeğin ince bir katmanı).
+  Soğutma, sabit yineleme sayısına dayalı doğrusal zamandan çarpımsal
+  "alpha" bozunmasına geçti (d3-force geleneği) — canlı döngünün herhangi
+  bir anda yeniden ısıtılabilmesi için gerekli. **Belirlenebilirlik
+  sözü daraltıldı, gizlenmeden**: aynı tohum ve aynı grafik artık yalnızca
+  başlangıç ve *yerleşmiş* durumu için garanti ediyor, her ara kareyi değil
+  — bir kullanıcı sürüklemesi kasıtlı olarak kararsız sonuçtan sapıyor,
+  bu sapma sürüklemenin amacı. Toplu yol (`layoutForceDirected`, azaltılmış
+  hareket ve testler tarafından kullanılıyor) daha güçlü garantiyi koruyor.
+- **`useForceSimulation.ts`** (yeni) — bu depoda ilk `requestAnimationFrame`
+  döngüsü (`MessageList.tsx`'in kendisi tek seferlik). Yerleştiğinde uyur
+  (kare zamanlamayı durdurur), etkileşimde uyanır. `prefers-reduced-motion:
+  reduce` döngüyü tamamen atlıyor ve simülasyonu eşzamanlı olarak
+  yerleştiriyor — hiç animasyon yok.
+- **Düğüm sürükleme** (`EntityGraphView.tsx`) — `graphPointAt` (ekran
+  pikselini grafik koordinatına çeviren, `viewBox`/ölçek/letterbox'ı doğru
+  hesaba katan yardımcı) `InteractiveGraphViewport`'un içinde bir closure
+  olarak yaşıyordu, hiçbir çocuğa açık değildi. Yeni bir React context
+  (`graphViewportContext.ts`) bunu açığa çıkarıyor. **JSX çocukları ebeveynin
+  fiber konumunda render edilir, kendi konumlarında değil** — bu yüzden
+  context'i okuyan `EntityGraphNode`, `EntityGraphView`'ın kendi `.map()`'i
+  içinde satır içi değil, ayrı bir bileşen olarak çıkarıldı.
+- 3px'lik bir hareket eşiği tıklamayı sürüklemeden ayırıyor.
+- **Ölçüm, varsayım değil**: saf React yeniden render'ı (fizik değil) 600
+  düğümde kare başına ~183-199ms ölçüldü (jsdom içinde) — 60fps bütçesinin
+  çok üzerinde. Ancak gerçek tarayıcıda, gerçek 62 düğümlük/180 kenarlık
+  korpus üzerinde, senkron DOM özniteliği yazma maliyeti yalnızca ~1.1ms
+  ölçüldü — jsdom'un DOM işlemlerini önemli ölçüde abarttığını doğruluyor.
+  Canlı `requestAnimationFrame` tabanlı tam kare ölçümü bu oturumun tarayıcı
+  aracının arka planda sekmeler için zamanlayıcıları/rAF'ı durdurması
+  nedeniyle alınamadı (`document.hidden === true` doğrulandı). **Bilinçli
+  sınır**: bugünkü gerçek korpus (14 evrak, ~60 düğüm) için React tabanlı
+  render kalıyor; `MAX_GRAPH_DOCUMENTS=200` teorik tavanında (600 düğüm)
+  performans yakından izlenmeli ve gerekirse konumları React'ı atlayarak
+  doğrudan ref üzerinden yazan bir yola geçilmeli — önceden inşa edilmedi,
+  çünkü bugünkü ölçek için gerekli değil.
+
+### Test
+- `docker compose exec -T frontend npm test -- --run` → **272 test geçti**
+  (53 dosya) — 32 yeni test bu özellik için (`createForceSimulation`: 11,
+  `useForceSimulation`: 8, `InteractiveGraphViewport` context/pan: 4,
+  `NodeInspector` sabitleme: 3, `EntityGraphView` sürükle/tıkla/sabitle: 6).
+- `npm run lint` → 0 hata (`DecisionFlow.tsx`'teki 2 uyarı önceden mevcut;
+  `useGraphViewport`'un kendi dosyasına taşınması yeni bir üçüncü uyarıyı
+  önledi -- react-refresh/only-export-components, aynı kategori).
+- `npx tsc --noEmit` → temiz.
+- Canlı korpus doğrulaması: gerçek sürükleme (tarayıcı aracının doğal
+  sürükleme özelliğiyle, ham `PointerEvent` gönderimiyle değil -- ikincisi
+  gerçek işaretçi yakalamayı güvenilir biçimde tetiklemiyor) bir düğümü
+  başarıyla sabitledi (`is-pinned` sınıfı + görsel kesikli halka); öznitelik
+  paneli sabitleme durumunu ve sabitlemeyi kaldır düğmesini doğru gösterdi;
+  panel açılışı `viewBox`'ı değiştirmedi (sıfırlama hatası için regresyon
+  kontrolü); her iki tema.
+
+Refs: [#210](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/210).
+
 ## [3.19.0] - 2026-08-18
 ### Değiştirildi
 **Mevzuat Haritası → birleşik varlık grafiği** (#210) — bir önceki sürümün

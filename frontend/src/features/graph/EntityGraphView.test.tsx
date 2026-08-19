@@ -46,11 +46,45 @@ function buildGraph(): KnowledgeGraph {
   };
 }
 
+const MOCK_SVG_RECT = {
+  x: 0, y: 0, top: 0, left: 0, right: 900, bottom: 700, width: 900, height: 700,
+  toJSON: () => ({}),
+};
+
+/** Every drag/graphPointAt test needs the SVG to report a real bounding
+ * rect -- jsdom never lays anything out, so `getBoundingClientRect`
+ * returns all zeros unless stubbed, exactly like
+ * `InteractiveGraphViewport.test.tsx`'s own `mockSvgRect`. */
+function mockSvgRect(container: HTMLElement) {
+  const svg = container.querySelector('[data-testid="interactive-graph-svg"]') as SVGSVGElement;
+  Object.defineProperty(svg, "getBoundingClientRect", { value: () => MOCK_SVG_RECT, configurable: true });
+  return svg;
+}
+
+/** A plain click: press and release at the same point, no movement --
+ * dispatched as MouseEvents named "pointerdown"/"pointerup" because jsdom
+ * has no PointerEvent constructor (same technique
+ * DecisionFlow.test.tsx and InteractiveGraphViewport.test.tsx already
+ * use; React's synthetic event system dispatches by the native event's
+ * `type` string, not its class). */
+function firePointerClick(element: Element, clientX = 100, clientY = 100) {
+  fireEvent(element, new MouseEvent("pointerdown", { bubbles: true, clientX, clientY }));
+  fireEvent(element, new MouseEvent("pointerup", { bubbles: true, clientX, clientY }));
+}
+
+/** A drag: press on `element`, move past the click threshold, release. */
+function fireDrag(element: Element, from: { x: number; y: number }, to: { x: number; y: number }) {
+  fireEvent(element, new MouseEvent("pointerdown", { bubbles: true, clientX: from.x, clientY: from.y }));
+  fireEvent(element, new MouseEvent("pointermove", { bubbles: true, clientX: to.x, clientY: to.y }));
+  fireEvent(element, new MouseEvent("pointerup", { bubbles: true, clientX: to.x, clientY: to.y }));
+}
+
 describe("EntityGraphView", () => {
   it("clicking a node opens the inspector with that node's data", () => {
     const { container } = render(<EntityGraphView graph={buildGraph()} />);
+    mockSvgRect(container);
 
-    fireEvent.click(container.querySelector('[data-node-id="entity:tbmm"]')!);
+    firePointerClick(container.querySelector('[data-node-id="entity:tbmm"]')!);
 
     const inspector = screen.getByRole("complementary", { name: /düğüm ayrıntıları/i });
     expect(inspector).toBeInTheDocument();
@@ -59,11 +93,88 @@ describe("EntityGraphView", () => {
 
   it("the entity inspector discloses every merged surface form", () => {
     const { container } = render(<EntityGraphView graph={buildGraph()} />);
+    mockSvgRect(container);
 
-    fireEvent.click(container.querySelector('[data-node-id="entity:tbmm"]')!);
+    firePointerClick(container.querySelector('[data-node-id="entity:tbmm"]')!);
 
     const inspector = screen.getByRole("complementary", { name: /düğüm ayrıntıları/i });
     expect(within(inspector).getByText("TÜRKİYE BÜYÜK MİLLET MECLİSİ")).toBeInTheDocument();
+  });
+
+  it("a drag past the click threshold pins the node and does not open the inspector", () => {
+    const { container } = render(<EntityGraphView graph={buildGraph()} />);
+    mockSvgRect(container);
+    const target = container.querySelector('[data-node-id="entity:tbmm"]')!;
+
+    fireDrag(target, { x: 100, y: 100 }, { x: 160, y: 160 });
+
+    expect(screen.queryByRole("complementary", { name: /düğüm ayrıntıları/i })).not.toBeInTheDocument();
+    expect(target).toHaveClass("is-pinned");
+  });
+
+  it("a click without movement opens the inspector without pinning", () => {
+    const { container } = render(<EntityGraphView graph={buildGraph()} />);
+    mockSvgRect(container);
+    const target = container.querySelector('[data-node-id="entity:tbmm"]')!;
+
+    firePointerClick(target);
+
+    expect(screen.getByRole("complementary", { name: /düğüm ayrıntıları/i })).toBeInTheDocument();
+    expect(target).not.toHaveClass("is-pinned");
+  });
+
+  it("dragging a node updates its rendered position to follow the cursor", () => {
+    const { container } = render(<EntityGraphView graph={buildGraph()} />);
+    mockSvgRect(container);
+    const target = container.querySelector('[data-node-id="entity:tbmm"]')!;
+    const circleBefore = target.querySelector("circle")!;
+    const before = { cx: circleBefore.getAttribute("cx"), cy: circleBefore.getAttribute("cy") };
+
+    fireDrag(target, { x: 100, y: 100 }, { x: 400, y: 300 });
+
+    const circleAfter = container.querySelector('[data-node-id="entity:tbmm"] circle')!;
+    expect({ cx: circleAfter.getAttribute("cx"), cy: circleAfter.getAttribute("cy") }).not.toEqual(before);
+  });
+
+  it("double-clicking a pinned node unpins it", () => {
+    const { container } = render(<EntityGraphView graph={buildGraph()} />);
+    mockSvgRect(container);
+    const target = container.querySelector('[data-node-id="entity:tbmm"]')!;
+    fireDrag(target, { x: 100, y: 100 }, { x: 160, y: 160 });
+    expect(target).toHaveClass("is-pinned");
+
+    fireEvent.doubleClick(target);
+
+    expect(target).not.toHaveClass("is-pinned");
+  });
+
+  it("the inspector's unpin button unpins a dragged node", () => {
+    const { container } = render(<EntityGraphView graph={buildGraph()} />);
+    mockSvgRect(container);
+    const target = container.querySelector('[data-node-id="entity:tbmm"]')!;
+    fireDrag(target, { x: 100, y: 100 }, { x: 160, y: 160 });
+    expect(target).toHaveClass("is-pinned");
+
+    // A second, plain click (no movement) opens the inspector on the
+    // now-pinned node -- exactly how a user reaches the unpin button.
+    firePointerClick(target);
+    const inspector = screen.getByRole("complementary", { name: /düğüm ayrıntıları/i });
+    expect(within(inspector).getByText(/sabitlendi/i)).toBeInTheDocument();
+
+    fireEvent.click(within(inspector).getByRole("button", { name: /sabitlemeyi kaldır/i }));
+
+    expect(container.querySelector('[data-node-id="entity:tbmm"]')).not.toHaveClass("is-pinned");
+  });
+
+  it("opening the inspector leaves the viewBox unchanged -- regression for the resize-reset bug", () => {
+    const { container } = render(<EntityGraphView graph={buildGraph()} />);
+    const svg = mockSvgRect(container);
+    const initialViewBox = svg.getAttribute("viewBox");
+
+    firePointerClick(container.querySelector('[data-node-id="entity:tbmm"]')!);
+
+    expect(screen.getByRole("complementary", { name: /düğüm ayrıntıları/i })).toBeInTheDocument();
+    expect(svg.getAttribute("viewBox")).toBe(initialViewBox);
   });
 
   it("unchecking an edge-type filter removes matching edges from the rendered graph", () => {
@@ -112,8 +223,9 @@ describe("EntityGraphView", () => {
   it("clicking a document node's open-document action calls onSelectDocument", () => {
     const onSelectDocument = vi.fn();
     const { container } = render(<EntityGraphView graph={buildGraph()} onSelectDocument={onSelectDocument} />);
+    mockSvgRect(container);
 
-    fireEvent.click(container.querySelector('[data-node-id="doc:a.pdf"]')!);
+    firePointerClick(container.querySelector('[data-node-id="doc:a.pdf"]')!);
     fireEvent.click(screen.getByRole("button", { name: /belgeyi aç/i }));
 
     expect(onSelectDocument).toHaveBeenCalledWith("a.pdf");

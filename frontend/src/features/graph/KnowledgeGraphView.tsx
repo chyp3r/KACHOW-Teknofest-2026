@@ -154,6 +154,7 @@ export function KnowledgeGraphView({
                 key={row.node.id}
                 className={`node node-document ${incident ? "" : "is-dimmed"}`.trim()}
                 data-node-id={row.node.id}
+                data-graph-node=""
                 role="button"
                 tabIndex={0}
                 aria-label={row.node.file_name ?? row.node.label}
@@ -187,6 +188,7 @@ export function KnowledgeGraphView({
                 key={row.node.id}
                 className={`node node-madde ${incident ? "" : "is-dimmed"}`.trim()}
                 data-node-id={row.node.id}
+                data-graph-node=""
                 role="button"
                 tabIndex={0}
                 aria-label={`${row.node.label} ${row.node.field_labels.join(", ")}`}
