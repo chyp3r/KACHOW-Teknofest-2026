@@ -50,6 +50,8 @@ export interface DocumentMetadata {
   document_type_label: string;
   compliance_status: string;
   summary: string;
+  analyzed?: boolean;
+  pending_file?: File;
 }
 
 export interface DocumentAnalysis extends DocumentMetadata {

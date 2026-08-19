@@ -34,7 +34,7 @@ describe("DocumentUploader", () => {
       },
     });
     expect(
-      await screen.findByText("Evrak başarıyla yüklendi ve analiz edildi."),
+      await screen.findByText("Evrak analize hazır."),
     ).toBeInTheDocument();
     expect(upload).toHaveBeenCalledTimes(1);
   });

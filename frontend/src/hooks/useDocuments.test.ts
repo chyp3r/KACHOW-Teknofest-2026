@@ -29,6 +29,7 @@ describe("useDocuments", () => {
 
   beforeEach(() => {
     mocks.list.mockReset().mockResolvedValue([remoteDocument]);
+    mocks.analyze.mockReset();
     mocks.getAnalysis.mockReset().mockResolvedValue({ ...remoteDocument });
   });
 
@@ -43,5 +44,82 @@ describe("useDocuments", () => {
     }));
 
     await waitFor(() => expect(result.current.selectedDocument).toBeNull());
+  });
+
+  it("stages a selected file locally and analyzes it only on demand", async () => {
+    const analyzed = {
+      ...remoteDocument,
+      file_name: "bekleyen.pdf",
+      storage_path: "uploads/analyzed.pdf",
+      extraction: { extractor: "pdfium", page_count: 1, char_count: 120, used_ocr: false },
+      fields: {},
+      missing_fields: [],
+      mevzuat_references: [],
+      guardrail: {
+        sensitivity_level: "unmarked",
+        pii_findings: [],
+        requires_human_review: false,
+        reasons: [],
+      },
+    };
+    mocks.analyze.mockResolvedValue(analyzed);
+    const { result } = renderHook(() => useDocuments("user-1"), { wrapper });
+    await waitFor(() => expect(result.current.documents).toEqual([remoteDocument]));
+
+    let pendingPath = "";
+    await act(async () => {
+      const pending = await result.current.upload(
+        new File(["içerik"], "bekleyen.pdf", { type: "application/pdf" }),
+      );
+      pendingPath = pending.storage_path;
+    });
+
+    expect(result.current.documents[0]).toMatchObject({
+      file_name: "bekleyen.pdf",
+      analyzed: false,
+    });
+    expect(mocks.analyze).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.analyze(pendingPath);
+    });
+
+    expect(mocks.analyze).toHaveBeenCalledTimes(1);
+    expect(mocks.analyze.mock.calls[0][0]).toBeInstanceOf(File);
+    expect(result.current.documents[0]).toMatchObject({
+      storage_path: "uploads/analyzed.pdf",
+      analyzed: true,
+    });
+  });
+
+  it("can analyze a file immediately after staging it for chat", async () => {
+    mocks.analyze.mockResolvedValue({
+      ...remoteDocument,
+      storage_path: "uploads/chat.pdf",
+      extraction: { extractor: "pdfium", page_count: 1, char_count: 120, used_ocr: false },
+      fields: {},
+      missing_fields: [],
+      mevzuat_references: [],
+      guardrail: {
+        sensitivity_level: "unmarked",
+        pii_findings: [],
+        requires_human_review: false,
+        reasons: [],
+      },
+    });
+    const { result } = renderHook(() => useDocuments("user-1"), { wrapper });
+    await waitFor(() => expect(result.current.documents).toEqual([remoteDocument]));
+    const upload = result.current.upload;
+    const analyze = result.current.analyze;
+
+    await act(async () => {
+      const pending = await upload(
+        new File(["içerik"], "chat.pdf", { type: "application/pdf" }),
+      );
+      await analyze(pending.storage_path);
+    });
+
+    expect(mocks.analyze).toHaveBeenCalledTimes(1);
+    expect(result.current.documents[0].storage_path).toBe("uploads/chat.pdf");
   });
 });

@@ -1,4 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import type { DocumentAnalysis, DocumentMetadata } from "../types/documents";
 import { DocumentsPage } from "./DocumentsPage";
@@ -32,9 +34,11 @@ const analysis: DocumentAnalysis = {
   },
 };
 
+const renderPage = (page: ReactElement) => render(<MemoryRouter>{page}</MemoryRouter>);
+
 describe("DocumentsPage", () => {
   it("opens the compact uploader from the header action and omits the subtitle", () => {
-    render(
+    renderPage(
       <DocumentsPage
         documents={[]}
         selected={null}
@@ -58,9 +62,9 @@ describe("DocumentsPage", () => {
     expect(screen.getByRole("button", { name: "Yüklemeyi kapat" })).toBeInTheDocument();
   });
 
-  it("shows analysis below the selected document row and supports collapsing it", () => {
+  it("shows analysis in the detail pane and supports closing it", () => {
     const onCloseDocument = vi.fn();
-    render(
+    renderPage(
       <DocumentsPage
         documents={[document]}
         selected={document}
@@ -76,16 +80,87 @@ describe("DocumentsPage", () => {
 
     const row = screen.getByRole("button", { name: /izin-talebi\.pdf/ });
     expect(row).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("heading", { name: "Analiz ayrıntıları" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Evrak Özeti" })).toBeInTheDocument();
 
-    fireEvent.click(row);
+    fireEvent.click(screen.getByRole("button", { name: "Liste görünümüne dön" }));
     expect(onCloseDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it("switches between the supported reference detail tabs", () => {
+    renderPage(
+      <DocumentsPage
+        documents={[document]}
+        selected={document}
+        analysis={analysis}
+        loading={false}
+        uploading={false}
+        error={null}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Ayrıntılar" }));
+    expect(screen.getByText("Evrak adı")).toBeInTheDocument();
+    expect(screen.getByText("Sayfa sayısı")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Analiz" }));
+    expect(screen.getByRole("heading", { name: "Belge karar sürecine hazır" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Temel bilgiler" })).toBeInTheDocument();
+    expect(screen.queryByText("Analiz alanlarını görüntüle veya düzenle")).not.toBeInTheDocument();
+  });
+
+  it("edits basic analysis fields in place without replacing the compact grid", async () => {
+    const onUpdateFields = vi.fn().mockResolvedValue(undefined);
+    const detailedAnalysis: DocumentAnalysis = {
+      ...analysis,
+      fields: {
+        tarih: "14.04.2026",
+        konu: "4982 sayılı Kanun Kapsamında Bilgi Talebi",
+        muhatap: "ÖRNEK BAKANLIĞI BİLGİ EDİNME BİRİMİNE",
+        imza_sahibi: "Fatma Öz",
+        gizlilik_derecesi: null,
+        ivedilik: null,
+        basvuran_adi: "Fatma Öz",
+        adres: "Deneme Cad. No:5 Kat:3 Örnek/Örnek",
+        iletisim: "ornek@ornek.example",
+      },
+    };
+    renderPage(
+      <DocumentsPage
+        documents={[document]}
+        selected={document}
+        analysis={detailedAnalysis}
+        loading={false}
+        uploading={false}
+        error={null}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+        onSelect={vi.fn()}
+        onUpdateFields={onUpdateFields}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Analiz" }));
+    const compactPanel = screen.getByRole("region", { name: "Temel bilgiler" });
+    expect(compactPanel).not.toHaveClass("is-editing");
+    expect(screen.getAllByText("—")).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Temel bilgileri düzenle" }));
+    expect(compactPanel).toHaveClass("is-editing");
+    fireEvent.change(screen.getByLabelText("Muhatap"), { target: { value: "Hukuk İşleri Birimi" } });
+    fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+
+    await waitFor(() => expect(onUpdateFields).toHaveBeenCalledWith(
+      document.storage_path,
+      expect.objectContaining({ muhatap: "Hukuk İşleri Birimi", konu: "4982 sayılı Kanun Kapsamında Bilgi Talebi" }),
+    ));
+    expect(compactPanel).not.toHaveClass("is-editing");
   });
 
   it("deletes a document after confirmation and closes it if it was open", async () => {
     const onDeleteDocument = vi.fn().mockResolvedValue(undefined);
     const onCloseDocument = vi.fn();
-    render(
+    renderPage(
       <DocumentsPage
         documents={[document]}
         selected={document}
@@ -100,7 +175,8 @@ describe("DocumentsPage", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Evrakı sil" }));
+    fireEvent.click(screen.getByLabelText("izin-talebi.pdf için işlemler"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sil" }));
     expect(screen.getByRole("alertdialog", { name: "Evrakı sil" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Sil" }));
 
@@ -110,7 +186,7 @@ describe("DocumentsPage", () => {
 
   it("does not delete anything when the confirmation is cancelled", () => {
     const onDeleteDocument = vi.fn();
-    render(
+    renderPage(
       <DocumentsPage
         documents={[document]}
         selected={null}
@@ -124,7 +200,8 @@ describe("DocumentsPage", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Evrakı sil" }));
+    fireEvent.click(screen.getByLabelText("izin-talebi.pdf için işlemler"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sil" }));
     fireEvent.click(screen.getByRole("button", { name: "Vazgeç" }));
 
     expect(onDeleteDocument).not.toHaveBeenCalled();
@@ -132,7 +209,7 @@ describe("DocumentsPage", () => {
   });
 
   it("hides the delete button when no onDeleteDocument is wired", () => {
-    render(
+    renderPage(
       <DocumentsPage
         documents={[document]}
         selected={null}
@@ -145,6 +222,117 @@ describe("DocumentsPage", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "Evrakı sil" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("izin-talebi.pdf için işlemler"));
+    expect(screen.queryByRole("menuitem", { name: "Sil" })).not.toBeInTheDocument();
+  });
+
+  it("shows a single analyze action for a pending document", () => {
+    const pendingDocument: DocumentMetadata = {
+      ...document,
+      storage_path: "pending:test-document",
+      document_type: "",
+      document_type_label: "",
+      compliance_status: "",
+      summary: "",
+      analyzed: false,
+    };
+    const onAnalyzeDocument = vi.fn().mockResolvedValue(undefined);
+
+    renderPage(
+      <DocumentsPage
+        documents={[pendingDocument]}
+        selected={null}
+        analysis={null}
+        loading={false}
+        uploading={false}
+        error={null}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+        onAnalyzeDocument={onAnalyzeDocument}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("izin-talebi.pdf için işlemler"));
+    const analyzeButton = screen.getByRole("menuitem", { name: "Analiz et" });
+    expect(analyzeButton).toBeInTheDocument();
+    fireEvent.click(analyzeButton);
+    expect(onAnalyzeDocument).toHaveBeenCalledWith("pending:test-document");
+  });
+
+  it("makes review the primary action and explains the number of issues", () => {
+    const reviewDocument = { ...document, compliance_status: "partially_compliant" };
+    const reviewAnalysis: DocumentAnalysis = {
+      ...analysis,
+      ...reviewDocument,
+      missing_fields: [
+        { key: "imza", label: "İmza", severity: "high", mevzuat: "", reason: "İmza alanı doğrulanmalı." },
+        { key: "tarih", label: "Tarih", severity: "medium", mevzuat: "", reason: "Tarih okunamadı." },
+      ],
+    };
+
+    renderPage(
+      <DocumentsPage
+        documents={[reviewDocument]}
+        selected={reviewDocument}
+        analysis={reviewAnalysis}
+        loading={false}
+        uploading={false}
+        error={null}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText("İnceleme gerekli · 2 konu")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Analizi incele" }));
+    expect(screen.getByRole("heading", { name: "2 konu incelenmeli" })).toBeInTheDocument();
+    expect(screen.getByText("İmza alanı doğrulanmalı.")).toBeInTheDocument();
+  });
+
+  it("shows active filters and clears them in one action", () => {
+    renderPage(
+      <DocumentsPage
+        documents={[document]}
+        selected={null}
+        analysis={null}
+        loading={false}
+        uploading={false}
+        error={null}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Evraklarda ara" }), { target: { value: "izin" } });
+    expect(screen.getByText("Arama: izin")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Filtreleri temizle" }));
+    expect(screen.getByRole("textbox", { name: "Evraklarda ara" })).toHaveValue("");
+    expect(screen.queryByLabelText("Etkin filtreler")).not.toBeInTheDocument();
+  });
+
+  it("edits extracted text page by page", async () => {
+    const onSaveText = vi.fn().mockResolvedValue(undefined);
+    renderPage(
+      <DocumentsPage
+        documents={[document]}
+        selected={document}
+        analysis={analysis}
+        documentText={{ pages: ["İlk metin"], extracted_text: "İlk metin", page_count: 1, extractor: "pdfium", used_ocr: false }}
+        loading={false}
+        uploading={false}
+        error={null}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+        onSelect={vi.fn()}
+        onSaveText={onSaveText}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Belge Metni" }));
+    expect(screen.getByRole("heading", { name: "Sayfa 1/1" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Düzenle" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Sayfa 1/1" }), { target: { value: "Düzeltilmiş metin" } });
+    fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+
+    await waitFor(() => expect(onSaveText).toHaveBeenCalledWith(document.storage_path, ["Düzeltilmiş metin"]));
   });
 });

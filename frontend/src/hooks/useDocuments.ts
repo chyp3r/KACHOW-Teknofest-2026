@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../query/queryKeys";
 import { documentService } from "../services/documentService";
@@ -11,6 +11,8 @@ export function useDocuments(
   const queryClient = useQueryClient();
   const [selectedDocument, setSelectedDocument] =
     useState<DocumentMetadata | null>(null);
+  const [pendingDocuments, setPendingDocuments] = useState<DocumentMetadata[]>([]);
+  const pendingDocumentsRef = useRef<DocumentMetadata[]>([]);
   const documentsQuery = useQuery({
     queryKey: queryKeys.documents(),
     queryFn: () => documentService.list(),
@@ -19,7 +21,7 @@ export function useDocuments(
   const analysisQuery = useQuery({
     queryKey: queryKeys.documentAnalysis(selectedDocument?.storage_path ?? ""),
     queryFn: () => documentService.getAnalysis(selectedDocument!.storage_path),
-    enabled: Boolean(selectedDocument),
+    enabled: Boolean(selectedDocument) && selectedDocument?.analyzed !== false,
     staleTime: 60_000,
   });
   const textQuery = useQuery({
@@ -28,19 +30,31 @@ export function useDocuments(
     enabled: Boolean(selectedDocument),
     staleTime: 60_000,
   });
-  const uploadMutation = useMutation({
-    mutationFn: (file: File) => documentService.analyze(file),
-    onSuccess: (analysis) => {
+  const analyzeMutation = useMutation({
+    mutationFn: ({ file }: { storagePath: string; file: File }) => documentService.analyze(file),
+    onSuccess: (analysis, { storagePath }) => {
+      const completedAnalysis: DocumentAnalysis = {
+        ...analysis,
+        upload_time: new Date().toISOString(),
+        analyzed: true,
+      };
+      const remainingPending = pendingDocumentsRef.current.filter(
+        (item) => item.storage_path !== storagePath,
+      );
+      pendingDocumentsRef.current = remainingPending;
+      setPendingDocuments(remainingPending);
       queryClient.setQueryData<DocumentMetadata[]>(queryKeys.documents(), (current = []) => [
-        analysis,
+        completedAnalysis,
         ...current.filter((item) => item.storage_path !== analysis.storage_path),
       ]);
       queryClient.setQueryData(
         queryKeys.documentAnalysis(analysis.storage_path),
-        analysis,
+        completedAnalysis,
       );
-      setSelectedDocument(analysis);
-      onUploaded?.(analysis);
+      setSelectedDocument((current) =>
+        current?.storage_path === storagePath ? completedAnalysis : current,
+      );
+      onUploaded?.(completedAnalysis);
     },
   });
   const updateFieldsMutation = useMutation({
@@ -134,26 +148,30 @@ export function useDocuments(
     if (
       selectedDocument &&
       documentsQuery.data &&
-      !documentsQuery.data.some(
+      ![...pendingDocuments, ...documentsQuery.data].some(
         (document) => document.storage_path === selectedDocument.storage_path,
       )
     ) {
       setSelectedDocument(null);
     }
-  }, [documentsQuery.data, selectedDocument]);
+  }, [documentsQuery.data, pendingDocuments, selectedDocument]);
 
   const error =
-    uploadMutation.error ?? analysisQuery.error ?? documentsQuery.error;
+    analyzeMutation.error ?? analysisQuery.error ?? documentsQuery.error;
 
   return {
-    documents: documentsQuery.data ?? [],
+    documents: [...pendingDocuments, ...(documentsQuery.data ?? [])],
     selectedDocument,
     setSelectedDocument,
-    analysis: analysisQuery.data ?? null,
+    analysis: selectedDocument?.analyzed === false ? null : analysisQuery.data ?? null,
     documentText: textQuery.data ?? null,
     loading: documentsQuery.isLoading || analysisQuery.isLoading,
     refreshing: documentsQuery.isFetching && !documentsQuery.isLoading,
-    uploading: uploadMutation.isPending,
+    uploading: false,
+    analyzing: analyzeMutation.isPending,
+    analyzingStoragePath: analyzeMutation.isPending
+      ? analyzeMutation.variables?.storagePath ?? null
+      : null,
     updatingFields: updateFieldsMutation.isPending,
     generatingDetailedSummary: detailedSummaryMutation.isPending,
     savingText: updateTextMutation.isPending,
@@ -164,7 +182,35 @@ export function useDocuments(
       await documentsQuery.refetch();
     },
     upload: async (file: File) => {
-      await uploadMutation.mutateAsync(file);
+      const document: DocumentMetadata = {
+        file_name: file.name,
+        storage_path: `pending:${crypto.randomUUID()}`,
+        upload_time: new Date().toISOString(),
+        document_type: "",
+        document_type_label: "",
+        compliance_status: "",
+        summary: "",
+        analyzed: false,
+        pending_file: file,
+      };
+      const nextPending = [document, ...pendingDocumentsRef.current];
+      pendingDocumentsRef.current = nextPending;
+      setPendingDocuments(nextPending);
+      setSelectedDocument(document);
+      return document;
+    },
+    analyze: async (storagePath: string) => {
+      const document = pendingDocumentsRef.current.find(
+        (item) => item.storage_path === storagePath,
+      );
+      if (!document?.pending_file) {
+        const cached = queryClient.getQueryData<DocumentAnalysis>(
+          queryKeys.documentAnalysis(storagePath),
+        );
+        if (cached) return cached;
+        return documentService.getAnalysis(storagePath);
+      }
+      return analyzeMutation.mutateAsync({ storagePath, file: document.pending_file });
     },
     updateFields: async (storagePath: string, fields: EvrakFields) => {
       await updateFieldsMutation.mutateAsync({ storagePath, fields });
@@ -179,6 +225,17 @@ export function useDocuments(
       await reextractTextMutation.mutateAsync(storagePath);
     },
     deleteDocument: async (storagePath: string) => {
+      if (pendingDocumentsRef.current.some((item) => item.storage_path === storagePath)) {
+        const remainingPending = pendingDocumentsRef.current.filter(
+          (item) => item.storage_path !== storagePath,
+        );
+        pendingDocumentsRef.current = remainingPending;
+        setPendingDocuments(remainingPending);
+        setSelectedDocument((current) =>
+          current?.storage_path === storagePath ? null : current,
+        );
+        return;
+      }
       await removeMutation.mutateAsync(storagePath);
     },
   };
