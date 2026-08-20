@@ -2,6 +2,108 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.23.0] - 2026-08-20
+Taslak/revizyon hattının taraf modeli ve genel SOTA bakımı (#218). Kök neden:
+sistemde "biz kimiz / karşı taraf kim" ayrımı hiç modellenmemişti -- bir evrağın
+karşı tarafına ait kimlik bilgileri (gönderen kurum, imza sahibi) hiçbir uyarı
+vermeden kendi antet/imza alanımıza sızabiliyor, doğrulayıcı bunu "tam
+doğrulanmış" sayabiliyordu. Bu sürüm bu kök nedeni ve keşif sırasında bulunan
+30'dan fazla ilişkili hatayı kapatıyor.
+
+### Eklendi
+- **Taraf modeli** (`app.ai.identity.parties`): Şirket kimliği + aktif birimler
+  + istek sahibinden deterministik olarak "biz" ve "karşı taraf"ı çözer; gelen
+  evrakın bize mi yoksa üçüncü bir tarafa mı ait olduğunu (`reply_to_us` /
+  `third_party`) belirler. Yazım briefi ve yazar/revizyon promptları artık bu
+  ayrımı açıkça taşıyor; imza bloğu kuralı bir daha asla "gelen evrakın imza
+  sahibi alanını" işaret etmiyor.
+- **Kimlik sızıntısı denetimi**: Doğrulayıcı artık karşı tarafın kendi kurumu/
+  imza sahibinin taslağın KENDİ antet/imza bloğuna sızdığını (`gonderen_
+  muhatap_karisikligi`, `karsi_taraf_kimlik_sizintisi`) tespit ediyor ve dar,
+  hedefli bir soru olarak kullanıcıya soruyor -- bildirilen bug'ın tam
+  senaryosu artık tam puanla geçmiyor.
+- **Üslup/tutarlılık denetimleri** (`app.ai.verification.style_checks`): Aynı
+  kişiye hem resmî ("Sayın X") hem gündelik ("X Bey") hitap edilmesi, taslak
+  içinde bir cümlenin birebir tekrarı ve imza bloğunda çıplak bir yer tutucu
+  etiketinin ("Ad Soyad", "Unvan") gerçek değermiş gibi bırakılması artık
+  tespit ediliyor ve mevcut onarım döngüsüne besleniyor.
+- **Asistan devri** (Faz 7): Bir mesaj "assist"e yönlendirilse bile, karar
+  kaynağı belirsizse (`model_failed`/`model_unclear`/`clarify_repeat_guard`)
+  deterministik bir yeniden puanlama draft/revize kanıtı bulursa asistan hiç
+  çalıştırılmadan ilgili akışa devrediliyor. Asistan modeli de kendi "Üretim
+  Yasağı" kuralı yüzünden aslında kendi görev alanına giren bir isteği
+  reddetmek yerine yeni `request_handoff` aracını çağırabiliyor.
+- `drafts` tablosuna `(session_id, version)` üzerinde kısmi bir unique index
+  (migration 0028) -- eşzamanlı bir çift gönderimin sessizce iki farklı
+  sürüm=N satırı üretmesi artık veritabanı seviyesinde engelleniyor.
+
+### Düzeltildi
+- **Güven skoru artık ne fazla ne eksik güveniyor**: Kullanıcının önceki
+  turlarda verdiği veya yazım briefi kapısında onayladığı bilgiler artık
+  "kaynakta doğrulanamayan iddia" olarak işaretlenmiyor; talimat eşleşmesi
+  tam/kanonik/jeton-örtüşmesi merdivenini kullanıyor; mevzuat bağlamı
+  uyarısı taslak gerçekten bir mevzuat maddesine atıf yapmadıkça tetiklenmiyor;
+  kalite yargıcı çökerse taslak artık sessizce "temiz" sayılmıyor, insan
+  onayına düşüyor.
+- **Eksik bilgi kapısı bir daha oturumu kilitlemiyor**: "Vazgeç" artık düzgün
+  işleniyor; ardışık iki eksik-bilgi turu artık aynı `interrupt_id`'yi
+  üretmiyor (frontend'in kendi kendini engelleyen tekrar-önleme mantığı bir
+  daha oturumu asla sonsuza kadar durdurmuyor).
+- **Onarım döngüsü artık en iyi denemeyi seçiyor**: Bir onarım turu bir
+  kusuru düzeltirken daha kötü bir tane üretirse (ya da tamamen çökerse),
+  tur bu turdaki en iyi sonucu görmezden gelip son (daha kötü ya da boş)
+  denemeyi bir daha teslim etmiyor.
+- Çok maddeli bir revizyon talimatında hiçbir madde artık sessizce
+  düşmüyor; örtüşen hedef aralıkları artık içeriği çoğaltmıyor; 200
+  karakterden uzun bir talimat artık başarılı bir revizyonu çöpe atmıyor;
+  kapsamını aşıp taslağın tamamını yeniden üreten bir düzeltme artık dar
+  hedefe yapıştırılıp içeriği ikiye katlamıyor.
+- "Asıl metni koru" gibi bir talimat artık "sil" alt dizesi yüzünden
+  kısaltma isteği sanılmıyor; "Hiçbir yeri kısaltma" artık kısaltmaya izin
+  olarak okunmuyor; taslakta zaten var olan bir "..." işareti her revizyon
+  turunda yeniden içerik-kaybı olarak işaretlenmiyor.
+- Dilekçe/muvafakatname/taahhütname/vekâletname/tutanak gibi hukuken ağır
+  alt türler artık "diğer resmî yazışma" türünün "makul tamamlama
+  yapabilirsin" toleransını miras almıyor.
+- HITL onay sayaçları (`kachow_router_assist_handoffs_total` hariç, bu
+  sürümde yeni eklendi) artık her gerçek duraklama-cevap döngüsünü bir kez
+  sayıyor, ikamet ettikleri `interrupt()` çağrısının kendi replay'i yüzünden
+  iki (iki turlu yazım briefinde dört) kez değil.
+- Aynı sohbet oturumuna eşzamanlı bir çift gönderim (hızlı çift tıklama, bir
+  istemci tekrar denemesi) artık aynı checkpoint'e karşı iki eşzamanlı
+  `ainvoke()` çağrısı yarıştırmıyor; bir onay/devam turu artık orijinal
+  turun ekli belgesini kaybetmiyor. Zaman aşımına uğrayan veya çöken bir tur
+  artık `runs` tablosunda sonsuza kadar "running" kalan bir satır bırakmıyor.
+- Bir oturumun `draft_history`'si artık sınırsız büyümüyor (20 sürümle
+  sınırlı); sürüm numaraları bu sınırın ötesinde de doğru artmaya devam
+  ediyor.
+
+### Test
+- Bildirilen hatanın gerçek senaryosunu birebir yeniden üreten regresyon
+  testleri (kimlik sızıntısı, üslup denetimleri, en iyi deneme seçimi, tüm
+  eksik-bilgi kapısı düzeltmeleri); değerlendirme altın kümesine karşı
+  tarafın kimliğinin taslağın kendi antet/imza bölümüne sızdığı üç yeni
+  "kimlik" kategorisi vakası eklendi (`evaluation/datasets/drafts.jsonl`) --
+  `make eval` hâlâ 43 vakada %100 doğruluk, %0 yanlış-pozitif veriyor.
+
+### Bilinçli sınırlar
+- `DraftRepository.create_version`'a bir eşzamanlılık çakışması retry
+  mantığı eklenmedi -- migration 0028'in unique index'i ikinci eşzamanlı
+  yazara sessiz bir kopya yerine yüksek sesle bir `IntegrityError` veriyor;
+  bunu şeffaf bir şekilde yeniden deneyip başarıya çevirmek, çağıran
+  katmanın işlem sınırlarının daha derin bir incelemesini gerektiriyor.
+- `POLICY_VERSION` bilinçli olarak artırılmadı: bu sürümdeki tüm değişiklikler
+  `app.ai.verification.confidence_rules.RULES` kural tablosunda -- bu tablo,
+  3.0.0'da `Policy` şemasının kendisinden bilinçli olarak ayrılmıştı (bkz.
+  `app.ai.policy`'nin kendi POLICY_VERSION notu).
+- Frontend değişikliği gerekmiyor. Ekip arkadaşına iletilecek: (1) şirket
+  kimliği/kural uç noktalarının hâlâ bir arayüzü yok (`PUT /companies/{id}/
+  profile`, `/rules`); (2) yeni güven-skoru kuralları (`karsi_taraf_kimlik_
+  sizintisi`, `gonderen_muhatap_karisikligi`, `kisi_tutarsizligi`, `dolgu_
+  ifade`, `imza_blogu_uydurma`) `DraftMetaStrip`'in skor dökümünde otomatik
+  görünür, kod değişikliği gerekmez; (3) `InterruptPanel.tsx`'teki "Vazgeç"
+  düğmesinin bilinen kilitlenme sorunu artık backend'de çözüldü.
+
 ## [3.22.0] - 2026-08-18
 ### Eklendi
 - **Şirkete özel ajan kimliği**: Şirket adminleri artık asistanın kendini
