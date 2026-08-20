@@ -72,9 +72,12 @@ from app.ai.revision.instruction import (
     _merge,
     locate_target,
     parse_revision_instruction,
+    resolve_merge_target,
+    spans_overlap,
 )
 from app.ai.revision.retrieval import maybe_extend_context
 from app.ai.session.focus import DraftVersion
+from app.ai.workflows.attempt_tracking import best_of, snapshot_attempt
 from app.ai.verification import (
     InfoQuestion,
     VerificationReport,
@@ -86,7 +89,7 @@ from app.ai.verification import (
     normalize_unfilled_markers,
     verify_draft,
 )
-from app.ai.workflows.correspondence import format_correspondence_profile
+from app.ai.workflows.correspondence import format_correspondence_profile, is_strict_sub_genre
 from app.ai.workflows.events import (
     emit_node_end,
     emit_node_error,
@@ -168,6 +171,11 @@ class ReviseState(TypedDict, total=False):
     attempt_history: list[dict[str, Any]]
     #: See draft_graph.DraftState's own field of the same name.
     applied_rules: list[dict[str, Any]]
+    #: See draft_graph.DraftState's own field of the same name (C2/C3, see
+    #: app.ai.workflows.attempt_tracking).
+    best_attempt: dict[str, Any]
+    #: See draft_graph.DraftState's own field of the same name (C3).
+    restored_from_best_attempt: bool
 
     #: Set by `audit`.
     conflicts: list[dict[str, Any]]
@@ -393,9 +401,56 @@ def create_revise_graph(
             "Revizyon talimatı ayrıştırılıyor...",
         )
 
+        if not instructions.strip():
+            # C21: decompose_instruction("") resolves to a single
+            # scope="whole" directive carrying an *empty* raw instruction --
+            # a whole-draft rewrite with nothing telling the model what to
+            # change is the single most dangerous directive this parser can
+            # produce, not a safe default. Short-circuits to a no-op
+            # instead: the active draft is returned completely unchanged,
+            # never reaching rewrite/verify at all.
+            await emit_node_end(
+                config, "revise_parse", "Talimat Ayrıştırma",
+                "Talimat boş; taslak değiştirilmeden bırakıldı.", {},
+            )
+            return {
+                "draft": active_draft.text,
+                "correspondence_type": active_draft.correspondence_type,
+                "correspondence_sub_genre": getattr(active_draft, "correspondence_sub_genre", ""),
+                "confidence_score": 100.0,
+                "combined_score": 100.0,
+                "requires_human_approval": False,
+                "requires_revision": False,
+                "evaluation_notes": (
+                    "Revizyon talimatı boş olduğu için taslak değiştirilmeden bırakıldı."
+                ),
+                "status": StepStatus.COMPLETED,
+            }
+
         instruction = parse_revision_instruction(instructions)
         directives = list(instruction.directives)
         targets = [locate_target(active_draft.text, directive) for directive in directives]
+
+        if (
+            len(directives) > 1
+            and all(t is not None for t in targets)
+            and spans_overlap(targets)
+        ):
+            # C5: two directives resolved to overlapping (not merely
+            # adjacent) spans -- splicing both via the right-to-left merge
+            # would corrupt one span's offsets with the other's. Falls back
+            # to the same safe whole-draft rewrite an unlocatable clause
+            # already gets (see decompose_instruction's own docstring),
+            # carrying the complete original instruction so neither
+            # directive's own request is silently dropped.
+            directives = [
+                EditDirective(
+                    scope="whole", operation="content", section_hint=None,
+                    ordinal=None, raw=instructions, order=0,
+                )
+            ]
+            targets = [None]
+
         multi_directive_ok = len(directives) > 1 and all(t is not None for t in targets)
 
         correspondence_type = active_draft.correspondence_type
@@ -422,6 +477,12 @@ def create_revise_graph(
             "attempts": 0,
             "status": "IN_PROGRESS",
         }
+
+    def route_after_parse(state: ReviseState) -> str:
+        # C21: parse_node's own blank-instruction short-circuit already set
+        # status=COMPLETED and the unchanged draft -- nothing downstream
+        # (retrieval, rewrite, verify) needs to run for a no-op.
+        return "end" if state.get("status") == StepStatus.COMPLETED else "retrieve_context"
 
     async def retrieve_context_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
         active_draft = state["active_draft"]
@@ -576,6 +637,22 @@ def create_revise_graph(
                                 rules_block=rules_block,
                             )
                             rewritten = await _generate_validated(agent, prompt, preset)
+                            if resolve_merge_target(targets[i], rewritten, active_draft.text) is None:
+                                # C22, multi-directive case: unlike the
+                                # single-directive path below, falling back
+                                # to a whole-draft replacement here would
+                                # discard every other directive's splice
+                                # already applied earlier in this same
+                                # right-to-left pass. Skip this one
+                                # directive's risky rewrite instead --
+                                # its own span is left as it was, and the
+                                # other, correctly-scoped directives still
+                                # land.
+                                logger.warning(
+                                    "Directive %d's rewrite looked like a scope overrun; "
+                                    "leaving its target span unchanged.", i,
+                                )
+                                continue
                             working_draft = _merge(working_draft, targets[i], rewritten)
                         merged_draft = working_draft
                     else:
@@ -594,11 +671,23 @@ def create_revise_graph(
                             rules_block=rules_block,
                         )
                         rewritten = await _generate_validated(agent, prompt, preset)
-                        merged_draft = _merge(active_draft.text, target, rewritten)
+                        effective_target = resolve_merge_target(target, rewritten, active_draft.text)
+                        merged_draft = _merge(active_draft.text, effective_target, rewritten)
         except TimeoutError:
             logger.warning(
                 "Revise rewrite node exceeded its %.0fs budget (attempt %d).", budget, attempt_number
             )
+            if is_repair and state.get("best_attempt"):
+                await emit_node_error(
+                    config, "revise", "Taslak Revizyonu",
+                    "Onarım denemesi süre sınırını aştı; önceki en iyi deneme korundu.",
+                    fatal=False,
+                )
+                return recover_from_failed_attempt(
+                    state["best_attempt"], attempt_number,
+                    f"Onarım denemesi {budget:.0f} saniyelik süre sınırını aştı; "
+                    "önceki en iyi deneme korundu.",
+                )
             await emit_node_error(
                 config, "revise", "Taslak Revizyonu",
                 f"Revizyon {budget:.0f} saniyelik süre sınırını aştı.", fatal=True,
@@ -611,6 +700,16 @@ def create_revise_graph(
             }
         except Exception as exc:
             logger.exception("Revise rewrite node failed (attempt %d)", attempt_number)
+            if is_repair and state.get("best_attempt"):
+                await emit_node_error(
+                    config, "revise", "Taslak Revizyonu",
+                    "Onarım denemesi başarısız oldu; önceki en iyi deneme korundu.",
+                    detail=str(exc), fatal=False,
+                )
+                return recover_from_failed_attempt(
+                    state["best_attempt"], attempt_number,
+                    f"Onarım denemesi başarısız oldu ({exc}); önceki en iyi deneme korundu.",
+                )
             await emit_node_error(
                 config, "revise", "Taslak Revizyonu", "Revizyon üretilemedi.", detail=str(exc),
             )
@@ -637,7 +736,22 @@ def create_revise_graph(
         }
 
     def route_after_rewrite(state: ReviseState) -> str:
-        return "end" if state.get("status") == StepStatus.FAILED else "verify"
+        if state.get("status") == StepStatus.FAILED:
+            return "end"
+        # restored_from_best_attempt (C3): a repair pass crashed and
+        # rewrite_node already fell back to a previous, fully-verified
+        # attempt -- re-entering "verify" would re-check text that was
+        # already checked and could itself crash again. Goes to "audit"
+        # rather than straight to "end" (unlike draft_graph, which has no
+        # audit-equivalent step): parse_node's own `instruction`/`directives`
+        # are already in state, so the changelog/conflict audit can still
+        # run against the restored draft -- audit_node's own broad
+        # try/except (see its docstring) already degrades this to an empty,
+        # advisory-only result if anything about the restored state doesn't
+        # fit its expectations.
+        if state.get("restored_from_best_attempt"):
+            return "audit"
+        return "verify"
 
     async def verify_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
         active_draft = state["active_draft"]
@@ -655,7 +769,11 @@ def create_revise_graph(
         draft_text, _ = normalize_role_placeholders(
             draft_text, is_individual_petition="dilekçe" in sub_genre.lower()
         )
-        strict = correspondence_type != "other_official"
+        # C16: mirrors draft_graph.verify_node's identical guard -- a
+        # strict sub-genre (see is_strict_sub_genre) keeps forcing human
+        # approval on an unsupported claim even though its type resolves
+        # to other_official.
+        strict = correspondence_type != "other_official" or is_strict_sub_genre(sub_genre)
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
 
         await emit_node_start(
@@ -807,6 +925,23 @@ def create_revise_graph(
             "status": status,
             "applied_rules": [rule.model_dump() for rule in combined.applied_rules],
         }
+
+        # C2: mirrors draft_graph.verify_node's identical bookkeeping (see
+        # app.ai.workflows.attempt_tracking) -- track the best-scoring
+        # attempt across this turn's repair loop, and ship it instead of
+        # whichever attempt happened to run last if the loop is about to
+        # exhaust its attempt budget with defects still open.
+        snapshot = snapshot_attempt(update, draft_text)
+        best_attempt = best_of(snapshot, state.get("best_attempt"))
+        update["best_attempt"] = best_attempt
+        if (
+            not missing_information
+            and combined.requires_revision
+            and state.get("attempts", 0) >= preset.max_draft_attempts
+            and best_attempt is not snapshot
+        ):
+            update.update(best_attempt)
+
         await emit_node_end(
             config, "verify", "Taslak Doğrulama", "Taslak doğrulaması tamamlandı.",
             {"draft": draft_text, **update},
@@ -963,10 +1098,12 @@ def create_revise_graph(
     builder.add_node("audit", audit_node)
 
     builder.add_edge(START, "parse")
-    builder.add_edge("parse", "retrieve_context")
+    builder.add_conditional_edges(
+        "parse", route_after_parse, {"retrieve_context": "retrieve_context", "end": END}
+    )
     builder.add_edge("retrieve_context", "rewrite")
     builder.add_conditional_edges(
-        "rewrite", route_after_rewrite, {"verify": "verify", "end": END}
+        "rewrite", route_after_rewrite, {"verify": "verify", "audit": "audit", "end": END}
     )
     builder.add_conditional_edges(
         "verify", route_after_verify,

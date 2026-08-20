@@ -39,8 +39,10 @@ from app.ai.verification import (
     verify_draft,
 )
 from app.ai.verification.draft_verifier import LEGISLATION_PATTERN
+from app.ai.workflows.attempt_tracking import best_of, recover_from_failed_attempt, snapshot_attempt
 from app.ai.workflows.correspondence import (
     format_correspondence_profile,
+    is_strict_sub_genre,
     resolve_correspondence_type,
 )
 from app.ai.workflows.events import (
@@ -141,6 +143,17 @@ class DraftState(TypedDict, total=False):
     #: app.ai.verification.confidence_rules.
     applied_rules: list[dict[str, Any]]
     attempt_history: list[dict[str, Any]]
+    #: The best-scoring attempt's full result snapshot seen so far this turn
+    #: (see app.ai.workflows.attempt_tracking) -- kept so a repair pass that
+    #: makes the draft *worse*, or that crashes outright, cannot ship a
+    #: worse or blank result than an earlier attempt already produced (C2,
+    #: C3). Absent on the first attempt.
+    best_attempt: dict[str, Any]
+    #: Set only when a repair pass crashed/timed out and writer_node fell
+    #: back to `best_attempt` instead of failing the whole turn (C3) --
+    #: tells route_after_writer this is already a fully verified result, so
+    #: it should route straight to "end" rather than back through "verify".
+    restored_from_best_attempt: bool
     status: str
     error: str
     attempts: int
@@ -556,7 +569,14 @@ def _build_repair_prompt(
         + (f" -> Öneri: {item.get('suggested_fix')}" if item.get("suggested_fix") else "")
         for index, item in enumerate(defects, start=1)
     )
-    is_other = state.get("correspondence_type") == "other_official"
+    # C16: a strict sub-genre (itiraz dilekçesi, muvafakatname, taahhütname,
+    # vekâletname, tutanak -- see is_strict_sub_genre's own docstring) keeps
+    # the anti-fabrication rules even though its type resolves to
+    # other_official; only a genuinely generic "diğer resmî yazışma" gets
+    # the "you may supply reasonable conventional completions" leniency.
+    is_other = state.get("correspondence_type") == "other_official" and not is_strict_sub_genre(
+        state.get("correspondence_sub_genre", "")
+    )
 
     return (
         "### GÖREV:\n"
@@ -1086,7 +1106,10 @@ def create_draft_graph(
                 meta=meta,
             )
 
-            is_other = state.get("correspondence_type") == "other_official"
+            # C16: see the identical guard in _build_repair_prompt.
+            is_other = state.get("correspondence_type") == "other_official" and not is_strict_sub_genre(
+                state.get("correspondence_sub_genre", "")
+            )
             rules = _anti_fabrication_rules(is_other)
 
             prompt = (
@@ -1211,6 +1234,13 @@ def create_draft_graph(
                 attempt_number,
                 preset.level.value,
             )
+            if is_revision and state.get("best_attempt"):
+                return recover_from_failed_attempt(
+                    state["best_attempt"],
+                    attempt_number,
+                    f"Onarım denemesi {budget:.0f} saniyelik süre sınırını aştı; "
+                    "önceki en iyi deneme korundu.",
+                )
             return {
                 "draft": "".join(chunks).strip(),
                 "attempts": attempt_number,
@@ -1224,6 +1254,12 @@ def create_draft_graph(
             }
         except Exception as exc:
             logger.exception("Writer/Reviser node failed (attempt %d)", attempt_number)
+            if is_revision and state.get("best_attempt"):
+                return recover_from_failed_attempt(
+                    state["best_attempt"],
+                    attempt_number,
+                    f"Onarım denemesi başarısız oldu ({exc}); önceki en iyi deneme korundu.",
+                )
             return {
                 "draft": "".join(chunks).strip(),
                 "attempts": attempt_number,
@@ -1234,7 +1270,13 @@ def create_draft_graph(
             }
 
     def route_after_writer(state: DraftState) -> str:
-        return "end" if state.get("status") == "FAILED" else "verify"
+        # restored_from_best_attempt (C3): a repair pass crashed and
+        # writer_node already fell back to a previous, fully-verified
+        # attempt -- re-entering "verify" would re-check text that was
+        # already checked (wasted work) and could itself crash again.
+        if state.get("status") == "FAILED" or state.get("restored_from_best_attempt"):
+            return "end"
+        return "verify"
 
     async def verify_node(state: DraftState, config: RunnableConfig) -> dict[str, Any]:
         logger.info("Running Draft Verification Node...")
@@ -1269,7 +1311,12 @@ def create_draft_graph(
             draft_text, is_individual_petition="dilekçe" in sub_genre.lower()
         )
         classification = state.get("classification") or {}
-        strict = state.get("correspondence_type") != "other_official"
+        # C16: a strict sub-genre keeps forcing human approval on an
+        # unsupported claim even though its type resolves to
+        # other_official -- see is_strict_sub_genre's own docstring.
+        strict = state.get("correspondence_type") != "other_official" or is_strict_sub_genre(
+            sub_genre
+        )
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
 
         # The company adapter's own preferred_examples are real generated
@@ -1516,6 +1563,24 @@ def create_draft_graph(
             "reasoning_level": preset.level.value,
             "applied_rules": [rule.model_dump() for rule in combined.applied_rules],
         }
+
+        # C2: track the best-scoring attempt across this turn's loop (see
+        # app.ai.workflows.attempt_tracking), and -- only when the loop is
+        # about to exhaust its attempt budget with defects still open --
+        # ship that best attempt instead of whichever one happened to run
+        # last. Never touches a missing_information turn: that question is
+        # about *this* draft's own placeholders, so swapping the draft out
+        # from under it would make the question nonsensical.
+        snapshot = snapshot_attempt(update, draft_text)
+        best_attempt = best_of(snapshot, state.get("best_attempt"))
+        update["best_attempt"] = best_attempt
+        if (
+            not missing_information
+            and combined.requires_revision
+            and state.get("attempts", 0) >= preset.max_draft_attempts
+            and best_attempt is not snapshot
+        ):
+            update.update(best_attempt)
 
         await emit_node_end(
             config,

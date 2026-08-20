@@ -187,17 +187,20 @@ def test_a_major_or_critical_finding_forces_approval_but_a_minor_one_alone_does_
 
 
 def test_duplicate_findings_from_both_layers_are_deduped_keeping_higher_severity():
+    """A genuine duplicate: both layers describe the exact same conflict
+    (identical detail text), just at different severities -- the higher one
+    wins and only one finding surfaces."""
     from app.ai.revision.conflict import ConflictFinding
 
     deterministic = [
         ConflictFinding(
-            kind="mevzuat_dayanaksiz", severity="major", detail="d1",
+            kind="mevzuat_dayanaksiz", severity="major", detail="aynı çelişki",
             instruction_fragment="x", source="deterministic",
         )
     ]
     llm = [
         ConflictFinding(
-            kind="mevzuat_dayanaksiz", severity="critical", detail="d2",
+            kind="mevzuat_dayanaksiz", severity="critical", detail="aynı çelişki",
             instruction_fragment="x", source="llm",
         )
     ]
@@ -205,6 +208,34 @@ def test_duplicate_findings_from_both_layers_are_deduped_keeping_higher_severity
     result = merge_conflicts(deterministic, llm)
     assert len(result.conflicts) == 1
     assert result.conflicts[0].severity == "critical"
+
+
+def test_two_distinct_conflicts_of_the_same_kind_both_surface():
+    """C28 regression: before this, every finding from one
+    detect_conflicts_deterministic call shared the same
+    instruction_fragment (computed once per instruction, not per-finding),
+    so two genuinely different conflicts of the same kind -- e.g. a date
+    contradiction and a separate sayı contradiction, both "kaynak_celiskisi"
+    -- collapsed onto the same dedup key and one was silently discarded."""
+    from app.ai.revision.conflict import ConflictFinding
+
+    date_conflict = ConflictFinding(
+        kind="kaynak_celiskisi", severity="critical",
+        detail="Talimattaki tarih ('12.05.2026') kaynak evraktaki tarih ('01.01.2026') ile çelişiyor.",
+        instruction_fragment="aynı talimat", source="deterministic",
+    )
+    number_conflict = ConflictFinding(
+        kind="kaynak_celiskisi", severity="critical",
+        detail="Talimattaki sayı ('E-999') kaynak evraktaki sayı ('E-123') ile çelişiyor.",
+        instruction_fragment="aynı talimat", source="deterministic",
+    )
+
+    result = merge_conflicts([date_conflict, number_conflict], [])
+
+    assert len(result.conflicts) == 2
+    details = {finding.detail for finding in result.conflicts}
+    assert date_conflict.detail in details
+    assert number_conflict.detail in details
 
 
 # ===========================================================================

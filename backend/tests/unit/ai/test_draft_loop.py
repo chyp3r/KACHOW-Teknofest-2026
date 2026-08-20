@@ -258,6 +258,68 @@ async def test_writer_exception_ends_the_run_without_reaching_verify():
     assert "verification" not in result
 
 
+GOOD_DRAFT_MISSING_KONU = (
+    "Sayı: E-1-1\n"
+    "Tarih: 30.07.2026\n\n"
+    "Sayın Makam,\n\n"
+    "Arz ederim.\n\n"
+    "Ali Veli\nGenel Müdür"
+)
+
+
+@pytest.mark.asyncio
+async def test_a_repair_pass_that_scores_worse_does_not_win_over_the_first_attempt():
+    """C2: the loop used to always ship whichever attempt ran *last* -- even
+    when a repair pass, in "fixing" one defect, introduced worse ones. The
+    first attempt here (missing only its Konu line, one structural defect,
+    score 92) scores higher than the "repaired" one (BAD_DRAFT, missing
+    nearly every structural element, score 70); once MAX_DRAFT_ATTEMPTS is
+    reached, the first attempt must be what ships, not the second."""
+    graph = create_draft_graph(_mock_llm_client())
+
+    with (
+        patch.object(WriterAgent, "stream") as mock_writer,
+        patch.object(ReviserAgent, "stream") as mock_reviser,
+    ):
+        mock_writer.side_effect = lambda **kwargs: _one_chunk(GOOD_DRAFT_MISSING_KONU)
+        mock_reviser.side_effect = lambda **kwargs: _one_chunk(BAD_DRAFT)
+
+        result = await graph.ainvoke(BASE_STATE)
+
+    assert mock_writer.call_count == 1
+    assert mock_reviser.call_count == MAX_DRAFT_ATTEMPTS - 1
+    assert result["draft"] == GOOD_DRAFT_MISSING_KONU
+    assert result["combined_score"] == 92.0
+    assert result["status"] == "NEEDS_HUMAN_APPROVAL"
+    assert result["verification"]["missing_structure"] == ["Konu satırı"]
+
+
+@pytest.mark.asyncio
+async def test_a_repair_pass_that_crashes_restores_the_first_attempt_instead_of_failing():
+    """C3: a repair pass that raises used to discard whatever a previous,
+    already-verified attempt had produced and fail the whole turn -- even
+    when attempt 1 had already produced a usable, verified letter."""
+    graph = create_draft_graph(_mock_llm_client())
+
+    async def _raise(**kwargs):
+        raise RuntimeError("model unavailable")
+        yield  # pragma: no cover - makes this an async generator function
+
+    with (
+        patch.object(WriterAgent, "stream") as mock_writer,
+        patch.object(ReviserAgent, "stream") as mock_reviser,
+    ):
+        mock_writer.side_effect = lambda **kwargs: _one_chunk(GOOD_DRAFT_MISSING_KONU)
+        mock_reviser.side_effect = _raise
+
+        result = await graph.ainvoke(BASE_STATE)
+
+    assert result["status"] != "FAILED"
+    assert result["draft"] == GOOD_DRAFT_MISSING_KONU
+    assert result["combined_score"] == 92.0
+    assert "en iyi deneme" in result["error"]
+
+
 @pytest.mark.asyncio
 async def test_missing_source_document_fails_before_any_generation_call():
     graph = create_draft_graph(_mock_llm_client())

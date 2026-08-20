@@ -95,6 +95,32 @@ async def test_a_grounded_pii_free_revision_does_not_require_approval(fake_llm):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("blank_instruction", ["", "   ", "\n\n"])
+async def test_a_blank_instruction_is_a_no_op_not_a_whole_draft_rewrite(fake_llm, blank_instruction):
+    """C21: decompose_instruction("") used to resolve to a single
+    scope="whole" directive carrying an *empty* raw instruction -- a
+    whole-draft rewrite with nothing telling the model what to change,
+    the single most dangerous directive this parser can produce. The
+    active draft must come back completely unchanged, and the reviser
+    must never even be called."""
+    draft = _active_draft()
+    graph = create_revise_graph(fake_llm)
+
+    result = await graph.ainvoke(
+        {
+            "active_draft": draft,
+            "instructions": blank_instruction,
+            "reasoning_level": "fast",
+        }
+    )
+
+    assert fake_llm.stream_calls == []
+    assert result["draft"] == draft.text
+    assert result["status"] == StepStatus.COMPLETED
+    assert result["requires_human_approval"] is False
+
+
+@pytest.mark.asyncio
 async def test_a_fallback_correspondence_type_forces_human_approval(fake_llm):
     fake_llm.stream_chunks = [
         "Konu: Yıllık İzin Talebi\nSayı: E-1\nTarih: 30.07.2026\n\nSayın Makam,\n\n"

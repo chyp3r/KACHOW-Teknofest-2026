@@ -380,7 +380,17 @@ def merge_conflicts(
     _SEVERITY_RANK = {"minor": 0, "major": 1, "critical": 2}
 
     for finding in (*deterministic, *llm):
-        key = (finding.kind, _fold(finding.instruction_fragment or finding.detail))
+        # C28: keyed on the finding's own detail, not instruction_fragment --
+        # every deterministic finding from one detect_conflicts_deterministic
+        # call shares the exact same instruction_fragment (it's computed
+        # once from the instruction, not per-finding, see that function's
+        # own `fragment = _fragment(raw)`), so two genuinely different
+        # conflicts of the same kind (a date conflict and a separate sayı
+        # conflict, both "kaynak_celiskisi") collapsed onto one dict key and
+        # silently discarded whichever wasn't kept -- the user found out
+        # about one contradiction and not the other. `detail` carries the
+        # specific label and value that actually distinguishes them.
+        key = (finding.kind, _fold(finding.detail))
         existing = merged.get(key)
         if existing is None or _SEVERITY_RANK[finding.severity] > _SEVERITY_RANK[existing.severity]:
             merged[key] = finding
