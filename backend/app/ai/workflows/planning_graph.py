@@ -22,7 +22,7 @@ from app.ai.guardrails.llm_nuance import judge_output_leakage
 from app.ai.guardrails.output_gate import classify_reason_kind, evaluate_response
 from app.ai.guardrails.sensitivity import SensitivityAssessment, assessment_from_analysis
 from app.ai.identity.company_profile import CompanyProfile, ProfileProvider
-from app.ai.identity.injection import format_agent_identity
+from app.ai.identity.injection import format_agent_identity, format_user_address
 from app.ai.identity.parties import PartyContext, resolve_party_context
 from app.ai.session.focus import DraftVersion, SessionFocus, compute_focus_update, merge_focus
 from app.ai.llms.base import BaseLLMClient
@@ -230,6 +230,13 @@ class PlanningState(TypedDict, total=False):
     #: suggest. Survives a human-in-the-loop pause/resume via the
     #: checkpointer, same as user_id.
     company_id: str | None
+    #: The authenticated caller's ``username`` (ChatService._invoke), carried
+    #: the same way user_id is -- read only by _run_assist, to address the
+    #: caller by name (see app.ai.identity.injection.format_user_address).
+    #: None in the open demo/dev path, or for any caller whose username
+    #: wasn't resolved. Survives a checkpointer resume unchanged, same as
+    #: user_id.
+    user_display_name: str | None
     #: The authenticated caller's resolved SensitivityLevel (see
     #: app.core.permissions.role_checker.clearance_for), as its string
     #: value -- graph state must stay JSON-serialisable, same reason
@@ -1230,6 +1237,7 @@ def create_planning_graph(
                         sensitivity, requester_clearance
                     ),
                     agent_identity=format_agent_identity(profile),
+                    user_display_name=format_user_address(state.get("user_display_name")),
                     tools=tools,
                     config=config,
                     node="assist",

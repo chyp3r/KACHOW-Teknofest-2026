@@ -36,6 +36,14 @@ doğrulanmış" sayabiliyordu. Bu sürüm bu kök nedeni ve keşif sırasında b
 - `drafts` tablosuna `(session_id, version)` üzerinde kısmi bir unique index
   (migration 0028) -- eşzamanlı bir çift gönderimin sessizce iki farklı
   sürüm=N satırı üretmesi artık veritabanı seviyesinde engelleniyor.
+- **Asistan artık kullanıcının adını biliyor**: Kimliği doğrulanmış çağıranın
+  `username`'i (`ChatService.handle_message`/`handle_message_stream` →
+  `PlanningState.user_display_name`) artık asistan prompt'una
+  (`app.ai.identity.injection.format_user_address`, `assistant.md`'nin yeni
+  `{{user_display_name}}` yer tutucusu) taşınıyor; asistan selamlarken veya
+  doğrudan hitap ederken kullanıcının adını kullanabiliyor. Ad bilinmiyorsa
+  (demo/dev yolu, `REQUIRE_AUTH` kapalı) nötr, kişiselleştirilmemiş bir
+  hitaba düşülüyor -- model asla bir ad uydurmuyor.
 
 ### Düzeltildi
 - **Güven skoru artık ne fazla ne eksik güveniyor**: Kullanıcının önceki
@@ -96,6 +104,12 @@ doğrulanmış" sayabiliyordu. Bu sürüm bu kök nedeni ve keşif sırasında b
   `app.ai.verification.confidence_rules.RULES` kural tablosunda -- bu tablo,
   3.0.0'da `Policy` şemasının kendisinden bilinçli olarak ayrılmıştı (bkz.
   `app.ai.policy`'nin kendi POLICY_VERSION notu).
+- `UserModel`'de gerçek bir ad alanı (`full_name`) yok, yalnızca kayıt
+  sırasında girilen benzersiz `username` var. Asistanın hitap için kullandığı
+  isim bilinçli olarak bu `username`; bazı hesaplarda (örn. seed'lenen
+  "root") gerçek bir ad yerine bir handle olarak görünebilir. Bir `full_name`
+  kolonu (migration + kayıt/güncelleme şemaları) bu sürümün kapsamı dışında
+  bırakıldı.
 - Frontend değişikliği gerekmiyor. Ekip arkadaşına iletilecek: (1) şirket
   kimliği/kural uç noktalarının hâlâ bir arayüzü yok (`PUT /companies/{id}/
   profile`, `/rules`); (2) yeni güven-skoru kuralları (`karsi_taraf_kimlik_

@@ -1,12 +1,17 @@
-"""Renders a ``CompanyProfile`` into prompt text.
+"""Renders identity info (company or caller) into prompt text.
 
-Two separate render targets, on purpose:
+Three separate render targets, on purpose:
 
 - :func:`format_agent_identity` -- the assistant's self-description, fed
   into ``assistant.md``'s ``{{agent_identity}}`` placeholder via
   ``app.ai.prompts.manager``. When ``profile.is_empty``, returns the exact
   sentence the template used to hard-code, so a company with nothing
   configured sees byte-identical behaviour to before this feature existed.
+- :func:`format_user_address` -- the caller's own name, fed into
+  ``assistant.md``'s ``{{user_display_name}}`` placeholder. Takes a plain
+  string (``PlanningState.user_display_name``, the caller's ``username``),
+  not a profile object -- there is no provider/caching layer here, the
+  value is already sitting on the authenticated request.
 - :func:`format_identity_brief_section` -- a brief section for
   ``app.ai.workflows.draft_graph._build_brief``, mirroring
   ``_format_style_examples``'s "return '' rather than an empty header"
@@ -30,6 +35,8 @@ company's own identity -- this section is now the primary source, not a
 fallback, and only an explicit contrary statement in the user's own message
 (surfaced in section 8 as a ``user_text``-sourced slot) overrides it.
 """
+
+from typing import Optional
 
 from app.ai.identity.company_profile import CompanyProfile
 
@@ -69,6 +76,27 @@ def format_agent_identity(profile: CompanyProfile) -> str:
         "sistemin yetenekleri hakkındaki sorularını yanıtlar ve gerektiğinde "
         "yüklenmiş bir belgenin içeriğine veya mevzuata dair sorularını, sana "
         "tanımlı araçları (tools) kullanarak yanıtlarsın."
+    )
+
+
+def format_user_address(display_name: Optional[str]) -> str:
+    """Render the assistant's addressing instruction for the current caller.
+
+    Args:
+        display_name: The authenticated caller's ``username`` (see
+            ``PlanningState.user_display_name``), or ``None`` in the open
+            demo/dev path or when it wasn't resolved.
+
+    Returns:
+        The text to substitute into ``assistant.md``'s
+        ``{{user_display_name}}`` placeholder. Never empty -- a neutral
+        instruction when no name is known, so the model doesn't invent one.
+    """
+    if not display_name:
+        return "Kullanıcının adı bilinmiyor; nötr, kişiselleştirilmemiş bir dille hitap et."
+    return (
+        f'Kullanıcının adı **{display_name}**. Selamlarken veya doğrudan '
+        f'hitap ederken bu adı kullan (örn. "Merhaba {display_name},").'
     )
 
 

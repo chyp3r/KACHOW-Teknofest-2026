@@ -93,6 +93,7 @@ class ChatService:
         requester_clearance: Optional[str] = None,
         company_id: Optional[str] = None,
         revision_draft: Optional[DraftModel] = None,
+        user_display_name: Optional[str] = None,
     ) -> ChatMessageResponse:
         """Process a user message and return the completed (or paused) result.
 
@@ -113,6 +114,11 @@ class ChatService:
                 a company, the same way ``user_id`` already is.
             revision_draft: Authorized persisted draft selected explicitly
                 as this turn's revision target, when any.
+            user_display_name: The authenticated caller's ``username`` (see
+                ``UserModel``), carried into ``PlanningState.
+                user_display_name`` so the assist agent can address the
+                caller by name (see ``app.ai.identity.injection.
+                format_user_address``). ``None`` in the open demo/dev path.
 
         Returns:
             The orchestrated response.
@@ -133,6 +139,7 @@ class ChatService:
                 requester_clearance=requester_clearance,
                 company_id=company_id,
                 revision_draft=revision_draft,
+                user_display_name=user_display_name,
             )
             response = await self._response_from_state(
                 state, config, thread_id, user_id=user_id, document_id=request.document_id, company_id=company_id
@@ -156,6 +163,7 @@ class ChatService:
         requester_clearance: Optional[str] = None,
         company_id: Optional[str] = None,
         revision_draft: Optional[DraftModel] = None,
+        user_display_name: Optional[str] = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Process a user message, yielding progress events as they happen.
 
@@ -170,6 +178,7 @@ class ChatService:
             requester_clearance: See :meth:`handle_message`.
             company_id: See :meth:`handle_message`.
             revision_draft: See :meth:`handle_message`.
+            user_display_name: See :meth:`handle_message`.
 
         Yields:
             Progress and result events. The first event is always ``session``,
@@ -195,6 +204,7 @@ class ChatService:
                         requester_clearance=requester_clearance,
                         company_id=company_id,
                         revision_draft=revision_draft,
+                        user_display_name=user_display_name,
                     )
                     reply, workflow_status, details = await self._enqueue_terminal_event(
                         queue,
@@ -469,6 +479,7 @@ class ChatService:
         requester_clearance: Optional[str] = None,
         company_id: Optional[str] = None,
         revision_draft: Optional[DraftModel] = None,
+        user_display_name: Optional[str] = None,
     ) -> dict[str, Any]:
         """Run the planning graph under a timeout.
 
@@ -494,6 +505,10 @@ class ChatService:
                 company. Also persists across a checkpointer resume.
             revision_draft: Authorized persisted target to load into
                 ``SessionFocus.active_draft`` before planning this turn.
+            user_display_name: The authenticated caller's ``username``,
+                carried into ``PlanningState.user_display_name`` the same
+                way -- read by ``_run_assist`` so it can address the caller
+                by name. ``None`` in the open demo/dev path.
 
         Returns:
             The final (or paused) workflow state.
@@ -535,6 +550,7 @@ class ChatService:
                         "user_id": user_id,
                         "requester_clearance": requester_clearance,
                         "company_id": company_id,
+                        "user_display_name": user_display_name,
                         "focus": focus_update,
                     },
                     config=config,

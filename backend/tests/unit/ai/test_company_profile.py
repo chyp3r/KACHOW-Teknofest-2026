@@ -2,7 +2,11 @@
 (#214): the CompanyProfile dataclass and its prompt rendering."""
 
 from app.ai.identity.company_profile import CompanyProfile
-from app.ai.identity.injection import format_agent_identity, format_identity_brief_section
+from app.ai.identity.injection import (
+    format_agent_identity,
+    format_identity_brief_section,
+    format_user_address,
+)
 
 
 def test_empty_profile_identity_matches_the_pre_feature_hardcoded_sentence():
@@ -52,6 +56,17 @@ def test_brief_section_renders_letterhead_and_signer_title():
     assert "Acme A.Ş." in section
     assert "Daire Başkanı" in section
     assert "Yazım Briefi" in section
+
+
+def test_user_address_names_the_caller_when_known():
+    text = format_user_address("Ahmet Yılmaz")
+    assert "Ahmet Yılmaz" in text
+
+
+def test_user_address_falls_back_to_a_neutral_instruction_when_unknown():
+    text = format_user_address(None)
+    assert "bilinmiyor" in text
+    assert text != ""
 
 
 def test_to_dict_excludes_company_id_and_from_dict_round_trips():

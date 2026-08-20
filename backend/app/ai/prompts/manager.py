@@ -20,7 +20,13 @@ _PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*(\w+)\s*\}\}")
 #: catches -- see ``tests/unit/ai/test_prompt_templates.py``.
 TEMPLATE_CONTRACTS: Dict[str, frozenset] = {
     "assistant": frozenset(
-        {"history_summary", "document_context", "security_boundary", "agent_identity"}
+        {
+            "history_summary",
+            "document_context",
+            "security_boundary",
+            "agent_identity",
+            "user_display_name",
+        }
     ),
     "classifier": frozenset(),
     "compliance": frozenset(),
