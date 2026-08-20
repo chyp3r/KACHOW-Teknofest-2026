@@ -65,3 +65,23 @@ def test_a_long_snippet_is_truncated():
 
     assert len(changelog.entries[0].after) <= 400
     assert changelog.entries[0].after.endswith("…")
+
+
+def test_a_long_instruction_directive_is_truncated_not_rejected():
+    """C6 regression: `EditDirective.raw` is unbounded on the whole-draft
+    fallback path (it carries the user's entire instruction verbatim), but
+    `ChangeEntry.directive` has its own `max_length=200`. Before this fix, a
+    revision instruction longer than 200 characters reached
+    `ChangeEntry(...)` untruncated and raised a `pydantic.ValidationError`
+    that `revise_graph.audit_node` never caught -- discarding an
+    already-successful revision entirely (see `revise.py`'s outer
+    `except Exception`)."""
+    long_instruction = "Muhatabı değiştir ve " + "çok uzun bir talimat metni " * 10
+    assert len(long_instruction) > 200
+    directives = decompose_instruction(long_instruction)
+    after = BEFORE.replace("Sayın Makam,", "Sayın Vali Bey,")
+
+    changelog = build_changelog(BEFORE, after, directives)
+
+    assert len(changelog.entries) == 1
+    assert len(changelog.entries[0].directive) <= 200

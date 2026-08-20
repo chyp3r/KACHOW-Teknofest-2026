@@ -57,8 +57,9 @@ from app.ai.adapters.company_rules import CompanyRuleSet, RulesProvider
 from app.ai.adapters.injection import format_adapter_block, format_rules_block
 from app.ai.policy.budget import node_budget
 from app.ai.reasoning_levels import ReasoningLevelPreset, get_reasoning_level_preset
-from app.ai.revision.changelog import build_changelog
+from app.ai.revision.changelog import RevisionChangelog, build_changelog
 from app.ai.revision.conflict import (
+    ConflictReport,
     assess_conflicts_llm,
     detect_conflicts_deterministic,
     merge_conflicts,
@@ -876,25 +877,48 @@ def create_revise_graph(
             "Talimat mevzuat ve kaynak evrakla karşılaştırılıyor...",
         )
 
-        report = VerificationReport(**state.get("verification", {}))
-        deterministic = detect_conflicts_deterministic(
-            instruction=instruction, context=state.get("context", ""),
-            source_document=active_draft.source_document, report=report,
-        )
-
-        judge_on = (
-            settings.DRAFT_JUDGE_ENABLED if preset.judge_enabled is None else preset.judge_enabled
-        )
-        llm_findings = []
-        if settings.REVISION_CONFLICT_AUDIT_ENABLED and judge_on:
-            llm_findings = await assess_conflicts_llm(
-                conflict_agent, instruction=instruction.raw, revised_draft=draft_text,
-                context=state.get("context", ""), source_document=active_draft.source_document,
-                timeout_s=settings.DRAFT_JUDGE_TIMEOUT_SECONDS * preset.timeout_multiplier,
+        # This node's own docstring is explicit that a finding here is
+        # advisory, never a gate -- so a failure to *produce* one must be
+        # advisory too. Before this guard, any exception here (a malformed
+        # `verification` dict, a `ConflictFinding`/`ChangeEntry` field
+        # exceeding its own `max_length` on a long instruction or a chain of
+        # institution names, ...) propagated out of the node, out of
+        # `graph.ainvoke`, and into `run_revise`'s outer `except Exception`
+        # (see `revise.py`), which discards the whole revision -- text,
+        # verification, everything -- and reports `FAILED` even though
+        # `rewrite_node`/`verify_node` already produced and verified a good
+        # draft two nodes ago. Degrading to an empty, non-blocking report
+        # is exactly this node's own stated contract for a *conflict*
+        # finding; it must be the contract for a *failure to audit* too.
+        try:
+            report = VerificationReport(**state.get("verification", {}))
+            deterministic = detect_conflicts_deterministic(
+                instruction=instruction, context=state.get("context", ""),
+                source_document=active_draft.source_document, report=report,
             )
 
-        conflict_report = merge_conflicts(deterministic, llm_findings)
-        changelog = build_changelog(active_draft.text, draft_text, state.get("directives") or [])
+            judge_on = (
+                settings.DRAFT_JUDGE_ENABLED if preset.judge_enabled is None else preset.judge_enabled
+            )
+            llm_findings = []
+            if settings.REVISION_CONFLICT_AUDIT_ENABLED and judge_on:
+                llm_findings = await assess_conflicts_llm(
+                    conflict_agent, instruction=instruction.raw, revised_draft=draft_text,
+                    context=state.get("context", ""), source_document=active_draft.source_document,
+                    timeout_s=settings.DRAFT_JUDGE_TIMEOUT_SECONDS * preset.timeout_multiplier,
+                )
+
+            conflict_report = merge_conflicts(deterministic, llm_findings)
+            changelog = build_changelog(active_draft.text, draft_text, state.get("directives") or [])
+        except Exception:
+            logger.exception(
+                "Revise audit node failed; degrading to an empty, advisory-only result "
+                "rather than failing the (already successful) revision."
+            )
+            conflict_report = ConflictReport()
+            changelog = RevisionChangelog(
+                entries=[], summary="Değişiklik özeti oluşturulamadı."
+            )
 
         # Advisory only -- see this node's own docstring. Whether the turn
         # pauses for a human is entirely verify_node's call; a conflict

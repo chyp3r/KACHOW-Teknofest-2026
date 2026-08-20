@@ -332,6 +332,18 @@ class PlanningState(TypedDict, total=False):
     #: "revizyon iste" click, consumed by gate_revise_node and cleared
     #: immediately after -- never read anywhere else.
     gate_revision_note: str
+    #: How many times human_gate_node has re-asked this turn for a
+    #: *missing_information* round that did not go through gate_revise_node
+    #: (a residual/unanswered placeholder, or a "reject"/"approve" resume
+    #: with no answers) -- plays the same role gate_revision_count plays for
+    #: the revision-loop rounds. Without a counter of its own, a residual
+    #: round's interrupt_id hash (kind + draft text + current_step_idx +
+    #: gate_revision_count, none of which change on a residual round) comes
+    #: out byte-identical to the round it re-asks, the frontend's dedup
+    #: silently drops the repeat interrupt event, and the session hangs
+    #: waiting for an answer the client believes it already sent. Reset to 0
+    #: every turn in planning_node.
+    needs_input_round: int
     #: Persists across separate ainvoke() calls on the same checkpointer
     #: thread_id (see ChatService._thread_id) -- this is the whole memory
     #: story; there is no separate store to keep consistent with it. Holds up
@@ -806,6 +818,7 @@ def create_planning_graph(
             "final_output": {},
             "gate_revision_count": 0,
             "gate_revision_note": "",
+            "needs_input_round": 0,
             "history": [{"role": "user", "content": state["input_text"]}],
             # Always written, even to None: a decision of any other kind
             # supersedes and clears a stale open question rather than
@@ -1990,6 +2003,7 @@ def create_planning_graph(
         ]
 
         gate_revision_count = state.get("gate_revision_count", 0)
+        needs_input_round = state.get("needs_input_round", 0)
         payload = {
             "kind": kind,
             "questions": prompt_questions,
@@ -2004,19 +2018,24 @@ def create_planning_graph(
             "revision_round": gate_revision_count,
             "max_revision_rounds": settings.HITL_MAX_GATE_REVISIONS,
             "revision_exhausted": gate_revision_count >= settings.HITL_MAX_GATE_REVISIONS,
+            "auto_value": AUTO_ANSWER,
         }
         # Deterministic, not a fresh uuid4: interrupt() re-executes everything
         # before it on resume, including this id's computation, and it must
         # come out identical both times for the frontend's dedup to work.
-        # gate_revision_count is part of the hash so a second gate round
-        # within the same turn gets a distinct id even when the model
-        # happens to produce byte-identical text -- without it the
-        # frontend's interrupt_id dedup would silently swallow the second
-        # round's interrupt and the run would hang waiting for an answer
-        # the client thinks it already gave.
+        # gate_revision_count is part of the hash so a "revizyon iste" round
+        # gets a distinct id even when the model happens to produce
+        # byte-identical text; needs_input_round plays the same role for a
+        # residual/unanswered-placeholder re-ask, which touches neither the
+        # draft text nor current_step_idx nor gate_revision_count -- without
+        # it, a second NEEDS_INPUT round hashed identically to the first,
+        # the frontend's interrupt_id dedup silently swallowed the repeat
+        # event, and the session hung forever waiting for an answer the
+        # client believed it had already sent (see human_gate_node's own
+        # "reject"/residual handling below for the two ways that happened).
         interrupt_id = hashlib.sha256(
             f"{kind}:{draft_result.get('draft', '')}:{state.get('current_step_idx', 0)}:"
-            f"{gate_revision_count}".encode("utf-8")
+            f"{gate_revision_count}:{needs_input_round}".encode("utf-8")
         ).hexdigest()[:16]
 
         HITL_INTERRUPTS.labels(kind=kind).inc()
@@ -2036,7 +2055,9 @@ def create_planning_graph(
         )
 
         if kind == "missing_information":
-            if answer.get("action") == "revise":
+            action = answer.get("action")
+
+            if action == "revise":
                 # Escape hatch: the user typed a revision instruction into
                 # what was meant to be an answer box instead of the field's
                 # actual value -- apply_answers would otherwise substitute
@@ -2048,28 +2069,89 @@ def create_planning_graph(
                 # draft_result["status"], not kind, so setting the same
                 # status here is enough.
                 note = (answer.get("instructions") or "").strip()
-                return {
+                updates: dict[str, Any] = {
                     "gate_revision_note": note,
                     "draft_result": {**draft_result, "status": StepStatus.REVISE_REQUESTED},
                 }
+                # route_after_gate sends this straight to "end" -- bypassing
+                # executor, the only other place final_output is recomputed
+                # -- the moment the revision-round cap is already exhausted
+                # (a second "revizyon iste" click on the last allowed
+                # round). Set eagerly here so the turn's reply reflects
+                # draft_result even on that direct exit; harmless when the
+                # route instead goes to "gate_revise", which overwrites it
+                # again once the revision actually runs.
+                updates["final_output"] = _compile_final_output(state, updates)
+                return updates
+
+            if action == "reject":
+                # "Vazgeç" -- a verdict on the text, not a request for more
+                # information, so this never goes through apply_answers at
+                # all. Before this branch existed, "reject" fell straight
+                # through to the apply_answers path below with an empty
+                # `answers` dict: every placeholder came back unfilled, the
+                # draft text was byte-identical to what was just shown, and
+                # the resulting NEEDS_INPUT round hashed to the exact same
+                # interrupt_id as the round the user was trying to leave --
+                # the frontend's dedup silently dropped it and the session
+                # hung with no way to send another message on that thread
+                # (see route_after_gate's own REJECTED -> "end" branch,
+                # and SessionFocus._ARCHIVE_ONLY_DRAFT_STATUSES, which this
+                # finally gives a real producer).
+                reason = (answer.get("reason") or "").strip()
+                updates = {
+                    "draft_result": {
+                        **draft_result,
+                        "status": StepStatus.REJECTED,
+                        "rejection_reason": reason,
+                    },
+                }
+                # route_after_gate sends REJECTED straight to "end",
+                # bypassing executor -- the only other place final_output
+                # is recomputed. Without this the turn's reply would still
+                # reflect whatever final_output held before the gate ever
+                # paused (a stale, pre-rejection snapshot).
+                updates["final_output"] = _compile_final_output(state, updates)
+                return updates
 
             filled_draft, residual = apply_answers(
                 draft_result.get("draft", ""), answer.get("answers", {})
             )
 
-            if residual:
-                residual_questions = [
-                    question
-                    for question in missing_information
-                    if question.get("key") in residual
-                ]
+            # Only a placeholder key this draft actually asked a question
+            # about is grounds to reopen the gate. `residual` alone is not
+            # enough: build_missing_info_request's own "never ask about the
+            # response's own Tarih: line" skip used to be a broader
+            # "starts with tarih" substring test than apply_answers' own
+            # (unconditional) residual check, so an unrelated date
+            # placeholder (e.g. "[Başvuru Tarihi]") that build_missing_info_
+            # request silently skipped still came back from apply_answers as
+            # residual here, with no matching entry in `missing_information`
+            # -- reopening the gate with a `questions: []` payload the human
+            # has no way to answer, an unrecoverable dead end. Filtering on
+            # `residual_questions` (not raw `residual`) is the fail-closed
+            # half of that fix: a residual key with nothing to ask about is
+            # left as a visible unfilled placeholder in the text instead,
+            # and the draft proceeds to verification below, where
+            # `doldurulmamis_yer_tutucu` and the placeholder-count check
+            # already force human approval on it.
+            residual_questions = [
+                question
+                for question in missing_information
+                if question.get("key") in residual
+            ]
+
+            if residual_questions:
                 updated = {
                     **draft_result,
                     "draft": filled_draft,
                     "missing_information": residual_questions,
                     "status": StepStatus.NEEDS_INPUT,
                 }
-                return {"draft_result": updated}
+                return {
+                    "draft_result": updated,
+                    "needs_input_round": needs_input_round + 1,
+                }
 
             report = verify_draft(
                 filled_draft,
@@ -2162,12 +2244,22 @@ def create_planning_graph(
                 "Geri bildiriminize göre taslak güncellendi.", result,
             )
 
-        return {
+        updates: dict[str, Any] = {
             "draft_result": result,
             "revise_result": {"status": result.get("status")},
             "gate_revision_count": state.get("gate_revision_count", 0) + 1,
             "gate_revision_note": "",
         }
+        # route_after_gate_revise sends a FAILED result straight to "end",
+        # bypassing executor -- the only other place final_output is
+        # recomputed -- so without this the turn's reply would fall back to
+        # whatever final_output held before the gate loop started (a stale
+        # pre-revision snapshot, or empty on a plan where routing hadn't run
+        # yet), not the actual failure this round just produced. Harmless
+        # when the route instead goes to "human_gate"/"continue", which
+        # overwrite it again once the turn actually settles.
+        updates["final_output"] = _compile_final_output(state, updates)
+        return updates
 
     async def transfer_gate_node(state: PlanningState, config: RunnableConfig) -> dict[str, Any]:
         """Pause the transfer flow for its human checkpoint(s).

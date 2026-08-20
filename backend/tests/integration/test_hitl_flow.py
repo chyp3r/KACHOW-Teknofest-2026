@@ -221,6 +221,43 @@ async def test_a_still_missing_answer_pauses_again_instead_of_completing(monkeyp
     snapshot = await graph.aget_state(config)
     assert snapshot.next == ("human_gate",)
     assert "[MUHATAP]" in snapshot.values["draft_result"]["draft"]
+    # C1 regression: this second NEEDS_INPUT round must be hashed
+    # differently from the first (the draft text and current_step_idx are
+    # identical across both -- see human_gate_node's own interrupt_id
+    # comment) or the frontend's interrupt_id dedup silently drops the
+    # repeat event and the session hangs. needs_input_round is the state
+    # field that makes the two rounds' hashes differ.
+    assert snapshot.values["needs_input_round"] == 1
+
+
+@pytest.mark.asyncio
+async def test_rejecting_at_the_missing_information_gate_ends_the_turn_cleanly(monkeypatch):
+    """C1 regression: "Vazgeç" (action="reject") used to fall straight
+    through to apply_answers with an empty answers dict -- every placeholder
+    came back unfilled, the draft text was unchanged, and the resulting
+    NEEDS_INPUT round hashed identically to the round the user was trying to
+    leave. The frontend's interrupt_id dedup silently dropped it and the
+    session hung with no way to send another message on that thread. reject
+    must end the turn (StepStatus.REJECTED), not reopen the gate."""
+    monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
+    graph, _mocks = _build_graph()
+    config = {"configurable": {"thread_id": "hitl-reject-1"}}
+
+    await graph.ainvoke(
+        {"input_text": "Bu evraka cevap yazısı hazırla", "document_id": None}, config=config
+    )
+    result = await graph.ainvoke(
+        Command(resume={"action": "reject", "answers": {}, "instructions": "", "reason": "Vazgeçtim."}),
+        config=config,
+    )
+
+    assert result["final_output"]["status"] == "REJECTED"
+    assert result["final_output"]["draft"]["rejection_reason"] == "Vazgeçtim."
+
+    # The run must not still be paused -- the whole point of the fix is
+    # that a subsequent message on this thread is not refused.
+    snapshot = await graph.aget_state(config)
+    assert not snapshot.next
 
 
 @pytest.mark.asyncio

@@ -8,6 +8,7 @@ from app.ai.workflows.events import emit_reply_stream
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.authorization import AuthorizationException
 from app.core.config import settings
+from app.core.enums.step_status import StepStatus
 from app.domains.chat import chat_recorder
 from app.domains.drafts import draft_recorder
 from app.domains.chat.schema.chat_schema import (
@@ -596,6 +597,18 @@ class ChatService:
         draft = final_output.get("draft") or {}
         content = draft.get("draft")
         if not content:
+            return None
+        if draft.get("status") == StepStatus.FAILED:
+            # A FAILED result (a timed-out/errored draft or revise attempt)
+            # carries the *previous*, unrevised text back verbatim -- see
+            # e.g. `revise.py`'s FAILED return paths, which return
+            # `active_draft.text` unchanged -- stamped with a 0.0
+            # confidence score that has nothing to do with that text's real
+            # quality. Persisting it would create a phantom new version,
+            # byte-identical to the one before it but scored 0.0/FAILED,
+            # which `DraftRepository.get_latest_for_session` would then
+            # serve as "the current draft" ahead of the real one. Nothing
+            # actually changed this turn; there is nothing to record.
             return None
         routing = final_output.get("routing") or {}
         draft_id = await draft_recorder.record_draft(

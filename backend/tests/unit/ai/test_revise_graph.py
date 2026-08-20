@@ -321,3 +321,42 @@ async def test_an_explicit_deletion_instruction_is_honoured_not_reverted(fake_ll
     assert result["status"] == StepStatus.COMPLETED
     # Only ever the one rewrite pass -- no repair round undid the deletion.
     assert len(fake_llm.stream_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_audit_node_degrades_instead_of_failing_an_already_successful_revision(
+    fake_llm, monkeypatch
+):
+    """C6 regression: audit_node's own docstring says a conflict finding
+    here is advisory, never a gate -- so a failure to *produce* one must be
+    advisory too. Before this fix, any exception raised while building the
+    changelog/conflict report (a long instruction overflowing
+    ChangeEntry.directive's own max_length was one concrete way this
+    happened) propagated out of the graph and into run_revise's outer
+    except Exception, which discards the whole revision and reports FAILED
+    even though rewrite_node/verify_node already produced and verified a
+    perfectly good draft two nodes earlier."""
+    fake_llm.stream_chunks = [
+        "Konu: Yıllık İzin Talebi\nSayı: E-1\nTarih: 30.07.2026\n\nSayın Vali Bey,\n\n"
+        "İlgi yazı kapsamında personelimizin izin talebi tarafımıza iletilmiştir.\n\n"
+        "Arz ederim.\n\nAli Veli\nGenel Müdür"
+    ]
+
+    def _boom(*args, **kwargs):
+        raise ValueError("boom")
+
+    monkeypatch.setattr("app.ai.workflows.revise_graph.build_changelog", _boom)
+
+    graph = create_revise_graph(fake_llm)
+    result = await graph.ainvoke(
+        {
+            "active_draft": _active_draft(),
+            "instructions": "Muhatabı değiştir.",
+            "reasoning_level": "fast",
+        }
+    )
+
+    assert result["status"] != StepStatus.FAILED
+    assert "Sayın Vali Bey" in result["draft"]
+    assert result["changelog"]["entries"] == []
+    assert result["conflicts"] == []

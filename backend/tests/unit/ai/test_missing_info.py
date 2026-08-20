@@ -8,6 +8,7 @@ nothing regenerates the draft.
 
 from app.ai.verification.draft_verifier import VerificationReport
 from app.ai.verification.missing_info import apply_answers, build_missing_info_request
+from app.ai.workflows.writing_brief import AUTO_ANSWER
 
 REPORT = VerificationReport(confidence_score=40.0, requires_human_approval=True, placeholder_count=1)
 
@@ -93,3 +94,54 @@ def test_apply_answers_ignores_blank_or_whitespace_only_answers():
 
     assert "[MUHATAP]" in substituted
     assert residual == ["muhatap"]
+
+
+def test_the_responses_own_tarih_header_line_is_never_asked_about():
+    """C7 regression: the exact `Tarih: [...]` header line -- the one
+    `fill_date_placeholders` is responsible for -- must still be skipped."""
+    draft = "Sayı: [Belge Sayısı]\nTarih: [Tarih]\nKonu: Test"
+    questions = build_missing_info_request(draft, REPORT)
+
+    assert [q.key for q in questions] == ["belge_sayisi"]
+
+
+def test_an_unrelated_date_labelled_placeholder_is_still_asked_about():
+    """C7 regression: build_missing_info_request used to skip ANY
+    placeholder whose folded text merely started with "tarih" -- silently
+    swallowing a real information gap like "[Tarihi belirtiniz]" or
+    "[Son Başvuru Tarihi]" into never being asked about, while
+    apply_answers (with no matching skip) still counted the very same
+    placeholder as residual on resume -- a NEEDS_INPUT round with zero
+    questions in it and no way to answer it."""
+    draft = "Tarih: [Tarih]\n\nSon Başvuru Tarihi: [Tarihi belirtiniz]"
+    questions = build_missing_info_request(draft, REPORT)
+
+    assert [q.key for q in questions] == ["tarihi_belirtiniz"]
+
+    # And the two functions must agree: answering every *asked* question
+    # leaves nothing this draft's own header line wasn't already exempt
+    # from being asked about.
+    answers = {q.key: "01.01.2026" for q in questions}
+    substituted, residual = apply_answers(draft, answers)
+    assert "[Tarihi belirtiniz]" not in substituted
+    assert residual == ["tarih"]  # the exempt header line, never asked, never answerable
+
+
+def test_apply_answers_leaves_an_auto_answer_placeholder_untouched_and_unresidual():
+    """"Sen karar ver" (AUTO_ANSWER) must neither leak its own sentinel
+    text into the draft nor reopen the gate by counting as unanswered --
+    either of those regressions bricked the missing-information gate's
+    "acceptAllDefaults" button."""
+    draft = "Muhatap: [Alıcının adı ve soyadı]\nİmza: [İmzalayacak yetkilinin adı ve soyadı]"
+    substituted, residual = apply_answers(
+        draft,
+        {
+            "alicinin_adi_ve_soyadi": AUTO_ANSWER,
+            "imzalayacak_yetkilinin_adi_ve_soyadi": "Ahmet Yılmaz",
+        },
+    )
+
+    assert AUTO_ANSWER not in substituted
+    assert "[Alıcının adı ve soyadı]" in substituted
+    assert "Ahmet Yılmaz" in substituted
+    assert residual == []

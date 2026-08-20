@@ -13,6 +13,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.ai.verification.draft_verifier import PLACEHOLDER_PATTERN, VerificationReport, _fold
+from app.ai.verification.placeholders import _DATE_LINE_PATTERN
+from app.ai.workflows.writing_brief import AUTO_ANSWER
 
 logger = logging.getLogger(__name__)
 
@@ -94,17 +96,36 @@ def build_missing_info_request(
     missing_fields = (classification or {}).get("missing_fields") or []
     seen: dict[str, InfoQuestion] = {}
 
-    for match in PLACEHOLDER_PATTERN.findall(draft):
-        placeholder_text = match.strip("[]").strip()
+    # The response's own "Tarih:" header line is the one placeholder that
+    # is never a real information gap: app.ai.verification.placeholders.
+    # fill_date_placeholders already tried to substitute it with the
+    # server-resolved date before this runs (see draft_graph.verify_node /
+    # revise_graph.verify_node), so asking about it would ask the user for
+    # a fact the system, not the user, is responsible for. Anchored to the
+    # exact same structural line `_DATE_LINE_PATTERN` matches -- NOT a bare
+    # "folded text starts with tarih" substring test, which this used to be:
+    # that also silently swallowed unrelated date-labelled placeholders
+    # (e.g. "[Başvuru Tarihi]", "[Son Başvuru Tarihi]", inline "[Tarih
+    # Aralığı]") into never being asked about at all, while apply_answers
+    # -- which has no such skip -- still counted the very same placeholder
+    # as unanswered ("residual") on resume. The two disagreeing produced a
+    # NEEDS_INPUT round whose `missing_information` list was empty: an
+    # interrupt with zero questions in it, which the human has no way to
+    # answer and the gate has no way to leave (see human_gate_node's own
+    # `residual_questions` filter, the other half of this fix).
+    date_header_spans = [match.span() for match in _DATE_LINE_PATTERN.finditer(draft)]
+
+    def _is_date_header(match: "re.Match[str]") -> bool:
+        return any(
+            start <= match.start() and match.end() <= end
+            for start, end in date_header_spans
+        )
+
+    for match in PLACEHOLDER_PATTERN.finditer(draft):
+        placeholder_text = match.group(0).strip("[]").strip()
         if not placeholder_text:
             continue
-        # The draft's own date is never something to ask the user about
-        # (see app.ai.workflows.dates.today_tr) -- draft_graph.verify_node/
-        # revise_graph.verify_node already fill the "Tarih:" line's own
-        # placeholder with the server-resolved date before this runs, so
-        # this is a defensive second layer for a caller that skipped that
-        # step or a differently-worded date placeholder the writer left.
-        if _fold(placeholder_text).startswith("tarih"):
+        if _is_date_header(match):
             continue
         key = _slugify(placeholder_text)
         if key in seen:
@@ -151,7 +172,20 @@ def apply_answers(draft: str, answers: dict[str, Any]) -> tuple[str, list[str]]:
     def _replace(match: "re.Match[str]") -> str:
         placeholder_text = match.group(0).strip("[]").strip()
         key = _slugify(placeholder_text)
-        answer = _coerce_answer(answers.get(key)).strip()
+        raw_answer = answers.get(key)
+        if raw_answer == AUTO_ANSWER:
+            # "Sen karar ver" ("acceptAllDefaults" in the frontend) --
+            # the user explicitly declined to supply this value, so this is
+            # neither a real answer (never substitute the sentinel's own
+            # literal text into the letter) nor an unanswered question to
+            # re-ask (never append to `residual`, which would reopen the
+            # very round the user just tried to close). Leave the bracketed
+            # placeholder exactly as the writer left it -- a visible,
+            # in-text marker a human reviewer can still see, the same
+            # convention `writer.md`'s own `[BİLGİ EKSİK: ...]` placeholders
+            # use, not silently swallowed or replaced with garbage text.
+            return match.group(0)
+        answer = _coerce_answer(raw_answer).strip()
         if answer:
             return answer
         residual.append(key)
