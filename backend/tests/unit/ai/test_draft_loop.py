@@ -434,7 +434,14 @@ async def test_writer_streams_growing_partial_previews_for_the_waiting_ui():
     config = {"configurable": {"status_queue": queue}}
 
     part1 = "Konu: Test Konusu\nSayı: E-1-1\nTarih: 30.07.2026\n\nSayın Makam,\n\n"
-    filler = "Bu cümle önizleme eşiğini aşmak için tekrarlanan dolgu metnidir. " * 4
+    # Four distinct sentences, not one repeated four times: an identical
+    # sentence recurring verbatim is exactly what
+    # app.ai.verification.style_checks.check_filler_sentences now flags as
+    # dolgu_ifade, which would push this draft into an (unmocked) revision
+    # pass and break this test's unrelated preview-streaming assertion.
+    filler = " ".join(
+        f"Bu cümle önizleme eşiğini aşmak için eklenen {i}. dolgu metnidir." for i in range(1, 5)
+    )
     part3 = "Arz ederim.\n\nAli Veli\nGenel Müdür"
     full_draft = (part1 + filler + part3).strip()
 
@@ -518,8 +525,13 @@ async def test_a_preview_masks_pii_even_though_the_final_draft_is_left_for_human
     # A single "Kimlik No: <digits>" mention plus enough padding to cross the
     # preview threshold -- not repeated, since repeating it would itself
     # read as an address-shaped line (2+ "no: <digits>" hits) and get
-    # collapsed by the *other* PII rule this test isn't about.
-    padding = "Bu cümle önizleme eşiğini aşmak için tekrarlanan dolgu metnidir. " * 3
+    # collapsed by the *other* PII rule this test isn't about. Also not the
+    # exact same sentence three times over: that would trip
+    # check_filler_sentences's dolgu_ifade finding, pushing this draft into
+    # an (unmocked) revision pass this test isn't about either.
+    padding = " ".join(
+        f"Bu cümle önizleme eşiğini aşmak için eklenen {i}. dolgu metnidir." for i in range(1, 4)
+    )
     filler = f"Başvuran T.C. Kimlik No: {valid_tckn} olan kişidir. {padding}"
     part3 = "Arz ederim.\n\nAli Veli\nGenel Müdür"
 

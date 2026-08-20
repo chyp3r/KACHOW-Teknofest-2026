@@ -182,6 +182,29 @@ def test_combine_outcomes_with_nothing_reproduces_a_clean_scoring_pass():
     assert combine_outcomes() == score_findings([])
 
 
+def test_the_two_style_heuristics_do_not_force_approval_but_still_cost_score():
+    """Faz 4: kisi_tutarsizligi/dolgu_ifade are pattern heuristics -- a
+    single occurrence must not strand an otherwise-clean draft in human
+    review, unlike a confirmed identity/groundedness defect."""
+    for rule_id in ("kisi_tutarsizligi", "dolgu_ifade"):
+        outcome = score_findings([RuleFinding(rule_id=rule_id)])
+        assert outcome.forces_approval is False, rule_id
+        assert outcome.score < 100.0, rule_id
+
+
+def test_imza_blogu_uydurma_forces_approval_like_the_identity_leak_rules():
+    outcome = score_findings([RuleFinding(rule_id="imza_blogu_uydurma")])
+    assert outcome.forces_approval is True
+    assert outcome.score == round(100.0 - RULES["imza_blogu_uydurma"].penalty, 1)
+
+
+def test_the_two_identity_party_rules_deduct_their_own_penalty_and_force_approval():
+    for rule_id in ("gonderen_muhatap_karisikligi", "karsi_taraf_kimlik_sizintisi"):
+        outcome = score_findings([RuleFinding(rule_id=rule_id)])
+        assert outcome.score == round(100.0 - RULES[rule_id].penalty, 1), rule_id
+        assert outcome.forces_approval is True, rule_id
+
+
 def test_every_rule_id_referenced_by_this_test_module_exists_in_the_table():
     """Guards against a typo'd rule_id silently scoring as if the rule did
     not exist (score_findings would KeyError on an unknown id at lookup

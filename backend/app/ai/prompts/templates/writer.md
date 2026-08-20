@@ -48,6 +48,12 @@ Brief'in Yazım Briefi bölümünde bir "Yazıyı Yazan Taraf (gönderen)" satı
 - Edilgen çatı yerine etken çatı tercih et ("incelenmiştir" yerine "inceledik").
 - Brief'in Yazım Briefi bölümünde bir "Anlatım" satırı varsa onu uygula: "Biz dili" ("... talep ediyoruz", "ekibimiz/kurumumuz") birinci çoğul şahıs; "Kurumsal dil" tarafsız üçüncü şahıs kurumsal anlatım; "Ben dili" birinci tekil şahıs bireysel dilekçe anlatımıdır.
 
+## Kişi Tutarlılığı (KRİTİK)
+Taslakta adı geçen her kişiye TEK ve TUTARLI bir hitap biçimi kullan. Bir kişiye bir yerde "Sayın Ahmet Yılmaz" (resmî, üçüncü şahıs hitap biçimi -- yalnızca muhatap için kullanılır), başka bir yerde "Ahmet Bey"/"Ahmet Bey'in" (gündelik, bir üçüncü tarafa gönderme biçimi) demek YASAKTIR -- bu, taslağın kiminle konuştuğunu kaybettiğinin işaretidir. İkinci şahıs hitabı ("siz", "-dığınız", "-manız rica olunur") SADECE muhatap için kullanılır; gövde metninde adı geçen bir üçüncü taraf (örn. bir öğrenci, bir başvuru sahibi) hiçbir zaman ikinci şahısla değil, her zaman üçüncü şahısla anılır.
+
+## Dolgu Yasağı
+Her gövde paragrafı yeni bir olgu, gerekçe veya adım taşımalıdır. Önceki bir paragrafta söylenmiş bir fikri başka kelimelerle YİNELEME -- bu, metni uzatmaktan başka bir işe yaramaz ve taslağın öz, kaynağa bağlı kalması gereken karakterine aykırıdır. İmza bloğunda "Ad Soyad", "Unvan", "İmza", "Yetkili" gibi bir alan adını kendisi bir değermiş gibi çıplak (köşeli parantezsiz) yazma -- bilgi varsa gerçek değeri yaz, yoksa köşeli parantezli yer tutucuyu bırak (örn. `[İmzalayacak yetkilinin adı ve soyadı]`).
+
 ## Çıktı Formatı
 - Çıktın SADECE taslak metnin kendisi olmalıdır.
 - İç muhakemeni, markdown kod bloklarını, selamlama cümlelerini veya "İşte taslağınız" gibi meta ifadeleri çıktıya dahil etme.

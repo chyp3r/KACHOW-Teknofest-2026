@@ -125,14 +125,22 @@ RULES: dict[str, ConfidenceRule] = {
         # Style/register rules (see app.ai.verification.style_checks) --
         # rule ids defined here alongside every other rule, detection
         # logic lives in its own module the same way structural/groundedness
-        # detection lives in draft_verifier.py.
+        # detection lives in draft_verifier.py. The two pattern-heuristic
+        # rules (kisi_tutarsizligi, dolgu_ifade) do not force approval on
+        # their own: they still cost score and still feed the repair loop
+        # (see llm_judge.merge_verdicts), but a heuristic match alone
+        # shouldn't be able to strand an otherwise-clean draft in human
+        # review the way a confirmed identity/groundedness defect does.
+        # imza_blogu_uydurma keeps the table's default (forces_approval=True)
+        # -- an exact bare-label match in the signature block is as
+        # high-precision as gelen_sayi_sizintisi/karsi_taraf_kimlik_sizintisi.
         ConfidenceRule(
             "kisi_tutarsizligi", "Kişi/hitap tutarsızlığı", "butunluk",
-            8.0, per_occurrence=True, cap=24.0,
+            8.0, per_occurrence=True, cap=24.0, forces_approval=False,
         ),
         ConfidenceRule(
             "dolgu_ifade", "İçerik taşımayan dolgu ifadesi", "butunluk",
-            4.0, per_occurrence=True, cap=16.0,
+            4.0, per_occurrence=True, cap=16.0, forces_approval=False,
         ),
         ConfidenceRule("imza_blogu_uydurma", "İmza bloğunda uydurma/meta değer", "yapi", 10.0),
         ConfidenceRule(

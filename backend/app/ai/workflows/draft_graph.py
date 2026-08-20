@@ -28,6 +28,9 @@ from app.ai.verification import (
     InfoQuestion,
     UnsupportedClaim,
     build_missing_info_request,
+    check_filler_sentences,
+    check_person_consistency,
+    check_signature_block,
     fill_date_placeholders,
     judge_draft,
     merge_verdicts,
@@ -480,6 +483,46 @@ def _build_brief(
     )
 
 
+def _anti_fabrication_rules(is_other: bool) -> str:
+    """The writer's own no-hallucination rules, shared with the repair prompt.
+
+    Before this, the *first* writer pass carried these rules (see
+    ``writer_node``'s own inline block) but ``_build_repair_prompt`` did not
+    -- a repair pass only forbade touching sentences outside the defect
+    list, never forbade inventing new facts inside the ones it *was*
+    fixing. ``missing_structure`` defects specifically require writing new
+    content (e.g. "add the missing Konu line"), which is exactly the
+    situation a reviser with no anti-fabrication rule at all will fill with
+    a guess -- and, per ``merge_verdicts``'s "best attempt wins" framing
+    (see Faz 5), a fabricated guess could win over a correctly-flagged
+    placeholder from an earlier attempt.
+
+    Args:
+        is_other: Whether this is the lenient ``other_official``
+            correspondence type, which is allowed conventional boilerplate.
+
+    Returns:
+        The rule bullet list, identical for the writer's first pass and
+        every repair pass after it.
+    """
+    if is_other:
+        return (
+            "- Yazışma türü 'Diğer resmî yazışma' olduğu için, brief'te bulunmayan "
+            "tamamlayıcı bilgileri genel kurumsal bilgi birikiminle tamamlayabilirsin.\n"
+            "- Resmî yazı standartlarına uygunluğu sağlamak için makul tamamlamalar yapabilirsin."
+        )
+    return (
+        "- Yalnızca brief içindeki bilgilere ve mevzuat bağlamına sadık kal.\n"
+        "- Gelen evrakta veya mevzuatta yer almayan hiçbir kişi, kurum, sayı, "
+        "tarih veya olay uydurma. Tarih alanı bu kuralın istisnasıdır: brief'in "
+        "\"0. BUGÜNÜN TARİHİ\" bölümündeki değeri her zaman kullan, uydurma.\n"
+        "- Zorunlu olup brief'te bulunmayan bilgileri, kime ait olduğunu açıkça "
+        "belirten köşeli parantezli bir yer tutucu olarak bırak (örn. "
+        "'[Belge Sayısı]', '[İmzalayacak yetkilinin adı ve soyadı]') -- çıplak "
+        "'Ad Soyad'/'Unvan' gibi kime ait olduğu belirsiz yer tutucular kullanma."
+    )
+
+
 def _build_repair_prompt(
     state: DraftState, adapter_block: str = "", rules_block: str = ""
 ) -> str:
@@ -513,6 +556,7 @@ def _build_repair_prompt(
         + (f" -> Öneri: {item.get('suggested_fix')}" if item.get("suggested_fix") else "")
         for index, item in enumerate(defects, start=1)
     )
+    is_other = state.get("correspondence_type") == "other_official"
 
     return (
         "### GÖREV:\n"
@@ -523,8 +567,9 @@ def _build_repair_prompt(
         f"{format_correspondence_profile(state.get('correspondence_type', 'other_official'), state.get('correspondence_sub_genre', ''))}\n\n"
         f"### ÖNCEKİ TASLAK:\n{state.get('previous_draft', '')}\n\n"
         f"### DÜZELTİLMESİ GEREKEN KUSURLAR:\n{numbered or '(kusur listesi boş)'}\n\n"
-        "### KURAL:\n"
-        "Yalnızca listelenen kusurları düzelt. Başka hiçbir cümleyi değiştirme. "
+        "### KURALLAR:\n"
+        f"{_anti_fabrication_rules(is_other)}\n"
+        "- Yalnızca listelenen kusurları düzelt. Başka hiçbir cümleyi değiştirme. "
         "`[...]` yer tutucularını olduğu gibi bırak."
         f"{_format_style_examples(state.get('style_examples'))}"
         f"{rules_block}"
@@ -1042,23 +1087,7 @@ def create_draft_graph(
             )
 
             is_other = state.get("correspondence_type") == "other_official"
-            if is_other:
-                rules = (
-                    "- Yazışma türü 'Diğer resmî yazışma' olduğu için, brief'te bulunmayan "
-                    "tamamlayıcı bilgileri genel kurumsal bilgi birikiminle tamamlayabilirsin.\n"
-                    "- Resmî yazı standartlarına uygunluğu sağlamak için makul tamamlamalar yapabilirsin."
-                )
-            else:
-                rules = (
-                    "- Yalnızca brief içindeki bilgilere ve mevzuat bağlamına sadık kal.\n"
-                    "- Gelen evrakta veya mevzuatta yer almayan hiçbir kişi, kurum, sayı, "
-                    "tarih veya olay uydurma. Tarih alanı bu kuralın istisnasıdır: brief'in "
-                    "\"0. BUGÜNÜN TARİHİ\" bölümündeki değeri her zaman kullan, uydurma.\n"
-                    "- Zorunlu olup brief'te bulunmayan bilgileri, kime ait olduğunu açıkça "
-                    "belirten köşeli parantezli bir yer tutucu olarak bırak (örn. "
-                    "'[Belge Sayısı]', '[İmzalayacak yetkilinin adı ve soyadı]') -- çıplak "
-                    "'Ad Soyad'/'Unvan' gibi kime ait olduğu belirsiz yer tutucular kullanma."
-                )
+            rules = _anti_fabrication_rules(is_other)
 
             prompt = (
                 "### GÖREV:\n"
@@ -1413,6 +1442,18 @@ def create_draft_graph(
             if finding.confidence >= get_policy().guardrail.pii_confidence_floor
         ]
 
+        # Register/consistency checks a regex can decide alone (see
+        # app.ai.verification.style_checks's module docstring) -- run on the
+        # same normalized draft_text everything else above already checked,
+        # after the identity-leak placeholder conversion so a leak that was
+        # just turned into a `[...]` placeholder isn't also flagged as a
+        # bare signature meta-value or a person-consistency mismatch.
+        style_findings = [
+            *check_person_consistency(draft_text),
+            *check_filler_sentences(draft_text),
+            *check_signature_block(draft_text),
+        ]
+
         combined = merge_verdicts(
             report,
             verdict,
@@ -1423,6 +1464,7 @@ def create_draft_graph(
             cites_legislation=bool(LEGISLATION_PATTERN.search(draft_text)),
             content_loss=content_loss,
             judge_attempted=judge_on,
+            style_findings=style_findings,
         )
 
         DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)

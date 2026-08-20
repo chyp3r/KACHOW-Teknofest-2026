@@ -7,6 +7,7 @@ import pytest
 from app.ai.agents.judge import JudgeAgent
 from app.ai.guardrails.pii import PiiFinding
 from app.ai.revision.elision import ContentLossFinding
+from app.ai.verification.confidence_rules import RuleFinding
 from app.ai.verification.draft_verifier import MIN_AUTOMATED_CONFIDENCE_SCORE, VerificationReport
 from app.ai.verification.llm_judge import (
     DraftJudgeVerdict,
@@ -334,6 +335,50 @@ def test_multiple_additional_findings_deduct_cumulatively():
     assert combined.combined_score == 52.0  # 100 - 10 - 8 - 30
     assert combined.requires_human_approval is True
     assert combined.combined_score < MIN_AUTOMATED_CONFIDENCE_SCORE
+
+
+def test_a_style_finding_deducts_score_and_becomes_a_repair_item():
+    """Faz 4: app.ai.verification.style_checks findings are folded into the
+    same additional-findings pass as PII/mevzuat/content-loss, and into
+    repair_items the same way a judge finding is."""
+    combined = merge_verdicts(
+        _report(confidence_score=100.0),
+        None,
+        style_findings=[RuleFinding(rule_id="dolgu_ifade", detail="Tekrarlanan cümle (2x): 'X'")],
+    )
+
+    assert combined.combined_score == 96.0  # 100 - 4 (dolgu_ifade, single occurrence)
+    assert any(item.kind == "dolgu_ifade" for item in combined.repair_items)
+    repair_item = next(item for item in combined.repair_items if item.kind == "dolgu_ifade")
+    assert repair_item.detail == "Tekrarlanan cümle (2x): 'X'"
+    assert repair_item.suggested_fix
+
+
+def test_a_heuristic_style_finding_does_not_force_approval_on_its_own():
+    """kisi_tutarsizligi/dolgu_ifade are pattern heuristics -- they cost
+    score and drive the repair loop, but (unlike gonderen_muhatap_karisikligi
+    or karsi_taraf_kimlik_sizintisi) a single occurrence must not strand an
+    otherwise-clean draft in human review on its own."""
+    combined = merge_verdicts(
+        _report(confidence_score=100.0),
+        None,
+        style_findings=[RuleFinding(rule_id="kisi_tutarsizligi", detail="'Ahmet'")],
+    )
+
+    assert combined.requires_human_approval is False
+
+
+def test_an_imza_blogu_uydurma_style_finding_forces_approval():
+    """Unlike the two register heuristics, a bare meta-value in the
+    signature block is as high-precision as an exact identity leak, so it
+    keeps the rule table's default forces_approval=True."""
+    combined = merge_verdicts(
+        _report(confidence_score=100.0),
+        None,
+        style_findings=[RuleFinding(rule_id="imza_blogu_uydurma", detail="'Ad Soyad'")],
+    )
+
+    assert combined.requires_human_approval is True
 
 
 def test_no_additional_signals_leaves_the_deterministic_score_untouched():
