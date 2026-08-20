@@ -32,6 +32,7 @@ from langgraph.types import Command
 from app.ai.llms.base import BaseLLMClient
 from app.ai.workflows.planning_graph import create_planning_graph
 from app.core.config import settings
+from app.observability.ai_metrics import HITL_INTERRUPTS
 
 SOURCE_DOCUMENT = "Sayı: E-1-1, Tarih: 30.07.2026 tarihli evrak."
 
@@ -170,6 +171,7 @@ async def test_answering_resumes_without_regenerating_the_draft(monkeypatch):
     monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
     graph, mocks = _build_graph()
     config = {"configurable": {"thread_id": "hitl-test-2"}}
+    before = HITL_INTERRUPTS.labels(kind="missing_information")._value.get()
 
     await graph.ainvoke(
         {"input_text": "Bu evraka cevap yazısı hazırla", "document_id": None}, config=config
@@ -179,6 +181,12 @@ async def test_answering_resumes_without_regenerating_the_draft(monkeypatch):
         Command(resume={"action": "answer", "answers": {"muhatap": "İlgili Makama"}, "instructions": ""}),
         config=config,
     )
+
+    # C25: interrupt() replays everything before it on resume, including a
+    # counter placed there -- one real pause-and-answer cycle must count
+    # once, not twice (a naive placement fires on both the pausing call and
+    # the resuming replay).
+    assert HITL_INTERRUPTS.labels(kind="missing_information")._value.get() == before + 1
 
     assert result["final_output"]["status"] == "COMPLETED"
     assert "İlgili Makama" in result["final_output"]["draft"]["draft"]

@@ -1,16 +1,20 @@
-"""Unit tests for ChatService's own draft-persistence guard.
+"""Unit tests for ChatService's own draft-persistence guard, plus the
+per-session lock serializing concurrent calls against the same thread_id
+(C13/C14).
 
-Only `_maybe_record_draft` is exercised here -- everything else on
-ChatService needs a real compiled planning graph, which belongs in the
-integration suite (see tests/integration/test_hitl_flow.py and friends).
+Only `_maybe_record_draft` and `_session_lock` are exercised directly here
+-- a full `handle_message`/`resume` round trip needs a real compiled
+planning graph, which belongs in the integration suite (see
+tests/integration/test_hitl_flow.py and friends).
 """
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
 
 from app.core.enums.step_status import StepStatus
-from app.domains.chat.chat_service import ChatService
+from app.domains.chat.chat_service import ChatService, _session_lock
 
 
 @pytest.mark.asyncio
@@ -114,3 +118,62 @@ async def test_applied_rules_is_folded_into_the_stored_verification(monkeypatch)
 
     stored_verification = record_draft.call_args.kwargs["verification"]
     assert stored_verification["applied_rules"] == final_output["draft"]["applied_rules"]
+
+
+# ==========================================
+# _session_lock -- C13/C14
+# ==========================================
+def test_the_same_thread_id_always_returns_the_same_lock_instance():
+    assert _session_lock("thread-a") is _session_lock("thread-a")
+
+
+def test_different_thread_ids_get_independent_locks():
+    assert _session_lock("thread-a") is not _session_lock("thread-b")
+
+
+@pytest.mark.asyncio
+async def test_two_concurrent_calls_for_the_same_session_are_serialized():
+    """The core guarantee: two coroutines racing for the same thread_id's
+    lock never overlap -- one fully finishes (enter and exit both recorded)
+    before the other's own enter is recorded."""
+    order: list[str] = []
+
+    async def _turn(label: str) -> None:
+        async with _session_lock("shared-thread"):
+            order.append(f"{label}-enter")
+            await asyncio.sleep(0.01)
+            order.append(f"{label}-exit")
+
+    await asyncio.gather(_turn("first"), _turn("second"))
+
+    assert order in (
+        ["first-enter", "first-exit", "second-enter", "second-exit"],
+        ["second-enter", "second-exit", "first-enter", "first-exit"],
+    )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_calls_for_different_sessions_are_not_serialized():
+    """Control for the test above -- two unrelated sessions must not block
+    each other; only a shared thread_id does."""
+    order: list[str] = []
+    started_first = asyncio.Event()
+
+    async def _first() -> None:
+        async with _session_lock("thread-x"):
+            order.append("first-enter")
+            started_first.set()
+            await asyncio.sleep(0.05)
+            order.append("first-exit")
+
+    async def _second() -> None:
+        await started_first.wait()
+        async with _session_lock("thread-y"):
+            order.append("second-enter")
+            order.append("second-exit")
+
+    await asyncio.gather(_first(), _second())
+
+    # "second" ran to completion while "first" was still holding its own,
+    # unrelated lock -- proof the two sessions never contended.
+    assert order.index("second-enter") < order.index("first-exit")

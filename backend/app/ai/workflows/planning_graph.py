@@ -2066,7 +2066,6 @@ def create_planning_graph(
             f"{state.get('run_id', '')}:{brief_gate_round}".encode("utf-8")
         ).hexdigest()[:16]
 
-        HITL_INTERRUPTS.labels(kind="writing_brief").inc()
         await emit_node_start(
             config, "brief_gate", "Yazım Briefi", "Taslak öncesi yazım briefi bekleniyor..."
         )
@@ -2074,6 +2073,14 @@ def create_planning_graph(
             config, kind="writing_brief", interrupt_id=interrupt_id, payload=payload
         )
         answer = interrupt(payload)
+        # C25: counted here, not before interrupt() -- interrupt() re-runs
+        # everything above it on resume (see this node's own comment on
+        # interrupt_id), so a counter placed before it fires once on the
+        # pausing execution *and* once more on the replay that resumes it,
+        # double-counting every single interrupt. This line only executes
+        # on the replay where interrupt() actually returns instead of
+        # raising, which is exactly once per real pause-and-answer cycle.
+        HITL_INTERRUPTS.labels(kind="writing_brief").inc()
         answer = answer if isinstance(answer, dict) else {}
         await emit_node_end(
             config, "brief_gate", "Yazım Briefi", "Yazım briefi yanıtı alındı.", answer
@@ -2205,7 +2212,6 @@ def create_planning_graph(
             f"{gate_revision_count}:{needs_input_round}".encode("utf-8")
         ).hexdigest()[:16]
 
-        HITL_INTERRUPTS.labels(kind=kind).inc()
         await emit_node_start(
             config,
             "human_gate",
@@ -2214,6 +2220,10 @@ def create_planning_graph(
         )
         await emit_interrupt(config, kind=kind, interrupt_id=interrupt_id, payload=payload)
         answer = interrupt(payload)
+        # C25: see brief_gate_node's identical comment -- counted after
+        # interrupt() returns, not before, so a real pause-and-answer cycle
+        # is counted exactly once instead of twice.
+        HITL_INTERRUPTS.labels(kind=kind).inc()
         answer = answer if isinstance(answer, dict) else {}
         # Execution only reaches here after Command(resume=...) -- the gate is
         # now resolved, whatever the human decided.
@@ -2482,7 +2492,6 @@ def create_planning_graph(
             interrupt_id = hashlib.sha256(
                 f"artifact_transfer_disambiguate:{intent_id}:{gate_round}".encode("utf-8")
             ).hexdigest()[:16]
-            HITL_INTERRUPTS.labels(kind="artifact_transfer_disambiguate").inc()
             await emit_node_start(
                 config, "transfer_gate", "Alıcı Seçimi", "Alıcı seçiminiz bekleniyor..."
             )
@@ -2490,6 +2499,8 @@ def create_planning_graph(
                 config, kind="artifact_transfer_disambiguate", interrupt_id=interrupt_id, payload=payload
             )
             answer = interrupt(payload)
+            # C25: see brief_gate_node's identical comment.
+            HITL_INTERRUPTS.labels(kind="artifact_transfer_disambiguate").inc()
             answer = answer if isinstance(answer, dict) else {}
             await emit_node_end(
                 config, "transfer_gate", "Alıcı Seçimi", "Alıcı seçimi alındı.", answer
@@ -2545,7 +2556,6 @@ def create_planning_graph(
         interrupt_id = hashlib.sha256(
             f"artifact_transfer_confirm:{intent_id}:{gate_round}".encode("utf-8")
         ).hexdigest()[:16]
-        HITL_INTERRUPTS.labels(kind="artifact_transfer_confirm").inc()
         await emit_node_start(
             config, "transfer_gate", "Transfer Onayı", "Transfer onayınız bekleniyor..."
         )
@@ -2553,6 +2563,8 @@ def create_planning_graph(
             config, kind="artifact_transfer_confirm", interrupt_id=interrupt_id, payload=payload
         )
         answer = interrupt(payload)
+        # C25: see brief_gate_node's identical comment.
+        HITL_INTERRUPTS.labels(kind="artifact_transfer_confirm").inc()
         answer = answer if isinstance(answer, dict) else {}
         await emit_node_end(
             config, "transfer_gate", "Transfer Onayı", "Transfer onayı alındı.", answer

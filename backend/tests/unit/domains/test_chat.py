@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from pydantic import ValidationError
 from unittest.mock import AsyncMock, MagicMock
@@ -41,6 +43,44 @@ async def test_chat_service_plain_chat(chat_service, mock_planning_graph):
     assert response.reply == "Merhaba, size nasıl yardımcı olabilirim?"
     assert response.session_id == "123"
     mock_planning_graph.ainvoke.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_end_orphaned_run_closes_out_the_run_row(chat_service, mock_planning_graph, monkeypatch):
+    """A timed-out or crashed turn never reaches consolidate_memory_node --
+    the only place end_run() is normally called -- so the runs row
+    planning_node's own start_run wrote would stay "running" forever
+    without this."""
+    from app.domains.chat import chat_service as chat_service_module
+
+    end_run = AsyncMock()
+    monkeypatch.setattr(chat_service_module, "end_run", end_run)
+    mock_planning_graph.aget_state.return_value = MagicMock(
+        values={"run_id": "run-1", "company_id": "company-1"}
+    )
+
+    await chat_service._end_orphaned_run({}, "timeout")
+
+    end_run.assert_called_once_with(run_id="run-1", status="timeout", company_id="company-1")
+
+
+@pytest.mark.asyncio
+async def test_end_orphaned_run_is_a_silent_no_op_without_a_recoverable_run_id(
+    chat_service, mock_planning_graph, monkeypatch
+):
+    """No checkpointer (aget_state raises), or a snapshot with no run_id at
+    all (nothing ever got as far as planning_node) -- both must degrade
+    silently, never raise a second exception on top of the one the caller
+    is already handling."""
+    from app.domains.chat import chat_service as chat_service_module
+
+    end_run = AsyncMock()
+    monkeypatch.setattr(chat_service_module, "end_run", end_run)
+    mock_planning_graph.aget_state.side_effect = RuntimeError("no checkpointer configured")
+
+    await chat_service._end_orphaned_run({}, "timeout")
+
+    end_run.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -207,6 +247,38 @@ async def test_chat_service_rejects_new_message_on_already_paused_session(
     mock_planning_graph.ainvoke.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_concurrent_messages_on_the_same_session_are_serialized(chat_service, mock_planning_graph):
+    """C13/C14: a double submission on the same session (a fast
+    double-click, a client retry racing the first request) must not race
+    two concurrent ainvoke() calls against the same checkpoint -- the
+    second call's own turn only starts once the first has fully settled,
+    not somewhere in the middle of it."""
+    order: list[str] = []
+
+    async def _slow_ainvoke(_graph_input, config):
+        thread_id = config["configurable"]["thread_id"]
+        order.append(f"start-{thread_id}")
+        await asyncio.sleep(0.02)
+        order.append(f"end-{thread_id}")
+        return {"final_output": {"status": "COMPLETED", "assist": {"reply": "ok"}}}
+
+    mock_planning_graph.ainvoke = _slow_ainvoke
+    request = ChatMessageRequest(message="Merhaba", session_id="concurrent-session")
+
+    await asyncio.gather(
+        chat_service.handle_message(request), chat_service.handle_message(request)
+    )
+
+    # Each turn's own start/end pair completes before the next turn's start
+    # -- never two "start"s back to back, which is what an unserialized
+    # race would produce.
+    assert order == [
+        "start-concurrent-session", "end-concurrent-session",
+        "start-concurrent-session", "end-concurrent-session",
+    ]
+
+
 def test_chat_message_request_defaults_reasoning_level_to_balanced():
     """The zero-regression contract: an older caller that never sends this
     field must resolve to today's pre-existing behaviour."""
@@ -280,6 +352,32 @@ async def test_resume_refuses_a_thread_belonging_to_a_different_user(
         await chat_service.resume("user-1:abc", request, user_id="user-2")
 
     mock_planning_graph.ainvoke.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_resume_records_the_turn_with_the_documents_own_id_not_none(
+    chat_service, mock_planning_graph, monkeypatch
+):
+    """C14: PlanningState.document_id survives a checkpointer resume
+    unchanged, but resume()/resume_stream() used to hardcode document_id=None
+    when recording the turn regardless -- every draft settled through a
+    gate (missing-information, brief, approval) lost its attachment even
+    though the original turn had a document."""
+    from app.domains.chat import chat_service as chat_service_module
+    from app.domains.chat.schema.chat_schema import ChatResumeRequest
+
+    record_turn = AsyncMock()
+    monkeypatch.setattr(chat_service_module.chat_recorder, "record_turn", record_turn)
+
+    mock_planning_graph.ainvoke.return_value = {
+        "document_id": "doc-42",
+        "final_output": {"status": "COMPLETED", "assist": {"reply": "Tamam."}},
+    }
+    request = ChatResumeRequest(session_id="thread-1", action="approve")
+
+    await chat_service.resume("thread-1", request)
+
+    assert record_turn.call_args.kwargs["document_id"] == "doc-42"
 
 
 @pytest.mark.asyncio

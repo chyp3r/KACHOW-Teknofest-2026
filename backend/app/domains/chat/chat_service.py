@@ -17,6 +17,7 @@ from app.domains.chat.schema.chat_schema import (
     ChatResumeRequest,
 )
 from app.observability.ai_metrics import HITL_RESUMES
+from app.observability.run_recorder import end_run
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,50 @@ ORCHESTRATION_TIMEOUT_SECONDS = settings.AI_WORKFLOW_TIMEOUT_SECONDS * 2
 
 DEFAULT_REPLY = "İşleminiz tamamlandı."
 INTERRUPTED_REPLY = "Devam etmek için ek bilgiye veya onayınıza ihtiyaç var."
+
+#: Module-level, not a `ChatService` instance attribute (C13/C14, Faz 8):
+#: `api/dependency.get_chat_service` builds a fresh `ChatService` per
+#: request while the planning graph it wraps is a shared, lazily-built
+#: singleton (`get_planning_graph`'s own module-level `_planning_graph`) --
+#: an instance attribute would give every request its own empty lock
+#: registry and serialize nothing. Every entry point that can advance a
+#: session's graph (a fresh message or a resume, streamed or not) acquires
+#: the lock for the same `thread_id` before touching the checkpointer, so a
+#: double submission -- a fast double-click, a client retry racing the
+#: first request -- is serialized rather than racing two concurrent
+#: `ainvoke()` calls against the same checkpoint: the second call simply
+#: waits for the first to finish (recording included) and then acts on its
+#: settled state, instead of independently reading the same stale
+#: checkpoint and producing a second, divergent continuation (two
+#: `drafts` rows, two recorded chat turns).
+#:
+#: In-process only -- this does not serialize across multiple worker
+#: processes. `drafts`' own `(session_id, version)` unique index (migration
+#: 0028) is the cross-process backstop: a losing concurrent writer there
+#: gets a loud `IntegrityError` instead of a silent duplicate row.
+_session_locks: dict[str, asyncio.Lock] = {}
+
+
+def _session_lock(thread_id: str) -> asyncio.Lock:
+    """The lock serializing every graph-touching call for one session.
+
+    Safe to call unsynchronized from multiple coroutines: everything here
+    is synchronous (no ``await``), so under asyncio's single-threaded event
+    loop it runs to completion without a concurrent call ever observing a
+    half-updated ``_session_locks``.
+
+    Entries are deliberately never evicted: an unclaimed ``asyncio.Lock``
+    is a handful of bytes, and removing one safely (only once nothing holds
+    or is waiting on it) needs its own synchronization to avoid dropping a
+    lock a concurrent caller is mid-acquire on -- not worth it for a
+    registry bounded by "distinct sessions this process has ever seen",
+    nowhere near the per-turn, per-checkpoint growth ``draft_history`` has.
+    """
+    lock = _session_locks.get(thread_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _session_locks[thread_id] = lock
+    return lock
 
 
 class ChatService:
@@ -71,27 +116,31 @@ class ChatService:
             AIException: If the workflow fails or exceeds its timeout.
         """
         thread_id = self._thread_id(request.session_id, user_id)
-        config = self._trace_config(thread_id, user_id, company_id)
-        state = await self._invoke(
-            request,
-            config=config,
-            user_id=user_id,
-            requester_clearance=requester_clearance,
-            company_id=company_id,
-        )
-        response = await self._response_from_state(
-            state, config, thread_id, user_id=user_id, document_id=request.document_id, company_id=company_id
-        )
-        await chat_recorder.record_turn(
-            thread_id=thread_id,
-            user_id=user_id,
-            document_id=request.document_id,
-            user_message=request.message,
-            reply=response.reply,
-            workflow_status=response.workflow_status,
-            details=response.details,
-            company_id=company_id,
-        )
+        # C13/C14: serializes this whole turn (including the pause-state
+        # check inside `_invoke`) against any other call touching the same
+        # session -- see `_session_lock`'s own docstring.
+        async with _session_lock(thread_id):
+            config = self._trace_config(thread_id, user_id, company_id)
+            state = await self._invoke(
+                request,
+                config=config,
+                user_id=user_id,
+                requester_clearance=requester_clearance,
+                company_id=company_id,
+            )
+            response = await self._response_from_state(
+                state, config, thread_id, user_id=user_id, document_id=request.document_id, company_id=company_id
+            )
+            await chat_recorder.record_turn(
+                thread_id=thread_id,
+                user_id=user_id,
+                document_id=request.document_id,
+                user_message=request.message,
+                reply=response.reply,
+                workflow_status=response.workflow_status,
+                details=response.details,
+                company_id=company_id,
+            )
         return response
 
     async def handle_message_stream(
@@ -126,35 +175,37 @@ class ChatService:
 
         async def run_graph() -> None:
             try:
-                config = self._trace_config(thread_id, user_id, company_id)
-                config.setdefault("configurable", {})["status_queue"] = queue
+                # C13/C14: see handle_message's identical comment.
+                async with _session_lock(thread_id):
+                    config = self._trace_config(thread_id, user_id, company_id)
+                    config.setdefault("configurable", {})["status_queue"] = queue
 
-                state = await self._invoke(
-                    request,
-                    config=config,
-                    user_id=user_id,
-                    requester_clearance=requester_clearance,
-                    company_id=company_id,
-                )
-                reply, workflow_status, details = await self._enqueue_terminal_event(
-                    queue,
-                    state,
-                    config,
-                    thread_id,
-                    user_id=user_id,
-                    document_id=request.document_id,
-                    company_id=company_id,
-                )
-                await chat_recorder.record_turn(
-                    thread_id=thread_id,
-                    user_id=user_id,
-                    document_id=request.document_id,
-                    user_message=request.message,
-                    reply=reply,
-                    workflow_status=workflow_status,
-                    details=details,
-                    company_id=company_id,
-                )
+                    state = await self._invoke(
+                        request,
+                        config=config,
+                        user_id=user_id,
+                        requester_clearance=requester_clearance,
+                        company_id=company_id,
+                    )
+                    reply, workflow_status, details = await self._enqueue_terminal_event(
+                        queue,
+                        state,
+                        config,
+                        thread_id,
+                        user_id=user_id,
+                        document_id=request.document_id,
+                        company_id=company_id,
+                    )
+                    await chat_recorder.record_turn(
+                        thread_id=thread_id,
+                        user_id=user_id,
+                        document_id=request.document_id,
+                        user_message=request.message,
+                        reply=reply,
+                        workflow_status=workflow_status,
+                        details=details,
+                        company_id=company_id,
+                    )
             except asyncio.CancelledError:
                 raise
             except AIException as exc:
@@ -223,44 +274,56 @@ class ChatService:
 
         self._verify_thread_ownership(session_id, user_id)
         HITL_RESUMES.labels(action=request.action).inc()
-        config = self._trace_config(session_id, user_id, company_id)
-        # No explicit escalation on this resume -> preset resolves to
-        # BALANCED (multiplier 1.0), leaving today's fixed timeout unchanged.
-        timeout = ORCHESTRATION_TIMEOUT_SECONDS * get_reasoning_level_preset(
-            request.reasoning_level
-        ).timeout_multiplier
-        try:
-            state = await asyncio.wait_for(
-                self.planning_graph.ainvoke(
-                    Command(resume=self._resume_payload(request)), config=config
-                ),
-                timeout=timeout,
-            )
-        except asyncio.TimeoutError as exc:
-            raise AIException(
-                message="Devam işlemi zaman aşımına uğradı.",
-                details={"timeout_seconds": timeout},
-            ) from exc
-        except Exception as exc:
-            logger.exception("Resume failed")
-            raise AIException(
-                message="Devam işlemi sırasında bir hata oluştu.",
-                details={"reason": str(exc)},
-            ) from exc
+        # C13/C14: unlike handle_message, a resume never went through
+        # _invoke's own pause-state check at all -- this lock is the only
+        # thing serializing it against a concurrent resume or a fresh
+        # message on the same session (see _session_lock's own docstring).
+        async with _session_lock(session_id):
+            config = self._trace_config(session_id, user_id, company_id)
+            # No explicit escalation on this resume -> preset resolves to
+            # BALANCED (multiplier 1.0), leaving today's fixed timeout unchanged.
+            timeout = ORCHESTRATION_TIMEOUT_SECONDS * get_reasoning_level_preset(
+                request.reasoning_level
+            ).timeout_multiplier
+            try:
+                state = await asyncio.wait_for(
+                    self.planning_graph.ainvoke(
+                        Command(resume=self._resume_payload(request)), config=config
+                    ),
+                    timeout=timeout,
+                )
+            except asyncio.TimeoutError as exc:
+                raise AIException(
+                    message="Devam işlemi zaman aşımına uğradı.",
+                    details={"timeout_seconds": timeout},
+                ) from exc
+            except Exception as exc:
+                logger.exception("Resume failed")
+                raise AIException(
+                    message="Devam işlemi sırasında bir hata oluştu.",
+                    details={"reason": str(exc)},
+                ) from exc
 
-        response = await self._response_from_state(
-            state, config, session_id, user_id=user_id, document_id=None, company_id=company_id
-        )
-        await chat_recorder.record_turn(
-            thread_id=session_id,
-            user_id=user_id,
-            document_id=None,
-            user_message=self._resume_summary(request),
-            reply=response.reply,
-            workflow_status=response.workflow_status,
-            details=response.details,
-            company_id=company_id,
-        )
+            # C14: PlanningState.document_id survives a checkpointer resume
+            # unchanged (see its own docstring) -- a resumed turn that
+            # settles a draft used to record it with document_id hardcoded
+            # to None regardless, so every draft resolved through a gate
+            # (missing-information, brief, approval) lost its attachment
+            # even though the original turn had one.
+            document_id = state.get("document_id")
+            response = await self._response_from_state(
+                state, config, session_id, user_id=user_id, document_id=document_id, company_id=company_id
+            )
+            await chat_recorder.record_turn(
+                thread_id=session_id,
+                user_id=user_id,
+                document_id=document_id,
+                user_message=self._resume_summary(request),
+                reply=response.reply,
+                workflow_status=response.workflow_status,
+                details=response.details,
+                company_id=company_id,
+            )
         return response
 
     async def resume_stream(
@@ -300,28 +363,33 @@ class ChatService:
 
         async def run_graph() -> None:
             try:
-                config = self._trace_config(session_id, user_id, company_id)
-                config.setdefault("configurable", {})["status_queue"] = queue
+                # C13/C14: see resume's identical comment.
+                async with _session_lock(session_id):
+                    config = self._trace_config(session_id, user_id, company_id)
+                    config.setdefault("configurable", {})["status_queue"] = queue
 
-                state = await asyncio.wait_for(
-                    self.planning_graph.ainvoke(
-                        Command(resume=self._resume_payload(request)), config=config
-                    ),
-                    timeout=timeout,
-                )
-                reply, workflow_status, details = await self._enqueue_terminal_event(
-                    queue, state, config, session_id, user_id=user_id, document_id=None, company_id=company_id
-                )
-                await chat_recorder.record_turn(
-                    thread_id=session_id,
-                    user_id=user_id,
-                    document_id=None,
-                    user_message=self._resume_summary(request),
-                    reply=reply,
-                    workflow_status=workflow_status,
-                    details=details,
-                    company_id=company_id,
-                )
+                    state = await asyncio.wait_for(
+                        self.planning_graph.ainvoke(
+                            Command(resume=self._resume_payload(request)), config=config
+                        ),
+                        timeout=timeout,
+                    )
+                    # C14: see resume's identical comment.
+                    document_id = state.get("document_id")
+                    reply, workflow_status, details = await self._enqueue_terminal_event(
+                        queue, state, config, session_id, user_id=user_id, document_id=document_id,
+                        company_id=company_id,
+                    )
+                    await chat_recorder.record_turn(
+                        thread_id=session_id,
+                        user_id=user_id,
+                        document_id=document_id,
+                        user_message=self._resume_summary(request),
+                        reply=reply,
+                        workflow_status=workflow_status,
+                        details=details,
+                        company_id=company_id,
+                    )
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -453,6 +521,7 @@ class ChatService:
                 timeout=timeout,
             )
         except asyncio.TimeoutError as exc:
+            await self._end_orphaned_run(config, "timeout")
             raise AIException(
                 message="Sohbet işlemi zaman aşımına uğradı.",
                 details={"timeout_seconds": timeout},
@@ -461,10 +530,44 @@ class ChatService:
             raise
         except Exception as exc:
             logger.exception("Orchestration workflow failed")
+            await self._end_orphaned_run(config, "error")
             raise AIException(
                 message="İş akışı sırasında bir hata oluştu.",
                 details={"reason": str(exc)},
             ) from exc
+
+    async def _end_orphaned_run(self, config: dict[str, Any], status: str) -> None:
+        """Close out a run's ``runs`` row after its task never reached
+        ``consolidate_memory_node`` -- the only place ``end_run`` is
+        normally called (see that node's own docstring).
+
+        A timed-out or crashed ``ainvoke`` leaves the graph task aborted
+        mid-flight; without this, the row `planning_node`'s own
+        ``start_run`` wrote stays ``"running"`` forever, indistinguishable
+        from a genuinely still-in-progress turn.
+
+        Best-effort and silent on any failure: recovering the ``run_id``
+        needs a checkpointer (see ``aget_state``'s own tolerance of one
+        being absent), and this must never raise a *second* exception on
+        top of the one the caller is already handling.
+
+        Args:
+            config: The same runnable config the failed ``ainvoke`` call used.
+            status: Recorded on the row -- ``"timeout"`` or ``"error"``.
+        """
+        try:
+            snapshot = await self.planning_graph.aget_state(config)
+            values = snapshot.values if snapshot else {}
+            run_id = values.get("run_id") if isinstance(values, dict) else None
+            company_id = values.get("company_id") if isinstance(values, dict) else None
+        except Exception:
+            return
+        if not run_id:
+            return
+        try:
+            await end_run(run_id=run_id, status=status, company_id=company_id)
+        except Exception:
+            logger.warning("Failed to close out orphaned run %s", run_id, exc_info=True)
 
     async def _enqueue_terminal_event(
         self,
