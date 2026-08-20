@@ -72,3 +72,45 @@ async def test_a_completed_result_is_still_persisted(monkeypatch):
 
     assert draft_id == "draft-123"
     record_draft.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_applied_rules_is_folded_into_the_stored_verification(monkeypatch):
+    """C29: draft["verification"] alone only ever carries
+    VerificationReport.applied_rules -- the deterministic verifier's own
+    findings. The fuller, auditable breakdown (PII, judge/style findings,
+    ...) lives in draft["applied_rules"] instead (see merge_verdicts's own
+    docstring), and DraftModel.verification has no separate column for it
+    -- this must be folded in before persisting, the same way
+    DraftService's own verification_for_storage does."""
+    record_draft = AsyncMock(return_value="draft-123")
+    monkeypatch.setattr("app.domains.chat.chat_service.draft_recorder.record_draft", record_draft)
+
+    service = ChatService(planning_graph=None)
+    final_output = {
+        "draft": {
+            "draft": "Konu: Test\n\nArz ederim.",
+            "status": StepStatus.COMPLETED,
+            "confidence_score": 70.0,
+            "verification": {"confidence_score": 70.0, "applied_rules": []},
+            "applied_rules": [
+                {"rule_id": "pii_bulgusu", "label": "Kişisel veri bulgusu",
+                 "category": "gizlilik", "occurrences": 1, "penalty_applied": 15.0,
+                 "forces_approval": True},
+            ],
+        },
+        "routing": {},
+    }
+
+    class _FakeGraph:
+        async def aupdate_state(self, *args, **kwargs):
+            return None
+
+    service.planning_graph = _FakeGraph()
+
+    await service._maybe_record_draft(
+        final_output, config={}, thread_id="t1", user_id=None, document_id=None
+    )
+
+    stored_verification = record_draft.call_args.kwargs["verification"]
+    assert stored_verification["applied_rules"] == final_output["draft"]["applied_rules"]

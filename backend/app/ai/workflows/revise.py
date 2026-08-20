@@ -15,6 +15,8 @@ from typing import Any, Optional
 from langchain_core.runnables import RunnableConfig
 
 from app.ai.adapters.company_adapter import AdapterProvider
+from app.ai.adapters.company_rules import RulesProvider
+from app.ai.identity.company_profile import ProfileProvider
 from app.ai.llms.base import BaseLLMClient
 from app.ai.reasoning_levels import get_reasoning_level_preset
 from app.ai.revision.instruction import (
@@ -68,6 +70,8 @@ async def run_revise(
     instruction_origin: str = "user_turn",
     company_id: Optional[str] = None,
     adapter_provider: Optional[AdapterProvider] = None,
+    rules_provider: Optional[RulesProvider] = None,
+    profile_provider: Optional[ProfileProvider] = None,
     today: str = "",
 ) -> dict[str, Any]:
     """Produce a targeted revision of the active draft.
@@ -123,6 +127,22 @@ async def run_revise(
             own graph. Ignored when ``revise_graph`` is supplied pre-built
             -- that graph's own adapter_provider (or lack of one) already
             applies.
+        rules_provider: Async callable resolving a company's mandatory
+            drafting rules (see
+            ``app.domains.companies.provider.get_company_rules``),
+            forwarded to ``create_revise_graph`` the same way
+            ``adapter_provider`` is (C27) -- without this, a caller that
+            builds its own graph through this fallback (rather than
+            passing a pre-built ``revise_graph``, the way every caller in
+            this codebase today happens to) silently lost the company's
+            mandatory rules on every revision, even though the original
+            draft enforced them. Ignored when ``revise_graph`` is supplied
+            pre-built -- that graph's own rules_provider already applies.
+        profile_provider: Async callable resolving a company's identity
+            profile (see
+            ``app.domains.companies.provider.get_company_profile``),
+            forwarded the same way (Faz 6). Ignored when ``revise_graph``
+            is supplied pre-built.
         today: The date this revision is happening on (see
             app.ai.workflows.dates.today_tr), forwarded so
             revise_graph.verify_node's own date-placeholder backstop can
@@ -140,7 +160,8 @@ async def run_revise(
     preset = get_reasoning_level_preset(reasoning_level)
     resolved_correspondence_type = correspondence_type or active_draft.correspondence_type
     graph = revise_graph or create_revise_graph(
-        llm_client, fast_llm_client, mevzuat_retriever, adapter_provider
+        llm_client, fast_llm_client, mevzuat_retriever, adapter_provider, rules_provider,
+        profile_provider,
     )
 
     try:
@@ -202,6 +223,14 @@ async def run_revise(
         "pii_findings": final_state.get("pii_findings", []),
         "missing_information": final_state.get("missing_information", []),
         "attempt_history": final_state.get("attempt_history", []),
+        # C29: these two used to fall out of the sub-graph result here --
+        # revise_graph.verify_node computes and returns both (the same
+        # auditable rule breakdown and attempt count draft_graph's own
+        # result carries), but this façade never surfaced them, so every
+        # revised draft persisted with an empty applied_rules and no
+        # attempt count regardless of what the sub-graph actually did.
+        "applied_rules": final_state.get("applied_rules", []),
+        "attempts": final_state.get("attempts", 0),
         "conflicts": final_state.get("conflicts", []),
         "conflict_notes": final_state.get("conflict_notes", ""),
         "changelog": final_state.get("changelog", {}),

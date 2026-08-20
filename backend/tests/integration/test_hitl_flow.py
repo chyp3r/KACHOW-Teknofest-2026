@@ -305,3 +305,62 @@ async def test_a_revision_note_in_the_answer_box_runs_revise_instead_of_being_su
     # revision note as if it were a muhatap value.
     assert "Unvanı Daire Başkanı olarak değiştir" not in revised_draft
     assert "Daire Başkanı" in revised_draft
+
+
+@pytest.mark.asyncio
+async def test_the_revise_escape_hatch_carries_the_sub_genre_and_status_through(
+    fake_llm, fake_fast_llm, monkeypatch
+):
+    """C15: gate_revise_node used to build its DraftVersion without
+    correspondence_sub_genre/status/rejection_reason, silently dropping
+    them on every gate-triggered revision -- a revision of a specific
+    sub-genre (an itiraz dilekçesi, say) fell back to generic "diğer resmî
+    yazışma" phrasing, and a revision of a REJECTED draft never saw
+    _build_brief's own rejection-reason section."""
+    monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
+    monkeypatch.setattr(settings, "DRAFT_JUDGE_ENABLED", False)
+    draft_result = {**MOCK_DRAFT_RESULT, "correspondence_sub_genre": "itiraz dilekçesi"}
+    document_analysis_graph = AsyncMock(
+        ainvoke=AsyncMock(
+            return_value={
+                "document_type": "official_letter", "document_type_label": "Resmî Yazı",
+                "summary": "Test evrakı.", "fields": {}, "missing_fields": [],
+                "compliance_status": "compliant", "mevzuat_suggestions": [],
+            }
+        )
+    )
+    draft_graph = AsyncMock(ainvoke=AsyncMock(return_value=dict(draft_result)))
+    routing_graph = AsyncMock(
+        ainvoke=AsyncMock(
+            return_value={
+                "routed_unit": "İnsan Kaynakları Daire Başkanlığı", "priority": "Normal",
+                "reasoning": "Test gerekçesi.", "justification": "Test gerekçesi.",
+            }
+        )
+    )
+    graph = create_planning_graph(
+        llm_client=fake_llm, fast_llm_client=fake_fast_llm,
+        document_analysis_graph=document_analysis_graph, rag_graph=AsyncMock(),
+        draft_graph=draft_graph, routing_graph=routing_graph, checkpointer=MemorySaver(),
+    )
+    config = {"configurable": {"thread_id": "hitl-sub-genre-passthrough"}}
+
+    await graph.ainvoke(
+        {"input_text": "Bu evraka cevap yazısı hazırla", "document_id": None}, config=config
+    )
+
+    fake_llm.stream_chunks = [DRAFT_WITH_PLACEHOLDER.replace("Genel Müdür", "Daire Başkanı")]
+    result = await graph.ainvoke(
+        Command(
+            resume={
+                "action": "revise", "answers": {},
+                "instructions": "Unvanı Daire Başkanı olarak değiştir.",
+            }
+        ),
+        config=config,
+    )
+
+    assert (
+        result.get("final_output", {}).get("draft", {}).get("correspondence_sub_genre")
+        == "itiraz dilekçesi"
+    )

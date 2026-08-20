@@ -249,7 +249,13 @@ class DraftService:
             confidence_score=confidence,
             requires_human_approval=common_fields["requires_human_approval"],
             attempts=common_fields["attempts"],
-            verification=common_fields["verification"],
+            # C29: this success branch computed verification_for_storage
+            # (applied_rules folded into the verification blob, same as the
+            # missing_information branch above) but never actually used it --
+            # every successfully routed draft persisted its verification
+            # without the auditable rule breakdown that made it into the
+            # response schema's own top-level applied_rules field.
+            verification=verification_for_storage,
             judge=common_fields["judge"],
             missing_information=missing_information,
             instructions=request.instructions,

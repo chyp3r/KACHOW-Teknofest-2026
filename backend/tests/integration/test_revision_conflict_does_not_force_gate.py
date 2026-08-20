@@ -105,6 +105,17 @@ async def test_an_unfounded_legislation_citation_is_applied_and_only_notices(
     # meaningful (an unrelated brief_gate interrupt from turn one would
     # otherwise trip it for the wrong reason).
     monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
+    # This test is about the deterministic conflict audit
+    # (detect_conflicts_deterministic), not judge behaviour -- neither fake
+    # LLM configures a structured response, so a judge call here would
+    # always degrade. Since Faz 6, revise_graph.verify_node distinguishes
+    # "judge attempted and degraded" from "judge intentionally skipped"
+    # (see merge_verdicts's own judge_attempted parameter, B7) and forces
+    # human approval for the former -- exactly the parity fix Faz 6 adds,
+    # but it would otherwise make this test's own unrelated conflict-notice
+    # assertion fail on a NEEDS_HUMAN_APPROVAL status. Disabling the judge
+    # keeps this test focused on what it actually verifies.
+    monkeypatch.setattr(settings, "DRAFT_JUDGE_ENABLED", False)
     graph, draft_graph = _build_graph(fake_llm, fake_fast_llm)
     queue: asyncio.Queue = asyncio.Queue()
     config = {"configurable": {"thread_id": "conflict-notice-1", STATUS_QUEUE_KEY: queue}}

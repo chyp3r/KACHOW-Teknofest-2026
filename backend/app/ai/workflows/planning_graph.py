@@ -732,7 +732,8 @@ def create_planning_graph(
     # "revizyon iste" loop, see gate_revise_node) invokes this compiled
     # sub-graph rather than building a fresh one per call.
     revise_graph = create_revise_graph(
-        llm_client, fast_llm_client, mevzuat_retriever, adapter_provider, rules_provider
+        llm_client, fast_llm_client, mevzuat_retriever, adapter_provider, rules_provider,
+        profile_provider,
     )
 
     # Layer 2 of the intent ladder. Built once per graph, and only when there is
@@ -2263,6 +2264,16 @@ def create_planning_graph(
                 for example in (draft_result.get("style_examples") or [])
             ),
             correspondence_type_source=draft_result.get("correspondence_type_source") or "",
+            # C15: these three used to be silently dropped here -- a
+            # gate-triggered revision of a specific sub-genre (an itiraz
+            # dilekçesi, say) lost that genre and fell back to generic
+            # "diğer resmî yazışma" phrasing (and, since Faz 5's C16, its
+            # strict-verification override too); a revision of a REJECTED
+            # draft never saw _build_brief's own rejection-reason section,
+            # since that section is gated on exactly these two fields.
+            correspondence_sub_genre=draft_result.get("correspondence_sub_genre") or "",
+            status=draft_result.get("status") or "",
+            rejection_reason=draft_result.get("rejection_reason") or "",
             writing_brief=draft_result.get("writing_brief") or {},
         )
 

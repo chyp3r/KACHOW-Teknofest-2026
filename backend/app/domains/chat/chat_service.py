@@ -611,6 +611,22 @@ class ChatService:
             # actually changed this turn; there is nothing to record.
             return None
         routing = final_output.get("routing") or {}
+        # C29: `draft["verification"]` alone only ever carries
+        # VerificationReport.applied_rules -- the deterministic verifier's
+        # own findings. The fuller, auditable breakdown (PII, a guessed
+        # correspondence type, missing mevzuat context, judge/style
+        # findings) lives in `draft["applied_rules"]` instead (see
+        # `merge_verdicts`'s own docstring), and DraftModel.verification has
+        # no separate column for it -- folded in here the same way
+        # `app.domains.documents.draft_service.DraftService`'s own
+        # `verification_for_storage` does, so a persisted draft's stored
+        # verification actually matches what the response schema's
+        # top-level `applied_rules` field shows, for both a fresh draft and
+        # a revision alike.
+        verification_for_storage = {
+            **(draft.get("verification") or {}),
+            "applied_rules": draft.get("applied_rules") or [],
+        }
         draft_id = await draft_recorder.record_draft(
             user_id=user_id,
             company_id=company_id,
@@ -624,7 +640,7 @@ class ChatService:
             confidence_score=draft.get("confidence_score"),
             requires_human_approval=draft.get("requires_human_approval"),
             attempts=draft.get("attempts"),
-            verification=draft.get("verification"),
+            verification=verification_for_storage,
             judge=draft.get("judge"),
             missing_information=draft.get("missing_information"),
         )

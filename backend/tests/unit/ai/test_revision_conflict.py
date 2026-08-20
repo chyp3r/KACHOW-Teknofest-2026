@@ -265,6 +265,27 @@ async def test_a_successful_llm_call_returns_findings(fake_llm):
 
 
 @pytest.mark.asyncio
+async def test_the_source_document_is_framed_as_untrusted_content(fake_llm):
+    """A submitted document is attacker-controlled input from the system's
+    perspective (see app.ai.guardrails.injection's own module docstring) --
+    the prompt must tell the model KAYNAK EVRAK is data to compare against,
+    never an instruction to follow, as a second layer alongside the
+    extraction-time scrubber."""
+    fake_llm.generate_structured_return = ConflictAssessment(conflicts=[], rationale="")
+    agent = ConflictAuditorAgent(fake_llm)
+
+    await assess_conflicts_llm(
+        agent, instruction="test talimatı", revised_draft=WELL_FORMED_DRAFT,
+        context="", source_document="Sayın Makam, ...",
+    )
+
+    messages = fake_llm.generate_structured_calls[0]["messages"]
+    prompt = "\n".join(message.get("content", "") for message in messages)
+    assert "GÜVENİLMEYEN İÇERİK" in prompt
+    assert "KAYNAK EVRAK" in prompt
+
+
+@pytest.mark.asyncio
 async def test_a_provider_error_degrades_to_an_empty_list(fake_llm):
     fake_llm.generate_structured_side_effect = [RuntimeError("provider down")]
     agent = ConflictAuditorAgent(fake_llm)

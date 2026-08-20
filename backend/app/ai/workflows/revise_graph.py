@@ -55,6 +55,8 @@ from app.ai.policy import get_policy
 from app.ai.adapters.company_adapter import AdapterProvider, CompanyAdapter
 from app.ai.adapters.company_rules import CompanyRuleSet, RulesProvider
 from app.ai.adapters.injection import format_adapter_block, format_rules_block
+from app.ai.identity.company_profile import CompanyProfile, ProfileProvider
+from app.ai.identity.injection import format_identity_brief_section
 from app.ai.policy.budget import node_budget
 from app.ai.reasoning_levels import ReasoningLevelPreset, get_reasoning_level_preset
 from app.ai.revision.changelog import RevisionChangelog, build_changelog
@@ -82,6 +84,9 @@ from app.ai.verification import (
     InfoQuestion,
     VerificationReport,
     build_missing_info_request,
+    check_filler_sentences,
+    check_person_consistency,
+    check_signature_block,
     fill_date_placeholders,
     judge_draft,
     merge_verdicts,
@@ -89,6 +94,7 @@ from app.ai.verification import (
     normalize_unfilled_markers,
     verify_draft,
 )
+from app.ai.verification.draft_verifier import LEGISLATION_PATTERN
 from app.ai.workflows.correspondence import format_correspondence_profile, is_strict_sub_genre
 from app.ai.workflows.events import (
     emit_node_end,
@@ -155,6 +161,12 @@ class ReviseState(TypedDict, total=False):
     #: forward so `verify` can render the same rules block for the judge
     #: without re-resolving. Absent/empty behaves like no rules configured.
     company_rules: dict[str, Any]
+    #: The resolved identity profile (`CompanyProfile.to_dict()`), set once
+    #: by `rewrite` and carried forward so `verify` can pass the same
+    #: values to `verify_draft` as `trusted_facts` without re-resolving --
+    #: mirrors draft_graph.DraftState's own field of the same name. Absent/
+    #: empty behaves like no profile configured, never an error.
+    company_profile: dict[str, Any]
 
     #: Set by `verify`.
     confidence_score: float
@@ -192,13 +204,42 @@ def _coerce_fields(classification: dict[str, Any]) -> dict[str, Any]:
     return fields if isinstance(fields, dict) else {}
 
 
-def _build_brief(active_draft: DraftVersion, context: str) -> str:
+def _build_brief(
+    active_draft: DraftVersion, context: str, profile: Optional[CompanyProfile] = None
+) -> str:
     """The grounding brief handed to every reviser/judge call this run.
 
     Rebuilt from ``context`` (not cached) so a conditional re-retrieval
     (see ``app.ai.revision.retrieval``) is reflected in every downstream
     prompt, not just the first one.
+
+    Args:
+        active_draft: The version being revised.
+        context: The (possibly re-retrieved) legislation context.
+        profile: The requesting company's identity profile (see
+            ``app.ai.identity.company_profile.CompanyProfile``), or None.
+            Rendered as its own section when non-empty (see
+            ``format_identity_brief_section``) -- mirrors
+            ``draft_graph._build_brief``'s identical section, since a
+            repair pass needing to add a missing antet/imza block deserves
+            the same system-verified identity the original draft had,
+            not silence on who "we" are.
     """
+    fields = _coerce_fields(active_draft.classification)
+    # Mirrors draft_graph._build_brief's own section 3/4 "KARŞI TARAFA
+    # AİTTİR" framing -- without this, a repair pass asked to add a
+    # missing structural element (an antet, a signature block) had no
+    # party-model guidance at all, since _coerce_fields was defined here
+    # but never actually used until now.
+    party_note = (
+        "3. GELEN EVRAKIN KİMLİK BİLGİLERİ -- KARŞI TARAFA AİTTİR (bu alanlar bizim "
+        "antet/imza bloğumuza veya gönderen kurum alanımıza ASLA yazılamaz, yalnızca "
+        "gövde metninde bir olgu olarak anılabilir):\n"
+        f"   - Gönderen Kurum: {fields.get('gonderen_kurum') or '(belirtilmemiş)'}\n"
+        "   - Muhatap (evrakın KENDİ muhatabı -- bizim yanıtımızın muhatabı değil, "
+        f"bu bilgi Yazım Briefi'ndedir): {fields.get('muhatap') or '(belirtilmemiş)'}\n"
+        f"   - İmza Sahibi (KARŞI TARAF): {fields.get('imza_sahibi') or '(belirtilmemiş)'}\n"
+    )
     rejection_note = ""
     if active_draft.status == "REJECTED" and active_draft.rejection_reason:
         # `active_draft` can itself be a previously rejected version (see
@@ -209,17 +250,24 @@ def _build_brief(active_draft: DraftVersion, context: str) -> str:
         # is exactly what the reviser's own "yalnızca kusur listesindeki
         # maddeleri gider" contract already expects of it.
         rejection_note = (
-            "5. Önceki Sürümün Reddedilme Gerekçesi (YALNIZCA bu noktaya "
+            "6. Önceki Sürümün Reddedilme Gerekçesi (YALNIZCA bu noktaya "
             f"odaklan; metnin geri kalanındaki doğru bilgiyi koru): "
             f"{active_draft.rejection_reason}\n"
         )
+    identity_section = (
+        format_identity_brief_section(profile, section_number=7)
+        if profile is not None
+        else ""
+    )
     return (
         f"1. Önceki Taslak Sürümü: {active_draft.version}\n"
         f"2. Doğrulanmış Sınıflandırma: {active_draft.classification.get('summary', 'Özet yok.')}\n"
-        f'3. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
+        f"{party_note}"
+        f'4. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
         f"{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
-        f"4. Yazım Briefi:\n{format_writing_brief(active_draft.writing_brief)}\n"
+        f"5. Yazım Briefi:\n{format_writing_brief(active_draft.writing_brief)}\n"
         f"{rejection_note}"
+        f"{identity_section}"
     )
 
 
@@ -335,6 +383,7 @@ def create_revise_graph(
     mevzuat_retriever: Optional[Any] = None,
     adapter_provider: Optional[AdapterProvider] = None,
     rules_provider: Optional[RulesProvider] = None,
+    profile_provider: Optional[ProfileProvider] = None,
 ):
     """Create and compile the revision workflow.
 
@@ -358,6 +407,17 @@ def create_revise_graph(
             injected the same way ``draft_graph``'s own ``rules_provider``
             is. None reproduces pre-feature behaviour exactly (no rules
             block, ever).
+        profile_provider: Optional async callable resolving a company's
+            identity profile (see
+            ``app.domains.companies.provider.get_company_profile``) --
+            injected the same way ``draft_graph``'s own ``profile_provider``
+            is (Faz 6). Before this, a revision had no access to the
+            company's identity at all, so a repair pass asked to add a
+            missing antet/imza block had nothing telling it who "we" are,
+            and the company's own name/letterhead scored as an ungrounded
+            claim on every single revision instead of a trusted fact.
+            None reproduces pre-feature behaviour exactly (no identity
+            section, no trusted_facts, ever).
 
     Returns:
         The compiled LangGraph workflow.
@@ -392,6 +452,20 @@ def create_revise_graph(
         except Exception:
             logger.warning("Company rules resolution failed for %s", company_id, exc_info=True)
             return CompanyRuleSet.empty(company_id)
+
+    async def _resolve_profile(state: ReviseState) -> CompanyProfile:
+        """This company's identity profile, or an empty one when no
+        ``profile_provider`` was configured, no ``company_id`` is on this
+        turn's state, or resolution itself fails -- mirrors
+        ``draft_graph``'s identical helper (Faz 6)."""
+        company_id = state.get("company_id") or ""
+        if not company_id or profile_provider is None:
+            return CompanyProfile.empty(company_id)
+        try:
+            return await profile_provider(company_id)
+        except Exception:
+            logger.warning("Company profile resolution failed for %s", company_id, exc_info=True)
+            return CompanyProfile.empty(company_id)
 
     async def parse_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
         active_draft = state["active_draft"]
@@ -574,7 +648,6 @@ def create_revise_graph(
         is_repair = bool(state.get("previous_draft"))
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
         client = _resolve_free_text_client(preset, llm_client, fast_llm_client)
-        brief = _build_brief(active_draft, state.get("context", ""))
         correspondence_type = state.get("correspondence_type") or active_draft.correspondence_type
         sub_genre = state.get("correspondence_sub_genre") or getattr(
             active_draft, "correspondence_sub_genre", ""
@@ -587,6 +660,8 @@ def create_revise_graph(
         adapter_block = format_adapter_block(adapter)
         company_ruleset = await _resolve_rules(state)
         rules_block = format_rules_block(company_ruleset)
+        profile = await _resolve_profile(state)
+        brief = _build_brief(active_draft, state.get("context", ""), profile)
 
         await emit_node_start(
             config, "revise", "Taslak Revizyonu",
@@ -733,6 +808,7 @@ def create_revise_graph(
             "status": "IN_PROGRESS",
             "company_adapter": adapter.to_dict(),
             "company_rules": company_ruleset.to_dict(),
+            "company_profile": profile.to_dict(),
         }
 
     def route_after_rewrite(state: ReviseState) -> str:
@@ -787,6 +863,25 @@ def create_revise_graph(
         adapter = CompanyAdapter.from_dict(
             state.get("company_id") or "", state.get("company_adapter")
         )
+        # Faz 6: mirrors draft_graph.verify_node's identical trusted_facts
+        # fold-in -- without this, the company's own name/letterhead
+        # scored as an ungrounded dayanaksiz_iddia on every single
+        # revision, even though the exact same draft's *original*
+        # verify_draft call (in draft_graph) never flagged it.
+        profile = CompanyProfile.from_dict(
+            state.get("company_id") or "", state.get("company_profile")
+        )
+        trusted_facts = [
+            value
+            for value in (
+                profile.display_name,
+                profile.short_name,
+                profile.letterhead,
+                profile.default_signer_title,
+                profile.default_signer_name,
+            )
+            if value
+        ]
         report = verify_draft(
             draft_text,
             source_document=active_draft.source_document,
@@ -797,6 +892,7 @@ def create_revise_graph(
             style_examples=list(active_draft.style_examples) + list(adapter.preferred_examples),
             is_individual_petition="dilekçe" in sub_genre.lower(),
             today=state.get("today", ""),
+            trusted_facts=trusted_facts,
         )
 
         judge_on = (
@@ -814,7 +910,7 @@ def create_revise_graph(
             verdict = await judge_draft(
                 judge_agent,
                 draft=draft_text,
-                brief=_build_brief(active_draft, state.get("context", "")),
+                brief=_build_brief(active_draft, state.get("context", ""), profile),
                 correspondence_type=correspondence_type,
                 instructions=state.get("instructions", ""),
                 timeout_s=settings.DRAFT_JUDGE_TIMEOUT_SECONDS * preset.timeout_multiplier,
@@ -867,6 +963,17 @@ def create_revise_graph(
             if finding.confidence >= get_policy().guardrail.pii_confidence_floor
         ]
 
+        # Faz 6: style_checks findings, fed into the same repair loop the
+        # way draft_graph.verify_node's identical block already does (Faz
+        # 4) -- a repair pass fixing one defect and introducing a person/
+        # filler/signature-block one of its own deserves the same check a
+        # fresh draft gets.
+        style_findings = [
+            *check_person_consistency(draft_text),
+            *check_filler_sentences(draft_text),
+            *check_signature_block(draft_text),
+        ]
+
         combined = merge_verdicts(
             report,
             verdict,
@@ -874,7 +981,10 @@ def create_revise_graph(
             pii_findings=pii_findings,
             correspondence_type_fallback=state.get("correspondence_type_source") == "fallback",
             has_context=bool(state.get("context")),
+            cites_legislation=bool(LEGISLATION_PATTERN.search(draft_text)),
             content_loss=content_loss,
+            judge_attempted=judge_on,
+            style_findings=style_findings,
         )
 
         DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)
