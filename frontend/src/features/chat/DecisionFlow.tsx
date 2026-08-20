@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- metadata and stage derivation are intentionally shared with the inline progress component. */
 import { AlertCircle, ChevronDown, Clock3, GitBranch, X } from "lucide-react";
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import type {
@@ -38,9 +39,9 @@ export const NODE_INFO: Record<string, { label: string; short: string; descripti
   classification: { label: "Evrak Analizi", short: "ANALİZ", description: "Evrak türünü ve zorunlu üst veri alanlarını çıkarır." },
   rag: { label: "Mevzuat", short: "RAG", description: "İlgili mevzuatı hibrit aramayla getirir ve kanıt bağlamını kurar." },
   examples: { label: "Üslup Örnekleri", short: "ÖRNEK", description: "Benzer resmî yazılardan üslup örnekleri getirir." },
-  brief: { label: "Yazım Briefi", short: "BRIEF", description: "Taslak öncesi yazım stilini (taraf, muhatap, kapanış vb.) çözümler." },
-  brief_gate: { label: "Yazım Briefi", short: "BRIEF", description: "Yazım briefindeki belirsiz yuvalar için kullanıcıya sorar." },
-  draft: { label: "Taslak", short: "YAZAR", description: "Belge ve mevzuat bağlamından resmî yazı taslağı oluşturur." },
+  brief: { label: "Yazışma Bilgileri", short: "BİLGİ", description: "Taslak öncesi taraf, muhatap ve kapanış bilgilerini netleştirir." },
+  brief_gate: { label: "Yazışma Bilgileri", short: "BİLGİ", description: "Yazışma bilgilerindeki belirsiz alanlar için kullanıcıya sorar." },
+  draft: { label: "Taslak Hazırlama", short: "TASLAK", description: "Belge ve mevzuat bağlamından resmî yazı taslağı oluşturur." },
   verify: { label: "Doğrulama", short: "KANIT", description: "Taslağın iddialarını kaynak evrak ve mevzuata karşı denetler." },
   judge: { label: "Kalite Yargıcı", short: "YARGIÇ", description: "Talebe uygunluk, resmî üslup ve muhatap tutarlılığını değerlendirir." },
   revise: { label: "Revizyon", short: "REVİZE", description: "Doğrulama ve kalite bulgularını düzeltme listesine dönüştürür." },
@@ -50,7 +51,7 @@ export const NODE_INFO: Record<string, { label: string; short: string; descripti
   revise_audit: { label: "Çelişki Denetimi", short: "DENETİM", description: "Uygulanan talimatla mevzuat/kaynak arasında çelişki olup olmadığını denetler." },
   human_gate: { label: "Eksik Bilgiler", short: "EKSİK", description: "Bir alan eksikse akışı güvenli biçimde durdurup kullanıcıya sorar." },
   gate_revise: { label: "Geri Bildirimli Revizyon", short: "GERİ BLD.", description: 'Eksik bilgi ekranındaki "Revizyon iste" talebinizi aynı çalışmada uygular ve ekrana geri döner.' },
-  routing: { label: "Birim Sevki", short: "SEVK", description: "Tamamlanan taslak için hedef birimi gerekçesiyle önerir." },
+  routing: { label: "Birim Yönlendirme", short: "YÖN", description: "Tamamlanan taslak için hedef birimi gerekçesiyle önerir." },
   assist: { label: "Asistan", short: "ASİST", description: "Belge ve mevzuat araçlarını kullanarak kaynaklı sohbet yanıtı hazırlar." },
   clarify: { label: "Açıklayıcı Soru", short: "SORU", description: "İsteği netleştirmek için kullanıcıya seçenekli bir soru sorar." },
   refuse: { label: "Kapsam Denetimi", short: "KAPSAM", description: "İsteğin sistemin görev alanı dışında kaldığını belirler ve yetenek listesini döndürür." },

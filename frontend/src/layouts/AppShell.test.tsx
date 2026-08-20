@@ -56,6 +56,7 @@ describe("AppShell compact navigation", () => {
     const expand = screen.getByRole("button", { name: "Menüyü genişlet" });
     expect(expand).toHaveAttribute("aria-controls", "primary-sidebar");
     expect(expand).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("Karar Destek Sistemi")).toBeInTheDocument();
 
     fireEvent.click(expand);
 
@@ -92,5 +93,20 @@ describe("AppShell compact navigation", () => {
 
     expect(screen.getByRole("combobox", { name: "Tema seçimi" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Tema: system/ })).not.toBeInTheDocument();
+  });
+
+  it("exposes the colorful dashboard as the first workspace destination", () => {
+    render(
+      withQueryClient(
+        <MemoryRouter initialEntries={["/home"]}>
+          <AppShell><div>İçerik</div></AppShell>
+        </MemoryRouter>,
+      ),
+    );
+
+    const homeLink = screen.getByRole("link", { name: "Ana Sayfa" });
+    expect(homeLink).toHaveClass("nav-tone-indigo", "active");
+    expect(homeLink).toHaveAttribute("href", "/home");
+    expect(screen.queryByRole("link", { name: "Yönlendirme" })).not.toBeInTheDocument();
   });
 });

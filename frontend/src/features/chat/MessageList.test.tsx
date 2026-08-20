@@ -86,6 +86,92 @@ describe("MessageList", () => {
     expect(container.querySelector(".interrupt-message")).toBeNull();
   });
 
+  it("keeps completed questions and their selected answers visible in the conversation", () => {
+    renderWithQueryClient(
+      <MessageList
+        {...baseProps}
+        messages={[
+          {
+            sender: "assistant",
+            text: "",
+            resolvedPrompt: {
+              kind: "writing_brief",
+              title: "Yazım Briefi",
+              action: "answer",
+              questions: [
+                {
+                  key: "yazisma_turu",
+                  header: "Yazışma türü",
+                  question: "Nasıl bir yazışma hazırlayayım?",
+                  options: [
+                    { value: "information_notice", label: "Bilgilendirme metni" },
+                  ],
+                  multi_select: false,
+                  allow_free_text: false,
+                  required: true,
+                },
+                {
+                  key: "muhatap",
+                  header: "Muhatap",
+                  question: "Yazı kime gidecek?",
+                  options: [],
+                  multi_select: false,
+                  allow_free_text: true,
+                  required: true,
+                },
+              ],
+              answers: {
+                yazisma_turu: "information_notice",
+                muhatap: "Strateji Geliştirme Dairesi",
+              },
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Yazım Briefi")).toBeInTheDocument();
+    expect(screen.getByText("Yanıtlandı")).toBeInTheDocument();
+    expect(screen.getByText("Yazışma türü")).toBeInTheDocument();
+    expect(screen.getByText("Bilgilendirme metni")).toBeInTheDocument();
+    expect(screen.getByText("Strateji Geliştirme Dairesi")).toBeInTheDocument();
+    expect(screen.queryByText(/yazisma_turu:/)).not.toBeInTheDocument();
+  });
+
+  it("renders a persisted interrupt sentence and its active form as one message", () => {
+    const interrupt: InterruptState = {
+      kind: "missing_information",
+      interruptId: "interrupt-single-surface",
+      payload: {
+        questions: [{
+          key: "sender_name",
+          question: "Gönderen kurumun adı nedir?",
+          header: "Gönderen kurumun adı",
+          options: [],
+          multi_select: false,
+          allow_free_text: true,
+          required: true,
+        }],
+      },
+    };
+    renderWithQueryClient(
+      <MessageList
+        {...baseProps}
+        messages={[{
+          sender: "assistant",
+          text: "Devam etmek için ek bilgiye veya onayınıza ihtiyaç var.",
+          details: { interrupt: interrupt.payload },
+        }]}
+        interrupt={interrupt}
+        onResume={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(screen.queryByText("Devam etmek için ek bilgiye veya onayınıza ihtiyaç var.")).not.toBeInTheDocument();
+    expect(screen.getByText("Birkaç bilgi daha gerekiyor")).toBeInTheDocument();
+    expect(screen.queryByText(/akış duraklatıldı/i)).not.toBeInTheDocument();
+  });
+
   it("offers a 👍/👎 vote on an assistant reply but not on the user's own message", () => {
     renderWithQueryClient(
       <MessageList

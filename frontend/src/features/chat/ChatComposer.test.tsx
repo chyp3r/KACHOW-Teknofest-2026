@@ -5,9 +5,13 @@ import { ChatComposer } from "./ChatComposer";
 
 const baseProps = {
   documents: [],
+  drafts: [],
   selectedDocument: null,
+  selectedDraft: null,
   onSelectDocument: vi.fn(),
+  onSelectDraft: vi.fn(),
   onClearDocument: vi.fn(),
+  onClearDraft: vi.fn(),
   onSend: vi.fn().mockResolvedValue(undefined),
 };
 
@@ -29,10 +33,10 @@ describe("ChatComposer", () => {
     expect(onSend).toHaveBeenCalledWith("Uzun Türkçe bir karar destek sorusu", "balanced", false);
   });
 
-  it("keeps the document action and AI mode in the same compact control row", () => {
+  it("keeps the document action and working mode in the same compact control row", () => {
     render(<MemoryRouter><ChatComposer {...baseProps} loading={false} /></MemoryRouter>);
 
-    expect(screen.getByRole("button", { name: "Evrak ekle" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "AI modu" })).toHaveValue("balanced");
+    expect(screen.getByRole("button", { name: "Evrak veya taslak ekle" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Çalışma modu" })).toHaveValue("balanced");
   });
 });

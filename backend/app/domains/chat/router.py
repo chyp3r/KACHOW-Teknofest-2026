@@ -10,17 +10,23 @@ from app.api.dependency import (
     get_chat_service,
     get_chat_session_repository,
     get_document_repository,
+    get_draft_repository,
     require_auth_if_enabled,
 )
 from app.api.exceptions.authorization import AuthorizationException
 from app.api.rate_limit import rate_limit
 from app.api.responses import SuccessResponse
 from app.core.enums.sensitivity_level import SensitivityLevel
+from app.core.authz.attributes import Action, Resource
+from app.core.authz.dependency import subject_from_user
+from app.core.authz.engine import authorize
 from app.core.permissions.role_checker import assert_clearance, bypasses_ownership, clearance_for
 from app.domains.chat.chat_service import ChatService
 from app.domains.chat.repository import ChatMessageRepository, ChatSessionRepository
 from app.domains.chat.schema.chat_schema import ChatMessageRequest, ChatResumeRequest
 from app.domains.documents.repository import DocumentRepository
+from app.domains.drafts.model.draft_model import DraftModel
+from app.domains.drafts.repository import DraftRepository
 from app.domains.users.model.user_model import UserModel
 from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 
@@ -67,6 +73,26 @@ async def _verify_document_access(
     except ValueError:
         document_level = SensitivityLevel.UNMARKED
     assert_clearance(current_user, document_level)
+
+
+async def _resolve_revision_draft(
+    draft_id: Optional[str],
+    current_user: UserModel,
+    draft_repository: DraftRepository,
+) -> Optional[DraftModel]:
+    """Resolve and authorize an explicitly selected revision target."""
+    if not draft_id:
+        return None
+    draft = await draft_repository.get_by_id(draft_id)
+    if draft is None:
+        raise AuthorizationException(message="Bu taslağı düzenleme izniniz yok.")
+    resource = Resource(
+        type="draft", id=draft.id, company_id=draft.company_id, owner_id=draft.user_id
+    )
+    decision = authorize(subject_from_user(current_user), Action.DRAFT_UPDATE, resource)
+    if not decision.permit:
+        raise AuthorizationException(message="Bu taslağı düzenleme izniniz yok.")
+    return draft
 
 # Authentication is mandatory (see require_auth_if_enabled) -- every route in
 # this router carries a real, tenant-bound current_user.
@@ -161,6 +187,7 @@ async def send_chat_message(
     request: ChatMessageRequest,
     service: ChatService = Depends(get_chat_service),
     document_repository: DocumentRepository = Depends(get_document_repository),
+    draft_repository: DraftRepository = Depends(get_draft_repository),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
     """Orchestrate a chat interaction and return the completed result.
@@ -171,12 +198,16 @@ async def send_chat_message(
     human-in-the-loop gate; resume it via ``POST /chat/resume``.
     """
     await _verify_document_access(request.document_id, current_user, document_repository)
+    revision_draft = await _resolve_revision_draft(
+        request.draft_id, current_user, draft_repository
+    )
     clearance = clearance_for(current_user)
     result = await service.handle_message(
         request,
         user_id=current_user.id,
         requester_clearance=clearance.value if clearance else None,
         company_id=current_user.company_id,
+        revision_draft=revision_draft,
     )
     return SuccessResponse(data=make_serializable(result.model_dump()))
 
@@ -187,6 +218,7 @@ async def stream_chat_message(
     http_request: Request,
     service: ChatService = Depends(get_chat_service),
     document_repository: DocumentRepository = Depends(get_document_repository),
+    draft_repository: DraftRepository = Depends(get_draft_repository),
     current_user: UserModel = Depends(require_auth_if_enabled),
     _: None = Depends(rate_limit(max_requests=20, window_seconds=60, key_prefix="chat:stream")),
 ):
@@ -204,6 +236,9 @@ async def stream_chat_message(
     # a denied request gets a normal 403 instead of a stream that opens and
     # then immediately reports a generic error.
     await _verify_document_access(request.document_id, current_user, document_repository)
+    revision_draft = await _resolve_revision_draft(
+        request.draft_id, current_user, draft_repository
+    )
     user_id = current_user.id
     clearance = clearance_for(current_user)
     return _sse_response(
@@ -212,6 +247,7 @@ async def stream_chat_message(
             user_id=user_id,
             requester_clearance=clearance.value if clearance else None,
             company_id=current_user.company_id,
+            revision_draft=revision_draft,
         ),
         http_request,
     )

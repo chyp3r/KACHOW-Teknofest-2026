@@ -24,6 +24,73 @@ def chat_service(mock_planning_graph):
     return ChatService(planning_graph=mock_planning_graph)
 
 
+def test_chat_request_rejects_document_and_draft_context_together():
+    with pytest.raises(ValidationError):
+        ChatMessageRequest(
+            message="Bunu revize et",
+            document_id="uploads/source.pdf",
+            draft_id="draft-1",
+        )
+
+
+def test_selected_draft_becomes_the_active_revision_focus(chat_service):
+    from app.domains.drafts.model.draft_model import DraftModel
+
+    draft = DraftModel(
+        id="draft-2",
+        company_id="company-1",
+        user_id="user-1",
+        session_id=None,
+        document_id=None,
+        version=2,
+        parent_draft_id="draft-1",
+        content="Konu: Test\n\nRevize edilecek içerik",
+        correspondence_type="response_letter",
+        confidence_score=87.5,
+        status="COMPLETED",
+        is_deleted=False,
+    )
+
+    focus = chat_service._revision_focus(draft)
+
+    assert focus["active_draft_id"] == "draft-2"
+    assert focus["active_draft"].text == draft.content
+    assert focus["active_draft"].version == 2
+    assert focus["active_draft"].created_from == "draft"
+    assert focus["draft_history"] == (focus["active_draft"],)
+
+
+@pytest.mark.asyncio
+async def test_direct_draft_is_attached_to_the_revision_session(monkeypatch):
+    from app.domains.drafts.model.draft_model import DraftModel
+
+    attach = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.domains.drafts.draft_recorder.attach_to_session", attach)
+    draft = DraftModel(
+        id="draft-direct",
+        company_id="company-1",
+        user_id="user-1",
+        session_id=None,
+        document_id=None,
+        version=1,
+        content="Taslak",
+        is_deleted=False,
+    )
+
+    await ChatService._attach_direct_revision_draft(
+        draft,
+        thread_id="user-1:web:new",
+        company_id="company-1",
+    )
+
+    attach.assert_awaited_once_with(
+        draft_id="draft-direct",
+        session_id="user-1:web:new",
+        company_id="company-1",
+    )
+    assert draft.session_id == "user-1:web:new"
+
+
 @pytest.mark.asyncio
 async def test_chat_service_plain_chat(chat_service, mock_planning_graph):
     request = ChatMessageRequest(message="Merhaba", session_id="123")
@@ -280,6 +347,43 @@ async def test_resume_refuses_a_thread_belonging_to_a_different_user(
         await chat_service.resume("user-1:abc", request, user_id="user-2")
 
     mock_planning_graph.ainvoke.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_resume_records_structured_answers_for_history_rehydration(
+    chat_service, mock_planning_graph, monkeypatch
+):
+    """The user-facing history must not have to parse ``key: value`` text.
+
+    The readable summary remains as a compatibility fallback, while the same
+    resume payload is persisted in message details for the completed form
+    receipt rendered by the frontend.
+    """
+    from app.domains.chat import chat_service as chat_service_module
+    from app.domains.chat.schema.chat_schema import ChatResumeRequest
+
+    record_turn = AsyncMock()
+    monkeypatch.setattr(chat_service_module.chat_recorder, "record_turn", record_turn)
+    mock_planning_graph.ainvoke.return_value = {
+        "final_output": {"status": "COMPLETED", "assist": {"reply": "Tamam."}}
+    }
+    request = ChatResumeRequest(
+        session_id="thread-1",
+        action="answer",
+        answers={"document_count": "1234"},
+    )
+
+    await chat_service.resume("thread-1", request)
+
+    assert record_turn.await_args.kwargs["user_details"] == {
+        "interaction_response": {
+            "action": "answer",
+            "answers": {"document_count": "1234"},
+            "instructions": "",
+            "reason": "",
+            "reasoning_level": None,
+        }
+    }
 
 
 @pytest.mark.asyncio

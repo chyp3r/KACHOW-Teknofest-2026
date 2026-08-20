@@ -1,4 +1,4 @@
-import { Activity, Search, ShieldAlert, UserPlus } from "lucide-react";
+import { Activity, BarChart3, Bot, Briefcase, Building2, MoreHorizontal, ScrollText, Search, Shield, ShieldAlert, UserRoundCheck, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ConfirmationDialog } from "../components/ConfirmationDialog";
@@ -17,7 +17,43 @@ import { Button } from "../components/Button";
 import { Input, Select } from "../components/FormControls";
 import { SectionHeader } from "../components/SectionHeader";
 import { Alert, Card, Spinner } from "../components/Surface";
-import { TrainingPanel } from "../features/admin/TrainingPanel";
+import { AiManagementPanel } from "../features/admin/AiManagementPanel";
+import { AnalyticsPanel } from "../features/admin/AnalyticsPanel";
+import { AuditPanel } from "../features/admin/AuditPanel";
+import { CompanySettingsPanel } from "../features/admin/CompanySettingsPanel";
+import { UnitsPanel } from "../features/admin/UnitsPanel";
+import { UserPermissionsDrawer } from "../features/admin/UserPermissionsDrawer";
+import { Tabs } from "../components/Tabs";
+
+type AdminSection = "users" | "units" | "company" | "ai" | "analytics" | "audit";
+
+function UserActionsMenu({
+  user,
+  disabled,
+  onToggle,
+  onSoftDelete,
+  onHardDelete,
+  onDetails,
+}: {
+  user: User;
+  disabled: boolean;
+  onToggle: () => void;
+  onSoftDelete: () => void;
+  onHardDelete: () => void;
+  onDetails: () => void;
+}) {
+  return (
+    <details className="action-menu">
+      <summary aria-label={`${user.username} için işlemleri aç`} title="İşlemler"><MoreHorizontal /></summary>
+      <div role="menu" aria-label={`${user.username} işlemleri`}>
+        <Button variant="ghost" size="sm" onClick={onDetails}>Ayrıntılar ve izinler</Button>
+        <Button variant="ghost" size="sm" disabled={disabled} onClick={onToggle}>{user.is_active ? "Devre dışı bırak" : "Etkinleştir"}</Button>
+        <Button variant="ghost" size="sm" className="danger-text" disabled={disabled} onClick={onSoftDelete}>Erişimi kaldır</Button>
+        <Button variant="ghost" size="sm" className="danger-text" disabled={disabled} onClick={onHardDelete}>Kalıcı sil</Button>
+      </div>
+    </details>
+  );
+}
 
 export function AdminPage({ onLogin }: { onLogin: () => void }) {
   const { user, loading: sessionLoading } = useAuth();
@@ -27,6 +63,8 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<User | null>(null);
   const [removeMode, setRemoveMode] = useState<"soft" | "hard">("soft");
+  const [activeSection, setActiveSection] = useState<AdminSection>("users");
+  const [detailUser, setDetailUser] = useState<User | null>(null);
   const canView = user?.role === "admin" || user?.role === "manager";
   const canManage = user?.role === "admin";
   const admin = useAdminUsers(canView);
@@ -115,6 +153,26 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
       />
       <ApiErrorNotice error={admin.errorObject ?? error} />
       {notice && <Alert variant="success">{notice}</Alert>}
+      <Tabs
+        label="Yönetim bölümleri"
+        active={activeSection}
+        onChange={setActiveSection}
+        items={[
+          { id: "users", label: "Kullanıcılar", icon: <Users /> },
+          { id: "units", label: "Birimler", icon: <Building2 /> },
+          ...(canManage ? [{ id: "company" as const, label: "Kurum", icon: <Briefcase /> }] : []),
+          { id: "ai", label: "AI ve Eğitim", icon: <Bot /> },
+          { id: "analytics", label: "Analitik", icon: <BarChart3 /> },
+          ...(canManage ? [{ id: "audit" as const, label: "Denetim", icon: <ScrollText /> }] : []),
+        ]}
+      />
+      {activeSection === "users" && <div className="admin-section" role="tabpanel">
+      <div className="admin-overview-grid" aria-label="Kullanıcı özeti">
+        <Card className="admin-metric-card"><span><Users /></span><div><small>Toplam kullanıcı</small><strong>{users.length}</strong></div></Card>
+        <Card className="admin-metric-card"><span><Shield /></span><div><small>Yönetici</small><strong>{users.filter((item) => item.role === "admin" || item.role === "manager").length}</strong></div></Card>
+        <Card className="admin-metric-card"><span><UserRoundCheck /></span><div><small>Yönetici yardımcısı</small><strong>{users.filter((item) => item.role === "manager").length}</strong></div></Card>
+        <Card className="admin-metric-card"><span><Briefcase /></span><div><small>Çalışan</small><strong>{users.filter((item) => item.role === "employee").length}</strong></div></Card>
+      </div>
       <Card className="invite-panel" padding="default">
         <div>
           <span className="eyebrow">
@@ -164,6 +222,8 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
         } />
         {loading ? (
           <div className="table-loading"><Spinner label="Kullanıcılar yükleniyor" />Kullanıcılar yükleniyor…</div>
+        ) : filtered.length === 0 ? (
+          <EmptyState compact icon={Search} title="Kullanıcı bulunamadı" description="Arama ifadenizi değiştirip yeniden deneyin." />
         ) : (
           <div className="table-scroll">
             <table>
@@ -237,42 +297,14 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
                     </td>
                     <td>
                       {canManage ? (
-                        <div className="table-actions">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={busy || item.id === user.id}
-                            onClick={() =>
-                              void update(item, { is_active: !item.is_active })
-                            }
-                          >
-                            {item.is_active ? "Devre dışı bırak" : "Etkinleştir"}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="danger-text"
-                            disabled={busy || item.id === user.id}
-                            onClick={() => {
-                              setRemoveMode("soft");
-                              setRemoveTarget(item);
-                            }}
-                          >
-                            Erişimi kaldır
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="danger-text"
-                            disabled={busy || item.id === user.id}
-                            onClick={() => {
-                              setRemoveMode("hard");
-                              setRemoveTarget(item);
-                            }}
-                          >
-                            Kalıcı sil
-                          </Button>
-                        </div>
+                        <UserActionsMenu
+                          user={item}
+                          disabled={busy || item.id === user.id}
+                          onToggle={() => void update(item, { is_active: !item.is_active })}
+                          onSoftDelete={() => { setRemoveMode("soft"); setRemoveTarget(item); }}
+                          onHardDelete={() => { setRemoveMode("hard"); setRemoveTarget(item); }}
+                          onDetails={() => setDetailUser(item)}
+                        />
                       ) : (
                         <small>Yalnızca admin değiştirebilir</small>
                       )}
@@ -284,7 +316,20 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
           </div>
         )}
       </Card>
-      {user.company_id && <TrainingPanel companyId={user.company_id} canManage={canManage} />}
+      </div>}
+      {activeSection === "units" && <UnitsPanel canManage />}
+      {activeSection === "company" && user.company_id && <CompanySettingsPanel companyId={user.company_id} canManage={canManage} />}
+      {activeSection === "ai" && (
+        <div className="admin-section" role="tabpanel">
+          {user.company_id ? (
+            <AiManagementPanel companyId={user.company_id} canManage={canManage} />
+          ) : (
+            <EmptyState icon={Bot} title="Şirket bağlamı bulunamadı" description="AI eğitim verileri yalnızca bir şirkete bağlı yönetici hesabında görüntülenebilir." />
+          )}
+        </div>
+      )}
+      {activeSection === "analytics" && user.company_id && <AnalyticsPanel companyId={user.company_id} />}
+      {activeSection === "audit" && <AuditPanel companyId={user.company_id ?? undefined} />}
       <ConfirmationDialog
         open={Boolean(removeTarget)}
         title={removeMode === "hard" ? "Kullanıcıyı kalıcı sil" : "Erişimi kaldır"}
@@ -298,6 +343,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
         onCancel={() => setRemoveTarget(null)}
         onConfirm={() => void remove()}
       />
+      <UserPermissionsDrawer user={detailUser} open={Boolean(detailUser)} canManage={canView} onClose={() => setDetailUser(null)} />
     </div>
   );
 }

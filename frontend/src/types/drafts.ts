@@ -21,3 +21,19 @@ export interface PersistedDraft {
   created_at: string;
   updated_at: string;
 }
+
+export interface DraftShare {
+  id: string;
+  draft_id: string;
+  sender_id: string;
+  recipient_id: string;
+  suggested_unit_id: string | null;
+  message: string | null;
+  status: "sent" | "read" | "accepted" | "rejected" | "withdrawn" | string;
+  responded_at: string | null;
+  response_note: string | null;
+  created_at: string;
+  content: string | null;
+  correspondence_type: string | null;
+  destination: string | null;
+}

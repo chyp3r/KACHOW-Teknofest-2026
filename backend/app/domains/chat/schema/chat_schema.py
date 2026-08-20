@@ -1,6 +1,6 @@
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.core.enums.reasoning_level import ReasoningLevel
 
@@ -27,10 +27,24 @@ class ChatMessageRequest(BaseModel):
         max_length=512,
         description="Opsiyonel olarak hakkında soru sorulan spesifik belgenin (storage_path) ID'si.",
     )
+    draft_id: Optional[str] = Field(
+        default=None,
+        max_length=128,
+        description=(
+            "Opsiyonel olarak revize edilecek kayıtlı taslağın ID'si. Seçilen taslak, "
+            "oturumun aktif taslak bağlamı olur. document_id ile birlikte gönderilemez."
+        ),
+    )
     reasoning_level: ReasoningLevel = Field(
         default=ReasoningLevel.BALANCED,
         description="Hız/kalite tercihi: fast (hızlı), balanced (dengeli, varsayılan), deep (derin muhakeme).",
     )
+
+    @model_validator(mode="after")
+    def validate_single_context(self) -> "ChatMessageRequest":
+        if self.document_id and self.draft_id:
+            raise ValueError("Aynı istekte yalnızca bir evrak veya bir taslak seçilebilir.")
+        return self
 
 
 class ChatMessageResponse(BaseModel):

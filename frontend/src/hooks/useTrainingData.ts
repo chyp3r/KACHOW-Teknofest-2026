@@ -52,6 +52,10 @@ export function useTrainingData(companyId: string | undefined) {
     onSuccess: invalidateAll,
   });
 
+  const exportMutation = useMutation({
+    mutationFn: () => trainingService.exportSamples(companyId!),
+  });
+
   return {
     stats: statsQuery.data,
     statsLoading: statsQuery.isLoading,
@@ -63,8 +67,9 @@ export function useTrainingData(companyId: string | undefined) {
     compile: () => compileMutation.mutateAsync(),
     triggerRun: () => triggerRunMutation.mutateAsync(),
     deleteSample: (sampleId: string) => deleteSampleMutation.mutateAsync(sampleId),
+    exportSamples: () => exportMutation.mutateAsync(),
     isBusy:
-      compileMutation.isPending || triggerRunMutation.isPending || deleteSampleMutation.isPending,
-    error: compileMutation.error ?? triggerRunMutation.error ?? deleteSampleMutation.error ?? null,
+      compileMutation.isPending || triggerRunMutation.isPending || deleteSampleMutation.isPending || exportMutation.isPending,
+    error: compileMutation.error ?? triggerRunMutation.error ?? deleteSampleMutation.error ?? exportMutation.error ?? null,
   };
 }

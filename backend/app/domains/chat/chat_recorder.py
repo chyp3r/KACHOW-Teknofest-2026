@@ -29,6 +29,7 @@ async def record_turn(
     user_id: Optional[str],
     document_id: Optional[str],
     user_message: str,
+    user_details: Optional[dict[str, Any]] = None,
     reply: str,
     workflow_status: str,
     details: Optional[dict[str, Any]] = None,
@@ -42,6 +43,9 @@ async def record_turn(
         user_id: The authenticated caller, when known.
         document_id: The document attached to this turn, if any.
         user_message: The caller's input text this turn.
+        user_details: Optional structured metadata stored on the caller's
+            message. Resume turns use this to preserve the answered HITL
+            form without changing the public request/response contract.
         reply: The assistant's reply text (or the interrupted-turn prompt).
         workflow_status: `ChatMessageResponse.workflow_status` for this turn.
         details: `ChatMessageResponse.details` for this turn, stored on the
@@ -64,7 +68,11 @@ async def record_turn(
                 title=_derive_title(user_message),
             )
             await messages.add_message(
-                thread_id, role="user", content=user_message, company_id=company_id
+                thread_id,
+                role="user",
+                content=user_message,
+                details=user_details,
+                company_id=company_id,
             )
             await messages.add_message(
                 thread_id,

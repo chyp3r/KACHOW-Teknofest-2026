@@ -56,6 +56,26 @@ describe("useChatWorkflow", () => {
     expect(onSessionResolved).toHaveBeenCalledWith("user-1:web:thread");
   });
 
+  it("sends an explicitly selected draft as revision context", async () => {
+    const { result } = renderHook(
+      () => useChatWorkflow(null, "user-1"),
+      { wrapper },
+    );
+
+    await act(() => result.current.send(
+      "Üslubu sadeleştir",
+      "balanced",
+      false,
+      undefined,
+      "draft-1",
+    ));
+
+    expect(mocks.send.mock.calls[0][0]).toMatchObject({
+      document_id: null,
+      draft_id: "draft-1",
+    });
+  });
+
   it("preserves the active stream when the first session event updates the route", async () => {
     let continueStream: (() => void) | undefined;
     let receivedSignal: AbortSignal | undefined;
@@ -142,6 +162,233 @@ describe("useChatWorkflow", () => {
     expect(result.current.messages[0]?.text).toBe("Önceki yanıt");
     expect(mocks.messages).toHaveBeenCalledWith("user-1:web:client");
     expect(mocks.state).toHaveBeenCalledWith("user-1:web:client");
+  });
+
+  it("rehydrates a structured resume as a completed question card instead of raw keys", async () => {
+    const questions = [{
+      key: "yazisma_turu",
+      question: "Nasıl bir yazışma hazırlayayım?",
+      header: "Yazışma türü",
+      options: [{ value: "information_notice", label: "Bilgilendirme metni" }],
+      multi_select: false,
+      allow_free_text: false,
+      required: true,
+    }];
+    mocks.messages.mockResolvedValue({
+      items: [
+        {
+          id: "message-interrupt",
+          role: "assistant",
+          content: "Devam etmek için ek bilgiye ihtiyacım var.",
+          workflow_status: "INTERRUPTED",
+          details: { interrupt: { kind: "writing_brief", title: "Yazım Briefi", questions } },
+          created_at: "2026-08-19T10:00:00Z",
+        },
+        {
+          id: "message-answer",
+          role: "user",
+          content: "yazisma_turu: information_notice",
+          workflow_status: null,
+          details: {
+            interaction_response: {
+              action: "answer",
+              answers: { yazisma_turu: "information_notice" },
+              instructions: "",
+              reason: null,
+            },
+          },
+          created_at: "2026-08-19T10:01:00Z",
+        },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 50,
+    });
+
+    const { result } = renderHook(
+      () => useChatWorkflow(null, "user-1", "user-1:web:client"),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    expect(result.current.messages[0]).toMatchObject({
+      sender: "assistant",
+      text: "",
+      resolvedPrompt: {
+        kind: "writing_brief",
+        title: "Yazım Briefi",
+        answers: { yazisma_turu: "information_notice" },
+      },
+    });
+  });
+
+  it("leaves an answered interrupt receipt in the live conversation", async () => {
+    const questions = [{
+      key: "document_count",
+      question: "Belge sayısı nedir?",
+      header: "Belge sayısı",
+      options: [],
+      multi_select: false,
+      allow_free_text: true,
+      required: true,
+    }];
+    mocks.send.mockImplementationOnce(async (_request, onEvent) => {
+      onEvent({ event: "session", thread_id: "user-1:web:thread" });
+      onEvent({
+        event: "interrupt",
+        kind: "missing_information",
+        interrupt_id: "interrupt-answers",
+        payload: { kind: "missing_information", questions },
+      });
+    });
+    mocks.state.mockResolvedValue({
+      status: "interrupted",
+      interrupt: { kind: "missing_information", questions },
+    });
+    mocks.resume.mockImplementationOnce(async (_request, onEvent) => {
+      onEvent({ event: "final_result", reply: "Taslak hazır.", workflow_status: "COMPLETED" });
+    });
+
+    const { result } = renderHook(() => useChatWorkflow(null, "user-1"), { wrapper });
+    await act(() => result.current.send("taslak hazırla", "balanced", false));
+    expect(result.current.pendingInterrupt?.kind).toBe("missing_information");
+
+    await act(() => result.current.resume("answer", { document_count: "1234" }, ""));
+
+    expect(result.current.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sender: "assistant",
+        text: "",
+        resolvedPrompt: expect.objectContaining({
+          answers: { document_count: "1234" },
+          questions,
+        }),
+      }),
+    ]));
+    expect(result.current.messages.some((message) => message.text.includes("document_count:"))).toBe(false);
+  });
+
+  it("replaces each answered form in place and opens a later request as a new message", async () => {
+    const briefQuestions = [{
+      key: "yazisma_turu",
+      question: "Nasıl bir yazışma hazırlayayım?",
+      header: "Yazışma türü",
+      options: [{ value: "information_notice", label: "Bilgilendirme metni" }],
+      multi_select: false,
+      allow_free_text: false,
+      required: true,
+    }];
+    const missingQuestions = [{
+      key: "sender_name",
+      question: "Gönderen kurumun adı nedir?",
+      header: "Gönderen kurumun adı",
+      options: [],
+      multi_select: false,
+      allow_free_text: true,
+      required: true,
+    }];
+    mocks.send.mockImplementationOnce(async (_request, onEvent) => {
+      onEvent({ event: "session", thread_id: "user-1:web:thread" });
+      onEvent({
+        event: "interrupt",
+        kind: "writing_brief",
+        interrupt_id: "brief-1",
+        payload: { kind: "writing_brief", title: "Yazım Briefi", questions: briefQuestions },
+      });
+      onEvent({
+        event: "final_result",
+        reply: "Devam etmek için ek bilgiye veya onayınıza ihtiyaç var.",
+        workflow_status: "INTERRUPTED",
+        details: { interrupt: { kind: "writing_brief", questions: briefQuestions } },
+      });
+    });
+    let persistedInterrupt = { kind: "writing_brief", questions: briefQuestions };
+    mocks.state.mockImplementation(async () => ({
+      status: "interrupted",
+      interrupt: persistedInterrupt,
+    }));
+    mocks.resume
+      .mockImplementationOnce(async (_request, onEvent) => {
+        persistedInterrupt = { kind: "missing_information", questions: missingQuestions };
+        onEvent({
+          event: "interrupt",
+          kind: "missing_information",
+          interrupt_id: "missing-2",
+          payload: { kind: "missing_information", questions: missingQuestions },
+        });
+        onEvent({
+          event: "final_result",
+          reply: "Devam etmek için ek bilgiye veya onayınıza ihtiyaç var.",
+          workflow_status: "INTERRUPTED",
+          details: { interrupt: { kind: "missing_information", questions: missingQuestions } },
+        });
+      })
+      .mockImplementationOnce(async (_request, onEvent) => {
+        onEvent({ event: "final_result", reply: "Taslak hazır.", workflow_status: "COMPLETED" });
+      });
+
+    const { result } = renderHook(() => useChatWorkflow(null, "user-1"), { wrapper });
+    await act(() => result.current.send("taslak hazırla", "balanced", false));
+    expect(result.current.messages.map((message) => message.text)).toEqual(["taslak hazırla"]);
+
+    await act(() => result.current.resume("answer", { yazisma_turu: "information_notice" }, ""));
+    expect(result.current.messages.filter((message) => message.resolvedPrompt)).toHaveLength(1);
+    expect(result.current.messages.some((message) => message.text.startsWith("Devam etmek için"))).toBe(false);
+    expect(result.current.pendingInterrupt?.kind).toBe("missing_information");
+
+    await act(() => result.current.resume("answer", { sender_name: "KACHOW" }, ""));
+    const receipts = result.current.messages.filter((message) => message.resolvedPrompt);
+    expect(receipts).toHaveLength(2);
+    expect(receipts[0]?.resolvedPrompt?.answers).toEqual({ yazisma_turu: "information_notice" });
+    expect(receipts[1]?.resolvedPrompt?.answers).toEqual({ sender_name: "KACHOW" });
+    expect(result.current.messages[result.current.messages.length - 1]?.text).toBe("Taslak hazır.");
+  });
+
+  it("converts legacy raw resume summaries into the same completed card", async () => {
+    const questions = [{
+      key: "yazisma_turu",
+      question: "Nasıl bir yazışma hazırlayayım?",
+      header: "Yazışma türü",
+      options: [{ value: "information_notice", label: "Bilgilendirme metni" }],
+      multi_select: false,
+      allow_free_text: false,
+      required: true,
+    }];
+    mocks.messages.mockResolvedValue({
+      items: [
+        {
+          id: "legacy-interrupt",
+          role: "assistant",
+          content: "Devam etmek için ek bilgiye veya onayınıza ihtiyaç var.",
+          workflow_status: "INTERRUPTED",
+          details: { interrupt: { kind: "writing_brief", title: "Yazım Briefi", questions } },
+          created_at: "2026-08-19T10:00:00Z",
+        },
+        {
+          id: "legacy-answer",
+          role: "user",
+          content: "yazisma_turu: information_notice",
+          workflow_status: null,
+          details: null,
+          created_at: "2026-08-19T10:01:00Z",
+        },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 50,
+    });
+
+    const { result } = renderHook(
+      () => useChatWorkflow(null, "user-1", "user-1:web:legacy"),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    expect(result.current.messages[0]).toMatchObject({
+      sender: "assistant",
+      text: "",
+      resolvedPrompt: { answers: { yazisma_turu: "information_notice" } },
+    });
   });
 
   it("records each node's backend label and first-seen order, then clears both on the next send", async () => {

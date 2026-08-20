@@ -93,68 +93,92 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
   }
 
   return (
-    <div className="draft-meta-strip">
-      {hasScore && (
-        <span className="draft-meta-chip">
-          Güven skoru: {draft.combined_score}/100
-        </span>
-      )}
-      {appliedRules.length > 0 && (
-        <details className="message-logs draft-meta-rules">
-          <summary>Skor dökümü ({appliedRules.length})</summary>
-          {appliedRules.map((rule) => (
-            <p key={rule.rule_id}>
-              {rule.label}
-              {rule.occurrences > 1 ? ` (×${rule.occurrences})` : ""}
-              {rule.penalty_applied > 0 ? ` — -${rule.penalty_applied} puan` : ""}
-            </p>
-          ))}
-        </details>
-      )}
-      {routedUnit && (
-        <span className="draft-meta-chip">
-          <Route size={13} />
-          Önerilen birim: {routedUnit}
-          {alternativeUnits.length > 0 && !savedDestination
-            ? ` · Alternatif: ${alternativeUnits.join(", ")}`
-            : ""}
-        </span>
-      )}
-      {draftId && (
-        <UnitPicker
-          currentDestination={routedUnit ?? null}
-          saving={updateDestinationMutation.isPending}
-          onSave={(destination) => updateDestinationMutation.mutate(destination)}
-        />
-      )}
-      {draft.requires_human_approval && !isRejected && draft.evaluation_notes && (
-        <details className="message-logs draft-meta-rules">
-          <summary>Kontrol notları</summary>
-          <p>{draft.evaluation_notes}</p>
-        </details>
-      )}
-      {isRejected && (
-        <span className="draft-meta-chip draft-meta-danger">
-          <XCircle size={13} />
-          Reddedildi
-          {draft.rejection_reason ? ` (gerekçe: ${draft.rejection_reason})` : ""}
-        </span>
-      )}
-      {isReviseExhausted && (
-        <span className="draft-meta-chip draft-meta-warning">
-          <AlertCircle size={13} />
-          Revizyon turu sınırına ulaşıldı; bu son sürüm korundu.
-        </span>
-      )}
-      {hasScore && !isRejected && !isReviseExhausted && (
-        <span className="draft-meta-chip draft-meta-success">
-          <CheckCircle2 size={13} />
-          Hazır
-        </span>
-      )}
-      {changelogSummary && (
-        <span className="draft-meta-chip">Değişiklik özeti: {changelogSummary}</span>
-      )}
-    </div>
+    <section className="draft-meta-strip" aria-label="Taslak kontrol özeti">
+      <header className="draft-meta-header">
+        {hasScore ? (
+          <div className="draft-score-metric">
+            <span>Güven skoru</span>
+            <strong>{draft.combined_score}</strong>
+            <span>/100</span>
+            <span className="sr-only">Güven skoru: {draft.combined_score}/100</span>
+          </div>
+        ) : (
+          <strong>Taslak durumu</strong>
+        )}
+        <div className="draft-meta-statuses">
+          {isRejected && (
+            <span className="draft-meta-chip draft-meta-danger">
+              <XCircle size={13} />
+              Reddedildi
+              {draft.rejection_reason ? ` (gerekçe: ${draft.rejection_reason})` : ""}
+            </span>
+          )}
+          {isReviseExhausted && (
+            <span className="draft-meta-chip draft-meta-warning">
+              <AlertCircle size={13} />
+              Revizyon turu sınırına ulaşıldı; bu son sürüm korundu.
+            </span>
+          )}
+          {hasScore && !isRejected && !isReviseExhausted && (
+            <span className="draft-meta-chip draft-meta-success">
+              <CheckCircle2 size={13} />
+              Hazır
+            </span>
+          )}
+        </div>
+      </header>
+
+      <div className="draft-meta-body">
+        {appliedRules.length > 0 && (
+          <details className="draft-meta-detail">
+            <summary>Skor dökümü ({appliedRules.length})</summary>
+            <div className="draft-meta-detail-content">
+              {appliedRules.map((rule) => (
+                <p key={rule.rule_id}>
+                  {rule.label}
+                  {rule.occurrences > 1 ? ` (×${rule.occurrences})` : ""}
+                  {rule.penalty_applied > 0 ? ` — -${rule.penalty_applied} puan` : ""}
+                </p>
+              ))}
+            </div>
+          </details>
+        )}
+
+        {(routedUnit || draftId) && (
+          <div className="draft-routing-row">
+            {routedUnit && (
+              <span className="draft-meta-chip draft-routing-value">
+                <Route size={14} />
+                Önerilen birim: {routedUnit}
+                {alternativeUnits.length > 0 && !savedDestination
+                  ? ` · Alternatif: ${alternativeUnits.join(", ")}`
+                  : ""}
+              </span>
+            )}
+            {draftId && (
+              <UnitPicker
+                currentDestination={routedUnit ?? null}
+                saving={updateDestinationMutation.isPending}
+                onSave={(destination) => updateDestinationMutation.mutate(destination)}
+              />
+            )}
+          </div>
+        )}
+
+        {draft.requires_human_approval && !isRejected && draft.evaluation_notes && (
+          <details className="draft-meta-detail">
+            <summary>Kontrol notları</summary>
+            <div className="draft-meta-detail-content">
+              <p>{draft.evaluation_notes}</p>
+            </div>
+          </details>
+        )}
+        {changelogSummary && (
+          <p className="draft-meta-change-summary">
+            <strong>Değişiklik özeti:</strong> {changelogSummary}
+          </p>
+        )}
+      </div>
+    </section>
   );
 }

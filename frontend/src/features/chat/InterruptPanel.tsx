@@ -216,7 +216,7 @@ export function InterruptPanel({
           />
           <FormActions className="interrupt-actions approval-actions">
             <Button variant="secondary" disabled={loading} onClick={acceptAllDefaults}>
-              Sen karar ver, devam et
+              Otomatik belirle ve devam et
             </Button>
             <Button
               variant="destructive"

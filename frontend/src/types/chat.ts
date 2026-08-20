@@ -34,6 +34,28 @@ export interface PromptQuestion {
   required: boolean;
 }
 
+export type InterruptKind =
+  | "missing_information"
+  | "writing_brief"
+  | "artifact_transfer_confirm"
+  | "artifact_transfer_disambiguate";
+
+// Read-only receipt left in the conversation after a human-in-the-loop
+// question has been answered. Unlike the transport-only resume summary, this
+// preserves the original questions and selected values so a reload can
+// reconstruct the exchange without exposing internal field keys.
+export interface ResolvedPromptInteraction {
+  kind: InterruptKind;
+  title?: string;
+  intro?: string;
+  questions: PromptQuestion[];
+  resolved?: Record<string, { value: string; label?: string; source?: string }>;
+  answers: Record<string, string | string[]>;
+  action: "answer" | "approve" | "revise" | "reject" | "select";
+  instructions?: string;
+  reason?: string;
+}
+
 export interface ChatMessage {
   id?: string;
   sender: "user" | "assistant";
@@ -52,6 +74,7 @@ export interface ChatMessage {
   // typing it out by hand would do), per
   // app.ai.workflows.planner._try_resolve_pending_clarification.
   questions?: PromptQuestion[];
+  resolvedPrompt?: ResolvedPromptInteraction;
 }
 
 export interface ChatSession {
@@ -113,15 +136,9 @@ export interface TransferRecipientCandidate {
 }
 
 export interface InterruptState {
-  kind:
-    | "missing_information"
-    | "writing_brief"
-    // Faz 4 (#201) -- app.ai.workflows.planning_graph.transfer_gate_node.
-    // Two distinct kinds sharing one gate: candidates unresolved
-    // (disambiguate, human picks -- never the model) vs. a single resolved
-    // proposal awaiting the actual send confirmation.
-    | "artifact_transfer_confirm"
-    | "artifact_transfer_disambiguate";
+  // Faz 4 (#201) also includes two transfer gate shapes: candidates
+  // unresolved (disambiguate) and the final send confirmation.
+  kind: InterruptKind;
   interruptId: string;
   payload: {
     questions?: PromptQuestion[];
@@ -274,6 +291,7 @@ export interface ChatRequest {
   message: string;
   session_id: string | null;
   document_id: string | null;
+  draft_id: string | null;
   reasoning_level: ReasoningLevel;
 }
 

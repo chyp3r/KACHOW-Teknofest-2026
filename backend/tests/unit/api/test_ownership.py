@@ -19,6 +19,7 @@ from app.api.dependency import (
     get_chat_service,
     get_document_analysis_service,
     get_document_repository,
+    get_draft_repository,
     get_draft_history_service,
     get_draft_service,
     require_auth_if_enabled,
@@ -50,6 +51,7 @@ def _user(user_id: str, role: str = "employee", company_id: str = "company-1") -
 
 @pytest.fixture(autouse=True)
 def _clear_overrides():
+    app.dependency_overrides[get_draft_repository] = lambda: AsyncMock()
     yield
     app.dependency_overrides.clear()
 
@@ -151,6 +153,53 @@ def test_chat_message_allows_a_manager_to_reach_a_document_it_does_not_own():
 
     assert response.status_code == 200
     chat_service.handle_message.assert_awaited_once()
+
+
+# ==========================================
+# /chat -- draft_id update authorization
+# ==========================================
+def test_chat_message_refuses_a_draft_owned_by_another_employee():
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user("user-b")
+    document_repository = AsyncMock()
+    app.dependency_overrides[get_document_repository] = lambda: document_repository
+    draft_repository = AsyncMock()
+    draft_repository.get_by_id.return_value = _draft(user_id="user-a")
+    app.dependency_overrides[get_draft_repository] = lambda: draft_repository
+    chat_service = AsyncMock()
+    app.dependency_overrides[get_chat_service] = lambda: chat_service
+
+    response = client.post(
+        "/api/v1/chat/message",
+        json={"message": "Üslubu sadeleştir.", "draft_id": "draft-1"},
+    )
+
+    assert response.status_code == 403
+    chat_service.handle_message.assert_not_called()
+
+
+def test_chat_message_passes_an_authorized_revision_draft_to_the_service():
+    from app.domains.chat.schema.chat_schema import ChatMessageResponse
+
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user("user-a")
+    document_repository = AsyncMock()
+    app.dependency_overrides[get_document_repository] = lambda: document_repository
+    draft_repository = AsyncMock()
+    draft = _draft(user_id="user-a")
+    draft_repository.get_by_id.return_value = draft
+    app.dependency_overrides[get_draft_repository] = lambda: draft_repository
+    chat_service = AsyncMock()
+    chat_service.handle_message.return_value = ChatMessageResponse(
+        reply="Taslak revize edildi.", workflow_status="COMPLETED", session_id="user-a:s1"
+    )
+    app.dependency_overrides[get_chat_service] = lambda: chat_service
+
+    response = client.post(
+        "/api/v1/chat/message",
+        json={"message": "Üslubu sadeleştir.", "draft_id": "draft-1"},
+    )
+
+    assert response.status_code == 200
+    assert chat_service.handle_message.await_args.kwargs["revision_draft"] is draft
 
 
 # ==========================================

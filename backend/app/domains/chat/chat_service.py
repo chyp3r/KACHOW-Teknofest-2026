@@ -4,6 +4,7 @@ from typing import Any, AsyncIterator, Optional
 from uuid import uuid4
 
 from app.ai.reasoning_levels import get_reasoning_level_preset
+from app.ai.session.focus import DraftVersion
 from app.ai.workflows.events import emit_reply_stream
 from app.api.exceptions.ai_error import AIException
 from app.api.exceptions.authorization import AuthorizationException
@@ -15,6 +16,7 @@ from app.domains.chat.schema.chat_schema import (
     ChatMessageResponse,
     ChatResumeRequest,
 )
+from app.domains.drafts.model.draft_model import DraftModel
 from app.observability.ai_metrics import HITL_RESUMES
 
 logger = logging.getLogger(__name__)
@@ -44,6 +46,7 @@ class ChatService:
         user_id: Optional[str] = None,
         requester_clearance: Optional[str] = None,
         company_id: Optional[str] = None,
+        revision_draft: Optional[DraftModel] = None,
     ) -> ChatMessageResponse:
         """Process a user message and return the completed (or paused) result.
 
@@ -62,6 +65,8 @@ class ChatService:
                 the graph's own state (``PlanningState.company_id``) so the
                 run/draft/guardrail recorders can attribute their writes to
                 a company, the same way ``user_id`` already is.
+            revision_draft: Authorized persisted draft selected explicitly
+                as this turn's revision target, when any.
 
         Returns:
             The orchestrated response.
@@ -77,6 +82,7 @@ class ChatService:
             user_id=user_id,
             requester_clearance=requester_clearance,
             company_id=company_id,
+            revision_draft=revision_draft,
         )
         response = await self._response_from_state(
             state, config, thread_id, user_id=user_id, document_id=request.document_id, company_id=company_id
@@ -99,6 +105,7 @@ class ChatService:
         user_id: Optional[str] = None,
         requester_clearance: Optional[str] = None,
         company_id: Optional[str] = None,
+        revision_draft: Optional[DraftModel] = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Process a user message, yielding progress events as they happen.
 
@@ -112,6 +119,7 @@ class ChatService:
             user_id: See :meth:`handle_message`.
             requester_clearance: See :meth:`handle_message`.
             company_id: See :meth:`handle_message`.
+            revision_draft: See :meth:`handle_message`.
 
         Yields:
             Progress and result events. The first event is always ``session``,
@@ -134,6 +142,7 @@ class ChatService:
                     user_id=user_id,
                     requester_clearance=requester_clearance,
                     company_id=company_id,
+                    revision_draft=revision_draft,
                 )
                 reply, workflow_status, details = await self._enqueue_terminal_event(
                     queue,
@@ -255,6 +264,7 @@ class ChatService:
             user_id=user_id,
             document_id=None,
             user_message=self._resume_summary(request),
+            user_details={"interaction_response": self._resume_payload(request)},
             reply=response.reply,
             workflow_status=response.workflow_status,
             details=response.details,
@@ -316,6 +326,7 @@ class ChatService:
                     user_id=user_id,
                     document_id=None,
                     user_message=self._resume_summary(request),
+                    user_details={"interaction_response": self._resume_payload(request)},
                     reply=reply,
                     workflow_status=workflow_status,
                     details=details,
@@ -388,6 +399,7 @@ class ChatService:
         user_id: Optional[str] = None,
         requester_clearance: Optional[str] = None,
         company_id: Optional[str] = None,
+        revision_draft: Optional[DraftModel] = None,
     ) -> dict[str, Any]:
         """Run the planning graph under a timeout.
 
@@ -411,6 +423,8 @@ class ChatService:
                 ``record_step``, ``end_run``, the output guardrail's
                 ``record_event``) so their writes can be attributed to a
                 company. Also persists across a checkpointer resume.
+            revision_draft: Authorized persisted target to load into
+                ``SessionFocus.active_draft`` before planning this turn.
 
         Returns:
             The final (or paused) workflow state.
@@ -433,10 +447,16 @@ class ChatService:
                 details={"session_id": thread_id},
             )
 
+        thread_id = (config.get("configurable") or {}).get("thread_id", "")
+        await self._attach_direct_revision_draft(
+            revision_draft, thread_id=thread_id, company_id=company_id
+        )
+
         timeout = ORCHESTRATION_TIMEOUT_SECONDS * get_reasoning_level_preset(
             request.reasoning_level
         ).timeout_multiplier
         try:
+            focus_update = self._revision_focus(revision_draft)
             return await asyncio.wait_for(
                 self.planning_graph.ainvoke(
                     {
@@ -446,6 +466,7 @@ class ChatService:
                         "user_id": user_id,
                         "requester_clearance": requester_clearance,
                         "company_id": company_id,
+                        "focus": focus_update,
                     },
                     config=config,
                 ),
@@ -464,6 +485,50 @@ class ChatService:
                 message="İş akışı sırasında bir hata oluştu.",
                 details={"reason": str(exc)},
             ) from exc
+
+    @staticmethod
+    def _revision_focus(draft: Optional[DraftModel]) -> dict[str, Any]:
+        """Build the partial session-focus update for an explicit draft pick.
+
+        Persisted drafts intentionally store the settled text and quality
+        metadata, not the graph's full source/context snapshot.  The selected
+        row is therefore loaded as a revision target without inventing missing
+        grounding; a newly produced version will carry whatever the revision
+        workflow can verify from that honest baseline.
+        """
+        if draft is None:
+            return {}
+        created_from = "rejected" if (draft.status or "").upper() == "REJECTED" else "draft"
+        active_draft = DraftVersion(
+            version=draft.version,
+            text=draft.content,
+            correspondence_type=draft.correspondence_type or "other_official",
+            confidence_score=float(draft.confidence_score or 0.0),
+            created_from=created_from,
+            supersedes=0,
+            status=draft.status or "",
+        )
+        return {
+            "active_draft": active_draft,
+            "draft_history": (active_draft,),
+            "active_draft_idle_turns": 0,
+            "active_draft_id": draft.id,
+            "writing_brief": None,
+        }
+
+    @staticmethod
+    async def _attach_direct_revision_draft(
+        draft: Optional[DraftModel], *, thread_id: str, company_id: Optional[str]
+    ) -> None:
+        if draft is None or draft.session_id is not None:
+            return
+        attached = await draft_recorder.attach_to_session(
+            draft_id=draft.id,
+            session_id=thread_id,
+            company_id=company_id,
+        )
+        if attached:
+            draft.session_id = thread_id
 
     async def _enqueue_terminal_event(
         self,

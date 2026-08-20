@@ -85,6 +85,31 @@ async def test_update_destination_leaves_the_justification_untouched_when_omitte
     assert draft.destination_justification == "Orijinal gerekçe."
 
 
+@pytest.mark.asyncio
+async def test_attach_session_turns_a_direct_draft_into_a_revision_parent(repo, mock_session):
+    draft = DraftModel(
+        id="draft-direct", company_id="company-1", session_id=None, version=1, content="içerik"
+    )
+
+    attached = await repo.attach_session(draft, "user-1:web:revision")
+
+    assert attached is draft
+    assert draft.session_id == "user-1:web:revision"
+    mock_session.flush.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_attach_session_never_moves_an_existing_draft_chain(repo, mock_session):
+    draft = DraftModel(
+        id="draft-1", company_id="company-1", session_id="original", version=1, content="içerik"
+    )
+
+    attached = await repo.attach_session(draft, "different")
+
+    assert attached.session_id == "original"
+    mock_session.flush.assert_not_called()
+
+
 def test_soft_delete_statement_shape_matches_the_model():
     """Sanity check that the update() target/column names used above are
     real DraftModel attributes, not typo'd strings that would only fail at

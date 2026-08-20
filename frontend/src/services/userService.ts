@@ -3,6 +3,7 @@ import type { User, UserRole } from "../types/users";
 import type { SensitivityLevel } from "../types/security";
 import type { PaginatedResponse } from "../types/api";
 import type { UserSearchResult } from "../types/favorites";
+import type { PermissionGrant, PermissionGrantInput } from "../types/management";
 
 export interface UserSearchFilters {
   q?: string;
@@ -21,6 +22,7 @@ export const userService = {
       `/api/v1/users/search?${params.toString()}`,
     );
   },
+  get: (id: string) => apiRequest<User>(`/api/v1/users/${encodeURIComponent(id)}`),
   invite: (email: string, role: UserRole) =>
     apiRequest("/api/v1/users/invitations", {
       method: "POST",
@@ -51,4 +53,13 @@ export const userService = {
         new_password: newPassword,
       }),
     }),
+  permissions: (userId: string) =>
+    apiRequest<PermissionGrant[]>(`/api/v1/users/${encodeURIComponent(userId)}/permissions`),
+  grantPermission: (userId: string, input: PermissionGrantInput) =>
+    apiRequest<PermissionGrant>(`/api/v1/users/${encodeURIComponent(userId)}/permissions`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  revokePermission: (grantId: string) =>
+    apiRequest<null>(`/api/v1/users/permissions/${encodeURIComponent(grantId)}`, { method: "DELETE" }),
 };

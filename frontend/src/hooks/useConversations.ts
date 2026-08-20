@@ -13,12 +13,13 @@ function upsertConversation(current: Conversation[] | undefined, updated: Conver
   });
 }
 
-export function useConversations() {
+export function useConversations(enabled = true) {
   const queryClient = useQueryClient();
   const listQuery = useQuery({
     queryKey: queryKeys.conversations,
     queryFn: () => collectPages((page) => messagingService.conversations(page)),
     staleTime: 15_000,
+    enabled,
   });
 
   const setList = (updater: (current: Conversation[] | undefined) => Conversation[]) => {

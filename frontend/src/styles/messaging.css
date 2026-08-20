@@ -3,7 +3,7 @@
    design-system.css'in token'larını (--space-*, --radius-*, --surface-*)
    kullanır, kendi renk değeri tanımlamaz. */
 
-.messages-page { height: 100dvh; padding: 0; display: flex; }
+.page.messages-page { height: 100dvh; padding: 0; display: flex; }
 .messages-layout {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
@@ -50,6 +50,7 @@
 }
 .message-thread-header h2 { margin: 0; font-size: 1.05rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .message-thread-header-actions { display: flex; align-items: center; gap: var(--space-1); flex-shrink: 0; }
+.icon-button.message-thread-back { display: none; }
 .message-thread {
   flex: 1;
   min-height: 0;
@@ -233,11 +234,11 @@
 .notification-bell-panel header h3 { margin: 0; font-size: 0.95rem; }
 .notification-bell-list { list-style: none; margin: 0; padding: var(--space-2); display: grid; gap: var(--space-1); }
 .notification-bell-list li {
-  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
-  cursor: pointer;
 }
-.notification-bell-list li:hover { background: var(--surface-hover); }
+.notification-bell-list li > button { display: block; width: 100%; padding: var(--space-2) var(--space-3); border: 0; border-radius: inherit; color: var(--text-primary); background: transparent; text-align: left; cursor: pointer; }
+.notification-bell-list li:hover,
+.notification-bell-list li:focus-within { background: var(--surface-hover); }
 .notification-bell-list li.is-unread { background: var(--surface-selected); }
 .notification-bell-list li strong { display: block; }
 .notification-bell-list li p { margin: var(--space-1) 0 0; color: var(--text-secondary); font-size: 0.85rem; }
@@ -245,6 +246,18 @@
 .sidebar-notification-row { display: flex; justify-content: center; padding-bottom: var(--space-2); }
 
 @media (max-width: 47.5rem) {
+  .page.messages-page {
+    padding: calc(var(--touch-target) + var(--space-5) + env(safe-area-inset-top)) 0 0;
+  }
+
   .messages-layout { grid-template-columns: 1fr; }
-  .conversation-list-panel { display: none; }
+  .messages-layout .message-thread-panel { display: none; }
+  .messages-layout.has-active-conversation .conversation-list-panel { display: none; }
+  .messages-layout.has-active-conversation .message-thread-panel { display: flex; }
+  .icon-button.message-thread-back { display: inline-grid; flex: 0 0 auto; }
+  .message-thread-header { justify-content: flex-start; gap: var(--space-2); }
+  .message-thread-header h2 { flex: 1; }
+  .message-bubble { max-width: 88%; }
+  .artifact-card { width: 100%; min-width: 0; }
+  .user-search-filter-row { grid-template-columns: 1fr; }
 }

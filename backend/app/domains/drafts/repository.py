@@ -31,6 +31,14 @@ class DraftRepository:
         )
         return result.scalar_one_or_none()
 
+    async def attach_session(self, draft: DraftModel, session_id: str) -> DraftModel:
+        """Attach a formerly session-less draft to its first revision chat."""
+        if draft.session_id is not None:
+            return draft
+        draft.session_id = session_id
+        await self.db.flush()
+        return draft
+
     async def list_versions_for_session(self, session_id: str) -> List[DraftModel]:
         """Every version for a session, oldest first."""
         result = await self.db.execute(

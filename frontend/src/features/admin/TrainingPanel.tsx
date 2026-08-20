@@ -1,4 +1,4 @@
-import { GraduationCap } from "lucide-react";
+import { Download, GraduationCap } from "lucide-react";
 import { Fragment, useState } from "react";
 import { Button } from "../../components/Button";
 import { SectionHeader } from "../../components/SectionHeader";
@@ -73,6 +73,9 @@ export function TrainingPanel({ companyId, canManage }: { companyId: string; can
             <div className="table-actions">
               <Button variant="outline" size="sm" disabled={training.isBusy} onClick={() => void compile()}>
                 Örnekleri derle
+              </Button>
+              <Button variant="outline" size="sm" leadingIcon={<Download />} disabled={training.isBusy} onClick={() => void training.exportSamples()}>
+                JSONL dışa aktar
               </Button>
               <Button size="sm" disabled={training.isBusy} onClick={() => void triggerRun()}>
                 {training.isBusy ? <Spinner size="xs" label="Çalışıyor" /> : "Eğitimi başlat"}

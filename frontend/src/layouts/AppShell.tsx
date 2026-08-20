@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  Activity,
   FileText,
   LogIn,
   LogOut,
+  LayoutDashboard,
   Menu,
   MessageCircle,
   MessageSquare,
@@ -14,7 +14,6 @@ import {
   FilePenLine,
   Monitor,
   Network,
-  Route,
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
@@ -30,6 +29,7 @@ import { Button, IconButton } from "../components/Button";
 import { Select } from "../components/FormControls";
 import { NotificationBell } from "../components/NotificationBell";
 import { OverlayBackdrop } from "../components/Surface";
+import { BrandLockup } from "../components/BrandLockup";
 
 interface AppShellProps {
   children: ReactNode;
@@ -41,16 +41,19 @@ const NAV_ITEMS: Array<{
   label: string;
   icon: typeof MessageSquare;
   admin?: boolean;
+  root?: boolean;
   badgeKey?: "messages";
+  tone: "blue" | "violet" | "emerald" | "amber" | "cyan" | "indigo" | "rose";
 }> = [
-  { route: "/chats", label: "Sohbetler", icon: MessageSquare },
-  { route: "/messages", label: "Mesajlar", icon: MessageCircle, badgeKey: "messages" },
-  { route: "/documents", label: "Evraklar", icon: FileText },
-  { route: "/drafts", label: "Taslaklar", icon: FilePenLine },
-  { route: "/graph", label: "Mevzuat Haritası", icon: Network },
-  { route: "/routing", label: "Yönlendirme", icon: Route },
-  { route: "/account", label: "Hesabım", icon: Settings },
-  { route: "/admin", label: "Yönetim", icon: ShieldCheck, admin: true },
+  { route: "/home", label: "Ana Sayfa", icon: LayoutDashboard, tone: "indigo" },
+  { route: "/chats", label: "Sohbetler", icon: MessageSquare, tone: "blue" },
+  { route: "/messages", label: "Mesajlar", icon: MessageCircle, badgeKey: "messages", tone: "violet" },
+  { route: "/documents", label: "Evraklar", icon: FileText, tone: "emerald" },
+  { route: "/drafts", label: "Taslaklar", icon: FilePenLine, tone: "amber" },
+  { route: "/graph", label: "Mevzuat Haritası", icon: Network, tone:"cyan" },
+  { route: "/account", label: "Hesabım", icon: Settings, tone: "blue" },
+  { route: "/admin", label: "Yönetim", icon: ShieldCheck, admin: true, tone: "rose" },
+  { route: "/platform", label: "Platform Yönetimi", icon: ShieldCheck, root: true, tone: "rose" },
 ];
 
 const THEME_ICONS: Record<ThemeMode, typeof Sun> = {
@@ -71,8 +74,8 @@ export function AppShell({
   const navigate = useNavigate();
   const route = location.pathname;
   const { user, logout } = useAuth();
-  const conversations = useConversations();
-  useMessagingStream(Boolean(user));
+  const conversations = useConversations(user?.role !== "root");
+  useMessagingStream(Boolean(user) && user?.role !== "root");
   const { mode, setMode } = useTheme();
   const ThemeIcon = THEME_ICONS[mode];
   const themeModes: ThemeMode[] = ["system", "light", "dark"];
@@ -126,13 +129,7 @@ export function AppShell({
         aria-label="Ana menü"
       >
         <div className="brand">
-          <span className="brand-mark">
-            <Activity size={21} />
-          </span>
-          <div className="brand-copy">
-            <strong>KACHOW</strong>
-            <small>Karar Destek Sistemi</small>
-          </div>
+          <BrandLockup compact={compact} />
           <IconButton
             className="sidebar-compact-toggle"
             icon={compact ? <PanelLeftOpen /> : <PanelLeftClose />}
@@ -151,14 +148,14 @@ export function AppShell({
         </div>
         <nav className="sidebar-nav">
           <span className="nav-caption">Çalışma Alanı</span>
-          {NAV_ITEMS.filter(
-            (item) =>
-              !item.admin || user?.role === "admin" || user?.role === "manager",
-          ).map(({ route: itemRoute, label, icon: Icon, badgeKey }) => (
+          {NAV_ITEMS.filter((item) => {
+            if (user?.role === "root") return item.root || item.route === "/account";
+            return !item.root && (!item.admin || user?.role === "admin" || user?.role === "manager");
+          }).map(({ route: itemRoute, label, icon: Icon, badgeKey, tone }) => (
               <NavLink
                 key={itemRoute}
                 to={itemRoute}
-                className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+                className={({ isActive }) => `nav-item nav-tone-${tone} ${isActive ? "active" : ""}`}
                 title={compact ? label : undefined}
                 onClick={() => setMobileOpen(false)}
               >
@@ -173,6 +170,11 @@ export function AppShell({
         <div className="sidebar-footer">
           {!compact && (
             <div className="sidebar-notification-row">
+              <NotificationBell />
+            </div>
+          )}
+          {compact && (
+            <div className="sidebar-notification-row compact-notification-row">
               <NotificationBell />
             </div>
           )}
