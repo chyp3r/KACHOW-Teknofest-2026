@@ -258,6 +258,68 @@ async def test_writer_exception_ends_the_run_without_reaching_verify():
     assert "verification" not in result
 
 
+GOOD_DRAFT_MISSING_KONU = (
+    "Sayı: E-1-1\n"
+    "Tarih: 30.07.2026\n\n"
+    "Sayın Makam,\n\n"
+    "Arz ederim.\n\n"
+    "Ali Veli\nGenel Müdür"
+)
+
+
+@pytest.mark.asyncio
+async def test_a_repair_pass_that_scores_worse_does_not_win_over_the_first_attempt():
+    """C2: the loop used to always ship whichever attempt ran *last* -- even
+    when a repair pass, in "fixing" one defect, introduced worse ones. The
+    first attempt here (missing only its Konu line, one structural defect,
+    score 92) scores higher than the "repaired" one (BAD_DRAFT, missing
+    nearly every structural element, score 70); once MAX_DRAFT_ATTEMPTS is
+    reached, the first attempt must be what ships, not the second."""
+    graph = create_draft_graph(_mock_llm_client())
+
+    with (
+        patch.object(WriterAgent, "stream") as mock_writer,
+        patch.object(ReviserAgent, "stream") as mock_reviser,
+    ):
+        mock_writer.side_effect = lambda **kwargs: _one_chunk(GOOD_DRAFT_MISSING_KONU)
+        mock_reviser.side_effect = lambda **kwargs: _one_chunk(BAD_DRAFT)
+
+        result = await graph.ainvoke(BASE_STATE)
+
+    assert mock_writer.call_count == 1
+    assert mock_reviser.call_count == MAX_DRAFT_ATTEMPTS - 1
+    assert result["draft"] == GOOD_DRAFT_MISSING_KONU
+    assert result["combined_score"] == 92.0
+    assert result["status"] == "NEEDS_HUMAN_APPROVAL"
+    assert result["verification"]["missing_structure"] == ["Konu satırı"]
+
+
+@pytest.mark.asyncio
+async def test_a_repair_pass_that_crashes_restores_the_first_attempt_instead_of_failing():
+    """C3: a repair pass that raises used to discard whatever a previous,
+    already-verified attempt had produced and fail the whole turn -- even
+    when attempt 1 had already produced a usable, verified letter."""
+    graph = create_draft_graph(_mock_llm_client())
+
+    async def _raise(**kwargs):
+        raise RuntimeError("model unavailable")
+        yield  # pragma: no cover - makes this an async generator function
+
+    with (
+        patch.object(WriterAgent, "stream") as mock_writer,
+        patch.object(ReviserAgent, "stream") as mock_reviser,
+    ):
+        mock_writer.side_effect = lambda **kwargs: _one_chunk(GOOD_DRAFT_MISSING_KONU)
+        mock_reviser.side_effect = _raise
+
+        result = await graph.ainvoke(BASE_STATE)
+
+    assert result["status"] != "FAILED"
+    assert result["draft"] == GOOD_DRAFT_MISSING_KONU
+    assert result["combined_score"] == 92.0
+    assert "en iyi deneme" in result["error"]
+
+
 @pytest.mark.asyncio
 async def test_missing_source_document_fails_before_any_generation_call():
     graph = create_draft_graph(_mock_llm_client())
@@ -434,7 +496,14 @@ async def test_writer_streams_growing_partial_previews_for_the_waiting_ui():
     config = {"configurable": {"status_queue": queue}}
 
     part1 = "Konu: Test Konusu\nSayı: E-1-1\nTarih: 30.07.2026\n\nSayın Makam,\n\n"
-    filler = "Bu cümle önizleme eşiğini aşmak için tekrarlanan dolgu metnidir. " * 4
+    # Four distinct sentences, not one repeated four times: an identical
+    # sentence recurring verbatim is exactly what
+    # app.ai.verification.style_checks.check_filler_sentences now flags as
+    # dolgu_ifade, which would push this draft into an (unmocked) revision
+    # pass and break this test's unrelated preview-streaming assertion.
+    filler = " ".join(
+        f"Bu cümle önizleme eşiğini aşmak için eklenen {i}. dolgu metnidir." for i in range(1, 5)
+    )
     part3 = "Arz ederim.\n\nAli Veli\nGenel Müdür"
     full_draft = (part1 + filler + part3).strip()
 
@@ -518,8 +587,13 @@ async def test_a_preview_masks_pii_even_though_the_final_draft_is_left_for_human
     # A single "Kimlik No: <digits>" mention plus enough padding to cross the
     # preview threshold -- not repeated, since repeating it would itself
     # read as an address-shaped line (2+ "no: <digits>" hits) and get
-    # collapsed by the *other* PII rule this test isn't about.
-    padding = "Bu cümle önizleme eşiğini aşmak için tekrarlanan dolgu metnidir. " * 3
+    # collapsed by the *other* PII rule this test isn't about. Also not the
+    # exact same sentence three times over: that would trip
+    # check_filler_sentences's dolgu_ifade finding, pushing this draft into
+    # an (unmocked) revision pass this test isn't about either.
+    padding = " ".join(
+        f"Bu cümle önizleme eşiğini aşmak için eklenen {i}. dolgu metnidir." for i in range(1, 4)
+    )
     filler = f"Başvuran T.C. Kimlik No: {valid_tckn} olan kişidir. {padding}"
     part3 = "Arz ederim.\n\nAli Veli\nGenel Müdür"
 

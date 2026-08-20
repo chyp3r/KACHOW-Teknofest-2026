@@ -64,6 +64,23 @@ _DRAFT_TOUCHING_INTENTS = frozenset({"draft", "revise"})
 #: much that a long session's objective grows without bound.
 OBJECTIVE_CHAR_CAP = 500
 
+#: `draft_history`'s upper bound (C24) -- every neighbouring channel on this
+#: same object is already bounded (`history`'s own window, `objective`'s
+#: char cap), but `draft_history` grew without one: a long-running,
+#: many-times-revised session's checkpoint carried every version ever
+#: produced, forever, each with its *own* copy of `source_document` and
+#: `classification` (needed by revise's own grounding, see
+#: `DraftVersion`'s docstring) -- a document-heavy session's checkpoint size
+#: grew roughly with turn count times document size, not just turn count.
+#: The oldest entries are the ones a live session needs least: `active_draft`
+#: (always the newest) is what every reader that matters -- revise's own
+#: brief, the approval gate, a transfer proposal -- actually consults;
+#: anything older is audit trail. `DraftRepository`'s own `drafts` table
+#: already persists the complete, unbounded chain to the database on every
+#: version (see `chat_service._maybe_record_draft`); this cap only trims the
+#: in-memory/checkpointed copy, never the durable record.
+DRAFT_HISTORY_CAP = 20
+
 #: Turns an active draft may sit untouched by a draft/revise turn before it
 #: is treated as abandoned. Without this, `active_draft` -- once set --
 #: never clears itself (nothing else in this module writes `None` to it),
@@ -181,8 +198,12 @@ class SessionFocus:
             it, so the next turn's "üslubunu düzelt" still has something to
             attach to. Only an explicit ``RESET_SURFACES`` phrase or
             ``ACTIVE_DRAFT_IDLE_LIMIT`` idle turns clears it to ``None``.
-        draft_history: Every settled version, oldest first (``active_draft``
-            is always ``draft_history[-1]`` when set).
+        draft_history: The most recent settled versions, oldest first,
+            capped at ``DRAFT_HISTORY_CAP`` (``active_draft`` is always
+            ``draft_history[-1]`` when set) -- the complete, uncapped chain
+            is what the ``drafts`` database table is for (see
+            ``app.domains.drafts.repository.DraftRepository``); this is a
+            working set for the live session, not the durable record.
         objective: A short, accumulated statement of what the user is
             trying to accomplish across a multi-turn negotiation. Bounded
             (see ``OBJECTIVE_CHAR_CAP``) rather than an unbounded log.
@@ -242,6 +263,13 @@ class SessionFocus:
     active_document_id: Optional[str] = None
     active_draft: Optional[DraftVersion] = None
     draft_history: tuple[DraftVersion, ...] = ()
+    #: The next version number to assign, independent of `len(draft_history)`
+    #: (C24): once `draft_history` is capped (see `DRAFT_HISTORY_CAP`), its
+    #: length stops being "how many versions this session has ever had" --
+    #: deriving the next version from it would start reissuing numbers
+    #: already used by trimmed-away entries. Monotonically increasing,
+    #: never trimmed itself (a bare int costs nothing to keep forever).
+    draft_version_counter: int = 0
     objective: str = ""
     pending_clarification: Optional[dict[str, Any]] = None
     last_referenced_anchor: Optional[str] = None
@@ -289,6 +317,18 @@ def _revision_origin(
     if plan_intent == "revise":
         return "revise"
     return "draft"
+
+
+def _append_history(
+    history: tuple[DraftVersion, ...], entry: DraftVersion
+) -> tuple[DraftVersion, ...]:
+    """Append one version, capped to `DRAFT_HISTORY_CAP` (C24).
+
+    Trims from the *front* -- the oldest entries are what a live session
+    needs least (see `DRAFT_HISTORY_CAP`'s own docstring); the newest
+    (`entry` itself, which becomes `active_draft`) is always kept.
+    """
+    return (*history, entry)[-DRAFT_HISTORY_CAP:]
 
 
 def _supersedes_of(
@@ -446,12 +486,19 @@ def compute_focus_update(
         # revision, but one happened inside the gate, not the plan.
         created_from = _revision_origin(plan_intent, draft_result)
         supersedes = _supersedes_of(created_from, focus.active_draft)
+        # C24: from a monotonic counter, not `len(focus.draft_history) + 1``
+        # -- once draft_history is capped (see DRAFT_HISTORY_CAP), its
+        # length is no longer "how many versions this session has ever
+        # had", and deriving the next number from it would start reissuing
+        # numbers a trimmed-away entry already used.
+        next_version = focus.draft_version_counter + 1
         version = _draft_version_from_result(
-            draft_result, version=len(focus.draft_history) + 1, created_from=created_from,
+            draft_result, version=next_version, created_from=created_from,
             supersedes=supersedes,
         )
         update["active_draft"] = version
-        update["draft_history"] = (*focus.draft_history, version)
+        update["draft_history"] = _append_history(focus.draft_history, version)
+        update["draft_version_counter"] = next_version
     elif archived_rejection:
         # A rejection is a verdict on the *text*, not an instruction to
         # forget it -- the rejected draft stays `active_draft`, revisable in
@@ -475,11 +522,15 @@ def compute_focus_update(
         if new_text:
             created_from = _revision_origin(plan_intent, draft_result)
             supersedes = _supersedes_of(created_from, focus.active_draft)
+            # C24: see the identical comment in the `produced_version`
+            # branch above.
+            next_version = focus.draft_version_counter + 1
             rejected_version = _draft_version_from_result(
-                draft_result, version=len(focus.draft_history) + 1, created_from="rejected",
+                draft_result, version=next_version, created_from="rejected",
                 rejection_reason=reason, supersedes=supersedes,
             )
-            history = (*focus.draft_history, rejected_version)
+            history = _append_history(focus.draft_history, rejected_version)
+            update["draft_version_counter"] = next_version
         else:
             # No new text this turn -- not reachable through the router
             # today (`archived_rejection`'s own guard requires this only
@@ -491,7 +542,17 @@ def compute_focus_update(
                 focus.active_draft, created_from="rejected", status=str(draft_status),
                 rejection_reason=reason,
             )
-            if focus.draft_history and focus.draft_history[-1] is focus.active_draft:
+            # C26: `==` (value equality), not `is` (identity) -- `focus` can
+            # come back from a checkpointer round-trip (LangGraph persists
+            # PlanningState as serialized data and reconstructs it), which
+            # always produces a *new* DraftVersion instance even when every
+            # field is identical to what was saved. `is` failed silently
+            # across that boundary and fell through to the `else` branch
+            # below, appending a spurious duplicate entry to draft_history
+            # instead of replacing the one being rejected. DraftVersion is a
+            # frozen dataclass, so `==` already compares every field by
+            # value, which is exactly "the same logical draft" here.
+            if focus.draft_history and focus.draft_history[-1] == focus.active_draft:
                 history = (*focus.draft_history[:-1], rejected_version)
             else:
                 history = (*focus.draft_history, rejected_version)

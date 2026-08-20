@@ -21,12 +21,27 @@ from app.ai.revision.instruction import EditDirective
 #: second time.
 _SNIPPET_LIMIT = 400
 
+#: `ChangeEntry.directive`'s own `max_length` -- kept as its own constant
+#: (rather than reusing `_SNIPPET_LIMIT`) so the truncation applied before
+#: construction and the field's own validation limit can never drift apart
+#: silently. `EditDirective.raw` (the source of this value on the
+#: whole-draft fallback path -- see `instruction.decompose_instruction`) is
+#: itself unbounded: it carries the user's entire revision instruction
+#: verbatim, unlike every other `EditDirective` field, which `_parse_one`
+#: derives from short, closed vocabularies. An instruction longer than this
+#: used to reach `ChangeEntry(...)` untruncated and raise a
+#: `pydantic.ValidationError` `audit_node` never caught -- discarding an
+#: already-successful revision over a changelog attribution failure (see
+#: `revise_graph.audit_node`'s own hardening for the other half of this
+#: fix).
+_DIRECTIVE_LIMIT = 200
+
 
 class ChangeEntry(BaseModel):
     """One paragraph-level change between two draft versions."""
 
     directive: str = Field(
-        default="", max_length=200,
+        default="", max_length=_DIRECTIVE_LIMIT,
         description="En yakın eşleşen kullanıcı direktifi (varsa), en iyi çaba eşleştirmesi.",
     )
     scope: str = Field(default="", description="Direktifin kapsamı (paragraph/section/whole).")
@@ -42,11 +57,11 @@ class RevisionChangelog(BaseModel):
     summary: str = Field(default="")
 
 
-def _truncate(text: str) -> str:
+def _truncate(text: str, limit: int = _SNIPPET_LIMIT) -> str:
     text = text.strip()
-    if len(text) <= _SNIPPET_LIMIT:
+    if len(text) <= limit:
         return text
-    return text[: _SNIPPET_LIMIT - 1].rstrip() + "…"
+    return text[: limit - 1].rstrip() + "…"
 
 
 def _split_paragraphs(text: str) -> list[str]:
@@ -110,7 +125,7 @@ def build_changelog(
 
         entries.append(
             ChangeEntry(
-                directive=directive,
+                directive=_truncate(directive, _DIRECTIVE_LIMIT),
                 scope=scope,
                 before=_truncate(before_text),
                 after=_truncate(after_text),

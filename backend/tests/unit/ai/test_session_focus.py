@@ -7,6 +7,7 @@ independent of the graph wiring.
 """
 
 from app.ai.session.focus import (
+    DRAFT_HISTORY_CAP,
     OBJECTIVE_CHAR_CAP,
     DraftVersion,
     SessionFocus,
@@ -152,6 +153,31 @@ def test_a_completed_draft_becomes_the_first_version():
     assert version.text == "Sayın Makam, ..."
     assert version.created_from == "draft"
     assert update["draft_history"] == (version,)
+    assert update["draft_version_counter"] == 1
+
+
+# ==========================================
+# C24: draft_history is capped; version numbers keep climbing past the cap.
+# ==========================================
+def test_draft_history_is_capped_but_version_numbers_keep_climbing_past_it():
+    focus = SessionFocus()
+    for _ in range(DRAFT_HISTORY_CAP + 5):
+        update = compute_focus_update(
+            focus, document_id=None, plan_intent="revise", input_text="Tekrar dene.",
+            draft_result={
+                "status": "COMPLETED", "draft": "yeni metin",
+                "correspondence_type": "cover_letter", "combined_score": 90.0,
+            },
+        )
+        focus = merge_focus(focus, update)
+
+    assert len(focus.draft_history) == DRAFT_HISTORY_CAP
+    # The newest entry's own version number reflects every turn that ever
+    # ran, not just how many are still kept around.
+    assert focus.active_draft.version == DRAFT_HISTORY_CAP + 5
+    assert focus.draft_history[-1].version == DRAFT_HISTORY_CAP + 5
+    assert focus.draft_history[0].version == 6  # the oldest 5 were trimmed
+    assert focus.draft_version_counter == DRAFT_HISTORY_CAP + 5
 
 
 def test_a_settled_draft_from_the_revise_step_is_recorded_as_a_revise():
@@ -159,7 +185,7 @@ def test_a_settled_draft_from_the_revise_step_is_recorded_as_a_revise():
         version=1, text="v1", correspondence_type="cover_letter",
         confidence_score=70.0, created_from="draft",
     )
-    focus = SessionFocus(active_draft=first, draft_history=(first,))
+    focus = SessionFocus(active_draft=first, draft_history=(first,), draft_version_counter=1)
 
     update = compute_focus_update(
         focus,
@@ -189,7 +215,7 @@ def test_a_second_unrelated_draft_request_is_not_mislabeled_as_a_revise():
         version=1, text="v1", correspondence_type="cover_letter",
         confidence_score=70.0, created_from="draft",
     )
-    focus = SessionFocus(active_draft=first, draft_history=(first,))
+    focus = SessionFocus(active_draft=first, draft_history=(first,), draft_version_counter=1)
 
     update = compute_focus_update(
         focus,
@@ -282,7 +308,7 @@ def test_a_rejected_draft_with_no_new_text_is_annotated_in_place_and_stays_activ
         version=1, text="v1", correspondence_type="cover_letter",
         confidence_score=70.0, created_from="draft",
     )
-    focus = SessionFocus(active_draft=first, draft_history=(first,))
+    focus = SessionFocus(active_draft=first, draft_history=(first,), draft_version_counter=1)
 
     update = compute_focus_update(
         focus,
@@ -305,6 +331,46 @@ def test_a_rejected_draft_with_no_new_text_is_annotated_in_place_and_stays_activ
     assert update["last_rejection"] == {
         "version": 1, "reason": "Üslup çok resmi değil.", "draft": "v1",
     }
+
+
+def test_a_rejected_draft_with_no_new_text_replaces_the_history_entry_after_a_checkpoint_round_trip():
+    """C26: the no-new-text fallback used to compare `focus.draft_history[-1]
+    is focus.active_draft` (identity, not value) to decide whether to
+    replace the last history entry in place or append a new one. A
+    checkpointer round-trip (LangGraph persists PlanningState and
+    reconstructs it) always produces a *new* DraftVersion instance even
+    when every field is identical to what was saved -- `is` silently failed
+    across that boundary and appended a spurious duplicate instead of
+    replacing the entry being rejected. Constructing `active_draft` and the
+    history's last entry as two separately-built (but field-equal)
+    instances reproduces exactly that boundary without needing a real
+    checkpointer."""
+    first_in_history = DraftVersion(
+        version=1, text="v1", correspondence_type="cover_letter",
+        confidence_score=70.0, created_from="draft",
+    )
+    # A separate object, not the same one `draft_history` holds -- but
+    # equal in every field, the same shape a checkpointer round-trip
+    # produces.
+    reconstructed_active_draft = DraftVersion(
+        version=1, text="v1", correspondence_type="cover_letter",
+        confidence_score=70.0, created_from="draft",
+    )
+    assert reconstructed_active_draft is not first_in_history
+    assert reconstructed_active_draft == first_in_history
+    focus = SessionFocus(
+        active_draft=reconstructed_active_draft, draft_history=(first_in_history,),
+        draft_version_counter=1,
+    )
+
+    update = compute_focus_update(
+        focus, document_id=None, plan_intent="revise", input_text="Bu olmadı, reddediyorum.",
+        draft_result={"status": "REJECTED", "rejection_reason": "Üslup çok resmi değil."},
+    )
+
+    # Exactly one entry -- replaced in place, not appended alongside.
+    assert len(update["draft_history"]) == 1
+    assert update["draft_history"][0].created_from == "rejected"
 
 
 def test_a_rejection_with_no_prior_active_draft_still_archives_the_real_text():
@@ -342,7 +408,7 @@ def test_rejecting_a_revision_keeps_its_own_text_not_the_prior_versions():
         version=1, text="v1 - eski içerik", correspondence_type="cover_letter",
         confidence_score=70.0, created_from="draft",
     )
-    focus = SessionFocus(active_draft=first, draft_history=(first,))
+    focus = SessionFocus(active_draft=first, draft_history=(first,), draft_version_counter=1)
 
     update = compute_focus_update(
         focus,
@@ -376,7 +442,7 @@ def test_rejecting_an_unrelated_fresh_draft_does_not_claim_to_supersede_the_open
         version=1, text="v1", correspondence_type="cover_letter",
         confidence_score=70.0, created_from="draft",
     )
-    focus = SessionFocus(active_draft=first, draft_history=(first,))
+    focus = SessionFocus(active_draft=first, draft_history=(first,), draft_version_counter=1)
 
     update = compute_focus_update(
         focus,
@@ -399,7 +465,7 @@ def test_a_gate_revise_round_rejected_at_the_gate_supersedes_the_prior_version()
         version=1, text="v1", correspondence_type="cover_letter",
         confidence_score=70.0, created_from="draft",
     )
-    focus = SessionFocus(active_draft=first, draft_history=(first,))
+    focus = SessionFocus(active_draft=first, draft_history=(first,), draft_version_counter=1)
 
     update = compute_focus_update(
         focus,

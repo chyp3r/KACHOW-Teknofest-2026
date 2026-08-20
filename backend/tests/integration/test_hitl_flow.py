@@ -32,6 +32,7 @@ from langgraph.types import Command
 from app.ai.llms.base import BaseLLMClient
 from app.ai.workflows.planning_graph import create_planning_graph
 from app.core.config import settings
+from app.observability.ai_metrics import HITL_INTERRUPTS
 
 SOURCE_DOCUMENT = "Sayı: E-1-1, Tarih: 30.07.2026 tarihli evrak."
 
@@ -170,6 +171,7 @@ async def test_answering_resumes_without_regenerating_the_draft(monkeypatch):
     monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
     graph, mocks = _build_graph()
     config = {"configurable": {"thread_id": "hitl-test-2"}}
+    before = HITL_INTERRUPTS.labels(kind="missing_information")._value.get()
 
     await graph.ainvoke(
         {"input_text": "Bu evraka cevap yazısı hazırla", "document_id": None}, config=config
@@ -179,6 +181,12 @@ async def test_answering_resumes_without_regenerating_the_draft(monkeypatch):
         Command(resume={"action": "answer", "answers": {"muhatap": "İlgili Makama"}, "instructions": ""}),
         config=config,
     )
+
+    # C25: interrupt() replays everything before it on resume, including a
+    # counter placed there -- one real pause-and-answer cycle must count
+    # once, not twice (a naive placement fires on both the pausing call and
+    # the resuming replay).
+    assert HITL_INTERRUPTS.labels(kind="missing_information")._value.get() == before + 1
 
     assert result["final_output"]["status"] == "COMPLETED"
     assert "İlgili Makama" in result["final_output"]["draft"]["draft"]
@@ -221,6 +229,43 @@ async def test_a_still_missing_answer_pauses_again_instead_of_completing(monkeyp
     snapshot = await graph.aget_state(config)
     assert snapshot.next == ("human_gate",)
     assert "[MUHATAP]" in snapshot.values["draft_result"]["draft"]
+    # C1 regression: this second NEEDS_INPUT round must be hashed
+    # differently from the first (the draft text and current_step_idx are
+    # identical across both -- see human_gate_node's own interrupt_id
+    # comment) or the frontend's interrupt_id dedup silently drops the
+    # repeat event and the session hangs. needs_input_round is the state
+    # field that makes the two rounds' hashes differ.
+    assert snapshot.values["needs_input_round"] == 1
+
+
+@pytest.mark.asyncio
+async def test_rejecting_at_the_missing_information_gate_ends_the_turn_cleanly(monkeypatch):
+    """C1 regression: "Vazgeç" (action="reject") used to fall straight
+    through to apply_answers with an empty answers dict -- every placeholder
+    came back unfilled, the draft text was unchanged, and the resulting
+    NEEDS_INPUT round hashed identically to the round the user was trying to
+    leave. The frontend's interrupt_id dedup silently dropped it and the
+    session hung with no way to send another message on that thread. reject
+    must end the turn (StepStatus.REJECTED), not reopen the gate."""
+    monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
+    graph, _mocks = _build_graph()
+    config = {"configurable": {"thread_id": "hitl-reject-1"}}
+
+    await graph.ainvoke(
+        {"input_text": "Bu evraka cevap yazısı hazırla", "document_id": None}, config=config
+    )
+    result = await graph.ainvoke(
+        Command(resume={"action": "reject", "answers": {}, "instructions": "", "reason": "Vazgeçtim."}),
+        config=config,
+    )
+
+    assert result["final_output"]["status"] == "REJECTED"
+    assert result["final_output"]["draft"]["rejection_reason"] == "Vazgeçtim."
+
+    # The run must not still be paused -- the whole point of the fix is
+    # that a subsequent message on this thread is not refused.
+    snapshot = await graph.aget_state(config)
+    assert not snapshot.next
 
 
 @pytest.mark.asyncio
@@ -268,3 +313,62 @@ async def test_a_revision_note_in_the_answer_box_runs_revise_instead_of_being_su
     # revision note as if it were a muhatap value.
     assert "Unvanı Daire Başkanı olarak değiştir" not in revised_draft
     assert "Daire Başkanı" in revised_draft
+
+
+@pytest.mark.asyncio
+async def test_the_revise_escape_hatch_carries_the_sub_genre_and_status_through(
+    fake_llm, fake_fast_llm, monkeypatch
+):
+    """C15: gate_revise_node used to build its DraftVersion without
+    correspondence_sub_genre/status/rejection_reason, silently dropping
+    them on every gate-triggered revision -- a revision of a specific
+    sub-genre (an itiraz dilekçesi, say) fell back to generic "diğer resmî
+    yazışma" phrasing, and a revision of a REJECTED draft never saw
+    _build_brief's own rejection-reason section."""
+    monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
+    monkeypatch.setattr(settings, "DRAFT_JUDGE_ENABLED", False)
+    draft_result = {**MOCK_DRAFT_RESULT, "correspondence_sub_genre": "itiraz dilekçesi"}
+    document_analysis_graph = AsyncMock(
+        ainvoke=AsyncMock(
+            return_value={
+                "document_type": "official_letter", "document_type_label": "Resmî Yazı",
+                "summary": "Test evrakı.", "fields": {}, "missing_fields": [],
+                "compliance_status": "compliant", "mevzuat_suggestions": [],
+            }
+        )
+    )
+    draft_graph = AsyncMock(ainvoke=AsyncMock(return_value=dict(draft_result)))
+    routing_graph = AsyncMock(
+        ainvoke=AsyncMock(
+            return_value={
+                "routed_unit": "İnsan Kaynakları Daire Başkanlığı", "priority": "Normal",
+                "reasoning": "Test gerekçesi.", "justification": "Test gerekçesi.",
+            }
+        )
+    )
+    graph = create_planning_graph(
+        llm_client=fake_llm, fast_llm_client=fake_fast_llm,
+        document_analysis_graph=document_analysis_graph, rag_graph=AsyncMock(),
+        draft_graph=draft_graph, routing_graph=routing_graph, checkpointer=MemorySaver(),
+    )
+    config = {"configurable": {"thread_id": "hitl-sub-genre-passthrough"}}
+
+    await graph.ainvoke(
+        {"input_text": "Bu evraka cevap yazısı hazırla", "document_id": None}, config=config
+    )
+
+    fake_llm.stream_chunks = [DRAFT_WITH_PLACEHOLDER.replace("Genel Müdür", "Daire Başkanı")]
+    result = await graph.ainvoke(
+        Command(
+            resume={
+                "action": "revise", "answers": {},
+                "instructions": "Unvanı Daire Başkanı olarak değiştir.",
+            }
+        ),
+        config=config,
+    )
+
+    assert (
+        result.get("final_output", {}).get("draft", {}).get("correspondence_sub_genre")
+        == "itiraz dilekçesi"
+    )

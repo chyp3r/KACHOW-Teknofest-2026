@@ -55,10 +55,13 @@ from app.ai.policy import get_policy
 from app.ai.adapters.company_adapter import AdapterProvider, CompanyAdapter
 from app.ai.adapters.company_rules import CompanyRuleSet, RulesProvider
 from app.ai.adapters.injection import format_adapter_block, format_rules_block
+from app.ai.identity.company_profile import CompanyProfile, ProfileProvider
+from app.ai.identity.injection import format_identity_brief_section
 from app.ai.policy.budget import node_budget
 from app.ai.reasoning_levels import ReasoningLevelPreset, get_reasoning_level_preset
-from app.ai.revision.changelog import build_changelog
+from app.ai.revision.changelog import RevisionChangelog, build_changelog
 from app.ai.revision.conflict import (
+    ConflictReport,
     assess_conflicts_llm,
     detect_conflicts_deterministic,
     merge_conflicts,
@@ -71,13 +74,19 @@ from app.ai.revision.instruction import (
     _merge,
     locate_target,
     parse_revision_instruction,
+    resolve_merge_target,
+    spans_overlap,
 )
 from app.ai.revision.retrieval import maybe_extend_context
 from app.ai.session.focus import DraftVersion
+from app.ai.workflows.attempt_tracking import best_of, snapshot_attempt
 from app.ai.verification import (
     InfoQuestion,
     VerificationReport,
     build_missing_info_request,
+    check_filler_sentences,
+    check_person_consistency,
+    check_signature_block,
     fill_date_placeholders,
     judge_draft,
     merge_verdicts,
@@ -85,7 +94,8 @@ from app.ai.verification import (
     normalize_unfilled_markers,
     verify_draft,
 )
-from app.ai.workflows.correspondence import format_correspondence_profile
+from app.ai.verification.draft_verifier import LEGISLATION_PATTERN
+from app.ai.workflows.correspondence import format_correspondence_profile, is_strict_sub_genre
 from app.ai.workflows.events import (
     emit_node_end,
     emit_node_error,
@@ -151,6 +161,12 @@ class ReviseState(TypedDict, total=False):
     #: forward so `verify` can render the same rules block for the judge
     #: without re-resolving. Absent/empty behaves like no rules configured.
     company_rules: dict[str, Any]
+    #: The resolved identity profile (`CompanyProfile.to_dict()`), set once
+    #: by `rewrite` and carried forward so `verify` can pass the same
+    #: values to `verify_draft` as `trusted_facts` without re-resolving --
+    #: mirrors draft_graph.DraftState's own field of the same name. Absent/
+    #: empty behaves like no profile configured, never an error.
+    company_profile: dict[str, Any]
 
     #: Set by `verify`.
     confidence_score: float
@@ -167,6 +183,11 @@ class ReviseState(TypedDict, total=False):
     attempt_history: list[dict[str, Any]]
     #: See draft_graph.DraftState's own field of the same name.
     applied_rules: list[dict[str, Any]]
+    #: See draft_graph.DraftState's own field of the same name (C2/C3, see
+    #: app.ai.workflows.attempt_tracking).
+    best_attempt: dict[str, Any]
+    #: See draft_graph.DraftState's own field of the same name (C3).
+    restored_from_best_attempt: bool
 
     #: Set by `audit`.
     conflicts: list[dict[str, Any]]
@@ -183,13 +204,42 @@ def _coerce_fields(classification: dict[str, Any]) -> dict[str, Any]:
     return fields if isinstance(fields, dict) else {}
 
 
-def _build_brief(active_draft: DraftVersion, context: str) -> str:
+def _build_brief(
+    active_draft: DraftVersion, context: str, profile: Optional[CompanyProfile] = None
+) -> str:
     """The grounding brief handed to every reviser/judge call this run.
 
     Rebuilt from ``context`` (not cached) so a conditional re-retrieval
     (see ``app.ai.revision.retrieval``) is reflected in every downstream
     prompt, not just the first one.
+
+    Args:
+        active_draft: The version being revised.
+        context: The (possibly re-retrieved) legislation context.
+        profile: The requesting company's identity profile (see
+            ``app.ai.identity.company_profile.CompanyProfile``), or None.
+            Rendered as its own section when non-empty (see
+            ``format_identity_brief_section``) -- mirrors
+            ``draft_graph._build_brief``'s identical section, since a
+            repair pass needing to add a missing antet/imza block deserves
+            the same system-verified identity the original draft had,
+            not silence on who "we" are.
     """
+    fields = _coerce_fields(active_draft.classification)
+    # Mirrors draft_graph._build_brief's own section 3/4 "KARŞI TARAFA
+    # AİTTİR" framing -- without this, a repair pass asked to add a
+    # missing structural element (an antet, a signature block) had no
+    # party-model guidance at all, since _coerce_fields was defined here
+    # but never actually used until now.
+    party_note = (
+        "3. GELEN EVRAKIN KİMLİK BİLGİLERİ -- KARŞI TARAFA AİTTİR (bu alanlar bizim "
+        "antet/imza bloğumuza veya gönderen kurum alanımıza ASLA yazılamaz, yalnızca "
+        "gövde metninde bir olgu olarak anılabilir):\n"
+        f"   - Gönderen Kurum: {fields.get('gonderen_kurum') or '(belirtilmemiş)'}\n"
+        "   - Muhatap (evrakın KENDİ muhatabı -- bizim yanıtımızın muhatabı değil, "
+        f"bu bilgi Yazım Briefi'ndedir): {fields.get('muhatap') or '(belirtilmemiş)'}\n"
+        f"   - İmza Sahibi (KARŞI TARAF): {fields.get('imza_sahibi') or '(belirtilmemiş)'}\n"
+    )
     rejection_note = ""
     if active_draft.status == "REJECTED" and active_draft.rejection_reason:
         # `active_draft` can itself be a previously rejected version (see
@@ -200,17 +250,24 @@ def _build_brief(active_draft: DraftVersion, context: str) -> str:
         # is exactly what the reviser's own "yalnızca kusur listesindeki
         # maddeleri gider" contract already expects of it.
         rejection_note = (
-            "5. Önceki Sürümün Reddedilme Gerekçesi (YALNIZCA bu noktaya "
+            "6. Önceki Sürümün Reddedilme Gerekçesi (YALNIZCA bu noktaya "
             f"odaklan; metnin geri kalanındaki doğru bilgiyi koru): "
             f"{active_draft.rejection_reason}\n"
         )
+    identity_section = (
+        format_identity_brief_section(profile, section_number=7)
+        if profile is not None
+        else ""
+    )
     return (
         f"1. Önceki Taslak Sürümü: {active_draft.version}\n"
         f"2. Doğrulanmış Sınıflandırma: {active_draft.classification.get('summary', 'Özet yok.')}\n"
-        f'3. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
+        f"{party_note}"
+        f'4. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
         f"{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
-        f"4. Yazım Briefi:\n{format_writing_brief(active_draft.writing_brief)}\n"
+        f"5. Yazım Briefi:\n{format_writing_brief(active_draft.writing_brief)}\n"
         f"{rejection_note}"
+        f"{identity_section}"
     )
 
 
@@ -326,6 +383,7 @@ def create_revise_graph(
     mevzuat_retriever: Optional[Any] = None,
     adapter_provider: Optional[AdapterProvider] = None,
     rules_provider: Optional[RulesProvider] = None,
+    profile_provider: Optional[ProfileProvider] = None,
 ):
     """Create and compile the revision workflow.
 
@@ -349,6 +407,17 @@ def create_revise_graph(
             injected the same way ``draft_graph``'s own ``rules_provider``
             is. None reproduces pre-feature behaviour exactly (no rules
             block, ever).
+        profile_provider: Optional async callable resolving a company's
+            identity profile (see
+            ``app.domains.companies.provider.get_company_profile``) --
+            injected the same way ``draft_graph``'s own ``profile_provider``
+            is (Faz 6). Before this, a revision had no access to the
+            company's identity at all, so a repair pass asked to add a
+            missing antet/imza block had nothing telling it who "we" are,
+            and the company's own name/letterhead scored as an ungrounded
+            claim on every single revision instead of a trusted fact.
+            None reproduces pre-feature behaviour exactly (no identity
+            section, no trusted_facts, ever).
 
     Returns:
         The compiled LangGraph workflow.
@@ -384,6 +453,20 @@ def create_revise_graph(
             logger.warning("Company rules resolution failed for %s", company_id, exc_info=True)
             return CompanyRuleSet.empty(company_id)
 
+    async def _resolve_profile(state: ReviseState) -> CompanyProfile:
+        """This company's identity profile, or an empty one when no
+        ``profile_provider`` was configured, no ``company_id`` is on this
+        turn's state, or resolution itself fails -- mirrors
+        ``draft_graph``'s identical helper (Faz 6)."""
+        company_id = state.get("company_id") or ""
+        if not company_id or profile_provider is None:
+            return CompanyProfile.empty(company_id)
+        try:
+            return await profile_provider(company_id)
+        except Exception:
+            logger.warning("Company profile resolution failed for %s", company_id, exc_info=True)
+            return CompanyProfile.empty(company_id)
+
     async def parse_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
         active_draft = state["active_draft"]
         instructions = state["instructions"]
@@ -392,9 +475,56 @@ def create_revise_graph(
             "Revizyon talimatı ayrıştırılıyor...",
         )
 
+        if not instructions.strip():
+            # C21: decompose_instruction("") resolves to a single
+            # scope="whole" directive carrying an *empty* raw instruction --
+            # a whole-draft rewrite with nothing telling the model what to
+            # change is the single most dangerous directive this parser can
+            # produce, not a safe default. Short-circuits to a no-op
+            # instead: the active draft is returned completely unchanged,
+            # never reaching rewrite/verify at all.
+            await emit_node_end(
+                config, "revise_parse", "Talimat Ayrıştırma",
+                "Talimat boş; taslak değiştirilmeden bırakıldı.", {},
+            )
+            return {
+                "draft": active_draft.text,
+                "correspondence_type": active_draft.correspondence_type,
+                "correspondence_sub_genre": getattr(active_draft, "correspondence_sub_genre", ""),
+                "confidence_score": 100.0,
+                "combined_score": 100.0,
+                "requires_human_approval": False,
+                "requires_revision": False,
+                "evaluation_notes": (
+                    "Revizyon talimatı boş olduğu için taslak değiştirilmeden bırakıldı."
+                ),
+                "status": StepStatus.COMPLETED,
+            }
+
         instruction = parse_revision_instruction(instructions)
         directives = list(instruction.directives)
         targets = [locate_target(active_draft.text, directive) for directive in directives]
+
+        if (
+            len(directives) > 1
+            and all(t is not None for t in targets)
+            and spans_overlap(targets)
+        ):
+            # C5: two directives resolved to overlapping (not merely
+            # adjacent) spans -- splicing both via the right-to-left merge
+            # would corrupt one span's offsets with the other's. Falls back
+            # to the same safe whole-draft rewrite an unlocatable clause
+            # already gets (see decompose_instruction's own docstring),
+            # carrying the complete original instruction so neither
+            # directive's own request is silently dropped.
+            directives = [
+                EditDirective(
+                    scope="whole", operation="content", section_hint=None,
+                    ordinal=None, raw=instructions, order=0,
+                )
+            ]
+            targets = [None]
+
         multi_directive_ok = len(directives) > 1 and all(t is not None for t in targets)
 
         correspondence_type = active_draft.correspondence_type
@@ -421,6 +551,12 @@ def create_revise_graph(
             "attempts": 0,
             "status": "IN_PROGRESS",
         }
+
+    def route_after_parse(state: ReviseState) -> str:
+        # C21: parse_node's own blank-instruction short-circuit already set
+        # status=COMPLETED and the unchanged draft -- nothing downstream
+        # (retrieval, rewrite, verify) needs to run for a no-op.
+        return "end" if state.get("status") == StepStatus.COMPLETED else "retrieve_context"
 
     async def retrieve_context_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
         active_draft = state["active_draft"]
@@ -512,7 +648,6 @@ def create_revise_graph(
         is_repair = bool(state.get("previous_draft"))
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
         client = _resolve_free_text_client(preset, llm_client, fast_llm_client)
-        brief = _build_brief(active_draft, state.get("context", ""))
         correspondence_type = state.get("correspondence_type") or active_draft.correspondence_type
         sub_genre = state.get("correspondence_sub_genre") or getattr(
             active_draft, "correspondence_sub_genre", ""
@@ -525,6 +660,8 @@ def create_revise_graph(
         adapter_block = format_adapter_block(adapter)
         company_ruleset = await _resolve_rules(state)
         rules_block = format_rules_block(company_ruleset)
+        profile = await _resolve_profile(state)
+        brief = _build_brief(active_draft, state.get("context", ""), profile)
 
         await emit_node_start(
             config, "revise", "Taslak Revizyonu",
@@ -575,6 +712,22 @@ def create_revise_graph(
                                 rules_block=rules_block,
                             )
                             rewritten = await _generate_validated(agent, prompt, preset)
+                            if resolve_merge_target(targets[i], rewritten, active_draft.text) is None:
+                                # C22, multi-directive case: unlike the
+                                # single-directive path below, falling back
+                                # to a whole-draft replacement here would
+                                # discard every other directive's splice
+                                # already applied earlier in this same
+                                # right-to-left pass. Skip this one
+                                # directive's risky rewrite instead --
+                                # its own span is left as it was, and the
+                                # other, correctly-scoped directives still
+                                # land.
+                                logger.warning(
+                                    "Directive %d's rewrite looked like a scope overrun; "
+                                    "leaving its target span unchanged.", i,
+                                )
+                                continue
                             working_draft = _merge(working_draft, targets[i], rewritten)
                         merged_draft = working_draft
                     else:
@@ -593,11 +746,23 @@ def create_revise_graph(
                             rules_block=rules_block,
                         )
                         rewritten = await _generate_validated(agent, prompt, preset)
-                        merged_draft = _merge(active_draft.text, target, rewritten)
+                        effective_target = resolve_merge_target(target, rewritten, active_draft.text)
+                        merged_draft = _merge(active_draft.text, effective_target, rewritten)
         except TimeoutError:
             logger.warning(
                 "Revise rewrite node exceeded its %.0fs budget (attempt %d).", budget, attempt_number
             )
+            if is_repair and state.get("best_attempt"):
+                await emit_node_error(
+                    config, "revise", "Taslak Revizyonu",
+                    "Onarım denemesi süre sınırını aştı; önceki en iyi deneme korundu.",
+                    fatal=False,
+                )
+                return recover_from_failed_attempt(
+                    state["best_attempt"], attempt_number,
+                    f"Onarım denemesi {budget:.0f} saniyelik süre sınırını aştı; "
+                    "önceki en iyi deneme korundu.",
+                )
             await emit_node_error(
                 config, "revise", "Taslak Revizyonu",
                 f"Revizyon {budget:.0f} saniyelik süre sınırını aştı.", fatal=True,
@@ -610,6 +775,16 @@ def create_revise_graph(
             }
         except Exception as exc:
             logger.exception("Revise rewrite node failed (attempt %d)", attempt_number)
+            if is_repair and state.get("best_attempt"):
+                await emit_node_error(
+                    config, "revise", "Taslak Revizyonu",
+                    "Onarım denemesi başarısız oldu; önceki en iyi deneme korundu.",
+                    detail=str(exc), fatal=False,
+                )
+                return recover_from_failed_attempt(
+                    state["best_attempt"], attempt_number,
+                    f"Onarım denemesi başarısız oldu ({exc}); önceki en iyi deneme korundu.",
+                )
             await emit_node_error(
                 config, "revise", "Taslak Revizyonu", "Revizyon üretilemedi.", detail=str(exc),
             )
@@ -633,10 +808,26 @@ def create_revise_graph(
             "status": "IN_PROGRESS",
             "company_adapter": adapter.to_dict(),
             "company_rules": company_ruleset.to_dict(),
+            "company_profile": profile.to_dict(),
         }
 
     def route_after_rewrite(state: ReviseState) -> str:
-        return "end" if state.get("status") == StepStatus.FAILED else "verify"
+        if state.get("status") == StepStatus.FAILED:
+            return "end"
+        # restored_from_best_attempt (C3): a repair pass crashed and
+        # rewrite_node already fell back to a previous, fully-verified
+        # attempt -- re-entering "verify" would re-check text that was
+        # already checked and could itself crash again. Goes to "audit"
+        # rather than straight to "end" (unlike draft_graph, which has no
+        # audit-equivalent step): parse_node's own `instruction`/`directives`
+        # are already in state, so the changelog/conflict audit can still
+        # run against the restored draft -- audit_node's own broad
+        # try/except (see its docstring) already degrades this to an empty,
+        # advisory-only result if anything about the restored state doesn't
+        # fit its expectations.
+        if state.get("restored_from_best_attempt"):
+            return "audit"
+        return "verify"
 
     async def verify_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
         active_draft = state["active_draft"]
@@ -654,7 +845,11 @@ def create_revise_graph(
         draft_text, _ = normalize_role_placeholders(
             draft_text, is_individual_petition="dilekçe" in sub_genre.lower()
         )
-        strict = correspondence_type != "other_official"
+        # C16: mirrors draft_graph.verify_node's identical guard -- a
+        # strict sub-genre (see is_strict_sub_genre) keeps forcing human
+        # approval on an unsupported claim even though its type resolves
+        # to other_official.
+        strict = correspondence_type != "other_official" or is_strict_sub_genre(sub_genre)
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
 
         await emit_node_start(
@@ -668,6 +863,25 @@ def create_revise_graph(
         adapter = CompanyAdapter.from_dict(
             state.get("company_id") or "", state.get("company_adapter")
         )
+        # Faz 6: mirrors draft_graph.verify_node's identical trusted_facts
+        # fold-in -- without this, the company's own name/letterhead
+        # scored as an ungrounded dayanaksiz_iddia on every single
+        # revision, even though the exact same draft's *original*
+        # verify_draft call (in draft_graph) never flagged it.
+        profile = CompanyProfile.from_dict(
+            state.get("company_id") or "", state.get("company_profile")
+        )
+        trusted_facts = [
+            value
+            for value in (
+                profile.display_name,
+                profile.short_name,
+                profile.letterhead,
+                profile.default_signer_title,
+                profile.default_signer_name,
+            )
+            if value
+        ]
         report = verify_draft(
             draft_text,
             source_document=active_draft.source_document,
@@ -678,6 +892,7 @@ def create_revise_graph(
             style_examples=list(active_draft.style_examples) + list(adapter.preferred_examples),
             is_individual_petition="dilekçe" in sub_genre.lower(),
             today=state.get("today", ""),
+            trusted_facts=trusted_facts,
         )
 
         judge_on = (
@@ -695,7 +910,7 @@ def create_revise_graph(
             verdict = await judge_draft(
                 judge_agent,
                 draft=draft_text,
-                brief=_build_brief(active_draft, state.get("context", "")),
+                brief=_build_brief(active_draft, state.get("context", ""), profile),
                 correspondence_type=correspondence_type,
                 instructions=state.get("instructions", ""),
                 timeout_s=settings.DRAFT_JUDGE_TIMEOUT_SECONDS * preset.timeout_multiplier,
@@ -748,6 +963,17 @@ def create_revise_graph(
             if finding.confidence >= get_policy().guardrail.pii_confidence_floor
         ]
 
+        # Faz 6: style_checks findings, fed into the same repair loop the
+        # way draft_graph.verify_node's identical block already does (Faz
+        # 4) -- a repair pass fixing one defect and introducing a person/
+        # filler/signature-block one of its own deserves the same check a
+        # fresh draft gets.
+        style_findings = [
+            *check_person_consistency(draft_text),
+            *check_filler_sentences(draft_text),
+            *check_signature_block(draft_text),
+        ]
+
         combined = merge_verdicts(
             report,
             verdict,
@@ -755,7 +981,10 @@ def create_revise_graph(
             pii_findings=pii_findings,
             correspondence_type_fallback=state.get("correspondence_type_source") == "fallback",
             has_context=bool(state.get("context")),
+            cites_legislation=bool(LEGISLATION_PATTERN.search(draft_text)),
             content_loss=content_loss,
+            judge_attempted=judge_on,
+            style_findings=style_findings,
         )
 
         DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)
@@ -806,6 +1035,23 @@ def create_revise_graph(
             "status": status,
             "applied_rules": [rule.model_dump() for rule in combined.applied_rules],
         }
+
+        # C2: mirrors draft_graph.verify_node's identical bookkeeping (see
+        # app.ai.workflows.attempt_tracking) -- track the best-scoring
+        # attempt across this turn's repair loop, and ship it instead of
+        # whichever attempt happened to run last if the loop is about to
+        # exhaust its attempt budget with defects still open.
+        snapshot = snapshot_attempt(update, draft_text)
+        best_attempt = best_of(snapshot, state.get("best_attempt"))
+        update["best_attempt"] = best_attempt
+        if (
+            not missing_information
+            and combined.requires_revision
+            and state.get("attempts", 0) >= preset.max_draft_attempts
+            and best_attempt is not snapshot
+        ):
+            update.update(best_attempt)
+
         await emit_node_end(
             config, "verify", "Taslak Doğrulama", "Taslak doğrulaması tamamlandı.",
             {"draft": draft_text, **update},
@@ -876,25 +1122,48 @@ def create_revise_graph(
             "Talimat mevzuat ve kaynak evrakla karşılaştırılıyor...",
         )
 
-        report = VerificationReport(**state.get("verification", {}))
-        deterministic = detect_conflicts_deterministic(
-            instruction=instruction, context=state.get("context", ""),
-            source_document=active_draft.source_document, report=report,
-        )
-
-        judge_on = (
-            settings.DRAFT_JUDGE_ENABLED if preset.judge_enabled is None else preset.judge_enabled
-        )
-        llm_findings = []
-        if settings.REVISION_CONFLICT_AUDIT_ENABLED and judge_on:
-            llm_findings = await assess_conflicts_llm(
-                conflict_agent, instruction=instruction.raw, revised_draft=draft_text,
-                context=state.get("context", ""), source_document=active_draft.source_document,
-                timeout_s=settings.DRAFT_JUDGE_TIMEOUT_SECONDS * preset.timeout_multiplier,
+        # This node's own docstring is explicit that a finding here is
+        # advisory, never a gate -- so a failure to *produce* one must be
+        # advisory too. Before this guard, any exception here (a malformed
+        # `verification` dict, a `ConflictFinding`/`ChangeEntry` field
+        # exceeding its own `max_length` on a long instruction or a chain of
+        # institution names, ...) propagated out of the node, out of
+        # `graph.ainvoke`, and into `run_revise`'s outer `except Exception`
+        # (see `revise.py`), which discards the whole revision -- text,
+        # verification, everything -- and reports `FAILED` even though
+        # `rewrite_node`/`verify_node` already produced and verified a good
+        # draft two nodes ago. Degrading to an empty, non-blocking report
+        # is exactly this node's own stated contract for a *conflict*
+        # finding; it must be the contract for a *failure to audit* too.
+        try:
+            report = VerificationReport(**state.get("verification", {}))
+            deterministic = detect_conflicts_deterministic(
+                instruction=instruction, context=state.get("context", ""),
+                source_document=active_draft.source_document, report=report,
             )
 
-        conflict_report = merge_conflicts(deterministic, llm_findings)
-        changelog = build_changelog(active_draft.text, draft_text, state.get("directives") or [])
+            judge_on = (
+                settings.DRAFT_JUDGE_ENABLED if preset.judge_enabled is None else preset.judge_enabled
+            )
+            llm_findings = []
+            if settings.REVISION_CONFLICT_AUDIT_ENABLED and judge_on:
+                llm_findings = await assess_conflicts_llm(
+                    conflict_agent, instruction=instruction.raw, revised_draft=draft_text,
+                    context=state.get("context", ""), source_document=active_draft.source_document,
+                    timeout_s=settings.DRAFT_JUDGE_TIMEOUT_SECONDS * preset.timeout_multiplier,
+                )
+
+            conflict_report = merge_conflicts(deterministic, llm_findings)
+            changelog = build_changelog(active_draft.text, draft_text, state.get("directives") or [])
+        except Exception:
+            logger.exception(
+                "Revise audit node failed; degrading to an empty, advisory-only result "
+                "rather than failing the (already successful) revision."
+            )
+            conflict_report = ConflictReport()
+            changelog = RevisionChangelog(
+                entries=[], summary="Değişiklik özeti oluşturulamadı."
+            )
 
         # Advisory only -- see this node's own docstring. Whether the turn
         # pauses for a human is entirely verify_node's call; a conflict
@@ -939,10 +1208,12 @@ def create_revise_graph(
     builder.add_node("audit", audit_node)
 
     builder.add_edge(START, "parse")
-    builder.add_edge("parse", "retrieve_context")
+    builder.add_conditional_edges(
+        "parse", route_after_parse, {"retrieve_context": "retrieve_context", "end": END}
+    )
     builder.add_edge("retrieve_context", "rewrite")
     builder.add_conditional_edges(
-        "rewrite", route_after_rewrite, {"verify": "verify", "end": END}
+        "rewrite", route_after_rewrite, {"verify": "verify", "audit": "audit", "end": END}
     )
     builder.add_conditional_edges(
         "verify", route_after_verify,

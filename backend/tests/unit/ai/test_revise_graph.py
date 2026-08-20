@@ -95,6 +95,32 @@ async def test_a_grounded_pii_free_revision_does_not_require_approval(fake_llm):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("blank_instruction", ["", "   ", "\n\n"])
+async def test_a_blank_instruction_is_a_no_op_not_a_whole_draft_rewrite(fake_llm, blank_instruction):
+    """C21: decompose_instruction("") used to resolve to a single
+    scope="whole" directive carrying an *empty* raw instruction -- a
+    whole-draft rewrite with nothing telling the model what to change,
+    the single most dangerous directive this parser can produce. The
+    active draft must come back completely unchanged, and the reviser
+    must never even be called."""
+    draft = _active_draft()
+    graph = create_revise_graph(fake_llm)
+
+    result = await graph.ainvoke(
+        {
+            "active_draft": draft,
+            "instructions": blank_instruction,
+            "reasoning_level": "fast",
+        }
+    )
+
+    assert fake_llm.stream_calls == []
+    assert result["draft"] == draft.text
+    assert result["status"] == StepStatus.COMPLETED
+    assert result["requires_human_approval"] is False
+
+
+@pytest.mark.asyncio
 async def test_a_fallback_correspondence_type_forces_human_approval(fake_llm):
     fake_llm.stream_chunks = [
         "Konu: Yıllık İzin Talebi\nSayı: E-1\nTarih: 30.07.2026\n\nSayın Makam,\n\n"
@@ -321,3 +347,42 @@ async def test_an_explicit_deletion_instruction_is_honoured_not_reverted(fake_ll
     assert result["status"] == StepStatus.COMPLETED
     # Only ever the one rewrite pass -- no repair round undid the deletion.
     assert len(fake_llm.stream_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_audit_node_degrades_instead_of_failing_an_already_successful_revision(
+    fake_llm, monkeypatch
+):
+    """C6 regression: audit_node's own docstring says a conflict finding
+    here is advisory, never a gate -- so a failure to *produce* one must be
+    advisory too. Before this fix, any exception raised while building the
+    changelog/conflict report (a long instruction overflowing
+    ChangeEntry.directive's own max_length was one concrete way this
+    happened) propagated out of the graph and into run_revise's outer
+    except Exception, which discards the whole revision and reports FAILED
+    even though rewrite_node/verify_node already produced and verified a
+    perfectly good draft two nodes earlier."""
+    fake_llm.stream_chunks = [
+        "Konu: Yıllık İzin Talebi\nSayı: E-1\nTarih: 30.07.2026\n\nSayın Vali Bey,\n\n"
+        "İlgi yazı kapsamında personelimizin izin talebi tarafımıza iletilmiştir.\n\n"
+        "Arz ederim.\n\nAli Veli\nGenel Müdür"
+    ]
+
+    def _boom(*args, **kwargs):
+        raise ValueError("boom")
+
+    monkeypatch.setattr("app.ai.workflows.revise_graph.build_changelog", _boom)
+
+    graph = create_revise_graph(fake_llm)
+    result = await graph.ainvoke(
+        {
+            "active_draft": _active_draft(),
+            "instructions": "Muhatabı değiştir.",
+            "reasoning_level": "fast",
+        }
+    )
+
+    assert result["status"] != StepStatus.FAILED
+    assert "Sayın Vali Bey" in result["draft"]
+    assert result["changelog"]["entries"] == []
+    assert result["conflicts"] == []

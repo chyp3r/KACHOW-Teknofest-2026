@@ -208,6 +208,7 @@ async def send_chat_message(
         requester_clearance=clearance.value if clearance else None,
         company_id=current_user.company_id,
         revision_draft=revision_draft,
+        user_display_name=current_user.username,
     )
     return SuccessResponse(data=make_serializable(result.model_dump()))
 
@@ -248,6 +249,7 @@ async def stream_chat_message(
             requester_clearance=clearance.value if clearance else None,
             company_id=current_user.company_id,
             revision_draft=revision_draft,
+            user_display_name=current_user.username,
         ),
         http_request,
     )

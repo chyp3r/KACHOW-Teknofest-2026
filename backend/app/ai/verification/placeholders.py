@@ -152,9 +152,19 @@ def fill_date_placeholders(draft: str, today: str) -> NormalizedDraft:
 _SIGNATURE_PLACEHOLDERS: dict[str, str] = {
     _fold("Ad Soyad"): "İmzalayacak yetkilinin adı ve soyadı",
     _fold("Ad, Soyad"): "İmzalayacak yetkilinin adı ve soyadı",
+    _fold("Adı Soyadı"): "İmzalayacak yetkilinin adı ve soyadı",
     _fold("Soyad"): "İmzalayacak yetkilinin adı ve soyadı",
     _fold("Unvan"): "İmzalayacak yetkilinin unvanı",
     _fold("İmza"): "İmzalayacak yetkilinin adı ve soyadı",
+    # Corpus-derived anonymisation placeholders (see
+    # datasets/resmi_yazisma/anonimlestirme-manifesti.jsonl) -- a style
+    # example carrying one of these verbatim used to pass through
+    # unattributed and unasked (neither this map nor _INSTITUTION_
+    # PLACEHOLDERS recognised them), the exact unattributed-question bug
+    # this module exists to close, just for a corpus-shaped placeholder
+    # instead of a model-written one.
+    _fold("İmza Sahibi"): "İmzalayacak yetkilinin adı ve soyadı",
+    _fold("Kişi Adı"): "İmzalayacak yetkilinin adı ve soyadı",
 }
 
 #: Same placeholders, for an individual dilekçe (see `writer.md`'s own
@@ -163,9 +173,12 @@ _SIGNATURE_PLACEHOLDERS: dict[str, str] = {
 _SIGNATURE_PLACEHOLDERS_PETITION: dict[str, str] = {
     _fold("Ad Soyad"): "Dilekçe sahibinin adı ve soyadı",
     _fold("Ad, Soyad"): "Dilekçe sahibinin adı ve soyadı",
+    _fold("Adı Soyadı"): "Dilekçe sahibinin adı ve soyadı",
     _fold("Soyad"): "Dilekçe sahibinin adı ve soyadı",
     _fold("Unvan"): "Dilekçe sahibinin unvanı",
     _fold("İmza"): "Dilekçe sahibinin adı ve soyadı",
+    _fold("İmza Sahibi"): "Dilekçe sahibinin adı ve soyadı",
+    _fold("Kişi Adı"): "Dilekçe sahibinin adı ve soyadı",
 }
 
 #: A bare institution placeholder -- always the sender's own institution

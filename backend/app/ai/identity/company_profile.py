@@ -41,6 +41,23 @@ class CompanyProfile:
         default_signer_title: The title (unvan) to fall back to in a
             draft's signature block when neither the writing brief nor the
             source document supplies one (e.g. "Daire Başkanı").
+        default_signer_name: The name (ad soyad) to fall back to in a
+            draft's signature block under the same conditions as
+            ``default_signer_title``. Deliberately never the incoming
+            document's own ``imza_sahibi`` -- that name belongs to the
+            *counterparty* (see ``app.ai.identity.parties.CounterParty``),
+            never to us. Kept separate from ``default_signer_title``
+            (not merged into one "default signer" string) because a company
+            may configure one without the other -- a fixed signer title
+            with a rotating named signer is common, and the reverse is
+            possible too.
+        aliases: Alternate ways this company's own name appears in a
+            document or a user's own message (abbreviations, a unit's own
+            short form, a legacy name) -- consulted the same way
+            ``display_name``/``short_name`` are when deciding whether a
+            name found in context refers to *us* (see
+            ``app.ai.identity.parties.resolve_party_context``). Never used
+            to render anything; purely a matching aid.
         updated_at: ISO-8601 timestamp of the last write, or None if this
             profile has never been set (see :meth:`empty`).
     """
@@ -52,6 +69,8 @@ class CompanyProfile:
     agent_name: str = ""
     letterhead: str = ""
     default_signer_title: str = ""
+    default_signer_name: str = ""
+    aliases: tuple[str, ...] = ()
     updated_at: Optional[str] = None
 
     @property
@@ -64,6 +83,8 @@ class CompanyProfile:
             or self.agent_name
             or self.letterhead
             or self.default_signer_title
+            or self.default_signer_name
+            or self.aliases
         )
 
     @classmethod
@@ -91,6 +112,8 @@ class CompanyProfile:
             "agent_name": self.agent_name,
             "letterhead": self.letterhead,
             "default_signer_title": self.default_signer_title,
+            "default_signer_name": self.default_signer_name,
+            "aliases": list(self.aliases),
             "updated_at": self.updated_at,
         }
 
@@ -108,6 +131,8 @@ class CompanyProfile:
             agent_name=str(value.get("agent_name") or ""),
             letterhead=str(value.get("letterhead") or ""),
             default_signer_title=str(value.get("default_signer_title") or ""),
+            default_signer_name=str(value.get("default_signer_name") or ""),
+            aliases=tuple(str(a) for a in (value.get("aliases") or []) if str(a).strip()),
             updated_at=value.get("updated_at"),
         )
 

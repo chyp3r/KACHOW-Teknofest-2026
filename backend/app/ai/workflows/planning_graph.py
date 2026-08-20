@@ -22,7 +22,8 @@ from app.ai.guardrails.llm_nuance import judge_output_leakage
 from app.ai.guardrails.output_gate import classify_reason_kind, evaluate_response
 from app.ai.guardrails.sensitivity import SensitivityAssessment, assessment_from_analysis
 from app.ai.identity.company_profile import CompanyProfile, ProfileProvider
-from app.ai.identity.injection import format_agent_identity
+from app.ai.identity.injection import format_agent_identity, format_user_address
+from app.ai.identity.parties import PartyContext, resolve_party_context
 from app.ai.session.focus import DraftVersion, SessionFocus, compute_focus_update, merge_focus
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
@@ -30,6 +31,7 @@ from app.ai.policy.budget import node_budget
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.ai.semantic.prototype_matcher import PrototypeMatcher
 from app.ai.tools.document_tools import ToolResult, build_assistant_tools
+from app.ai.tools.handoff_tools import build_handoff_tools
 from app.ai.tools.transfer_tools import build_transfer_tools
 from app.ai.verification import InfoQuestion, apply_answers, verify_draft
 from app.ai.workflows.events import (
@@ -46,9 +48,10 @@ from app.ai.workflows.events import (
     emit_question,
 )
 from app.ai.workflows.dates import today_tr
+from app.ai.workflows.draft_graph import _build_instruction_haystack
 from app.ai.workflows.intent_rules import RESET_SURFACES
-from app.ai.workflows.intent_scorer import normalize
-from app.ai.workflows.planner import resolve_plan
+from app.ai.workflows.intent_scorer import PRESENCE_FLOOR, normalize, score_intents
+from app.ai.workflows.planner import PLAN_BY_INTENT, resolve_plan
 from app.ai.workflows.relevance import build_unrelated_reply, resolve_relevance
 from app.ai.workflows.revise import run_revise
 from app.ai.workflows.scope import build_refusal_reply
@@ -64,6 +67,7 @@ from app.observability import guardrail_recorder
 from app.observability.ai_metrics import (
     HITL_INTERRUPTS,
     NODE_DURATION,
+    ROUTER_ASSIST_HANDOFFS,
     ROUTER_CONFIDENCE,
     ROUTER_DECISIONS,
     ROUTER_SEMANTIC_AVAILABLE,
@@ -226,6 +230,13 @@ class PlanningState(TypedDict, total=False):
     #: suggest. Survives a human-in-the-loop pause/resume via the
     #: checkpointer, same as user_id.
     company_id: str | None
+    #: The authenticated caller's ``username`` (ChatService._invoke), carried
+    #: the same way user_id is -- read only by _run_assist, to address the
+    #: caller by name (see app.ai.identity.injection.format_user_address).
+    #: None in the open demo/dev path, or for any caller whose username
+    #: wasn't resolved. Survives a checkpointer resume unchanged, same as
+    #: user_id.
+    user_display_name: str | None
     #: The authenticated caller's resolved SensitivityLevel (see
     #: app.core.permissions.role_checker.clearance_for), as its string
     #: value -- graph state must stay JSON-serialisable, same reason
@@ -248,6 +259,15 @@ class PlanningState(TypedDict, total=False):
     reasoning_level: str
     plan_steps: list[str]
     plan_intent: str
+    #: Which mechanism produced this turn's plan (see
+    #: `planner.PlanDecision.source`'s own docstring for the full set of
+    #: values) -- turn-scoped, reset every turn in `planning_node`, same as
+    #: `plan_intent`/`plan_evidence`. `_step_assist` reads this to tell a
+    #: "assist" decision backed by real evidence (`fused`, `model`) apart
+    #: from one that reached assist purely because nothing else was
+    #: decisive (`model_failed`, `model_unclear`, `clarify_repeat_guard`) --
+    #: see `_deterministic_handoff_target` (Faz 7).
+    plan_source: str
     #: Ids of the lexical rules that fired for this turn's decision (see
     #: `PlanDecision.evidence`). Turn-scoped, like `plan_intent` itself --
     #: reset every turn in `planning_node`. `_run_assist` reads it to tell a
@@ -332,6 +352,18 @@ class PlanningState(TypedDict, total=False):
     #: "revizyon iste" click, consumed by gate_revise_node and cleared
     #: immediately after -- never read anywhere else.
     gate_revision_note: str
+    #: How many times human_gate_node has re-asked this turn for a
+    #: *missing_information* round that did not go through gate_revise_node
+    #: (a residual/unanswered placeholder, or a "reject"/"approve" resume
+    #: with no answers) -- plays the same role gate_revision_count plays for
+    #: the revision-loop rounds. Without a counter of its own, a residual
+    #: round's interrupt_id hash (kind + draft text + current_step_idx +
+    #: gate_revision_count, none of which change on a residual round) comes
+    #: out byte-identical to the round it re-asks, the frontend's dedup
+    #: silently drops the repeat interrupt event, and the session hangs
+    #: waiting for an answer the client believes it already sent. Reset to 0
+    #: every turn in planning_node.
+    needs_input_round: int
     #: Persists across separate ainvoke() calls on the same checkpointer
     #: thread_id (see ChatService._thread_id) -- this is the whole memory
     #: story; there is no separate store to keep consistent with it. Holds up
@@ -445,6 +477,54 @@ def _prior_turns(state: PlanningState, limit: int) -> list[dict[str, str]]:
     history = state.get("history") or []
     prior = history[:-1] if history else []
     return prior[-limit:] if limit > 0 else []
+
+
+#: Plan-decision sources that mean no real evidence-backed decision routed
+#: here -- see planner.PlanDecision.source's own docstring. A turn that
+#: reached "assist" through one of these had nothing decisive settle it,
+#: unlike a genuine "fused"/"model" win, which is why only these three
+#: trigger the deterministic recheck below (Faz 7) rather than every assist
+#: turn, which would re-litigate decisions the router already made with
+#: real evidence behind them.
+_WEAK_ASSIST_SOURCES = frozenset({"model_failed", "model_unclear", "clarify_repeat_guard"})
+
+
+def _deterministic_handoff_target(state: PlanningState) -> Optional[str]:
+    """Whether a plain lexical re-score finds decisive draft/revise evidence
+    a fallback assist decision missed entirely (Faz 7).
+
+    A message like "Cevabı gönderdiğim gibi bırak, sadece imzayı düzelt"
+    can fail to clear fusion's own tau_high/tau_low thresholds (whatever
+    else is going on in the message dilutes the signal) and still carry a
+    lexical `revise` score well above the noise floor -- the fusion layer's
+    uncertainty is about *which* intent wins outright, not about whether
+    the evidence for draft/revise exists at all. Re-scoring here is free
+    (no model call, the same table `intent_scorer.score_intents` already
+    is) and only ever *adds* a check on top of the router's own decision,
+    never overrides a confident one -- see `_WEAK_ASSIST_SOURCES`.
+
+    Args:
+        state: Current graph state.
+
+    Returns:
+        ``"draft"`` or ``"revise"`` when that intent's lexical score clears
+        ``PRESENCE_FLOOR``, else ``None``. ``revise`` can never win here
+        without ``SessionFocus.active_draft`` set -- `score_intents` itself
+        gates every `revise` rule on `has_active_draft`, so its score is
+        structurally 0.0 without one.
+    """
+    focus = state.get("focus") or SessionFocus()
+    has_active_draft = focus.active_draft is not None
+    scores = score_intents(
+        state.get("input_text", ""),
+        state.get("document_id"),
+        previous_intent=state.get("plan_intent"),
+        has_active_draft=has_active_draft,
+    )
+    for intent in ("draft", "revise"):
+        if scores.scores.get(intent, 0.0) >= PRESENCE_FLOOR:
+            return intent
+    return None
 
 
 def _summarize_step_outcome(
@@ -585,6 +665,7 @@ def create_planning_graph(
     profile_provider: Optional[ProfileProvider] = None,
     rules_provider: Any = None,
     transfer_provider: Any = None,
+    units_provider: Any = None,
 ):
     """Create and compile the master orchestration workflow.
 
@@ -650,6 +731,15 @@ def create_planning_graph(
             (the default, matching `settings.AI_TRANSFER_ENABLED`'s own
             default) means the tool is simply never offered to the model --
             degraded, not broken, same as an absent `checkpointer`.
+        units_provider: Optional async callable resolving a company's own
+            active routable unit names (see
+            `app.domains.units.provider.get_active_units_for_routing`,
+            already used by `routing_graph`'s own `units_provider`) --
+            folded into `app.ai.identity.parties.SelfParty.unit_names` so
+            the pre-draft writing brief (`_step_brief`) recognises a user
+            referring to one of the company's own departments as the
+            sender, not a document's addressee. `None` degrades to no unit
+            names at all, same as an absent `profile_provider`.
 
     Returns:
         The compiled LangGraph workflow.
@@ -688,12 +778,28 @@ def create_planning_graph(
             logger.warning("Company profile resolution failed for %s", company_id, exc_info=True)
             return CompanyProfile.empty(company_id)
 
+    async def _resolve_unit_names(company_id: Optional[str]) -> list[str]:
+        """This company's own active routable unit names, or an empty list
+        when no ``units_provider`` was configured, no ``company_id`` is on
+        this turn's state, or resolution itself fails -- unit names are a
+        matching aid for the party model, never load-bearing enough to
+        block a turn. Mirrors ``_resolve_profile`` exactly."""
+        if not company_id or units_provider is None:
+            return []
+        try:
+            units = await units_provider(company_id)
+            return [name for name, _description in units]
+        except Exception:
+            logger.warning("Company unit resolution failed for %s", company_id, exc_info=True)
+            return []
+
     # Built once per graph, like draft_graph/routing_graph -- run_revise
     # (both the plain "revise" step and the human approval gate's own
     # "revizyon iste" loop, see gate_revise_node) invokes this compiled
     # sub-graph rather than building a fresh one per call.
     revise_graph = create_revise_graph(
-        llm_client, fast_llm_client, mevzuat_retriever, adapter_provider, rules_provider
+        llm_client, fast_llm_client, mevzuat_retriever, adapter_provider, rules_provider,
+        profile_provider,
     )
 
     # Layer 2 of the intent ladder. Built once per graph, and only when there is
@@ -787,6 +893,7 @@ def create_planning_graph(
             "run_id": run_id,
             "plan_steps": decision.steps,
             "plan_intent": decision.intent,
+            "plan_source": decision.source,
             "plan_evidence": decision.evidence,
             "current_step_idx": 0,
             "_last_ran_step": None,
@@ -806,6 +913,7 @@ def create_planning_graph(
             "final_output": {},
             "gate_revision_count": 0,
             "gate_revision_note": "",
+            "needs_input_round": 0,
             "history": [{"role": "user", "content": state["input_text"]}],
             # Always written, even to None: a decision of any other kind
             # supersedes and clears a stale open question rather than
@@ -896,6 +1004,25 @@ def create_planning_graph(
             if brief_correspondence_type and brief_correspondence_type != AUTO_ANSWER
             else _requested_correspondence_type(classification)
         )
+        instructions = (
+            f"Kullanıcı İsteği: {state['input_text']}\n\n"
+            "Gelen evraka, evrakın amacı ve doğrulanmış bağlam doğrultusunda "
+            "resmî ve kurumsal bir Türkçe yanıt taslağı oluştur."
+        )
+        # Every prior USER turn's own text, this session -- see
+        # draft_graph._build_instruction_haystack's own docstring for why a
+        # name/date/institution supplied in an earlier turn of the same
+        # negotiation must still count as the user's own word. A large
+        # limit is "all of them": history is already bounded by
+        # HISTORY_RAW_CAP, so nothing further needs capping here.
+        prior_user_turns = [
+            turn.get("content", "")
+            for turn in _prior_turns(state, limit=10_000)
+            if turn.get("role") == "user"
+        ]
+        instruction_haystack = _build_instruction_haystack(
+            state["input_text"], prior_user_turns, brief_answers
+        )
 
         return await draft_graph.ainvoke(
             {
@@ -907,11 +1034,8 @@ def create_planning_graph(
                 "user_request": state["input_text"],
                 "correspondence_type": requested_correspondence_type,
                 "context": context,
-                "instructions": (
-                    f"Kullanıcı İsteği: {state['input_text']}\n\n"
-                    "Gelen evraka, evrakın amacı ve doğrulanmış bağlam doğrultusunda "
-                    "resmî ve kurumsal bir Türkçe yanıt taslağı oluştur."
-                ),
+                "instructions": instructions,
+                "instruction_haystack": instruction_haystack,
                 "attempts": 0,
                 "reasoning_level": state.get("reasoning_level", ReasoningLevel.BALANCED.value),
                 "writing_brief": brief_answers,
@@ -1080,6 +1204,23 @@ def create_planning_graph(
                 ),
             ]
 
+        # Faz 7: the model's own escape hatch for a message that should have
+        # routed to draft/revise but landed here anyway -- see
+        # app.ai.tools.handoff_tools's own module docstring for why this is
+        # a tool call rather than a text-pattern detector on the reply.
+        pending_handoff: dict[str, Any] = {}
+
+        def _record_handoff_request(payload: dict[str, Any]) -> None:
+            pending_handoff.update(payload)
+
+        tools = [
+            *tools,
+            *build_handoff_tools(
+                has_active_draft=(state.get("focus") or SessionFocus()).active_draft is not None,
+                on_handoff_requested=_record_handoff_request,
+            ),
+        ]
+
         profile = await _resolve_profile(state.get("company_id"))
 
         chunks: list[str] = []
@@ -1096,6 +1237,7 @@ def create_planning_graph(
                         sensitivity, requester_clearance
                     ),
                     agent_identity=format_agent_identity(profile),
+                    user_display_name=format_user_address(state.get("user_display_name")),
                     tools=tools,
                     config=config,
                     node="assist",
@@ -1184,6 +1326,8 @@ def create_planning_graph(
                 result["last_referenced_anchor"] = referenced_anchor["anchor"]
             if pending_transfer:
                 result["pending_transfer"] = dict(pending_transfer)
+            if pending_handoff.get("target") in ("draft", "revise"):
+                result["handoff_intent"] = pending_handoff["target"]
             return result
         except asyncio.TimeoutError:
             logger.warning("Assist step timed out")
@@ -1317,7 +1461,15 @@ def create_planning_graph(
         )
         prior_brief = focus.writing_brief if continues_active_draft else None
         try:
-            resolution = resolve_brief(state["input_text"], classification, prior_brief)
+            profile = await _resolve_profile(state.get("company_id"))
+            unit_names = await _resolve_unit_names(state.get("company_id"))
+            party = resolve_party_context(
+                profile,
+                unit_names=unit_names,
+                classification=classification,
+                requester_user_id=state.get("user_id") or "",
+            )
+            resolution = resolve_brief(state["input_text"], classification, prior_brief, party=party)
         except Exception:
             logger.exception("Writing-brief resolution failed; continuing without one.")
             updates["brief_result"] = {
@@ -1429,6 +1581,27 @@ def create_planning_graph(
     async def _step_assist(
         state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
     ) -> None:
+        # Faz 7, item 1: a fallback plan decision (no real evidence behind
+        # "assist" -- see _WEAK_ASSIST_SOURCES) gets one more free,
+        # deterministic check before the model call runs at all. Never
+        # fires for a confident "fused"/"model" decision -- this only
+        # catches the specific case where nothing else was decisive either.
+        if state.get("plan_source") in _WEAK_ASSIST_SOURCES:
+            target = _deterministic_handoff_target(state)
+            if target is not None:
+                ROUTER_ASSIST_HANDOFFS.labels(reason="fallback_source", target=target).inc()
+                await emit_node_skipped(
+                    config, "assist", STEP_LABELS["assist"],
+                    f"Belirleyici {'taslak' if target == 'draft' else 'revizyon'} kanıtı "
+                    f"bulundu; '{target}' akışına devredildi.",
+                )
+                updates["assist_result"] = {
+                    "status": StepStatus.SKIPPED,
+                    "reason": f"deterministic_handoff:{target}",
+                }
+                updates["plan_steps"] = [*(state.get("plan_steps") or []), *PLAN_BY_INTENT[target]]
+                return
+
         assist_result = await _run_assist(state, classification, config)
         updates["assist_result"] = assist_result
         # assist_result carries its own "history" entry (the assistant's reply)
@@ -1449,6 +1622,21 @@ def create_planning_graph(
         if pending_transfer:
             updates["transfer_resolve_result"] = pending_transfer
             updates["plan_steps"] = [*(state.get("plan_steps") or []), "transfer_execute"]
+
+        # Faz 7, item 2: the assistant model itself called request_handoff
+        # mid-turn -- the message ran through assist (a confident decision,
+        # or item 1 above would already have redirected it), but the model
+        # recognized it actually belongs to draft/revise. Appends the same
+        # way item 1 does; `updates["plan_steps"]` may already carry
+        # transfer_execute from the block above, so this extends whichever
+        # list is current rather than overwriting it.
+        handoff_intent = assist_result.get("handoff_intent")
+        if handoff_intent in ("draft", "revise"):
+            ROUTER_ASSIST_HANDOFFS.labels(reason="model_tool", target=handoff_intent).inc()
+            updates["plan_steps"] = [
+                *(updates.get("plan_steps") or state.get("plan_steps") or []),
+                *PLAN_BY_INTENT[handoff_intent],
+            ]
 
     async def _step_revise(
         state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
@@ -1886,7 +2074,6 @@ def create_planning_graph(
             f"{state.get('run_id', '')}:{brief_gate_round}".encode("utf-8")
         ).hexdigest()[:16]
 
-        HITL_INTERRUPTS.labels(kind="writing_brief").inc()
         await emit_node_start(
             config, "brief_gate", "Yazım Briefi", "Taslak öncesi yazım briefi bekleniyor..."
         )
@@ -1894,6 +2081,14 @@ def create_planning_graph(
             config, kind="writing_brief", interrupt_id=interrupt_id, payload=payload
         )
         answer = interrupt(payload)
+        # C25: counted here, not before interrupt() -- interrupt() re-runs
+        # everything above it on resume (see this node's own comment on
+        # interrupt_id), so a counter placed before it fires once on the
+        # pausing execution *and* once more on the replay that resumes it,
+        # double-counting every single interrupt. This line only executes
+        # on the replay where interrupt() actually returns instead of
+        # raising, which is exactly once per real pause-and-answer cycle.
+        HITL_INTERRUPTS.labels(kind="writing_brief").inc()
         answer = answer if isinstance(answer, dict) else {}
         await emit_node_end(
             config, "brief_gate", "Yazım Briefi", "Yazım briefi yanıtı alındı.", answer
@@ -1990,6 +2185,7 @@ def create_planning_graph(
         ]
 
         gate_revision_count = state.get("gate_revision_count", 0)
+        needs_input_round = state.get("needs_input_round", 0)
         payload = {
             "kind": kind,
             "questions": prompt_questions,
@@ -2004,22 +2200,26 @@ def create_planning_graph(
             "revision_round": gate_revision_count,
             "max_revision_rounds": settings.HITL_MAX_GATE_REVISIONS,
             "revision_exhausted": gate_revision_count >= settings.HITL_MAX_GATE_REVISIONS,
+            "auto_value": AUTO_ANSWER,
         }
         # Deterministic, not a fresh uuid4: interrupt() re-executes everything
         # before it on resume, including this id's computation, and it must
         # come out identical both times for the frontend's dedup to work.
-        # gate_revision_count is part of the hash so a second gate round
-        # within the same turn gets a distinct id even when the model
-        # happens to produce byte-identical text -- without it the
-        # frontend's interrupt_id dedup would silently swallow the second
-        # round's interrupt and the run would hang waiting for an answer
-        # the client thinks it already gave.
+        # gate_revision_count is part of the hash so a "revizyon iste" round
+        # gets a distinct id even when the model happens to produce
+        # byte-identical text; needs_input_round plays the same role for a
+        # residual/unanswered-placeholder re-ask, which touches neither the
+        # draft text nor current_step_idx nor gate_revision_count -- without
+        # it, a second NEEDS_INPUT round hashed identically to the first,
+        # the frontend's interrupt_id dedup silently swallowed the repeat
+        # event, and the session hung forever waiting for an answer the
+        # client believed it had already sent (see human_gate_node's own
+        # "reject"/residual handling below for the two ways that happened).
         interrupt_id = hashlib.sha256(
             f"{kind}:{draft_result.get('draft', '')}:{state.get('current_step_idx', 0)}:"
-            f"{gate_revision_count}".encode("utf-8")
+            f"{gate_revision_count}:{needs_input_round}".encode("utf-8")
         ).hexdigest()[:16]
 
-        HITL_INTERRUPTS.labels(kind=kind).inc()
         await emit_node_start(
             config,
             "human_gate",
@@ -2028,6 +2228,10 @@ def create_planning_graph(
         )
         await emit_interrupt(config, kind=kind, interrupt_id=interrupt_id, payload=payload)
         answer = interrupt(payload)
+        # C25: see brief_gate_node's identical comment -- counted after
+        # interrupt() returns, not before, so a real pause-and-answer cycle
+        # is counted exactly once instead of twice.
+        HITL_INTERRUPTS.labels(kind=kind).inc()
         answer = answer if isinstance(answer, dict) else {}
         # Execution only reaches here after Command(resume=...) -- the gate is
         # now resolved, whatever the human decided.
@@ -2036,7 +2240,9 @@ def create_planning_graph(
         )
 
         if kind == "missing_information":
-            if answer.get("action") == "revise":
+            action = answer.get("action")
+
+            if action == "revise":
                 # Escape hatch: the user typed a revision instruction into
                 # what was meant to be an answer box instead of the field's
                 # actual value -- apply_answers would otherwise substitute
@@ -2048,28 +2254,89 @@ def create_planning_graph(
                 # draft_result["status"], not kind, so setting the same
                 # status here is enough.
                 note = (answer.get("instructions") or "").strip()
-                return {
+                updates: dict[str, Any] = {
                     "gate_revision_note": note,
                     "draft_result": {**draft_result, "status": StepStatus.REVISE_REQUESTED},
                 }
+                # route_after_gate sends this straight to "end" -- bypassing
+                # executor, the only other place final_output is recomputed
+                # -- the moment the revision-round cap is already exhausted
+                # (a second "revizyon iste" click on the last allowed
+                # round). Set eagerly here so the turn's reply reflects
+                # draft_result even on that direct exit; harmless when the
+                # route instead goes to "gate_revise", which overwrites it
+                # again once the revision actually runs.
+                updates["final_output"] = _compile_final_output(state, updates)
+                return updates
+
+            if action == "reject":
+                # "Vazgeç" -- a verdict on the text, not a request for more
+                # information, so this never goes through apply_answers at
+                # all. Before this branch existed, "reject" fell straight
+                # through to the apply_answers path below with an empty
+                # `answers` dict: every placeholder came back unfilled, the
+                # draft text was byte-identical to what was just shown, and
+                # the resulting NEEDS_INPUT round hashed to the exact same
+                # interrupt_id as the round the user was trying to leave --
+                # the frontend's dedup silently dropped it and the session
+                # hung with no way to send another message on that thread
+                # (see route_after_gate's own REJECTED -> "end" branch,
+                # and SessionFocus._ARCHIVE_ONLY_DRAFT_STATUSES, which this
+                # finally gives a real producer).
+                reason = (answer.get("reason") or "").strip()
+                updates = {
+                    "draft_result": {
+                        **draft_result,
+                        "status": StepStatus.REJECTED,
+                        "rejection_reason": reason,
+                    },
+                }
+                # route_after_gate sends REJECTED straight to "end",
+                # bypassing executor -- the only other place final_output
+                # is recomputed. Without this the turn's reply would still
+                # reflect whatever final_output held before the gate ever
+                # paused (a stale, pre-rejection snapshot).
+                updates["final_output"] = _compile_final_output(state, updates)
+                return updates
 
             filled_draft, residual = apply_answers(
                 draft_result.get("draft", ""), answer.get("answers", {})
             )
 
-            if residual:
-                residual_questions = [
-                    question
-                    for question in missing_information
-                    if question.get("key") in residual
-                ]
+            # Only a placeholder key this draft actually asked a question
+            # about is grounds to reopen the gate. `residual` alone is not
+            # enough: build_missing_info_request's own "never ask about the
+            # response's own Tarih: line" skip used to be a broader
+            # "starts with tarih" substring test than apply_answers' own
+            # (unconditional) residual check, so an unrelated date
+            # placeholder (e.g. "[Başvuru Tarihi]") that build_missing_info_
+            # request silently skipped still came back from apply_answers as
+            # residual here, with no matching entry in `missing_information`
+            # -- reopening the gate with a `questions: []` payload the human
+            # has no way to answer, an unrecoverable dead end. Filtering on
+            # `residual_questions` (not raw `residual`) is the fail-closed
+            # half of that fix: a residual key with nothing to ask about is
+            # left as a visible unfilled placeholder in the text instead,
+            # and the draft proceeds to verification below, where
+            # `doldurulmamis_yer_tutucu` and the placeholder-count check
+            # already force human approval on it.
+            residual_questions = [
+                question
+                for question in missing_information
+                if question.get("key") in residual
+            ]
+
+            if residual_questions:
                 updated = {
                     **draft_result,
                     "draft": filled_draft,
                     "missing_information": residual_questions,
                     "status": StepStatus.NEEDS_INPUT,
                 }
-                return {"draft_result": updated}
+                return {
+                    "draft_result": updated,
+                    "needs_input_round": needs_input_round + 1,
+                }
 
             report = verify_draft(
                 filled_draft,
@@ -2130,6 +2397,16 @@ def create_planning_graph(
                 for example in (draft_result.get("style_examples") or [])
             ),
             correspondence_type_source=draft_result.get("correspondence_type_source") or "",
+            # C15: these three used to be silently dropped here -- a
+            # gate-triggered revision of a specific sub-genre (an itiraz
+            # dilekçesi, say) lost that genre and fell back to generic
+            # "diğer resmî yazışma" phrasing (and, since Faz 5's C16, its
+            # strict-verification override too); a revision of a REJECTED
+            # draft never saw _build_brief's own rejection-reason section,
+            # since that section is gated on exactly these two fields.
+            correspondence_sub_genre=draft_result.get("correspondence_sub_genre") or "",
+            status=draft_result.get("status") or "",
+            rejection_reason=draft_result.get("rejection_reason") or "",
             writing_brief=draft_result.get("writing_brief") or {},
         )
 
@@ -2162,12 +2439,22 @@ def create_planning_graph(
                 "Geri bildiriminize göre taslak güncellendi.", result,
             )
 
-        return {
+        updates: dict[str, Any] = {
             "draft_result": result,
             "revise_result": {"status": result.get("status")},
             "gate_revision_count": state.get("gate_revision_count", 0) + 1,
             "gate_revision_note": "",
         }
+        # route_after_gate_revise sends a FAILED result straight to "end",
+        # bypassing executor -- the only other place final_output is
+        # recomputed -- so without this the turn's reply would fall back to
+        # whatever final_output held before the gate loop started (a stale
+        # pre-revision snapshot, or empty on a plan where routing hadn't run
+        # yet), not the actual failure this round just produced. Harmless
+        # when the route instead goes to "human_gate"/"continue", which
+        # overwrite it again once the turn actually settles.
+        updates["final_output"] = _compile_final_output(state, updates)
+        return updates
 
     async def transfer_gate_node(state: PlanningState, config: RunnableConfig) -> dict[str, Any]:
         """Pause the transfer flow for its human checkpoint(s).
@@ -2213,7 +2500,6 @@ def create_planning_graph(
             interrupt_id = hashlib.sha256(
                 f"artifact_transfer_disambiguate:{intent_id}:{gate_round}".encode("utf-8")
             ).hexdigest()[:16]
-            HITL_INTERRUPTS.labels(kind="artifact_transfer_disambiguate").inc()
             await emit_node_start(
                 config, "transfer_gate", "Alıcı Seçimi", "Alıcı seçiminiz bekleniyor..."
             )
@@ -2221,6 +2507,8 @@ def create_planning_graph(
                 config, kind="artifact_transfer_disambiguate", interrupt_id=interrupt_id, payload=payload
             )
             answer = interrupt(payload)
+            # C25: see brief_gate_node's identical comment.
+            HITL_INTERRUPTS.labels(kind="artifact_transfer_disambiguate").inc()
             answer = answer if isinstance(answer, dict) else {}
             await emit_node_end(
                 config, "transfer_gate", "Alıcı Seçimi", "Alıcı seçimi alındı.", answer
@@ -2276,7 +2564,6 @@ def create_planning_graph(
         interrupt_id = hashlib.sha256(
             f"artifact_transfer_confirm:{intent_id}:{gate_round}".encode("utf-8")
         ).hexdigest()[:16]
-        HITL_INTERRUPTS.labels(kind="artifact_transfer_confirm").inc()
         await emit_node_start(
             config, "transfer_gate", "Transfer Onayı", "Transfer onayınız bekleniyor..."
         )
@@ -2284,6 +2571,8 @@ def create_planning_graph(
             config, kind="artifact_transfer_confirm", interrupt_id=interrupt_id, payload=payload
         )
         answer = interrupt(payload)
+        # C25: see brief_gate_node's identical comment.
+        HITL_INTERRUPTS.labels(kind="artifact_transfer_confirm").inc()
         answer = answer if isinstance(answer, dict) else {}
         await emit_node_end(
             config, "transfer_gate", "Transfer Onayı", "Transfer onayı alındı.", answer

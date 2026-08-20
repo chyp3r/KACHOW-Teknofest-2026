@@ -2,16 +2,16 @@
   "meta": {
     "drafts": {
       "dataset": "drafts",
-      "started_at": "2026-08-07T09:55:47",
-      "total_ms": 4.625
+      "started_at": "2026-08-20T06:32:12",
+      "total_ms": 5.403
     },
     "intents": {
       "dataset": "intents",
-      "started_at": "2026-08-07T09:55:47",
-      "total_ms": 47.662
+      "started_at": "2026-08-20T06:32:12",
+      "total_ms": 104.503
     }
   },
-  "policy_version": "1.4.0",
+  "policy_version": "3.0.0",
   "suites": {
     "drafts": {
       "accuracy": 1.0,
@@ -66,9 +66,9 @@
       "false_positive_rate": 0.0
     },
     "intents": {
-      "abstention_rate": 0.1313,
-      "accuracy_over_all": 0.825,
-      "accuracy_over_decided": 0.9496,
+      "abstention_rate": 0.052,
+      "accuracy_over_all": 0.9133,
+      "accuracy_over_decided": 0.9634,
       "by_category": {
         "clarify_resolution": {
           "abstention_rate": 0.0,
@@ -98,12 +98,24 @@
           "abstention_rate": 0.0,
           "accuracy_over_all": 1.0,
           "accuracy_over_decided": 1.0,
-          "cases": 8
+          "cases": 10
+        },
+        "farewell": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 2
+        },
+        "greeting_mid_session": {
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 2
         },
         "heldout_paraphrase": {
-          "abstention_rate": 0.3182,
-          "accuracy_over_all": 0.4091,
-          "accuracy_over_decided": 0.6,
+          "abstention_rate": 0.4091,
+          "accuracy_over_all": 0.3636,
+          "accuracy_over_decided": 0.6154,
           "cases": 22
         },
         "inversion": {
@@ -126,8 +138,8 @@
         },
         "keyword_draft": {
           "abstention_rate": 0.0,
-          "accuracy_over_all": 1.0,
-          "accuracy_over_decided": 1.0,
+          "accuracy_over_all": 0.9,
+          "accuracy_over_decided": 0.9,
           "cases": 10
         },
         "memory_recall": {
@@ -161,15 +173,15 @@
           "cases": 6
         },
         "revise": {
-          "abstention_rate": 0.6,
-          "accuracy_over_all": 0.3,
-          "accuracy_over_decided": 0.75,
-          "cases": 10
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
+          "cases": 17
         },
         "short_imperative": {
-          "abstention_rate": 1.0,
-          "accuracy_over_all": 0.0,
-          "accuracy_over_decided": 0.0,
+          "abstention_rate": 0.0,
+          "accuracy_over_all": 1.0,
+          "accuracy_over_decided": 1.0,
           "cases": 8
         },
         "short_message": {
@@ -179,34 +191,63 @@
           "cases": 6
         }
       },
-      "cases": 160,
-      "clarify_rate": 0.0875,
+      "cases": 173,
+      "clarify_rate": 0.1098,
       "confusion_matrix": {
         "<abstain>": {
-          "<abstain>": 8
+          "<abstain>": 10
         },
         "analyze": {
           "<abstain>": 1,
-          "analyze": 21,
-          "assist": 5
+          "analyze": 22,
+          "assist": 4
         },
         "assist": {
           "<abstain>": 3,
-          "assist": 64
+          "assist": 68
         },
         "draft": {
-          "<abstain>": 10,
+          "<abstain>": 5,
           "assist": 1,
-          "draft": 35
+          "draft": 39,
+          "refuse": 1
         },
         "revise": {
-          "<abstain>": 7,
-          "analyze": 1,
-          "revise": 4
+          "revise": 19
         }
       },
-      "expected_calibration_error": 0.2736,
+      "expected_calibration_error": 0.1265,
       "failures": [
+        {
+          "category": "keyword_draft",
+          "document_attached": false,
+          "expected": "draft",
+          "id": "draft_04",
+          "message": "Bu konuda bir bilgilendirme metni hazırlamanı istiyorum.",
+          "observed": "refuse",
+          "previous_intent": null,
+          "source": "scope_deterministic"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "draft",
+          "id": "held_01",
+          "message": "Bu belgeye karşılık verecek bir şeyler yazsana.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
+        {
+          "category": "heldout_paraphrase",
+          "document_attached": true,
+          "expected": "draft",
+          "id": "held_02",
+          "message": "Şu evraka dönüş yapacak bir metin çıkaralım.",
+          "observed": "<abstain>",
+          "previous_intent": null,
+          "source": "clarify"
+        },
         {
           "category": "heldout_paraphrase",
           "document_attached": true,
@@ -215,7 +256,7 @@
           "message": "Bunun cevabını sen yazar mısın?",
           "observed": "assist",
           "previous_intent": null,
-          "source": "scored"
+          "source": "fused"
         },
         {
           "category": "heldout_paraphrase",
@@ -225,7 +266,7 @@
           "message": "İlgili makama sunulmak üzere bir yazı ihzar et.",
           "observed": "<abstain>",
           "previous_intent": null,
-          "source": "context_default"
+          "source": "clarify"
         },
         {
           "category": "heldout_paraphrase",
@@ -235,7 +276,7 @@
           "message": "Şu belgeye bir göz atıp durumu anlatır mısın?",
           "observed": "assist",
           "previous_intent": null,
-          "source": "scored"
+          "source": "fused"
         },
         {
           "category": "heldout_paraphrase",
@@ -245,17 +286,7 @@
           "message": "Bu evrakta bir sorun var mı acaba?",
           "observed": "assist",
           "previous_intent": null,
-          "source": "scored"
-        },
-        {
-          "category": "heldout_paraphrase",
-          "document_attached": true,
-          "expected": "analyze",
-          "id": "held_07",
-          "message": "Bu yazının kurallara uyup uymadığını söyler misin?",
-          "observed": "assist",
-          "previous_intent": null,
-          "source": "semantic"
+          "source": "fused"
         },
         {
           "category": "heldout_paraphrase",
@@ -265,7 +296,7 @@
           "message": "Belgenin durumunu bir çıkar bakalım.",
           "observed": "<abstain>",
           "previous_intent": null,
-          "source": "context_default"
+          "source": "clarify"
         },
         {
           "category": "heldout_paraphrase",
@@ -275,7 +306,7 @@
           "message": "Sen ne tür işler görebiliyorsun?",
           "observed": "<abstain>",
           "previous_intent": null,
-          "source": "context_default"
+          "source": "clarify"
         },
         {
           "category": "heldout_paraphrase",
@@ -285,7 +316,7 @@
           "message": "Buradaki akış nasıl ilerliyor tam olarak?",
           "observed": "<abstain>",
           "previous_intent": null,
-          "source": "context_default"
+          "source": "clarify"
         },
         {
           "category": "heldout_paraphrase",
@@ -295,154 +326,14 @@
           "message": "Şu ana kadar neler geçti aramızda?",
           "observed": "<abstain>",
           "previous_intent": "assist",
-          "source": "context_default"
-        },
-        {
-          "category": "revise",
-          "document_attached": false,
-          "expected": "revise",
-          "id": "revise_01",
-          "message": "Bu taslağı biraz kısalt.",
-          "observed": "<abstain>",
-          "previous_intent": null,
           "source": "clarify"
         },
         {
-          "category": "revise",
-          "document_attached": false,
-          "expected": "revise",
-          "id": "revise_02",
-          "message": "Metni biraz uzat.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": "clarify"
-        },
-        {
-          "category": "revise",
-          "document_attached": false,
-          "expected": "revise",
-          "id": "revise_03",
-          "message": "Taslağı daha resmi yap.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": "clarify"
-        },
-        {
-          "category": "revise",
-          "document_attached": false,
-          "expected": "revise",
-          "id": "revise_07",
-          "message": "Yazının tonunu değiştir.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": "clarify"
-        },
-        {
-          "category": "revise",
-          "document_attached": false,
-          "expected": "revise",
-          "id": "revise_08",
-          "message": "Şu cümleyi düzeltir misin?",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": "clarify"
-        },
-        {
-          "category": "revise",
-          "document_attached": false,
-          "expected": "revise",
-          "id": "revise_09",
-          "message": "Taslağı güncelle lütfen.",
-          "observed": "analyze",
-          "previous_intent": null,
-          "source": "semantic"
-        },
-        {
-          "category": "revise",
-          "document_attached": false,
-          "expected": "revise",
-          "id": "revise_10",
-          "message": "Kapanışı değiştirir misin?",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": "clarify"
-        },
-        {
-          "category": "short_imperative",
-          "document_attached": false,
+          "category": "heldout_paraphrase",
+          "document_attached": true,
           "expected": "draft",
-          "id": "short_imp_01",
-          "message": "Cevap yaz.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": "clarify"
-        },
-        {
-          "category": "short_imperative",
-          "document_attached": false,
-          "expected": "draft",
-          "id": "short_imp_02",
-          "message": "Yazı hazırla.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": "clarify"
-        },
-        {
-          "category": "short_imperative",
-          "document_attached": false,
-          "expected": "draft",
-          "id": "short_imp_03",
-          "message": "Kaleme al.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": "clarify"
-        },
-        {
-          "category": "short_imperative",
-          "document_attached": false,
-          "expected": "draft",
-          "id": "short_imp_04",
-          "message": "Metni yaz.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": "clarify"
-        },
-        {
-          "category": "short_imperative",
-          "document_attached": false,
-          "expected": "draft",
-          "id": "short_imp_05",
-          "message": "Tanzim et.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": "clarify"
-        },
-        {
-          "category": "short_imperative",
-          "document_attached": false,
-          "expected": "draft",
-          "id": "short_imp_06",
-          "message": "Cevap hazırla.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": "clarify"
-        },
-        {
-          "category": "short_imperative",
-          "document_attached": false,
-          "expected": "draft",
-          "id": "short_imp_07",
-          "message": "Cevabı hazırla.",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": "clarify"
-        },
-        {
-          "category": "short_imperative",
-          "document_attached": false,
-          "expected": "draft",
-          "id": "short_imp_08",
-          "message": "Yanıt hazırla.",
+          "id": "held_17",
+          "message": "Buna karşılık verecek resmi bir dönüş kurgulayalım.",
           "observed": "<abstain>",
           "previous_intent": null,
           "source": "clarify"
@@ -455,7 +346,7 @@
           "message": "Bu konuda ilgili makama iletilecek bir metin oluşturalım mı?",
           "observed": "<abstain>",
           "previous_intent": null,
-          "source": "context_default"
+          "source": "clarify"
         },
         {
           "category": "heldout_paraphrase",
@@ -465,7 +356,7 @@
           "message": "Bu belgenin sorunlu yanları var mı bakar mısın?",
           "observed": "assist",
           "previous_intent": null,
-          "source": "scored"
+          "source": "fused"
         },
         {
           "category": "heldout_paraphrase",
@@ -475,173 +366,160 @@
           "message": "Bu evrakın ne tür bir yazı olduğunu sen söyle.",
           "observed": "assist",
           "previous_intent": null,
-          "source": "scored"
-        },
-        {
-          "category": "heldout_paraphrase",
-          "document_attached": false,
-          "expected": "revise",
-          "id": "held_21",
-          "message": "Yazdığın metni bir kez daha ele alır mısın?",
-          "observed": "<abstain>",
-          "previous_intent": null,
-          "source": "context_default"
+          "source": "fused"
         }
       ],
-      "macro_f1": 0.8311,
+      "macro_f1": 0.952,
       "per_label": [
         {
           "f1": 1.0,
           "label": "<abstain>",
           "precision": 1.0,
           "recall": 1.0,
-          "support": 8
+          "support": 10
         },
         {
-          "f1": 0.8571428571428572,
+          "f1": 0.8979591836734693,
           "label": "analyze",
-          "precision": 0.9545454545454546,
-          "recall": 0.7777777777777778,
+          "precision": 1.0,
+          "recall": 0.8148148148148148,
           "support": 27
         },
         {
-          "f1": 0.9343065693430657,
+          "f1": 0.9444444444444444,
           "label": "assist",
-          "precision": 0.9142857142857143,
-          "recall": 0.9552238805970149,
-          "support": 67
+          "precision": 0.9315068493150684,
+          "recall": 0.9577464788732394,
+          "support": 71
         },
         {
-          "f1": 0.8641975308641976,
+          "f1": 0.9176470588235294,
           "label": "draft",
           "precision": 1.0,
-          "recall": 0.7608695652173914,
+          "recall": 0.8478260869565217,
           "support": 46
         },
         {
-          "f1": 0.5,
+          "f1": 1.0,
           "label": "revise",
           "precision": 1.0,
-          "recall": 0.3333333333333333,
-          "support": 12
+          "recall": 1.0,
+          "support": 19
         }
       ],
       "risk_coverage": [
         {
-          "coverage": 0.86875,
-          "risk": 0.050359712230215826,
+          "coverage": 0.9479768786127167,
+          "risk": 0.036585365853658534,
           "threshold": 0.0
         },
         {
-          "coverage": 0.8,
-          "risk": 0.0546875,
+          "coverage": 0.8728323699421965,
+          "risk": 0.039735099337748346,
           "threshold": 0.05
         },
         {
-          "coverage": 0.8,
-          "risk": 0.0546875,
+          "coverage": 0.8728323699421965,
+          "risk": 0.039735099337748346,
           "threshold": 0.1
         },
         {
-          "coverage": 0.8,
-          "risk": 0.0546875,
+          "coverage": 0.8728323699421965,
+          "risk": 0.039735099337748346,
           "threshold": 0.15
         },
         {
-          "coverage": 0.8,
-          "risk": 0.0546875,
+          "coverage": 0.8728323699421965,
+          "risk": 0.039735099337748346,
           "threshold": 0.2
         },
         {
-          "coverage": 0.8,
-          "risk": 0.0546875,
+          "coverage": 0.8728323699421965,
+          "risk": 0.039735099337748346,
           "threshold": 0.25
         },
         {
-          "coverage": 0.8,
-          "risk": 0.0546875,
+          "coverage": 0.8728323699421965,
+          "risk": 0.039735099337748346,
           "threshold": 0.3
         },
         {
-          "coverage": 0.8,
-          "risk": 0.0546875,
+          "coverage": 0.8728323699421965,
+          "risk": 0.039735099337748346,
           "threshold": 0.35
         },
         {
-          "coverage": 0.73125,
-          "risk": 0.05982905982905983,
+          "coverage": 0.8728323699421965,
+          "risk": 0.039735099337748346,
           "threshold": 0.4
         },
         {
-          "coverage": 0.6375,
-          "risk": 0.029411764705882353,
+          "coverage": 0.8439306358381503,
+          "risk": 0.0410958904109589,
           "threshold": 0.45
         },
         {
-          "coverage": 0.6375,
-          "risk": 0.029411764705882353,
+          "coverage": 0.8439306358381503,
+          "risk": 0.0410958904109589,
           "threshold": 0.5
         },
         {
-          "coverage": 0.6,
-          "risk": 0.03125,
+          "coverage": 0.8439306358381503,
+          "risk": 0.0410958904109589,
           "threshold": 0.55
         },
         {
-          "coverage": 0.6,
-          "risk": 0.03125,
+          "coverage": 0.8439306358381503,
+          "risk": 0.0410958904109589,
           "threshold": 0.6
         },
         {
-          "coverage": 0.6,
-          "risk": 0.03125,
+          "coverage": 0.8439306358381503,
+          "risk": 0.0410958904109589,
           "threshold": 0.65
         },
         {
-          "coverage": 0.6,
-          "risk": 0.03125,
+          "coverage": 0.8439306358381503,
+          "risk": 0.0410958904109589,
           "threshold": 0.7
         },
         {
-          "coverage": 0.6,
-          "risk": 0.03125,
+          "coverage": 0.838150289017341,
+          "risk": 0.041379310344827586,
           "threshold": 0.75
         },
         {
-          "coverage": 0.35625,
-          "risk": 0.05263157894736842,
+          "coverage": 0.8265895953757225,
+          "risk": 0.027972027972027972,
           "threshold": 0.8
         },
         {
-          "coverage": 0.26875,
-          "risk": 0.023255813953488372,
+          "coverage": 0.7803468208092486,
+          "risk": 0.007407407407407408,
           "threshold": 0.85
         },
         {
-          "coverage": 0.25,
-          "risk": 0.025,
+          "coverage": 0.7398843930635838,
+          "risk": 0.0078125,
           "threshold": 0.9
         },
         {
-          "coverage": 0.25,
-          "risk": 0.025,
+          "coverage": 0.6242774566473989,
+          "risk": 0.009259259259259259,
           "threshold": 0.95
         },
         {
-          "coverage": 0.24375,
+          "coverage": 0.057803468208092484,
           "risk": 0.0,
           "threshold": 1.0
         }
       ],
       "source_distribution": {
-        "clarification_resolved": 6,
-        "clarify": 14,
+        "clarification_resolved": 5,
+        "clarify": 19,
         "compound": 8,
-        "context_default": 15,
-        "continuation": 7,
-        "empty": 2,
-        "scored": 101,
-        "semantic": 7
+        "fused": 140,
+        "scope_deterministic": 1
       }
     }
   }

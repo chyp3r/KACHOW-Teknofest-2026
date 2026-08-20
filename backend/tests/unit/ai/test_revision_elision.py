@@ -76,3 +76,62 @@ def test_a_removal_verb_instruction_permits_the_same_shrink():
 def test_a_kaldir_verb_instruction_permits_the_same_shrink():
     rewritten = "Sayın Ahmet Yılmaz,\n\nArz ederim.\n\nMehmet Öztürk"
     assert detect_content_loss(PREVIOUS_DRAFT, rewritten, "bu cümleyi kaldır") is None
+
+
+def test_a_temizle_verb_instruction_permits_the_same_shrink():
+    rewritten = "Sayın Ahmet Yılmaz,\n\nArz ederim.\n\nMehmet Öztürk"
+    assert detect_content_loss(PREVIOUS_DRAFT, rewritten, "ikinci paragrafı temizle") is None
+
+
+def test_an_azalt_verb_instruction_permits_the_same_shrink():
+    rewritten = "Sayın Ahmet Yılmaz,\n\nArz ederim.\n\nMehmet Öztürk"
+    assert detect_content_loss(PREVIOUS_DRAFT, rewritten, "gövde metnini azalt") is None
+
+
+# ==========================================
+# C10: "sil" must not misfire as a substring of an unrelated word, and a
+# negated shortening instruction must not be read as a request for one.
+# ==========================================
+def test_asil_metni_koru_does_not_misfire_as_a_deletion_instruction():
+    """"Asıl metni koru" folds to "asil metni koru" -- "sil" is a bare
+    substring of "asil", not the word "sil" ("delete"). Before the
+    word-boundary fix, this let a *content-preservation* instruction
+    silently permit real content loss."""
+    rewritten = "Sayın Ahmet Yılmaz,\n\nArz ederim.\n\nMehmet Öztürk"
+    finding = detect_content_loss(PREVIOUS_DRAFT, rewritten, "asıl metni koru")
+    assert finding is not None
+
+
+def test_a_negated_shortening_instruction_does_not_permit_the_shrink():
+    """"Hiçbir yeri kısaltma" contains "kisalt" but is an explicit
+    instruction *not* to shorten -- the opposite of what an unqualified
+    substring hit on "kisalt" would suggest."""
+    rewritten = "Sayın Ahmet Yılmaz,\n\nArz ederim.\n\nMehmet Öztürk"
+    finding = detect_content_loss(PREVIOUS_DRAFT, rewritten, "hiçbir yeri kısaltma")
+    assert finding is not None
+
+
+# ==========================================
+# C11: the elision marker check is a delta against the previous draft, not
+# an absolute search over the rewrite -- a "..." the previous draft already
+# legitimately carried must not re-trigger on every subsequent pass that
+# never touched it.
+# ==========================================
+def test_a_pre_existing_ellipsis_untouched_by_this_pass_is_not_flagged():
+    previous = PREVIOUS_DRAFT.replace(
+        "Sayın Ahmet Yılmaz,", "İlgi: [E-1... sayılı] yazınız.\n\nSayın Ahmet Yılmaz,"
+    )
+    rewritten = previous.replace("Arz ederim.\n\n", "Bilgilerinize sunarım.\n\n", 1)
+    assert detect_content_loss(previous, rewritten, "kapanışı değiştir") is None
+
+
+def test_a_newly_introduced_ellipsis_is_still_flagged():
+    previous = PREVIOUS_DRAFT.replace(
+        "Sayın Ahmet Yılmaz,", "İlgi: [E-1... sayılı] yazınız.\n\nSayın Ahmet Yılmaz,"
+    )
+    rewritten = (
+        "İlgi: [E-1... sayılı] yazınız.\n\nSayın Ahmet Yılmaz,\n\n...\n\n"
+        "Bilgilerinize sunarım.\n\nMehmet Öztürk\nGenel Müdür"
+    )
+    finding = detect_content_loss(previous, rewritten, "kapanışı değiştir")
+    assert finding is not None

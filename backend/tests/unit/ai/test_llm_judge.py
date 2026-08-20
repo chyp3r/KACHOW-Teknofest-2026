@@ -7,6 +7,7 @@ import pytest
 from app.ai.agents.judge import JudgeAgent
 from app.ai.guardrails.pii import PiiFinding
 from app.ai.revision.elision import ContentLossFinding
+from app.ai.verification.confidence_rules import RuleFinding
 from app.ai.verification.draft_verifier import MIN_AUTOMATED_CONFIDENCE_SCORE, VerificationReport
 from app.ai.verification.llm_judge import (
     DraftJudgeVerdict,
@@ -264,10 +265,48 @@ def test_a_guessed_correspondence_type_deducts_score_and_forces_approval():
 
 
 def test_missing_mevzuat_context_deducts_score_and_forces_approval():
-    combined = merge_verdicts(_report(confidence_score=100.0), None, has_context=False)
+    combined = merge_verdicts(
+        _report(confidence_score=100.0), None, has_context=False, cites_legislation=True
+    )
 
     assert combined.combined_score == 92.0  # 100 - 8 (mevzuat_baglami_yok)
     assert combined.requires_human_approval is True
+
+
+def test_a_degraded_judge_call_forces_approval_even_at_a_clean_deterministic_score():
+    """B7 regression: before this, a judge call that timed out/errored
+    (verdict=None) scored and approved *identically* to a clean pass --
+    silently dropping the quality gate exactly when it mattered most.
+    judge_attempted=True (the judge was supposed to run, unlike an
+    intentionally-skipped FAST-mode turn) now forces human approval on its
+    own when the call degraded."""
+    combined = merge_verdicts(_report(confidence_score=100.0), None, judge_attempted=True)
+
+    assert combined.combined_score == 100.0  # the degradation itself is zero-penalty by design
+    assert combined.requires_human_approval is True
+
+
+def test_an_intentionally_skipped_judge_does_not_force_approval():
+    """Control for the test above -- FAST mode (or a deployment setting)
+    intentionally not running the judge at all must not force approval on
+    every single draft it produces."""
+    combined = merge_verdicts(_report(confidence_score=100.0), None, judge_attempted=False)
+
+    assert combined.requires_human_approval is False
+
+
+def test_missing_mevzuat_context_is_not_penalized_when_the_draft_never_cites_legislation():
+    """B5 regression: a draft that never tried to cite any legislation
+    (most cover letters/information notices) has no missing-context
+    problem merely because none was retrieved -- before this,
+    mevzuat_baglami_yok fired unconditionally whenever has_context was
+    False, regardless of whether the draft ever referenced legislation."""
+    combined = merge_verdicts(
+        _report(confidence_score=100.0), None, has_context=False, cites_legislation=False
+    )
+
+    assert combined.combined_score == 100.0
+    assert not any(rule.rule_id == "mevzuat_baglami_yok" for rule in combined.applied_rules)
 
 
 def test_content_loss_deducts_score_forces_approval_and_becomes_a_repair_item():
@@ -286,7 +325,7 @@ def test_multiple_additional_findings_deduct_cumulatively():
     combined = merge_verdicts(
         _report(confidence_score=100.0), None,
         correspondence_type_fallback=True,  # -10
-        has_context=False,  # -8
+        has_context=False, cites_legislation=True,  # -8
         pii_findings=[
             PiiFinding(kind="tckn", preview="1***"),
             PiiFinding(kind="iban", preview="TR***"),
@@ -296,6 +335,50 @@ def test_multiple_additional_findings_deduct_cumulatively():
     assert combined.combined_score == 52.0  # 100 - 10 - 8 - 30
     assert combined.requires_human_approval is True
     assert combined.combined_score < MIN_AUTOMATED_CONFIDENCE_SCORE
+
+
+def test_a_style_finding_deducts_score_and_becomes_a_repair_item():
+    """Faz 4: app.ai.verification.style_checks findings are folded into the
+    same additional-findings pass as PII/mevzuat/content-loss, and into
+    repair_items the same way a judge finding is."""
+    combined = merge_verdicts(
+        _report(confidence_score=100.0),
+        None,
+        style_findings=[RuleFinding(rule_id="dolgu_ifade", detail="Tekrarlanan cümle (2x): 'X'")],
+    )
+
+    assert combined.combined_score == 96.0  # 100 - 4 (dolgu_ifade, single occurrence)
+    assert any(item.kind == "dolgu_ifade" for item in combined.repair_items)
+    repair_item = next(item for item in combined.repair_items if item.kind == "dolgu_ifade")
+    assert repair_item.detail == "Tekrarlanan cümle (2x): 'X'"
+    assert repair_item.suggested_fix
+
+
+def test_a_heuristic_style_finding_does_not_force_approval_on_its_own():
+    """kisi_tutarsizligi/dolgu_ifade are pattern heuristics -- they cost
+    score and drive the repair loop, but (unlike gonderen_muhatap_karisikligi
+    or karsi_taraf_kimlik_sizintisi) a single occurrence must not strand an
+    otherwise-clean draft in human review on its own."""
+    combined = merge_verdicts(
+        _report(confidence_score=100.0),
+        None,
+        style_findings=[RuleFinding(rule_id="kisi_tutarsizligi", detail="'Ahmet'")],
+    )
+
+    assert combined.requires_human_approval is False
+
+
+def test_an_imza_blogu_uydurma_style_finding_forces_approval():
+    """Unlike the two register heuristics, a bare meta-value in the
+    signature block is as high-precision as an exact identity leak, so it
+    keeps the rule table's default forces_approval=True."""
+    combined = merge_verdicts(
+        _report(confidence_score=100.0),
+        None,
+        style_findings=[RuleFinding(rule_id="imza_blogu_uydurma", detail="'Ad Soyad'")],
+    )
+
+    assert combined.requires_human_approval is True
 
 
 def test_no_additional_signals_leaves_the_deterministic_score_untouched():

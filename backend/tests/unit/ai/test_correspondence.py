@@ -18,6 +18,7 @@ import pytest
 
 from app.ai.workflows.correspondence import (
     format_correspondence_profile,
+    is_strict_sub_genre,
     match_genre,
     resolve_correspondence_type,
 )
@@ -182,3 +183,64 @@ def test_format_correspondence_profile_includes_the_sub_genre_line_when_set():
 def test_format_correspondence_profile_omits_the_sub_genre_line_when_unset():
     profile = format_correspondence_profile("response_letter", "")
     assert "Özel Tür" not in profile
+
+
+# ===========================================================================
+# C16: an explicit type must not drop a sub-genre the user's own text also
+# names, as long as the two agree on the resolved type.
+# ===========================================================================
+def test_an_explicit_other_official_type_still_picks_up_a_matching_sub_genre():
+    resolved, source, sub_genre = resolve_correspondence_type(
+        CorrespondenceType.OTHER_OFFICIAL, "itiraz dilekçesi yaz", {}
+    )
+    assert resolved == CorrespondenceType.OTHER_OFFICIAL
+    assert source == "explicit"
+    assert sub_genre == "itiraz dilekçesi"
+
+
+def test_an_explicit_type_that_disagrees_with_the_request_gets_no_sub_genre():
+    """The explicit type still wins outright -- but a sub-genre only ever
+    surfaces when match_genre agrees with it, never a contradictory one
+    from a completely different resolved type."""
+    resolved, source, sub_genre = resolve_correspondence_type(
+        CorrespondenceType.RESPONSE_LETTER, "itiraz dilekçesi yaz", {}
+    )
+    assert resolved == CorrespondenceType.RESPONSE_LETTER
+    assert source == "explicit"
+    assert sub_genre == ""
+
+
+# ===========================================================================
+# C16: match_genre must recognise a Turkish suffix attached directly to the
+# surface (no word boundary between them), not just the bare/nominative form.
+# ===========================================================================
+@pytest.mark.parametrize(
+    "user_request",
+    [
+        "itiraz dilekçesine cevap hazırlamayacağım, dilekçesini kabul ediyorum",
+        "vekâletnamesini iptal et",
+        "tutanakları hazırla",
+    ],
+)
+def test_a_suffixed_genre_surface_still_resolves(user_request):
+    assert match_genre(user_request) is not None
+
+
+# ===========================================================================
+# C16: the catalog's legally heaviest sub-genres must never receive
+# other_official's "you may invent conventional completions" leniency.
+# ===========================================================================
+@pytest.mark.parametrize(
+    "sub_genre",
+    [
+        "itiraz dilekçesi", "başvuru dilekçesi", "şikayet dilekçesi", "dilekçe",
+        "muvafakatname", "taahhütname", "vekâletname", "tutanak",
+    ],
+)
+def test_the_legally_heavy_sub_genres_are_strict(sub_genre):
+    assert is_strict_sub_genre(sub_genre) is True
+
+
+@pytest.mark.parametrize("sub_genre", ["olur yazısı", "görüş yazısı", "davet yazısı", ""])
+def test_other_sub_genres_are_not_forced_strict(sub_genre):
+    assert is_strict_sub_genre(sub_genre) is False

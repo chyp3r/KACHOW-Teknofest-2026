@@ -2,6 +2,7 @@ import re
 import unicodedata
 from typing import Any
 
+from app.ai.workflows.intent_scorer import _compile_surface
 from app.core.enums.correspondence_type import CorrespondenceType
 
 CORRESPONDENCE_TYPE_LABELS = {
@@ -121,6 +122,45 @@ _GENRE_SURFACES_BY_LENGTH = tuple(
     sorted(GENRE_SURFACES, key=lambda entry: len(entry[0]), reverse=True)
 )
 
+#: Sub-genre labels that resolve to ``OTHER_OFFICIAL`` but must never
+#: receive that type's "brief'te bulunmayan tamamlayıcı bilgileri genel
+#: kurumsal bilgi birikiminle tamamlayabilirsin" leniency (C16) -- these are
+#: the catalog's legally heaviest documents (a written consent, a formal
+#: commitment, a power of attorney, an official minutes/record, a personal
+#: petition), where an invented fact is a materially bigger problem than an
+#: ordinary cover letter's unknown boilerplate. Kept in its own set rather
+#: than a fifth ``CorrespondenceType`` value: the *type* (structure, four
+#: spec'd genres) and the *strictness* (whether fabrication is tolerated)
+#: are separate questions, and every one of these sub-genres already needs
+#: ``OTHER_OFFICIAL``'s flexible structure -- it's specifically the
+#: leniency that must not follow.
+STRICT_SUB_GENRES: frozenset[str] = frozenset(
+    {
+        "itiraz dilekçesi",
+        "başvuru dilekçesi",
+        "şikayet dilekçesi",
+        "dilekçe",
+        "muvafakatname",
+        "taahhütname",
+        "vekâletname",
+        "tutanak",
+    }
+)
+
+
+def is_strict_sub_genre(sub_genre: str) -> bool:
+    """Whether ``sub_genre`` must stay strict despite resolving to ``OTHER_OFFICIAL``.
+
+    Args:
+        sub_genre: The free-text sub-genre label (see
+            ``resolve_correspondence_type``'s return value), or "" for a
+            core type / an unrecognized sub-genre.
+
+    Returns:
+        True for one of ``STRICT_SUB_GENRES``.
+    """
+    return sub_genre in STRICT_SUB_GENRES
+
 
 def _normalize_text(value: Any) -> str:
     """Normalize correspondence labels for deterministic alias matching."""
@@ -168,6 +208,21 @@ def _match_type(value: Any) -> CorrespondenceType | None:
     return None
 
 
+#: Left-word-boundary compiled patterns for ``GENRE_SURFACES`` (C16), same
+#: compiler ``intent_scorer.ALL_RULES`` uses for its own surfaces -- open on
+#: the right so a Turkish suffix attached directly to the root ("dilekçe" +
+#: "sini" -> "dilekcesini", no gap between them) still matches. The old
+#: two-sided ``\b...\b`` boundary required the surface to be the *entire*
+#: word: "itiraz dilekcesi" matched "itiraz dilekçesi yazınız" but not
+#: "itiraz dilekçesine cevap yazınız" (dative case, the surface is a
+#: prefix, not the whole word) -- an ordinary, everyday phrasing that
+#: should resolve to the same sub-genre either way.
+_GENRE_PATTERNS_BY_LENGTH: tuple[tuple[re.Pattern[str], CorrespondenceType, str], ...] = tuple(
+    (_compile_surface(surface), correspondence_type, sub_genre)
+    for surface, correspondence_type, sub_genre in _GENRE_SURFACES_BY_LENGTH
+)
+
+
 def match_genre(user_request: str) -> tuple[CorrespondenceType, str] | None:
     """Match the user's own drafting request against ``GENRE_SURFACES``.
 
@@ -185,8 +240,8 @@ def match_genre(user_request: str) -> tuple[CorrespondenceType, str] | None:
     normalized = _normalize_text(user_request)
     if not normalized:
         return None
-    for surface, correspondence_type, sub_genre in _GENRE_SURFACES_BY_LENGTH:
-        if re.search(rf"\b{re.escape(surface)}\b", normalized):
+    for pattern, correspondence_type, sub_genre in _GENRE_PATTERNS_BY_LENGTH:
+        if pattern.search(normalized):
             return correspondence_type, sub_genre
     return None
 
@@ -276,7 +331,19 @@ def resolve_correspondence_type(
     if requested_type is not None:
         matched = _match_type(requested_type)
         if matched:
-            return matched, "explicit", ""
+            # C16: an explicit type (an API selection, a resolved
+            # writing-brief answer) used to always drop the sub-genre,
+            # even when the user's own text named a more specific one
+            # ("itiraz dilekçesi yaz" alongside a caller-supplied
+            # OTHER_OFFICIAL) -- only kept when match_genre agrees with
+            # the explicit type, so a contradictory guess never overrides
+            # it (e.g. explicit RESPONSE_LETTER against text naming a
+            # dilekçe, which would itself resolve to OTHER_OFFICIAL).
+            sub_genre = ""
+            genre_match = match_genre(user_request)
+            if genre_match and genre_match[0] == matched:
+                sub_genre = genre_match[1]
+            return matched, "explicit", sub_genre
         return CorrespondenceType.OTHER_OFFICIAL, "fallback", ""
 
     genre_match = match_genre(user_request)

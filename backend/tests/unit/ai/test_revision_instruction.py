@@ -3,10 +3,13 @@ the pre-existing deterministic instruction parsing (see test_revise_flow.py
 for the parser/locator/merge tests that predate this module)."""
 
 from app.ai.revision.instruction import (
+    TargetSpan,
     decompose_instruction,
     locate_target,
     needs_reretrieval,
     parse_revision_instruction,
+    resolve_merge_target,
+    spans_overlap,
 )
 
 DRAFT = (
@@ -67,6 +70,48 @@ def test_the_konu_section_hint_still_finds_the_header_block_directly():
     assert target is not None
     assert "Sayı:" in target.text
     assert target.text.startswith("Konu:")
+
+
+def test_konuyu_degistir_also_resolves_to_the_konu_hint():
+    """The bare accusative form ("konuyu") must resolve the same way the
+    longer "konu satırını" phrasing does -- both name the letter's own
+    Konu field."""
+    instruction = parse_revision_instruction("Konuyu değiştir.")
+    assert instruction.section_hint == "konu"
+
+
+# ===========================================================================
+# C20: a bare "konu" must not misfire on the generic Turkish noun ("bu
+# konuda" = "on this topic") -- only the field-naming forms should resolve
+# to the konu section hint at all.
+# ===========================================================================
+def test_a_generic_topic_reference_does_not_resolve_to_the_konu_section_hint():
+    instruction = parse_revision_instruction("Bu konuda daha resmi bir dil kullan.")
+    assert instruction.section_hint != "konu"
+    assert instruction.scope == "whole"
+
+
+def test_a_generic_topic_reference_targets_the_whole_draft_not_just_konu():
+    instruction = parse_revision_instruction("Bu konuda daha resmi bir dil kullan.")
+    target = locate_target(FULL_HEADER_DRAFT, instruction)
+    assert target is None  # whole-draft scope, not narrowed to the header
+
+
+# ===========================================================================
+# C19: "N paragraf ekle" is a count of paragraphs to *add*, not the ordinal
+# index of an existing one to edit -- must not resolve the same way "N.
+# paragrafı düzelt" (an ordinal edit target) does.
+# ===========================================================================
+def test_a_paragraph_addition_request_is_not_read_as_an_ordinal_target():
+    instruction = parse_revision_instruction("Metne 2 paragraf daha ekle.")
+    assert instruction.ordinal is None
+    assert instruction.scope == "whole"
+
+
+def test_an_ordinal_edit_request_is_still_read_as_an_ordinal_target():
+    instruction = parse_revision_instruction("2. paragrafı kısalt.")
+    assert instruction.ordinal == 2
+    assert instruction.scope == "paragraph"
 
 
 # ===========================================================================
@@ -165,3 +210,62 @@ def test_a_pure_tone_request_does_not_trigger_reretrieval():
 def test_a_shorten_request_does_not_trigger_reretrieval():
     instruction = parse_revision_instruction("Kısalt lütfen.")
     assert needs_reretrieval(instruction) is False
+
+
+# ===========================================================================
+# C22: a directive's rewrite that ignores its own narrow scope and
+# regenerates (close to) the whole draft must not be spliced in at the
+# original span -- that would double the content instead of replacing it.
+# ===========================================================================
+def _target(text: str) -> TargetSpan:
+    return TargetSpan(start=0, end=len(text), text=text)
+
+
+def test_an_ordinary_rewrite_keeps_its_own_target():
+    target = _target("Kısa bir paragraf.")
+    rewritten = "Biraz daha uzun ama makul bir paragraf oldu."
+    source = f"Konu: X\n\n{target.text}\n\nArz ederim.\n\nAli Veli"
+
+    assert resolve_merge_target(target, rewritten, source) is target
+
+
+def test_a_whole_draft_sized_rewrite_of_a_narrow_target_is_rejected():
+    target = _target("Kısa bir paragraf.")
+    source = (
+        "Konu: X\nSayı: E-1-1\nTarih: 18.08.2026\n\n"
+        f"Sayın Makam,\n\n{target.text}\n\nArz ederim.\n\nAli Veli\nGenel Müdür"
+    )
+    # The model ignored the scope rule and regenerated something as long as
+    # (and shaped like) the whole draft, not just the targeted paragraph.
+    rewritten = source.replace(target.text, "Tamamen yeniden yazılmış içerik burada.")
+
+    assert resolve_merge_target(target, rewritten, source) is None
+
+
+def test_a_none_target_is_never_flagged_as_an_overrun():
+    assert resolve_merge_target(None, "herhangi bir metin", "kaynak taslak") is None
+
+
+def test_an_empty_target_span_is_never_flagged_as_an_overrun():
+    target = _target("")
+    assert resolve_merge_target(target, "yeni içerik", "kaynak taslak") is target
+
+
+# ===========================================================================
+# C5: overlapping directive spans must be detected before the right-to-left
+# multi-directive merge -- splicing two overlapping spans corrupts offsets.
+# ===========================================================================
+def test_disjoint_spans_do_not_overlap():
+    assert spans_overlap([TargetSpan(0, 5, "x"), TargetSpan(10, 15, "y")]) is False
+
+
+def test_adjacent_touching_spans_do_not_overlap():
+    assert spans_overlap([TargetSpan(0, 5, "x"), TargetSpan(5, 10, "y")]) is False
+
+
+def test_intersecting_spans_overlap():
+    assert spans_overlap([TargetSpan(0, 10, "x"), TargetSpan(5, 15, "y")]) is True
+
+
+def test_a_none_target_is_ignored_when_checking_for_overlap():
+    assert spans_overlap([TargetSpan(0, 5, "x"), None]) is False

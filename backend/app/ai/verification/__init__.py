@@ -20,6 +20,11 @@ from app.ai.verification.placeholders import (
     normalize_role_placeholders,
     normalize_unfilled_markers,
 )
+from app.ai.verification.style_checks import (
+    check_filler_sentences,
+    check_person_consistency,
+    check_signature_block,
+)
 
 __all__ = [
     "MIN_AUTOMATED_CONFIDENCE_SCORE",
@@ -40,4 +45,7 @@ __all__ = [
     "fill_date_placeholders",
     "normalize_role_placeholders",
     "normalize_unfilled_markers",
+    "check_filler_sentences",
+    "check_person_consistency",
+    "check_signature_block",
 ]

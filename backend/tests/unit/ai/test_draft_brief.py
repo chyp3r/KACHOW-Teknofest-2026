@@ -11,7 +11,8 @@ document it is replying to.
 """
 
 from app.ai.identity.company_profile import CompanyProfile
-from app.ai.workflows.draft_graph import _build_brief
+from app.ai.verification.draft_verifier import verify_draft
+from app.ai.workflows.draft_graph import _build_brief, _build_instruction_haystack
 
 CLASSIFICATION = {
     "document_type_label": "Resmî Yazı",
@@ -147,3 +148,48 @@ def test_configured_profile_renders_the_identity_section():
     assert "Acme A.Ş." in brief
     assert "Daire Başkanı" in brief
     assert "Yazım Briefi" in brief.split("KURUM KİMLİĞİ")[1]
+
+
+# ==========================================
+# _build_instruction_haystack (B2/B3)
+# ==========================================
+
+
+def test_instruction_haystack_folds_in_prior_turns_and_brief_answers():
+    haystack = _build_instruction_haystack(
+        "Şimdi cevap yazısı hazırla.",
+        prior_user_turns=["Berkay bey stajını bizim şirketimizde tamamlamış."],
+        brief_answers={"yazan_taraf": "Mahmut Yazılım A.Ş."},
+    )
+
+    assert "Şimdi cevap yazısı hazırla." in haystack
+    assert "Berkay bey stajını bizim şirketimizde tamamlamış." in haystack
+    assert "Mahmut Yazılım A.Ş." in haystack
+
+
+def test_instruction_haystack_degrades_to_plain_instructions_when_nothing_else_is_given():
+    assert _build_instruction_haystack("Cevap yazısı hazırla.") == "Cevap yazısı hazırla."
+
+
+def test_a_name_supplied_only_in_an_earlier_turn_is_not_flagged_as_unsupported():
+    """B2/B3 regression: before this, verify_draft only ever saw the
+    *current* turn's own instructions -- a name/institution the user
+    supplied in an earlier turn of the same multi-turn negotiation (very
+    ordinary: "Berkay bey stajını bizim şirketimizde tamamlamış." one turn,
+    "şimdi cevap yazısı hazırla" the next) scored as an ungrounded
+    dayanaksiz_iddia purely for not being repeated verbatim in the latest
+    message."""
+    haystack = _build_instruction_haystack(
+        "Şimdi cevap yazısı hazırla.",
+        prior_user_turns=["Berkay bey stajını Mahmut Yazılım A.Ş.'de tamamlamış."],
+    )
+    draft = (
+        "Konu: Staj Onayı\n\nMahmut Yazılım A.Ş. bünyesinde stajın tamamlandığı "
+        "bildirilir.\n\nBilgilerinize sunulur.\n\nAyşe Kaya\nGenel Müdür"
+    )
+
+    report = verify_draft(draft, instructions=haystack)
+
+    assert not any(
+        "Mahmut Yazılım" in claim.value for claim in report.unsupported_claims
+    )

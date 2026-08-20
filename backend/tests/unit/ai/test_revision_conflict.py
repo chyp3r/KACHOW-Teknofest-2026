@@ -187,17 +187,20 @@ def test_a_major_or_critical_finding_forces_approval_but_a_minor_one_alone_does_
 
 
 def test_duplicate_findings_from_both_layers_are_deduped_keeping_higher_severity():
+    """A genuine duplicate: both layers describe the exact same conflict
+    (identical detail text), just at different severities -- the higher one
+    wins and only one finding surfaces."""
     from app.ai.revision.conflict import ConflictFinding
 
     deterministic = [
         ConflictFinding(
-            kind="mevzuat_dayanaksiz", severity="major", detail="d1",
+            kind="mevzuat_dayanaksiz", severity="major", detail="aynı çelişki",
             instruction_fragment="x", source="deterministic",
         )
     ]
     llm = [
         ConflictFinding(
-            kind="mevzuat_dayanaksiz", severity="critical", detail="d2",
+            kind="mevzuat_dayanaksiz", severity="critical", detail="aynı çelişki",
             instruction_fragment="x", source="llm",
         )
     ]
@@ -205,6 +208,34 @@ def test_duplicate_findings_from_both_layers_are_deduped_keeping_higher_severity
     result = merge_conflicts(deterministic, llm)
     assert len(result.conflicts) == 1
     assert result.conflicts[0].severity == "critical"
+
+
+def test_two_distinct_conflicts_of_the_same_kind_both_surface():
+    """C28 regression: before this, every finding from one
+    detect_conflicts_deterministic call shared the same
+    instruction_fragment (computed once per instruction, not per-finding),
+    so two genuinely different conflicts of the same kind -- e.g. a date
+    contradiction and a separate sayı contradiction, both "kaynak_celiskisi"
+    -- collapsed onto the same dedup key and one was silently discarded."""
+    from app.ai.revision.conflict import ConflictFinding
+
+    date_conflict = ConflictFinding(
+        kind="kaynak_celiskisi", severity="critical",
+        detail="Talimattaki tarih ('12.05.2026') kaynak evraktaki tarih ('01.01.2026') ile çelişiyor.",
+        instruction_fragment="aynı talimat", source="deterministic",
+    )
+    number_conflict = ConflictFinding(
+        kind="kaynak_celiskisi", severity="critical",
+        detail="Talimattaki sayı ('E-999') kaynak evraktaki sayı ('E-123') ile çelişiyor.",
+        instruction_fragment="aynı talimat", source="deterministic",
+    )
+
+    result = merge_conflicts([date_conflict, number_conflict], [])
+
+    assert len(result.conflicts) == 2
+    details = {finding.detail for finding in result.conflicts}
+    assert date_conflict.detail in details
+    assert number_conflict.detail in details
 
 
 # ===========================================================================
@@ -231,6 +262,27 @@ async def test_a_successful_llm_call_returns_findings(fake_llm):
     assert len(findings) == 1
     assert findings[0].source == "llm"
     assert findings[0].kind == "mevzuat_celiskisi"
+
+
+@pytest.mark.asyncio
+async def test_the_source_document_is_framed_as_untrusted_content(fake_llm):
+    """A submitted document is attacker-controlled input from the system's
+    perspective (see app.ai.guardrails.injection's own module docstring) --
+    the prompt must tell the model KAYNAK EVRAK is data to compare against,
+    never an instruction to follow, as a second layer alongside the
+    extraction-time scrubber."""
+    fake_llm.generate_structured_return = ConflictAssessment(conflicts=[], rationale="")
+    agent = ConflictAuditorAgent(fake_llm)
+
+    await assess_conflicts_llm(
+        agent, instruction="test talimatı", revised_draft=WELL_FORMED_DRAFT,
+        context="", source_document="Sayın Makam, ...",
+    )
+
+    messages = fake_llm.generate_structured_calls[0]["messages"]
+    prompt = "\n".join(message.get("content", "") for message in messages)
+    assert "GÜVENİLMEYEN İÇERİK" in prompt
+    assert "KAYNAK EVRAK" in prompt
 
 
 @pytest.mark.asyncio

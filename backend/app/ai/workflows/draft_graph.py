@@ -1,7 +1,8 @@
 import asyncio
 import json
 import logging
-from typing import Any, TypedDict
+import re
+from typing import Any, Sequence, TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
@@ -25,7 +26,11 @@ from app.ai.revision.elision import detect_content_loss
 from app.ai.verification import (
     DraftJudgeVerdict,
     InfoQuestion,
+    UnsupportedClaim,
     build_missing_info_request,
+    check_filler_sentences,
+    check_person_consistency,
+    check_signature_block,
     fill_date_placeholders,
     judge_draft,
     merge_verdicts,
@@ -33,8 +38,11 @@ from app.ai.verification import (
     normalize_unfilled_markers,
     verify_draft,
 )
+from app.ai.verification.draft_verifier import LEGISLATION_PATTERN
+from app.ai.workflows.attempt_tracking import best_of, recover_from_failed_attempt, snapshot_attempt
 from app.ai.workflows.correspondence import (
     format_correspondence_profile,
+    is_strict_sub_genre,
     resolve_correspondence_type,
 )
 from app.ai.workflows.events import (
@@ -104,6 +112,18 @@ class DraftState(TypedDict, total=False):
     correspondence_sub_genre: str
     context: str
     instructions: str
+    #: This turn's own `instructions` plus every earlier user turn's own
+    #: message text and any settled writing-brief slot answer this session
+    #: (see `_build_instruction_haystack`) -- what `verify_node` hands
+    #: `verify_draft` as `instructions=` so a name/date/institution the
+    #: user supplied in an *earlier* turn of a multi-turn negotiation is
+    #: still recognised as the user's own word, not scored as an
+    #: ungrounded `dayanaksiz_iddia` merely for not being repeated
+    #: verbatim in the latest message. Falls back to plain `instructions`
+    #: when empty (an older caller, or one not yet updated to populate
+    #: this -- see `app.ai.workflows.revise_graph`, wired in a later
+    #: phase) so nothing regresses to "no instruction grounding at all".
+    instruction_haystack: str
     draft: str
     previous_draft: str
     confidence_score: float
@@ -123,6 +143,17 @@ class DraftState(TypedDict, total=False):
     #: app.ai.verification.confidence_rules.
     applied_rules: list[dict[str, Any]]
     attempt_history: list[dict[str, Any]]
+    #: The best-scoring attempt's full result snapshot seen so far this turn
+    #: (see app.ai.workflows.attempt_tracking) -- kept so a repair pass that
+    #: makes the draft *worse*, or that crashes outright, cannot ship a
+    #: worse or blank result than an earlier attempt already produced (C2,
+    #: C3). Absent on the first attempt.
+    best_attempt: dict[str, Any]
+    #: Set only when a repair pass crashed/timed out and writer_node fell
+    #: back to `best_attempt` instead of failing the whole turn (C3) --
+    #: tells route_after_writer this is already a fully verified result, so
+    #: it should route straight to "end" rather than back through "verify".
+    restored_from_best_attempt: bool
     status: str
     error: str
     attempts: int
@@ -253,6 +284,108 @@ def _format_entities(entities: Any) -> str:
     return ", ".join(names) if names else "(tespit edilmedi)"
 
 
+#: Which placeholder an identity-slot leak (see
+#: `app.ai.verification.draft_verifier._check_identity_slot_leaks`) converts
+#: to, by rule id -- the same placeholder text `writer.md` itself tells the
+#: writer to use for that slot when the real value is unknown, so a
+#: converted leak is indistinguishable from an ordinary unfilled field to
+#: everything downstream (`build_missing_info_request`/`apply_answers`).
+_IDENTITY_LEAK_PLACEHOLDER: dict[str, str] = {
+    "gonderen_muhatap_karisikligi": "[Gönderen kurumun adı]",
+    "karsi_taraf_kimlik_sizintisi": "[İmzalayacak yetkilinin adı ve soyadı]",
+}
+
+
+def _convert_identity_leaks_to_placeholders(
+    draft_text: str, identity_slot_leaks: list[UnsupportedClaim]
+) -> tuple[str, bool]:
+    """Turn an exact-match identity-slot leak into a normal, askable
+    placeholder instead of building a second resolution path for one
+    specific defect kind.
+
+    The counterparty's own institution/signatory ending up in our antet or
+    signature block (see ``draft_verifier._check_identity_slot_leaks``) is
+    not a blank the human gate already knows how to ask about -- it is a
+    *wrong* value sitting where a placeholder should be. Replacing the
+    exact leaked text with the same placeholder ``writer.md`` itself uses
+    for that slot lets the existing missing-information gate
+    (``build_missing_info_request``/``apply_answers``) ask "bu yazıyı kimin
+    adına, kime yazıyoruz?" the same way it already asks about any other
+    unfilled field -- a second, parallel resolution mechanism was never
+    needed.
+
+    Only ever replaces an **exact** literal occurrence of the leaked value
+    (the common shape this fixes -- the counterparty's name copied
+    verbatim, exactly the reported bug). A value ``_check_identity_slot_
+    leaks`` only matched via the tolerant token-overlap fallback has no
+    single exact span to replace safely; it is left in the text and still
+    lowers the score/forces approval (see ``confidence_rules.RULES``), just
+    without an interactive question for that specific occurrence.
+
+    Args:
+        draft_text: The draft text to transform.
+        identity_slot_leaks: ``VerificationReport.identity_slot_leaks`` from
+            a prior ``verify_draft`` pass.
+
+    Returns:
+        The (possibly transformed) draft text, and whether anything was
+        actually replaced -- the caller re-verifies only when it was.
+    """
+    changed = False
+    for leak in identity_slot_leaks:
+        placeholder = _IDENTITY_LEAK_PLACEHOLDER.get(leak.kind)
+        if not placeholder or not leak.value:
+            continue
+        pattern = re.compile(re.escape(leak.value))
+        if pattern.search(draft_text):
+            draft_text = pattern.sub(placeholder, draft_text, count=1)
+            changed = True
+    return draft_text, changed
+
+
+def _build_instruction_haystack(
+    instructions: str,
+    prior_user_turns: Sequence[str] = (),
+    brief_answers: dict[str, Any] | None = None,
+) -> str:
+    """Compose everything a claim may legitimately trace to as "the user's
+    own word", for ``verify_draft``'s instruction-only-claims split.
+
+    Before this, ``verify_draft`` only ever saw the current turn's own
+    ``instructions``. A name/date/institution the user supplied in an
+    *earlier* turn of the same multi-turn negotiation -- very ordinary
+    ("Berkay bey stajını bizim şirketimizde tamamlamış." one turn, "şimdi
+    cevap yazısı hazırla" the next) -- scored as an ungrounded
+    ``dayanaksiz_iddia`` (-12) purely for not being repeated verbatim in
+    the latest message, even though the user plainly did supply it this
+    session. Settled writing-brief answers (see
+    ``app.ai.workflows.writing_brief`` -- human-approved, per
+    ``_build_brief``'s own section 8) are folded in for the same reason: a
+    value typed into the writing-brief card is exactly as trusted as one
+    typed into the chat box.
+
+    Kept separate from the writer's own ``instructions`` prompt input on
+    purpose -- the writer should still only ever see *this turn's* request
+    in brief section 7; stuffing prior turns in there would confuse "what
+    to do now" with "what was said before", a problem this haystack does
+    not have since it is never rendered into a prompt, only compared
+    against.
+
+    Args:
+        instructions: This turn's own drafting instructions.
+        prior_user_turns: Earlier turns' own message text, this session,
+            oldest first.
+        brief_answers: The settled writing-brief slot answers, if any.
+
+    Returns:
+        The combined haystack text.
+    """
+    parts = [instructions, *prior_user_turns]
+    if brief_answers:
+        parts.extend(str(value) for value in brief_answers.values() if value)
+    return "\n".join(part for part in parts if part)
+
+
 def _build_brief(
     classification: dict[str, Any],
     context: str,
@@ -283,9 +416,17 @@ def _build_brief(
         profile: The requesting company's identity profile (see
             ``app.ai.identity.company_profile.CompanyProfile``), or None.
             Rendered as section 9 when non-empty (see
-            ``format_identity_brief_section``) -- a *default* header/signer
-            for the slots section 8's writing brief leaves unspecified, not
-            an override of it.
+            ``format_identity_brief_section``) -- this is the primary,
+            system-verified identity for whoever is writing this letter.
+            ``app.ai.workflows.writing_brief.resolve_brief`` already
+            consults the same profile (via ``app.ai.identity.parties.
+            resolve_party_context``) when resolving section 8's own "Yazan
+            Taraf" slot, so by the time this renders, section 8 normally
+            already reflects this same identity -- this section restates it
+            explicitly for the writer's antet/imza rendering, not as a
+            fallback the writing brief overrides, but as the same fact
+            stated in the place the writer looks for header/signature
+            specifics.
 
     Returns:
         The brief text.
@@ -294,6 +435,17 @@ def _build_brief(
     missing = classification.get("missing_fields") or []
     missing_labels = ", ".join(
         item.get("label", "") for item in missing if isinstance(item, dict)
+    )
+    # Only point at section 9 by name when it will actually be rendered
+    # below (see format_identity_brief_section's own "" when empty
+    # convention) -- referencing a section that doesn't exist in this
+    # brief would be a dangling pointer, and would also leak the literal
+    # string "KURUM KİMLİĞİ" into every brief regardless of whether a
+    # profile is configured.
+    us_pointer = (
+        "bölüm 9 KURUM KİMLİĞİ ve bölüm 8 Yazım Briefi'ndeki 'Yazan Taraf' satırıdır"
+        if profile is not None and not profile.is_empty
+        else "bölüm 8 Yazım Briefi'ndeki 'Yazan Taraf' satırıdır"
     )
 
     return (
@@ -305,33 +457,82 @@ def _build_brief(
         f"1. Belge Türü: "
         f"{classification.get('document_type_label') or classification.get('document_type') or 'Belirtilmedi'}\n"
         f"2. Belge Özeti: {classification.get('summary') or 'Özet çıkarılamadı.'}\n"
-        f"3. GELEN EVRAKIN KİMLİK BİLGİLERİ (bu, cevapladığın evrakın KENDİ sayı/tarihidir "
-        f"-- YALNIZCA aşağıdaki bir 'İlgi:' satırında bu evraka atıf yapmak için kullanılabilir. "
-        f"SENİN YAZACAĞIN YANITIN KENDİ Sayı/Tarih alanına ASLA yazma; o alan her zaman ilgili "
-        f"yer tutucudur, çünkü yanıtın sayısını SENİN kurumunun evrak kaydı verir, gelen evrakın "
-        f"kaydı değil):\n"
+        f"3. GELEN EVRAKIN KİMLİK BİLGİLERİ -- KARŞI TARAFA AİTTİR (bu bölümdeki ve bölüm "
+        f"4'teki hiçbir isim/kurum/imza sahibi BİZ DEĞİLİZ -- biz kimiz sorusunun cevabı "
+        f"yalnızca {us_pointer}. Buradaki sayı/"
+        f"tarih, cevapladığın evrakın KENDİ sayı/tarihidir -- YALNIZCA aşağıdaki bir 'İlgi:' "
+        f"satırında bu evraka atıf yapmak için kullanılabilir. SENİN YAZACAĞIN YANITIN KENDİ "
+        f"Sayı/Tarih alanına ASLA yazma; o alan her zaman ilgili yer tutucudur, çünkü yanıtın "
+        f"sayısını SENİN kurumunun evrak kaydı verir, gelen evrakın kaydı değil):\n"
         f"   - Gelen Evrakın Sayısı: {fields.get('sayi') or '(gelen evrakta belirtilmemiş)'}\n"
         f"   - Gelen Evrakın Tarihi: {fields.get('tarih') or '(gelen evrakta belirtilmemiş)'}\n"
-        f"4. Diğer Çıkarılan Bilgiler (bunlar yanıtın kendi ilgili alanlarında -- Konu, Muhatap "
-        f"vb. -- doğrudan kullanılabilir; aşağıdaki parantez içi not bir alanın evrakta "
-        f"bulunmadığını belirtir -- bu notu KENDİSİ bir değermiş gibi taslağa yazma, "
-        f"yanındaki yönergeye göre ilgili yer tutucuyu bırak):\n"
+        f"4. Diğer Çıkarılan Bilgiler (Konu dışındaki her alan KARŞI TARAFA AİTTİR -- gövde "
+        f"metninde bir olgu olarak anılabilir, ama antet/imza bloğu/gönderen kurum alanlarına "
+        f"ASLA yazılamaz; aşağıdaki parantez içi not bir alanın evrakta bulunmadığını belirtir "
+        f"-- bu notu KENDİSİ bir değermiş gibi taslağa yazma, yanındaki yönergeye göre ilgili "
+        f"yer tutucuyu bırak):\n"
         f"   - Konu: {fields.get('konu') or '(evrakta yok -- taslakta [Konu] yer tutucusunu bırak)'}\n"
-        f"   - Muhatap: {fields.get('muhatap') or '(evrakta yok -- taslakta [Alıcının adı ve soyadı] yer tutucusunu bırak; Yazım Briefi bölümünde belirtilmişse onu esas al)'}\n"
-        f"   - Gönderen Kurum: {fields.get('gonderen_kurum') or '(evrakta belirtilmemiş)'}\n"
-        f"   - İmza Sahibi: {fields.get('imza_sahibi') or '(evrakta belirtilmemiş)'}"
+        f"   - Muhatap (evrakın KENDİ muhatabı -- SENİN yanıtının muhatabı bölüm 8'deki "
+        f"Yazım Briefi'nin kendi 'Muhatap' satırıdır, bu değer değil): "
+        f"{fields.get('muhatap') or '(evrakta yok)'}\n"
+        f"   - Gönderen Kurum (KARŞI TARAF -- bizim antetimiz asla bu olamaz): "
+        f"{fields.get('gonderen_kurum') or '(evrakta belirtilmemiş)'}\n"
+        f"   - İmza Sahibi (KARŞI TARAF -- bizim imza bloğumuz asla bu kişi olamaz): "
+        f"{fields.get('imza_sahibi') or '(evrakta belirtilmemiş)'}"
         f" ({fields.get('imza_unvani') or '(unvan belirtilmemiş)'})\n"
-        f"   - Belgede Geçen Diğer Önemli Varlıklar (kişi, kurum, tarih, tutar vb. -- "
-        f"örn. bir CV'deki çalışılan kurumlar; talimat bunlardan birine atıfta "
-        f"bulunuyorsa burada ara, kullanıcıya SORMA): "
+        f"   - Belgede Geçen Diğer Önemli Varlıklar (KARŞI TARAFA AİT kişi, kurum, tarih, "
+        f"tutar vb. -- örn. bir CV'deki çalışılan kurumlar; talimat bunlardan birine atıfta "
+        f"bulunuyorsa burada ara, kullanıcıya SORMA -- ama bunları antet/imza/gönderen "
+        f"kurum/muhatap alanlarımıza ASLA yazma, yalnızca gövdede olgu olarak kullan): "
         f"{_format_entities(classification.get('entities'))}\n"
         f"5. Evrakta Tespit Edilen Eksik Alanlar: {missing_labels or 'yok'}\n"
         f'6. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
         f"{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
         f"7. Kullanıcı Talebi ve Talimatlar: {instructions}\n"
-        f"8. YAZIM BRİEFİ (İNSAN ONAYLI -- KAYNAK BİLGİ SAYILIR):\n"
+        f"8. YAZIM BRİEFİ (İNSAN ONAYLI -- KAYNAK BİLGİ SAYILIR; 'Yazan Taraf' ve 'Muhatap' "
+        f"satırları BİZ/KARŞI TARAF ayrımının kendisidir):\n"
         f"{format_writing_brief(writing_brief or {})}\n"
         f"{format_identity_brief_section(profile) if profile is not None else ''}"
+    )
+
+
+def _anti_fabrication_rules(is_other: bool) -> str:
+    """The writer's own no-hallucination rules, shared with the repair prompt.
+
+    Before this, the *first* writer pass carried these rules (see
+    ``writer_node``'s own inline block) but ``_build_repair_prompt`` did not
+    -- a repair pass only forbade touching sentences outside the defect
+    list, never forbade inventing new facts inside the ones it *was*
+    fixing. ``missing_structure`` defects specifically require writing new
+    content (e.g. "add the missing Konu line"), which is exactly the
+    situation a reviser with no anti-fabrication rule at all will fill with
+    a guess -- and, per ``merge_verdicts``'s "best attempt wins" framing
+    (see Faz 5), a fabricated guess could win over a correctly-flagged
+    placeholder from an earlier attempt.
+
+    Args:
+        is_other: Whether this is the lenient ``other_official``
+            correspondence type, which is allowed conventional boilerplate.
+
+    Returns:
+        The rule bullet list, identical for the writer's first pass and
+        every repair pass after it.
+    """
+    if is_other:
+        return (
+            "- Yazışma türü 'Diğer resmî yazışma' olduğu için, brief'te bulunmayan "
+            "tamamlayıcı bilgileri genel kurumsal bilgi birikiminle tamamlayabilirsin.\n"
+            "- Resmî yazı standartlarına uygunluğu sağlamak için makul tamamlamalar yapabilirsin."
+        )
+    return (
+        "- Yalnızca brief içindeki bilgilere ve mevzuat bağlamına sadık kal.\n"
+        "- Gelen evrakta veya mevzuatta yer almayan hiçbir kişi, kurum, sayı, "
+        "tarih veya olay uydurma. Tarih alanı bu kuralın istisnasıdır: brief'in "
+        "\"0. BUGÜNÜN TARİHİ\" bölümündeki değeri her zaman kullan, uydurma.\n"
+        "- Zorunlu olup brief'te bulunmayan bilgileri, kime ait olduğunu açıkça "
+        "belirten köşeli parantezli bir yer tutucu olarak bırak (örn. "
+        "'[Belge Sayısı]', '[İmzalayacak yetkilinin adı ve soyadı]') -- çıplak "
+        "'Ad Soyad'/'Unvan' gibi kime ait olduğu belirsiz yer tutucular kullanma."
     )
 
 
@@ -368,6 +569,14 @@ def _build_repair_prompt(
         + (f" -> Öneri: {item.get('suggested_fix')}" if item.get("suggested_fix") else "")
         for index, item in enumerate(defects, start=1)
     )
+    # C16: a strict sub-genre (itiraz dilekçesi, muvafakatname, taahhütname,
+    # vekâletname, tutanak -- see is_strict_sub_genre's own docstring) keeps
+    # the anti-fabrication rules even though its type resolves to
+    # other_official; only a genuinely generic "diğer resmî yazışma" gets
+    # the "you may supply reasonable conventional completions" leniency.
+    is_other = state.get("correspondence_type") == "other_official" and not is_strict_sub_genre(
+        state.get("correspondence_sub_genre", "")
+    )
 
     return (
         "### GÖREV:\n"
@@ -378,8 +587,9 @@ def _build_repair_prompt(
         f"{format_correspondence_profile(state.get('correspondence_type', 'other_official'), state.get('correspondence_sub_genre', ''))}\n\n"
         f"### ÖNCEKİ TASLAK:\n{state.get('previous_draft', '')}\n\n"
         f"### DÜZELTİLMESİ GEREKEN KUSURLAR:\n{numbered or '(kusur listesi boş)'}\n\n"
-        "### KURAL:\n"
-        "Yalnızca listelenen kusurları düzelt. Başka hiçbir cümleyi değiştirme. "
+        "### KURALLAR:\n"
+        f"{_anti_fabrication_rules(is_other)}\n"
+        "- Yalnızca listelenen kusurları düzelt. Başka hiçbir cümleyi değiştirme. "
         "`[...]` yer tutucularını olduğu gibi bırak."
         f"{_format_style_examples(state.get('style_examples'))}"
         f"{rules_block}"
@@ -433,8 +643,11 @@ def _format_source_chunks_section(chunks: list[dict[str, Any]]) -> str:
 
     Not folded into ``_build_brief`` itself: that function runs inside
     ``validate_input_node``, before any retrieval happens, so it has no
-    chunks yet to render. Numbered "9." (one past ``_build_brief``'s own
-    0-8) rather than inserted positionally among them, for the same reason.
+    chunks yet to render. Numbered "10." -- one past ``_build_brief``'s own
+    0-8 *and* past ``format_identity_brief_section``'s section 9, appended
+    right before this one -- rather than inserted positionally among them,
+    for the same reason. Was previously also "9.", colliding with the
+    identity section whenever both were present in the same brief.
 
     Returns "" (not an empty section) when there are no chunks -- same
     "absent signal, not an empty one" reasoning as ``_format_style_examples``.
@@ -455,7 +668,7 @@ def _format_source_chunks_section(chunks: list[dict[str, Any]]) -> str:
         return ""
 
     return (
-        "\n9. BELGEDEN İLGİLİ ALINTILAR (birebir alıntı -- özet değil; "
+        "\n10. BELGEDEN İLGİLİ ALINTILAR (birebir alıntı -- özet değil; "
         "kaynak evrakın kendi metninden doğrudan aktarılmıştır. Bölüm 2'deki "
         "özetle çelişmez, onu somut ayrıntılarla tamamlar):\n"
         + "\n\n".join(blocks)
@@ -893,24 +1106,11 @@ def create_draft_graph(
                 meta=meta,
             )
 
-            is_other = state.get("correspondence_type") == "other_official"
-            if is_other:
-                rules = (
-                    "- Yazışma türü 'Diğer resmî yazışma' olduğu için, brief'te bulunmayan "
-                    "tamamlayıcı bilgileri genel kurumsal bilgi birikiminle tamamlayabilirsin.\n"
-                    "- Resmî yazı standartlarına uygunluğu sağlamak için makul tamamlamalar yapabilirsin."
-                )
-            else:
-                rules = (
-                    "- Yalnızca brief içindeki bilgilere ve mevzuat bağlamına sadık kal.\n"
-                    "- Gelen evrakta veya mevzuatta yer almayan hiçbir kişi, kurum, sayı, "
-                    "tarih veya olay uydurma. Tarih alanı bu kuralın istisnasıdır: brief'in "
-                    "\"0. BUGÜNÜN TARİHİ\" bölümündeki değeri her zaman kullan, uydurma.\n"
-                    "- Zorunlu olup brief'te bulunmayan bilgileri, kime ait olduğunu açıkça "
-                    "belirten köşeli parantezli bir yer tutucu olarak bırak (örn. "
-                    "'[Belge Sayısı]', '[İmzalayacak yetkilinin adı ve soyadı]') -- çıplak "
-                    "'Ad Soyad'/'Unvan' gibi kime ait olduğu belirsiz yer tutucular kullanma."
-                )
+            # C16: see the identical guard in _build_repair_prompt.
+            is_other = state.get("correspondence_type") == "other_official" and not is_strict_sub_genre(
+                state.get("correspondence_sub_genre", "")
+            )
+            rules = _anti_fabrication_rules(is_other)
 
             prompt = (
                 "### GÖREV:\n"
@@ -1034,6 +1234,13 @@ def create_draft_graph(
                 attempt_number,
                 preset.level.value,
             )
+            if is_revision and state.get("best_attempt"):
+                return recover_from_failed_attempt(
+                    state["best_attempt"],
+                    attempt_number,
+                    f"Onarım denemesi {budget:.0f} saniyelik süre sınırını aştı; "
+                    "önceki en iyi deneme korundu.",
+                )
             return {
                 "draft": "".join(chunks).strip(),
                 "attempts": attempt_number,
@@ -1047,6 +1254,12 @@ def create_draft_graph(
             }
         except Exception as exc:
             logger.exception("Writer/Reviser node failed (attempt %d)", attempt_number)
+            if is_revision and state.get("best_attempt"):
+                return recover_from_failed_attempt(
+                    state["best_attempt"],
+                    attempt_number,
+                    f"Onarım denemesi başarısız oldu ({exc}); önceki en iyi deneme korundu.",
+                )
             return {
                 "draft": "".join(chunks).strip(),
                 "attempts": attempt_number,
@@ -1057,7 +1270,13 @@ def create_draft_graph(
             }
 
     def route_after_writer(state: DraftState) -> str:
-        return "end" if state.get("status") == "FAILED" else "verify"
+        # restored_from_best_attempt (C3): a repair pass crashed and
+        # writer_node already fell back to a previous, fully-verified
+        # attempt -- re-entering "verify" would re-check text that was
+        # already checked (wasted work) and could itself crash again.
+        if state.get("status") == "FAILED" or state.get("restored_from_best_attempt"):
+            return "end"
+        return "verify"
 
     async def verify_node(state: DraftState, config: RunnableConfig) -> dict[str, Any]:
         logger.info("Running Draft Verification Node...")
@@ -1092,7 +1311,12 @@ def create_draft_graph(
             draft_text, is_individual_petition="dilekçe" in sub_genre.lower()
         )
         classification = state.get("classification") or {}
-        strict = state.get("correspondence_type") != "other_official"
+        # C16: a strict sub-genre keeps forcing human approval on an
+        # unsupported claim even though its type resolves to
+        # other_official -- see is_strict_sub_genre's own docstring.
+        strict = state.get("correspondence_type") != "other_official" or is_strict_sub_genre(
+            sub_genre
+        )
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
 
         # The company adapter's own preferred_examples are real generated
@@ -1113,24 +1337,59 @@ def create_draft_graph(
                 profile.short_name,
                 profile.letterhead,
                 profile.default_signer_title,
+                profile.default_signer_name,
             )
             if value
         ]
+        is_individual_petition = "dilekçe" in sub_genre.lower()
+        style_example_texts = [
+            example.get("text", "") for example in state.get("style_examples") or []
+        ] + list(adapter.preferred_examples)
+        # Falls back to plain `instructions` when the caller never populated
+        # the wider haystack (see DraftState.instruction_haystack's own
+        # docstring) -- never narrower than today's behaviour.
+        instruction_haystack = state.get("instruction_haystack") or state.get("instructions", "")
         report = verify_draft(
             draft_text,
             source_document=state.get("source_document", ""),
             context=state.get("context", ""),
             classification=classification,
-            instructions=state.get("instructions", ""),
+            instructions=instruction_haystack,
             strict=strict,
-            style_examples=[
-                example.get("text", "") for example in state.get("style_examples") or []
-            ]
-            + list(adapter.preferred_examples),
-            is_individual_petition="dilekçe" in sub_genre.lower(),
+            style_examples=style_example_texts,
+            is_individual_petition=is_individual_petition,
             today=state.get("today", ""),
             trusted_facts=trusted_facts,
         )
+
+        # The counterparty's own institution/signatory leaked into our
+        # antet/signature block (see draft_verifier._check_identity_slot_
+        # leaks) is not a blank the missing-information gate already knows
+        # how to ask about -- it's a *wrong* value sitting where a
+        # placeholder should be. Converting an exact-match leak into the
+        # same placeholder writer.md itself uses for that slot folds this
+        # into the existing gate (build_missing_info_request/apply_answers)
+        # rather than a second resolution path, and this is the narrow hard
+        # gate an identity-class defect gets that a merely low-scoring or
+        # guessed-type draft does not (see human_gate_node's own docstring
+        # on why nothing else pauses the run).
+        if report.identity_slot_leaks:
+            draft_text, changed = _convert_identity_leaks_to_placeholders(
+                draft_text, report.identity_slot_leaks
+            )
+            if changed:
+                report = verify_draft(
+                    draft_text,
+                    source_document=state.get("source_document", ""),
+                    context=state.get("context", ""),
+                    classification=classification,
+                    instructions=instruction_haystack,
+                    strict=strict,
+                    style_examples=style_example_texts,
+                    is_individual_petition=is_individual_petition,
+                    today=state.get("today", ""),
+                    trusted_facts=trusted_facts,
+                )
 
         # None means the level has no opinion; defer to the global setting.
         # True/False (fast forces off, deep forces on) overrides it outright.
@@ -1230,6 +1489,18 @@ def create_draft_graph(
             if finding.confidence >= get_policy().guardrail.pii_confidence_floor
         ]
 
+        # Register/consistency checks a regex can decide alone (see
+        # app.ai.verification.style_checks's module docstring) -- run on the
+        # same normalized draft_text everything else above already checked,
+        # after the identity-leak placeholder conversion so a leak that was
+        # just turned into a `[...]` placeholder isn't also flagged as a
+        # bare signature meta-value or a person-consistency mismatch.
+        style_findings = [
+            *check_person_consistency(draft_text),
+            *check_filler_sentences(draft_text),
+            *check_signature_block(draft_text),
+        ]
+
         combined = merge_verdicts(
             report,
             verdict,
@@ -1237,7 +1508,10 @@ def create_draft_graph(
             pii_findings=pii_findings,
             correspondence_type_fallback=state.get("correspondence_type_source") == "fallback",
             has_context=bool(state.get("context")),
+            cites_legislation=bool(LEGISLATION_PATTERN.search(draft_text)),
             content_loss=content_loss,
+            judge_attempted=judge_on,
+            style_findings=style_findings,
         )
 
         DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)
@@ -1289,6 +1563,24 @@ def create_draft_graph(
             "reasoning_level": preset.level.value,
             "applied_rules": [rule.model_dump() for rule in combined.applied_rules],
         }
+
+        # C2: track the best-scoring attempt across this turn's loop (see
+        # app.ai.workflows.attempt_tracking), and -- only when the loop is
+        # about to exhaust its attempt budget with defects still open --
+        # ship that best attempt instead of whichever one happened to run
+        # last. Never touches a missing_information turn: that question is
+        # about *this* draft's own placeholders, so swapping the draft out
+        # from under it would make the question nonsensical.
+        snapshot = snapshot_attempt(update, draft_text)
+        best_attempt = best_of(snapshot, state.get("best_attempt"))
+        update["best_attempt"] = best_attempt
+        if (
+            not missing_information
+            and combined.requires_revision
+            and state.get("attempts", 0) >= preset.max_draft_attempts
+            and best_attempt is not snapshot
+        ):
+            update.update(best_attempt)
 
         await emit_node_end(
             config,

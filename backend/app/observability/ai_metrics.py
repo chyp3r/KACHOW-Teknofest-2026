@@ -175,6 +175,22 @@ ROUTER_STAGE_DURATION = Histogram(
     ["stage"],
 )
 
+#: Every time a turn that resolved to "assist" got handed off to draft/revise
+#: instead of actually running the assist step (Faz 7, see
+#: planning_graph._step_assist) -- by "reason" (``fallback_source``: a
+#: deterministic re-score caught it before assist ever ran, because the
+#: routing decision itself came from a fallback source with no real
+#: evidence behind it; ``model_tool``: the assistant model itself called
+#: ``request_handoff`` mid-turn) and by the "target" it moved to. A rising
+#: rate here is a signal the fusion weights (app.ai.policy.router_weights)
+#: have gone stale for current traffic, not that this fix is failing --
+#: this fix is the *symptom detector* for that drift, not its cure.
+ROUTER_ASSIST_HANDOFFS = Counter(
+    "kachow_router_assist_handoffs_total",
+    "Turns routed to assist that were handed off to draft/revise instead, by reason and target.",
+    ["reason", "target"],
+)
+
 #: How the human approval gate's "revizyon iste" loop (planning_graph
 #: gate_revise_node/route_after_gate) resolves: another round produced (still
 #: within HITL_MAX_GATE_REVISIONS) vs. the round cap was hit and the gate

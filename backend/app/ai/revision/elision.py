@@ -28,10 +28,11 @@ repair loop rather than inventing a second one.
 """
 
 import re
+from collections import Counter
 from dataclasses import dataclass
 from typing import Optional
 
-from app.ai.workflows.intent_scorer import normalize
+from app.ai.workflows.intent_scorer import _compile_surface, normalize
 
 #: A model regenerating a whole draft sometimes takes a shortcut for a
 #: section it judges "unchanged" -- an ellipsis, or a bracketed/parenthesized
@@ -51,14 +52,86 @@ _ELISION_MARKERS = re.compile(
 #: Instruction keywords that legitimately ask for a shorter draft -- a big
 #: length drop under one of these is the user's own request, not content
 #: loss. Includes explicit deletion/removal verbs ("sil", "cikar",
-#: "kaldir") alongside the length/summary ones: a "şu paragraftan bir kısmı
-#: sil" request that the reviser actually honoured must never be flagged as
-#: an elision defect and looped back into a repair pass whose own prompt
-#: tells the model to restore "already-filled" content -- that would
-#: silently undo the very deletion the user asked for.
-_SHORTENING_KEYWORDS = (
-    "kisalt", "ozetle", "sadelestir", "daha kisa", "kucult", "sil", "cikar", "kaldir",
+#: "kaldir", "temizle", "azalt", "indir") alongside the length/summary
+#: ones: a "şu paragraftan bir kısmı sil" request that the reviser actually
+#: honoured must never be flagged as an elision defect and looped back into
+#: a repair pass whose own prompt tells the model to restore
+#: "already-filled" content -- that would silently undo the very deletion
+#: the user asked for. Left-word-boundary matched via the same
+#: ``intent_scorer._compile_surface`` compiler ``ALL_RULES`` uses, not a
+#: bare substring test (C10): "Asıl metni koru" folds to "asil metni
+#: koru", which contains "sil" as a substring inside "asil" and used to
+#: misfire as a deletion request purely from that coincidence.
+_SHORTENING_SURFACES: tuple[str, ...] = (
+    "kisalt", "ozetle", "sadelestir", "daha kisa", "kucult", "sil", "cikar",
+    "kaldir", "temizle", "azalt", "indir",
 )
+_SHORTENING_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    _compile_surface(surface) for surface in _SHORTENING_SURFACES
+)
+
+#: Negation words that, found immediately before a shortening surface,
+#: reverse its meaning -- "Hiçbir yeri kısaltma" contains "kisalt" but is an
+#: explicit instruction *not* to shorten anything, the opposite of what an
+#: unqualified substring hit would suggest (C10).
+_NEGATION_MARKERS = ("hicbir", "hic ", "asla", "sakin", "yapma", "etme")
+
+#: How many folded characters before a shortening-surface match to scan for
+#: a negation marker -- enough to cover "Hiçbir yeri kısaltma" (~15 chars
+#: of "hicbir yeri " before "kisaltma") without reaching back across an
+#: unrelated earlier clause.
+_NEGATION_WINDOW = 20
+
+
+def _wants_shorter(instructions: str) -> bool:
+    """Whether the instruction asks for a shorter/trimmed draft.
+
+    Args:
+        instructions: The user's revision instruction.
+
+    Returns:
+        True for the first shortening surface found that isn't immediately
+        preceded by a negation marker (see ``_NEGATION_MARKERS``).
+    """
+    normalized = normalize(instructions)
+    for pattern in _SHORTENING_PATTERNS:
+        for match in pattern.finditer(normalized):
+            window = normalized[max(0, match.start() - _NEGATION_WINDOW) : match.start()]
+            if any(marker in window for marker in _NEGATION_MARKERS):
+                continue
+            return True
+    return False
+
+
+def _new_elision_markers(previous_draft: str, rewritten_draft: str) -> list[str]:
+    """Elision markers introduced by *this* rewrite pass, not ones the
+    previous draft already carried.
+
+    C11: ``_ELISION_MARKERS`` used to be searched for in ``rewritten_draft``
+    alone, so a draft that already legitimately contained one (an "İlgi:"
+    line quoting a partial reference, a corpus placeholder that happened to
+    use "...") failed this check on *every subsequent* revision pass, even
+    ones that never touched that line -- the reviser correctly reproduced
+    it verbatim, which is exactly what it was supposed to do, and got
+    flagged for doing so anyway.
+
+    Args:
+        previous_draft: The draft text before this rewrite pass.
+        rewritten_draft: The model's new output for this pass.
+
+    Returns:
+        The distinct marker strings whose count went up between the two --
+        empty when the rewrite introduced no elision beyond what was
+        already there.
+    """
+    previous_counts = Counter(_ELISION_MARKERS.findall(previous_draft))
+    rewritten_counts = Counter(_ELISION_MARKERS.findall(rewritten_draft))
+    return [
+        marker
+        for marker, count in rewritten_counts.items()
+        if count > previous_counts.get(marker, 0)
+    ]
+
 
 #: Below this fraction of the previous draft's length, with no shortening
 #: instruction in play, a rewrite is presumed to have silently dropped
@@ -89,7 +162,7 @@ def detect_content_loss(
     Returns:
         A finding describing what looks lost, or ``None`` when nothing does.
     """
-    markers = _ELISION_MARKERS.findall(rewritten_draft)
+    markers = _new_elision_markers(previous_draft, rewritten_draft)
     if markers:
         return ContentLossFinding(
             detail=(
@@ -107,9 +180,7 @@ def detect_content_loss(
     if previous_length == 0:
         return None
     rewritten_length = len(rewritten_draft.strip())
-    wants_shorter = any(
-        keyword in normalize(instructions) for keyword in _SHORTENING_KEYWORDS
-    )
+    wants_shorter = _wants_shorter(instructions)
     if not wants_shorter and rewritten_length < previous_length * _MIN_LENGTH_RATIO:
         percentage = round(rewritten_length / previous_length * 100)
         return ContentLossFinding(

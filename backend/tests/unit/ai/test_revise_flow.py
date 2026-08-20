@@ -197,6 +197,29 @@ async def test_run_revise_targets_only_the_requested_paragraph(fake_llm):
 
 
 @pytest.mark.asyncio
+async def test_run_revise_surfaces_applied_rules_and_attempts(fake_llm):
+    """C29: these two used to fall out of run_revise's own result dict --
+    revise_graph.verify_node computes and returns both, but this façade
+    never surfaced them, so every revised draft persisted with an empty
+    applied_rules and no attempt count regardless of what the sub-graph
+    actually did."""
+    fake_llm.stream_chunks = ["Personel izin talebi ivedilikle değerlendirilmelidir."]
+
+    result = await run_revise(
+        active_draft=_ACTIVE_DRAFT,
+        instructions="2. paragrafı 'Personel izin talebi ivedilikle değerlendirilmelidir.' olarak değiştir.",
+        correspondence_type="response_letter",
+        llm_client=fake_llm,
+        fast_llm_client=None,
+        reasoning_level="fast",
+    )
+
+    assert "applied_rules" in result
+    assert isinstance(result["applied_rules"], list)
+    assert result["attempts"] >= 1
+
+
+@pytest.mark.asyncio
 async def test_run_revise_falls_back_to_the_draft_s_own_type_when_none_is_given(fake_llm):
     fake_llm.stream_chunks = ["Yeni tam taslak metni."]
 

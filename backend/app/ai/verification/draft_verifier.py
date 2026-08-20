@@ -197,6 +197,18 @@ class VerificationReport(BaseModel):
             "değil, taslağın bu satırında ASLA görünmemesi gerekmesidir."
         ),
     )
+    identity_slot_leaks: list[UnsupportedClaim] = Field(
+        default_factory=list,
+        description=(
+            "Karşı tarafın kendi kimlik alanlarının (gönderen kurum, imza sahibi, "
+            "başvuran adı) taslağın KENDİ antet veya imza bloğunda göründüğü "
+            "durumlar (bkz. _check_identity_slot_leaks) -- incoming_number_leaks'in "
+            "aynı mantığının antet/imzaya genellenmiş hâli: bu değerler kaynakta "
+            "gerçekten var (karşı tarafa ait oldukları için), sorun doğru olmaları "
+            "değil, yazan tarafın (bizim) kimlik alanlarında ASLA görünmemeleri "
+            "gerektiğidir."
+        ),
+    )
     placeholder_count: int = Field(
         default=0, description="Taslakta doldurulması gereken yer tutucu sayısı."
     )
@@ -466,6 +478,150 @@ def _check_incoming_number_leak(
     return []
 
 
+#: Everything from the start of the draft up to (not including) the first
+#: "Sayı:"/"Tarih:" line -- our own antet/header block, per writer.md's own
+#: field order (antet always precedes Sayı/Tarih). Falls back to the first
+#: two non-empty lines when neither label exists at all (e.g. a petition,
+#: which writer.md tells the writer to skip antet/Sayı for entirely).
+_ANTET_BLOCK_PATTERN = re.compile(
+    r"\A(.*?)(?=^[ \t]*(?:Say[ıi]|Tarih)[ \t]*:)", re.MULTILINE | re.DOTALL
+)
+
+#: The same closing-formula pattern `STRUCTURE_CHECKS`'s "kapanis" entry
+#: uses -- the signature block (name + unvan) is everything after the
+#: *last* occurrence of one of these, since that is the letter's own
+#: closing line by construction.
+_CLOSING_PHRASE_PATTERN = re.compile(
+    r"(arz\s+ederim|rica\s+ederim|bilgilerinize\s+sunulur|arz\s+ve\s+rica)", re.IGNORECASE
+)
+
+
+def _antet_block(draft: str) -> str:
+    match = _ANTET_BLOCK_PATTERN.search(draft)
+    if match:
+        return match.group(1)
+    # No Sayı:/Tarih: line at all (a petition, or a malformed draft) -- the
+    # first couple of non-empty lines are the closest available proxy for
+    # "whatever this draft opens with".
+    lines = [line for line in draft.splitlines() if line.strip()]
+    return "\n".join(lines[:2])
+
+
+def _signature_block(draft: str) -> str:
+    matches = list(_CLOSING_PHRASE_PATTERN.finditer(draft))
+    if matches:
+        return draft[matches[-1].end():]
+    # No closing phrase found -- the last few non-empty lines are the
+    # closest available proxy for "wherever the name/unvan block is".
+    lines = [line for line in draft.splitlines() if line.strip()]
+    return "\n".join(lines[-3:])
+
+
+def _value_present_in(value: str, block_folded: str) -> bool:
+    """Whether ``value`` (a counterparty field) shows up in a draft block,
+    tolerating paraphrase the same way ``_support_for`` does for
+    institution names -- an exact fold match, or a token-overlap ratio at
+    or above ``TOKEN_OVERLAP_THRESHOLD``."""
+    folded_value = _fold(value)
+    if not folded_value:
+        return False
+    if folded_value in block_folded:
+        return True
+    return _token_overlap(folded_value, block_folded) >= TOKEN_OVERLAP_THRESHOLD
+
+
+def _check_identity_slot_leaks(
+    draft: str, classification: dict[str, Any] | None
+) -> tuple[list[RuleFinding], list[UnsupportedClaim]]:
+    """Flag the counterparty's own identity fields leaking into slots that
+    must only ever describe *us*, the sender.
+
+    Generalises ``_check_incoming_number_leak``'s own reasoning ("this
+    value IS grounded -- it's genuinely in the source document -- but that
+    does not make it *allowed in this specific line*") from the response's
+    own case number to its antet and signature block. Both
+    ``gonderen_kurum``/``muhatap`` and ``imza_sahibi``/``basvuran_adi`` are
+    part of the trusted grounding haystack (``_flatten_classification``
+    folds the whole classification in), so the general claim check has no
+    reason to flag either one as unsupported -- they are true. Being true
+    does not make the counterparty's own institution or signatory ours.
+
+    Two distinct failure shapes, kept as two rule ids (see
+    ``app.ai.verification.confidence_rules.RULES``) because they are two
+    different confusions a writer can make, not the same one twice:
+
+    - The counterparty's own sending institution (or the incoming
+      document's own addressee -- a document reversed without
+      confirmation, see ``app.ai.identity.parties``) ends up in *our*
+      antet block: we mistook the document's sender for who we are. This
+      is the exact shape of the reported bug -- a reply meant to be sent
+      *by* one company was headed with the *addressee university's* own
+      antet. -> ``gonderen_muhatap_karisikligi``.
+    - The counterparty's own signatory (or a petition's own applicant)
+      ends up in *our* signature block: we mistook their signer for ours
+      -- the failure ``writer.md``'s old "gelen evrakın imza sahibi
+      alanı" instruction produced directly. ->
+      ``karsi_taraf_kimlik_sizintisi``.
+
+    Args:
+        draft: The generated draft text, unstripped.
+        classification: Analysis output, whose extracted fields are the
+            counterparty's own identity.
+
+    Returns:
+        Rule findings for ``score_findings``, and the same leaks rendered
+        as ``UnsupportedClaim``s for the caller's own visibility (mirrors
+        ``incoming_number_leaks`` on ``VerificationReport``).
+    """
+    fields = (classification or {}).get("fields") or {}
+    if hasattr(fields, "model_dump"):
+        fields = fields.model_dump()
+
+    findings: list[RuleFinding] = []
+    claims: list[UnsupportedClaim] = []
+
+    antet_folded = _fold(_antet_block(draft))
+    for key in ("gonderen_kurum", "muhatap"):
+        value = str(fields.get(key) or "").strip()
+        if value and _value_present_in(value, antet_folded):
+            findings.append(
+                RuleFinding(rule_id="gonderen_muhatap_karisikligi", detail=f"{key}: {value}")
+            )
+            claims.append(
+                UnsupportedClaim(
+                    kind="gonderen_muhatap_karisikligi",
+                    value=value,
+                    explanation=(
+                        "Bu değer, gelen evrakın karşı tarafına ait (gönderen kurum/"
+                        "muhatap alanı) -- ama taslağın KENDİ antet/başlık bölümünde "
+                        "görünüyor. Antet her zaman yazan tarafın (bizim) kimliğidir, "
+                        "karşı tarafın değil."
+                    ),
+                )
+            )
+
+    signature_folded = _fold(_signature_block(draft))
+    for key in ("imza_sahibi", "basvuran_adi"):
+        value = str(fields.get(key) or "").strip()
+        if value and _value_present_in(value, signature_folded):
+            findings.append(
+                RuleFinding(rule_id="karsi_taraf_kimlik_sizintisi", detail=f"{key}: {value}")
+            )
+            claims.append(
+                UnsupportedClaim(
+                    kind="karsi_taraf_kimlik_sizintisi",
+                    value=value,
+                    explanation=(
+                        "Bu değer, gelen evrakın karşı tarafına ait (imza sahibi/başvuran "
+                        "adı) -- ama taslağın KENDİ imza bloğunda görünüyor. İmza bloğu "
+                        "her zaman yazan tarafın (bizim) imzacısıdır, karşı tarafın değil."
+                    ),
+                )
+            )
+
+    return findings, claims
+
+
 #: Structure keys that don't apply to an individually-signed petition (an
 #: itiraz/başvuru/şikayet dilekçesi, or any sub-genre resolving with
 #: "dilekçe" in its label -- see ``resolve_correspondence_type``). A
@@ -611,9 +767,20 @@ def verify_draft(
     instruction_only_claims: list[UnsupportedClaim] = []
     instructions_haystack = _fold(instructions)
     if instructions_haystack:
+        # The same exact -> canonical -> token-overlap ladder `_support_for`
+        # uses against source_document/context, not a raw substring test --
+        # a substring test missed the ordinary Turkish inflection an
+        # instruction almost always adds ("İstanbul Valiliğine" in the
+        # instruction vs. "İstanbul Valiliği" in the claim), silently
+        # denying an instruction-sourced value the same tolerance every
+        # other trusted source already gets.
+        instructions_canonical_index = _build_canonical_index(instructions)
         remaining_after_instructions: list[UnsupportedClaim] = []
         for claim in claims:
-            if _fold(claim.value) in instructions_haystack:
+            support = _support_for(
+                claim.kind, claim.value, instructions_haystack, instructions_canonical_index
+            )
+            if support.supported:
                 instruction_only_claims.append(
                     claim.model_copy(
                         update={
@@ -659,6 +826,17 @@ def verify_draft(
 
     incoming_number_leaks = _check_incoming_number_leak(draft, classification)
 
+    # Skipped for an individual petition: it has no antet slot at all (see
+    # PETITION_EXEMPT_STRUCTURE_KEYS -- writer.md tells the writer not to
+    # write one), and its signature block is legitimately the petitioner's
+    # own name -- the same value classification.fields.basvuran_adi
+    # carries when the petition itself is the source document, so the
+    # signature check would false-positive on every well-formed petition.
+    identity_findings: list[RuleFinding] = []
+    identity_slot_leaks: list[UnsupportedClaim] = []
+    if not is_individual_petition:
+        identity_findings, identity_slot_leaks = _check_identity_slot_leaks(draft, classification)
+
     # Every deterministic finding, in one list -- score_findings (the single
     # rule table, see app.ai.verification.confidence_rules) is the only
     # place a penalty number is computed from here on. `dayanaksiz_iddia`
@@ -680,6 +858,7 @@ def verify_draft(
         RuleFinding(rule_id="gelen_sayi_sizintisi", detail=leak.value)
         for leak in incoming_number_leaks
     )
+    findings.extend(identity_findings)
     findings.extend(
         RuleFinding(rule_id="doldurulmamis_yer_tutucu") for _ in range(placeholder_count)
     )
@@ -695,12 +874,13 @@ def verify_draft(
         example_leaks=example_leaks,
         instruction_only_claims=instruction_only_claims,
         incoming_number_leaks=incoming_number_leaks,
+        identity_slot_leaks=identity_slot_leaks,
         missing_structure=missing_structure,
         placeholder_count=placeholder_count,
         applied_rules=outcome.applied_rules,
         evaluation_notes=_build_notes(
             claims, missing_structure, placeholder_count, score, example_leaks,
-            incoming_number_leaks,
+            incoming_number_leaks, identity_slot_leaks,
         ),
     )
 
@@ -768,6 +948,7 @@ def _build_notes(
     score: float,
     example_leaks: list[UnsupportedClaim] | None = None,
     incoming_number_leaks: list[UnsupportedClaim] | None = None,
+    identity_slot_leaks: list[UnsupportedClaim] | None = None,
 ) -> str:
     """Compose the Turkish rationale shown alongside the score.
 
@@ -779,11 +960,20 @@ def _build_notes(
         example_leaks: Unsupported claims traced back to a style example.
         incoming_number_leaks: The draft's own Sayı: line echoing the
             incoming document's number (see `_check_incoming_number_leak`).
+        identity_slot_leaks: The counterparty's own identity fields found in
+            the draft's own antet/signature block (see
+            `_check_identity_slot_leaks`).
 
     Returns:
         A human-readable summary.
     """
     notes: list[str] = []
+    if identity_slot_leaks:
+        sample = ", ".join(f"'{claim.value}'" for claim in identity_slot_leaks[:3])
+        notes.append(
+            f"Karşı tarafın kimliği taslağın kendi antet/imza bölümünde bulundu "
+            f"({sample}); insan onayı gerekiyor."
+        )
     if incoming_number_leaks:
         notes.append(
             "Taslağın kendi Sayı: alanı, cevaplanan gelen evrakın sayısıyla "

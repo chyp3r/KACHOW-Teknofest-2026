@@ -489,6 +489,7 @@ async def get_planning_graph(
             get_company_rules,
         )
         from app.domains.transfers.provider import build_transfer_graph_provider
+        from app.domains.units.provider import get_active_units_for_routing
         from app.infrastructure.checkpointing import get_checkpointer
 
         _planning_graph = create_planning_graph(
@@ -505,6 +506,7 @@ async def get_planning_graph(
             adapter_provider=get_company_adapter,
             profile_provider=get_company_profile,
             rules_provider=get_company_rules,
+            units_provider=get_active_units_for_routing,
             # Faz 4 (#201) -- always built and injected, gated where the
             # propose_transfer tool is actually offered instead
             # (settings.AI_TRANSFER_ENABLED; see planning_graph._run_assist).

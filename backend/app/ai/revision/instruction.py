@@ -15,7 +15,7 @@ adds structure *around* it; it never edits it.
 
 import re
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Literal, Optional, Sequence
 
 from app.ai.verification.draft_verifier import (
     AMOUNT_PATTERN,
@@ -24,19 +24,44 @@ from app.ai.verification.draft_verifier import (
     INSTITUTION_PATTERN,
     LEGISLATION_PATTERN,
 )
-from app.ai.workflows.intent_scorer import normalize
+from app.ai.workflows.intent_scorer import _compile_surface, normalize
 
 Scope = Literal["paragraph", "section", "whole"]
 Operation = Literal["tone_formal", "tone_informal", "shorten", "lengthen", "content"]
 
 #: Recognized structural parts of the fixed 9-part official letter format
 #: (see prompts/templates/writer.md) and the phrases that name them.
+#: "konu" is deliberately absent here -- unlike the other three, a bare
+#: "konu" is genuinely ambiguous in Turkish (see `_KONU_HINT_PATTERN`) and
+#: gets its own, narrower resolution instead of a plain surface list.
 _SECTION_HINTS: dict[str, tuple[str, ...]] = {
-    "konu": ("konu",),
     "giris": ("giris", "ilk paragraf", "baslangic paragrafi"),
     "kapanis": ("kapanis", "son paragraf", "arz kismi", "rica kismi"),
     "imza": ("imza", "imza blogu", "imza kismi"),
 }
+#: Left-word-boundary compiled patterns for `_SECTION_HINTS` (C20) -- a plain
+#: substring test let "imza" match inside an unrelated word starting with
+#: it; same compiler `intent_scorer.ALL_RULES` uses for its own surfaces.
+_SECTION_HINT_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
+    canonical: tuple(_compile_surface(surface) for surface in surfaces)
+    for canonical, surfaces in _SECTION_HINTS.items()
+}
+
+#: "konu" resolved separately (C20): a bare substring test on "konu" made
+#: "Bu konuda daha resmi bir dil kullan" ("On this topic, use more formal
+#: language" -- a generic remark, not naming the letter's own Konu field at
+#: all) match and narrow an instruction meant for the whole draft down to
+#: just the Konu line. Turkish case marks the difference: the accusative
+#: ("konuyu", "konusunu" -- a direct object, "change THE Konu field") means
+#: the field; the locative/instrumental ("konuda", "konuyla" -- "regarding
+#: this topic") does not. The first alternative matches bare "konu" or an
+#: accusative-suffixed form only when nothing else is glued directly after
+#: it (so "konuda" cannot match through the optional group); the second
+#: matches "konu" followed by a specific field-naming word ("konu satırı",
+#: "konu başlığı", "konu kısmı", "konu alanı").
+_KONU_HINT_PATTERN = re.compile(
+    r"\bkonu(?:yu|sunu)?(?=\s|$)|\bkonu\s+(?:satir|basli[gk]|kism|alan)"
+)
 
 #: Phrases inside the *closing* paragraph specifically -- used to locate the
 #: "kapanış" section structurally rather than just by position, since a
@@ -47,6 +72,14 @@ _ORDINAL_PATTERN = re.compile(r"(\d+)\s*\.?\s*paragraf")
 _ORDINAL_WORDS: dict[str, int] = {
     "ilk": 1, "birinci": 1, "ikinci": 2, "ucuncu": 3, "dorduncu": 4, "son": -1,
 }
+
+#: Verbs that mean "add a paragraph", not "edit the Nth one" (C19). "Metne 2
+#: paragraf daha ekle" ("add 2 more paragraphs to the text") reads the "2" as
+#: a *count* of new paragraphs to insert, not the ordinal index of an
+#: existing one -- `_ORDINAL_PATTERN` alone cannot tell the two apart (both
+#: are "\d+ paragraf"), so this rejects the numeric ordinal reading whenever
+#: one of these addition verbs is also present in the same instruction.
+_PARAGRAPH_ADDITION_HINTS = ("ekle", "ilave et", "ilave edilsin", "eklensin")
 
 _OPERATION_HINTS: dict[Operation, tuple[str, ...]] = {
     "tone_formal": ("daha resmi", "resmiyet"),
@@ -152,14 +185,17 @@ def _parse_one(raw: str) -> tuple[Scope, Operation, Optional[str], Optional[int]
     normalized = normalize(raw)
 
     section_hint: Optional[str] = None
-    for canonical, surfaces in _SECTION_HINTS.items():
-        if any(surface in normalized for surface in surfaces):
-            section_hint = canonical
-            break
+    if _KONU_HINT_PATTERN.search(normalized):
+        section_hint = "konu"
+    else:
+        for canonical, patterns in _SECTION_HINT_PATTERNS.items():
+            if any(pattern.search(normalized) for pattern in patterns):
+                section_hint = canonical
+                break
 
     ordinal: Optional[int] = None
     match = _ORDINAL_PATTERN.search(normalized)
-    if match:
+    if match and not any(hint in normalized for hint in _PARAGRAPH_ADDITION_HINTS):
         ordinal = int(match.group(1))
     else:
         padded = f" {normalized} "
@@ -416,6 +452,85 @@ def locate_target(
         scope=instruction.scope, section_hint=instruction.section_hint,
         ordinal=instruction.ordinal,
     )
+
+
+#: Above this ratio of rewritten-to-target length, the model's output looks
+#: like it ignored the requested scope and regenerated far more than the
+#: targeted span -- splicing that in verbatim would double up whatever
+#: comes after the target's own end rather than replacing just the target.
+_SCOPE_OVERRUN_LENGTH_RATIO = 3.0
+
+#: How much of the *whole draft's* own length the rewritten text has to
+#: reach, on top of the ratio above, before this counts as "the model
+#: regenerated everything" rather than "this paragraph just got a lot
+#: longer than before" -- both together are what distinguish the two.
+_SCOPE_OVERRUN_DRAFT_FRACTION = 0.7
+
+
+def resolve_merge_target(
+    target: Optional[TargetSpan], rewritten: str, source_draft: str
+) -> Optional[TargetSpan]:
+    """Detect a directive's rewrite ignoring its own scope (C22).
+
+    A directive scoped to one paragraph or section tells the model, in its
+    own prompt, to return only that section's new text (see
+    ``revise_graph._build_directive_prompt``'s ``scope_rule``). A model
+    that ignores this and regenerates the whole draft anyway produces text
+    that is both far longer than the target it was asked to replace *and*
+    close to the full draft's own length -- splicing that through
+    ``_merge`` at the original narrow span would paste a whole extra draft
+    into the middle of the real one, roughly doubling the content instead
+    of replacing it.
+
+    Args:
+        target: The directive's own located span, or ``None`` (already a
+            whole-draft scope, so there is nothing to overrun by definition).
+        rewritten: The model's raw output for this directive.
+        source_draft: The full draft this directive was scoped against.
+
+    Returns:
+        ``target`` unchanged in the ordinary case, or ``None`` when an
+        overrun is detected -- the caller's own ``_merge`` call then takes
+        the same whole-draft-replacement path a directive with no located
+        span already gets, rather than splicing.
+    """
+    if target is None:
+        return None
+
+    target_length = len(target.text.strip())
+    if target_length == 0:
+        return target
+
+    rewritten_length = len(rewritten.strip())
+    if rewritten_length < target_length * _SCOPE_OVERRUN_LENGTH_RATIO:
+        return target
+
+    draft_length = len(source_draft.strip())
+    if draft_length > 0 and rewritten_length >= draft_length * _SCOPE_OVERRUN_DRAFT_FRACTION:
+        return None
+    return target
+
+
+def spans_overlap(targets: Sequence[Optional[TargetSpan]]) -> bool:
+    """Whether any two of the given target spans overlap (C5).
+
+    The multi-directive right-to-left merge (see
+    ``revise_graph.rewrite_node``) assumes every directive's own span stays
+    a valid, disjoint range against the original draft -- an overlap breaks
+    that assumption, letting one directive's splice corrupt another's
+    offsets or duplicate/drop the shared text between them.
+
+    Args:
+        targets: Every directive's own located span. A ``None`` entry (an
+            unlocatable directive) is never itself part of an overlap --
+            that case is already handled by requiring every target to be
+            non-``None`` before this is even called.
+
+    Returns:
+        True when any two non-``None`` spans intersect.
+    """
+    spans = sorted((t.start, t.end) for t in targets if t is not None)
+    return any(spans[i][1] > spans[i + 1][0] for i in range(len(spans) - 1))
 
 
 def _merge(source_draft: str, target: Optional[TargetSpan], rewritten: str) -> str:

@@ -113,3 +113,20 @@ def test_no_agent_module_references_a_template_outside_the_contract():
                 referenced_names.add(node.value.value)
 
     assert referenced_names == set(TEMPLATE_CONTRACTS)
+
+
+def test_the_writer_prompt_never_tells_the_model_to_sign_with_the_counterpartys_signatory():
+    """Party-model regression: writer.md's signature-block rule used to
+    read "...Yazım Briefi veya gelen evrakın imza sahibi alanı varsa aynen
+    kullan" -- literally instructing the writer to sign OUR outgoing letter
+    with the incoming document's own signatory whenever the writing brief
+    left the signer unspecified (see app.ai.identity.parties's module
+    docstring for the concrete bug this produced, and
+    app.ai.verification.draft_verifier's own trusted-haystack folding of
+    the full classification, which meant the resulting swap scored as
+    fully grounded). The signature block may only ever draw from the
+    writing brief or our own KURUM KİMLİĞİ section."""
+    writer_prompt = get_prompt_manager().get_template("writer")
+
+    assert "gelen evrakın imza sahibi" not in writer_prompt
+    assert "Gelen evrakın kendi imza sahibi" in writer_prompt  # the explicit prohibition

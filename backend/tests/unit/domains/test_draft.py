@@ -91,6 +91,32 @@ async def test_generate_draft_and_route_success(draft_service, mock_draft_graph,
 
 
 @pytest.mark.asyncio
+async def test_generate_draft_persists_applied_rules_on_the_successfully_routed_path(
+    draft_service, mock_draft_graph, mock_routing_graph, monkeypatch
+):
+    """C29: this success branch (after routing assigns a unit) computed
+    verification_for_storage (applied_rules folded into the verification
+    blob) but never actually used it -- every successfully routed draft
+    persisted its verification without the auditable rule breakdown that
+    made it into the response schema's own top-level applied_rules field."""
+    mock_draft_graph.ainvoke.return_value["applied_rules"] = [
+        {"rule_id": "tur_tahmini", "label": "Yazışma türü tahmin edildi",
+         "category": "belirsizlik", "occurrences": 1, "penalty_applied": 10.0,
+         "forces_approval": True},
+    ]
+    record_draft = AsyncMock(return_value="draft-id-1")
+    monkeypatch.setattr(
+        "app.domains.documents.draft_service.draft_recorder.record_draft", record_draft
+    )
+    request = _request(instructions="Test", correspondence_type="cover_letter")
+
+    await draft_service.generate_draft_and_route(request, user_id="user-1", company_id="company-1")
+
+    stored_verification = record_draft.call_args.kwargs["verification"]
+    assert stored_verification["applied_rules"] == mock_draft_graph.ainvoke.return_value["applied_rules"]
+
+
+@pytest.mark.asyncio
 async def test_generate_draft_flags_human_approval_when_routing_cannot_assign_a_unit(
     draft_service, mock_draft_graph, mock_routing_graph
 ):

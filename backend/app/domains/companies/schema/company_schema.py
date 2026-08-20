@@ -90,6 +90,25 @@ class CompanyProfileUpdate(BaseModel):
     default_signer_title: str = Field(
         default="", max_length=100, description="Varsayılan imza unvanı (ör. 'Daire Başkanı')"
     )
+    default_signer_name: str = Field(
+        default="",
+        max_length=150,
+        description=(
+            "Varsayılan imza sahibi ad soyad -- yazım briefi ve gelen evrakın kendi "
+            "imza sahibi alanı boş kaldığında kullanılır. Gelen evrakın imza "
+            "sahibiyle ASLA karıştırılmaz; o karşı tarafa aittir."
+        ),
+    )
+    aliases: List[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description=(
+            "Şirketin bir belgede veya kullanıcı mesajında geçebilecek diğer ad "
+            "biçimleri (kısaltma, eski ad vb.) -- yalnızca bir belgenin bize "
+            "gönderildiğini/adımızı taşıdığını tespit etmek için kullanılır, "
+            "hiçbir taslakta doğrudan render edilmez."
+        ),
+    )
 
 
 class CompanyProfileResponse(BaseModel):
@@ -103,6 +122,8 @@ class CompanyProfileResponse(BaseModel):
     agent_name: str
     letterhead: str
     default_signer_title: str
+    default_signer_name: str = ""
+    aliases: List[str] = Field(default_factory=list)
     updated_at: Optional[str] = None
 
 
