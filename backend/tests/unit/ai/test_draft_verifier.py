@@ -498,3 +498,151 @@ def test_a_company_letterhead_passed_as_a_trusted_fact_is_not_flagged():
     assert not any(
         "Acme Fen İşleri Dairesi Başkanlığı" in claim.value for claim in report.unsupported_claims
     )
+
+
+# ==========================================
+# Party model: _check_identity_slot_leaks (karsi_taraf_kimlik_sizintisi /
+# gonderen_muhatap_karisikligi)
+# ==========================================
+
+#: The exact shape of the reported bug: a reply meant to be sent *by* one
+#: company (asked to reply on behalf of "Mahmut Yazılım A.Ş." to a
+#: university's own internship-evaluation letter) instead used the
+#: *university's* own antet, and signed with the *university's* own
+#: signatory -- both counterparty fields, both fully "grounded" in
+#: classification (since they are genuinely the counterparty's real data),
+#: and so -- before this fix -- scoring as a clean, fully-supported draft.
+_UNIVERSITY_SOURCE_DOCUMENT = (
+    "T.C. HACETTEPE ÜNİVERSİTESİ\nMühendislik Fakültesi Dekanlığı\n\n"
+    "Sayı: E-12345678-903-99\nTarih: 15.05.2026\nKonu: Staj Değerlendirme Raporu\n\n"
+    "Öğrencimiz Berkay Sarıca'nın stajının değerlendirme raporu ekte sunulmuştur.\n\n"
+    "Ahmet Yılmaz\nStaj Komisyonu Başkanı"
+)
+_UNIVERSITY_CLASSIFICATION = {
+    "fields": {
+        "sayi": "E-12345678-903-99",
+        "tarih": "15.05.2026",
+        "gonderen_kurum": "T.C. Hacettepe Üniversitesi Mühendislik Fakültesi Dekanlığı",
+        "imza_sahibi": "Ahmet Yılmaz",
+    },
+}
+
+
+def test_the_counterpartys_signatory_in_our_own_signature_block_is_flagged():
+    """Regression for the reported bug: before _check_identity_slot_leaks
+    existed, the counterparty's own imza_sahibi ending up in OUR signature
+    block scored as fully grounded (it genuinely is in classification) --
+    the exact swap writer.md's old "gelen evrakın imza sahibi alanı"
+    instruction used to produce directly."""
+    draft = (
+        "T.C. ÖRNEK ŞİRKETİ A.Ş.\n\nSayı: 2026/45\nTarih: 20.08.2026\nKonu: Staj Onayı\n\n"
+        "T.C. HACETTEPE ÜNİVERSİTESİ REKTÖRLÜĞÜNE\n\n"
+        "İlgi yazınızda belirtilen stajın başarıyla tamamlandığı bildirilir.\n\n"
+        "Bilgilerinize sunulur.\n\n"
+        "Ahmet Yılmaz\nStaj Komisyonu Başkanı"
+    )
+    report = verify_draft(
+        draft,
+        source_document=_UNIVERSITY_SOURCE_DOCUMENT,
+        classification=_UNIVERSITY_CLASSIFICATION,
+        today="20.08.2026",
+    )
+
+    assert any(
+        rule.rule_id == "karsi_taraf_kimlik_sizintisi" for rule in report.applied_rules
+    )
+    assert any("Ahmet Yılmaz" in claim.value for claim in report.identity_slot_leaks)
+    assert report.requires_human_approval is True
+    assert report.confidence_score < 100.0
+
+
+def test_the_counterpartys_own_institution_in_our_own_antet_is_flagged():
+    """The other half of the reported bug: the counterparty's own
+    gonderen_kurum ending up in OUR antet block -- we mistook the document's
+    sender for who we are."""
+    draft = (
+        "T.C. HACETTEPE ÜNİVERSİTESİ REKTÖRLÜĞÜ\nMühendislik Fakültesi Dekanlığı\n\n"
+        "Sayı: 2026/45\nTarih: 20.08.2026\nKonu: Staj Onayı\n\n"
+        "İLGİLİ MAKAMA\n\n"
+        "Stajın başarıyla tamamlandığı bildirilir.\n\n"
+        "Bilgilerinize sunulur.\n\n"
+        "[İmzalayacak yetkilinin adı ve soyadı]\n[İmzalayacak yetkilinin unvanı]"
+    )
+    report = verify_draft(
+        draft,
+        source_document=_UNIVERSITY_SOURCE_DOCUMENT,
+        classification=_UNIVERSITY_CLASSIFICATION,
+        today="20.08.2026",
+    )
+
+    assert any(
+        rule.rule_id == "gonderen_muhatap_karisikligi" for rule in report.applied_rules
+    )
+    assert report.requires_human_approval is True
+
+
+def test_a_correctly_attributed_draft_has_no_identity_slot_leaks():
+    """Control for the two tests above -- our own antet/signature must
+    never be flagged just for existing alongside a counterparty document."""
+    draft = (
+        "T.C. ÖRNEK ŞİRKETİ A.Ş.\n\nSayı: 2026/45\nTarih: 20.08.2026\nKonu: Staj Onayı\n\n"
+        "T.C. HACETTEPE ÜNİVERSİTESİ REKTÖRLÜĞÜNE\n\n"
+        "İlgi yazınızda belirtilen stajın başarıyla tamamlandığı bildirilir.\n\n"
+        "Bilgilerinize sunulur.\n\n"
+        "Ayşe Kaya\nGenel Müdür"
+    )
+    report = verify_draft(
+        draft,
+        source_document=_UNIVERSITY_SOURCE_DOCUMENT,
+        classification=_UNIVERSITY_CLASSIFICATION,
+        today="20.08.2026",
+    )
+
+    assert report.identity_slot_leaks == []
+    assert not any(
+        rule.rule_id in {"karsi_taraf_kimlik_sizintisi", "gonderen_muhatap_karisikligi"}
+        for rule in report.applied_rules
+    )
+
+
+def test_identity_slot_leak_checks_are_skipped_for_an_individual_petition():
+    """A petition's own signature block is legitimately the petitioner's
+    own name -- the same value classification.fields.basvuran_adi carries
+    when the petition itself is the source document, so the check would
+    false-positive on every well-formed petition."""
+    draft = (
+        "T.C. HACETTEPE ÜNİVERSİTESİ REKTÖRLÜĞÜNE\n\n"
+        "Stajımın onaylanmasını arz ederim.\n\n"
+        "Gereğini arz ederim.\n\nBerkay Sarıca"
+    )
+    report = verify_draft(
+        draft,
+        classification={"fields": {"basvuran_adi": "Berkay Sarıca"}},
+        is_individual_petition=True,
+    )
+
+    assert report.identity_slot_leaks == []
+
+
+def test_a_reordered_identity_leak_is_still_caught_via_token_overlap():
+    """Not just an exact-substring match: the same tolerant token-overlap
+    ladder _support_for uses for institution-name paraphrase (see
+    _check_identity_slot_leaks/_value_present_in) also catches the
+    counterparty's signatory written in a different word order."""
+    draft = (
+        "T.C. ÖRNEK ŞİRKETİ A.Ş.\n\nSayı: 2026/45\nTarih: 20.08.2026\nKonu: Staj Onayı\n\n"
+        "T.C. HACETTEPE ÜNİVERSİTESİ REKTÖRLÜĞÜNE\n\n"
+        "İlgi yazınızda belirtilen stajın başarıyla tamamlandığı bildirilir.\n\n"
+        "Bilgilerinize sunulur.\n\n"
+        "Yılmaz Ahmet Bey\nStaj Komisyonu Başkanı"
+    )
+    report = verify_draft(
+        draft,
+        source_document=_UNIVERSITY_SOURCE_DOCUMENT,
+        classification=_UNIVERSITY_CLASSIFICATION,
+        today="20.08.2026",
+    )
+
+    assert any(
+        rule.rule_id == "karsi_taraf_kimlik_sizintisi" for rule in report.applied_rules
+    )

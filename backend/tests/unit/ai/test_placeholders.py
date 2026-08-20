@@ -162,6 +162,19 @@ def test_bare_signature_placeholders_are_attributed_to_the_signing_official():
     assert count == 2
 
 
+def test_corpus_derived_signature_placeholders_are_also_attributed():
+    """[İMZA SAHİBİ]/[KİŞİ ADI] -- the anonymisation manifest's own
+    placeholder tokens (see datasets/resmi_yazisma/anonimlestirme-
+    manifesti.jsonl) -- used to pass through unrecognised whenever a style
+    example leaked one verbatim, the exact unattributed-question bug this
+    module exists to close, just for a corpus-shaped placeholder instead
+    of a model-written one."""
+    for variant in ("İmza Sahibi", "Kişi Adı"):
+        normalized, count = normalize_role_placeholders(f"[{variant}]")
+        assert normalized == "[İmzalayacak yetkilinin adı ve soyadı]", variant
+        assert count == 1, variant
+
+
 def test_accent_and_casing_variants_of_unvan_are_all_recognised():
     for variant in ("Ünvan", "UNVAN", "ünvan"):
         normalized, count = normalize_role_placeholders(f"[{variant}]")

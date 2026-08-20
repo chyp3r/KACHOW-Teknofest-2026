@@ -109,6 +109,32 @@ RULES: dict[str, ConfidenceRule] = {
             "gelen_sayi_sizintisi", "Gelen evrakın sayısı kendi Sayı alanına sızmış",
             "dayanak", 25.0,
         ),
+        # Party-model rules (see app.ai.identity.parties and
+        # draft_verifier._check_identity_slot_leaks): the counterparty's own
+        # identity ending up in one of OUR identity slots. Two ids because
+        # they are two different confusions, not the same one twice -- see
+        # _check_identity_slot_leaks's own docstring for which is which.
+        ConfidenceRule(
+            "gonderen_muhatap_karisikligi", "Gönderen kurum muhatap/antet karışıklığı",
+            "butunluk", 30.0,
+        ),
+        ConfidenceRule(
+            "karsi_taraf_kimlik_sizintisi", "Karşı tarafın kimliği bizim kimlik alanımızda",
+            "dayanak", 30.0,
+        ),
+        # Style/register rules (see app.ai.verification.style_checks) --
+        # rule ids defined here alongside every other rule, detection
+        # logic lives in its own module the same way structural/groundedness
+        # detection lives in draft_verifier.py.
+        ConfidenceRule(
+            "kisi_tutarsizligi", "Kişi/hitap tutarsızlığı", "butunluk",
+            8.0, per_occurrence=True, cap=24.0,
+        ),
+        ConfidenceRule(
+            "dolgu_ifade", "İçerik taşımayan dolgu ifadesi", "butunluk",
+            4.0, per_occurrence=True, cap=16.0,
+        ),
+        ConfidenceRule("imza_blogu_uydurma", "İmza bloğunda uydurma/meta değer", "yapi", 10.0),
         ConfidenceRule(
             "doldurulmamis_yer_tutucu", "Doldurulmamış yer tutucu", "belirsizlik",
             5.0, per_occurrence=True, cap=30.0,

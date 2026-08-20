@@ -192,5 +192,7 @@ def test_every_rule_id_referenced_by_this_test_module_exists_in_the_table():
         "gelen_sayi_sizintisi", "doldurulmamis_yer_tutucu", "tur_tahmini",
         "mevzuat_baglami_yok", "pii_bulgusu", "icerik_kaybi",
         "yargic_kritik_bulgu", "talebi_karsilamiyor", "sirket_kurali_ihlali",
+        "gonderen_muhatap_karisikligi", "karsi_taraf_kimlik_sizintisi",
+        "kisi_tutarsizligi", "dolgu_ifade", "imza_blogu_uydurma",
     }
     assert set(RULES.keys()) == expected

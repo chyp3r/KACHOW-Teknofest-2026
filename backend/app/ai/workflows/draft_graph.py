@@ -1,7 +1,8 @@
 import asyncio
 import json
 import logging
-from typing import Any, TypedDict
+import re
+from typing import Any, Sequence, TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
@@ -25,6 +26,7 @@ from app.ai.revision.elision import detect_content_loss
 from app.ai.verification import (
     DraftJudgeVerdict,
     InfoQuestion,
+    UnsupportedClaim,
     build_missing_info_request,
     fill_date_placeholders,
     judge_draft,
@@ -33,6 +35,7 @@ from app.ai.verification import (
     normalize_unfilled_markers,
     verify_draft,
 )
+from app.ai.verification.draft_verifier import LEGISLATION_PATTERN
 from app.ai.workflows.correspondence import (
     format_correspondence_profile,
     resolve_correspondence_type,
@@ -104,6 +107,18 @@ class DraftState(TypedDict, total=False):
     correspondence_sub_genre: str
     context: str
     instructions: str
+    #: This turn's own `instructions` plus every earlier user turn's own
+    #: message text and any settled writing-brief slot answer this session
+    #: (see `_build_instruction_haystack`) -- what `verify_node` hands
+    #: `verify_draft` as `instructions=` so a name/date/institution the
+    #: user supplied in an *earlier* turn of a multi-turn negotiation is
+    #: still recognised as the user's own word, not scored as an
+    #: ungrounded `dayanaksiz_iddia` merely for not being repeated
+    #: verbatim in the latest message. Falls back to plain `instructions`
+    #: when empty (an older caller, or one not yet updated to populate
+    #: this -- see `app.ai.workflows.revise_graph`, wired in a later
+    #: phase) so nothing regresses to "no instruction grounding at all".
+    instruction_haystack: str
     draft: str
     previous_draft: str
     confidence_score: float
@@ -251,6 +266,108 @@ def _format_entities(entities: Any) -> str:
         return "(tespit edilmedi)"
     names = [str(entity).strip() for entity in entities if str(entity).strip()]
     return ", ".join(names) if names else "(tespit edilmedi)"
+
+
+#: Which placeholder an identity-slot leak (see
+#: `app.ai.verification.draft_verifier._check_identity_slot_leaks`) converts
+#: to, by rule id -- the same placeholder text `writer.md` itself tells the
+#: writer to use for that slot when the real value is unknown, so a
+#: converted leak is indistinguishable from an ordinary unfilled field to
+#: everything downstream (`build_missing_info_request`/`apply_answers`).
+_IDENTITY_LEAK_PLACEHOLDER: dict[str, str] = {
+    "gonderen_muhatap_karisikligi": "[Gönderen kurumun adı]",
+    "karsi_taraf_kimlik_sizintisi": "[İmzalayacak yetkilinin adı ve soyadı]",
+}
+
+
+def _convert_identity_leaks_to_placeholders(
+    draft_text: str, identity_slot_leaks: list[UnsupportedClaim]
+) -> tuple[str, bool]:
+    """Turn an exact-match identity-slot leak into a normal, askable
+    placeholder instead of building a second resolution path for one
+    specific defect kind.
+
+    The counterparty's own institution/signatory ending up in our antet or
+    signature block (see ``draft_verifier._check_identity_slot_leaks``) is
+    not a blank the human gate already knows how to ask about -- it is a
+    *wrong* value sitting where a placeholder should be. Replacing the
+    exact leaked text with the same placeholder ``writer.md`` itself uses
+    for that slot lets the existing missing-information gate
+    (``build_missing_info_request``/``apply_answers``) ask "bu yazıyı kimin
+    adına, kime yazıyoruz?" the same way it already asks about any other
+    unfilled field -- a second, parallel resolution mechanism was never
+    needed.
+
+    Only ever replaces an **exact** literal occurrence of the leaked value
+    (the common shape this fixes -- the counterparty's name copied
+    verbatim, exactly the reported bug). A value ``_check_identity_slot_
+    leaks`` only matched via the tolerant token-overlap fallback has no
+    single exact span to replace safely; it is left in the text and still
+    lowers the score/forces approval (see ``confidence_rules.RULES``), just
+    without an interactive question for that specific occurrence.
+
+    Args:
+        draft_text: The draft text to transform.
+        identity_slot_leaks: ``VerificationReport.identity_slot_leaks`` from
+            a prior ``verify_draft`` pass.
+
+    Returns:
+        The (possibly transformed) draft text, and whether anything was
+        actually replaced -- the caller re-verifies only when it was.
+    """
+    changed = False
+    for leak in identity_slot_leaks:
+        placeholder = _IDENTITY_LEAK_PLACEHOLDER.get(leak.kind)
+        if not placeholder or not leak.value:
+            continue
+        pattern = re.compile(re.escape(leak.value))
+        if pattern.search(draft_text):
+            draft_text = pattern.sub(placeholder, draft_text, count=1)
+            changed = True
+    return draft_text, changed
+
+
+def _build_instruction_haystack(
+    instructions: str,
+    prior_user_turns: Sequence[str] = (),
+    brief_answers: dict[str, Any] | None = None,
+) -> str:
+    """Compose everything a claim may legitimately trace to as "the user's
+    own word", for ``verify_draft``'s instruction-only-claims split.
+
+    Before this, ``verify_draft`` only ever saw the current turn's own
+    ``instructions``. A name/date/institution the user supplied in an
+    *earlier* turn of the same multi-turn negotiation -- very ordinary
+    ("Berkay bey stajını bizim şirketimizde tamamlamış." one turn, "şimdi
+    cevap yazısı hazırla" the next) -- scored as an ungrounded
+    ``dayanaksiz_iddia`` (-12) purely for not being repeated verbatim in
+    the latest message, even though the user plainly did supply it this
+    session. Settled writing-brief answers (see
+    ``app.ai.workflows.writing_brief`` -- human-approved, per
+    ``_build_brief``'s own section 8) are folded in for the same reason: a
+    value typed into the writing-brief card is exactly as trusted as one
+    typed into the chat box.
+
+    Kept separate from the writer's own ``instructions`` prompt input on
+    purpose -- the writer should still only ever see *this turn's* request
+    in brief section 7; stuffing prior turns in there would confuse "what
+    to do now" with "what was said before", a problem this haystack does
+    not have since it is never rendered into a prompt, only compared
+    against.
+
+    Args:
+        instructions: This turn's own drafting instructions.
+        prior_user_turns: Earlier turns' own message text, this session,
+            oldest first.
+        brief_answers: The settled writing-brief slot answers, if any.
+
+    Returns:
+        The combined haystack text.
+    """
+    parts = [instructions, *prior_user_turns]
+    if brief_answers:
+        parts.extend(str(value) for value in brief_answers.values() if value)
+    return "\n".join(part for part in parts if part)
 
 
 def _build_brief(
@@ -1144,24 +1261,59 @@ def create_draft_graph(
                 profile.short_name,
                 profile.letterhead,
                 profile.default_signer_title,
+                profile.default_signer_name,
             )
             if value
         ]
+        is_individual_petition = "dilekçe" in sub_genre.lower()
+        style_example_texts = [
+            example.get("text", "") for example in state.get("style_examples") or []
+        ] + list(adapter.preferred_examples)
+        # Falls back to plain `instructions` when the caller never populated
+        # the wider haystack (see DraftState.instruction_haystack's own
+        # docstring) -- never narrower than today's behaviour.
+        instruction_haystack = state.get("instruction_haystack") or state.get("instructions", "")
         report = verify_draft(
             draft_text,
             source_document=state.get("source_document", ""),
             context=state.get("context", ""),
             classification=classification,
-            instructions=state.get("instructions", ""),
+            instructions=instruction_haystack,
             strict=strict,
-            style_examples=[
-                example.get("text", "") for example in state.get("style_examples") or []
-            ]
-            + list(adapter.preferred_examples),
-            is_individual_petition="dilekçe" in sub_genre.lower(),
+            style_examples=style_example_texts,
+            is_individual_petition=is_individual_petition,
             today=state.get("today", ""),
             trusted_facts=trusted_facts,
         )
+
+        # The counterparty's own institution/signatory leaked into our
+        # antet/signature block (see draft_verifier._check_identity_slot_
+        # leaks) is not a blank the missing-information gate already knows
+        # how to ask about -- it's a *wrong* value sitting where a
+        # placeholder should be. Converting an exact-match leak into the
+        # same placeholder writer.md itself uses for that slot folds this
+        # into the existing gate (build_missing_info_request/apply_answers)
+        # rather than a second resolution path, and this is the narrow hard
+        # gate an identity-class defect gets that a merely low-scoring or
+        # guessed-type draft does not (see human_gate_node's own docstring
+        # on why nothing else pauses the run).
+        if report.identity_slot_leaks:
+            draft_text, changed = _convert_identity_leaks_to_placeholders(
+                draft_text, report.identity_slot_leaks
+            )
+            if changed:
+                report = verify_draft(
+                    draft_text,
+                    source_document=state.get("source_document", ""),
+                    context=state.get("context", ""),
+                    classification=classification,
+                    instructions=instruction_haystack,
+                    strict=strict,
+                    style_examples=style_example_texts,
+                    is_individual_petition=is_individual_petition,
+                    today=state.get("today", ""),
+                    trusted_facts=trusted_facts,
+                )
 
         # None means the level has no opinion; defer to the global setting.
         # True/False (fast forces off, deep forces on) overrides it outright.
@@ -1268,7 +1420,9 @@ def create_draft_graph(
             pii_findings=pii_findings,
             correspondence_type_fallback=state.get("correspondence_type_source") == "fallback",
             has_context=bool(state.get("context")),
+            cites_legislation=bool(LEGISLATION_PATTERN.search(draft_text)),
             content_loss=content_loss,
+            judge_attempted=judge_on,
         )
 
         DRAFT_SCORE.labels(source="deterministic").observe(report.confidence_score)

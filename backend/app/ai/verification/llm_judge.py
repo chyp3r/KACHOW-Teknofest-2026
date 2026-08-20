@@ -246,7 +246,9 @@ def merge_verdicts(
     pii_findings: Optional[Sequence[PiiFinding]] = None,
     correspondence_type_fallback: bool = False,
     has_context: bool = True,
+    cites_legislation: bool = False,
     content_loss: Optional[ContentLossFinding] = None,
+    judge_attempted: bool = False,
 ) -> CombinedVerdict:
     """Combine every signal about a draft into one deterministic outcome.
 
@@ -275,9 +277,31 @@ def merge_verdicts(
             ``app.ai.workflows.correspondence.resolve_correspondence_type``).
         has_context: Whether any verified legislation excerpt backs this
             draft. ``False`` means the system had nothing to ground it in.
+        cites_legislation: Whether the draft's own text actually cites a
+            legislation article/number (see
+            ``draft_verifier.LEGISLATION_PATTERN``). ``mevzuat_baglami_yok``
+            only fires when this is also true -- a draft that never tried
+            to cite anything (most cover letters/information notices) has
+            no missing-context problem merely because none was retrieved;
+            before this, every draft without a retrieved mevzuat context
+            paid the penalty unconditionally, whether or not it ever
+            referenced legislation at all.
         content_loss: A detected elision between this draft and the version
             it revised (see ``app.ai.revision.elision.detect_content_loss``),
             when this is a revision pass and one was found.
+        judge_attempted: Whether the judge was actually supposed to run
+            this turn (``judge_on`` at the call site), as opposed to being
+            intentionally skipped (FAST reasoning level, or the company/
+            deployment setting that disables it outright). Distinguishing
+            the two matters because ``verdict is None`` alone cannot: an
+            *attempted* call that times out or errors sets ``judge_available
+            = False`` and now also forces ``requires_human_approval`` --
+            before this, a draft whose judge call degraded scored and
+            approved identically to one the judge actually passed clean,
+            silently dropping the quality gate exactly when it mattered
+            most. An *intentionally skipped* judge (``judge_attempted=
+            False``) must not force approval on every single FAST-mode
+            draft merely for skipping a check it was never asked to run.
 
     Returns:
         The combined verdict the draft graph's router acts on.
@@ -332,7 +356,7 @@ def merge_verdicts(
     ]
     if correspondence_type_fallback:
         additional_findings.append(RuleFinding(rule_id="tur_tahmini"))
-    if not has_context:
+    if not has_context and cites_legislation:
         additional_findings.append(RuleFinding(rule_id="mevzuat_baglami_yok"))
     if content_loss is not None:
         additional_findings.append(RuleFinding(rule_id="icerik_kaybi", detail=content_loss.detail))
@@ -391,6 +415,7 @@ def merge_verdicts(
         report.requires_human_approval
         or additional_outcome.forces_approval
         or combined_score < MIN_AUTOMATED_CONFIDENCE_SCORE
+        or (judge_attempted and not judge_available)
     )
     requires_revision = bool(repair_items)
 

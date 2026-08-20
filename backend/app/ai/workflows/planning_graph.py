@@ -47,6 +47,7 @@ from app.ai.workflows.events import (
     emit_question,
 )
 from app.ai.workflows.dates import today_tr
+from app.ai.workflows.draft_graph import _build_instruction_haystack
 from app.ai.workflows.intent_rules import RESET_SURFACES
 from app.ai.workflows.intent_scorer import normalize
 from app.ai.workflows.planner import resolve_plan
@@ -935,6 +936,25 @@ def create_planning_graph(
             if brief_correspondence_type and brief_correspondence_type != AUTO_ANSWER
             else _requested_correspondence_type(classification)
         )
+        instructions = (
+            f"Kullanıcı İsteği: {state['input_text']}\n\n"
+            "Gelen evraka, evrakın amacı ve doğrulanmış bağlam doğrultusunda "
+            "resmî ve kurumsal bir Türkçe yanıt taslağı oluştur."
+        )
+        # Every prior USER turn's own text, this session -- see
+        # draft_graph._build_instruction_haystack's own docstring for why a
+        # name/date/institution supplied in an earlier turn of the same
+        # negotiation must still count as the user's own word. A large
+        # limit is "all of them": history is already bounded by
+        # HISTORY_RAW_CAP, so nothing further needs capping here.
+        prior_user_turns = [
+            turn.get("content", "")
+            for turn in _prior_turns(state, limit=10_000)
+            if turn.get("role") == "user"
+        ]
+        instruction_haystack = _build_instruction_haystack(
+            state["input_text"], prior_user_turns, brief_answers
+        )
 
         return await draft_graph.ainvoke(
             {
@@ -946,11 +966,8 @@ def create_planning_graph(
                 "user_request": state["input_text"],
                 "correspondence_type": requested_correspondence_type,
                 "context": context,
-                "instructions": (
-                    f"Kullanıcı İsteği: {state['input_text']}\n\n"
-                    "Gelen evraka, evrakın amacı ve doğrulanmış bağlam doğrultusunda "
-                    "resmî ve kurumsal bir Türkçe yanıt taslağı oluştur."
-                ),
+                "instructions": instructions,
+                "instruction_haystack": instruction_haystack,
                 "attempts": 0,
                 "reasoning_level": state.get("reasoning_level", ReasoningLevel.BALANCED.value),
                 "writing_brief": brief_answers,
