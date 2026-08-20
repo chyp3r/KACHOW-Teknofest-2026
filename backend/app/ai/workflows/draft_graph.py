@@ -283,9 +283,17 @@ def _build_brief(
         profile: The requesting company's identity profile (see
             ``app.ai.identity.company_profile.CompanyProfile``), or None.
             Rendered as section 9 when non-empty (see
-            ``format_identity_brief_section``) -- a *default* header/signer
-            for the slots section 8's writing brief leaves unspecified, not
-            an override of it.
+            ``format_identity_brief_section``) -- this is the primary,
+            system-verified identity for whoever is writing this letter.
+            ``app.ai.workflows.writing_brief.resolve_brief`` already
+            consults the same profile (via ``app.ai.identity.parties.
+            resolve_party_context``) when resolving section 8's own "Yazan
+            Taraf" slot, so by the time this renders, section 8 normally
+            already reflects this same identity -- this section restates it
+            explicitly for the writer's antet/imza rendering, not as a
+            fallback the writing brief overrides, but as the same fact
+            stated in the place the writer looks for header/signature
+            specifics.
 
     Returns:
         The brief text.
@@ -294,6 +302,17 @@ def _build_brief(
     missing = classification.get("missing_fields") or []
     missing_labels = ", ".join(
         item.get("label", "") for item in missing if isinstance(item, dict)
+    )
+    # Only point at section 9 by name when it will actually be rendered
+    # below (see format_identity_brief_section's own "" when empty
+    # convention) -- referencing a section that doesn't exist in this
+    # brief would be a dangling pointer, and would also leak the literal
+    # string "KURUM KİMLİĞİ" into every brief regardless of whether a
+    # profile is configured.
+    us_pointer = (
+        "bölüm 9 KURUM KİMLİĞİ ve bölüm 8 Yazım Briefi'ndeki 'Yazan Taraf' satırıdır"
+        if profile is not None and not profile.is_empty
+        else "bölüm 8 Yazım Briefi'ndeki 'Yazan Taraf' satırıdır"
     )
 
     return (
@@ -305,31 +324,40 @@ def _build_brief(
         f"1. Belge Türü: "
         f"{classification.get('document_type_label') or classification.get('document_type') or 'Belirtilmedi'}\n"
         f"2. Belge Özeti: {classification.get('summary') or 'Özet çıkarılamadı.'}\n"
-        f"3. GELEN EVRAKIN KİMLİK BİLGİLERİ (bu, cevapladığın evrakın KENDİ sayı/tarihidir "
-        f"-- YALNIZCA aşağıdaki bir 'İlgi:' satırında bu evraka atıf yapmak için kullanılabilir. "
-        f"SENİN YAZACAĞIN YANITIN KENDİ Sayı/Tarih alanına ASLA yazma; o alan her zaman ilgili "
-        f"yer tutucudur, çünkü yanıtın sayısını SENİN kurumunun evrak kaydı verir, gelen evrakın "
-        f"kaydı değil):\n"
+        f"3. GELEN EVRAKIN KİMLİK BİLGİLERİ -- KARŞI TARAFA AİTTİR (bu bölümdeki ve bölüm "
+        f"4'teki hiçbir isim/kurum/imza sahibi BİZ DEĞİLİZ -- biz kimiz sorusunun cevabı "
+        f"yalnızca {us_pointer}. Buradaki sayı/"
+        f"tarih, cevapladığın evrakın KENDİ sayı/tarihidir -- YALNIZCA aşağıdaki bir 'İlgi:' "
+        f"satırında bu evraka atıf yapmak için kullanılabilir. SENİN YAZACAĞIN YANITIN KENDİ "
+        f"Sayı/Tarih alanına ASLA yazma; o alan her zaman ilgili yer tutucudur, çünkü yanıtın "
+        f"sayısını SENİN kurumunun evrak kaydı verir, gelen evrakın kaydı değil):\n"
         f"   - Gelen Evrakın Sayısı: {fields.get('sayi') or '(gelen evrakta belirtilmemiş)'}\n"
         f"   - Gelen Evrakın Tarihi: {fields.get('tarih') or '(gelen evrakta belirtilmemiş)'}\n"
-        f"4. Diğer Çıkarılan Bilgiler (bunlar yanıtın kendi ilgili alanlarında -- Konu, Muhatap "
-        f"vb. -- doğrudan kullanılabilir; aşağıdaki parantez içi not bir alanın evrakta "
-        f"bulunmadığını belirtir -- bu notu KENDİSİ bir değermiş gibi taslağa yazma, "
-        f"yanındaki yönergeye göre ilgili yer tutucuyu bırak):\n"
+        f"4. Diğer Çıkarılan Bilgiler (Konu dışındaki her alan KARŞI TARAFA AİTTİR -- gövde "
+        f"metninde bir olgu olarak anılabilir, ama antet/imza bloğu/gönderen kurum alanlarına "
+        f"ASLA yazılamaz; aşağıdaki parantez içi not bir alanın evrakta bulunmadığını belirtir "
+        f"-- bu notu KENDİSİ bir değermiş gibi taslağa yazma, yanındaki yönergeye göre ilgili "
+        f"yer tutucuyu bırak):\n"
         f"   - Konu: {fields.get('konu') or '(evrakta yok -- taslakta [Konu] yer tutucusunu bırak)'}\n"
-        f"   - Muhatap: {fields.get('muhatap') or '(evrakta yok -- taslakta [Alıcının adı ve soyadı] yer tutucusunu bırak; Yazım Briefi bölümünde belirtilmişse onu esas al)'}\n"
-        f"   - Gönderen Kurum: {fields.get('gonderen_kurum') or '(evrakta belirtilmemiş)'}\n"
-        f"   - İmza Sahibi: {fields.get('imza_sahibi') or '(evrakta belirtilmemiş)'}"
+        f"   - Muhatap (evrakın KENDİ muhatabı -- SENİN yanıtının muhatabı bölüm 8'deki "
+        f"Yazım Briefi'nin kendi 'Muhatap' satırıdır, bu değer değil): "
+        f"{fields.get('muhatap') or '(evrakta yok)'}\n"
+        f"   - Gönderen Kurum (KARŞI TARAF -- bizim antetimiz asla bu olamaz): "
+        f"{fields.get('gonderen_kurum') or '(evrakta belirtilmemiş)'}\n"
+        f"   - İmza Sahibi (KARŞI TARAF -- bizim imza bloğumuz asla bu kişi olamaz): "
+        f"{fields.get('imza_sahibi') or '(evrakta belirtilmemiş)'}"
         f" ({fields.get('imza_unvani') or '(unvan belirtilmemiş)'})\n"
-        f"   - Belgede Geçen Diğer Önemli Varlıklar (kişi, kurum, tarih, tutar vb. -- "
-        f"örn. bir CV'deki çalışılan kurumlar; talimat bunlardan birine atıfta "
-        f"bulunuyorsa burada ara, kullanıcıya SORMA): "
+        f"   - Belgede Geçen Diğer Önemli Varlıklar (KARŞI TARAFA AİT kişi, kurum, tarih, "
+        f"tutar vb. -- örn. bir CV'deki çalışılan kurumlar; talimat bunlardan birine atıfta "
+        f"bulunuyorsa burada ara, kullanıcıya SORMA -- ama bunları antet/imza/gönderen "
+        f"kurum/muhatap alanlarımıza ASLA yazma, yalnızca gövdede olgu olarak kullan): "
         f"{_format_entities(classification.get('entities'))}\n"
         f"5. Evrakta Tespit Edilen Eksik Alanlar: {missing_labels or 'yok'}\n"
         f'6. Doğrulanmış Mevzuat Bağlamı:\n"""\n'
         f"{context or 'İlgili mevzuat bağlamı bulunamadı.'}\n\"\"\"\n"
         f"7. Kullanıcı Talebi ve Talimatlar: {instructions}\n"
-        f"8. YAZIM BRİEFİ (İNSAN ONAYLI -- KAYNAK BİLGİ SAYILIR):\n"
+        f"8. YAZIM BRİEFİ (İNSAN ONAYLI -- KAYNAK BİLGİ SAYILIR; 'Yazan Taraf' ve 'Muhatap' "
+        f"satırları BİZ/KARŞI TARAF ayrımının kendisidir):\n"
         f"{format_writing_brief(writing_brief or {})}\n"
         f"{format_identity_brief_section(profile) if profile is not None else ''}"
     )
@@ -433,8 +461,11 @@ def _format_source_chunks_section(chunks: list[dict[str, Any]]) -> str:
 
     Not folded into ``_build_brief`` itself: that function runs inside
     ``validate_input_node``, before any retrieval happens, so it has no
-    chunks yet to render. Numbered "9." (one past ``_build_brief``'s own
-    0-8) rather than inserted positionally among them, for the same reason.
+    chunks yet to render. Numbered "10." -- one past ``_build_brief``'s own
+    0-8 *and* past ``format_identity_brief_section``'s section 9, appended
+    right before this one -- rather than inserted positionally among them,
+    for the same reason. Was previously also "9.", colliding with the
+    identity section whenever both were present in the same brief.
 
     Returns "" (not an empty section) when there are no chunks -- same
     "absent signal, not an empty one" reasoning as ``_format_style_examples``.
@@ -455,7 +486,7 @@ def _format_source_chunks_section(chunks: list[dict[str, Any]]) -> str:
         return ""
 
     return (
-        "\n9. BELGEDEN İLGİLİ ALINTILAR (birebir alıntı -- özet değil; "
+        "\n10. BELGEDEN İLGİLİ ALINTILAR (birebir alıntı -- özet değil; "
         "kaynak evrakın kendi metninden doğrudan aktarılmıştır. Bölüm 2'deki "
         "özetle çelişmez, onu somut ayrıntılarla tamamlar):\n"
         + "\n\n".join(blocks)

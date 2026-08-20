@@ -43,6 +43,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Optional
 
+from app.ai.identity.parties import CounterParty, PartyContext, SelfParty
 from app.ai.workflows.correspondence import (
     CORRESPONDENCE_TYPE_LABELS,
     match_genre,
@@ -60,7 +61,9 @@ AUTO_ANSWER = "__auto__"
 #: four is deterministic rather than dict-ordering-dependent.
 MAX_BRIEF_QUESTIONS = 4
 
-SlotSource = Literal["user_text", "classification", "document_reply", "prior_brief", "default"]
+SlotSource = Literal[
+    "user_text", "classification", "document_reply", "prior_brief", "default", "company_profile"
+]
 
 
 @dataclass(frozen=True)
@@ -166,12 +169,28 @@ class BriefSlotSpec:
         }
 
 
+#: The party context a call site that doesn't resolve one (a test, or a
+#: caller predating this module's party-awareness) gets by default --
+#: `is_known=False`/`relation="none"` on both sides, so every resolver's
+#: party-aware branch is a no-op and behaviour falls through to the
+#: purely textual heuristics exactly as it did before `PartyContext`
+#: existed.
+_UNKNOWN_PARTY = PartyContext(us=SelfParty(), them=CounterParty(), relation="none")
+
+
 @dataclass(frozen=True)
 class BriefEvidence:
     raw_text: str
     normalized_text: str
     fields: dict[str, Any]
     prior_brief: dict[str, Any]
+    #: Who is writing this letter and who the incoming document (if any)
+    #: actually names -- see ``app.ai.identity.parties``. Defaults to an
+    #: unknown/neutral context (every resolver's party-aware branch
+    #: becomes a no-op) so a caller that never resolved one -- a test, or
+    #: any pre-party-model code path -- behaves exactly as it did before
+    #: this field existed.
+    party: PartyContext = field(default_factory=lambda: _UNKNOWN_PARTY)
 
 
 @dataclass(frozen=True)
@@ -434,10 +453,35 @@ def _resolve_yazan_taraf(
             value = match.group(1).strip(" ,.-")
             if value:
                 return SlotResolution(value=value, source="user_text", label=value)
-    document_muhatap = evidence.fields.get("muhatap")
-    if document_muhatap:
-        value = str(document_muhatap).strip()
-        return SlotResolution(value=value, source="document_reply", label=value)
+
+    # A configured company identity is the most reliable signal for who is
+    # writing this letter that exists anywhere in the pipeline -- more
+    # reliable than a guess derived from the *incoming* document's own
+    # header, which is what this fell back to before PartyContext existed
+    # (see app.ai.identity.parties's module docstring for the concrete bug
+    # that produced: a document's own muhatap treated as our sender
+    # unconditionally, with no check that the document was ever actually
+    # addressed to us). Ranked above the document-reply fallback below on
+    # purpose: an admin-entered identity should win over an inference from
+    # document text even when that inference happens to be available too.
+    us = evidence.party.us
+    if us.is_known:
+        value = us.display_name or us.short_name
+        if value:
+            return SlotResolution(value=value, source="company_profile", label=value)
+
+    # Only reverse the incoming document's own addressee into our sender
+    # slot when the document was actually confirmed addressed to us (see
+    # resolve_party_context) -- never unconditionally. A document whose
+    # muhatap doesn't match our own configured identity (a CV, a
+    # third-party report, or one we simply cannot verify) must never
+    # donate its addressee to our own antet/imza.
+    if evidence.party.relation == "reply_to_us":
+        document_muhatap = evidence.fields.get("muhatap")
+        if document_muhatap:
+            value = str(document_muhatap).strip()
+            return SlotResolution(value=value, source="document_reply", label=value)
+
     weak_match = _YAZAN_TARAF_WEAK_PATTERN.search(evidence.raw_text)
     if weak_match:
         value = weak_match.group(1).strip(" ,.-")
@@ -537,15 +581,28 @@ def _resolve_muhatap(
     evidence: BriefEvidence, known: dict[str, SlotResolution]
 ) -> Optional[SlotResolution]:
     del known
-    document_sender = evidence.fields.get("gonderen_kurum")
-    if document_sender:
-        value = str(document_sender).strip()
-        return SlotResolution(value=value, source="document_reply", label=value)
+    # Same guard as _resolve_yazan_taraf's own document-reply branch: only
+    # reverse the document's own sender into our addressee slot when the
+    # document is confirmed addressed to us. Otherwise this institution
+    # belongs to the counterparty and must never become who WE write to.
+    if evidence.party.relation == "reply_to_us":
+        document_sender = evidence.fields.get("gonderen_kurum")
+        if document_sender:
+            value = str(document_sender).strip()
+            return SlotResolution(value=value, source="document_reply", label=value)
     for surface, label in _INSTITUTION_VOCABULARY.items():
         if re.search(rf"\b{re.escape(surface)}\w*\b", evidence.normalized_text):
+            # Our own unit ("İnsan Kaynakları Müdürlüğü" as one of *our*
+            # departments) mentioned in the user's own message describes
+            # who is writing, never who the letter is addressed to.
+            if evidence.party.belongs_to_us(label):
+                continue
             return SlotResolution(value=label, source="user_text", label=label)
 
-    candidates = _muhatap_candidates(evidence)
+    candidates = [
+        candidate for candidate in _muhatap_candidates(evidence)
+        if not evidence.party.belongs_to_us(candidate)
+    ]
     if not candidates:
         return None
 
@@ -564,12 +621,22 @@ def _resolve_muhatap(
 def _resolve_anlatim(
     evidence: BriefEvidence, known: dict[str, SlotResolution]
 ) -> Optional[SlotResolution]:
-    del known
     if any(pattern.search(evidence.raw_text) for pattern in _YAZAN_TARAF_STRONG_PATTERNS):
         return SlotResolution(value="birinci_cogul", source="user_text", label="Biz dili")
+    yazan_taraf = known.get("yazan_taraf")
+    if yazan_taraf is not None and yazan_taraf.source == "company_profile":
+        # The company itself is resolved as the sender (see
+        # _resolve_yazan_taraf) -- the same first-person-plural voice an
+        # explicit "... ekibi olarak" gets, since a company writing on its
+        # own behalf is exactly that same case, just resolved from its
+        # configured identity instead of the message's own wording.
+        return SlotResolution(value="birinci_cogul", source="company_profile", label="Biz dili")
     if "dilekce" in evidence.normalized_text and not evidence.fields.get("gonderen_kurum"):
         return SlotResolution(value="birinci_tekil", source="user_text", label="Ben dili")
-    if evidence.fields.get("gonderen_kurum"):
+    # Institutional third-person voice only follows from the document's own
+    # sender when the document is confirmed addressed to us -- a
+    # third-party document's presence says nothing about our own register.
+    if evidence.party.relation == "reply_to_us" and evidence.fields.get("gonderen_kurum"):
         return SlotResolution(value="kurumsal", source="document_reply", label="Kurumsal dil")
     return None
 
@@ -621,6 +688,7 @@ def resolve_brief(
     input_text: str,
     classification: Optional[dict[str, Any]] = None,
     prior_brief: Optional[dict[str, Any]] = None,
+    party: Optional[PartyContext] = None,
 ) -> BriefResolution:
     """Resolve every writing-style slot, asking only about what's unknown.
 
@@ -639,11 +707,22 @@ def resolve_brief(
         input_text: The user's message this turn.
         classification: The document-analysis result, if a document is
             attached. Its ``fields.muhatap``/``fields.gonderen_kurum``
-            back the role-inversion rule for a reply-to-a-document turn.
+            back the role-inversion rule for a reply-to-a-document turn --
+            but only when ``party.relation == "reply_to_us"`` confirms the
+            document was actually addressed to us (see
+            ``app.ai.identity.parties.resolve_party_context``); a document
+            we cannot verify was addressed to us (a CV, a third-party
+            report, or simply no self-identity configured to check
+            against) never triggers the reversal.
         prior_brief: ``SessionFocus.writing_brief`` from an earlier turn in
             the same session, if any. Every slot it carries is treated as
             already answered, which is what makes turn 2+ of a session
             silent.
+        party: This turn's resolved party context (see
+            ``app.ai.identity.parties.resolve_party_context``). Defaults to
+            an unknown/neutral context -- every party-aware branch below
+            becomes a no-op, and resolution falls back to the purely
+            textual heuristics that predate this parameter.
 
     Returns:
         Resolved slots plus the (priority-ordered, capped) list of
@@ -657,6 +736,7 @@ def resolve_brief(
         normalized_text=normalize(input_text or ""),
         fields=fields,
         prior_brief=dict(prior_brief or {}),
+        party=party or _UNKNOWN_PARTY,
     )
 
     resolved: dict[str, SlotResolution] = {}

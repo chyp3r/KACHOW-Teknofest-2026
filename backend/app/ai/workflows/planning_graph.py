@@ -23,6 +23,7 @@ from app.ai.guardrails.output_gate import classify_reason_kind, evaluate_respons
 from app.ai.guardrails.sensitivity import SensitivityAssessment, assessment_from_analysis
 from app.ai.identity.company_profile import CompanyProfile, ProfileProvider
 from app.ai.identity.injection import format_agent_identity
+from app.ai.identity.parties import PartyContext, resolve_party_context
 from app.ai.session.focus import DraftVersion, SessionFocus, compute_focus_update, merge_focus
 from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
@@ -597,6 +598,7 @@ def create_planning_graph(
     profile_provider: Optional[ProfileProvider] = None,
     rules_provider: Any = None,
     transfer_provider: Any = None,
+    units_provider: Any = None,
 ):
     """Create and compile the master orchestration workflow.
 
@@ -662,6 +664,15 @@ def create_planning_graph(
             (the default, matching `settings.AI_TRANSFER_ENABLED`'s own
             default) means the tool is simply never offered to the model --
             degraded, not broken, same as an absent `checkpointer`.
+        units_provider: Optional async callable resolving a company's own
+            active routable unit names (see
+            `app.domains.units.provider.get_active_units_for_routing`,
+            already used by `routing_graph`'s own `units_provider`) --
+            folded into `app.ai.identity.parties.SelfParty.unit_names` so
+            the pre-draft writing brief (`_step_brief`) recognises a user
+            referring to one of the company's own departments as the
+            sender, not a document's addressee. `None` degrades to no unit
+            names at all, same as an absent `profile_provider`.
 
     Returns:
         The compiled LangGraph workflow.
@@ -699,6 +710,21 @@ def create_planning_graph(
         except Exception:
             logger.warning("Company profile resolution failed for %s", company_id, exc_info=True)
             return CompanyProfile.empty(company_id)
+
+    async def _resolve_unit_names(company_id: Optional[str]) -> list[str]:
+        """This company's own active routable unit names, or an empty list
+        when no ``units_provider`` was configured, no ``company_id`` is on
+        this turn's state, or resolution itself fails -- unit names are a
+        matching aid for the party model, never load-bearing enough to
+        block a turn. Mirrors ``_resolve_profile`` exactly."""
+        if not company_id or units_provider is None:
+            return []
+        try:
+            units = await units_provider(company_id)
+            return [name for name, _description in units]
+        except Exception:
+            logger.warning("Company unit resolution failed for %s", company_id, exc_info=True)
+            return []
 
     # Built once per graph, like draft_graph/routing_graph -- run_revise
     # (both the plain "revise" step and the human approval gate's own
@@ -1330,7 +1356,15 @@ def create_planning_graph(
         )
         prior_brief = focus.writing_brief if continues_active_draft else None
         try:
-            resolution = resolve_brief(state["input_text"], classification, prior_brief)
+            profile = await _resolve_profile(state.get("company_id"))
+            unit_names = await _resolve_unit_names(state.get("company_id"))
+            party = resolve_party_context(
+                profile,
+                unit_names=unit_names,
+                classification=classification,
+                requester_user_id=state.get("user_id") or "",
+            )
+            resolution = resolve_brief(state["input_text"], classification, prior_brief, party=party)
         except Exception:
             logger.exception("Writing-brief resolution failed; continuing without one.")
             updates["brief_result"] = {

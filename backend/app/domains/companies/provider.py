@@ -21,6 +21,7 @@ never to a hard failure of the draft/revise turn itself.
 
 import json
 import logging
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any, Optional, Sequence
 
@@ -187,17 +188,40 @@ async def get_company_profile(company_id: str) -> CompanyProfile:
 
 
 async def _read_profile_from_db(company_id: str) -> CompanyProfile:
+    """Read this company's profile, falling back to its registered
+    ``CompanyModel.name`` when no admin has ever filled in ``display_name``.
+
+    Without this fallback, a company with no profile configured at all --
+    today, every company, since neither ``app.domains.companies.seeder``
+    nor any frontend surface ever writes one -- resolves to
+    ``CompanyProfile.empty``, which means ``app.ai.identity.parties.
+    SelfParty.is_known`` is False for it: the party model has no name to
+    match "is this document addressed to us" against, and the writer's own
+    identity section never renders. ``companies.name`` is NOT NULL and set
+    at creation for every real company, so this is a real fallback for the
+    common case, not a rare edge -- ``display_name``/``short_name``/
+    ``letterhead`` etc. remain empty (this only ever supplies a name to
+    match/render, never invents an antet or a signer).
+    """
     try:
         async with tenant_session(company_id, is_root=False) as session:
             result = await session.execute(
-                select(CompanyModel.settings).where(CompanyModel.id == company_id)
+                select(CompanyModel.settings, CompanyModel.name).where(
+                    CompanyModel.id == company_id
+                )
             )
-            company_settings = result.scalar_one_or_none()
+            row = result.first()
     except Exception:
         logger.warning("Company profile DB read failed for %s", company_id, exc_info=True)
         return CompanyProfile.empty(company_id)
+    if row is None:
+        return CompanyProfile.empty(company_id)
+    company_settings, company_name = row
     value = (company_settings or {}).get(_PROFILE_SETTINGS_KEY) if company_settings else None
-    return CompanyProfile.from_dict(company_id, value)
+    profile = CompanyProfile.from_dict(company_id, value)
+    if not profile.display_name and company_name:
+        profile = replace(profile, display_name=company_name)
+    return profile
 
 
 async def set_company_profile(
@@ -208,6 +232,8 @@ async def set_company_profile(
     agent_name: str = "",
     letterhead: str = "",
     default_signer_title: str = "",
+    default_signer_name: str = "",
+    aliases: Sequence[str] = (),
 ) -> CompanyProfile:
     """Replace ``company_id``'s identity profile and invalidate the cache.
 
@@ -234,6 +260,8 @@ async def set_company_profile(
             agent_name=agent_name,
             letterhead=letterhead,
             default_signer_title=default_signer_title,
+            default_signer_name=default_signer_name,
+            aliases=tuple(alias for alias in aliases if alias),
             updated_at=datetime.now(timezone.utc).isoformat(),
         )
 

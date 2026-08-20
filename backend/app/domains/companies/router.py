@@ -230,6 +230,8 @@ async def update_company_profile(
             agent_name=schema.agent_name,
             letterhead=schema.letterhead,
             default_signer_title=schema.default_signer_title,
+            default_signer_name=schema.default_signer_name,
+            aliases=schema.aliases,
         )
     except ValueError as exc:
         raise NotFoundException(message="Şirket bulunamadı.") from exc

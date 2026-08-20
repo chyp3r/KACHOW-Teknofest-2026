@@ -33,7 +33,7 @@ DRAFT_RESULT = {
 }
 
 
-def _build_graph(fake_llm, fake_fast_llm, *, fields=None):
+def _build_graph(fake_llm, fake_fast_llm, *, fields=None, profile_provider=None, units_provider=None):
     document_analysis_graph = AsyncMock(
         ainvoke=AsyncMock(
             return_value={
@@ -66,6 +66,8 @@ def _build_graph(fake_llm, fake_fast_llm, *, fields=None):
         routing_graph=routing_graph,
         fast_llm_client=fake_fast_llm,
         checkpointer=MemorySaver(),
+        profile_provider=profile_provider,
+        units_provider=units_provider,
     )
     return graph, {"draft_graph": draft_graph, "routing_graph": routing_graph}
 
@@ -190,9 +192,21 @@ async def test_rejecting_the_brief_gate_ends_the_turn_without_a_draft(fake_llm, 
 
 @pytest.mark.asyncio
 async def test_a_fully_determined_turn_never_pauses_at_the_brief_gate(fake_llm, fake_fast_llm):
+    # A configured company profile matching the document's own muhatap
+    # field is what licenses the document-reply role reversal (see
+    # app.ai.identity.parties) -- without one, this turn's muhatap slot
+    # would be left unresolved and the gate would still open (see
+    # test_writing_brief.py's own coverage of that "cannot verify, don't
+    # reverse" case at the unit level).
+    async def _profile_provider(company_id):
+        from app.ai.identity.company_profile import CompanyProfile
+
+        return CompanyProfile(company_id=company_id, display_name="KACMAK Ekibi")
+
     graph, mocks = _build_graph(
         fake_llm, fake_fast_llm,
-        fields={"gonderen_kurum": "TEKNOFEST Bilişim Vadisi", "muhatap": "KACMAK Ekibi"}
+        fields={"gonderen_kurum": "TEKNOFEST Bilişim Vadisi", "muhatap": "KACMAK Ekibi"},
+        profile_provider=_profile_provider,
     )
     config = {"configurable": {"thread_id": "brief-gate-5"}}
 
@@ -200,6 +214,7 @@ async def test_a_fully_determined_turn_never_pauses_at_the_brief_gate(fake_llm, 
         {
             "input_text": "KACMAK ekibi olarak arz ederim şeklinde bir cevap yazısı hazırla",
             "document_id": None,
+            "company_id": "c1",
         },
         config=config,
     )

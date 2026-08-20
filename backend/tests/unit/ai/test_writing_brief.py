@@ -5,6 +5,8 @@ ekibi olarak" must resolve who's writing without asking, and never
 misplaces that name as the addressee.
 """
 
+from app.ai.identity.company_profile import CompanyProfile
+from app.ai.identity.parties import resolve_party_context
 from app.ai.workflows.writing_brief import (
     AUTO_ANSWER,
     MAX_BRIEF_QUESTIONS,
@@ -30,21 +32,50 @@ def test_preserves_original_casing_and_diacritics_in_the_extracted_name():
     assert resolution.resolved["yazan_taraf"].value == "Hacettepe Bilişim Kulübü"
 
 
-def test_document_reply_inverts_sender_and_addressee():
-    classification = {"fields": {"gonderen_kurum": "TEKNOFEST Bilişim Vadisi", "muhatap": None}}
-    resolution = resolve_brief("Bu evraka cevap yazısı hazırla", classification)
+def test_document_reply_inverts_sender_and_addressee_once_confirmed_addressed_to_us():
+    """The reversal is only licensed once the document's own muhatap field
+    is confirmed to name us (see app.ai.identity.parties) -- unlike the
+    unconditional reversal this replaced, a document whose addressee simply
+    isn't known can't be reversed at all (see the "does not" test below)."""
+    classification = {
+        "fields": {"gonderen_kurum": "TEKNOFEST Bilişim Vadisi", "muhatap": "KACMAK Ekibi"}
+    }
+    profile = CompanyProfile(company_id="c1", display_name="KACMAK Ekibi")
+    party = resolve_party_context(profile, classification=classification)
+    assert party.relation == "reply_to_us"
+
+    resolution = resolve_brief("Bu evraka cevap yazısı hazırla", classification, party=party)
 
     assert resolution.resolved["muhatap"].value == "TEKNOFEST Bilişim Vadisi"
     assert resolution.resolved["muhatap"].source == "document_reply"
+
+
+def test_document_reply_does_not_invert_when_the_addressee_is_not_confirmed_as_us():
+    """C-fix regression: before app.ai.identity.parties existed, ANY
+    document's own gonderen_kurum/muhatap were reversed into our own
+    sender/addressee unconditionally -- a CV, an internship report, or any
+    third-party document produced the wrong letterhead and the wrong
+    addressee. With no party context (or one that can't confirm the
+    document was addressed to us), the reversal must not happen."""
+    classification = {"fields": {"gonderen_kurum": "TEKNOFEST Bilişim Vadisi", "muhatap": None}}
+
+    resolution = resolve_brief("Bu evraka cevap yazısı hazırla", classification)
+
+    assert "muhatap" not in resolution.resolved
+    assert any(question["key"] == "muhatap" for question in resolution.questions)
 
 
 def test_a_fully_determined_turn_asks_nothing():
     classification = {
         "fields": {"gonderen_kurum": "TEKNOFEST Bilişim Vadisi", "muhatap": "KACMAK Ekibi"}
     }
+    profile = CompanyProfile(company_id="c1", display_name="KACMAK Ekibi")
+    party = resolve_party_context(profile, classification=classification)
+
     resolution = resolve_brief(
         "KACMAK ekibi olarak arz ederim şeklinde bir cevap yazısı hazırla",
         classification,
+        party=party,
     )
 
     assert resolution.questions == ()
