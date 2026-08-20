@@ -2,6 +2,289 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.25.0] - 2026-08-19
+### Değiştirildi
+**Mevzuat Haritası → canlı, sürüklenebilir simülasyon** (#210) —
+[csacademy.com/app/graph_editor](https://csacademy.com/app/graph_editor/)'ün
+"Force mode" davranışına göre modellendi: düğümler birbirini iter, kenarlar
+çeker, tüm graf merkeze doğru hafifçe çekilir; bir düğümü sürüklemek onu
+bıraktığınız yerde sabitler. Referans sitenin kendi belgelediği davranış
+esas alındı ("nodes support drag and drop... at the end of the drop the
+node becomes fixed... you can fix/unfix a node by simple click") ve canlı
+olarak doğrulandı (art arda iki ekran görüntüsünde düğümlerin hâlâ
+yerleşmekte olduğu gözlemlendi).
+
+**Tek gerçek çakışma**: referans sitede tek tıklama sabitleme/serbest
+bırakma anlamına geliyor; bu uygulamada tıklama zaten öznitelik panelini
+açıyor. Çözüm: tıklama = öznitelikler, sürükleme = sabitleme. Serbest
+bırakma iki yoldan erişilebilir: düğüme çift tıklama, ve öznitelik
+panelindeki "Sabitlemeyi kaldır" düğmesi.
+
+**"Düğüme tıkla, özniteliklerini gör" isteği bir önceki sürümde zaten
+uygulanmıştı — az önce bulunan iki hataya kadar hiç çalışmıyor gibi
+görünüyordu:**
+
+- `InteractiveGraphViewport`'un kaydırma-engelleme kontrolü `.closest(".node")`
+  ile eşleşiyordu; v1 bipartit görünüm bu ham sınıfı taşıyordu ama v2'nin
+  `EntityGraphView`'ı `entity-graph-node`/`node-entity` gibi farklı sınıflar
+  kullanıyordu — hiçbiri `.node` ile eşleşmiyordu, bu yüzden bir düğüme
+  basmak sessizce tüm tuvali kaydırmaya başlıyordu. Düzeltme: seçici artık
+  açık bir `[data-graph-node]` özniteliğine bakıyor (her iki görünüm de
+  taşıyor), tesadüfi bir sınıf adına değil.
+- Aynı bileşendeki bir `ResizeObserver`, tuval boyutu her değiştiğinde
+  kamerayı sıfırlıyordu — 18rem'lik öznitelik panelini açmak tuvali
+  daraltıyor, bu da her tıklamada yakınlaştırma/kaydırma durumunu sıfırlıyordu.
+  Kaldırıldı; panel artık tuvalin üzerinde **yüzen bir kaplama** olarak
+  konumlanıyor (`position: absolute`), bu yüzden açılması/kapanması tuvali
+  hiç yeniden boyutlandırmıyor.
+
+- **`forceLayout.ts`** ikiye ayrıldı, tek fizik çekirdeğini paylaşarak:
+  `createForceSimulation` (canlı, adım adım ilerleyen, sabitlenebilir,
+  yeniden ısıtılabilir) ve `layoutForceDirected` (eskisi gibi sabit
+  yinelemeli toplu sarmalayıcı, artık bu çekirdeğin ince bir katmanı).
+  Soğutma, sabit yineleme sayısına dayalı doğrusal zamandan çarpımsal
+  "alpha" bozunmasına geçti (d3-force geleneği) — canlı döngünün herhangi
+  bir anda yeniden ısıtılabilmesi için gerekli. **Belirlenebilirlik
+  sözü daraltıldı, gizlenmeden**: aynı tohum ve aynı grafik artık yalnızca
+  başlangıç ve *yerleşmiş* durumu için garanti ediyor, her ara kareyi değil
+  — bir kullanıcı sürüklemesi kasıtlı olarak kararsız sonuçtan sapıyor,
+  bu sapma sürüklemenin amacı. Toplu yol (`layoutForceDirected`, azaltılmış
+  hareket ve testler tarafından kullanılıyor) daha güçlü garantiyi koruyor.
+- **`useForceSimulation.ts`** (yeni) — bu depoda ilk `requestAnimationFrame`
+  döngüsü (`MessageList.tsx`'in kendisi tek seferlik). Yerleştiğinde uyur
+  (kare zamanlamayı durdurur), etkileşimde uyanır. `prefers-reduced-motion:
+  reduce` döngüyü tamamen atlıyor ve simülasyonu eşzamanlı olarak
+  yerleştiriyor — hiç animasyon yok.
+- **Düğüm sürükleme** (`EntityGraphView.tsx`) — `graphPointAt` (ekran
+  pikselini grafik koordinatına çeviren, `viewBox`/ölçek/letterbox'ı doğru
+  hesaba katan yardımcı) `InteractiveGraphViewport`'un içinde bir closure
+  olarak yaşıyordu, hiçbir çocuğa açık değildi. Yeni bir React context
+  (`graphViewportContext.ts`) bunu açığa çıkarıyor. **JSX çocukları ebeveynin
+  fiber konumunda render edilir, kendi konumlarında değil** — bu yüzden
+  context'i okuyan `EntityGraphNode`, `EntityGraphView`'ın kendi `.map()`'i
+  içinde satır içi değil, ayrı bir bileşen olarak çıkarıldı.
+- 3px'lik bir hareket eşiği tıklamayı sürüklemeden ayırıyor.
+- **Ölçüm, varsayım değil**: saf React yeniden render'ı (fizik değil) 600
+  düğümde kare başına ~183-199ms ölçüldü (jsdom içinde) — 60fps bütçesinin
+  çok üzerinde. Ancak gerçek tarayıcıda, gerçek 62 düğümlük/180 kenarlık
+  korpus üzerinde, senkron DOM özniteliği yazma maliyeti yalnızca ~1.1ms
+  ölçüldü — jsdom'un DOM işlemlerini önemli ölçüde abarttığını doğruluyor.
+  Canlı `requestAnimationFrame` tabanlı tam kare ölçümü bu oturumun tarayıcı
+  aracının arka planda sekmeler için zamanlayıcıları/rAF'ı durdurması
+  nedeniyle alınamadı (`document.hidden === true` doğrulandı). **Bilinçli
+  sınır**: bugünkü gerçek korpus (14 evrak, ~60 düğüm) için React tabanlı
+  render kalıyor; `MAX_GRAPH_DOCUMENTS=200` teorik tavanında (600 düğüm)
+  performans yakından izlenmeli ve gerekirse konumları React'ı atlayarak
+  doğrudan ref üzerinden yazan bir yola geçilmeli — önceden inşa edilmedi,
+  çünkü bugünkü ölçek için gerekli değil.
+
+### Test
+- `docker compose exec -T frontend npm test -- --run` → **272 test geçti**
+  (53 dosya) — 32 yeni test bu özellik için (`createForceSimulation`: 11,
+  `useForceSimulation`: 8, `InteractiveGraphViewport` context/pan: 4,
+  `NodeInspector` sabitleme: 3, `EntityGraphView` sürükle/tıkla/sabitle: 6).
+- `npm run lint` → 0 hata (`DecisionFlow.tsx`'teki 2 uyarı önceden mevcut;
+  `useGraphViewport`'un kendi dosyasına taşınması yeni bir üçüncü uyarıyı
+  önledi -- react-refresh/only-export-components, aynı kategori).
+- `npx tsc --noEmit` → temiz.
+- Canlı korpus doğrulaması: gerçek sürükleme (tarayıcı aracının doğal
+  sürükleme özelliğiyle, ham `PointerEvent` gönderimiyle değil -- ikincisi
+  gerçek işaretçi yakalamayı güvenilir biçimde tetiklemiyor) bir düğümü
+  başarıyla sabitledi (`is-pinned` sınıfı + görsel kesikli halka); öznitelik
+  paneli sabitleme durumunu ve sabitlemeyi kaldır düğmesini doğru gösterdi;
+  panel açılışı `viewBox`'ı değiştirmedi (sıfırlama hatası için regresyon
+  kontrolü); her iki tema.
+
+Refs: [#210](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/210).
+
+## [3.24.0] - 2026-08-18
+### Değiştirildi
+**Mevzuat Haritası → birleşik varlık grafiği** (#210) — bir önceki sürümün
+Evrak↔Madde uyum omurgası, kullanıcının asıl talebi doğrultusunda genişletildi:
+"her varlık bir node olsun, bir node'a tıklayınca özniteliklerini göreyim,
+aynı muhatap/gönderen/yetkiliyi paylaşan evraklar arasında kenar olsun."
+
+**Ölçülmeden önce doğrulanan tek karar tersine döndü.** v1, Kurum'u bilinçli
+olarak node tipi dışında bırakmıştı; gerekçe OCR hasarının node kimliğine
+karışmasıydı. Bu gerekçe aslında **entity resolution** için bir argümandı,
+düğüm tipini dışlamak için değil — bu sürüm tam da bunu yapıyor.
+
+**Belirleyici ölçüm: `imza_sahibi` — kullanıcının isteğinde ilk andığı alan —
+gerçek 14 evrakın **hiçbirinde** dolu değil.** Taranmış evraklardaki el
+yazısı imza blokları OCR ile kurtarılamıyor; bu, uyum grafiğinin kendi
+başlığıyla da bağımsız doğrulandı ("m.17 (İmza sahibi) — 14 evrakın
+14'ünde eksik"). Aynı talebin arkasındaki niyet yine de karşılanabilir
+durumdaydı: `entities[]` alanı zaten kişi node'ları üretiyor (İdris ŞAHİN 5
+evrağı birbirine bağlıyor) — boş bir alan yerine dolu bir alandan.
+
+- **`app/domains/documents/entity_resolution.py`** — saf çözümleyici.
+  `resolve_entities(raw_names)`, korpus genelindeki her ham `muhatap`/
+  `gonderen_kurum`/`entities[]` dizesini tek bir canonical isim uzayına
+  çözer: markdown/liste artıklarını ve sızmış belge numaralarını temizler,
+  `normalizers._fold` ile Türkçe katlar, aciliyet eklerini (`GÜNLÜDÜR`) ve
+  datif hâl ekini (yalnız `-na`/`-ne`/`-ya`/`-ye`, üç harfli `-ına`/`-ine`
+  değil — sözcük zaten iyelik `-ı/-i` ile bitiyor, uzun varyant o sesli
+  harfi de yerdi) ayıklar, son olarak sıralı anahtarlar üzerinde
+  deterministik bir `SequenceMatcher` bulanık geçişiyle kalan tek karakterlik
+  OCR gürültüsünü (`Ğ`→`Ç` gibi) birleştirir. Gösterim etiketi en sık geçen
+  ham yazım biçimidir — **ama** ölçüldü: gerçek korpusta markdown önekli
+  biçim (5/11) düz biçimden (4/11) daha sık, naif "en sık kazanır" bir
+  jüri karşısında `##### TÜRKİYE ... BAŞKANLIĞINA` gösterirdi; yalnızca
+  baştaki markdown gürültüsü etiketten temizlenir, sondaki parantez (gerçek
+  bilgi — bir alt birim) korunur, ham biçim yine de `surface_forms`'ta
+  dürüstçe kalır.
+- **Entity/Konu node'ları ve `muhatap`/`gonderen`/`bahseder`/`konu` kenarları**
+  `knowledge_graph.py`'ye eklendi. Üç kaynak (`muhatap`, `gonderen_kurum`,
+  `entities[]`) **tek bir paylaşılan çözümleme geçişinden** geçiyor — bu,
+  bir evrağın `muhatap`ı ile başka bir evrağın `entities[]` listesinde
+  geçen aynı kurumun tek node'da buluşmasını sağlıyor (canlı korpusta
+  doğrulandı: TBMM muhatap'ı + iki `entities[]` anması → 11 evraklık tek
+  node). `konu` ayrı bir ad uzayında kalıyor — bir konu ile bir kurum farklı
+  şeyler, aynı uzayı paylaşmaları yanlış birleşmelere yol açardı.
+  **Evrak↔Evrak kenarı yok** — iki evrak paylaştıkları entity node'u
+  üzerinden bağlanıyor, doğrudan değil; bu hem O(n) kalıyor (bir merkez
+  düğüme 5 evrak = 5 kenar, 10 değil) hem de bağlantının *nedenini* ekranda
+  tutuyor. `GraphNode.attributes` — yalnızca `document` node'larında dolu,
+  düğüm denetleyicisinin okuduğu serbest alan (sayı/tarih/konu/muhatap/
+  gönderen/ivedilik/özet/eksik-alan-sayısı).
+- **Frontend force-directed katman** (`features/graph/forceLayout.ts`) —
+  bipartit düzen (v1) artık yalnızca "sadece uyum" ön ayarında kullanılıyor;
+  birleşik görünüm belirleyici bir kuvvet benzetimiyle çiziliyor. Belirleyicilik
+  rastgelelik pahasına değil, tasarımla sağlanıyor: `Math.random()` hiç
+  çağrılmıyor (seed'li mulberry32, düğüm kimliklerine göre sıralı tüketiliyor),
+  yineleme sayısı sabit (yakınsama tabanlı değil), kenarlar kuvvet toplamından
+  önce deterministik sıralanıyor (kayan nokta toplaması değişmeli değildir —
+  ölçülmeden atlanabilecek ince bir hata kaynağıydı, kendi sıra-bağımsızlık
+  testimle yakalandı). **Ölçülmeden varsayılmadı**: naif O(n²) itiş 600
+  düğümde ~4.7sn sürdü (200 evrak sınırının ulaşabileceği ölçek), 150ms
+  bütçesinin çok üzerinde; Barnes-Hut dörtlü ağacı O(n log n)'e indirdi
+  (~262ms), yineleme sayısı 300'den 150'ye düşürülerek ~149ms'e ulaşıldı.
+  Gerçek korpus (14 evrak, ~60 düğüm) her hâlükârda milisaniyenin altında.
+- **`NodeInspector.tsx`** — kullanıcının isteğinin merkezindeki, v1'de hiç
+  olmayan yetenek: herhangi bir düğüme tıklamak özniteliklerini gösteren bir
+  panel açıyor. Entity düğümleri için birleşen **her** ham yazım biçimini
+  listeliyor — OCR birleşimini gizlemek yerine açıkça gösteriyor.
+- **`GraphFilters.tsx` + `filters.ts`** — düğüm/kenar türü anahtarları ve iki
+  ön ayar: "Tüm graf" ve "Sadece uyum". İkincisi, `filterToComplianceOnly`
+  saf fonksiyonuyla PR #212'nin gönderdiği bipartit görünümü **yeniden
+  uygulamadan, filtreleyerek** üretiyor. Tek incelik: `rule_edge_count`/
+  `llm_edge_count` artık grafik genelinde (entity kenarları dahil) sayılıyor
+  — filtre bu sayıları filtrelenmiş kenar kümesinden yeniden hesaplamazsa
+  "sadece uyum" başlığı v1'de hiç var olmayan entity kenarlarıyla şişmiş bir
+  "kural" sayısı gösterirdi. Canlı korpusta doğrulandı: filtrelenmemiş
+  birleşik grafik 78 kural/116 model önerisi (194 kenar, tüm düğüm/kenar
+  türleri açıkken) gösterirken, "sadece uyum" ön ayarı tam olarak PR #212'nin
+  gönderdiği "45 kural, 40 model önerisi"ni gösteriyor.
+
+### Test
+- `docker compose exec -T backend pytest -q` → **2200 test geçti** (2 bilinen,
+  önceden var olan MCP arızası).
+- `docker compose exec -T frontend npm test -- --run` → **240 test geçti**
+  (51 dosya).
+- `npm run lint` → 0 hata (`DecisionFlow.tsx`'teki 2 uyarı önceden mevcut).
+- `npx tsc --noEmit` → temiz.
+- Canlı korpus (14 evrak) doğrulaması: entity çözümlemesi TBMM'yi 6 farklı
+  yazım biçiminden 11 evraklık tek node'a birleştirdi; düğüm denetleyicisi
+  gerçek evrak özniteliklerini (Sayı, Konu, Muhatap, Gönderen kurum) doğru
+  gösterdi; "sadece uyum" ön ayarı v1'in gönderdiği sayılarla birebir eşleşti;
+  filtre anahtarları DOM'dan kenarları doğru kaldırdı; evrak düğümünden
+  "Belgeyi aç" ile `/documents/<path>`'e geçiş sıfır yeni kod olmadan çalıştı;
+  açık ve koyu tema.
+
+Refs: [#210](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/210).
+
+## [3.23.0] - 2026-08-18
+### Eklendi
+**Mevzuat Haritası** (#210) — evraklar ile mevzuat maddeleri arasındaki uyum
+ilişkilerini gösteren bir bilgi grafiği. Tasarımdan önce her aday kenar tipi
+gerçek korpus üzerinde ölçüldü: evrak↔evrak atıfları (`ilgi`), önerge numarası,
+paylaşılan kanun/tür/kurum/varlık — hepsi ya sıfır ya da anlamsız (tam bağlı
+graf) sinyal verdi. Tek gerçek sinyal madde granülerliğinde: kural tablosundan
+gelen eksik-alan atıfları (`missing_fields[].mevzuat`) ve modelin ürettiği
+mevzuat atıfları (`mevzuat_references[]`). Grafik bu iki kaynak üzerine kurulu;
+ayrı bir depolama katmanı yok, her istekte önbellekteki analizlerden türetilir.
+
+- **`app/ai/compliance/mevzuat_citation.py`** — saf atıf çözümleyici.
+  `resolve_citation(text)`, serbest metindeki `"RYUEHY m.14"`,
+  `"3071 sayılı ... m.4"`, `"Devlet Memurları Kanunu"` gibi ifadeleri
+  `(kanun, madde)` çiftine çözer. `LEGISLATION_PATTERN`'in
+  `(?<![-/\d])` negatif lookbehind'ı taşıyıcı: `"E-22222222-903-118 sayılı
+  yazınız"` gibi belge numaralarını hayalet kanun olarak yorumlamaz.
+- **`app/domains/documents/knowledge_graph.py`** — saf grafik üretici,
+  I/O yok. Node'lar: `document` (Postgres PK id), `madde` (**bileşik id**
+  `madde:{kanun}:{n}` — ölçüldü: `madde:4` hem 2646 hem 3071 sayılı kanunda
+  var, bileşik id olmadan iki farklı madde tek node'da birleşirdi), `kanun`
+  (konteyner). Kenarlar: `ihlal` (Evrak→Madde, `source="rule"`, kural
+  tablosundan — deterministik) ve `atif` (Evrak→Madde/Kanun,
+  `source="llm"` — model çıktısı, üç kademeli çözümleme: kanun+madde →
+  Madde node, yalnız kanun → Kanun node, hiçbiri → `unresolved_reference_
+  count`'a sayılır, hiçbir atıf sessizce atılmaz). Başlık istatistiği
+  **farklı evrak sayısına** göre hesaplanır, kenar sayısına göre değil —
+  bir evrak aynı maddeyi iki alan yüzünden iki kez ihlal edebilir.
+  **Kurum bilinçli olarak node değil**: üç aday anahtar da OCR hasarını
+  node kimliğine taşırdı (ölçüldü: en iyi ihtimalle 3 kenar, ağır
+  normalizasyondan sonra); hiçbir node id'sinin OCR'lı metinden türememesi
+  değişmez bir kural.
+- **`GET /documents/graph`** ve **`GET /documents/{storage_path}/graph`** —
+  bkz. **`docs/api/documents.md`**. Korpus görünümü `MAX_GRAPH_DOCUMENTS
+  = 200` ile sınırlı ve payda'yı sessizce küçültmemek için bu limit
+  `list_for_owner`'a açıkça geçiliyor (repository varsayılanı 100).
+  Clearance seviyesinin üzerindeki evraklar 403 değil sessizce dışlanıyor,
+  yalnızca sayısı (`hidden_document_count`) bildiriliyor. 60 saniyelik
+  Redis önbelleği **clearance'ı anahtarın parçası yapıyor** — aksi hâlde
+  düşük yetkili bir kullanıcı yüksek yetkili birinin önbelleğe düşürdüğü
+  grafiği görebilirdi. `dataclasses.asdict()` ile önbellek-hit/miss
+  arasında tuple/list tutarsızlığı kendi testimle yakalandı ve tek bir
+  `_graph_to_json_dict()` yardımcıyla giderildi.
+- **Frontend `/graph` rotası** (`Mevzuat Haritası`, `AppShell` navigasyonu) —
+  iki sütunlu bespoke SVG bant diyagramı (force-directed/radial/matrix
+  değerlendirildi ve elendi — bkz. tasarım notları): sol sütun evraklar
+  (ihlal sayısına göre azalan), sağ sütun maddeler (kanun bantları
+  içinde derece'ye göre azalan), kübik Bézier bantlar. Başlık kartı
+  hesaplanan (asla sabit kodlanmamış) en çok ihlal edilen maddeyi,
+  kaynağını (`kural tablosu — deterministik, model çıktısı değil`) ve
+  evrak/madde/bağlantı sayılarını gösteriyor. Tek kanunluk korpuslarda
+  (bugünkü durum) tek satırlık başlık — sahte çeşitlilik göstermek yerine
+  yokluğu dürüstçe kabul ediyor. Hover ile ilgisiz kenarları soluklaştırma;
+  evrak node'una tıklama mevcut `/documents/:storagePath` seçim akışını
+  **hiç yeni bağlantı kodu olmadan** tetikliyor (`App.tsx`'in var olan
+  `useMatch`/`useEffect`'i zaten bunu yapıyordu).
+  `InteractiveGraphViewport` (`features/chat/` → `components/`,
+  `baseWidth`/`baseHeight` prop'ları eklendi) `DecisionFlow` ile paylaşılıyor.
+- **Tek-evrak komşuluk görünümü** — `DocumentAnalysisPanel`'de "Belge
+  ilişkileri" `<details>` bölümü, mevcut opsiyonel-prop kapasite kuralına
+  uygun (`undefined` = bağlanmamış, `null` = bağlanmış ama henüz yüklenmedi).
+- Karanlık temada `--workflow-rule`/`--workflow-llm` yalnızca `:root`'ta
+  tanımlıydı ve açık tema için hiç override edilmemişti — ölçüldü: sky-500
+  `#f8fafc` üzerinde ~2.65:1 kontrast, WCAG 3:1 eşiğinin altında. Açık tema
+  override'ı eklendi; bu benim özelliğimden önce var olan bir hataydı,
+  kendi tasarımımın erişilebilirlik gereksinimini uygularken bulundu.
+
+**Bilinçli kapsam dışı**: Plan `ilgi` atıflarını arşivde olmayan evraklara
+işaret eden "sarkan referanslar" olarak tek-evrak görünümünde göstermeyi
+öneriyordu (`canonical_document_number()` ile çözümleme). Bu, korpusun
+tek-yönlü olduğunu (yalnızca cevap yazıları tutuluyor, gelen TBMM yazıları
+değil) dürüstçe göstermenin en ucuz yolu olarak tasarlanmıştı ama bu
+sürümde **uygulanmadı** — kapsam kasıtlı olarak Evrak↔Madde uyum omurgasıyla
+sınırlı tutuldu. `Document<->Document` kenar tipi altyapıda hazır (`atif`/
+`ihlal` şeması buna izin verir) ama `ilgi`/`sayi` çözümlemesi bağlı değil.
+
+### Test
+- `docker compose exec -T backend pytest -q` → **2172 test geçti** (2
+  bilinen, önceden var olan MCP arıza — bu özellikle ilgisiz).
+- `docker compose exec -T frontend npm test -- --run` → **206 test geçti**
+  (46 dosya).
+- `npm run lint` → 0 hata; `DecisionFlow.tsx`'teki 2 uyarı `origin/main`'de
+  değişmeden mevcut, bu özellik yalnızca o dosyanın import satırını değiştirdi.
+- `npx tsc --noEmit` → temiz.
+- `npm run api:types:check` → `src/api/generated.ts` yeniden üretildi ve
+  commit edildi (yeni uç noktalar şemayı değiştirdi).
+- Tam korpus (14 evrak) üzerinde canlı doğrulama: gerçek başlık cümlesi
+  (RYUEHY m.17, 14 evrağın hepsinde ihlal), her iki tema, zoom/pan/hover/
+  tıkla-git akışı, tek-evrak komşuluk grafiği — hepsi tarayıcıda gözlemlendi.
+
+Refs: [#210](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/210).
+
 ## [3.22.0] - 2026-08-18
 ### Eklendi
 - **Şirkete özel ajan kimliği**: Şirket adminleri artık asistanın kendini

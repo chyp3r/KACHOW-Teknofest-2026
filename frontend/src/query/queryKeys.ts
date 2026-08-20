@@ -23,4 +23,6 @@ export const queryKeys = {
   units: ["units"] as const,
   transfer: (transferId: string) => ["transfer", transferId] as const,
   transferRecommendations: (draftId: string) => ["transfer-recommendations", draftId] as const,
+  knowledgeGraph: ["documents", "graph"] as const,
+  documentGraph: (storagePath: string) => ["documents", "graph", storagePath] as const,
 };

@@ -1,6 +1,5 @@
 import { Minus, Plus, RotateCcw } from "lucide-react";
 import {
-  useEffect,
   useRef,
   useState,
   type KeyboardEvent,
@@ -8,10 +7,11 @@ import {
   type ReactNode,
   type WheelEvent,
 } from "react";
-import { IconButton } from "../../components/Button";
+import { IconButton } from "./Button";
+import { GraphViewportContext, type Point } from "./graphViewportContext";
 
-const BASE_WIDTH = 560;
-const BASE_HEIGHT = 700;
+const DEFAULT_BASE_WIDTH = 560;
+const DEFAULT_BASE_HEIGHT = 700;
 const MIN_SCALE = 0.6;
 const MAX_SCALE = 3;
 const SCALE_STEP = 0.2;
@@ -20,11 +20,6 @@ interface Camera {
   centerX: number;
   centerY: number;
   scale: number;
-}
-
-interface Point {
-  x: number;
-  y: number;
 }
 
 interface DragStart {
@@ -40,11 +35,6 @@ interface PinchStart {
   anchor: Point;
 }
 
-const INITIAL_CAMERA: Camera = {
-  centerX: BASE_WIDTH / 2,
-  centerY: BASE_HEIGHT / 2,
-  scale: 1,
-};
 const clampScale = (scale: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
 const distance = (left: Point, right: Point) =>
   Math.hypot(right.x - left.x, right.y - left.y);
@@ -60,11 +50,19 @@ const pointerPoint = (event: PointerEvent<HTMLDivElement>): Point => ({
 export function InteractiveGraphViewport({
   children,
   ariaLabel,
+  baseWidth = DEFAULT_BASE_WIDTH,
+  baseHeight = DEFAULT_BASE_HEIGHT,
 }: {
   children: ReactNode;
   ariaLabel: string;
+  // Lets a caller with a taller/wider canvas (e.g. the knowledge graph's
+  // bipartite layout, which grows with document/madde count) start framed
+  // correctly instead of at DecisionFlow's fixed 560x700.
+  baseWidth?: number;
+  baseHeight?: number;
 }) {
-  const [camera, setCamera] = useState<Camera>(INITIAL_CAMERA);
+  const initialCamera: Camera = { centerX: baseWidth / 2, centerY: baseHeight / 2, scale: 1 };
+  const [camera, setCamera] = useState<Camera>(initialCamera);
   const [dragging, setDragging] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -73,33 +71,14 @@ export function InteractiveGraphViewport({
   const dragStart = useRef<DragStart | null>(null);
   const pinchStart = useRef<PinchStart | null>(null);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || typeof ResizeObserver === "undefined") return;
-    let previousSize = "";
-    const observer = new ResizeObserver(([entry]) => {
-      const nextSize = `${Math.round(entry.contentRect.width)}x${Math.round(entry.contentRect.height)}`;
-      if (!previousSize) {
-        previousSize = nextSize;
-        return;
-      }
-      if (nextSize === previousSize) return;
-      previousSize = nextSize;
-      cameraRef.current = INITIAL_CAMERA;
-      setCamera(INITIAL_CAMERA);
-    });
-    observer.observe(canvas);
-    return () => observer.disconnect();
-  }, []);
-
   const updateCamera = (next: Camera) => {
     cameraRef.current = next;
     setCamera(next);
   };
 
   const dimensionsAt = (scale: number) => ({
-    width: BASE_WIDTH / scale,
-    height: BASE_HEIGHT / scale,
+    width: baseWidth / scale,
+    height: baseHeight / scale,
   });
 
   const viewBoxAt = (value: Camera) => {
@@ -113,8 +92,8 @@ export function InteractiveGraphViewport({
 
   const renderedGeometry = (scale: number) => {
     const rect = svgRef.current?.getBoundingClientRect();
-    const width = Math.max(1, rect?.width ?? BASE_WIDTH);
-    const height = Math.max(1, rect?.height ?? BASE_HEIGHT);
+    const width = Math.max(1, rect?.width ?? baseWidth);
+    const height = Math.max(1, rect?.height ?? baseHeight);
     const dimensions = dimensionsAt(scale);
     const pixelsPerUnit = Math.min(width / dimensions.width, height / dimensions.height);
     return {
@@ -168,10 +147,16 @@ export function InteractiveGraphViewport({
     updateCamera(cameraForAnchor(anchor, clientPoint, scale));
   };
 
-  const reset = () => updateCamera(INITIAL_CAMERA);
+  const reset = () => updateCamera(initialCamera);
 
   const beginPointer = (event: PointerEvent<HTMLDivElement>) => {
-    if ((event.target as Element).closest(".node")) return;
+    // `.node` covers DecisionFlow's older markup; `[data-graph-node]` is
+    // the explicit, non-coincidental opt-out every node-rendering view
+    // should carry going forward -- a class name that happens to be
+    // "node-document" or "entity-graph-node" does not match `.node` and
+    // would otherwise silently fall through to panning the whole canvas
+    // instead of letting the node handle its own drag.
+    if ((event.target as Element).closest("[data-graph-node], .node")) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     const point = pointerPoint(event);
@@ -290,59 +275,61 @@ export function InteractiveGraphViewport({
   const viewBox = viewBoxAt(camera);
 
   return (
-    <div className="graph-container decision-graph-container interactive-graph">
-      <div className="graph-toolbar" role="toolbar" aria-label="Grafik görünümü kontrolleri">
-        <IconButton
-          icon={<Minus />}
-          aria-label="Grafiği küçült"
-          title="Küçült"
-          disabled={camera.scale <= MIN_SCALE}
-          onClick={() => zoomAt(cameraRef.current.scale - SCALE_STEP)}
-        />
-        <output aria-live="polite" aria-label={`Yakınlaştırma %${Math.round(camera.scale * 100)}`}>
-          %{Math.round(camera.scale * 100)}
-        </output>
-        <IconButton
-          icon={<Plus />}
-          aria-label="Grafiği büyüt"
-          title="Büyüt"
-          disabled={camera.scale >= MAX_SCALE}
-          onClick={() => zoomAt(cameraRef.current.scale + SCALE_STEP)}
-        />
-        <IconButton icon={<RotateCcw />} aria-label="Grafik görünümünü sıfırla" tooltip="Sıfırla" onClick={reset} />
-      </div>
-
-      <div ref={canvasRef} className="graph-canvas">
-        <div
-          className={`graph-pan-surface ${dragging ? "is-dragging" : ""}`}
-          role="region"
-          tabIndex={0}
-          aria-label="Etkileşimli teknik grafik"
-          aria-describedby="graph-interaction-help"
-          onPointerDown={beginPointer}
-          onPointerMove={movePointer}
-          onPointerUp={endPointer}
-          onPointerCancel={endPointer}
-          onWheel={handleWheel}
-          onKeyDown={handleKeyboard}
-        >
-          <svg
-            ref={svgRef}
-            width="100%"
-            height="100%"
-            viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
-            preserveAspectRatio="xMidYMid meet"
-            role="img"
-            aria-label={ariaLabel}
-            data-testid="interactive-graph-svg"
-          >
-            {children}
-          </svg>
+    <GraphViewportContext.Provider value={{ graphPointAt }}>
+      <div className="graph-container decision-graph-container interactive-graph">
+        <div className="graph-toolbar" role="toolbar" aria-label="Grafik görünümü kontrolleri">
+          <IconButton
+            icon={<Minus />}
+            aria-label="Grafiği küçült"
+            title="Küçült"
+            disabled={camera.scale <= MIN_SCALE}
+            onClick={() => zoomAt(cameraRef.current.scale - SCALE_STEP)}
+          />
+          <output aria-live="polite" aria-label={`Yakınlaştırma %${Math.round(camera.scale * 100)}`}>
+            %{Math.round(camera.scale * 100)}
+          </output>
+          <IconButton
+            icon={<Plus />}
+            aria-label="Grafiği büyüt"
+            title="Büyüt"
+            disabled={camera.scale >= MAX_SCALE}
+            onClick={() => zoomAt(cameraRef.current.scale + SCALE_STEP)}
+          />
+          <IconButton icon={<RotateCcw />} aria-label="Grafik görünümünü sıfırla" tooltip="Sıfırla" onClick={reset} />
         </div>
+
+        <div ref={canvasRef} className="graph-canvas">
+          <div
+            className={`graph-pan-surface ${dragging ? "is-dragging" : ""}`}
+            role="region"
+            tabIndex={0}
+            aria-label="Etkileşimli teknik grafik"
+            aria-describedby="graph-interaction-help"
+            onPointerDown={beginPointer}
+            onPointerMove={movePointer}
+            onPointerUp={endPointer}
+            onPointerCancel={endPointer}
+            onWheel={handleWheel}
+            onKeyDown={handleKeyboard}
+          >
+            <svg
+              ref={svgRef}
+              width="100%"
+              height="100%"
+              viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
+              preserveAspectRatio="xMidYMid meet"
+              role="img"
+              aria-label={ariaLabel}
+              data-testid="interactive-graph-svg"
+            >
+              {children}
+            </svg>
+          </div>
+        </div>
+        <p id="graph-interaction-help" className="graph-interaction-help">
+          Sürükleyerek taşıyın · Tekerlek veya +/− ile yakınlaştırın · 0 ile sıfırlayın
+        </p>
       </div>
-      <p id="graph-interaction-help" className="graph-interaction-help">
-        Sürükleyerek taşıyın · Tekerlek veya +/− ile yakınlaştırın · 0 ile sıfırlayın
-      </p>
-    </div>
+    </GraphViewportContext.Provider>
   );
 }

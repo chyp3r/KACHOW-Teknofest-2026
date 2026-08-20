@@ -1,0 +1,50 @@
+{
+  "storage_path": "uploads/cy034.pdf",
+  "file_name": "CY-034_7-41896-sayistayin-faaliyetlerine-iliskin.pdf",
+  "document_type_label": "Resmî Yazı",
+  "compliance_status": "incomplete",
+  "missing_fields": [
+    {
+      "key": "tarih",
+      "label": "Tarih",
+      "severity": "zorunlu",
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.12",
+      "reason": "Tarih, sayı ile aynı satırda yazı alanının en sağında bulunmalıdır."
+    },
+    {
+      "key": "gonderen_kurum",
+      "label": "Gönderen idare (başlık)",
+      "severity": "zorunlu",
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.10",
+      "reason": "Başlık, belgeyi gönderen idarenin adının belirtildiği bölümdür."
+    },
+    {
+      "key": "imza_sahibi",
+      "label": "İmza sahibi",
+      "severity": "zorunlu",
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.17",
+      "reason": "Belge, yetkili amir tarafından ad ve soyad belirtilerek imzalanmalıdır."
+    },
+    {
+      "key": "imza_unvani",
+      "label": "İmza sahibinin unvanı",
+      "severity": "onerilen",
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.17",
+      "reason": "İmza bölümünde imzalayanın unvanı da yer almalıdır."
+    }
+  ],
+  "mevzuat_references": [
+    {
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik MADDE 4 (1) p)",
+      "aciklama": "Evrakta eksik olan 'Tarih' ve 'Gönderen idare (başlık)' bilgileri, belgenin üstveri alanını oluşturur. Madde 4'te tanımlanan 'Üstveri' kavramı gereği bu bilgiler belgenin tanımı için zorunludur."
+    },
+    {
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik MADDE 4 (1) s)",
+      "aciklama": "Evrakta eksik olan 'İmza sahibi' ve 'İmza sahibinin unvanı', belgenin yetkili makam tarafından onaylandığını gösterir. Madde 4'te tanımlanan 'Yetkili makam' kavramı gereği bu bilgiler belgenin yürürlükte olması için zorunludur."
+    },
+    {
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik MADDE 13 (2)",
+      "aciklama": "Evrakta eksik olan 'Tarih', belgenin imzalandığı zamanı belirtmek için gereklidir. Madde 13'te belirtilen tarih bilgisi, belgenin resmiyet kazanması ve üstveri alanında yer alması için zorunludur."
+    }
+  ]
+}

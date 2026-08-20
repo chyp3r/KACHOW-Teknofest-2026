@@ -3,7 +3,7 @@ import { useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { DocumentTable } from "../features/documents/DocumentTable";
 import { DocumentUploader } from "../features/documents/DocumentUploader";
-import type { DocumentAnalysis, DocumentMetadata, DocumentText, EvrakFields } from "../types/documents";
+import type { DocumentAnalysis, DocumentMetadata, DocumentText, EvrakFields, KnowledgeGraph } from "../types/documents";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Surface";
 
@@ -23,6 +23,8 @@ export function DocumentsPage({
   onCloseDocument,
   onGenerateDetailedSummary,
   generatingDetailedSummary,
+  documentGraph,
+  loadingDocumentGraph,
   documentText,
   onSaveText,
   savingText,
@@ -44,6 +46,8 @@ export function DocumentsPage({
   onCloseDocument?: () => void;
   onGenerateDetailedSummary?: (storagePath: string) => Promise<void>;
   generatingDetailedSummary?: boolean;
+  documentGraph?: KnowledgeGraph | null;
+  loadingDocumentGraph?: boolean;
   documentText?: DocumentText | null;
   onSaveText?: (storagePath: string, pages: string[]) => Promise<void>;
   savingText?: boolean;
@@ -97,6 +101,8 @@ export function DocumentsPage({
         onDeleteDocument={onDeleteDocument}
         onGenerateDetailedSummary={onGenerateDetailedSummary}
         generatingDetailedSummary={generatingDetailedSummary}
+        documentGraph={documentGraph}
+        loadingDocumentGraph={loadingDocumentGraph}
         documentText={documentText}
         onSaveText={onSaveText}
         savingText={savingText}

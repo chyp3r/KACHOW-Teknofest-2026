@@ -698,6 +698,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/documents/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Corpus Graph
+         * @description The compliance knowledge graph over every document the caller may see.
+         *
+         *     Declared here, above every ``/{storage_path:path}`` route below --
+         *     FastAPI matches routes in registration order, and ``:path`` converters
+         *     swallow slashes, so a literal ``/graph`` registered after the catch-all
+         *     ``GET /{storage_path:path}`` would never be reached; every request would
+         *     match the catch-all first, with ``storage_path="graph"``.
+         *
+         *     Unlike every other route in this file, a document above the caller's
+         *     clearance is not a 403 for the whole graph -- it is silently excluded
+         *     (see ``DocumentService.build_corpus_graph``'s own docstring), and only
+         *     its count is reported back as ``hidden_document_count``. Revealing that
+         *     a hidden document *exists* would defeat the point of hiding it.
+         *
+         *     Args:
+         *         service: Injected document analysis service.
+         *         current_user: The authenticated caller. Company-wide when
+         *             ADMIN/MANAGER/ROOT (see ``bypasses_ownership``), otherwise
+         *             scoped to the caller's own documents -- the same semantics
+         *             ``GET /documents`` already uses.
+         *
+         *     Returns:
+         *         ``{nodes, edges, insights, truncated, total_document_count,
+         *         hidden_document_count}`` inside the unified success envelope.
+         */
+        get: operations["get_corpus_graph_api_v1_documents_graph_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/documents/{storage_path}/fields": {
         parameters: {
             query?: never;
@@ -740,6 +783,106 @@ export interface paths {
          *             document's confidentiality level.
          */
         patch: operations["update_document_fields_api_v1_documents__storage_path__fields_patch"];
+        trace?: never;
+    };
+    "/api/v1/documents/{storage_path}/detailed-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Detailed Summary
+         * @description Build (or return the already-built) detailed summary of a document.
+         *
+         *     On-demand: the short ``summary`` `POST /documents/analyze` already
+         *     returns is enough for most documents, and building the detailed one is
+         *     expensive -- measured directly, 184-288s on real documents, several
+         *     sequential LLM calls (see ``app.ai.summarization``'s own module
+         *     docstring). This is why it is its own endpoint rather than part of the
+         *     eager analysis: a user pays that cost only when they actually want the
+         *     result, not on every upload.
+         *
+         *     Idempotent: a document whose detailed summary is already cached returns
+         *     it immediately, no model call. Rate-limited tighter than
+         *     ``POST /documents/analyze`` (5/60s vs 10/60s) precisely because each
+         *     call that does reach the model is this expensive.
+         *
+         *     Args:
+         *         storage_path: The document's storage key.
+         *         service: Injected document analysis service.
+         *         document_repository: Ownership registry, checked before generating.
+         *         current_user: The authenticated caller.
+         *
+         *     Returns:
+         *         The full analysis with ``detailed_summary`` populated, in the same
+         *         shape as ``GET /documents/{storage_path}``.
+         *
+         *     Raises:
+         *         HTTPException: 400 if storage_path is malformed, 404 if no analysis
+         *             is cached for it.
+         *         AuthorizationException: 403 if the document belongs to a different
+         *             company or user, or the requester's clearance doesn't cover the
+         *             document's confidentiality level.
+         *         AIException: 502 if building the summary times out or the
+         *             underlying provider call fails (see
+         *             ``DocumentService.generate_detailed_summary``'s own docstring
+         *             for why this raises instead of degrading silently).
+         */
+        post: operations["generate_detailed_summary_api_v1_documents__storage_path__detailed_summary_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documents/{storage_path}/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Document Graph
+         * @description The single-document neighbourhood: one document and every madde/kanun
+         *     it touches.
+         *
+         *     Declared above the catch-all ``GET /{storage_path:path}`` immediately
+         *     below -- both are GET routes matching the same path shape, so
+         *     registration order is the only thing that decides which one a request
+         *     like ``/documents/uploads/abc.pdf/graph`` reaches. Registered after it,
+         *     this route would never be hit; every such request would instead match
+         *     the catch-all with ``storage_path="uploads/abc.pdf/graph"``.
+         *
+         *     Args:
+         *         storage_path: The document's storage key.
+         *         service: Injected document analysis service.
+         *         document_repository: Ownership registry, checked before returning
+         *             content.
+         *         current_user: The authenticated caller.
+         *
+         *     Returns:
+         *         The same envelope shape as ``GET /documents/graph``, scoped to this
+         *         one document.
+         *
+         *     Raises:
+         *         HTTPException: 400 if storage_path is malformed, 404 if no analysis
+         *             is cached for it.
+         *         AuthorizationException: 403 if the document belongs to a different
+         *             company or user, or the requester's clearance doesn't cover the
+         *             document's confidentiality level.
+         */
+        get: operations["get_document_graph_api_v1_documents__storage_path__graph_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/documents/{storage_path}": {
@@ -932,8 +1075,10 @@ export interface paths {
          * Send Draft
          * @description Send one draft version to one or more recipients within the caller's company.
          *
-         *     `Action.DRAFT_SEND`-gated: an EMPLOYEE may only send its own draft,
-         *     ADMIN/MANAGER/ROOT may send any draft company-wide.
+         *     Delegates to `ArtifactTransferService.execute` (see `DraftShareService.
+         *     send`'s own docstring) -- `Action.ARTIFACT_TRANSFER`-gated there: an
+         *     EMPLOYEE may only send its own draft, ADMIN/MANAGER/ROOT may send any
+         *     draft company-wide.
          */
         post: operations["send_draft_api_v1_drafts__draft_id__send_post"];
         delete?: never;
@@ -1435,6 +1580,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/pools/items/{item_id}/adopt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adopt Pool Item
+         * @description Copy-on-write (Faz 5, #205): give a transferred item's own owner a
+         *     fully independent, editable copy (blob + registry row + analysis cache
+         *     + Q&A index) instead of the read-only shared-blob snapshot a transfer
+         *     leaves behind by default. The pool item's own owner only -- no Admin/
+         *     Manager bypass, see `DocumentService.adopt_pool_item`'s own docstring.
+         */
+        post: operations["adopt_pool_item_api_v1_pools_items__item_id__adopt_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/root/overview": {
         parameters: {
             query?: never;
@@ -1672,6 +1841,99 @@ export interface paths {
          *     for why it isn't part of `docker compose up` by default).
          */
         post: operations["trigger_training_run_api_v1_companies__company_id__training_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/transfers/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Transfer
+         * @description Send one draft or document to one recipient -- the manual chat-
+         *     initiated path. `Action.ARTIFACT_TRANSFER`-gated: an EMPLOYEE may only
+         *     send an artifact it owns, ADMIN/MANAGER/ROOT may send any artifact
+         *     company-wide. Always ends up posting a `kind="artifact"` message into
+         *     the sender/recipient DM (opened if it didn't already exist).
+         */
+        post: operations["send_transfer_api_v1_transfers_send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/transfers/send-group": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Group Transfer
+         * @description Send one draft or document to several recipients at once -- chat/
+         *     REST only (see `ArtifactTransferService.execute_group`'s own docstring
+         *     for why the AI channel never reaches this). Per-recipient partial
+         *     success: one recipient's denial/not-found never blocks the others.
+         */
+        post: operations["send_group_transfer_api_v1_transfers_send_group_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/transfers/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recommend Recipients
+         * @description Suggested recipients for `draft_id`, ranked from its own routed
+         *     unit's membership (favorites first). Empty, never an error, when the
+         *     draft has no routed unit or that unit is inactive -- a recommendation
+         *     is a hint, not a requirement.
+         */
+        get: operations["recommend_recipients_api_v1_transfers_recommendations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/transfers/{transfer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Transfer
+         * @description Fetch one transfer -- the sender or recipient only (or Admin/
+         *     Manager/Root company-wide), same participation-is-the-grant shape
+         *     `draft_shares` already uses. Backs `ArtifactMessageCard`'s live read of
+         *     a `kind="artifact"` message's current status.
+         */
+        get: operations["get_transfer_api_v1_transfers__transfer_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2865,13 +3127,13 @@ export interface components {
             session_id: string;
             /**
              * Action
-             * @description answer: eksik bilgi/yazım briefi cevapları. approve/revise/reject: taslak onay kararı. reject aynı zamanda yazım briefi kapısını da iptal eder.
+             * @description answer: eksik bilgi/yazım briefi cevapları. approve/revise/reject: taslak onay kararı. reject aynı zamanda yazım briefi kapısını da iptal eder. select: transfer akışında alıcı belirsizliğini çözen seçim (bkz. artifact_transfer_disambiguate, answers.recipient_id).
              * @enum {string}
              */
-            action: "answer" | "approve" | "revise" | "reject";
+            action: "answer" | "approve" | "revise" | "reject" | "select";
             /**
              * Answers
-             * @description action='answer' için PromptQuestion.key -> kullanıcı cevabı eşlemesi. Çoklu seçim soruları bir liste taşır; her başka soru tek bir dizedir ("Sen karar ver" seçeneği dahil, bkz. writing_brief.AUTO_ANSWER).
+             * @description action='answer' için PromptQuestion.key -> kullanıcı cevabı eşlemesi. Çoklu seçim soruları bir liste taşır; her başka soru tek bir dizedir ("Sen karar ver" seçeneği dahil, bkz. writing_brief.AUTO_ANSWER). action='select' için answers.recipient_id, seçilen adayın kullanıcı id'si.
              */
             answers?: {
                 [key: string]: string | string[];
@@ -3428,6 +3690,34 @@ export interface components {
             context?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * GroupTransferSendRequest
+         * @description `POST /transfers/send-group` body -- chat/REST-only fan-out to
+         *     several recipients at once (Faz 5, #205). There is no AI-channel
+         *     equivalent of this request; see `ArtifactTransferService.execute_group`'s
+         *     own docstring.
+         */
+        GroupTransferSendRequest: {
+            /**
+             * Recipient Ids
+             * @description Alıcı kullanıcı ID'leri
+             */
+            recipient_ids: string[];
+            /**
+             * Artifact Kind
+             * @enum {string}
+             */
+            artifact_kind: "draft" | "document";
+            /**
+             * Source Artifact Id
+             * @description drafts.id veya evrak storage_path'i
+             */
+            source_artifact_id: string;
+            /** Source Version */
+            source_version?: number | null;
+            /** Idempotency Key Prefix */
+            idempotency_key_prefix?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -4039,6 +4329,37 @@ export interface components {
             min_samples_required: number;
             /** Samples Remaining To Threshold */
             samples_remaining_to_threshold: number;
+        };
+        /**
+         * TransferSendRequest
+         * @description `POST /transfers/send` body -- the manual chat-initiated send.
+         *
+         *     Recipient is always an explicit id here: this channel is fed by
+         *     `UserSearchDrawer`/`PersonPickerBody` (Faz 2), which already resolves a
+         *     name to a user before the request is ever made. Name-based resolution
+         *     (`RecipientResolutionService`) exists for the Faz 4 AI channel, not
+         *     this one.
+         */
+        TransferSendRequest: {
+            /**
+             * Recipient Id
+             * @description Alıcı kullanıcı ID'si
+             */
+            recipient_id: string;
+            /**
+             * Artifact Kind
+             * @enum {string}
+             */
+            artifact_kind: "draft" | "document";
+            /**
+             * Source Artifact Id
+             * @description drafts.id veya evrak storage_path'i
+             */
+            source_artifact_id: string;
+            /** Source Version */
+            source_version?: number | null;
+            /** Idempotency Key */
+            idempotency_key?: string | null;
         };
         /**
          * UnitCreate
@@ -5290,6 +5611,26 @@ export interface operations {
             };
         };
     };
+    get_corpus_graph_api_v1_documents_graph_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     update_document_fields_api_v1_documents__storage_path__fields_patch: {
         parameters: {
             query?: never;
@@ -5304,6 +5645,68 @@ export interface operations {
                 "application/json": components["schemas"]["DocumentFieldsUpdateSchema"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_detailed_summary_api_v1_documents__storage_path__detailed_summary_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storage_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_graph_api_v1_documents__storage_path__graph_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storage_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -6488,6 +6891,37 @@ export interface operations {
             };
         };
     };
+    adopt_pool_item_api_v1_pools_items__item_id__adopt_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIResponse_DocumentPoolItemResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     root_overview_api_v1_root_overview_get: {
         parameters: {
             query?: never;
@@ -6817,6 +7251,135 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["APIResponse_TrainingRunResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_transfer_api_v1_transfers_send_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferSendRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_group_transfer_api_v1_transfers_send_group_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupTransferSendRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recommend_recipients_api_v1_transfers_recommendations_get: {
+        parameters: {
+            query: {
+                draft_id: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_transfer_api_v1_transfers__transfer_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transfer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

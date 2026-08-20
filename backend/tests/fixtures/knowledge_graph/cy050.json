@@ -1,0 +1,50 @@
+{
+  "storage_path": "uploads/cy050.pdf",
+  "file_name": "CY-050_7-41661-isitme-engelli-bireylerin-secilme-haklarini-kullanmalarina-ve-ya.pdf",
+  "document_type_label": "Resmî Yazı",
+  "compliance_status": "incomplete",
+  "missing_fields": [
+    {
+      "key": "muhatap",
+      "label": "Muhatap",
+      "severity": "zorunlu",
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.14",
+      "reason": "Muhatap, belgenin gönderildiği idareyi veya kişiyi belirtir."
+    },
+    {
+      "key": "gonderen_kurum",
+      "label": "Gönderen idare (başlık)",
+      "severity": "zorunlu",
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.10",
+      "reason": "Başlık, belgeyi gönderen idarenin adının belirtildiği bölümdür."
+    },
+    {
+      "key": "imza_sahibi",
+      "label": "İmza sahibi",
+      "severity": "zorunlu",
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.17",
+      "reason": "Belge, yetkili amir tarafından ad ve soyad belirtilerek imzalanmalıdır."
+    },
+    {
+      "key": "imza_unvani",
+      "label": "İmza sahibinin unvanı",
+      "severity": "onerilen",
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.17",
+      "reason": "İmza bölümünde imzalayanın unvanı da yer almalıdır."
+    }
+  ],
+  "mevzuat_references": [
+    {
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik MADDE 13",
+      "aciklama": "Evrakta eksik tespit edilen 'Sayı', 'Tarih' ve 'Konu' alanları, Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik MADDE 13'ün (1) fıkrasında belirtilen düzenleme kurallarına uygun olarak eksiksiz ve doğru biçimde doldurulmalıdır."
+    },
+    {
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik MADDE 4",
+      "aciklama": "Evrakta eksik tespit edilen 'Muhatap', 'Gönderen idare (başlık)' ve 'İmza sahibi' bilgileri, Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik MADDE 4'ün (1) fıkrasında belirtilen üstveri unsurları kapsamında eksiksiz olarak yer almalıdır."
+    },
+    {
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik MADDE 4",
+      "aciklama": "Evrakta eksik tespit edilen 'İmza sahibi' ve 'İmza sahibinin unvanı' bilgileri, Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik MADDE 4'ün (1) fıkrasında belirtilen yetkili makam unsuru kapsamında eksiksiz olarak yer almalıdır."
+    }
+  ]
+}
