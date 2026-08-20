@@ -1,0 +1,43 @@
+{
+  "storage_path": "uploads/cy012.pdf",
+  "file_name": "CY-012_7-42413-nato-nun-turkiye-de-yeni-bir-cok-uluslu-karargah-kuracagi-iddias.pdf",
+  "document_type_label": "Resmî Yazı",
+  "compliance_status": "incomplete",
+  "missing_fields": [
+    {
+      "key": "muhatap",
+      "label": "Muhatap",
+      "severity": "zorunlu",
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.14",
+      "reason": "Muhatap, belgenin gönderildiği idareyi veya kişiyi belirtir."
+    },
+    {
+      "key": "imza_sahibi",
+      "label": "İmza sahibi",
+      "severity": "zorunlu",
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.17",
+      "reason": "Belge, yetkili amir tarafından ad ve soyad belirtilerek imzalanmalıdır."
+    },
+    {
+      "key": "imza_unvani",
+      "label": "İmza sahibinin unvanı",
+      "severity": "onerilen",
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.17",
+      "reason": "İmza bölümünde imzalayanın unvanı da yer almalıdır."
+    }
+  ],
+  "mevzuat_references": [
+    {
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik MADDE 4-(2)",
+      "aciklama": "Evrakta muhatap bölümünün eksikliği tespit edilmiştir. Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik Madde 4(2) uyarınca, belge doğrudan muhatap birime gönderilmeli ve dağıtımlı değilse muhatap bölümü eksiksiz doldurulmalıdır."
+    },
+    {
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik MADDE 4-(s)",
+      "aciklama": "Evrakta imza sahibinin unvanının eksikliği tespit edilmiştir. Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik Madde 4(s) uyarınca, yetkili makam görevleri yerine getirme hususunda yürütme ve karar verme yetkisine sahip görevlileri ifade eder; bu nedenle imza sahibinin unvanı (yetki) belgede açıkça belirtilmelidir."
+    },
+    {
+      "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik MADDE 15-(2)",
+      "aciklama": "Evrakta muhatap bölümünün eksikliği tespit edilmiştir. Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik Madde 15(2) uyarınca, 'İlgi:' yan başlığı muhatap bölümünün son satırından itibaren iki satır boşluk bırakılarak yazılır; bu düzenleme muhatap bölümünün varlığını ve yerini gerektirir."
+    }
+  ]
+}

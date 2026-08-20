@@ -1,6 +1,6 @@
 # Frontend Design System
 
-Bu doküman frontend ölçü, yüzey ve etkileşim sisteminin uygulama sözleşmesini tanımlar. Tek kaynak `frontend/src/styles/design-system.css`; ortak React bileşenleri `frontend/src/components/` altındadır.
+Bu doküman frontend ölçü, yüzey ve etkileşim sisteminin uygulama sözleşmesini tanımlar. Token ve primitive kaynağı `frontend/src/styles/design-system.css`, referans ekranların ürün geometrisi `frontend/src/styles/reference-ui.css`, semantik tipografi rolleri `frontend/src/styles/typography.css` içindedir; ortak React bileşenleri `frontend/src/components/` altındadır.
 
 ## Geçiş öncesi denetim özeti
 
@@ -34,16 +34,17 @@ Tek üretim inline style istisnası teknik SVG grafiğinin veri kaynaklı koordi
 - Radius: `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-xl`, `--radius-full`.
 - Borders/elevation: default, strong, interactive, focus, error, disabled border; subtle ve overlay shadow.
 - Surface rolleri: app, sidebar, content, panel, interactive, elevated ve input. Açık/koyu tema yalnız token değerlerini değiştirir; bileşenler tema adına göre özel renk seçmez.
-- Shell rolleri: geniş sidebar 248 piksel, dar sidebar 76 pikseldir; teknik grafik açıldığında üçüncü kolon bu roller korunarak genişler.
+- Semantik vurgu rolleri: mavi, indigo, mor, yeşil, amber ve mercan tonları; her tonun açık/koyu tema için okunabilir yumuşak yüzeyi bulunur. Bu roller grafik serileri, metrik kartları, hızlı eylemler ve navigasyon işaretleri için kullanılır.
+- Shell rolleri: referans ekranlara göre geniş sidebar 232 piksel, dar sidebar 72 pikseldir; iş akışı açıkken 348 piksellik üçüncü kolon kullanılır ve dar viewport'ta drawer'a dönüşür.
 - Responsive gutter: desktop 32, tablet 24, mobile 16 pikseldir.
 
 ## Bileşen sözleşmesi
 
 Primitive katman: `Button`, `IconButton`, `Input`, `Select`, `Textarea`, `FormField`, `Card`, `StatusBadge`, `Alert`, `Divider`, `Spinner`, `Skeleton`.
 
-Composite katman: `PageHeader`, `SectionHeader`, `EmptyState`, `ErrorState`, `ApiErrorNotice`, `ListRow`, `Drawer`, `Dialog`, `ConfirmationDialog`, `FormActions`.
+Composite katman: `BrandLockup`, `Tabs`, `PageHeader`, `SectionHeader`, `EmptyState`, `ErrorState`, `ApiErrorNotice`, `ListRow`, `Drawer`, `Dialog`, `ConfirmationDialog`, `FormActions`.
 
-Feature composite katmanı: `WorkflowStepper`, `DocumentListItem` ve `DraftTable`. Bu üç bileşen aynı primitive ve tokenları kullanır; ancak bilgi mimarileri farklı olduğu için genel `ListRow` içine zorlanmaz. Workflow marker rail ve durum akışını, evrak satırı özet+metadata ilişkisini, taslak tablosu ise kolon ve responsive alan etiketlerini kendi feature sınırında sahiplenir.
+Feature composite katmanı: `WorkflowStepper`, `DocumentListItem` ve `DraftTable`. Bu üç bileşen aynı primitive ve tokenları kullanır; ancak bilgi mimarileri farklı olduğu için genel `ListRow` içine zorlanmaz. Workflow marker rail ve durum akışını; evrak kütüphanesi seçim yokken filtreli tabloyu, seçim varken Özet/Metadata/Analiz/Belge Metni sekmeli master-detail ilişkisini; taslak tablosu ise kolon, belge inceleme yüzeyi ve responsive alan etiketlerini kendi feature sınırında sahiplenir.
 
 Layout katmanı: `Stack`, `Inline`, `Cluster`, `Grid`. Gap prop'ları yalnız token anahtarlarını kabul eder; raw piksel prop'u yoktur.
 
@@ -54,6 +55,40 @@ Sayfalar yalnız `variant`, `size`, `status`, `loading`, `error` ve `selected` g
 Button ve form kontrolleri default, hover, active, focus-visible, disabled ve loading/error durumlarını paylaşır. Focus halkası iki piksel ve iki piksel offset'tir. Loading button label'ı DOM'da tutarak genişliği korur. Icon-only eylemler TypeScript seviyesinde `aria-label` zorunlu kılar.
 
 `FormField`, label/description/helper/error ilişkilerini `htmlFor`, `aria-describedby` ve `aria-invalid` ile kurar. `Drawer` ve `Dialog` Escape, focus trap, scroll lock ve kapanışta focus dönüşünü merkezileştirir.
+
+`Input` içindeki `trailingAction`, parola görünürlüğü gibi gerçek etkileşimleri
+aynı kontrol geometrisi içinde erişilebilir biçimde sunar; dekoratif
+`trailingIcon` ile karıştırılmaz. `Tabs` native `tablist`/`tab` rollerini ve
+`aria-selected` durumunu merkezileştirir. Bildirim popover'ı portal üzerinden
+render edilir; anchor konumunu viewport sınırlarına göre yukarı/aşağı ve yatay
+olarak sınırlar, Escape ile kapanır ve odağı tetikleyiciye döndürür.
+
+## Kurumsal renk sözleşmesi
+
+Açık temada birincil vurgu `#2563EB`, uygulama zemini `#F8FAFC`, panel yüzeyi
+`#FFFFFF`, sınır `#E2E8F0`, birincil metin `#0F172A` ve ikincil metin
+`#475569` yönündedir. Koyu temada uygulama zemini `#0D1117`, panel
+`#161B22`, yükseltilmiş yüzey `#1C2128`, sınır `#30363D`, birincil metin
+`#F0F3F6` ve ikincil metin `#B1BAC4` kullanır. Bu değerler yalnız tema token
+bloklarında bulunur; feature bileşenleri doğrudan hex renk seçmez.
+
+Birincil maviye ek olarak `accent-sky`, `accent-indigo`, `accent-violet`,
+`accent-emerald`, `accent-amber` ve `accent-rose` rolleri görsel ayrım için
+kullanılır. Renkli metrik ve grafik yüzeyleri semantik soft-surface tokenlarını
+compose eder; metin, sınır ve odak kontrastı yine ortak tema rollerinden gelir.
+Ana Sayfa bu paletin tam örneğidir. Diğer sayfalar aynı tonları yalnız durum,
+aktif navigasyon ve birincil eylem hiyerarşisini desteklediği ölçüde kullanır.
+
+Tema değişimi layout, spacing veya bilgi hiyerarşisini değiştirmez. Login,
+sidebar, bildirim, hesap, yönetim, belge ve workflow yüzeyleri aynı semantik
+surface/border/text rollerini kullanır.
+
+## Marka varlığı
+
+KACHOW marka kilidi `BrandLockup` üzerinden kullanılır. Amblem kaynağı
+`frontend/src/assets/kachow-mark.svg` dosyasıdır; sidebar veya giriş sayfasında
+CSS ile harf/logo çizilmez. Tam kilit “KACHOW / Karar Destek Sistemi” metnini,
+dar sidebar yalnız erişilebilir adı bulunan amblemi gösterir.
 
 ## İstisnalar
 

@@ -16,7 +16,12 @@ export function NotificationBell() {
   const notifications = useNotifications();
   useNotificationsStream(true);
   const [open, setOpen] = useState(false);
-  const [panelPosition, setPanelPosition] = useState<{ top: number; left: number } | null>(null);
+  const [panelPosition, setPanelPosition] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+  } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -26,9 +31,41 @@ export function NotificationBell() {
   // would just get clipped at the sidebar's edge instead of overlapping
   // the page like a dropdown should.
   useEffect(() => {
-    if (!open || !buttonRef.current) return;
-    const rect = buttonRef.current.getBoundingClientRect();
-    setPanelPosition({ top: rect.bottom + 8, left: rect.left });
+    if (!open) return;
+    const positionPanel = () => {
+      if (!buttonRef.current) return;
+      const rect = buttonRef.current.getBoundingClientRect();
+      const viewportPadding = 12;
+      const panelWidth = Math.min(360, window.innerWidth - viewportPadding * 2);
+      const left = Math.min(
+        Math.max(viewportPadding, rect.left),
+        window.innerWidth - panelWidth - viewportPadding,
+      );
+      const roomBelow = window.innerHeight - rect.bottom;
+      if (roomBelow >= 340) {
+        setPanelPosition({ top: rect.bottom + 8, left, width: panelWidth });
+      } else {
+        setPanelPosition({ bottom: window.innerHeight - rect.top + 8, left, width: panelWidth });
+      }
+    };
+    positionPanel();
+    window.addEventListener("resize", positionPanel);
+    window.addEventListener("scroll", positionPanel, true);
+    return () => {
+      window.removeEventListener("resize", positionPanel);
+      window.removeEventListener("scroll", positionPanel, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      buttonRef.current?.focus();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
   }, [open]);
 
   useEffect(() => {
@@ -70,7 +107,7 @@ export function NotificationBell() {
             className="notification-bell-panel"
             role="dialog"
             aria-label="Bildirimler"
-            style={{ position: "fixed", top: panelPosition.top, left: panelPosition.left }}
+            style={{ position: "fixed", ...panelPosition }}
           >
             <header>
               <h3>Bildirimler</h3>
@@ -91,16 +128,14 @@ export function NotificationBell() {
             ) : (
               <ul className="notification-bell-list">
                 {notifications.notifications.map((notification) => (
-                  <li
-                    key={notification.id}
-                    className={notification.read_at ? "" : "is-unread"}
-                    onClick={() => {
-                      if (!notification.read_at) void notifications.markRead(notification.id);
-                    }}
-                  >
-                    <strong>{notification.title}</strong>
-                    {notification.body && <p>{notification.body}</p>}
-                    <time dateTime={notification.created_at}>{formatTime(notification.created_at)}</time>
+                  <li key={notification.id} className={notification.read_at ? "" : "is-unread"}>
+                    <button type="button" onClick={() => {
+                        if (!notification.read_at) void notifications.markRead(notification.id);
+                      }}>
+                      <strong>{notification.title}</strong>
+                      {notification.body && <p>{notification.body}</p>}
+                      <time dateTime={notification.created_at}>{formatTime(notification.created_at)}</time>
+                    </button>
                   </li>
                 ))}
               </ul>

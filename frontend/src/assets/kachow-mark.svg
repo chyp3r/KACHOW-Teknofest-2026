@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 72" role="img" aria-labelledby="title">
+  <title id="title">KACHOW amblemi</title>
+  <defs>
+    <linearGradient id="shield" x1="10" y1="8" x2="54" y2="65" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#1D4ED8"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#shield)" d="M32 2.75c8.4 0 16.1 1.55 23.1 4.65a5 5 0 0 1 2.95 4.57v19.34c0 16.73-9.11 29.72-26.05 37.94C15.06 61.03 5.95 48.04 5.95 31.31V11.97A5 5 0 0 1 8.9 7.4C15.9 4.3 23.6 2.75 32 2.75Z"/>
+  <path fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="7" d="M20.25 20.5v30.25M21.25 36.5 39.5 19.75M29.75 30.25 43.5 49.75"/>
+  <circle cx="20.25" cy="20.5" r="3.6" fill="#fff"/>
+  <circle cx="20.25" cy="50.75" r="3.6" fill="#fff"/>
+  <circle cx="39.5" cy="19.75" r="3.6" fill="#fff"/>
+  <circle cx="43.5" cy="49.75" r="3.6" fill="#fff"/>
+</svg>

@@ -26,7 +26,7 @@ export function DocumentUploader({
     setMessage(null);
     try {
       await onUpload(file);
-      setMessage("Evrak başarıyla yüklendi ve analiz edildi.");
+      setMessage("Evrak analize hazır.");
     } catch {
       /* Error is shown by the page hook. */
     }
@@ -44,7 +44,7 @@ export function DocumentUploader({
         <div>
           <h2 id="upload-title">Yeni evrak yükle</h2>
           <p>
-            Yüklenen evrak otomatik olarak analiz edilir ve kütüphaneye eklenir.
+            Evrak seçilir; analiz yalnızca siz başlattığınızda çalışır.
           </p>
         </div>
       </div>
@@ -64,7 +64,7 @@ export function DocumentUploader({
         <div>
           <strong>
             {uploading
-              ? "Evrak analiz ediliyor…"
+              ? "Evrak yükleniyor…"
               : "Dosyanızı buraya sürükleyin"}
           </strong>
           <span>PDF, TXT, DOC veya görsel • En fazla 50 MB</span>

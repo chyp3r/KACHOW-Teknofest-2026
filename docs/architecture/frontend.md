@@ -501,11 +501,13 @@ Bu yapı frontend'in büyümesini kolaylaştırır.
 
 ## Routing ve Erişim
 
-Uygulama rotaları React Router ile yönetilir ve sayfa bazında lazy loading uygulanır. Kimliği doğrulanmamış kullanıcılar login rotasına, rolü yetersiz kullanıcılar güvenli bir uygulama rotasına yönlendirilir. Admin/manager görünürlük kontrolleri yalnızca arayüz kolaylığıdır; backend yetkilendirmesinin yerine geçmez.
+Uygulama rotaları React Router ile yönetilir ve sayfa bazında lazy loading uygulanır. Kimliği doğrulanmamış kullanıcılar login rotasına, başarılı oturumlar ve kök rota ise `/home` Ana Sayfa'ya yönlendirilir. Rolü yetersiz kullanıcılar da güvenli Ana Sayfa rotasına döner. Eski `/routing` bağlantıları bağımsız ekran oluşturmak yerine `/drafts` rotasına yönlendirilir. Admin/manager görünürlük kontrolleri yalnızca arayüz kolaylığıdır; backend yetkilendirmesinin yerine geçmez.
 
 ## Sunucu Durumu
 
 TanStack Query; belge listesi ve analizleri, sohbet oturumları ve mesajları, interrupt state, taslaklar, yönlendirme önerileri ve sistem sağlığı için sunucu cache'ini yönetir. Anahtarlar `frontend/src/query/queryKeys.ts` içinde merkezidir. Mutation başarıları yalnızca ilgili cache alanlarını invalidate eder. Kalıcı domain verisi için backend tek doğruluk kaynağıdır; localStorage cache'i kullanılmaz.
+
+Evraklar sayfasında seçilen ancak henüz analiz edilmeyen dosyalar bu kuralın bilinçli, geçici istisnasıdır: `File` nesnesi frontend state'inde `pending:` kimliğiyle tutulur ve sunucuya gönderilmez. Kullanıcı satırdaki **Analiz Et** eylemini kullandığında veya evrakı sohbete gönderdiğinde mevcut `POST /api/v1/documents/analyze` çağrısı yapılır; dönen kalıcı `storage_path` geçici kaydın yerini alır. Bekleyen kayıtlar localStorage'a yazılmadığı için sayfa yenilendiğinde kaybolur.
 
 ## API Sözleşmesi
 
@@ -529,19 +531,75 @@ Normal health kontrolü otomatik ve hafiftir. Postgres, Redis, Qdrant, Ollama, c
 
 ## Konuşma Odaklı Bilgi Mimarisi
 
-Varsayılan masaüstü kabuğu yalnızca birincil navigasyon ve ana çalışma alanından oluşur. Navigasyon; Sohbetler, Evraklar, Taslaklar, Yönlendirme, Hesabım ve yetkili kullanıcılar için Yönetim girişlerini taşır. Evrak yükleme, arama ve ayrıntı kontrolleri kalıcı navigasyonda değil, Evraklar sayfasında bulunur. Masaüstü navigasyonu 248 piksel genişliğinde açılır; 76 piksellik dar tercih `localStorage` içinde yalnızca sunum tercihi olarak saklanır. Dar durumda üstte her zaman görünür 44×44 genişletme kontrolü, ortalanmış 44×44 navigasyon hedefleri ve taşmayan tema/oturum kontrolleri kullanılır. Mobilde masaüstü dar tercihi görsel düzeni etkilemez; navigasyon tam içerikli çekmeceye dönüşür ve çekmece açıkken hamburger tetikleyicisi marka alanının üzerine binmez.
+Varsayılan masaüstü kabuğu yalnızca birincil navigasyon ve ana çalışma alanından oluşur. Navigasyon; Ana Sayfa, Sohbetler, Evraklar, Taslaklar, Hesabım ve yetkili kullanıcılar için Yönetim girişlerini taşır. Evrak yükleme, arama ve ayrıntı kontrolleri kalıcı navigasyonda değil, Evraklar sayfasında bulunur. Yönlendirme de ayrı bir ana navigasyon hedefi değildir; seçili taslağın devam adımıdır. Masaüstü navigasyonu 248 piksel genişliğinde açılır; 76 piksellik dar tercih `localStorage` içinde yalnızca sunum tercihi olarak saklanır. Dar durumda üstte her zaman görünür 44×44 genişletme kontrolü, ortalanmış 44×44 navigasyon hedefleri ve taşmayan tema/oturum kontrolleri kullanılır. Mobilde masaüstü dar tercihi görsel düzeni etkilemez; navigasyon tam içerikli çekmeceye dönüşür ve çekmece açıkken hamburger tetikleyicisi marka alanının üzerine binmez.
+
+Son yüklenen referans stil katmanı 760 piksel ve altında uygulama kabuğunun tek
+sütun, ana içeriğin yüzde 100 genişlik ve sayfa üst boşluğunun hamburger ile
+güvenli alanı birlikte hesaba kattığı kanonik mobil kuralları taşır. Bu katman,
+masaüstünde saklanmış kompakt navigasyon sınıfının mobil grid ve marka içeriğini
+daraltmasını engeller; hesap görünümü, yönetim metrikleri ve taslak özetleri gibi
+ikincil gridleri de dar ekranda tek veya akışkan sütuna indirir.
+
+Ana Sayfa ayrı bir kalıcı veri kaynağı oluşturmaz. Evrak listesi, taslak kutuları ve konuşma özetleri mevcut TanStack Query hook'ları üzerinden birleştirilerek toplam evrak, tamamlanan analiz, hazır taslak ve bekleyen iş göstergeleri üretilir. Haftalık hareket, durum dağılımı, evrak türleri ve son evraklar aynı cache verisinden türetilir; grafikler yeni bir API çağrısı veya localStorage kopyası oluşturmaz.
+
+Ana Sayfa banner'ı masaüstünde metin ve eylemleri iki sütunlu gridde ayırır;
+dekoratif yörünge eylem alanıyla çakışmaz. Orta genişliklerde iki sütun korunup
+eylemler sıkılaştırılır; 640 piksel altında banner tek sütuna, eylemler tam
+genişlikli butonlara dönüşür ve dekorasyon kaldırılır. Ana Sayfa'nın örtük grid
+satırları `max-content` kullandığı için kısa viewport yüksekliği banner'ı veya
+eylemlerini daraltmaz; sayfa kendi kaydırma alanında akmaya devam eder. Metrik,
+grafik, durum ve hızlı işlem kartları 1200/1024/760/480 piksel kırılımlarında
+sırasıyla iki, tek ve sıkılaştırılmış tek sütun düzenlerini kullanır.
+
+Mesajlaşma mobilde aynı anda yalnız konuşma listesini veya aktif konuşmayı
+gösterir. Konuşma seçildiğinde ayrıntı tam genişliğe geçer ve başlıktaki geri
+eylemi liste rotasına döner; ekli evrak/taslak kartları mesaj balonu genişliğini
+aşmaz.
 
 Sohbet geçmişi varsayılan düzende sütun ayırmaz; kullanıcının Geçmiş eylemiyle viewport'un sol kenarından açılan ve birincil navigasyonu örten bir modal çekmecedir. Masaüstünde 380 piksel, dar mobil ekranlarda tam genişlik kullanır. Çekmece açıldığında sayfa kaydırması kilitlenir, klavye odağı içeride tutulur; Escape, backdrop veya kapatma düğmesiyle kapanınca odak Geçmiş tetikleyicisine döner. İlk yükleme, hata, boş, başarı ve arka plan yenileme durumları birbirini dışlar; hata varken boş durum gösterilmez. Başarılı liste Bugün, Dün ve Daha eski gruplarına ayrılır; arama yalnızca en az on oturum olduğunda görünür. Sohbet içindeki evrak erişimi, seçilen evrakı kaldırılabilir bir çip olarak gösteren kompakt seçiciyle sağlanır. Evrak arama ve seçim arayüzü modal, mobilde tam ekran katman olarak açılır; yeni yükleme ve kapsamlı yönetim Evraklar sayfasına yönlendirilir.
 
 Ana konuşma ve mesaj oluşturucu aynı, en fazla 860 piksel okunabilir genişlikte hizalanır. Boş durum yalnızca backend'in desteklediği taslak ve yönlendirme başlangıçlarını gösterir; evrak analizi eylemi ancak bir evrak seçildiğinde görünür. Yerel sohbet/geçmiş hataları konuşma bağlamında kompakt ve yeniden denenebilir biçimde sunulur.
 
-Taslaklar sayfası tek sütunlu ve liste odaklıdır. Yeni taslak formu varsayılan olarak kapalıdır; sayfa başlığındaki birincil eylemle açılan tam genişlikte, kompakt bir panel kullanır. Kalıcı taslak satırları `document_id` ile aynı değeri taşıyan evrak `storage_path` alanından kaynak dosya adını çözer. Satır seçimi mevcut `/drafts/:draftId` rotasını koruyarak ayrıntıyı satırın altında açar; sürümler yeniden eskiye sıralanır ve her sürüm 420 karakterlik önizlemeden erişilebilir chevron eylemiyle tam metne genişletilebilir.
+Taslaklar sayfası tek sütunlu ve liste odaklıdır. Yeni taslak formu varsayılan olarak kapalıdır; sayfa başlığındaki birincil eylemle açılan tam genişlikte, kompakt bir panel kullanır. Kalıcı taslak satırları `document_id` ile aynı değeri taşıyan evrak `storage_path` alanından kaynak dosya adını çözer. Satır seçimi mevcut `/drafts/:draftId` rotasını koruyarak ayrıntıyı satırın altında açar. Taslak, Kontrol, Yönlendirme, Sürümler ve Ayrıntılar sekmeleri aynı seçili kayıt bağlamını paylaşır. Yönlendirme sekmesi taslak metni, güven göstergesi ve yazışma türüyle mevcut stateless öneri servisini çalıştırır; önerilen hedef kullanıcı onayıyla taslağa kaydedilir veya şirket birimleri arasından elle değiştirilebilir. Böylece metin başka bir sayfaya kopyalanmaz ve nihai karar kullanıcıda kalır.
 
-Evrak Kütüphanesi aynı tek sütunlu progressive-disclosure desenini kullanır. Sayfa başlığında açıklama metni bulunmaz; sağ üstteki “Evrak yükle” eylemi kompakt tam genişlikte yükleme alanını açar. Arama, tür filtresi ve tarih sıralaması kalıcı evrak listesinin üzerinde korunur. Evrak satırı seçildiğinde mevcut `/documents/:storagePath` rotası üzerinden analiz ayrıntısı aynı satırın altında açılır; satıra yeniden basılması seçimi ve derin rotayı kapatır.
+Sohbet oluşturucusundaki bağlam seçici “Evraklar / Taslaklar” sekmelerini
+tek bir erişilebilir diyalogda sunar ve bu iki bağlamı birbirini dışlayacak
+şekilde yönetir. Taslak ayrıntısındaki **Revize et** eylemi sohbet rotasına
+`draft` sorgu parametresiyle gider; sohbet seçili taslağı görünür bir çip olarak
+gösterir ve mesajı `ChatMessageRequest.draft_id` üzerinden revizyon bağlamında
+gönderir. Böylece `session_id` taşımayan doğrudan üretilmiş taslaklar da aynı
+arayüzden revize edilebilir.
+
+Evrak Kütüphanesi aynı tek sütunlu progressive-disclosure desenini kullanır. Sayfa başlığında açıklama metni bulunmaz; sağ üstteki “Evrak yükle” eylemi kompakt tam genişlikte dosya seçme alanını açar. Dosya seçimi analizi otomatik başlatmaz; bekleyen satır kendi **Analiz Et** eylemini taşır. Arama, tür filtresi ve tarih sıralaması kalıcı evrak listesinin üzerinde korunur. Evrak satırlarının tür, tarih, durum ve aksiyon sütunları içerik uzunluğuna göre büyüyüp küçülmez; masaüstünde sabit ölçüler kullanır, dar ekranlarda responsive yerleşime geçer. Analiz edilmiş evrak satırı seçildiğinde mevcut `/documents/:storagePath` rotası üzerinden analiz ayrıntısı aynı satırın altında açılır; satıra yeniden basılması seçimi ve derin rotayı kapatır.
+
+## Yönetim ve Operasyon Entegrasyonları
+
+Şirket admini ve manager rolleri Ana Sayfa'da şirket analytics özeti, evrak ve
+taslak zaman serileri ile birim dağılımını görür. Ayrıntılı guardrail ve bağlantı
+metrikleri Yönetim > Analitik alanında tutulur. Yönetim ekranı Kullanıcılar,
+Birimler, Kurum, AI ve Eğitim, Analitik ve Denetim sekmelerine ayrılır; kullanıcı
+detayı ve izinleri, birim CRUD ve üyelikleri, şirket profili/kuralları, geri
+bildirim istatistikleri, eğitim JSONL dışa aktarımı, şirket adaptörü ve audit
+zinciri bu alanlarda yönetilir.
+
+Root rolü normal tenant çalışma alanından ayrılır ve `/platform` rotasında
+Platform Yönetimi kabuğunu kullanır. Bu kabuk kurum liste/detay/oluşturma/
+güncelleme/silme, kurum yöneticisi atama, platform genel bakış, şirket ve
+kullanıcı istatistikleri, bağımlılık sağlığı ve tenantlar arası audit görünümünü
+barındırır. Root oturumunda tenant sohbet, evrak ve bildirim sorguları otomatik
+başlatılmaz.
+
+Evrak Kütüphanesi'ndeki Gelen Evraklar sekmesi kişisel havuz ve öğelerini
+gösterir; okundu işaretleme, sahiplenme ve kaldırma eylemleri aynı sunucu
+cache'ini hedefli biçimde yeniler. Yetkili kullanıcı seçili evrakı kişi veya
+birim havuzuna gönderebilir. Taslak gelen kutusu açılan paylaşımı okundu
+işaretler, giden paylaşımı geri çekebilir; gönderim penceresi backend alıcı
+önerilerini sunar. Mesajlar ekranındaki grup konuşmasına evrak/taslak eklemek
+tekil aktarımlar yerine grup aktarım endpoint'ini kullanır.
 
 İş akışı varsayılan olarak kapalıdır. Kullanıcı açtığında 1500 pikselin altındaki ekranlarda 400 piksellik bir örtü/çekmece, mobilde tam ekran katman kullanılır; geniş ekranlarda isteğe bağlı üçüncü bölge olabilir. İlk görünüm Evrak analizi, Taslak oluşturma, Doğrulama, İnsan onayı ve Yönlendirme adımlarından oluşan durum listesidir. Tam düğüm grafiği, araç çağrıları, guardrail olayları ve teknik meta veriler açık bir “Teknik grafiği görüntüle” ayrıntısının arkasında korunur. Teknik grafik %60–%300 aralığında buton, tekerlek veya pinch ile ölçeklenebilir; boş tuval sürüklenerek ya da odaklıyken ok tuşlarıyla kaydırılabilir ve tek eylemle başlangıç görünümüne döndürülebilir. Zoom ve pan CSS compositing yerine SVG `viewBox` koordinatlarında uygulanır; böylece yüksek yakınlaştırmada vektör keskinliği korunur. Edge'ler `non-scaling-stroke` ile ekranda sabit kalınlık taşır; bekleyen bağlantılar nötr yüksek kontrastla, çalışan/tamamlanan/hatalı bağlantılar durum rengi ve hafif vurguyla ayrıştırılır. Düğüm tıklama ve klavye seçimi bu viewport hareketlerinden ayrı tutulur.
 
-Yüzey sistemi açık ve koyu temada nötr uygulama zemini, tek ana yüzey ve ince sınırlar kullanır. Vurgu rengi birincil eylem, aktif navigasyon, seçim ve anlamlı durumlarla sınırlıdır. 760 piksel ve altında uygulama tek sütuna iner; navigasyon, geçmiş, evrak seçimi ve iş akışı birbirinden bağımsız katmanlar olarak açılır.
+Yüzey sistemi açık ve koyu temada okunabilir ana yüzeyleri ve ince sınırları korur. Mavi, indigo, mor, yeşil, amber ve mercan semantik tonları Ana Sayfa metrikleri, hızlı eylemler, navigasyon ikonları, seçim ve anlamlı durumlarda yumuşak yüzeyler olarak kullanılır; uzun okuma alanları renkli bloklara dönüştürülmez. 760 piksel ve altında uygulama tek sütuna iner; navigasyon, geçmiş, evrak seçimi ve iş akışı birbirinden bağımsız katmanlar olarak açılır.
 
 ## Typography Sistemi
 

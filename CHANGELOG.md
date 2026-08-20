@@ -2,7 +2,7 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
-## [3.23.0] - 2026-08-20
+## [3.27.0] - 2026-08-20
 Taslak/revizyon hattının taraf modeli ve genel SOTA bakımı (#218). Kök neden:
 sistemde "biz kimiz / karşı taraf kim" ayrımı hiç modellenmemişti -- bir evrağın
 karşı tarafına ait kimlik bilgileri (gönderen kurum, imza sahibi) hiçbir uyarı
@@ -104,6 +104,362 @@ doğrulanmış" sayabiliyordu. Bu sürüm bu kök nedeni ve keşif sırasında b
   görünür, kod değişikliği gerekmez; (3) `InterruptPanel.tsx`'teki "Vazgeç"
   düğmesinin bilinen kilitlenme sorunu artık backend'de çözüldü.
 
+## [3.26.0] - 2026-08-19
+### Eklendi
+- Backend yönetim kataloğundaki analytics, audit, şirket profili/kuralları,
+  üslup adaptörü, kullanıcı izinleri, birim yönetimi, geri bildirim ve eğitim
+  dışa aktarma uçları rol bazlı Yönetim ekranlarına bağlandı. Root kullanıcılar
+  için kurum CRUD, yönetici atama, platform istatistikleri, sağlık ve denetim
+  zincirini ayrı `/platform` çalışma alanında birleştiren Platform Yönetimi
+  ekranı eklendi.
+- Evrak Kütüphanesi'ne kişisel gelen havuz, havuz öğesini görüntüleme,
+  okundu işaretleme, sahiplenme, kaldırma ve kişi/birim havuzuna gönderme
+  akışları eklendi. Taslak paylaşımı okundu/geri çekme, aktarım alıcı önerileri
+  ve Mesajlar üzerinden grup aktarımı arayüze bağlandı.
+- Sohbet bağlam seçicisine **Evraklar / Taslaklar** sekmeleri ve kayıtlı
+  taslak araması eklendi. `ChatMessageRequest.draft_id`, yetki kontrolünden
+  geçen bir taslağı aktif revizyon bağlamına yükleyerek sohbet içinden hedefli
+  revizyon yapılmasını sağlıyor.
+- Gerçek evrak, taslak ve konuşma verilerini birleştiren renkli **Ana Sayfa**
+  eklendi. Sayfa; dört canlı metrik, yedi günlük hareket grafiği, evrak durum
+  dağılımı, tür dağılımı, son evraklar ve dört hızlı eylem içeriyor. Yeni bir
+  veri kopyası veya API ucu oluşturmadan mevcut sorgu cache'lerini kullanıyor.
+
+### Değiştirildi
+- Ana Sayfa, admin ve manager rollerinde şirket analytics özetini, zaman
+  serilerini ve birim dağılımını backend'den gösteriyor; çalışan görünümü
+  mevcut kişisel çalışma alanı metriklerini koruyor. Yönetim bilgi mimarisi
+  Kullanıcılar, Birimler, Kurum, AI ve Eğitim, Analitik ve Denetim olarak
+  ayrıldı.
+- Mobil uygulama kabuğunda masaüstünden kalan dar menü tercihi artık içerik
+  sütununu daraltmıyor. 760 piksel ve altında navigasyon tam çekmeceye,
+  sayfalar güvenli üst boşluklu tek sütuna; hesap, yönetim ve taslak metrikleri
+  de kullanılabilir tek/akışkan gridlere dönüşüyor.
+- Ana Sayfa banner'ı çakışmayan grid yerleşimine geçirildi; dekoratif yörünge
+  eylemlerden uzaklaştırıldı, mobilde gizlendi. Banner eylemleri, metrikler,
+  grafik kartları ve hızlı işlemler 480 piksel altındaki ekranlar için ayrıca
+  sıkılaştırıldı; bağlantı alt çizgileri ve dar sütun taşmaları kaldırıldı.
+  Ana Sayfa grid satırları içerik yüksekliğini koruduğu için kısa viewport'larda
+  banner 40 piksele sıkışmıyor ve eylemler kesilmeden sayfayla birlikte kayıyor.
+- Mobil mesajlaşmada konuşma listesi ile aktif konuşma ayrı görünümler olarak
+  çalışıyor. Aktif konuşmaya geri dönüş düğmesi eklendi; ekli evrak/taslak
+  kartlarının ve kişi filtrelerinin dar ekran taşmaları giderildi.
+- Taslak ayrıntısındaki **Revize et** eylemi artık yalnızca eski sohbeti
+  açmak yerine ilgili `draft_id` ile revizyon modunu açıyor; sohbet mesaj alanı
+  seçili taslağı gösterip revizyon talimatı istiyor.
+- Giriş sonrası ve kök rota artık `/home` Ana Sayfa'ya açılıyor; rolü yetersiz
+  kullanıcıların güvenli dönüş rotası da Ana Sayfa oldu. Sol navigasyona ilk
+  sırada Ana Sayfa eklendi.
+- Arayüz paleti mavi/nötr yapıyı koruyarak indigo, mor, yeşil, amber ve mercan
+  semantik tonlarla genişletildi. Navigasyon ikonları, metrik kartları, hızlı
+  eylemler, grafikler, ana butonlar ve uygulama zemini açık/koyu tema uyumlu
+  yumuşak renk yüzeyleri kullanıyor.
+- Bağımsız Yönlendirme sayfası ve sol menü girişi kaldırıldı. Yönlendirme
+  önerisi artık seçili taslağın **Yönlendirme** sekmesinde, taslak metni ve
+  güven göstergesi otomatik kullanılarak alınıyor. Önerilen birim tek eylemle
+  hedefe uygulanabiliyor veya kullanıcı şirket birimlerinden başka bir hedef
+  seçebiliyor. Eski `/routing` bağlantıları geriye uyumluluk için Taslaklar'a
+  yönlendiriliyor; Ana Sayfa hızlı eylemi de doğrudan Taslaklar'ı açıyor.
+
+### Test
+- Yeni yönetim ve havuz entegrasyonları sonrasında frontend typecheck, ESLint,
+  247 testlik Vitest paketi ve production Vite derlemesi başarıyla doğrulandı.
+- Kalıcı dar menü tercihinin mobilde etkisizleştirilmesi, güvenli sayfa
+  boşlukları, dar Ana Sayfa gridleri ve mobil mesajlaşma liste/konuşma geçişi
+  için responsive regresyon testleri eklendi.
+- Taslak bağlamı şema doğrulaması ve yetkilendirmesi, aktif revizyon odağının
+  kurulması, taslak sekmesinden seçim, `draft_id` taşıyan sohbet isteği ve
+  **Revize et** derin bağlantısı için backend/frontend regresyon testleri eklendi.
+- Ana Sayfa'nın canlı sayaçları, grafik verileri, hızlı eylemleri ve boş
+  durumları; kök rota yönlendirmesi ve yeni navigasyon girişi için frontend
+  regresyon testleri eklendi. TypeScript, lint, tam frontend test paketi ve
+  üretim derlemesi doğrulandı.
+- Taslak içinden yönlendirme önerisi alma, önerilen hedefi uygulama, bağımsız
+  menü girişinin kaldırılması ve eski `/routing` adresinin Taslaklar'a
+  yönlenmesi regresyon testleriyle kapsandı.
+## [3.25.0] - 2026-08-19
+### Değiştirildi
+**Mevzuat Haritası → canlı, sürüklenebilir simülasyon** (#210) —
+[csacademy.com/app/graph_editor](https://csacademy.com/app/graph_editor/)'ün
+"Force mode" davranışına göre modellendi: düğümler birbirini iter, kenarlar
+çeker, tüm graf merkeze doğru hafifçe çekilir; bir düğümü sürüklemek onu
+bıraktığınız yerde sabitler. Referans sitenin kendi belgelediği davranış
+esas alındı ("nodes support drag and drop... at the end of the drop the
+node becomes fixed... you can fix/unfix a node by simple click") ve canlı
+olarak doğrulandı (art arda iki ekran görüntüsünde düğümlerin hâlâ
+yerleşmekte olduğu gözlemlendi).
+
+**Tek gerçek çakışma**: referans sitede tek tıklama sabitleme/serbest
+bırakma anlamına geliyor; bu uygulamada tıklama zaten öznitelik panelini
+açıyor. Çözüm: tıklama = öznitelikler, sürükleme = sabitleme. Serbest
+bırakma iki yoldan erişilebilir: düğüme çift tıklama, ve öznitelik
+panelindeki "Sabitlemeyi kaldır" düğmesi.
+
+**"Düğüme tıkla, özniteliklerini gör" isteği bir önceki sürümde zaten
+uygulanmıştı — az önce bulunan iki hataya kadar hiç çalışmıyor gibi
+görünüyordu:**
+
+- `InteractiveGraphViewport`'un kaydırma-engelleme kontrolü `.closest(".node")`
+  ile eşleşiyordu; v1 bipartit görünüm bu ham sınıfı taşıyordu ama v2'nin
+  `EntityGraphView`'ı `entity-graph-node`/`node-entity` gibi farklı sınıflar
+  kullanıyordu — hiçbiri `.node` ile eşleşmiyordu, bu yüzden bir düğüme
+  basmak sessizce tüm tuvali kaydırmaya başlıyordu. Düzeltme: seçici artık
+  açık bir `[data-graph-node]` özniteliğine bakıyor (her iki görünüm de
+  taşıyor), tesadüfi bir sınıf adına değil.
+- Aynı bileşendeki bir `ResizeObserver`, tuval boyutu her değiştiğinde
+  kamerayı sıfırlıyordu — 18rem'lik öznitelik panelini açmak tuvali
+  daraltıyor, bu da her tıklamada yakınlaştırma/kaydırma durumunu sıfırlıyordu.
+  Kaldırıldı; panel artık tuvalin üzerinde **yüzen bir kaplama** olarak
+  konumlanıyor (`position: absolute`), bu yüzden açılması/kapanması tuvali
+  hiç yeniden boyutlandırmıyor.
+
+- **`forceLayout.ts`** ikiye ayrıldı, tek fizik çekirdeğini paylaşarak:
+  `createForceSimulation` (canlı, adım adım ilerleyen, sabitlenebilir,
+  yeniden ısıtılabilir) ve `layoutForceDirected` (eskisi gibi sabit
+  yinelemeli toplu sarmalayıcı, artık bu çekirdeğin ince bir katmanı).
+  Soğutma, sabit yineleme sayısına dayalı doğrusal zamandan çarpımsal
+  "alpha" bozunmasına geçti (d3-force geleneği) — canlı döngünün herhangi
+  bir anda yeniden ısıtılabilmesi için gerekli. **Belirlenebilirlik
+  sözü daraltıldı, gizlenmeden**: aynı tohum ve aynı grafik artık yalnızca
+  başlangıç ve *yerleşmiş* durumu için garanti ediyor, her ara kareyi değil
+  — bir kullanıcı sürüklemesi kasıtlı olarak kararsız sonuçtan sapıyor,
+  bu sapma sürüklemenin amacı. Toplu yol (`layoutForceDirected`, azaltılmış
+  hareket ve testler tarafından kullanılıyor) daha güçlü garantiyi koruyor.
+- **`useForceSimulation.ts`** (yeni) — bu depoda ilk `requestAnimationFrame`
+  döngüsü (`MessageList.tsx`'in kendisi tek seferlik). Yerleştiğinde uyur
+  (kare zamanlamayı durdurur), etkileşimde uyanır. `prefers-reduced-motion:
+  reduce` döngüyü tamamen atlıyor ve simülasyonu eşzamanlı olarak
+  yerleştiriyor — hiç animasyon yok.
+- **Düğüm sürükleme** (`EntityGraphView.tsx`) — `graphPointAt` (ekran
+  pikselini grafik koordinatına çeviren, `viewBox`/ölçek/letterbox'ı doğru
+  hesaba katan yardımcı) `InteractiveGraphViewport`'un içinde bir closure
+  olarak yaşıyordu, hiçbir çocuğa açık değildi. Yeni bir React context
+  (`graphViewportContext.ts`) bunu açığa çıkarıyor. **JSX çocukları ebeveynin
+  fiber konumunda render edilir, kendi konumlarında değil** — bu yüzden
+  context'i okuyan `EntityGraphNode`, `EntityGraphView`'ın kendi `.map()`'i
+  içinde satır içi değil, ayrı bir bileşen olarak çıkarıldı.
+- 3px'lik bir hareket eşiği tıklamayı sürüklemeden ayırıyor.
+- **Ölçüm, varsayım değil**: saf React yeniden render'ı (fizik değil) 600
+  düğümde kare başına ~183-199ms ölçüldü (jsdom içinde) — 60fps bütçesinin
+  çok üzerinde. Ancak gerçek tarayıcıda, gerçek 62 düğümlük/180 kenarlık
+  korpus üzerinde, senkron DOM özniteliği yazma maliyeti yalnızca ~1.1ms
+  ölçüldü — jsdom'un DOM işlemlerini önemli ölçüde abarttığını doğruluyor.
+  Canlı `requestAnimationFrame` tabanlı tam kare ölçümü bu oturumun tarayıcı
+  aracının arka planda sekmeler için zamanlayıcıları/rAF'ı durdurması
+  nedeniyle alınamadı (`document.hidden === true` doğrulandı). **Bilinçli
+  sınır**: bugünkü gerçek korpus (14 evrak, ~60 düğüm) için React tabanlı
+  render kalıyor; `MAX_GRAPH_DOCUMENTS=200` teorik tavanında (600 düğüm)
+  performans yakından izlenmeli ve gerekirse konumları React'ı atlayarak
+  doğrudan ref üzerinden yazan bir yola geçilmeli — önceden inşa edilmedi,
+  çünkü bugünkü ölçek için gerekli değil.
+
+### Test
+- `docker compose exec -T frontend npm test -- --run` → **272 test geçti**
+  (53 dosya) — 32 yeni test bu özellik için (`createForceSimulation`: 11,
+  `useForceSimulation`: 8, `InteractiveGraphViewport` context/pan: 4,
+  `NodeInspector` sabitleme: 3, `EntityGraphView` sürükle/tıkla/sabitle: 6).
+- `npm run lint` → 0 hata (`DecisionFlow.tsx`'teki 2 uyarı önceden mevcut;
+  `useGraphViewport`'un kendi dosyasına taşınması yeni bir üçüncü uyarıyı
+  önledi -- react-refresh/only-export-components, aynı kategori).
+- `npx tsc --noEmit` → temiz.
+- Canlı korpus doğrulaması: gerçek sürükleme (tarayıcı aracının doğal
+  sürükleme özelliğiyle, ham `PointerEvent` gönderimiyle değil -- ikincisi
+  gerçek işaretçi yakalamayı güvenilir biçimde tetiklemiyor) bir düğümü
+  başarıyla sabitledi (`is-pinned` sınıfı + görsel kesikli halka); öznitelik
+  paneli sabitleme durumunu ve sabitlemeyi kaldır düğmesini doğru gösterdi;
+  panel açılışı `viewBox`'ı değiştirmedi (sıfırlama hatası için regresyon
+  kontrolü); her iki tema.
+
+Refs: [#210](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/210).
+
+## [3.24.0] - 2026-08-18
+### Değiştirildi
+**Mevzuat Haritası → birleşik varlık grafiği** (#210) — bir önceki sürümün
+Evrak↔Madde uyum omurgası, kullanıcının asıl talebi doğrultusunda genişletildi:
+"her varlık bir node olsun, bir node'a tıklayınca özniteliklerini göreyim,
+aynı muhatap/gönderen/yetkiliyi paylaşan evraklar arasında kenar olsun."
+
+**Ölçülmeden önce doğrulanan tek karar tersine döndü.** v1, Kurum'u bilinçli
+olarak node tipi dışında bırakmıştı; gerekçe OCR hasarının node kimliğine
+karışmasıydı. Bu gerekçe aslında **entity resolution** için bir argümandı,
+düğüm tipini dışlamak için değil — bu sürüm tam da bunu yapıyor.
+
+**Belirleyici ölçüm: `imza_sahibi` — kullanıcının isteğinde ilk andığı alan —
+gerçek 14 evrakın **hiçbirinde** dolu değil.** Taranmış evraklardaki el
+yazısı imza blokları OCR ile kurtarılamıyor; bu, uyum grafiğinin kendi
+başlığıyla da bağımsız doğrulandı ("m.17 (İmza sahibi) — 14 evrakın
+14'ünde eksik"). Aynı talebin arkasındaki niyet yine de karşılanabilir
+durumdaydı: `entities[]` alanı zaten kişi node'ları üretiyor (İdris ŞAHİN 5
+evrağı birbirine bağlıyor) — boş bir alan yerine dolu bir alandan.
+
+- **`app/domains/documents/entity_resolution.py`** — saf çözümleyici.
+  `resolve_entities(raw_names)`, korpus genelindeki her ham `muhatap`/
+  `gonderen_kurum`/`entities[]` dizesini tek bir canonical isim uzayına
+  çözer: markdown/liste artıklarını ve sızmış belge numaralarını temizler,
+  `normalizers._fold` ile Türkçe katlar, aciliyet eklerini (`GÜNLÜDÜR`) ve
+  datif hâl ekini (yalnız `-na`/`-ne`/`-ya`/`-ye`, üç harfli `-ına`/`-ine`
+  değil — sözcük zaten iyelik `-ı/-i` ile bitiyor, uzun varyant o sesli
+  harfi de yerdi) ayıklar, son olarak sıralı anahtarlar üzerinde
+  deterministik bir `SequenceMatcher` bulanık geçişiyle kalan tek karakterlik
+  OCR gürültüsünü (`Ğ`→`Ç` gibi) birleştirir. Gösterim etiketi en sık geçen
+  ham yazım biçimidir — **ama** ölçüldü: gerçek korpusta markdown önekli
+  biçim (5/11) düz biçimden (4/11) daha sık, naif "en sık kazanır" bir
+  jüri karşısında `##### TÜRKİYE ... BAŞKANLIĞINA` gösterirdi; yalnızca
+  baştaki markdown gürültüsü etiketten temizlenir, sondaki parantez (gerçek
+  bilgi — bir alt birim) korunur, ham biçim yine de `surface_forms`'ta
+  dürüstçe kalır.
+- **Entity/Konu node'ları ve `muhatap`/`gonderen`/`bahseder`/`konu` kenarları**
+  `knowledge_graph.py`'ye eklendi. Üç kaynak (`muhatap`, `gonderen_kurum`,
+  `entities[]`) **tek bir paylaşılan çözümleme geçişinden** geçiyor — bu,
+  bir evrağın `muhatap`ı ile başka bir evrağın `entities[]` listesinde
+  geçen aynı kurumun tek node'da buluşmasını sağlıyor (canlı korpusta
+  doğrulandı: TBMM muhatap'ı + iki `entities[]` anması → 11 evraklık tek
+  node). `konu` ayrı bir ad uzayında kalıyor — bir konu ile bir kurum farklı
+  şeyler, aynı uzayı paylaşmaları yanlış birleşmelere yol açardı.
+  **Evrak↔Evrak kenarı yok** — iki evrak paylaştıkları entity node'u
+  üzerinden bağlanıyor, doğrudan değil; bu hem O(n) kalıyor (bir merkez
+  düğüme 5 evrak = 5 kenar, 10 değil) hem de bağlantının *nedenini* ekranda
+  tutuyor. `GraphNode.attributes` — yalnızca `document` node'larında dolu,
+  düğüm denetleyicisinin okuduğu serbest alan (sayı/tarih/konu/muhatap/
+  gönderen/ivedilik/özet/eksik-alan-sayısı).
+- **Frontend force-directed katman** (`features/graph/forceLayout.ts`) —
+  bipartit düzen (v1) artık yalnızca "sadece uyum" ön ayarında kullanılıyor;
+  birleşik görünüm belirleyici bir kuvvet benzetimiyle çiziliyor. Belirleyicilik
+  rastgelelik pahasına değil, tasarımla sağlanıyor: `Math.random()` hiç
+  çağrılmıyor (seed'li mulberry32, düğüm kimliklerine göre sıralı tüketiliyor),
+  yineleme sayısı sabit (yakınsama tabanlı değil), kenarlar kuvvet toplamından
+  önce deterministik sıralanıyor (kayan nokta toplaması değişmeli değildir —
+  ölçülmeden atlanabilecek ince bir hata kaynağıydı, kendi sıra-bağımsızlık
+  testimle yakalandı). **Ölçülmeden varsayılmadı**: naif O(n²) itiş 600
+  düğümde ~4.7sn sürdü (200 evrak sınırının ulaşabileceği ölçek), 150ms
+  bütçesinin çok üzerinde; Barnes-Hut dörtlü ağacı O(n log n)'e indirdi
+  (~262ms), yineleme sayısı 300'den 150'ye düşürülerek ~149ms'e ulaşıldı.
+  Gerçek korpus (14 evrak, ~60 düğüm) her hâlükârda milisaniyenin altında.
+- **`NodeInspector.tsx`** — kullanıcının isteğinin merkezindeki, v1'de hiç
+  olmayan yetenek: herhangi bir düğüme tıklamak özniteliklerini gösteren bir
+  panel açıyor. Entity düğümleri için birleşen **her** ham yazım biçimini
+  listeliyor — OCR birleşimini gizlemek yerine açıkça gösteriyor.
+- **`GraphFilters.tsx` + `filters.ts`** — düğüm/kenar türü anahtarları ve iki
+  ön ayar: "Tüm graf" ve "Sadece uyum". İkincisi, `filterToComplianceOnly`
+  saf fonksiyonuyla PR #212'nin gönderdiği bipartit görünümü **yeniden
+  uygulamadan, filtreleyerek** üretiyor. Tek incelik: `rule_edge_count`/
+  `llm_edge_count` artık grafik genelinde (entity kenarları dahil) sayılıyor
+  — filtre bu sayıları filtrelenmiş kenar kümesinden yeniden hesaplamazsa
+  "sadece uyum" başlığı v1'de hiç var olmayan entity kenarlarıyla şişmiş bir
+  "kural" sayısı gösterirdi. Canlı korpusta doğrulandı: filtrelenmemiş
+  birleşik grafik 78 kural/116 model önerisi (194 kenar, tüm düğüm/kenar
+  türleri açıkken) gösterirken, "sadece uyum" ön ayarı tam olarak PR #212'nin
+  gönderdiği "45 kural, 40 model önerisi"ni gösteriyor.
+
+### Test
+- `docker compose exec -T backend pytest -q` → **2200 test geçti** (2 bilinen,
+  önceden var olan MCP arızası).
+- `docker compose exec -T frontend npm test -- --run` → **240 test geçti**
+  (51 dosya).
+- `npm run lint` → 0 hata (`DecisionFlow.tsx`'teki 2 uyarı önceden mevcut).
+- `npx tsc --noEmit` → temiz.
+- Canlı korpus (14 evrak) doğrulaması: entity çözümlemesi TBMM'yi 6 farklı
+  yazım biçiminden 11 evraklık tek node'a birleştirdi; düğüm denetleyicisi
+  gerçek evrak özniteliklerini (Sayı, Konu, Muhatap, Gönderen kurum) doğru
+  gösterdi; "sadece uyum" ön ayarı v1'in gönderdiği sayılarla birebir eşleşti;
+  filtre anahtarları DOM'dan kenarları doğru kaldırdı; evrak düğümünden
+  "Belgeyi aç" ile `/documents/<path>`'e geçiş sıfır yeni kod olmadan çalıştı;
+  açık ve koyu tema.
+
+Refs: [#210](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/210).
+
+## [3.23.0] - 2026-08-18
+### Eklendi
+**Mevzuat Haritası** (#210) — evraklar ile mevzuat maddeleri arasındaki uyum
+ilişkilerini gösteren bir bilgi grafiği. Tasarımdan önce her aday kenar tipi
+gerçek korpus üzerinde ölçüldü: evrak↔evrak atıfları (`ilgi`), önerge numarası,
+paylaşılan kanun/tür/kurum/varlık — hepsi ya sıfır ya da anlamsız (tam bağlı
+graf) sinyal verdi. Tek gerçek sinyal madde granülerliğinde: kural tablosundan
+gelen eksik-alan atıfları (`missing_fields[].mevzuat`) ve modelin ürettiği
+mevzuat atıfları (`mevzuat_references[]`). Grafik bu iki kaynak üzerine kurulu;
+ayrı bir depolama katmanı yok, her istekte önbellekteki analizlerden türetilir.
+
+- **`app/ai/compliance/mevzuat_citation.py`** — saf atıf çözümleyici.
+  `resolve_citation(text)`, serbest metindeki `"RYUEHY m.14"`,
+  `"3071 sayılı ... m.4"`, `"Devlet Memurları Kanunu"` gibi ifadeleri
+  `(kanun, madde)` çiftine çözer. `LEGISLATION_PATTERN`'in
+  `(?<![-/\d])` negatif lookbehind'ı taşıyıcı: `"E-22222222-903-118 sayılı
+  yazınız"` gibi belge numaralarını hayalet kanun olarak yorumlamaz.
+- **`app/domains/documents/knowledge_graph.py`** — saf grafik üretici,
+  I/O yok. Node'lar: `document` (Postgres PK id), `madde` (**bileşik id**
+  `madde:{kanun}:{n}` — ölçüldü: `madde:4` hem 2646 hem 3071 sayılı kanunda
+  var, bileşik id olmadan iki farklı madde tek node'da birleşirdi), `kanun`
+  (konteyner). Kenarlar: `ihlal` (Evrak→Madde, `source="rule"`, kural
+  tablosundan — deterministik) ve `atif` (Evrak→Madde/Kanun,
+  `source="llm"` — model çıktısı, üç kademeli çözümleme: kanun+madde →
+  Madde node, yalnız kanun → Kanun node, hiçbiri → `unresolved_reference_
+  count`'a sayılır, hiçbir atıf sessizce atılmaz). Başlık istatistiği
+  **farklı evrak sayısına** göre hesaplanır, kenar sayısına göre değil —
+  bir evrak aynı maddeyi iki alan yüzünden iki kez ihlal edebilir.
+  **Kurum bilinçli olarak node değil**: üç aday anahtar da OCR hasarını
+  node kimliğine taşırdı (ölçüldü: en iyi ihtimalle 3 kenar, ağır
+  normalizasyondan sonra); hiçbir node id'sinin OCR'lı metinden türememesi
+  değişmez bir kural.
+- **`GET /documents/graph`** ve **`GET /documents/{storage_path}/graph`** —
+  bkz. **`docs/api/documents.md`**. Korpus görünümü `MAX_GRAPH_DOCUMENTS
+  = 200` ile sınırlı ve payda'yı sessizce küçültmemek için bu limit
+  `list_for_owner`'a açıkça geçiliyor (repository varsayılanı 100).
+  Clearance seviyesinin üzerindeki evraklar 403 değil sessizce dışlanıyor,
+  yalnızca sayısı (`hidden_document_count`) bildiriliyor. 60 saniyelik
+  Redis önbelleği **clearance'ı anahtarın parçası yapıyor** — aksi hâlde
+  düşük yetkili bir kullanıcı yüksek yetkili birinin önbelleğe düşürdüğü
+  grafiği görebilirdi. `dataclasses.asdict()` ile önbellek-hit/miss
+  arasında tuple/list tutarsızlığı kendi testimle yakalandı ve tek bir
+  `_graph_to_json_dict()` yardımcıyla giderildi.
+- **Frontend `/graph` rotası** (`Mevzuat Haritası`, `AppShell` navigasyonu) —
+  iki sütunlu bespoke SVG bant diyagramı (force-directed/radial/matrix
+  değerlendirildi ve elendi — bkz. tasarım notları): sol sütun evraklar
+  (ihlal sayısına göre azalan), sağ sütun maddeler (kanun bantları
+  içinde derece'ye göre azalan), kübik Bézier bantlar. Başlık kartı
+  hesaplanan (asla sabit kodlanmamış) en çok ihlal edilen maddeyi,
+  kaynağını (`kural tablosu — deterministik, model çıktısı değil`) ve
+  evrak/madde/bağlantı sayılarını gösteriyor. Tek kanunluk korpuslarda
+  (bugünkü durum) tek satırlık başlık — sahte çeşitlilik göstermek yerine
+  yokluğu dürüstçe kabul ediyor. Hover ile ilgisiz kenarları soluklaştırma;
+  evrak node'una tıklama mevcut `/documents/:storagePath` seçim akışını
+  **hiç yeni bağlantı kodu olmadan** tetikliyor (`App.tsx`'in var olan
+  `useMatch`/`useEffect`'i zaten bunu yapıyordu).
+  `InteractiveGraphViewport` (`features/chat/` → `components/`,
+  `baseWidth`/`baseHeight` prop'ları eklendi) `DecisionFlow` ile paylaşılıyor.
+- **Tek-evrak komşuluk görünümü** — `DocumentAnalysisPanel`'de "Belge
+  ilişkileri" `<details>` bölümü, mevcut opsiyonel-prop kapasite kuralına
+  uygun (`undefined` = bağlanmamış, `null` = bağlanmış ama henüz yüklenmedi).
+- Karanlık temada `--workflow-rule`/`--workflow-llm` yalnızca `:root`'ta
+  tanımlıydı ve açık tema için hiç override edilmemişti — ölçüldü: sky-500
+  `#f8fafc` üzerinde ~2.65:1 kontrast, WCAG 3:1 eşiğinin altında. Açık tema
+  override'ı eklendi; bu benim özelliğimden önce var olan bir hataydı,
+  kendi tasarımımın erişilebilirlik gereksinimini uygularken bulundu.
+
+**Bilinçli kapsam dışı**: Plan `ilgi` atıflarını arşivde olmayan evraklara
+işaret eden "sarkan referanslar" olarak tek-evrak görünümünde göstermeyi
+öneriyordu (`canonical_document_number()` ile çözümleme). Bu, korpusun
+tek-yönlü olduğunu (yalnızca cevap yazıları tutuluyor, gelen TBMM yazıları
+değil) dürüstçe göstermenin en ucuz yolu olarak tasarlanmıştı ama bu
+sürümde **uygulanmadı** — kapsam kasıtlı olarak Evrak↔Madde uyum omurgasıyla
+sınırlı tutuldu. `Document<->Document` kenar tipi altyapıda hazır (`atif`/
+`ihlal` şeması buna izin verir) ama `ilgi`/`sayi` çözümlemesi bağlı değil.
+
+### Test
+- `docker compose exec -T backend pytest -q` → **2172 test geçti** (2
+  bilinen, önceden var olan MCP arıza — bu özellikle ilgisiz).
+- `docker compose exec -T frontend npm test -- --run` → **206 test geçti**
+  (46 dosya).
+- `npm run lint` → 0 hata; `DecisionFlow.tsx`'teki 2 uyarı `origin/main`'de
+  değişmeden mevcut, bu özellik yalnızca o dosyanın import satırını değiştirdi.
+- `npx tsc --noEmit` → temiz.
+- `npm run api:types:check` → `src/api/generated.ts` yeniden üretildi ve
+  commit edildi (yeni uç noktalar şemayı değiştirdi).
+- Tam korpus (14 evrak) üzerinde canlı doğrulama: gerçek başlık cümlesi
+  (RYUEHY m.17, 14 evrağın hepsinde ihlal), her iki tema, zoom/pan/hover/
+  tıkla-git akışı, tek-evrak komşuluk grafiği — hepsi tarayıcıda gözlemlendi.
+
+Refs: [#210](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/210).
+
 ## [3.22.0] - 2026-08-18
 ### Eklendi
 - **Şirkete özel ajan kimliği**: Şirket adminleri artık asistanın kendini
@@ -128,6 +484,54 @@ doğrulanmış" sayabiliyordu. Bu sürüm bu kök nedeni ve keşif sırasında b
   etiketi artık tutarlı biçimde fiilen uygulanan dereceyi gösteriyor.
 
 ### Değiştirildi
+- Frontend görsel sistemi kamu çalışanlarının uzun süreli kullanımına uygun
+  kurumsal mavi/nötr semantik tokenlara taşındı; açık ve koyu tema yüzeyleri,
+  odak durumları ve responsive kabuk aynı layout sözleşmesini paylaşacak
+  biçimde güncellendi.
+- Giriş ekranı referans tasarımdaki iki kolonlu kurumsal düzene geçirildi;
+  CSS ile üretilen geçici harf işareti kaldırılarak mavi kalkan biçimli KACHOW
+  amblemi ortak marka varlığına dönüştürüldü. Sidebar marka kilidi, viewport
+  içinde kalan bildirim popover'ı, hesap görünümü ve Yönetim'deki
+  Kullanıcılar/AI Eğitimi ayrımı ortak bileşenlerle sadeleştirildi. Kullanıcı
+  erişimleri tablosunun başlık ve arama alanı kart kenarlarından dengeli iç
+  boşluk alacak, mobilde de tam genişliği koruyacak biçimde hizalandı.
+- Evrak Kütüphanesi, seçim yokken filtreli ve sayfalı tam tablo; seçim
+  yapıldığında sol evrak listesi ile sağda Özet/Analiz/Belge Metni/Ayrıntılar
+  sekmelerini kullanan master-detail düzene taşındı. Sohbet ve taslak
+  geçişleri seçili evrak bağlamını korur. Taslak oluşturma formuna seçilen
+  yazışma bilgilerinin özeti; taslak incelemeye belge yüzeyi ve yan metrik
+  paneli; Yönetim ekranına mevcut kullanıcı verisinden türetilen rol sayaçları
+  eklendi. Responsive kırılımlar açık/koyu temada aynı bilgi sırasını korur.
+- Evrak Kütüphanesi master-detail görünümü daha yoğun ve karar odaklı hale
+  getirildi: satır eylemleri üç nokta menüsünde toplandı, seçili durum ve
+  inceleme sayısı belirginleştirildi, ana eylem analiz durumuna göre dinamik
+  hale geldi. Sekmeler Özet/Analiz/Belge Metni/Ayrıntılar sırasına alındı;
+  ham analiz alanları kullanıcı dilindeki temel bilgiler, tespit edilen
+  unsurlar ve inceleme başlıklarına dönüştürüldü. Belge metni sayfa bazında
+  düzenlenebilir ve yeniden çıkarılabilir; etkin filtreler tek hamlede
+  temizlenebilir. Eski, iç içe analiz accordion'u kaldırıldı; temel alanlar
+  analiz sekmesine doğrudan yerleşen iki kolonlu kompakt gridde gösteriliyor
+  ve düzenleme sırasında aynı grid yerinde korunuyor.
+- Kullanıcı arayüzündeki teknik terminoloji; “Çalışma modu”, “Yazışma
+  Bilgileri”, “Taslak Hazırlama”, “Birim Yönlendirme” ve “Otomatik belirle”
+  ifadeleri etrafında tutarlı hale getirildi; transport enum değerleri ve API
+  sözleşmeleri değiştirilmedi.
+- Sohbette bilgi/onay soruları yanıtlandıktan sonra artık kaybolmuyor; soru ve
+  seçilen yanıtlar tamamlanmış, salt-okunur bir kart olarak hem canlı akışta
+  hem yeniden yüklenen geçmişte korunuyor. Kesinti sırasında devre dışı büyük
+  mesaj kutusu yerine kısa bir bekleme şeridi gösteriliyor; taslak güven skoru,
+  yönlendirme ve açılır kontrol notları sabit hizalı bir özet kartına taşındı.
+  Kesinti açıklaması ile soru formu tek asistan mesajında birleştirildi; yanıt
+  verildiğinde form aynı konumda tamamlanan cevap kartına dönüşüyor ve sonraki
+  bilgi talebi bunun altında ayrı bir mesaj olarak açılıyor. Eski ham
+  `alan: değer` cevapları da geçmiş yüklenirken aynı karta dönüştürülüyor.
+- Taslaklar sayfası açılır tablo yerine kararlı master-detail çalışma alanına
+  geçirildi. Taslaklarım/Gelenler/Gönderilenler sekmeleri gerçek paylaşım
+  uçlarına bağlandı; soldaki seçim listesi sabit kalırken sağda orantılı resmî
+  belge önizlemesi, kontrol durumu, kaynak evrak ve hedef birim bilgileri
+  gösteriliyor. Sürümler ayrı sekmeye, silme/kopyalama ikincil menüye taşındı;
+  Revize et ve Gönder ana eylemleri ile gelen taslağı kabul/red akışları eklendi.
+  Tablet ve mobil kırılımlar aynı bilgi hiyerarşisini koruyor.
 - Yeni analiz edilen ve OCR ile yeniden çıkarılan evraklarda kaydedilen
   `sensitivity_level`, artık ham çıkarım yerine (varsayılan atamayı da
   içeren) fiilen uygulanan dereceyi taşıyor; mevcut kayıtlar bir migration
@@ -141,6 +545,16 @@ doğrulanmış" sayabiliyordu. Bu sürüm bu kök nedeni ve keşif sırasında b
   varsayılan gizlilik derecesi için `assess`/`assessment_from_analysis`
   regresyon testleri. Migration, gerçek bir Postgres'e karşı yükseltme/geri
   alma/yükseltme döngüsüyle doğrulandı.
+- Tamamlanan bilgi kartının canlı akış ve geçmiş yükleme davranışı ile taslak
+  özet kartının skor, yönlendirme ve kontrol notlarını koruması için frontend
+  regresyon testleri eklendi.
+- Evrak görünümünün dinamik inceleme eylemi, konu sayısı, filtre temizleme,
+  menü içi silme/analiz ve sayfa bazlı belge metni düzenleme davranışları için
+  frontend regresyon testleri eklendi. Kompakt temel bilgi gridinin salt-okunur
+  ve yerinde düzenleme durumları da kapsama alındı.
+- Taslak master-detail görünümü, kaynak evrak ve sürüm sekmesi; hedef birim
+  değişikliği, gönderme, gelen taslağı kabul etme ve menü içi silme davranışları
+  için frontend regresyon testleri eklendi.
 
 Refs: [#214](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/214).
 
@@ -1193,17 +1607,20 @@ Refs: [#162](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/162)
 - **Evrak alanlarını elle düzenleme**: Analiz sırasında tespit edilemeyen veya yanlış çıkarılan üst veri alanları (Sayı, Tarih, Muhatap vb.) artık evrak analiz panelinden elle düzeltilebiliyor. Yeni `PATCH /api/v1/documents/{storage_path}/fields` uç noktası düzeltilen alan setini kaydediyor ve aynı deterministik kural tablosuyla (`check_required_fields`, model çağrısı yok) uygunluk kontrolünü anında yeniden çalıştırıyor.
 - **Taslak ve evrak silme**: Taslaklar sayfasından bir taslağı (ve tüm sürüm geçmişini) silme, Evraklar sayfasından bir evrakı (DB kaydı, ham dosya, analiz önbelleği ve dizinlenmiş Q&A parçaları dahil) kalıcı olarak silme eklendi. Taslak silme `DraftModel.is_deleted` üzerinden yumuşak silme (zaten var olan ama hiç yazılmayan bir alan); evrak silme geri alınamaz gerçek bir silme.
 - **Sohbet ekranına dosya sürükleyerek yükleme**: Sohbet ekranı açıkken bir dosya sürüklendiğinde tam ekran "dosyanızı buraya bırakın" katmanı beliriyor; bırakıldığında dosya doğrulanıp mevcut evrak yükleme/analiz akışına yönlendiriliyor, yeni evrak otomatik seçiliyor ve sohbete bilgilendirme mesajı düşüyor.
+- **İsteğe bağlı evrak analizi**: Evraklar sayfasında seçilen dosya artık otomatik analiz edilmiyor; frontend'de geçici “Analiz bekliyor” satırı olarak tutuluyor. Analiz yalnızca satırdaki **Analiz Et** eylemiyle veya evrak sohbete gönderildiğinde mevcut `POST /api/v1/documents/analyze` üzerinden başlıyor. Backend sözleşmesi değiştirilmedi; analiz edilmemiş geçici kayıt sayfa yenilendiğinde kayboluyor.
 
 ### Değiştirildi
 - **Taslak adlandırması**: Taslaklar sayfasındaki satır başlığı artık yalnızca yazışma türünü ("Cevap yazısı") değil, "Belge Adı - Yazı Türü" biçimini (örn. "izin-talebi.pdf - Cevap yazısı") gösteriyor; ayrı "Kaynak evrak" sütunu kaldırıldı.
 - **Taslaklar sayfasındaki durum rozetleri kaldırıldı**: yeşil "Hazır" / sarı "İnsan onayı" rozetleri hem satırlarda hem genişletilmiş detay panelinde gösterilmiyor artık.
 - **Yönlendirme sayfasındaki güven skoru kaydırıcısı kaldırıldı**: serbest metinle öneri istenirken artık rastgele bir güven skoru gönderilmiyor (backend zaten 100 varsayıyor); kalıcı bir taslak seçildiğinde o taslağın gerçek güven skoru arka planda kullanılmaya devam ediyor.
+- **Evrak listesi sütunları sabitlendi**: Dosya özeti esnek alanı korurken tür, tarih, durum ve satır aksiyonları masaüstünde sabit sütun ölçülerine geçirildi; içerik uzunluğuna bağlı satırdan satıra genişlik değişimi kaldırıldı ve mobil responsive düzen korundu.
 
 ### Düzeltildi
 - **Uzun sohbette sayfa yarım kalması**: `.messages-area`/`.chat-workspace`'in sıfır-tabanlı flex ayarı (`flex:1` = `1 1 0%`) mesaj listesinin hiç küçülmemesine, tüm daralmanın küçülemeyen kardeşlerine (guardrail uyarıları, İnsan Onayı paneli) yıkılmasına ve konteynerin taşarak `overflow:hidden` tarafından sertçe kırpılmasına yol açıyordu; buna `scrollIntoView`'ın `overflow:hidden` atalarını da (scrollbar'ı olmadan) kaydırması ekleniyordu. Mesaj listesi artık kendi kabına göre kayıyor (`scrollTop` doğrudan yazılıyor, kullanıcı yukarı kaydırdıysa aşağı zorlanmıyor), guardrail listesi ve onay paneli kendi üst sınırlarıyla bağımsız kayıyor, ve `100vh` yerine `100dvh` kullanılarak mobil tarayıcı araç çubuğunun sayfayı kırpması önlendi.
 
 ### Test
 - Dinamik iş akışı türetmesi (plan dışı düğümler, alt adım gruplama, araç çağrıları, bilinmeyen düğümler), evrak alan düzenleme formu, taslak/evrak silme akışları (onay diyaloğu dahil, backend'de sahiplik/yetki testleri), sohbet dosya sürükleme akışı ve mesaj listesi kaydırma davranışı için kapsamlı birim ve entegrasyon testleri eklendi.
+- Evrak seçiminin analiz çağrısı yapmadan beklemesi, manuel analiz düğmesi ve sohbet gönderiminden önce gerçek `storage_path` ile analiz tamamlama akışları için frontend regresyon testleri eklendi.
 
 Refs: [#159](https://github.com/chyp3r/KACHOW-Teknofest-2026/issues/159)
 

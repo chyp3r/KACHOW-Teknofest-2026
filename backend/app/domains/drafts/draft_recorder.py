@@ -25,6 +25,31 @@ from app.observability import company_metrics
 logger = logging.getLogger(__name__)
 
 
+async def attach_to_session(
+    *, draft_id: str, session_id: str, company_id: Optional[str]
+) -> bool:
+    """Give a direct-API draft a chat session before its first revision.
+
+    This lets the normal ``record_draft`` lookup find that row as the parent
+    and append version 2 instead of accidentally starting an unrelated
+    version-1 chain. Existing session-backed drafts are left untouched.
+    """
+    try:
+        async with tenant_session(company_id) as session:
+            repository = DraftRepository(session)
+            draft = await repository.get_by_id(draft_id)
+            if draft is None:
+                return False
+            if draft.session_id is not None:
+                return draft.session_id == session_id
+            await repository.attach_session(draft, session_id)
+            await session.commit()
+            return True
+    except Exception:
+        logger.exception("Failed to attach draft %s to session %s", draft_id, session_id)
+        return False
+
+
 async def record_draft(
     *,
     user_id: Optional[str],

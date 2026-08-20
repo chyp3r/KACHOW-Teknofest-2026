@@ -18,6 +18,13 @@ from app.domains.documents.model.document_model import DocumentModel
 from app.domains.documents.repository import DocumentRepository
 from app.domains.pools.model.document_pool_item_model import DocumentPoolItemModel
 from app.domains.pools.repository import DocumentPoolItemRepository, DocumentPoolRepository
+from app.domains.documents.knowledge_graph import (
+    DocumentGraphInput,
+    KnowledgeGraph,
+    MevzuatReferenceInput,
+    MissingFieldInput,
+    build_knowledge_graph,
+)
 from app.domains.quotas.service import DOCUMENTS_METRIC, QuotaService
 from app.domains.users.model.user_model import UserModel
 from app.api.exceptions.ai_error import AIException
@@ -49,6 +56,7 @@ from app.infrastructure.extractors.base import (
     BaseDocumentExtractor,
     DocumentExtractionError,
 )
+from app.infrastructure.cache.redis import RedisCache
 from app.infrastructure.extractors.vision import OllamaVisionExtractor
 from app.infrastructure.storage.base import BaseStorage
 from app.ai.embeddings.service import EmbeddingService
@@ -62,6 +70,31 @@ logger = logging.getLogger(__name__)
 
 UPLOAD_PATH_PREFIX = "uploads"
 MIN_ANALYSABLE_CHAR_COUNT = 20
+
+#: Corpus-graph settings. The cap bounds a per-request disk read (every
+#: surviving document's analysis cache is read in full) -- 200 documents is
+#: roughly 2MB of JSON, still comfortably inside a single request/response
+#: cycle. Beyond that the answer is a precomputed rollup, not a bigger cap
+#: (see the session plan's risk section).
+MAX_GRAPH_DOCUMENTS = 200
+GRAPH_CACHE_TTL_SECONDS = 60
+
+
+def _graph_to_json_dict(graph: KnowledgeGraph) -> dict[str, Any]:
+    """Flatten a `KnowledgeGraph` into a dict with strictly JSON-native
+    types (lists, not tuples).
+
+    `dataclasses.asdict` recurses into nested dataclasses but leaves tuple
+    fields as tuples -- so an uncached call would return `nodes: (...)`
+    while a cached one (after its `json.dumps`/`json.loads` round trip)
+    returns `nodes: [...]`, the same field carrying two different Python
+    types depending on cache state alone. Routing every call through one
+    JSON round trip here makes the shape identical either way.
+    """
+    import dataclasses
+    import json
+
+    return json.loads(json.dumps(dataclasses.asdict(graph), default=str))
 
 #: Q&A index settings. Must stay in sync with the retrieval side in
 #: planning_graph's document_qa step.
@@ -88,6 +121,7 @@ class DocumentService:
         pool_item_repository: Optional[DocumentPoolItemRepository] = None,
         quota_service: Optional[QuotaService] = None,
         summarizer_agent: Optional[SummarizerAgent] = None,
+        cache: Optional[RedisCache] = None,
         vision_extractor: Optional[OllamaVisionExtractor] = None,
     ) -> None:
         """Initialise the service with injected collaborators.
@@ -118,6 +152,10 @@ class DocumentService:
                 Optional so tests exercising the rest of this service don't
                 need an LLM client; `generate_detailed_summary` itself
                 requires it (see that method's own docstring).
+            cache: Backs `build_corpus_graph`'s 60s cache, mirroring
+                `AnalyticsService._cached`'s own Redis convention. Optional
+                so the corpus graph still works uncached (just recomputed
+                every call) when no cache is wired.
             vision_extractor: Runs a full-page OCR pass directly, bypassing
                 `extractor` (the fallback chain) entirely -- see
                 `reextract_document_text`, the user's manual override for
@@ -137,6 +175,7 @@ class DocumentService:
         self.pool_item_repository = pool_item_repository
         self.quota_service = quota_service
         self.summarizer_agent = summarizer_agent
+        self.cache = cache
         self.vision_extractor = vision_extractor
 
     async def analyze_document(
@@ -937,6 +976,197 @@ class DocumentService:
                 document.compliance_status = analysis.compliance_status.value
 
         return analysis
+
+    def _analysis_to_missing_field_inputs(
+        self, analysis: DocumentAnalysisResponseSchema
+    ) -> tuple[MissingFieldInput, ...]:
+        return tuple(
+            MissingFieldInput(
+                key=item.key, label=item.label, severity=item.severity,
+                mevzuat=item.mevzuat, reason=item.reason,
+            )
+            for item in analysis.missing_fields
+        )
+
+    def _analysis_to_mevzuat_reference_inputs(
+        self, analysis: DocumentAnalysisResponseSchema
+    ) -> tuple[MevzuatReferenceInput, ...]:
+        return tuple(
+            MevzuatReferenceInput(mevzuat=item.mevzuat, aciklama=item.aciklama)
+            for item in analysis.mevzuat_references
+        )
+
+    @staticmethod
+    def _analysis_to_entity_source_kwargs(analysis: DocumentAnalysisResponseSchema) -> dict[str, Any]:
+        """Everything `DocumentGraphInput` needs beyond missing_fields/
+        mevzuat_references: the raw fields Entity/Konu resolution and the
+        node inspector's attribute payload are built from. One helper
+        shared by `build_corpus_graph` and `build_document_graph` so the
+        two never drift -- each builds its own `DocumentGraphInput` from a
+        different repository path, but both read the same
+        `DocumentAnalysisResponseSchema.fields` shape."""
+        fields = analysis.fields
+        return {
+            "sayi": fields.sayi,
+            "tarih": fields.tarih,
+            "konu": fields.konu,
+            "muhatap": fields.muhatap,
+            "gonderen_kurum": fields.gonderen_kurum,
+            "ivedilik": fields.ivedilik,
+            "summary": analysis.summary,
+            "entities": tuple(fields.entities),
+        }
+
+    async def build_corpus_graph(
+        self,
+        company_id: str,
+        owner_id: Optional[str],
+        clearance: SensitivityLevel,
+    ) -> dict[str, Any]:
+        """Build the compliance knowledge graph over every document a caller
+        may see, deriving it on read from Postgres + the analysis cache --
+        no separate graph store.
+
+        Every candidate document<->document edge was measured against the
+        real corpus before this graph was designed (see the session plan);
+        the only edge type that survived is Document -> Madde, so the
+        Document<->Document case this returns is always disconnected nodes
+        joined only through shared maddeler -- expected, not a bug.
+
+        Args:
+            company_id: The caller's tenant. Applied to every repository
+                call; never bypassed.
+            owner_id: `None` for a company-wide view (ADMIN/MANAGER/ROOT,
+                see `bypasses_ownership`), otherwise scoped to that user's
+                own documents -- the same semantics `list_for_owner` and
+                `GET /documents` already use.
+            clearance: The caller's resolved confidentiality ceiling (see
+                `app.core.permissions.role_checker.clearance_for`). A
+                document whose `sensitivity_level` exceeds this is excluded
+                entirely -- its existence is not revealed, only its count
+                (`hidden_document_count`) is.
+
+        Returns:
+            A JSON-serialisable dict: `nodes`, `edges`, `insights` (the
+            graph itself, flattened from `KnowledgeGraph`/`GraphInsights`
+            via `dataclasses.asdict`), plus `truncated`,
+            `total_document_count` and `hidden_document_count`. Returning a
+            plain dict rather than the `KnowledgeGraph` dataclass lets a
+            cache hit skip reconstruction entirely -- the cached JSON *is*
+            the response.
+        """
+        import json
+
+        if self.document_repository is None:
+            empty = build_knowledge_graph([])
+            return {
+                **_graph_to_json_dict(empty),
+                "truncated": False,
+                "total_document_count": 0,
+                "hidden_document_count": 0,
+            }
+
+        cache_key = (
+            f"documents:graph:{company_id}:{owner_id or 'all'}:{clearance.value}"
+        )
+        if self.cache is not None:
+            cached = await self.cache.get(cache_key)
+            if cached is not None:
+                try:
+                    return json.loads(cached)
+                except (ValueError, TypeError):
+                    logger.warning("Corpus graph cache entry for %s failed to parse.", cache_key)
+
+        documents = await self.document_repository.list_for_owner(
+            company_id, owner_id, skip=0, limit=MAX_GRAPH_DOCUMENTS
+        )
+        total_document_count = await self.document_repository.count_for_owner(
+            company_id, owner_id
+        )
+
+        entries: list[DocumentGraphInput] = []
+        hidden_document_count = 0
+        for document in documents:
+            try:
+                level = SensitivityLevel(document.sensitivity_level)
+            except ValueError:
+                level = SensitivityLevel.UNMARKED
+            if level > clearance:
+                hidden_document_count += 1
+                continue
+
+            analysis = await self.get_cached_analysis(document.id)
+            if analysis is None:
+                entries.append(
+                    DocumentGraphInput(
+                        storage_path=document.id,
+                        file_name=document.file_name,
+                        document_type_label=document.document_type_label,
+                        compliance_status=document.compliance_status,
+                        has_analysis=False,
+                    )
+                )
+                continue
+
+            entries.append(
+                DocumentGraphInput(
+                    storage_path=document.id,
+                    file_name=document.file_name,
+                    document_type_label=document.document_type_label,
+                    compliance_status=document.compliance_status,
+                    has_analysis=True,
+                    missing_fields=self._analysis_to_missing_field_inputs(analysis),
+                    mevzuat_references=self._analysis_to_mevzuat_reference_inputs(analysis),
+                    **self._analysis_to_entity_source_kwargs(analysis),
+                )
+            )
+
+        graph = build_knowledge_graph(entries)
+        result = {
+            **_graph_to_json_dict(graph),
+            "truncated": total_document_count > MAX_GRAPH_DOCUMENTS,
+            "total_document_count": total_document_count,
+            "hidden_document_count": hidden_document_count,
+        }
+
+        if self.cache is not None:
+            await self.cache.set(
+                cache_key, json.dumps(result, default=str), expire_seconds=GRAPH_CACHE_TTL_SECONDS
+            )
+
+        return result
+
+    async def build_document_graph(self, storage_path: str) -> Optional[dict[str, Any]]:
+        """Build the single-document neighbourhood: one document and every
+        madde/kanun it touches, via the exact same builder `build_corpus_graph`
+        uses over the whole corpus.
+
+        Args:
+            storage_path: The document's storage key.
+
+        Returns:
+            The same dict shape `build_corpus_graph` returns (minus the
+            corpus-only `truncated`/`total_document_count`/
+            `hidden_document_count` keys), or `None` when no cached analysis
+            exists -- the router turns that into a 404, the same signal
+            `get_cached_analysis` already uses.
+        """
+        analysis = await self.get_cached_analysis(storage_path)
+        if analysis is None:
+            return None
+
+        entry = DocumentGraphInput(
+            storage_path=storage_path,
+            file_name=analysis.file_name,
+            document_type_label=analysis.document_type_label,
+            compliance_status=analysis.compliance_status.value,
+            has_analysis=True,
+            missing_fields=self._analysis_to_missing_field_inputs(analysis),
+            mevzuat_references=self._analysis_to_mevzuat_reference_inputs(analysis),
+            **self._analysis_to_entity_source_kwargs(analysis),
+        )
+        graph = build_knowledge_graph([entry])
+        return _graph_to_json_dict(graph)
 
     async def get_document_text(
         self, storage_path: str

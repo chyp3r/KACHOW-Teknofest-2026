@@ -9,17 +9,19 @@ import { useDrafts } from "../../hooks/useDrafts";
 import { queryKeys } from "../../query/queryKeys";
 import { documentService } from "../../services/documentService";
 import { transferService } from "../../services/transferService";
-import type { ArtifactKind } from "../../types/transfers";
+import type { ArtifactKind, ArtifactTransfer, GroupTransferResult } from "../../types/transfers";
 
 export function SendArtifactDialog({
   open,
   onClose,
   recipientId,
+  recipientIds,
   onSent,
 }: {
   open: boolean;
   onClose: () => void;
-  recipientId: string;
+  recipientId?: string;
+  recipientIds?: string[];
   onSent: () => void;
 }) {
   const [tab, setTab] = useState<ArtifactKind>("draft");
@@ -31,14 +33,11 @@ export function SendArtifactDialog({
     staleTime: 30_000,
   });
 
-  const sendMutation = useMutation({
+  const sendMutation = useMutation<ArtifactTransfer | GroupTransferResult[], Error, { sourceArtifactId: string; sourceVersion?: number }>({
     mutationFn: (params: { sourceArtifactId: string; sourceVersion?: number }) =>
-      transferService.send({
-        recipientId,
-        artifactKind: tab,
-        sourceArtifactId: params.sourceArtifactId,
-        sourceVersion: params.sourceVersion,
-      }),
+      recipientIds?.length
+        ? transferService.sendGroup({ recipientIds, artifactKind: tab, sourceArtifactId: params.sourceArtifactId, sourceVersion: params.sourceVersion })
+        : transferService.send({ recipientId: recipientId!, artifactKind: tab, sourceArtifactId: params.sourceArtifactId, sourceVersion: params.sourceVersion }),
     onSuccess: () => {
       onSent();
       onClose();

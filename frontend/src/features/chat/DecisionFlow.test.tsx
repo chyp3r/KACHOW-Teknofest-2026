@@ -36,7 +36,7 @@ describe("DecisionFlow", () => {
     );
     const stepper = screen.getByRole("list", { name: "İş akışı adımları" });
     expect(within(stepper).getAllByRole("button")).toHaveLength(2);
-    expect(within(stepper).getByText("Taslak")).toBeInTheDocument();
+    expect(within(stepper).getByText("Taslak Hazırlama")).toBeInTheDocument();
     expect(within(stepper).getByText("Doğrulama")).toBeInTheDocument();
     expect(within(stepper).getByText("Kalite Yargıcı")).toBeInTheDocument();
   });

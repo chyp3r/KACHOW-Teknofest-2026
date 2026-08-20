@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Paperclip, Settings } from "lucide-react";
+import { ChevronLeft, MessageCircle, Paperclip, Settings } from "lucide-react";
 import { useRef, useState } from "react";
 import { ApiErrorNotice } from "../components/ApiErrorNotice";
 import { IconButton } from "../components/Button";
@@ -19,10 +19,12 @@ export function MessagesPage({
   currentUserId,
   activeConversationId,
   onSelectConversation,
+  onCloseConversation,
 }: {
   currentUserId: string;
   activeConversationId?: string;
   onSelectConversation: (conversationId: string) => void;
+  onCloseConversation: () => void;
 }) {
   const queryClient = useQueryClient();
   const conversations = useConversations();
@@ -44,6 +46,9 @@ export function MessagesPage({
     activeConversation?.kind === "dm"
       ? activeConversation.participants.find((participant) => participant.user_id !== currentUserId)?.user_id
       : undefined;
+  const groupRecipientIds = activeConversation?.kind === "group"
+    ? activeConversation.participants.filter((participant) => participant.user_id !== currentUserId && participant.left_at == null).map((participant) => participant.user_id)
+    : undefined;
 
   const openDm = async (userId: string) => {
     setOpeningDmUserId(userId);
@@ -61,7 +66,7 @@ export function MessagesPage({
 
   return (
     <div className="page messages-page">
-      <div className="messages-layout">
+      <div className={`messages-layout ${activeConversation ? "has-active-conversation" : ""}`}>
         <ConversationList
           conversations={conversations.conversations}
           activeConversationId={activeConversationId}
@@ -83,6 +88,12 @@ export function MessagesPage({
           ) : (
             <>
               <header className="message-thread-header">
+                <IconButton
+                  className="message-thread-back"
+                  icon={<ChevronLeft />}
+                  aria-label="Konuşma listesine dön"
+                  onClick={onCloseConversation}
+                />
                 <h2>
                   {activeConversation.kind === "group"
                     ? activeConversation.title || "Adsız grup"
@@ -90,7 +101,7 @@ export function MessagesPage({
                         ?.username ?? "Bilinmeyen kullanıcı"}
                 </h2>
                 <div className="message-thread-header-actions">
-                  {dmRecipientId && (
+                  {(dmRecipientId || groupRecipientIds?.length) && (
                     <IconButton
                       icon={<Paperclip />}
                       aria-label="Taslak veya evrak gönder"
@@ -160,11 +171,12 @@ export function MessagesPage({
         }}
       />
 
-      {dmRecipientId && (
+      {(dmRecipientId || groupRecipientIds?.length) && (
         <SendArtifactDialog
           open={sendArtifactOpen}
           onClose={() => setSendArtifactOpen(false)}
           recipientId={dmRecipientId}
+          recipientIds={groupRecipientIds}
           onSent={() => {
             // The sender's own thread never receives its own message via
             // the messaging SSE stream (see ConversationService.

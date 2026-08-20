@@ -10,14 +10,14 @@
   --text-muted: #6b7280;
   
   --accent-cyan: #06b6d4;
-  --accent-blue: #3b82f6;
+  --accent-blue: #2563eb;
   --accent-indigo: #6366f1;
   --accent-purple: #a855f7;
   
   --status-todo: #6b7280;
   --status-running: #f59e0b;
-  --status-completed: #10b981;
-  --status-failed: #ef4444;
+  --status-completed: #16a34a;
+  --status-failed: #dc2626;
   --status-skipped: #374151;
 
   --workflow-rule: #0ea5e9;
@@ -709,6 +709,13 @@ body {
   --workflow-node-fill: #ffffff;
   --workflow-node-text: #172033;
   --workflow-node-label: #526078;
+  /* Only :root ever defined these (sky-500/slate-500 -- tuned for the dark
+     --workflow-canvas above); on this theme's #f8fafc canvas --workflow-rule
+     alone measures ~2.6:1, under the 3:1 non-text contrast floor. Darkened
+     both so the rule/model-suggestion ribbon distinction stays visible here
+     too, not just in dark mode. */
+  --workflow-rule: #0369a1;
+  --workflow-llm: #475569;
 }
 
 #root { height: 100dvh; }
@@ -1244,6 +1251,108 @@ td > span { color: var(--text-secondary); margin-top: var(--space-1); }
 .decision-graph-container .node-label { fill: var(--workflow-node-label); }
 .decision-graph-container .node.skipped { opacity: .42; }
 .decision-graph-container .link-line.failed { stroke: #ef4444; stroke-width: 2.5; opacity: 1; }
+
+/* Mevzuat Haritası -- the compliance knowledge graph. Reuses
+   .decision-graph-container's canvas/outline/.node-label rules above (both
+   graphs share the same InteractiveGraphViewport shell); the rules below add
+   only what is genuinely new: rect-shaped nodes, ribbons, and the headline. */
+.knowledge-graph-view { display: grid; gap: var(--space-3); }
+.knowledge-graph-headline-text { margin: 0; }
+.knowledge-graph-headline-note,
+.knowledge-graph-headline-stats { margin: var(--space-1) 0 0; color: var(--text-muted); }
+.knowledge-graph-kanun-header {
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  color: var(--text-secondary);
+  border-left: 3px solid var(--workflow-rule);
+}
+.knowledge-graph-loading { display: grid; place-items: center; min-height: 20rem; }
+
+.decision-graph-container .node rect.node-fill { stroke: var(--border-default); stroke-width: 1; }
+.decision-graph-container .node:focus-visible rect.node-fill,
+.decision-graph-container .node.is-selected rect.node-fill { filter: drop-shadow(0 0 6px var(--accent-blue)); }
+.decision-graph-container .node-fill.status-compliant { fill: var(--status-completed); }
+.decision-graph-container .node-fill.status-partially_compliant,
+.decision-graph-container .node-fill.status-incomplete { fill: var(--status-running); }
+.decision-graph-container .node-fill.status-unknown { fill: var(--status-todo); }
+.decision-graph-container .node-fill.no-analysis {
+  fill: var(--workflow-canvas);
+  stroke-dasharray: 3 2;
+  opacity: .7;
+}
+.decision-graph-container .node-fill-madde { fill: var(--workflow-node-fill); stroke: var(--workflow-rule); }
+.decision-graph-container .node.is-dimmed { opacity: .18; }
+
+.decision-graph-container .kanun-band { fill: var(--bg-primary); opacity: .5; }
+
+.decision-graph-container .ribbon { opacity: .35; }
+.decision-graph-container .ribbon.is-dimmed { opacity: .06; }
+.decision-graph-container .ribbon-rule { stroke: var(--workflow-rule); stroke-width: 1.5; }
+.decision-graph-container .ribbon-llm { stroke: var(--workflow-llm); stroke-width: 1; stroke-dasharray: 5 4; }
+
+/* Unified entity graph (v2) -- force-directed view, all node types. */
+.entity-graph-view { display: grid; gap: var(--space-3); }
+/* position: relative, not flex -- the inspector floats OVER the canvas
+   (see .node-inspector below) rather than sharing a row with it, so
+   opening/closing it never resizes the canvas. That resize was exactly
+   what drove InteractiveGraphViewport's old ResizeObserver to reset the
+   camera on every click -- fixed by removing that reset, but keeping the
+   canvas a fixed size regardless of the inspector is the belt to that
+   fix's suspenders. */
+.entity-graph-canvas-row { position: relative; }
+
+.decision-graph-container .entity-graph-node.is-dimmed { opacity: .18; }
+.decision-graph-container .entity-graph-node-fill { stroke: var(--border-default); stroke-width: 1; }
+.decision-graph-container .entity-graph-node.node-document .entity-graph-node-fill.status-compliant { fill: var(--status-completed); }
+.decision-graph-container .entity-graph-node.node-document .entity-graph-node-fill.status-partially_compliant,
+.decision-graph-container .entity-graph-node.node-document .entity-graph-node-fill.status-incomplete { fill: var(--status-running); }
+.decision-graph-container .entity-graph-node.node-document .entity-graph-node-fill.status-unknown { fill: var(--status-todo); }
+.decision-graph-container .entity-graph-node.node-entity .entity-graph-node-fill { fill: var(--accent-purple); }
+.decision-graph-container .entity-graph-node.node-madde .entity-graph-node-fill { fill: var(--workflow-node-fill); stroke: var(--workflow-rule); }
+.decision-graph-container .entity-graph-node.node-kanun .entity-graph-node-fill { fill: var(--bg-primary); stroke: var(--workflow-rule); }
+.decision-graph-container .entity-graph-node.node-konu .entity-graph-node-fill { fill: var(--bg-primary); stroke: var(--text-muted); }
+.decision-graph-container .entity-graph-node:focus-visible .entity-graph-node-fill,
+.decision-graph-container .entity-graph-node.is-selected .entity-graph-node-fill { filter: drop-shadow(0 0 6px var(--accent-blue)); }
+/* Pinned -- csacademy's own "the node becomes fixed" cue, dashed since a
+   dash already means "not the deterministic thing" elsewhere in this same
+   graph (ribbon-llm/edge-llm) and pinning is a per-viewer, not a data,
+   fact -- solid would visually claim it's part of the graph's data. */
+.decision-graph-container .entity-graph-node.is-pinned .entity-graph-node-fill {
+  stroke: var(--accent-blue);
+  stroke-width: 2;
+  stroke-dasharray: 3 2;
+}
+
+.decision-graph-container .entity-graph-edge { opacity: .45; }
+.decision-graph-container .entity-graph-edge.is-dimmed { opacity: .06; }
+.decision-graph-container .entity-graph-edge.edge-rule { stroke: var(--workflow-rule); stroke-width: 1.5; }
+.decision-graph-container .entity-graph-edge.edge-llm { stroke: var(--workflow-llm); stroke-width: 1; stroke-dasharray: 5 4; }
+
+.node-inspector {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  width: 18rem;
+  max-height: calc(100% - 2 * var(--space-3));
+  overflow-y: auto;
+  z-index: 2;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .3);
+}
+.node-inspector-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+.node-inspector-pin-status { display: flex; align-items: center; gap: var(--space-2); color: var(--text-muted); margin: var(--space-2) 0; }
+.node-inspector-attributes { display: grid; gap: var(--space-1) var(--space-2); margin: var(--space-2) 0; }
+.node-inspector-attributes dt { color: var(--text-muted); }
+.node-inspector-attributes dd { margin: 0; }
+.node-inspector-note { color: var(--text-muted); margin: var(--space-1) 0; }
+.node-inspector-surface-forms { margin: var(--space-1) 0; padding-left: var(--space-4); color: var(--text-secondary); }
+
+.graph-filters { display: grid; gap: var(--space-2); }
+.graph-filters-presets { display: flex; gap: var(--space-2); }
+.graph-filters-group { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); border: none; padding: 0; margin: 0; }
+.graph-filters-group legend { color: var(--text-muted); width: 100%; padding: 0; }
+.graph-filters-checkbox { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--text-secondary); }
+.graph-filters-checkbox.graph-filters-rule { color: var(--workflow-rule); }
+.graph-filters-checkbox.graph-filters-llm { color: var(--workflow-llm); }
 .workflow-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--text-muted); }
 .workflow-legend span { display: inline-flex; align-items: center; gap: var(--space-1); }
 .workflow-legend span::before { width: 7px; height: 7px; border: 2px solid; border-radius: var(--radius-full); content: ""; }

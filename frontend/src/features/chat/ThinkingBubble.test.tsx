@@ -28,7 +28,7 @@ describe("ThinkingBubble", () => {
       />,
     );
     expect(screen.getByText("Yönlendirici")).toBeInTheDocument();
-    expect(screen.getByText("Taslak")).toBeInTheDocument();
+    expect(screen.getByText("Taslak Hazırlama")).toBeInTheDocument();
     const steps = screen.getAllByRole("listitem");
     const draftStep = steps.find((item) => item.textContent?.includes("Taslak"));
     expect(draftStep).toHaveClass("is-running");

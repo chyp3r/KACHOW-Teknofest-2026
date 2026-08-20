@@ -59,6 +59,31 @@
   --font-mono: var(--font-family-mono);
 }
 
+/* Institutional identity and authentication roles */
+.brand-symbol > span {
+  font-family: var(--font-display);
+  font-weight: var(--weight-bold);
+  letter-spacing: -.08em;
+}
+
+.brand-lockup-copy { line-height: 1.15; }
+.brand-lockup-copy strong {
+  font-family: var(--font-display);
+  letter-spacing: -.02em;
+}
+
+.login-intro-copy h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 4.2vw, 4.5rem);
+  font-weight: var(--weight-semibold);
+  line-height: 1.04;
+  letter-spacing: -.045em;
+}
+
+.login-intro-copy p { font-size: 1rem; line-height: 1.7; }
+.login-assurances small,
+.login-security-note { line-height: 1.5; }
+
 [data-theme="light"] {
   --text-muted: #656a74;
   --text-link: #1d4ed8;
@@ -227,7 +252,8 @@ pre,
 .chat-history-header h2,
 .workflow-panel h2,
 .interrupt-header h2,
-.login-card h2 {
+.login-card h2,
+.node-inspector-header h3 {
   font-size: var(--text-heading-md);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-heading-md);
@@ -246,7 +272,6 @@ pre,
 }
 
 .draft-versions-heading h3,
-.routing-result h3,
 .chat-history-empty h3,
 .graph-step-details h3 {
   font-size: var(--text-body);
@@ -263,7 +288,6 @@ pre,
 .draft-document,
 .draft-version-content pre,
 .analysis-panel,
-.routing-result > p,
 .version-history article pre {
   font-size: var(--text-body-lg);
   font-weight: var(--weight-regular);
@@ -275,7 +299,6 @@ pre,
 .draft-document,
 .draft-version-content pre,
 .analysis-panel > details,
-.routing-result > p,
 .version-history article pre {
   max-width: 75ch;
 }
@@ -412,7 +435,9 @@ label,
 .doc-summary-preview,
 .chat-history-no-results,
 .sidebar-document-library .notice,
-.sidebar-document-library .upload-card .feedback {
+.sidebar-document-library .upload-card .feedback,
+.node-inspector-summary,
+.node-inspector-surface-forms li {
   font-size: var(--font-size-secondary);
   font-weight: var(--weight-regular);
   line-height: var(--leading-secondary);
@@ -434,8 +459,7 @@ label,
 .conflict-evidence,
 .document-upload-panel .dropzone > div span,
 .sidebar-document-library .dropzone > div span,
-.sidebar-document-library .empty-state p,
-.routing-result > small {
+.sidebar-document-library .empty-state p {
   font-size: var(--font-size-secondary);
   font-weight: var(--weight-regular);
   line-height: var(--leading-secondary);
@@ -478,7 +502,12 @@ label,
 .draft-history-list button small,
 .version-history article time,
 .doc-meta,
-.doc-type-badge {
+.doc-type-badge,
+.node-inspector-note,
+.node-inspector-attributes dt,
+.node-inspector-pin-status,
+.graph-filters-checkbox,
+.graph-filters-group legend {
   font-size: var(--text-caption);
   font-weight: var(--weight-regular);
   line-height: var(--leading-caption);
@@ -687,4 +716,42 @@ th {
     font-size: var(--text-heading-lg-mobile);
     line-height: var(--leading-heading-lg-mobile);
   }
+}
+
+/* Reference-board typography roles */
+.brand-lockup-copy strong { font-size: 1.05rem; font-weight: var(--weight-bold); }
+.brand-lockup-copy small { font-size: 0.6875rem; line-height: 1rem; }
+.nav-caption { font-size: 0.6875rem; font-weight: var(--weight-semibold); letter-spacing: 0.06em; text-transform: uppercase; }
+.nav-item { font-size: 0.8125rem; font-weight: var(--weight-medium); }
+.page-header h1 { font-size: 1.625rem; line-height: 2rem; }
+.page-header p { font-size: 0.8125rem; }
+.login-intro-copy h1 { font-size: clamp(2rem, 3.2vw, 3.35rem); line-height: 1.08; letter-spacing: -0.04em; }
+.login-intro-copy .eyebrow { font-size: 0.6875rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.login-form-heading h2 { font-size: 1.375rem; line-height: 1.75rem; }
+.login-form-heading p { font-size: 0.8125rem; }
+.document-detail-header h2 { font-size: 0.9375rem; font-weight: var(--weight-semibold); }
+.document-detail-header p { font-size: 0.75rem; }
+.admin-metric-card small { color: var(--text-secondary); font-size: 0.75rem; }
+.admin-metric-card strong { font-size: 1.5rem; line-height: 1.75rem; }
+.password-rule-list { font-size: 0.75rem; }
+.draft-brief-summary h3 { font-size: 0.9375rem; font-weight: var(--weight-semibold); }
+.draft-brief-summary header p,
+.draft-brief-summary dt,
+.draft-brief-next-step { font-size: 0.75rem; line-height: 1.125rem; }
+.draft-brief-summary dd { font-size: 0.8125rem; font-weight: var(--weight-medium); }
+.document-result-count,
+.document-pagination,
+.document-library-tip { font-size: 0.75rem; }
+.document-reference-table-header { font-size: 0.75rem; font-weight: var(--weight-medium); }
+.document-reference-table-row { font-size: 0.8125rem; }
+.document-reference-name strong { font-size: 0.8125rem; font-weight: var(--weight-semibold); }
+.document-reference-name small { font-size: 0.6875rem; line-height: 1rem; }
+.document-reference-summary h3,
+.document-reference-text h3 { font-size: 0.9375rem; font-weight: var(--weight-semibold); }
+.document-reference-summary,
+.document-reference-metadata,
+.document-reference-text { font-size: 0.8125rem; }
+
+@media (max-width: 47.5rem) {
+  .login-intro-copy h1 { font-size: 2rem; line-height: 1.1; }
 }

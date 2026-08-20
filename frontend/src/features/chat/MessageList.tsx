@@ -15,6 +15,7 @@ import { DraftMetaStrip } from "./DraftMetaStrip";
 import { FeedbackButtons } from "./FeedbackButtons";
 import { InterruptPanel } from "./InterruptPanel";
 import { ThinkingBubble } from "./ThinkingBubble";
+import { ResolvedPromptCard } from "./ResolvedPromptCard";
 import type { PromptAnswers } from "./PromptQuestionCard";
 import type { FeedbackTargetKind } from "../../types/feedback";
 
@@ -117,9 +118,13 @@ export function MessageList({
     const el = event.currentTarget;
     pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 96;
   };
+  const visibleMessages = messages.filter((message) => {
+    if (!interrupt || message.sender !== "assistant") return true;
+    return !message.details?.interrupt;
+  });
   return (
     <div className="messages-area" ref={containerRef} onScroll={handleScroll}>
-      {messages.length === 0 && !streamingText && !interrupt ? (
+      {visibleMessages.length === 0 && !streamingText && !interrupt ? (
         <EmptyState className="chat-empty-state" icon={MessageSquare} title="Nasıl yardımcı olabilirim?" description="Bir evrak üzerinde çalışın veya resmî yazışma süreciniz için destek alın." primaryAction={
           <div className="suggested-actions" aria-label="Önerilen başlangıçlar">
             {hasSelectedDocument && (
@@ -136,12 +141,12 @@ export function MessageList({
           </div>
         } />
       ) : (
-        messages.map((message, index) => (
+        visibleMessages.map((message, index) => (
           <article
             key={`${message.sender}-${index}`}
             className={`chat-message ${message.sender}${
               message.kind === "notice" ? " notice-message" : ""
-            }`}
+            }${message.resolvedPrompt ? " resolved-prompt-message" : ""}`}
           >
             <span className="message-avatar">
               {message.kind === "notice" ? (
@@ -160,9 +165,14 @@ export function MessageList({
                     ? "KACHOW Asistan"
                     : "Siz"}
               </header>
-              <div className="markdown-content">
-                <ReactMarkdown>{message.text}</ReactMarkdown>
-              </div>
+              {message.text && (
+                <div className="markdown-content">
+                  <ReactMarkdown>{message.text}</ReactMarkdown>
+                </div>
+              )}
+              {message.resolvedPrompt && (
+                <ResolvedPromptCard interaction={message.resolvedPrompt} />
+              )}
               <DraftMetaStrip details={message.details} />
               {message.questions?.length ? (
                 <PromptQuestionCard
@@ -223,10 +233,6 @@ export function MessageList({
             <Bot size={17} />
           </span>
           <div>
-            {/* Distinct from the loading spinner on purpose: the run is not
-                "thinking" here, it is stopped, waiting on the user -- see
-                ThinkingBubble below for the "still working" state. */}
-            <p className="interrupt-paused-banner">Yanıtınız bekleniyor — akış duraklatıldı.</p>
             {/* Keyed on interrupt_id so a new interrupt on the same mount
                 point -- a brief-gate re-ask, missing_information following
                 a writing_brief, or a second draft's gate later in the same

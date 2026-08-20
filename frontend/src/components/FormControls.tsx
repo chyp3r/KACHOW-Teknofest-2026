@@ -54,22 +54,24 @@ interface FieldProps {
   error?: ReactNode;
   leadingIcon?: ReactNode;
   trailingIcon?: ReactNode;
+  trailingAction?: ReactNode;
   controlSize?: ControlSize;
   fieldClassName?: string;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & FieldProps>(function Input(
-  { label, description, helperText, error, leadingIcon, trailingIcon, controlSize = "md", fieldClassName, id: providedId, required, className = "", ...props },
+  { label, description, helperText, error, leadingIcon, trailingIcon, trailingAction, controlSize = "md", fieldClassName, id: providedId, required, className = "", ...props },
   ref,
 ) {
   const generatedId = useId();
   const id = providedId ?? generatedId;
   const describedBy = error ? `${id}-error` : helperText ? `${id}-helper` : description ? `${id}-description` : undefined;
   const control = (
-    <span className={`field-control ${leadingIcon ? "has-leading-icon" : ""} ${trailingIcon ? "has-trailing-icon" : ""}`.trim()}>
+    <span className={`field-control ${leadingIcon ? "has-leading-icon" : ""} ${trailingIcon || trailingAction ? "has-trailing-icon" : ""}`.trim()}>
       {leadingIcon && <span className="field-icon field-icon-leading" aria-hidden="true">{leadingIcon}</span>}
       <input ref={ref} id={id} required={required} aria-invalid={Boolean(error)} aria-describedby={describedBy} className={`input control-${controlSize} ${className}`.trim()} {...props} />
       {trailingIcon && <span className="field-icon field-icon-trailing" aria-hidden="true">{trailingIcon}</span>}
+      {trailingAction && <span className="field-action field-action-trailing">{trailingAction}</span>}
     </span>
   );
   if (!label) return control;

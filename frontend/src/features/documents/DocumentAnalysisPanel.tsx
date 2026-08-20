@@ -4,8 +4,9 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { Alert, Card } from "../../components/Surface";
 import { Button } from "../../components/Button";
 import { Input, Textarea } from "../../components/FormControls";
-import type { DocumentAnalysis, DocumentText, EvrakFields } from "../../types/documents";
+import type { DocumentAnalysis, DocumentText, EvrakFields, KnowledgeGraph } from "../../types/documents";
 import { SENSITIVITY_LABELS } from "../../types/security";
+import { EntityGraphView } from "../graph/EntityGraphView";
 
 const MARK_KIND_LABELS: Record<"signature" | "stamp" | "handwriting", string> = {
   signature: "İmza",
@@ -33,6 +34,17 @@ const LABELS: Record<keyof EvrakFields, string> = {
 //: Fields whose value is a list, rendered as one line per item in the edit
 //: form's textarea instead of a single-line input.
 const LIST_FIELDS = new Set<keyof EvrakFields>(["ilgi", "ekler", "entities"]);
+const COMPACT_CORE_FIELDS: Array<keyof EvrakFields> = [
+  "tarih",
+  "konu",
+  "muhatap",
+  "imza_sahibi",
+  "gizlilik_derecesi",
+  "ivedilik",
+  "basvuran_adi",
+  "adres",
+  "iletisim",
+];
 const showValue = (value: unknown) =>
   Array.isArray(value)
     ? value.join(", ") || "—"
@@ -61,11 +73,14 @@ export function DocumentAnalysisPanel({
   saving = false,
   onGenerateDetailedSummary,
   generatingDetailedSummary = false,
+  documentGraph,
+  loadingDocumentGraph = false,
   documentText,
   onSaveText,
   savingText = false,
   onReextract,
   reextracting = false,
+  variant = "full",
 }: {
   analysis: DocumentAnalysis | null;
   // Undefined when the caller doesn't wire editing (e.g. no permission
@@ -78,6 +93,13 @@ export function DocumentAnalysisPanel({
   // (see onSave's own analogous shape one level up, in DocumentTable).
   onGenerateDetailedSummary?: () => Promise<void>;
   generatingDetailedSummary?: boolean;
+  // Undefined when not wired -- the section is hidden entirely, same
+  // convention as onSave/onGenerateDetailedSummary above. `null` (once
+  // wired) means "the query hasn't resolved yet", distinct from "not
+  // wired at all" -- see KnowledgeGraph's own `detailed_summary`-style
+  // optional-field convention in types/documents.ts.
+  documentGraph?: KnowledgeGraph | null;
+  loadingDocumentGraph?: boolean;
   // Data-gated, like `guardrail`/`signature` below -- not capability-gated
   // like onGenerateDetailedSummary above, since there is genuinely nothing
   // to show without it (a separate, slower-loading query in useDocuments).
@@ -86,6 +108,7 @@ export function DocumentAnalysisPanel({
   savingText?: boolean;
   onReextract?: () => Promise<void>;
   reextracting?: boolean;
+  variant?: "full" | "compact";
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -182,6 +205,68 @@ export function DocumentAnalysisPanel({
       );
     }
   };
+
+  const compactFieldKeys = [
+    ...COMPACT_CORE_FIELDS,
+    ...fieldKeys.filter((key) =>
+      !COMPACT_CORE_FIELDS.includes(key)
+      && key !== "entities"
+      && (
+        showValue(analysis.fields[key]) !== "—"
+        || analysis.missing_fields.some((item) => item.key === key)
+      )
+    ),
+  ];
+
+  if (variant === "compact") {
+    return (
+      <section className={`document-analysis-fields${isEditing ? " is-editing" : ""}`} aria-label="Temel bilgiler">
+        <header>
+          <h3>Temel bilgiler</h3>
+          {onSave && !isEditing && (
+            <Button variant="ghost" size="sm" leadingIcon={<Pencil />} aria-label="Temel bilgileri düzenle" onClick={startEditing}>
+              Düzenle
+            </Button>
+          )}
+        </header>
+        {isEditing ? (
+          <div className="document-compact-fields-editor">
+            {saveError && <Alert variant="error">{saveError}</Alert>}
+            {compactFieldKeys.map((key) => LIST_FIELDS.has(key) ? (
+              <Textarea
+                key={key}
+                label={LABELS[key]}
+                rows={2}
+                resize="vertical"
+                value={draft[key] ?? ""}
+                onChange={(event) => setDraft((previous) => ({ ...previous, [key]: event.target.value }))}
+              />
+            ) : (
+              <Input
+                key={key}
+                label={LABELS[key]}
+                value={draft[key] ?? ""}
+                onChange={(event) => setDraft((previous) => ({ ...previous, [key]: event.target.value }))}
+              />
+            ))}
+            <div className="document-compact-fields-actions">
+              <Button variant="ghost" size="sm" leadingIcon={<X />} disabled={saving} onClick={() => { setIsEditing(false); setSaveError(null); }}>Vazgeç</Button>
+              <Button size="sm" loading={saving} onClick={() => void save()}>Kaydet</Button>
+            </div>
+          </div>
+        ) : (
+          <dl>
+            {compactFieldKeys.map((key) => (
+              <div key={key}>
+                <dt>{LABELS[key]}</dt>
+                <dd>{showValue(analysis.fields[key])}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </section>
+    );
+  }
 
   return (
     <Card className="analysis-panel">
@@ -483,6 +568,12 @@ export function DocumentAnalysisPanel({
           <p className="detail-empty">Mevzuat önerisi bulunamadı.</p>
         )}
       </details>
+      {documentGraph !== undefined && (
+        <details>
+          <summary>Belge ilişkileri</summary>
+          <EntityGraphView graph={documentGraph} loading={loadingDocumentGraph} />
+        </details>
+      )}
     </Card>
   );
 }
