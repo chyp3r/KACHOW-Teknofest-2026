@@ -23,18 +23,8 @@ import { Input, Select, Textarea } from "../../components/FormControls";
 import { StatusBadge } from "../../components/StatusBadge";
 import type { DocumentAnalysis, DocumentMetadata, DocumentText, EvrakFields, KnowledgeGraph } from "../../types/documents";
 import { DocumentAnalysisPanel } from "./DocumentAnalysisPanel";
-import { Button } from "../../components/Button";
-import { SectionHeader } from "../../components/SectionHeader";
 import { Card, Spinner } from "../../components/Surface";
 import { Tabs } from "../../components/Tabs";
-import type {
-  DocumentAnalysis,
-  DocumentMetadata,
-  DocumentText,
-  EvrakFields,
-  KnowledgeGraph,
-} from "../../types/documents";
-import { DocumentAnalysisPanel } from "./DocumentAnalysisPanel";
 import { DocumentActionsMenu, DocumentListItem } from "./DocumentListItem";
 
 type DetailTab = "summary" | "analysis" | "text" | "details";
@@ -178,9 +168,7 @@ export function DocumentTable({
   }, [ascending, date, documents, query, status, type]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const visibleDocuments = selected
-    ? filtered
-    : filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const visibleDocuments = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const filtersActive = Boolean(query || type !== "all" || status !== "all" || date !== "all");
   const resetFilters = () => {
@@ -290,6 +278,10 @@ export function DocumentTable({
                 );
               })}
             </ul>
+            <footer className="document-pagination document-master-pagination">
+              <span>{(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} / {filtered.length}</span>
+              <div><IconButton variant="ghost" icon={<ChevronLeft />} aria-label="Önceki sayfa" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} /><span>{page} / {totalPages}</span><IconButton variant="ghost" icon={<ChevronRight />} aria-label="Sonraki sayfa" disabled={page === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} /></div>
+            </footer>
           </div>
 
           <section id={`document-detail-${selected.storage_path.replace(/[^a-zA-Z0-9_-]/g, "-")}`} className="document-detail-pane" aria-label="Evrak ayrıntıları">
