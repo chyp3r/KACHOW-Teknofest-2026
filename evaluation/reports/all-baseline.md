@@ -3,36 +3,33 @@
 > Bu rapor `make eval` ile üretilir ve **hiç LLM çağrısı içermez**.
 > Ölçülen, üretim kodundaki deterministik karar fonksiyonlarının kendisidir.
 
-Policy sürümü: `1.4.0`
+Policy sürümü: `3.0.0`
 
 ## Suite: `intents`
 
-Altın küme: `evaluation/datasets/intents.jsonl` · Koşu: 2026-08-07T09:55:47 · Süre: 47.7 ms
+Altın küme: `evaluation/datasets/intents.jsonl` · Koşu: 2026-08-20T06:32:12 · Süre: 104.5 ms
 
 ### Genel
 
 | Metrik | Değer |
 |---|---|
-| Vaka sayısı | 160 |
-| Macro F1 | 0.8311 |
-| Doğruluk (tüm vakalar) | 0.8250 |
-| Doğruluk (karar verilenler) | 0.9496 |
-| Eskalasyon (abstention) oranı | 0.1313 |
-| **Clarify oranı** (kullanıcıya soru) | **0.0875** |
-| Kalibrasyon hatası (ECE) | 0.2736 |
+| Vaka sayısı | 173 |
+| Macro F1 | 0.9520 |
+| Doğruluk (tüm vakalar) | 0.9133 |
+| Doğruluk (karar verilenler) | 0.9634 |
+| Eskalasyon (abstention) oranı | 0.0520 |
+| **Clarify oranı** (kullanıcıya soru) | **0.1098** |
+| Kalibrasyon hatası (ECE) | 0.1265 |
 
 ### Kaynak dağılımı
 
 | Kaynak | Vaka |
 |---|---|
-| `scored` | 101 |
-| `context_default` | 15 |
-| `clarify` | 14 |
+| `fused` | 140 |
+| `clarify` | 19 |
 | `compound` | 8 |
-| `continuation` | 7 |
-| `semantic` | 7 |
-| `clarification_resolved` | 6 |
-| `empty` | 2 |
+| `clarification_resolved` | 5 |
+| `scope_deterministic` | 1 |
 
 ### Kategori kırılımı
 
@@ -42,67 +39,56 @@ Altın küme: `evaluation/datasets/intents.jsonl` · Koşu: 2026-08-07T09:55:47 
 | `compound` | 8 | 1.00 | 0.00 |
 | `continuation` | 8 | 1.00 | 0.00 |
 | `document_question` | 10 | 1.00 | 0.00 |
-| `escalation` | 8 | 1.00 | 0.00 |
-| `heldout_paraphrase` | 22 | 0.41 | 0.32 |
+| `escalation` | 10 | 1.00 | 0.00 |
+| `farewell` | 2 | 1.00 | 0.00 |
+| `greeting_mid_session` | 2 | 1.00 | 0.00 |
+| `heldout_paraphrase` | 22 | 0.36 | 0.41 |
 | `inversion` | 8 | 1.00 | 0.00 |
 | `keyword_analyze` | 8 | 1.00 | 0.00 |
 | `keyword_assist` | 8 | 1.00 | 0.00 |
-| `keyword_draft` | 10 | 1.00 | 0.00 |
+| `keyword_draft` | 10 | 0.90 | 0.00 |
 | `memory_recall` | 10 | 1.00 | 0.00 |
 | `paraphrase_analyze` | 6 | 1.00 | 0.00 |
 | `paraphrase_draft` | 8 | 1.00 | 0.00 |
 | `paraphrase_memory` | 10 | 1.00 | 0.00 |
 | `precedence` | 6 | 1.00 | 0.00 |
-| `revise` | 10 | 0.30 | 0.60 |
-| `short_imperative` | 8 | 0.00 | 1.00 |
+| `revise` | 17 | 1.00 | 0.00 |
+| `short_imperative` | 8 | 1.00 | 0.00 |
 | `short_message` | 6 | 1.00 | 0.00 |
 
 ### Etiket bazında
 
 | Etiket | P | R | F1 | Destek |
 |---|---|---|---|---|
-| `<abstain>` | 1.00 | 1.00 | 1.00 | 8 |
-| `analyze` | 0.95 | 0.78 | 0.86 | 27 |
-| `assist` | 0.91 | 0.96 | 0.93 | 67 |
-| `draft` | 1.00 | 0.76 | 0.86 | 46 |
-| `revise` | 1.00 | 0.33 | 0.50 | 12 |
+| `<abstain>` | 1.00 | 1.00 | 1.00 | 10 |
+| `analyze` | 1.00 | 0.81 | 0.90 | 27 |
+| `assist` | 0.93 | 0.96 | 0.94 | 71 |
+| `draft` | 1.00 | 0.85 | 0.92 | 46 |
+| `revise` | 1.00 | 1.00 | 1.00 | 19 |
 
-### Başarısız vakalar (28)
+### Başarısız vakalar (15)
 
 | ID | Kategori | Mesaj | Beklenen | Gözlenen | Kaynak |
 |---|---|---|---|---|---|
-| `held_03` | `heldout_paraphrase` | Bunun cevabını sen yazar mısın? | `draft` | `assist` | `scored` |
-| `held_04` | `heldout_paraphrase` | İlgili makama sunulmak üzere bir yazı ihzar et. | `draft` | `<abstain>` | `context_default` |
-| `held_05` | `heldout_paraphrase` | Şu belgeye bir göz atıp durumu anlatır mısın? | `analyze` | `assist` | `scored` |
-| `held_06` | `heldout_paraphrase` | Bu evrakta bir sorun var mı acaba? | `analyze` | `assist` | `scored` |
-| `held_07` | `heldout_paraphrase` | Bu yazının kurallara uyup uymadığını söyler misin? | `analyze` | `assist` | `semantic` |
-| `held_08` | `heldout_paraphrase` | Belgenin durumunu bir çıkar bakalım. | `analyze` | `<abstain>` | `context_default` |
-| `held_12` | `heldout_paraphrase` | Sen ne tür işler görebiliyorsun? | `assist` | `<abstain>` | `context_default` |
-| `held_13` | `heldout_paraphrase` | Buradaki akış nasıl ilerliyor tam olarak? | `assist` | `<abstain>` | `context_default` |
-| `held_15` | `heldout_paraphrase` | Şu ana kadar neler geçti aramızda? | `assist` | `<abstain>` | `context_default` |
-| `revise_01` | `revise` | Bu taslağı biraz kısalt. | `revise` | `<abstain>` | `clarify` |
-| `revise_02` | `revise` | Metni biraz uzat. | `revise` | `<abstain>` | `clarify` |
-| `revise_03` | `revise` | Taslağı daha resmi yap. | `revise` | `<abstain>` | `clarify` |
-| `revise_07` | `revise` | Yazının tonunu değiştir. | `revise` | `<abstain>` | `clarify` |
-| `revise_08` | `revise` | Şu cümleyi düzeltir misin? | `revise` | `<abstain>` | `clarify` |
-| `revise_09` | `revise` | Taslağı güncelle lütfen. | `revise` | `analyze` | `semantic` |
-| `revise_10` | `revise` | Kapanışı değiştirir misin? | `revise` | `<abstain>` | `clarify` |
-| `short_imp_01` | `short_imperative` | Cevap yaz. | `draft` | `<abstain>` | `clarify` |
-| `short_imp_02` | `short_imperative` | Yazı hazırla. | `draft` | `<abstain>` | `clarify` |
-| `short_imp_03` | `short_imperative` | Kaleme al. | `draft` | `<abstain>` | `clarify` |
-| `short_imp_04` | `short_imperative` | Metni yaz. | `draft` | `<abstain>` | `clarify` |
-| `short_imp_05` | `short_imperative` | Tanzim et. | `draft` | `<abstain>` | `clarify` |
-| `short_imp_06` | `short_imperative` | Cevap hazırla. | `draft` | `<abstain>` | `clarify` |
-| `short_imp_07` | `short_imperative` | Cevabı hazırla. | `draft` | `<abstain>` | `clarify` |
-| `short_imp_08` | `short_imperative` | Yanıt hazırla. | `draft` | `<abstain>` | `clarify` |
-| `held_18` | `heldout_paraphrase` | Bu konuda ilgili makama iletilecek bir metin oluşturalım mı? | `draft` | `<abstain>` | `context_default` |
-| `held_19` | `heldout_paraphrase` | Bu belgenin sorunlu yanları var mı bakar mısın? | `analyze` | `assist` | `scored` |
-| `held_20` | `heldout_paraphrase` | Bu evrakın ne tür bir yazı olduğunu sen söyle. | `analyze` | `assist` | `scored` |
-| `held_21` | `heldout_paraphrase` | Yazdığın metni bir kez daha ele alır mısın? | `revise` | `<abstain>` | `context_default` |
+| `draft_04` | `keyword_draft` | Bu konuda bir bilgilendirme metni hazırlamanı istiyorum. | `draft` | `refuse` | `scope_deterministic` |
+| `held_01` | `heldout_paraphrase` | Bu belgeye karşılık verecek bir şeyler yazsana. | `draft` | `<abstain>` | `clarify` |
+| `held_02` | `heldout_paraphrase` | Şu evraka dönüş yapacak bir metin çıkaralım. | `draft` | `<abstain>` | `clarify` |
+| `held_03` | `heldout_paraphrase` | Bunun cevabını sen yazar mısın? | `draft` | `assist` | `fused` |
+| `held_04` | `heldout_paraphrase` | İlgili makama sunulmak üzere bir yazı ihzar et. | `draft` | `<abstain>` | `clarify` |
+| `held_05` | `heldout_paraphrase` | Şu belgeye bir göz atıp durumu anlatır mısın? | `analyze` | `assist` | `fused` |
+| `held_06` | `heldout_paraphrase` | Bu evrakta bir sorun var mı acaba? | `analyze` | `assist` | `fused` |
+| `held_08` | `heldout_paraphrase` | Belgenin durumunu bir çıkar bakalım. | `analyze` | `<abstain>` | `clarify` |
+| `held_12` | `heldout_paraphrase` | Sen ne tür işler görebiliyorsun? | `assist` | `<abstain>` | `clarify` |
+| `held_13` | `heldout_paraphrase` | Buradaki akış nasıl ilerliyor tam olarak? | `assist` | `<abstain>` | `clarify` |
+| `held_15` | `heldout_paraphrase` | Şu ana kadar neler geçti aramızda? | `assist` | `<abstain>` | `clarify` |
+| `held_17` | `heldout_paraphrase` | Buna karşılık verecek resmi bir dönüş kurgulayalım. | `draft` | `<abstain>` | `clarify` |
+| `held_18` | `heldout_paraphrase` | Bu konuda ilgili makama iletilecek bir metin oluşturalım mı? | `draft` | `<abstain>` | `clarify` |
+| `held_19` | `heldout_paraphrase` | Bu belgenin sorunlu yanları var mı bakar mısın? | `analyze` | `assist` | `fused` |
+| `held_20` | `heldout_paraphrase` | Bu evrakın ne tür bir yazı olduğunu sen söyle. | `analyze` | `assist` | `fused` |
 
 ## Suite: `drafts`
 
-Altın küme: `evaluation/datasets/drafts.jsonl` · Koşu: 2026-08-07T09:55:47 · Süre: 4.6 ms
+Altın küme: `evaluation/datasets/drafts.jsonl` · Koşu: 2026-08-20T06:32:12 · Süre: 5.4 ms
 
 ### Genel
 
