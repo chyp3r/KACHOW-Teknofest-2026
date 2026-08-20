@@ -31,6 +31,7 @@ from app.ai.policy.budget import node_budget
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.ai.semantic.prototype_matcher import PrototypeMatcher
 from app.ai.tools.document_tools import ToolResult, build_assistant_tools
+from app.ai.tools.handoff_tools import build_handoff_tools
 from app.ai.tools.transfer_tools import build_transfer_tools
 from app.ai.verification import InfoQuestion, apply_answers, verify_draft
 from app.ai.workflows.events import (
@@ -49,8 +50,8 @@ from app.ai.workflows.events import (
 from app.ai.workflows.dates import today_tr
 from app.ai.workflows.draft_graph import _build_instruction_haystack
 from app.ai.workflows.intent_rules import RESET_SURFACES
-from app.ai.workflows.intent_scorer import normalize
-from app.ai.workflows.planner import resolve_plan
+from app.ai.workflows.intent_scorer import PRESENCE_FLOOR, normalize, score_intents
+from app.ai.workflows.planner import PLAN_BY_INTENT, resolve_plan
 from app.ai.workflows.relevance import build_unrelated_reply, resolve_relevance
 from app.ai.workflows.revise import run_revise
 from app.ai.workflows.scope import build_refusal_reply
@@ -66,6 +67,7 @@ from app.observability import guardrail_recorder
 from app.observability.ai_metrics import (
     HITL_INTERRUPTS,
     NODE_DURATION,
+    ROUTER_ASSIST_HANDOFFS,
     ROUTER_CONFIDENCE,
     ROUTER_DECISIONS,
     ROUTER_SEMANTIC_AVAILABLE,
@@ -250,6 +252,15 @@ class PlanningState(TypedDict, total=False):
     reasoning_level: str
     plan_steps: list[str]
     plan_intent: str
+    #: Which mechanism produced this turn's plan (see
+    #: `planner.PlanDecision.source`'s own docstring for the full set of
+    #: values) -- turn-scoped, reset every turn in `planning_node`, same as
+    #: `plan_intent`/`plan_evidence`. `_step_assist` reads this to tell a
+    #: "assist" decision backed by real evidence (`fused`, `model`) apart
+    #: from one that reached assist purely because nothing else was
+    #: decisive (`model_failed`, `model_unclear`, `clarify_repeat_guard`) --
+    #: see `_deterministic_handoff_target` (Faz 7).
+    plan_source: str
     #: Ids of the lexical rules that fired for this turn's decision (see
     #: `PlanDecision.evidence`). Turn-scoped, like `plan_intent` itself --
     #: reset every turn in `planning_node`. `_run_assist` reads it to tell a
@@ -459,6 +470,54 @@ def _prior_turns(state: PlanningState, limit: int) -> list[dict[str, str]]:
     history = state.get("history") or []
     prior = history[:-1] if history else []
     return prior[-limit:] if limit > 0 else []
+
+
+#: Plan-decision sources that mean no real evidence-backed decision routed
+#: here -- see planner.PlanDecision.source's own docstring. A turn that
+#: reached "assist" through one of these had nothing decisive settle it,
+#: unlike a genuine "fused"/"model" win, which is why only these three
+#: trigger the deterministic recheck below (Faz 7) rather than every assist
+#: turn, which would re-litigate decisions the router already made with
+#: real evidence behind them.
+_WEAK_ASSIST_SOURCES = frozenset({"model_failed", "model_unclear", "clarify_repeat_guard"})
+
+
+def _deterministic_handoff_target(state: PlanningState) -> Optional[str]:
+    """Whether a plain lexical re-score finds decisive draft/revise evidence
+    a fallback assist decision missed entirely (Faz 7).
+
+    A message like "Cevabı gönderdiğim gibi bırak, sadece imzayı düzelt"
+    can fail to clear fusion's own tau_high/tau_low thresholds (whatever
+    else is going on in the message dilutes the signal) and still carry a
+    lexical `revise` score well above the noise floor -- the fusion layer's
+    uncertainty is about *which* intent wins outright, not about whether
+    the evidence for draft/revise exists at all. Re-scoring here is free
+    (no model call, the same table `intent_scorer.score_intents` already
+    is) and only ever *adds* a check on top of the router's own decision,
+    never overrides a confident one -- see `_WEAK_ASSIST_SOURCES`.
+
+    Args:
+        state: Current graph state.
+
+    Returns:
+        ``"draft"`` or ``"revise"`` when that intent's lexical score clears
+        ``PRESENCE_FLOOR``, else ``None``. ``revise`` can never win here
+        without ``SessionFocus.active_draft`` set -- `score_intents` itself
+        gates every `revise` rule on `has_active_draft`, so its score is
+        structurally 0.0 without one.
+    """
+    focus = state.get("focus") or SessionFocus()
+    has_active_draft = focus.active_draft is not None
+    scores = score_intents(
+        state.get("input_text", ""),
+        state.get("document_id"),
+        previous_intent=state.get("plan_intent"),
+        has_active_draft=has_active_draft,
+    )
+    for intent in ("draft", "revise"):
+        if scores.scores.get(intent, 0.0) >= PRESENCE_FLOOR:
+            return intent
+    return None
 
 
 def _summarize_step_outcome(
@@ -827,6 +886,7 @@ def create_planning_graph(
             "run_id": run_id,
             "plan_steps": decision.steps,
             "plan_intent": decision.intent,
+            "plan_source": decision.source,
             "plan_evidence": decision.evidence,
             "current_step_idx": 0,
             "_last_ran_step": None,
@@ -1137,6 +1197,23 @@ def create_planning_graph(
                 ),
             ]
 
+        # Faz 7: the model's own escape hatch for a message that should have
+        # routed to draft/revise but landed here anyway -- see
+        # app.ai.tools.handoff_tools's own module docstring for why this is
+        # a tool call rather than a text-pattern detector on the reply.
+        pending_handoff: dict[str, Any] = {}
+
+        def _record_handoff_request(payload: dict[str, Any]) -> None:
+            pending_handoff.update(payload)
+
+        tools = [
+            *tools,
+            *build_handoff_tools(
+                has_active_draft=(state.get("focus") or SessionFocus()).active_draft is not None,
+                on_handoff_requested=_record_handoff_request,
+            ),
+        ]
+
         profile = await _resolve_profile(state.get("company_id"))
 
         chunks: list[str] = []
@@ -1241,6 +1318,8 @@ def create_planning_graph(
                 result["last_referenced_anchor"] = referenced_anchor["anchor"]
             if pending_transfer:
                 result["pending_transfer"] = dict(pending_transfer)
+            if pending_handoff.get("target") in ("draft", "revise"):
+                result["handoff_intent"] = pending_handoff["target"]
             return result
         except asyncio.TimeoutError:
             logger.warning("Assist step timed out")
@@ -1494,6 +1573,27 @@ def create_planning_graph(
     async def _step_assist(
         state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
     ) -> None:
+        # Faz 7, item 1: a fallback plan decision (no real evidence behind
+        # "assist" -- see _WEAK_ASSIST_SOURCES) gets one more free,
+        # deterministic check before the model call runs at all. Never
+        # fires for a confident "fused"/"model" decision -- this only
+        # catches the specific case where nothing else was decisive either.
+        if state.get("plan_source") in _WEAK_ASSIST_SOURCES:
+            target = _deterministic_handoff_target(state)
+            if target is not None:
+                ROUTER_ASSIST_HANDOFFS.labels(reason="fallback_source", target=target).inc()
+                await emit_node_skipped(
+                    config, "assist", STEP_LABELS["assist"],
+                    f"Belirleyici {'taslak' if target == 'draft' else 'revizyon'} kanıtı "
+                    f"bulundu; '{target}' akışına devredildi.",
+                )
+                updates["assist_result"] = {
+                    "status": StepStatus.SKIPPED,
+                    "reason": f"deterministic_handoff:{target}",
+                }
+                updates["plan_steps"] = [*(state.get("plan_steps") or []), *PLAN_BY_INTENT[target]]
+                return
+
         assist_result = await _run_assist(state, classification, config)
         updates["assist_result"] = assist_result
         # assist_result carries its own "history" entry (the assistant's reply)
@@ -1514,6 +1614,21 @@ def create_planning_graph(
         if pending_transfer:
             updates["transfer_resolve_result"] = pending_transfer
             updates["plan_steps"] = [*(state.get("plan_steps") or []), "transfer_execute"]
+
+        # Faz 7, item 2: the assistant model itself called request_handoff
+        # mid-turn -- the message ran through assist (a confident decision,
+        # or item 1 above would already have redirected it), but the model
+        # recognized it actually belongs to draft/revise. Appends the same
+        # way item 1 does; `updates["plan_steps"]` may already carry
+        # transfer_execute from the block above, so this extends whichever
+        # list is current rather than overwriting it.
+        handoff_intent = assist_result.get("handoff_intent")
+        if handoff_intent in ("draft", "revise"):
+            ROUTER_ASSIST_HANDOFFS.labels(reason="model_tool", target=handoff_intent).inc()
+            updates["plan_steps"] = [
+                *(updates.get("plan_steps") or state.get("plan_steps") or []),
+                *PLAN_BY_INTENT[handoff_intent],
+            ]
 
     async def _step_revise(
         state: PlanningState, config: RunnableConfig, classification: dict[str, Any], updates: dict[str, Any]
