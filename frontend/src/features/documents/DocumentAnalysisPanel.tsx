@@ -4,8 +4,9 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { Alert, Card } from "../../components/Surface";
 import { Button } from "../../components/Button";
 import { Input, Textarea } from "../../components/FormControls";
-import type { DocumentAnalysis, DocumentText, EvrakFields } from "../../types/documents";
+import type { DocumentAnalysis, DocumentText, EvrakFields, KnowledgeGraph } from "../../types/documents";
 import { SENSITIVITY_LABELS } from "../../types/security";
+import { EntityGraphView } from "../graph/EntityGraphView";
 
 const MARK_KIND_LABELS: Record<"signature" | "stamp" | "handwriting", string> = {
   signature: "İmza",
@@ -72,6 +73,8 @@ export function DocumentAnalysisPanel({
   saving = false,
   onGenerateDetailedSummary,
   generatingDetailedSummary = false,
+  documentGraph,
+  loadingDocumentGraph = false,
   documentText,
   onSaveText,
   savingText = false,
@@ -90,6 +93,13 @@ export function DocumentAnalysisPanel({
   // (see onSave's own analogous shape one level up, in DocumentTable).
   onGenerateDetailedSummary?: () => Promise<void>;
   generatingDetailedSummary?: boolean;
+  // Undefined when not wired -- the section is hidden entirely, same
+  // convention as onSave/onGenerateDetailedSummary above. `null` (once
+  // wired) means "the query hasn't resolved yet", distinct from "not
+  // wired at all" -- see KnowledgeGraph's own `detailed_summary`-style
+  // optional-field convention in types/documents.ts.
+  documentGraph?: KnowledgeGraph | null;
+  loadingDocumentGraph?: boolean;
   // Data-gated, like `guardrail`/`signature` below -- not capability-gated
   // like onGenerateDetailedSummary above, since there is genuinely nothing
   // to show without it (a separate, slower-loading query in useDocuments).
@@ -558,6 +568,12 @@ export function DocumentAnalysisPanel({
           <p className="detail-empty">Mevzuat önerisi bulunamadı.</p>
         )}
       </details>
+      {documentGraph !== undefined && (
+        <details>
+          <summary>Belge ilişkileri</summary>
+          <EntityGraphView graph={documentGraph} loading={loadingDocumentGraph} />
+        </details>
+      )}
     </Card>
   );
 }

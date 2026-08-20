@@ -6,7 +6,7 @@ import type {
   ToolCallEvent,
   WorkflowNodeStatus,
 } from "../../types/chat";
-import { InteractiveGraphViewport } from "./InteractiveGraphViewport";
+import { InteractiveGraphViewport } from "../../components/InteractiveGraphViewport";
 import { Button, IconButton } from "../../components/Button";
 import { StatusBadge, type StatusTone } from "../../components/StatusBadge";
 import { Alert } from "../../components/Surface";

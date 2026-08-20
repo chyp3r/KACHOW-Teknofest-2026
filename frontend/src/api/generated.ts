@@ -760,6 +760,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/documents/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Corpus Graph
+         * @description The compliance knowledge graph over every document the caller may see.
+         *
+         *     Declared here, above every ``/{storage_path:path}`` route below --
+         *     FastAPI matches routes in registration order, and ``:path`` converters
+         *     swallow slashes, so a literal ``/graph`` registered after the catch-all
+         *     ``GET /{storage_path:path}`` would never be reached; every request would
+         *     match the catch-all first, with ``storage_path="graph"``.
+         *
+         *     Unlike every other route in this file, a document above the caller's
+         *     clearance is not a 403 for the whole graph -- it is silently excluded
+         *     (see ``DocumentService.build_corpus_graph``'s own docstring), and only
+         *     its count is reported back as ``hidden_document_count``. Revealing that
+         *     a hidden document *exists* would defeat the point of hiding it.
+         *
+         *     Args:
+         *         service: Injected document analysis service.
+         *         current_user: The authenticated caller. Company-wide when
+         *             ADMIN/MANAGER/ROOT (see ``bypasses_ownership``), otherwise
+         *             scoped to the caller's own documents -- the same semantics
+         *             ``GET /documents`` already uses.
+         *
+         *     Returns:
+         *         ``{nodes, edges, insights, truncated, total_document_count,
+         *         hidden_document_count}`` inside the unified success envelope.
+         */
+        get: operations["get_corpus_graph_api_v1_documents_graph_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/documents/{storage_path}/fields": {
         parameters: {
             query?: never;
@@ -976,6 +1019,22 @@ export interface paths {
          *         ValidationException: 422 if the vision model call itself fails.
          */
         post: operations["reextract_document_text_api_v1_documents__storage_path__re_extract_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+      "/api/v1/documents/{storage_path}/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_document_graph_api_v1_documents__storage_path__graph_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5936,6 +5995,26 @@ export interface operations {
             };
         };
     };
+    get_corpus_graph_api_v1_documents_graph_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     analyze_document_api_v1_documents_analyze_post: {
         parameters: {
             query?: never;
@@ -5948,6 +6027,37 @@ export interface operations {
                 "multipart/form-data": components["schemas"]["Body_analyze_document_api_v1_documents_analyze_post"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_graph_api_v1_documents__storage_path__graph_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storage_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

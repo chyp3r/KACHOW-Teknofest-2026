@@ -47,4 +47,6 @@ export const queryKeys = {
   rootHealth: ["root", "health"] as const,
   companies: ["companies"] as const,
   company: (companyId: string) => ["companies", companyId] as const,
+  knowledgeGraph: ["documents", "graph"] as const,
+  documentGraph: (storagePath: string) => ["documents", "graph", storagePath] as const,
 };

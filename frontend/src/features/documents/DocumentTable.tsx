@@ -21,6 +21,10 @@ import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { EmptyState } from "../../components/EmptyState";
 import { Input, Select, Textarea } from "../../components/FormControls";
 import { StatusBadge } from "../../components/StatusBadge";
+import type { DocumentAnalysis, DocumentMetadata, DocumentText, EvrakFields, KnowledgeGraph } from "../../types/documents";
+import { DocumentAnalysisPanel } from "./DocumentAnalysisPanel";
+import { Button } from "../../components/Button";
+import { SectionHeader } from "../../components/SectionHeader";
 import { Card, Spinner } from "../../components/Surface";
 import { Tabs } from "../../components/Tabs";
 import type {
@@ -28,6 +32,7 @@ import type {
   DocumentMetadata,
   DocumentText,
   EvrakFields,
+  KnowledgeGraph,
 } from "../../types/documents";
 import { DocumentAnalysisPanel } from "./DocumentAnalysisPanel";
 import { DocumentActionsMenu, DocumentListItem } from "./DocumentListItem";
@@ -92,6 +97,8 @@ export function DocumentTable({
   deletingDocument,
   onGenerateDetailedSummary,
   generatingDetailedSummary,
+  documentGraph,
+  loadingDocumentGraph,
   documentText,
   onSaveText,
   savingText,
@@ -112,6 +119,8 @@ export function DocumentTable({
   deletingDocument?: boolean;
   onGenerateDetailedSummary?: (storagePath: string) => Promise<void>;
   generatingDetailedSummary?: boolean;
+  documentGraph?: KnowledgeGraph | null;
+  loadingDocumentGraph?: boolean;
   documentText?: DocumentText | null;
   onSaveText?: (storagePath: string, pages: string[]) => Promise<void>;
   savingText?: boolean;
@@ -360,7 +369,7 @@ export function DocumentTable({
                   <section className={`document-analysis-verdict ${analysisIssues.length ? "needs-review" : "is-ready"}`}><span>{analysisIssues.length ? <AlertTriangle /> : <CheckCircle2 />}</span><div><h3>{analysisIssues.length ? `${analysisIssues.length} konu incelenmeli` : "Belge karar sürecine hazır"}</h3><p>{analysisIssues.length ? "Taslak veya yönlendirme öncesinde aşağıdaki bulguları doğrulayın." : "Zorunlu alanlar ve güvenlik kontrolleri tamamlandı."}</p></div></section>
                   {analysisIssues.length > 0 && <section><h3>İnceleme başlıkları</h3><ol className="document-issue-list">{analysisIssues.map((issue, index) => <li key={`${issue.title}-${index}`} className={`is-${issue.tone}`}><span>{index + 1}</span><div><strong>{issue.title}</strong><p>{issue.detail}</p></div></li>)}</ol></section>}
                   {analysis && <section><h3>Mevzuat ve dayanaklar</h3>{analysis.mevzuat_references.length ? <ul className="document-reference-list">{analysis.mevzuat_references.map((item, index) => <li key={`${item.mevzuat}-${index}`}><strong>{item.mevzuat}</strong><p>{item.aciklama}</p></li>)}</ul> : <p className="detail-empty">Ek bir mevzuat önerisi bulunmadı.</p>}</section>}
-                  <DocumentAnalysisPanel variant="compact" analysis={analysis} saving={updatingFields} onSave={onUpdateFields && analysis ? (fields) => onUpdateFields(analysis.storage_path, fields) : undefined} generatingDetailedSummary={generatingDetailedSummary} onGenerateDetailedSummary={onGenerateDetailedSummary && analysis ? () => onGenerateDetailedSummary(analysis.storage_path) : undefined} />
+                  <DocumentAnalysisPanel variant="compact" analysis={analysis} saving={updatingFields} onSave={onUpdateFields && analysis ? (fields) => onUpdateFields(analysis.storage_path, fields) : undefined} generatingDetailedSummary={generatingDetailedSummary} onGenerateDetailedSummary={onGenerateDetailedSummary && analysis ? () => onGenerateDetailedSummary(analysis.storage_path) : undefined} documentGraph={documentGraph} loadingDocumentGraph={loadingDocumentGraph} />
                 </div>
               )}
             </div>

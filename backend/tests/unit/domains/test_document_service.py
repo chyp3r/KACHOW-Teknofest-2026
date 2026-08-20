@@ -1180,3 +1180,263 @@ async def test_delete_document_skips_repository_and_vector_cleanup_when_absent(
     await service.delete_document("uploads/abc.pdf", "company-1")
 
     storage.delete_file.assert_awaited_once_with("uploads/abc.pdf")
+
+
+# ==========================================
+# build_corpus_graph
+# ==========================================
+def _graph_document(storage_path, sensitivity_level="unmarked", file_name=None):
+    return DocumentModel(
+        id=storage_path,
+        file_name=file_name or f"{storage_path}.pdf",
+        document_type_label="Resmî Yazı",
+        compliance_status="incomplete",
+        sensitivity_level=sensitivity_level,
+    )
+
+
+@pytest.mark.asyncio
+async def test_build_corpus_graph_scopes_the_repository_calls_to_the_given_company():
+    """The service must pass the caller's own company_id straight through to
+    both repository calls -- if it were ever hardcoded, forgotten, or swapped
+    with owner_id, company A's graph would leak company B's documents."""
+    service, _, _, _ = _build_service()
+    document_repository = AsyncMock()
+    document_repository.list_for_owner.return_value = []
+    document_repository.count_for_owner.return_value = 0
+    service.document_repository = document_repository
+
+    from app.core.enums.sensitivity_level import SensitivityLevel
+
+    await service.build_corpus_graph("company-a", "user-1", SensitivityLevel.COK_GIZLI)
+
+    assert document_repository.list_for_owner.await_args.args[:2] == ("company-a", "user-1")
+    assert document_repository.count_for_owner.await_args.args == ("company-a", "user-1")
+
+
+@pytest.mark.asyncio
+async def test_build_corpus_graph_hides_documents_above_the_callers_clearance():
+    from app.core.enums.sensitivity_level import SensitivityLevel
+
+    service, _, _, _ = _build_service()
+    document_repository = AsyncMock()
+    document_repository.list_for_owner.return_value = [
+        _graph_document("uploads/secret.pdf", sensitivity_level="gizli"),
+        _graph_document("uploads/visible.pdf", sensitivity_level="hizmete_ozel"),
+    ]
+    document_repository.count_for_owner.return_value = 2
+    service.document_repository = document_repository
+    service.get_cached_analysis = AsyncMock(return_value=None)
+
+    result = await service.build_corpus_graph(
+        "company-1", None, SensitivityLevel.HIZMETE_OZEL
+    )
+
+    document_nodes = [n for n in result["nodes"] if n["node_type"] == "document"]
+    assert len(document_nodes) == 1
+    assert document_nodes[0]["storage_path"] == "uploads/visible.pdf"
+    assert result["hidden_document_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_build_corpus_graph_caps_the_repository_query_and_reports_truncation():
+    """`DocumentRepository.list_for_owner` defaults to limit=100 -- relying on
+    that default here would silently cap the graph's denominator well below
+    what `build_corpus_graph`'s own MAX_GRAPH_DOCUMENTS promises."""
+    from app.core.enums.sensitivity_level import SensitivityLevel
+    from app.domains.documents.service import MAX_GRAPH_DOCUMENTS
+
+    service, _, _, _ = _build_service()
+    document_repository = AsyncMock()
+    document_repository.list_for_owner.return_value = []
+    document_repository.count_for_owner.return_value = 250
+    service.document_repository = document_repository
+
+    result = await service.build_corpus_graph("company-1", None, SensitivityLevel.COK_GIZLI)
+
+    assert document_repository.list_for_owner.await_args.kwargs["limit"] == MAX_GRAPH_DOCUMENTS == 200
+    assert result["truncated"] is True
+    assert result["total_document_count"] == 250
+
+
+@pytest.mark.asyncio
+async def test_build_corpus_graph_cache_key_is_scoped_by_clearance():
+    """Two callers with different clearances must never share a cache entry
+    -- otherwise a lower-clearance user could be served a higher-clearance
+    caller's cached graph, which would leak hidden documents' existence."""
+    from app.core.enums.sensitivity_level import SensitivityLevel
+
+    service, _, _, _ = _build_service()
+    document_repository = AsyncMock()
+    document_repository.list_for_owner.return_value = []
+    document_repository.count_for_owner.return_value = 0
+    service.document_repository = document_repository
+    cache = AsyncMock()
+    cache.get.return_value = None
+    service.cache = cache
+
+    await service.build_corpus_graph("company-1", None, SensitivityLevel.HIZMETE_OZEL)
+    await service.build_corpus_graph("company-1", None, SensitivityLevel.GIZLI)
+
+    keys_requested = [call.args[0] for call in cache.get.await_args_list]
+    assert len(keys_requested) == 2
+    assert keys_requested[0] != keys_requested[1]
+    assert "hizmete_ozel" in keys_requested[0]
+    assert "gizli" in keys_requested[1]
+
+
+@pytest.mark.asyncio
+async def test_build_corpus_graph_returns_the_cached_value_without_touching_the_repository():
+    from app.core.enums.sensitivity_level import SensitivityLevel
+
+    service, _, _, _ = _build_service()
+    document_repository = AsyncMock()
+    service.document_repository = document_repository
+    cache = AsyncMock()
+    cache.get.return_value = (
+        '{"nodes": [], "edges": [], "insights": {"document_count": 0, '
+        '"madde_count": 0, "kanun_count": 0, "rule_edge_count": 0, '
+        '"llm_edge_count": 0, "unresolved_reference_count": 0, '
+        '"top_breached_madde": null}, "truncated": false, '
+        '"total_document_count": 0, "hidden_document_count": 0}'
+    )
+    service.cache = cache
+
+    result = await service.build_corpus_graph("company-1", None, SensitivityLevel.GIZLI)
+
+    assert result["total_document_count"] == 0
+    document_repository.list_for_owner.assert_not_awaited()
+    document_repository.count_for_owner.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_build_corpus_graph_with_no_repository_returns_an_empty_graph():
+    from app.core.enums.sensitivity_level import SensitivityLevel
+
+    service, _, _, _ = _build_service()
+    assert service.document_repository is None
+
+    result = await service.build_corpus_graph("company-1", None, SensitivityLevel.COK_GIZLI)
+
+    assert result["nodes"] == []
+    assert result["edges"] == []
+    assert result["insights"]["document_count"] == 0
+    assert result["total_document_count"] == 0
+    assert result["truncated"] is False
+
+
+# ==========================================
+# build_document_graph
+# ==========================================
+@pytest.mark.asyncio
+async def test_build_document_graph_returns_none_when_uncached():
+    service, _, _, _ = _build_service()
+    service.get_cached_analysis = AsyncMock(return_value=None)
+
+    result = await service.build_document_graph("uploads/missing.pdf")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_build_document_graph_reflects_the_cached_analysis(tmp_path, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
+    service, _, _, _ = _build_service()
+    storage_path = "uploads/abc.pdf"
+    analysis = DocumentAnalysisResponseSchema(
+        file_name="evrak.pdf",
+        storage_path=storage_path,
+        document_type=DocumentType.OFFICIAL_LETTER,
+        document_type_label="Resmî Yazı",
+        summary="Özet.",
+        fields=EvrakField(),
+        missing_fields=[
+            MissingField(
+                key="sayi", label="Sayı", severity="zorunlu",
+                mevzuat="RYUEHY m.11", reason="Zorunlu.",
+            )
+        ],
+        compliance_status=ComplianceStatus.INCOMPLETE,
+        extraction=ExtractionInfoSchema(extractor="opendataloader", page_count=1, char_count=300, used_ocr=False),
+    )
+    _write_cache(tmp_path, storage_path, analysis)
+
+    result = await service.build_document_graph(storage_path)
+
+    assert result is not None
+    madde_ids = {n["id"] for n in result["nodes"] if n["node_type"] == "madde"}
+    assert "madde:2646:11" in madde_ids
+
+
+@pytest.mark.asyncio
+async def test_build_document_graph_feeds_entity_source_fields_into_the_graph(tmp_path, monkeypatch):
+    """v2: muhatap/gonderen_kurum/entities/konu/sayi/tarih/ivedilik must
+    reach the graph builder, not just missing_fields/mevzuat_references --
+    otherwise the single-document neighbourhood never grows an Entity node
+    even though the cached analysis has everything it needs."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
+    service, _, _, _ = _build_service()
+    storage_path = "uploads/entity.pdf"
+    analysis = DocumentAnalysisResponseSchema(
+        file_name="evrak.pdf",
+        storage_path=storage_path,
+        document_type=DocumentType.OFFICIAL_LETTER,
+        document_type_label="Resmî Yazı",
+        summary="Özet.",
+        fields=EvrakField(
+            sayi="E-1-2", tarih="18.03.2026", konu="Test konusu",
+            muhatap="ÖRNEK KAYMAKAMLIĞINA", gonderen_kurum="ÖRNEK BAKANLIĞI",
+            ivedilik="Acele", entities=["NATO"],
+        ),
+        missing_fields=[],
+        compliance_status=ComplianceStatus.COMPLIANT,
+        extraction=ExtractionInfoSchema(extractor="opendataloader", page_count=1, char_count=300, used_ocr=False),
+    )
+    _write_cache(tmp_path, storage_path, analysis)
+
+    result = await service.build_document_graph(storage_path)
+
+    assert result is not None
+    entity_labels = {n["label"] for n in result["nodes"] if n["node_type"] == "entity"}
+    assert "NATO" in entity_labels
+    doc_node = next(n for n in result["nodes"] if n["node_type"] == "document")
+    assert doc_node["attributes"]["sayi"] == "E-1-2"
+    assert doc_node["attributes"]["muhatap"] == "ÖRNEK KAYMAKAMLIĞINA"
+    konu_labels = {n["label"] for n in result["nodes"] if n["node_type"] == "konu"}
+    assert "Test konusu" in konu_labels
+
+
+@pytest.mark.asyncio
+async def test_build_corpus_graph_feeds_entity_source_fields_into_the_graph():
+    """Same wiring, exercised through build_corpus_graph's list_for_owner
+    path rather than build_document_graph's single-cache-read path -- the
+    two methods build DocumentGraphInput independently, so each needs its
+    own coverage."""
+    from app.core.enums.sensitivity_level import SensitivityLevel
+
+    service, _, _, _ = _build_service()
+    document_repository = AsyncMock()
+    document_repository.list_for_owner.return_value = [_graph_document("uploads/entity2.pdf")]
+    document_repository.count_for_owner.return_value = 1
+    service.document_repository = document_repository
+    analysis = DocumentAnalysisResponseSchema(
+        file_name="evrak.pdf",
+        storage_path="uploads/entity2.pdf",
+        document_type=DocumentType.OFFICIAL_LETTER,
+        document_type_label="Resmî Yazı",
+        summary="Özet.",
+        fields=EvrakField(muhatap="ÖRNEK KAYMAKAMLIĞINA", entities=["BTK"]),
+        missing_fields=[],
+        compliance_status=ComplianceStatus.COMPLIANT,
+        extraction=ExtractionInfoSchema(extractor="opendataloader", page_count=1, char_count=300, used_ocr=False),
+    )
+    service.get_cached_analysis = AsyncMock(return_value=analysis)
+
+    result = await service.build_corpus_graph("company-1", None, SensitivityLevel.COK_GIZLI)
+
+    entity_labels = {n["label"] for n in result["nodes"] if n["node_type"] == "entity"}
+    assert entity_labels == {"ÖRNEK KAYMAKAMLIĞINA", "BTK"}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../query/queryKeys";
 import { documentService } from "../services/documentService";
+import { graphService } from "../services/graphService";
 import type { DocumentAnalysis, DocumentMetadata, DocumentText, EvrakFields } from "../types/documents";
 
 export function useDocuments(
@@ -21,6 +22,12 @@ export function useDocuments(
   const analysisQuery = useQuery({
     queryKey: queryKeys.documentAnalysis(selectedDocument?.storage_path ?? ""),
     queryFn: () => documentService.getAnalysis(selectedDocument!.storage_path),
+    enabled: Boolean(selectedDocument) && selectedDocument?.analyzed !== false,
+    staleTime: 60_000,
+  });
+  const documentGraphQuery = useQuery({
+    queryKey: queryKeys.documentGraph(selectedDocument?.storage_path ?? ""),
+    queryFn: () => graphService.documentGraph(selectedDocument!.storage_path),
     enabled: Boolean(selectedDocument) && selectedDocument?.analyzed !== false,
     staleTime: 60_000,
   });
@@ -164,6 +171,13 @@ export function useDocuments(
     selectedDocument,
     setSelectedDocument,
     analysis: selectedDocument?.analyzed === false ? null : analysisQuery.data ?? null,
+    // undefined (query not yet enabled/no document selected) is preserved
+    // as-is -- DocumentAnalysisPanel's documentGraph prop treats undefined
+    // as "not wired" and null as "wired, no data yet" (see its own
+    // docstring), so collapsing this to `?? null` would hide the section
+    // entirely whenever a document is selected but its graph hasn't loaded.
+    documentGraph: documentGraphQuery.data ?? (selectedDocument ? null : undefined),
+    loadingDocumentGraph: documentGraphQuery.isLoading,
     documentText: textQuery.data ?? null,
     loading: documentsQuery.isLoading || analysisQuery.isLoading,
     refreshing: documentsQuery.isFetching && !documentsQuery.isLoading,
