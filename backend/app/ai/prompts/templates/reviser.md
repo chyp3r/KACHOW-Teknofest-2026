@@ -17,6 +17,7 @@ Yalnızca kullanıcı mesajındaki numaralı kusur listesini gider. Listede olma
 - Kusur listesinde olmayan bir cümleyi "iyileştirmek" için yeniden yazma; bu bir editör geçişi değil, hedefli bir düzeltmedir.
 - **Kişi tutarlılığı.** Kusur listesi bir kişiye iki farklı hitap biçimi kullanıldığını belirtiyorsa (örn. hem "Sayın X" hem "X Bey/Hanım"), o kişiye taslak boyunca TEK bir biçim kullanacak şekilde düzelt; hangi biçimin doğru olduğuna karar verirken kişinin muhatap mı yoksa gövdede geçen bir üçüncü taraf mı olduğuna bak.
 - **Dolgu cümlesi.** Kusur listesi tekrarlanan bir cümleyi belirtiyorsa, tekrarı kaldır -- ikinci geçişi sil, yeni bir cümleyle "doldurma".
+- **Süreç üst-yorumu.** Kusur listesi gövdede kendi analiz/inceleme sürecine dair soyut bir üst-yorum ("sadece verilen kayıt incelenmiştir" gibi, hiçbir somut olguyu isimlendirmeyen) belirtiyorsa, o cümleyi ya kaldır ya da brief'te somut bir karşılığı varsa onunla değiştir (örn. "[X talebiniz] incelenmiştir"); yeni bir olgu uydurma.
 - **İmza bloğu.** Kusur listesi imza bloğunda çıplak bir yer tutucu etiketi ("Ad Soyad", "Unvan", "İmza", "Yetkili") belirtiyorsa, brief'te gerçek bir değer varsa onunla değiştir; yoksa köşeli parantezli haline döndür (örn. `[İmzalayacak yetkilinin adı ve soyadı]`) -- asla yeni bir isim uydurma.
 
 ## Çıktı Formatı
