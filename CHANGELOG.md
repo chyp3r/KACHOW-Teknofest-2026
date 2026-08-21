@@ -2,6 +2,27 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.29.0] - 2026-08-21
+Eksik-bilgi kapısından geçen taslaklarda puan/kusur listesi metinle tutarsızdı
+(#223). Kök neden: kullanıcı eksik-bilgi sorularını yanıtlayıp yer tutucular
+doldurulduktan sonra taslak yeniden doğrulanıyor, ama yalnızca `verification`
+alanı (güven skoru, `unsupported_claims`, `placeholder_count`) tazeleniyor,
+ayrı bir üst seviye alan olan `applied_rules` -- kullanıcıya gösterilen kusur
+dökümünün asıl kaynağı -- doldurma öncesi hâliyle kalıyordu. Sonuç: artık
+metinde var olmayan "Doldurulmamış yer tutucu"/"İmza bloğunda uydurma" gibi
+kusurlar için puan kırılmaya devam ediyordu. Aynı doğrulama çağrısı, #221/#222
+kapsamında diğer tüm doğrulama noktalarına eklenen `today`/`trusted_facts`/
+`style_examples`/`source_chunks` parametrelerini de hiç almıyordu -- bu yüzden
+sistemin kendi enjekte ettiği bugünün tarihi bile "kaynakta doğrulanamayan
+iddia" sayılabiliyordu.
+
+### Düzeltildi
+- **Eksik-bilgi kapısı sonrası puan/kusur listesi artık taze**: Yer
+  tutucular doldurulduktan sonraki yeniden doğrulama, `applied_rules`'ı bu
+  taze rapordan yeniden kuruyor (artık pre-fill'den kalma stale liste
+  değil) ve aynı çağrıya diğer doğrulama noktalarıyla aynı `today`/
+  `trusted_facts`/`style_examples`/`source_chunks` bağlamını veriyor.
+
 ## [3.28.0] - 2026-08-21
 Taslak oluşturmada yanlış "bilinen bilgi", hatalı RAG puan kırımı ve AI dolgu
 ifadeleri (#221). Kök nedenler: (1) hiçbir admin `display_name` girmemiş bir
