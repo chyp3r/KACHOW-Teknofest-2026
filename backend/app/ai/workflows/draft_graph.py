@@ -29,6 +29,7 @@ from app.ai.verification import (
     UnsupportedClaim,
     build_missing_info_request,
     check_filler_sentences,
+    check_meta_commentary,
     check_person_consistency,
     check_signature_block,
     fill_date_placeholders,
@@ -1509,6 +1510,7 @@ def create_draft_graph(
             *check_person_consistency(draft_text),
             *check_filler_sentences(draft_text),
             *check_signature_block(draft_text),
+            *check_meta_commentary(draft_text),
         ]
 
         combined = merge_verdicts(

@@ -142,6 +142,10 @@ RULES: dict[str, ConfidenceRule] = {
             "dolgu_ifade", "İçerik taşımayan dolgu ifadesi", "butunluk",
             4.0, per_occurrence=True, cap=16.0, forces_approval=False,
         ),
+        ConfidenceRule(
+            "meta_yorum", "Kendi analiz sürecine dair üst-yorum", "butunluk",
+            4.0, per_occurrence=True, cap=16.0, forces_approval=False,
+        ),
         ConfidenceRule("imza_blogu_uydurma", "İmza bloğunda uydurma/meta değer", "yapi", 10.0),
         ConfidenceRule(
             "doldurulmamis_yer_tutucu", "Doldurulmamış yer tutucu", "belirsizlik",
