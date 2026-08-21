@@ -156,6 +156,15 @@ async def set_company_adapter(
 _PROFILE_SETTINGS_KEY = "company_profile"
 _PROFILE_CACHE_PREFIX = "company_profile:"
 
+#: Slug of the synthetic company `alembic/versions/0010_backfill_tenancy.py`
+#: (and `0015_backfill_recorder_company_id.py`) creates as an FK target for
+#: rows that predate multi-tenancy -- not a real tenant, never admin-
+#: configurable. Its `CompanyModel.name` ("Eski Kayıtlar (Kiracı Öncesi)")
+#: must never donate itself as a `display_name` fallback below: unlike a
+#: real company's own name, this string names the backfill mechanism, not
+#: an identity a draft should ever present as "known."
+_LEGACY_COMPANY_SLUG = "legacy-pre-tenancy"
+
 
 def _profile_cache_key(company_id: str) -> str:
     return f"{_PROFILE_CACHE_PREFIX}{company_id}"
@@ -191,22 +200,28 @@ async def _read_profile_from_db(company_id: str) -> CompanyProfile:
     """Read this company's profile, falling back to its registered
     ``CompanyModel.name`` when no admin has ever filled in ``display_name``.
 
-    Without this fallback, a company with no profile configured at all --
-    today, every company, since neither ``app.domains.companies.seeder``
-    nor any frontend surface ever writes one -- resolves to
-    ``CompanyProfile.empty``, which means ``app.ai.identity.parties.
-    SelfParty.is_known`` is False for it: the party model has no name to
-    match "is this document addressed to us" against, and the writer's own
-    identity section never renders. ``companies.name`` is NOT NULL and set
-    at creation for every real company, so this is a real fallback for the
-    common case, not a rare edge -- ``display_name``/``short_name``/
-    ``letterhead`` etc. remain empty (this only ever supplies a name to
-    match/render, never invents an antet or a signer).
+    Without this fallback, a company with no profile configured at all
+    resolves to ``CompanyProfile.empty``, which means ``app.ai.identity.
+    parties.SelfParty.is_known`` is False for it: the party model has no
+    name to match "is this document addressed to us" against, and the
+    writer's own identity section never renders. ``companies.name`` is NOT
+    NULL and set at creation for every real company, so this is a real
+    fallback for a company an admin hasn't configured yet, not a rare edge
+    -- ``display_name``/``short_name``/``letterhead`` etc. remain empty
+    (this only ever supplies a name to match/render, never invents an
+    antet or a signer).
+
+    Exception: the synthetic ``_LEGACY_COMPANY_SLUG`` company never takes
+    this fallback, even though it never has (and never sensibly could have)
+    a configured ``display_name`` either -- its ``name`` describes the
+    backfill mechanism that created it, not an identity, and treating it as
+    one let ``writing_brief._resolve_yazan_taraf`` present "Eski Kayıtlar
+    (Kiracı Öncesi)" as a confident, always-resolved sender fact.
     """
     try:
         async with tenant_session(company_id, is_root=False) as session:
             result = await session.execute(
-                select(CompanyModel.settings, CompanyModel.name).where(
+                select(CompanyModel.settings, CompanyModel.name, CompanyModel.slug).where(
                     CompanyModel.id == company_id
                 )
             )
@@ -216,10 +231,10 @@ async def _read_profile_from_db(company_id: str) -> CompanyProfile:
         return CompanyProfile.empty(company_id)
     if row is None:
         return CompanyProfile.empty(company_id)
-    company_settings, company_name = row
+    company_settings, company_name, company_slug = row
     value = (company_settings or {}).get(_PROFILE_SETTINGS_KEY) if company_settings else None
     profile = CompanyProfile.from_dict(company_id, value)
-    if not profile.display_name and company_name:
+    if not profile.display_name and company_name and company_slug != _LEGACY_COMPANY_SLUG:
         profile = replace(profile, display_name=company_name)
     return profile
 
