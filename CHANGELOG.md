@@ -44,6 +44,14 @@ fallback sorununa düştüğü ve bağımsız seed script'inin bozuk olduğu bul
   daha önce demo şirket de aynı fallback mekanizmasına dayanıyordu.
   `scripts/seed_users.py` artık güncel `seed_default_users(company_id)`
   imzasıyla çalışıyor (önceden parametresiz çağrı `TypeError` atıyordu).
+- **ISO 8601 tarihler artık Türkçe tarihlerle eşleşiyor**: Bu sürümün kendi
+  düzeltmeleri gerçek bir yükleme üzerinde test edilirken bulundu -- bir
+  belgenin çıkarılan metni tarihleri ISO biçiminde ("2026-04-09") yazdığında,
+  `DATE_PATTERN` bunu hiç tanımadığı için taslağın aynı tarihi Türkçe
+  biçimde ("09.04.2026") doğru şekilde tekrarlaması "kaynakta
+  doğrulanamayan iddia" sayılıp puan kırılıyordu. `DATE_PATTERN` ve
+  `canonical_date()` artık ISO tarihleri de tanıyor ve aynı kanonik forma
+  indirgeyip eşleştiriyor.
 
 ## [3.27.0] - 2026-08-20
 Taslak/revizyon hattının taraf modeli ve genel SOTA bakımı (#218). Kök neden:
