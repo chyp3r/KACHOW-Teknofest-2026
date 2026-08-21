@@ -45,9 +45,16 @@ PLACEHOLDER_PATTERN = re.compile(r"\[[^\]]*\]")
 #: Document numbers such as "E-12345678-903-4567" or "2024/145".
 DOCUMENT_NUMBER_PATTERN = re.compile(r"\b(?:[A-ZÇĞİÖŞÜ]-)?\d{2,}(?:[-/]\d+)+\b")
 
-#: Dates in the formats the regulation uses.
+#: Dates in the formats the regulation uses, plus ISO 8601 ("2026-04-09") --
+#: an uploaded document's own extracted text uses that shape at least as
+#: often as the Turkish DD.MM.YYYY one (a PDF form field like "Dates:
+#: 2026-04-09 to 2026-05-06" is common). Without it, a source date written in
+#: ISO form is invisible to _build_canonical_index, so a draft correctly
+#: restating the same date in Turkish format ("09.04.2026") finds nothing to
+#: match and gets flagged as an unsupported claim despite being grounded.
 DATE_PATTERN = re.compile(
     r"\b\d{1,2}[./]\d{1,2}[./]\d{4}\b"
+    r"|\b\d{4}-\d{1,2}-\d{1,2}\b"
     r"|\b\d{1,2}\s+(?:Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|"
     r"Eylül|Ekim|Kasım|Aralık)\s+\d{4}\b"
 )
@@ -671,6 +678,7 @@ def verify_draft(
     is_individual_petition: bool = False,
     today: str = "",
     trusted_facts: Sequence[str] = (),
+    source_chunks: Sequence[str] = (),
 ) -> VerificationReport:
     """Verify a draft's groundedness and structural completeness.
 
@@ -724,6 +732,15 @@ def verify_draft(
             like ``today`` is: without this, a company's own name would be
             flagged as an unsupported claim on every single draft that uses
             it.
+        source_chunks: Verbatim excerpts retrieved from the attached
+            document by the document-QA retriever (see ``app.ai.workflows.
+            draft_graph.retrieve_source_chunks_node``), the writer's only
+            view of the document's raw text (``_build_brief`` otherwise
+            hands it nothing but a short AI summary). Folded into the
+            grounding haystack for the same reason ``trusted_facts`` is:
+            without this, a fact the writer legitimately copied from a
+            retrieved chunk could still be flagged as an unsupported claim
+            if it happens not to also appear verbatim in ``source_document``.
 
     Returns:
         The verification report.
@@ -739,7 +756,7 @@ def verify_draft(
     # split out below via `instruction_only_claims` instead of being folded
     # in here, so its presence is visible to the caller rather than silently
     # indistinguishable from source/mevzuat grounding.
-    trusted: list[str] = [source_document, context, today, *trusted_facts]
+    trusted: list[str] = [source_document, context, today, *trusted_facts, *source_chunks]
     if classification:
         trusted.append(_flatten_classification(classification))
 

@@ -78,6 +78,11 @@ _STYLE_FINDING_SUGGESTED_FIXES: dict[str, str] = {
         "Tekrarlanan cümleyi kaldır; her paragraf yeni bir olgu veya adım "
         "taşımalı, önceki paragrafta söyleneni yeniden ifade etmemeli."
     ),
+    "meta_yorum": (
+        "Kendi analiz/inceleme sürecine dair soyut üst-yorumu ('sadece verilen "
+        "kayıt incelenmiştir' gibi) kaldır veya brief'teki somut bir olguya "
+        "bağla (örn. 'incelenmiştir' yerine '[X talebiniz] incelenmiştir')."
+    ),
     "imza_blogu_uydurma": (
         "İmza bloğundaki çıplak yer tutucu etiketini brief'teki gerçek "
         "değerle değiştir; değer yoksa köşeli parantezli haline döndür "

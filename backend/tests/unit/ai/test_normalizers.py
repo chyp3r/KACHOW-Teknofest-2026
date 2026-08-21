@@ -26,7 +26,10 @@ from app.ai.verification.normalizers import (
 
 @pytest.mark.parametrize(
     "written",
-    ["12.03.2026", "12/03/2026", "12-03-2026", "12 Mart 2026", "12 mart 2026"],
+    [
+        "12.03.2026", "12/03/2026", "12-03-2026", "12 Mart 2026", "12 mart 2026",
+        "2026-03-12",
+    ],
 )
 def test_canonical_date_folds_every_supported_spelling(written):
     assert canonical_date(written) == "2026-03-12"
@@ -35,6 +38,15 @@ def test_canonical_date_folds_every_supported_spelling(written):
 def test_canonical_date_pads_single_digit_components():
     assert canonical_date("1.3.2026") == "2026-03-01"
     assert canonical_date("1 Mart 2026") == "2026-03-01"
+    assert canonical_date("2026-03-1") == "2026-03-01"
+
+
+def test_canonical_date_matches_iso_against_turkish_notation():
+    """The exact bug this fixes: a source document's own extracted text
+    ("Dates: 2026-04-09 to 2026-05-06") and a draft restating the same date
+    in Turkish register ("09.04.2026") must ground each other."""
+    assert canonical_date("2026-04-09") == canonical_date("09.04.2026")
+    assert canonical_date("2026-04-09") == "2026-04-09"
 
 
 def test_canonical_date_keeps_different_dates_distinct():
@@ -42,10 +54,13 @@ def test_canonical_date_keeps_different_dates_distinct():
     assert canonical_date("12.03.2026") != canonical_date("13.03.2026")
     assert canonical_date("12.03.2026") != canonical_date("12.04.2026")
     assert canonical_date("03.12.2026") != canonical_date("12.03.2026")
+    assert canonical_date("2026-04-09") != canonical_date("2026-05-06")
+    assert canonical_date("2026-04-09") != canonical_date("09.05.2026")
 
 
 @pytest.mark.parametrize(
-    "written", ["", "yakında", "32.01.2026", "12.13.2026", "12 Foo 2026", "2026"]
+    "written",
+    ["", "yakında", "32.01.2026", "12.13.2026", "12 Foo 2026", "2026", "2026-13-01"],
 )
 def test_canonical_date_returns_none_rather_than_guessing(written):
     assert canonical_date(written) is None

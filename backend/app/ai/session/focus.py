@@ -118,6 +118,13 @@ class DraftVersion:
             ``ornek_sizintisi`` leak check the original draft got --
             without this a revision's verify pass had strictly weaker
             grounding checks than the draft it revised.
+        source_chunks: Verbatim document excerpts this version was written
+            with (see ``retrieve_source_chunks_node``), carried forward for
+            the same reason ``style_examples`` is -- without it, a fact
+            genuinely copied from a retrieved chunk in the original draft
+            could get flagged ``dayanaksiz_iddia`` the moment the draft is
+            revised, since ``revise_graph`` had no way to fold these back
+            into its own ``verify_draft`` call.
         correspondence_type_source: Whether ``correspondence_type`` was
             resolved from an explicit signal or guessed (``"fallback"``,
             see ``resolve_correspondence_type``). Carried forward so a
@@ -168,6 +175,7 @@ class DraftVersion:
     context: str = ""
     source_document: str = ""
     style_examples: tuple[str, ...] = ()
+    source_chunks: tuple[str, ...] = ()
     correspondence_type_source: str = ""
     correspondence_sub_genre: str = ""
     #: The pre-draft writing brief this version was written under (see
@@ -377,6 +385,10 @@ def _draft_version_from_result(
         style_examples=tuple(
             example.get("text", "") if isinstance(example, dict) else str(example)
             for example in (draft_result.get("style_examples") or [])
+        ),
+        source_chunks=tuple(
+            chunk.get("text", "") if isinstance(chunk, dict) else str(chunk)
+            for chunk in (draft_result.get("source_chunks") or [])
         ),
         correspondence_type_source=draft_result.get("correspondence_type_source") or "",
         correspondence_sub_genre=draft_result.get("correspondence_sub_genre") or "",

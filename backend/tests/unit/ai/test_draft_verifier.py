@@ -229,6 +229,18 @@ def test_a_different_date_is_still_flagged_after_canonicalisation():
     assert report.unsupported_claims[0].canonical == "2026-07-31"
 
 
+def test_turkish_date_is_grounded_by_an_iso_source_date():
+    """A reported bug's exact shape: an uploaded document's own extracted
+    text writes dates in ISO form ("Dates: 2026-04-09 to 2026-05-06"), and
+    the draft restates them in Turkish register -- these must ground each
+    other, not be flagged as separate, unrelated facts."""
+    report = verify_draft(
+        WELL_FORMED_DRAFT, source_document="Sayı: E-123-456 Tarih: 2026-07-30"
+    )
+
+    assert report.unsupported_claims == []
+
+
 def test_abbreviated_article_citation_is_grounded_by_the_long_form():
     draft = WELL_FORMED_DRAFT.replace("Arz ederim.", "m. 11 uyarınca arz ederim.")
 

@@ -148,6 +148,38 @@ def check_filler_sentences(draft: str) -> list[RuleFinding]:
     ]
 
 
+#: A self-referential meta-commentary sentence -- the model narrating its
+#: own review scope ("sadece verilen kayıt incelenmiştir") instead of
+#: grounding the sentence to a concrete, named request/document/mevzuat.
+#: Deliberately narrow (only the "yalnızca/sadece ... incelenmiştir" shape
+#: this bug report's symptom took), not a general hedging-language filter --
+#: a broader match would flag legitimate, concrete uses of the same verbs
+#: ("Talebiniz incelenmiştir.", grounded to "talebiniz").
+_META_COMMENTARY_PATTERN = re.compile(
+    r"\b(?:sadece|yalnızca)\s+(?:verilen|sağlanan|sunulan|elde\s+edilen)"
+    r"(?:\s+\S+){1,3}\s+(?:incelenmiştir|değerlendirilmiştir|dikkate\s+alınmıştır)",
+    re.IGNORECASE,
+)
+
+
+def check_meta_commentary(draft: str) -> list[RuleFinding]:
+    """Flag process narration about the model's own review scope.
+
+    See ``_META_COMMENTARY_PATTERN``'s own docstring for why the match is
+    kept this narrow.
+
+    Args:
+        draft: The generated draft text.
+
+    Returns:
+        One ``meta_yorum`` finding per match.
+    """
+    return [
+        RuleFinding(rule_id="meta_yorum", detail=f"Süreç üst-yorumu: '{match.group(0)}'")
+        for match in _META_COMMENTARY_PATTERN.finditer(draft)
+    ]
+
+
 #: A signature-block line whose *entire* folded content is one of the
 #: placeholder's own bare labels -- the model wrote the label as if it were
 #: the value instead of either filling it in or leaving the bracketed

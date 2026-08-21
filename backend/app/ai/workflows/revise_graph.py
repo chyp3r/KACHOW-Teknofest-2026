@@ -85,6 +85,7 @@ from app.ai.verification import (
     VerificationReport,
     build_missing_info_request,
     check_filler_sentences,
+    check_meta_commentary,
     check_person_consistency,
     check_signature_block,
     fill_date_placeholders,
@@ -893,6 +894,11 @@ def create_revise_graph(
             is_individual_petition="dilekçe" in sub_genre.lower(),
             today=state.get("today", ""),
             trusted_facts=trusted_facts,
+            # Same fold-in as draft_graph.verify_node -- without this, a
+            # fact the original draft legitimately copied from a retrieved
+            # document chunk had strictly weaker grounding on every revision
+            # than it did on the draft that first wrote it.
+            source_chunks=active_draft.source_chunks,
         )
 
         judge_on = (
@@ -972,6 +978,7 @@ def create_revise_graph(
             *check_person_consistency(draft_text),
             *check_filler_sentences(draft_text),
             *check_signature_block(draft_text),
+            *check_meta_commentary(draft_text),
         ]
 
         combined = merge_verdicts(

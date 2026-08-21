@@ -976,7 +976,17 @@ def create_planning_graph(
                 "Evrak analizi tamamlandı (önbellek).",
                 {"mevzuat_suggestions": mevzuat_references},
             )
-            return analysis
+            # _mevzuat_context() below only reads "mevzuat_documents"/
+            # "mevzuat_suggestions" (the live analysis sub-graph's own state
+            # keys), but the cached analysis blob on disk stores the same
+            # legislation excerpts under "mevzuat_references" instead (see
+            # the DocumentAnalysis response schema). Returning `analysis`
+            # unmodified silently dropped every legislation excerpt for a
+            # document drafted from cache: _mevzuat_context() saw no
+            # context, `has_context` went False, and a draft that legitimately
+            # cited the retrieved legislation still got flagged
+            # "mevzuat_baglami_yok" (no verified legislative context).
+            return {**analysis, "mevzuat_suggestions": analysis.get("mevzuat_suggestions") or mevzuat_references}
 
         return await document_analysis_graph.ainvoke(
             {"input_text": state["input_text"], "is_ocr_text": False},
@@ -2395,6 +2405,10 @@ def create_planning_graph(
             style_examples=tuple(
                 example.get("text", "") if isinstance(example, dict) else str(example)
                 for example in (draft_result.get("style_examples") or [])
+            ),
+            source_chunks=tuple(
+                chunk.get("text", "") if isinstance(chunk, dict) else str(chunk)
+                for chunk in (draft_result.get("source_chunks") or [])
             ),
             correspondence_type_source=draft_result.get("correspondence_type_source") or "",
             # C15: these three used to be silently dropped here -- a

@@ -29,6 +29,7 @@ from app.ai.verification import (
     UnsupportedClaim,
     build_missing_info_request,
     check_filler_sentences,
+    check_meta_commentary,
     check_person_consistency,
     check_signature_block,
     fill_date_placeholders,
@@ -1349,6 +1350,14 @@ def create_draft_graph(
         # the wider haystack (see DraftState.instruction_haystack's own
         # docstring) -- never narrower than today's behaviour.
         instruction_haystack = state.get("instruction_haystack") or state.get("instructions", "")
+        # The writer's only view of the document's raw text (see
+        # retrieve_source_chunks_node) -- without folding these into the
+        # grounding haystack too, a fact genuinely copied from a retrieved
+        # chunk could still be flagged dayanaksiz_iddia if it isn't also a
+        # verbatim substring of source_document.
+        source_chunk_texts = [
+            chunk.get("text", "") for chunk in state.get("source_chunks") or [] if chunk.get("text")
+        ]
         report = verify_draft(
             draft_text,
             source_document=state.get("source_document", ""),
@@ -1360,6 +1369,7 @@ def create_draft_graph(
             is_individual_petition=is_individual_petition,
             today=state.get("today", ""),
             trusted_facts=trusted_facts,
+            source_chunks=source_chunk_texts,
         )
 
         # The counterparty's own institution/signatory leaked into our
@@ -1389,6 +1399,7 @@ def create_draft_graph(
                     is_individual_petition=is_individual_petition,
                     today=state.get("today", ""),
                     trusted_facts=trusted_facts,
+                    source_chunks=source_chunk_texts,
                 )
 
         # None means the level has no opinion; defer to the global setting.
@@ -1499,6 +1510,7 @@ def create_draft_graph(
             *check_person_consistency(draft_text),
             *check_filler_sentences(draft_text),
             *check_signature_block(draft_text),
+            *check_meta_commentary(draft_text),
         ]
 
         combined = merge_verdicts(

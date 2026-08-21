@@ -65,6 +65,13 @@ _TURKISH_MAP = str.maketrans(
 )
 
 _NUMERIC_DATE = re.compile(r"^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$")
+#: ISO 8601 ("2026-04-09") -- a source document's own extracted text (a PDF's
+#: literal "Dates: 2026-04-09 to 2026-05-06", say) uses this shape as often as
+#: the Turkish DD.MM.YYYY one _NUMERIC_DATE handles. Checked before it: a
+#: leading 4-digit group can never match _NUMERIC_DATE's first (1-2 digit) day
+#: group, so the two patterns never contend for the same input, but ordering
+#: this one first keeps the "most specific first" reading intact.
+_ISO_DATE = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
 _TEXTUAL_DATE = re.compile(r"^(\d{1,2})\s+([a-z]+)\s+(\d{4})$")
 
 #: "4982 sayılı" -> the law's number.
@@ -101,8 +108,9 @@ def _fold(text: str) -> str:
 def canonical_date(value: str) -> Optional[str]:
     """Render a Turkish date in ISO form.
 
-    Handles the two formats the regulation and its drafts actually use --
-    ``12.03.2026`` (also with ``/`` or ``-``) and ``12 Mart 2026``.
+    Handles the formats the regulation, its drafts, and an uploaded
+    document's own extracted text actually use -- ``12.03.2026`` (also with
+    ``/`` or ``-``), ``12 Mart 2026``, and ISO 8601's ``2026-03-12``.
 
     Args:
         value: The date as written.
@@ -114,17 +122,21 @@ def canonical_date(value: str) -> Optional[str]:
     """
     folded = _fold(value)
 
-    match = _NUMERIC_DATE.match(folded)
+    match = _ISO_DATE.match(folded)
     if match:
-        day, month, year = (int(part) for part in match.groups())
+        year, month, day = (int(part) for part in match.groups())
     else:
-        match = _TEXTUAL_DATE.match(folded)
-        if not match:
-            return None
-        day_text, month_name, year_text = match.groups()
-        if month_name not in _MONTHS:
-            return None
-        day, month, year = int(day_text), _MONTHS[month_name], int(year_text)
+        match = _NUMERIC_DATE.match(folded)
+        if match:
+            day, month, year = (int(part) for part in match.groups())
+        else:
+            match = _TEXTUAL_DATE.match(folded)
+            if not match:
+                return None
+            day_text, month_name, year_text = match.groups()
+            if month_name not in _MONTHS:
+                return None
+            day, month, year = int(day_text), _MONTHS[month_name], int(year_text)
 
     # Reject impossible dates rather than normalising them; a draft claiming
     # "32.13.2026" is a defect the verifier should still surface as ungrounded.

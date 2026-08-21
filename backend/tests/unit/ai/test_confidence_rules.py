@@ -183,10 +183,11 @@ def test_combine_outcomes_with_nothing_reproduces_a_clean_scoring_pass():
 
 
 def test_the_two_style_heuristics_do_not_force_approval_but_still_cost_score():
-    """Faz 4: kisi_tutarsizligi/dolgu_ifade are pattern heuristics -- a
-    single occurrence must not strand an otherwise-clean draft in human
-    review, unlike a confirmed identity/groundedness defect."""
-    for rule_id in ("kisi_tutarsizligi", "dolgu_ifade"):
+    """Faz 4: kisi_tutarsizligi/dolgu_ifade/meta_yorum are pattern
+    heuristics -- a single occurrence must not strand an otherwise-clean
+    draft in human review, unlike a confirmed identity/groundedness
+    defect."""
+    for rule_id in ("kisi_tutarsizligi", "dolgu_ifade", "meta_yorum"):
         outcome = score_findings([RuleFinding(rule_id=rule_id)])
         assert outcome.forces_approval is False, rule_id
         assert outcome.score < 100.0, rule_id
@@ -216,6 +217,6 @@ def test_every_rule_id_referenced_by_this_test_module_exists_in_the_table():
         "mevzuat_baglami_yok", "pii_bulgusu", "icerik_kaybi",
         "yargic_kritik_bulgu", "talebi_karsilamiyor", "sirket_kurali_ihlali",
         "gonderen_muhatap_karisikligi", "karsi_taraf_kimlik_sizintisi",
-        "kisi_tutarsizligi", "dolgu_ifade", "imza_blogu_uydurma",
+        "kisi_tutarsizligi", "dolgu_ifade", "imza_blogu_uydurma", "meta_yorum",
     }
     assert set(RULES.keys()) == expected
