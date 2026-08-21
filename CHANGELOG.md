@@ -2,6 +2,49 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.28.0] - 2026-08-21
+Taslak oluşturmada yanlış "bilinen bilgi", hatalı RAG puan kırımı ve AI dolgu
+ifadeleri (#221). Kök nedenler: (1) hiçbir admin `display_name` girmemiş bir
+şirket için `CompanyModel.name`'e düşen fallback, multi-tenancy migration'ının
+oluşturduğu sentetik "legacy" şirket için de çalışıyor ve bu ismi taslağın
+gönderen tarafına dair confident bir "bilinen bilgi" gibi sunuyordu; (2) hem
+önbellekten taslaklanan belgelerde mevzuat RAG bağlamı bir anahtar
+uyuşmazlığı yüzünden sessizce kayboluyor hem de belge RAG'ından ("Kaynak
+Alıntılar") gelen gerçek içerik doğrulayıcıya hiç aktarılmıyordu; (3) yazar
+promptundaki güçlü "yalnızca verileni kullan" talimatları modeli taslak
+gövdesine "sadece verilen kayıt incelenmiştir" tarzı anlamsız süreç
+üst-yorumları eklemeye itiyordu. Aynı keşif sırasında seeder'ların da (1)'deki
+fallback sorununa düştüğü ve bağımsız seed script'inin bozuk olduğu bulundu.
+
+### Düzeltildi
+- **"Bilinenler" artık sahte bir kurum adı sunmuyor**: `_read_profile_from_db`
+  artık multi-tenancy migration'ının sentetik "legacy-pre-tenancy" şirketini
+  `display_name` fallback'inden hariç tutuyor -- bu şirkete bağlı bir kullanıcı
+  için gönderen taraf artık her turda "Eski Kayıtlar (Kiracı Öncesi)" olarak
+  confident gösterilmiyor.
+- **Önbellekten taslaklanan belgelerde mevzuat bağlamı artık kayıp değil**:
+  `_run_classification`'ın önbellek dalı, disk önbelleğindeki mevzuat
+  bilgisini artık `_mevzuat_context()`'in okuduğu anahtara (`mevzuat_
+  suggestions`) da yazıyor -- daha önce her önbellekli taslak, RAG gerçekten
+  mevzuat bulmuş olsa bile "Doğrulanmış mevzuat bağlamı yok" ile
+  cezalandırılıyordu.
+- **Belge RAG'ından ("Kaynak Alıntılar") gelen bilgi artık "desteksiz"
+  sayılmıyor**: `verify_draft()` artık `retrieve_source_chunks_node`'un
+  çektiği belge alıntılarını da doğrulama zeminine (`trusted` haystack)
+  katıyor -- hem ilk taslakta hem de revizyonlarda (`DraftVersion` artık
+  `source_chunks`'ı da taşıyor).
+- **Taslak gövdesi artık anlamsız süreç üst-yorumu içermiyor**: `writer.md`/
+  `reviser.md`'ye "sadece/yalnızca verilen ... incelenmiştir" tarzı
+  kaynağa/sürece atıf yapan dolgu ifadelerini yasaklayan açık bir kural
+  eklendi; ayrıca prompt talimatına rağmen bir kaçış olursa yeni
+  `check_meta_commentary` deterministik denetimi bunu yakalayıp mevcut
+  onarım döngüsüne yönlendiriyor.
+- **Seeder artık gerçek bir şirket profili yazıyor**: `seed_demo_company`,
+  demo şirketi oluşturduktan sonra `set_company_profile`'ı çağırıyor --
+  daha önce demo şirket de aynı fallback mekanizmasına dayanıyordu.
+  `scripts/seed_users.py` artık güncel `seed_default_users(company_id)`
+  imzasıyla çalışıyor (önceden parametresiz çağrı `TypeError` atıyordu).
+
 ## [3.27.0] - 2026-08-20
 Taslak/revizyon hattının taraf modeli ve genel SOTA bakımı (#218). Kök neden:
 sistemde "biz kimiz / karşı taraf kim" ayrımı hiç modellenmemişti -- bir evrağın
