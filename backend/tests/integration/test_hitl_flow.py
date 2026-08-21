@@ -56,6 +56,22 @@ MOCK_DRAFT_RESULT = {
     "requires_human_approval": True,
     "verification": {},
     "judge": {},
+    # The pre-fill draft's own (wide, merge_verdicts-produced) findings --
+    # deliberately non-empty and containing a rule the filled draft below
+    # can never actually have (see test_answering_a_placeholder_drops_its_
+    # own_stale_applied_rules), so a test can tell whether human_gate_node's
+    # re-verify after apply_answers actually replaces this with the fresh
+    # report's own findings or leaves it stale.
+    "applied_rules": [
+        {
+            "rule_id": "doldurulmamis_yer_tutucu",
+            "label": "Doldurulmamış yer tutucu",
+            "category": "belirsizlik",
+            "occurrences": 1,
+            "penalty_applied": 5.0,
+            "forces_approval": True,
+        }
+    ],
     "source_document": SOURCE_DOCUMENT,
     "context": "İlgili mevzuat bağlamı.",
     "classification": {},
@@ -208,6 +224,43 @@ async def test_answering_resumes_without_regenerating_the_draft(monkeypatch):
     # pause must never be repeated on resume.
     assert mocks["draft_graph"].ainvoke.await_count == 1
     assert mocks["routing_graph"].ainvoke.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_answering_a_placeholder_drops_its_own_stale_applied_rules(monkeypatch):
+    """A reported bug: human_gate_node re-verifies the filled draft and
+    correctly refreshes confidence_score/verification, but used to leave
+    draft_result["applied_rules"] -- what app.domains.chat.chat_service.
+    _maybe_record_draft actually persists as the shown defect breakdown (its
+    own C29 comment explains why it prefers this field over the one nested
+    in "verification") -- untouched from before the placeholder was filled.
+    A user answering "[MUHATAP]" saw a clean, fully-grounded draft still
+    docked for "Doldurulmamış yer tutucu", a defect that no longer existed
+    anywhere in the text they were looking at.
+
+    MOCK_DRAFT_RESULT's applied_rules carries exactly that stale finding;
+    the filled draft (real "İlgili Makama", every field grounded in
+    SOURCE_DOCUMENT) has nothing left to flag, so it must be gone after the
+    gate resumes -- proving this call site rebuilds applied_rules from its
+    own fresh re-verify instead of inheriting the pre-fill one."""
+    monkeypatch.setattr(settings, "HITL_BRIEF_GATE_ENABLED", False)
+    graph, _mocks = _build_graph()
+    config = {"configurable": {"thread_id": "hitl-test-applied-rules"}}
+
+    await graph.ainvoke(
+        {"input_text": "Bu evraka cevap yazısı hazırla", "document_id": None}, config=config
+    )
+    result = await graph.ainvoke(
+        Command(resume={"action": "answer", "answers": {"muhatap": "İlgili Makama"}, "instructions": ""}),
+        config=config,
+    )
+
+    applied_rules = result["final_output"]["draft"]["applied_rules"]
+    assert "doldurulmamis_yer_tutucu" not in {rule["rule_id"] for rule in applied_rules}
+    # The fresh re-verify's own report, not the stale pre-fill one, must be
+    # what confidence_score/verification.placeholder_count agree with too.
+    assert result["final_output"]["draft"]["confidence_score"] > 40.0
+    assert result["final_output"]["draft"]["verification"]["placeholder_count"] == 0
 
 
 @pytest.mark.asyncio

@@ -2348,6 +2348,38 @@ def create_planning_graph(
                     "needs_input_round": needs_input_round + 1,
                 }
 
+            # Same grounding this re-verify would have had if it had gone
+            # through draft_graph.verify_node instead of this bypass path --
+            # without it, today's own date has nothing to match against
+            # (state["today"] is legitimately injected, never extracted from
+            # a source, and every other verify_draft call site threads it
+            # through), and the company's own name/signer or a genuinely
+            # retrieved document chunk can get flagged as an unsupported
+            # claim purely because this call forgot to hand over the
+            # material that grounds it.
+            profile = CompanyProfile.from_dict(
+                state.get("company_id") or "", draft_result.get("company_profile")
+            )
+            trusted_facts = [
+                value
+                for value in (
+                    profile.display_name,
+                    profile.short_name,
+                    profile.letterhead,
+                    profile.default_signer_title,
+                    profile.default_signer_name,
+                )
+                if value
+            ]
+            style_example_texts = [
+                example.get("text", "") if isinstance(example, dict) else str(example)
+                for example in (draft_result.get("style_examples") or [])
+            ]
+            source_chunk_texts = [
+                chunk.get("text", "")
+                for chunk in (draft_result.get("source_chunks") or [])
+                if isinstance(chunk, dict) and chunk.get("text")
+            ]
             report = verify_draft(
                 filled_draft,
                 source_document=draft_result.get("source_document", ""),
@@ -2355,6 +2387,10 @@ def create_planning_graph(
                 classification=draft_result.get("classification") or {},
                 instructions=draft_result.get("instructions", ""),
                 strict=draft_result.get("correspondence_type") != "other_official",
+                style_examples=style_example_texts,
+                today=draft_result.get("today", ""),
+                trusted_facts=trusted_facts,
+                source_chunks=source_chunk_texts,
             )
             status = StepStatus.NEEDS_HUMAN_APPROVAL if report.requires_human_approval else StepStatus.COMPLETED
             updated = {
@@ -2364,6 +2400,16 @@ def create_planning_graph(
                 "combined_score": report.confidence_score,
                 "requires_human_approval": report.requires_human_approval,
                 "verification": report.model_dump(),
+                # C29 (app.domains.chat.chat_service._maybe_record_draft)
+                # persists *this* key as the draft's displayed defect
+                # breakdown, not the one nested inside "verification" --
+                # left stale (still the pre-fill draft's findings: the very
+                # placeholders/signature-block/style-leak defects this gate
+                # round just fixed) before this line existed, so a filled,
+                # re-verified, correctly-scored draft still showed the user
+                # a "Doldurulmamış yer tutucu"/"İmza bloğunda uydurma" style
+                # penalty for a defect no longer in the text at all.
+                "applied_rules": [rule.model_dump() for rule in report.applied_rules],
                 "evaluation_notes": report.evaluation_notes,
                 "missing_information": [],
                 "status": status,
