@@ -14,6 +14,7 @@ from typing import Optional
 from uuid import uuid4
 
 from app.core.config import settings
+from app.domains.companies import provider as company_provider
 from app.domains.companies.model.company_model import CompanyModel
 from app.domains.companies.repository import CompanyRepository
 from app.infrastructure.database.session import AsyncSessionLocal
@@ -54,6 +55,21 @@ async def seed_demo_company() -> Optional[str]:
             await repository.create(company)
             await session.commit()
             logger.info("Seeded demo company '%s' (%s)", company.name, company.id)
+            # Without this, `app.domains.companies.provider._read_profile_
+            # from_db` had no configured `company_profile` to read for the
+            # demo company and fell back to its raw `CompanyModel.name` --
+            # the same fallback mechanism that let a *synthetic* company's
+            # name leak into "known info" as a confident fact elsewhere.
+            # The demo environment should exercise a genuinely configured
+            # profile, not rely on that fallback by accident.
+            try:
+                await company_provider.set_company_profile(
+                    company.id,
+                    display_name=settings.SEED_DEMO_COMPANY_NAME,
+                    short_name=settings.SEED_DEMO_COMPANY_NAME,
+                )
+            except Exception:
+                logger.exception("Failed to seed demo company's profile")
             return company.id
         except Exception:
             logger.exception("Failed to seed demo company")
