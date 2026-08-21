@@ -2406,6 +2406,10 @@ def create_planning_graph(
                 example.get("text", "") if isinstance(example, dict) else str(example)
                 for example in (draft_result.get("style_examples") or [])
             ),
+            source_chunks=tuple(
+                chunk.get("text", "") if isinstance(chunk, dict) else str(chunk)
+                for chunk in (draft_result.get("source_chunks") or [])
+            ),
             correspondence_type_source=draft_result.get("correspondence_type_source") or "",
             # C15: these three used to be silently dropped here -- a
             # gate-triggered revision of a specific sub-genre (an itiraz

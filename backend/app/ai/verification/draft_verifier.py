@@ -671,6 +671,7 @@ def verify_draft(
     is_individual_petition: bool = False,
     today: str = "",
     trusted_facts: Sequence[str] = (),
+    source_chunks: Sequence[str] = (),
 ) -> VerificationReport:
     """Verify a draft's groundedness and structural completeness.
 
@@ -724,6 +725,15 @@ def verify_draft(
             like ``today`` is: without this, a company's own name would be
             flagged as an unsupported claim on every single draft that uses
             it.
+        source_chunks: Verbatim excerpts retrieved from the attached
+            document by the document-QA retriever (see ``app.ai.workflows.
+            draft_graph.retrieve_source_chunks_node``), the writer's only
+            view of the document's raw text (``_build_brief`` otherwise
+            hands it nothing but a short AI summary). Folded into the
+            grounding haystack for the same reason ``trusted_facts`` is:
+            without this, a fact the writer legitimately copied from a
+            retrieved chunk could still be flagged as an unsupported claim
+            if it happens not to also appear verbatim in ``source_document``.
 
     Returns:
         The verification report.
@@ -739,7 +749,7 @@ def verify_draft(
     # split out below via `instruction_only_claims` instead of being folded
     # in here, so its presence is visible to the caller rather than silently
     # indistinguishable from source/mevzuat grounding.
-    trusted: list[str] = [source_document, context, today, *trusted_facts]
+    trusted: list[str] = [source_document, context, today, *trusted_facts, *source_chunks]
     if classification:
         trusted.append(_flatten_classification(classification))
 

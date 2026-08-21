@@ -893,6 +893,11 @@ def create_revise_graph(
             is_individual_petition="dilekçe" in sub_genre.lower(),
             today=state.get("today", ""),
             trusted_facts=trusted_facts,
+            # Same fold-in as draft_graph.verify_node -- without this, a
+            # fact the original draft legitimately copied from a retrieved
+            # document chunk had strictly weaker grounding on every revision
+            # than it did on the draft that first wrote it.
+            source_chunks=active_draft.source_chunks,
         )
 
         judge_on = (
