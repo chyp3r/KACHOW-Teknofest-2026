@@ -10,6 +10,7 @@ for each.
 
 from app.ai.verification.style_checks import (
     check_filler_sentences,
+    check_meta_commentary,
     check_person_consistency,
     check_signature_block,
 )
@@ -136,3 +137,34 @@ def test_a_correctly_bracketed_placeholder_is_not_flagged():
     draft = "Arz ederim.\n\n[İmzalayacak yetkilinin adı ve soyadı]\n[İmzalayacak yetkilinin unvanı]"
 
     assert check_signature_block(draft) == []
+
+
+# ==========================================
+# check_meta_commentary
+# ==========================================
+def test_the_reported_bugs_exact_phrasing_is_flagged():
+    draft = "Konu: Staj Onayı\n\nSadece verilen kayıt incelenmiştir.\n\nBilgilerinize sunulur."
+
+    findings = check_meta_commentary(draft)
+
+    assert len(findings) == 1
+    assert findings[0].rule_id == "meta_yorum"
+    assert "incelenmiştir" in findings[0].detail
+
+
+def test_a_wordier_variant_of_the_same_shape_is_flagged():
+    draft = "Yalnızca sağlanan bilgiler doğrultusunda değerlendirilmiştir."
+
+    findings = check_meta_commentary(draft)
+
+    assert len(findings) == 1
+    assert findings[0].rule_id == "meta_yorum"
+
+
+def test_a_claim_grounded_to_a_named_request_is_not_flagged():
+    """The verb alone ("incelenmiştir") is legitimate, formulaic official
+    register -- only the self-referential "sadece/yalnızca verilen ..."
+    shape this bug report's symptom took should ever trip the check."""
+    draft = "Talebiniz 5018 sayılı Kanun kapsamında incelenmiştir."
+
+    assert check_meta_commentary(draft) == []
