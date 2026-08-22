@@ -1,4 +1,4 @@
-.PHONY: setup-db bootstrap up down logs test eval eval-baseline eval-llm eval-retrieval \
+.PHONY: setup-db bootstrap up down logs test test-e2e eval eval-baseline eval-llm eval-retrieval \
 	migrate seed shell psql restart-backend \
 	reset-db reset-checkpoints reset-cache reset-storage reset-document-qa reset
 
@@ -79,6 +79,14 @@ restart-backend:
 # genuinely needed by the integration tests.
 test:
 	docker compose run --rm backend pytest -q
+
+# Real ASGI HTTP e2e tests (tests/e2e/, Workstream C): RLS through a real
+# Postgres, a real app lifespan (LangGraph checkpointer included), fake LLM/
+# embeddings clients only. Deselected from the default `test` lane by
+# pyproject.toml's `addopts` -- needs db/redis/qdrant up, unlike the fast
+# default lane, which needs no infra at all.
+test-e2e:
+	docker compose run --rm backend pytest -q -m e2e
 
 # Deterministic evaluation of the non-LLM decision layer. Deliberately a
 # separate target rather than a test: the full run is a measurement, not a
