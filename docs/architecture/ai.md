@@ -498,11 +498,12 @@ Embedding katmanı belgeleri ve metinleri vektörlere dönüştürerek anlamsal 
 * **get_embeddings_client**: İlgili sağlayıcıyı başlatan fabrika fonksiyonu.
 
 ### Metin Bölme (Chunking) Stratejileri
-`app/ai/embeddings/chunking/` altında 4 farklı bölme yöntemi sunulmaktadır:
-1. **CharacterChunker** (`character.py`): Basit karakter sınırı ve çakışma (overlap) odaklı bölücü.
-2. **RecursiveChunker** (`recursive.py`): Paragraf, cümle ve kelime sınırlarını koruyarak metni rekürsif olarak bölen standart bölücü.
-3. **SemanticChunker** (`semantic.py`): Cümleler arası anlamsal kosinüs benzerliği (cosine similarity) analizini yapıp, anlamsal sapma veya eşik (static/percentile threshold) değerine göre bölen bölücü.
-4. **AgenticChunker** (`agentic.py`): LLM/Ajan yardımıyla metni mantıksal bölümlere ayıran, her parçaya özel başlık ve özet üreterek zengin meta veri (metadata) üreten gelişmiş bölücü.
+`app/ai/embeddings/chunking/` altında 4 bölücü sınıfı bulunur, ama **production'da yalnızca biri kullanılıyor**:
+
+1. **RecursiveChunker** (`recursive.py`) — **tek production stratejisi.** Paragraf, cümle ve kelime sınırlarını koruyarak metni rekürsif olarak böler; `add_start_index=True` sayesinde her chunk'ın kaynak metindeki karakter ofsetini taşır, bu da `_index_for_qa`'nın `[s. N]` sayfa atıflarını kurmasını sağlar. Boyut/overlap parametreleri `app.ai.policy.schema.ChunkingPolicy`'de tek kaynaktan yönetilir (bkz. o sınıfın docstring'i).
+2. **CharacterChunker** (`character.py`) — basit karakter sınırı ve overlap odaklı bölücü; yalnızca test/karşılaştırma amaçlı, hiçbir production çağrı yerinde kullanılmıyor.
+3. **SemanticChunker** (`semantic.py`) — cümleler arası kosinüs benzerliği analiziyle bölen bölücü. **Hiçbir production yoluna bağlı değil ve olduğu gibi bağlanmamalı**: `start_index` üretmiyor (sayfa atıfı kaybolur), Türkçe cümle ayırıcı regex'i yaygın kısaltmaları ve büyük ünlüleri (İ/Ş/Ğ/Ç/Ö/Ü) doğru işlemiyor, ve üst boyut sınırı/overlap'i yok. Ayrıntılar ve production'a bağlanmadan önce çözülmesi gerekenler sınıfın kendi docstring'inde. Şu an yalnızca `evaluation`'ın retrieval eval suite'inde bir keşif kolu olarak kullanılıyor.
+4. **AgenticChunker** (`agentic.py`) — LLM/Ajan yardımıyla metni mantıksal bölümlere ayıran, her parçaya özel başlık ve özet üreten bölücü. Production'a bağlı değil; upload anında belge başına LLM çağrısı gerektirdiği için ~28 tok/s yerel model üzerinde production yolu olarak uygun değil.
 
 ### Embedding Servisi
 `app/ai/embeddings/service.py` altındaki **EmbeddingService** sınıfı metin bölme (chunking) ve vektör üretme (embedding) adımlarını orkestre ederek, text, vector ve metadata barındıran `EmbeddedChunk` listesini döndürür.

@@ -13,6 +13,7 @@ mistaken for a change in the traffic.
 
 from app.ai.policy.schema import (
     BudgetPolicy,
+    ChunkingPolicy,
     GuardrailPolicy,
     IntentPolicy,
     MemoryPolicy,
@@ -40,6 +41,12 @@ from app.ai.policy.schema import (
 #: is additive and defaulted, so nothing currently keyed on 3.0.0 is
 #: actually stale -- bump properly (with regenerated prototypes) in a
 #: follow-up that has embedding access.
+#: NOTE: ChunkingPolicy was added under this same 3.0.0 stamp for the same
+#: reason -- it is additive and defaulted (its values reproduce the exact
+#: 1000/200 literals every call site already used), so nothing keyed on
+#: 3.0.0 goes stale. It carries no new production behaviour by itself; it
+#: only replaces four copy-pasted literals with one source of truth (see
+#: ChunkingPolicy's own docstring).
 POLICY_VERSION = "3.0.0"
 
 _POLICY = Policy(version=POLICY_VERSION)
@@ -61,6 +68,7 @@ def get_policy() -> Policy:
 
 __all__ = [
     "BudgetPolicy",
+    "ChunkingPolicy",
     "GuardrailPolicy",
     "IntentPolicy",
     "MemoryPolicy",

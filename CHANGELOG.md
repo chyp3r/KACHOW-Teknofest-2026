@@ -3,6 +3,32 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [3.31.0] - 2026-08-22
+Chunk boyutu/overlap parametreleri (#227). `chunk_size=1000, chunk_overlap=200`
+çifti `service.py`, `mcp_mevzuat.py` ve `scripts/index_mevzuat.py`'de ayrı ayrı
+literal olarak duruyordu; üçünde de "must stay in sync" yorumu vardı ama
+senkronu koruyan hiçbir mekanizma yoktu -- `corpus_loader.py`'nin docstring'i
+bunların byte-identical chunk üretmek zorunda olduğunu, aksi halde
+`reciprocal_rank_fusion`'ın exact-`page_content` dedup'ının çift saydığını
+söylüyor. Ayrıca `SemanticChunker` repoda duruyor ve export ediliyordu ama
+`start_index` metadata'sı üretmiyor -- onu `_index_for_qa`'ya bağlayan bir
+sonraki geliştirici `[s. N]` sayfa atıflarını sessizce kaybederdi.
+
+### Eklendi
+- **`ChunkingPolicy`** (`app.ai.policy.schema`): Q&A ve mevzuat chunk
+  boyutu/overlap'i için tek kaynak. İki ayrı çift taşıyor (`qa_*`,
+  `mevzuat_*`) çünkü ikisinin re-index maliyeti farklı. `check_invariants()`
+  artık `0 < overlap < size`'ı doğruluyor. Bilinçli olarak bir `strategy`
+  alanı taşımıyor -- tek production chunker'ı `RecursiveChunker`.
+
+### Değiştirildi
+- `service.py`, `mcp_mevzuat.py` ve `scripts/index_mevzuat.py`'deki chunk
+  boyutu/overlap literalleri artık `get_policy().chunking`'den okunuyor.
+- `SemanticChunker`'ın docstring'i, onu üretime bağlamadan önce çözülmesi
+  gereken üç somut sorunu (start_index yok, Türkçe cümle ayırıcı regex
+  sınırlaması, üst boyut sınırı/overlap yok) açıkça anlatacak şekilde
+  yeniden yazıldı; `docs/architecture/ai.md`'deki yanıltıcı "4 kullanılabilir
+  strateji" anlatımı düzeltildi.
+
 LLM'siz retrieval eval suite'i (#229). `evaluation/metrics.py` içinde
 `precision_at_k`/`recall_at_k` yazılmış ve unit-test edilmişti ama hiçbir
 suite onları çağırmıyordu -- sistemin çekirdek özelliği olan RAG retrieval

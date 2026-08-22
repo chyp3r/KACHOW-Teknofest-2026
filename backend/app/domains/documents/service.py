@@ -13,6 +13,7 @@ from app.ai.documents.anchors import build_page_map
 from app.ai.guardrails.file_integrity import check_file_integrity
 from app.ai.guardrails.injection import scrub_extracted_text
 from app.ai.guardrails.sensitivity import assess as assess_sensitivity
+from app.ai.policy import get_policy
 from app.ai.summarization import build_detailed_summary
 from app.domains.documents.model.document_model import DocumentModel
 from app.domains.documents.repository import DocumentRepository
@@ -97,10 +98,13 @@ def _graph_to_json_dict(graph: KnowledgeGraph) -> dict[str, Any]:
     return json.loads(json.dumps(dataclasses.asdict(graph), default=str))
 
 #: Q&A index settings. Must stay in sync with the retrieval side in
-#: planning_graph's document_qa step.
+#: planning_graph's document_qa step. Chunk size/overlap are sourced from
+#: ChunkingPolicy.qa_* rather than local literals -- see that class's
+#: docstring for why chunking has its own policy section and why it does
+#: not (yet) carry a strategy switch.
 QA_COLLECTION_NAME = "document_qa"
-QA_CHUNK_SIZE = 1000
-QA_CHUNK_OVERLAP = 200
+QA_CHUNK_SIZE = get_policy().chunking.qa_chunk_size
+QA_CHUNK_OVERLAP = get_policy().chunking.qa_chunk_overlap
 
 #: Cached embedding dimension, probed once per process.
 _qa_vector_size: Optional[int] = None

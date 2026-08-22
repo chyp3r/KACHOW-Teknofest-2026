@@ -28,9 +28,11 @@ import pytest
 from app.ai.policy import POLICY_VERSION, Policy, get_policy
 from app.ai.policy.budget import node_budget
 from app.ai.reasoning_levels import get_reasoning_level_preset
+from app.ai.retrieval import mcp_mevzuat
 from app.ai.verification import draft_verifier, llm_judge
 from app.ai.workflows import intent_scorer, planning_graph, routing_graph
 from app.core.enums.reasoning_level import ReasoningLevel
+from app.domains.documents import service as document_service
 
 WORKFLOW_DIR = Path(draft_verifier.__file__).resolve().parents[1] / "workflows"
 
@@ -171,6 +173,30 @@ def test_consuming_modules_read_their_constants_from_the_policy():
     assert planning_graph.HISTORY_RAW_CAP == policy.memory.history_raw_cap
     assert planning_graph.CONSOLIDATION_BATCH_SIZE == policy.memory.consolidation_batch_size
     assert planning_graph.QA_RESULT_LIMIT == policy.memory.qa_result_limit
+    assert document_service.QA_CHUNK_SIZE == policy.chunking.qa_chunk_size
+    assert document_service.QA_CHUNK_OVERLAP == policy.chunking.qa_chunk_overlap
+    assert mcp_mevzuat.CHUNK_SIZE == policy.chunking.mevzuat_chunk_size
+    assert mcp_mevzuat.CHUNK_OVERLAP == policy.chunking.mevzuat_chunk_overlap
+
+
+def test_chunk_overlap_must_be_smaller_than_chunk_size():
+    """RecursiveCharacterTextSplitter degenerates once overlap catches up
+    with size -- this is a real invalid configuration, not just wasteful."""
+    policy = get_policy()
+    broken = replace(
+        policy, chunking=replace(policy.chunking, qa_chunk_overlap=policy.chunking.qa_chunk_size)
+    )
+
+    with pytest.raises(ValueError, match="qa_chunk_overlap"):
+        broken.check_invariants()
+
+
+def test_chunk_size_must_be_positive():
+    policy = get_policy()
+    broken = replace(policy, chunking=replace(policy.chunking, mevzuat_chunk_size=0))
+
+    with pytest.raises(ValueError, match="mevzuat_chunk_size"):
+        broken.check_invariants()
 
 
 def test_the_policy_is_a_single_frozen_instance():

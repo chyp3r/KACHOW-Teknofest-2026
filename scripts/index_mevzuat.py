@@ -15,14 +15,16 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 from app.ai.embeddings.chunking.recursive import RecursiveChunker
 from app.ai.embeddings.models import get_embeddings_client
+from app.ai.policy import get_policy
 from app.core.config import settings
 from app.infrastructure.vectorstore import get_vector_store
 from app.workers.indexing import index_mevzuat_corpus
 
-# Must match the parameters used by the BM25 dependency in app/api/dependency.py,
-# otherwise rank fusion sees the same passage twice.
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
+# Sourced from ChunkingPolicy.mevzuat_* -- must match the parameters used
+# by the BM25 dependency (app.ai.retrieval.mcp_mevzuat), otherwise rank
+# fusion sees the same passage twice.
+CHUNK_SIZE = get_policy().chunking.mevzuat_chunk_size
+CHUNK_OVERLAP = get_policy().chunking.mevzuat_chunk_overlap
 
 
 def _parse_args() -> argparse.Namespace:

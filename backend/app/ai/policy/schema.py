@@ -30,6 +30,7 @@ from app.core.enums.user_role import UserRole
 
 __all__ = [
     "BudgetPolicy",
+    "ChunkingPolicy",
     "DraftPolicy",
     "GuardrailPolicy",
     "IntentPolicy",
@@ -391,6 +392,63 @@ class DraftPolicy:
 
 
 @dataclass(frozen=True)
+class ChunkingPolicy:
+    """Chunk-size/overlap parameters for the two things this codebase splits
+    text for: the per-upload Document Q&A index and the offline mevzuat
+    corpus index.
+
+    Both pairs used to be the same ``1000``/``200`` literal, copy-pasted
+    across four call sites (``app.domains.documents.service``,
+    ``app.ai.retrieval.mcp_mevzuat``, ``scripts/index_mevzuat.py``, and the
+    corpus loader they both feed) with a "must stay in sync" comment at
+    three of them and no mechanism enforcing it. This class is that
+    mechanism -- one source of truth read by all four.
+
+    Deliberately no ``strategy`` field selecting between chunkers. The only
+    production chunker is ``RecursiveChunker``
+    (``app.ai.embeddings.chunking.recursive``); ``SemanticChunker`` exists
+    in the same package and is unit-tested, but is not wired into any
+    production call site and must not be without first proving it helps --
+    see that module's own docstring for the concrete reasons it is not a
+    safe drop-in today (a Turkish sentence-boundary regex that mishandles
+    common abbreviations and uppercase vowels, an unbounded chunk size with
+    no overlap, and no ``start_index`` metadata, which would silently drop
+    the ``[s. N]`` page citation ``_index_for_qa`` builds from it).
+    ``evaluation``'s retrieval suite is where that question gets an answer;
+    this policy is not the place to pre-empt it with an unused field.
+
+    Attributes:
+        qa_chunk_size: Character length of each ``document_qa`` chunk (the
+            per-upload Q&A index queried by ``retrieve_source_chunks_node``
+            and the ``search_document`` tool).
+        qa_chunk_overlap: Character overlap between consecutive
+            ``document_qa`` chunks -- keeps an answer that straddles a
+            chunk boundary from being lost.
+        mevzuat_chunk_size: Character length of each mevzuat corpus chunk.
+            Kept as a separate field from ``qa_chunk_size`` rather than one
+            shared pair on purpose: the indexing worker
+            (``app.workers.indexing.index_mevzuat_corpus``) and the BM25
+            dependency path (``app.ai.retrieval.mcp_mevzuat``,
+            ``scripts/index_mevzuat.py``) must produce byte-identical
+            chunks for the same corpus text, or
+            ``app.ai.retrieval.fusion.reciprocal_rank_fusion``'s
+            exact-``page_content`` dedup double-counts a chunk that was
+            split two different ways. Changing this value re-chunks the
+            corpus differently from whatever is already sitting in the
+            committed ``mevzuat`` Qdrant collection and ``sparse_vocab.json``
+            -- it requires re-running ``scripts/index_mevzuat.py``, not just
+            a policy edit.
+        mevzuat_chunk_overlap: Character overlap for mevzuat corpus chunks;
+            same re-index caveat as ``mevzuat_chunk_size``.
+    """
+
+    qa_chunk_size: int = 1000
+    qa_chunk_overlap: int = 200
+    mevzuat_chunk_size: int = 1000
+    mevzuat_chunk_overlap: int = 200
+
+
+@dataclass(frozen=True)
 class Policy:
     """The complete parameter surface of the deterministic decision layer."""
 
@@ -403,6 +461,7 @@ class Policy:
     budget: BudgetPolicy = field(default_factory=BudgetPolicy)
     guardrail: GuardrailPolicy = field(default_factory=GuardrailPolicy)
     draft: DraftPolicy = field(default_factory=DraftPolicy)
+    chunking: ChunkingPolicy = field(default_factory=ChunkingPolicy)
 
     def check_invariants(self) -> None:
         """Assert the relationships between parameters that must always hold.
@@ -502,3 +561,24 @@ class Policy:
             raise ValueError("draft.source_chunk_count must be positive")
         if self.draft.source_chunk_char_budget <= 0:
             raise ValueError("draft.source_chunk_char_budget must be positive")
+
+        chunking = self.chunking
+        for size_name, overlap_name, size, overlap in (
+            ("chunking.qa_chunk_size", "chunking.qa_chunk_overlap",
+             chunking.qa_chunk_size, chunking.qa_chunk_overlap),
+            ("chunking.mevzuat_chunk_size", "chunking.mevzuat_chunk_overlap",
+             chunking.mevzuat_chunk_size, chunking.mevzuat_chunk_overlap),
+        ):
+            if size <= 0:
+                raise ValueError(f"{size_name} must be positive")
+            if overlap < 0:
+                raise ValueError(f"{overlap_name} must not be negative")
+            if overlap >= size:
+                # RecursiveCharacterTextSplitter degenerates (near-duplicate
+                # or endlessly overlapping chunks) once overlap catches up
+                # with size -- this is not a valid configuration, not just
+                # an inefficient one.
+                raise ValueError(
+                    f"{overlap_name} ({overlap}) must be smaller than "
+                    f"{size_name} ({size})"
+                )
