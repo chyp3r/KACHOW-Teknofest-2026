@@ -19,6 +19,7 @@ and wrongly; optimising the second alone produces one that abstains on
 everything and pushes the entire load onto the model tier.
 """
 
+import math
 from dataclasses import dataclass
 from typing import Iterable, Optional, Sequence
 
@@ -36,6 +37,9 @@ __all__ = [
     "expected_calibration_error",
     "precision_at_k",
     "recall_at_k",
+    "mean_reciprocal_rank",
+    "hit_rate_at_k",
+    "ndcg_at_k",
     "binary_rates",
 ]
 
@@ -366,6 +370,106 @@ def recall_at_k(retrieved: Sequence[str], relevant: Iterable[str], k: int) -> fl
         return 0.0
     top = set(list(retrieved)[:k])
     return len(top & relevant_set) / len(relevant_set)
+
+
+def mean_reciprocal_rank(rankings: Sequence[tuple[Sequence[str], Iterable[str]]]) -> float:
+    """Mean of 1/rank of the first relevant item, across a batch of queries.
+
+    Unlike precision/recall@k, MRR is not cut off at a fixed k -- it rewards
+    a relevant item appearing anywhere in the ranking, weighted by how close
+    to the top it is. That makes it the right complement to precision@k
+    here: precision@k tells you whether the writer's fixed budget (k source
+    chunks) would have included a relevant one, MRR tells you how far a
+    chunking configuration pushed the first relevant hit down the ranking
+    even when it stayed inside that budget.
+
+    Args:
+        rankings: One ``(retrieved, relevant)`` pair per query -- retrieved
+            identifiers best-first, and the gold relevant identifiers for
+            that query.
+
+    Returns:
+        The mean reciprocal rank in [0, 1], or 0.0 for an empty input. A
+        query with no relevant item found anywhere in ``retrieved``
+        contributes 0.0, not an excluded term.
+    """
+    if not rankings:
+        return 0.0
+
+    reciprocal_ranks = []
+    for retrieved, relevant in rankings:
+        relevant_set = set(relevant)
+        rank = next(
+            (index for index, item in enumerate(retrieved, start=1) if item in relevant_set),
+            None,
+        )
+        reciprocal_ranks.append(1.0 / rank if rank else 0.0)
+    return sum(reciprocal_ranks) / len(reciprocal_ranks)
+
+
+def hit_rate_at_k(retrieved: Sequence[str], relevant: Iterable[str], k: int) -> float:
+    """Whether at least one relevant item lands in the top-k, as 1.0 or 0.0.
+
+    The coarsest of the ranking metrics here on purpose: it answers "would
+    the writer have seen anything relevant at all", collapsing rank position
+    and count into a single pass/fail per query. Aggregate hit_rate_at_k
+    across a gold set for the share of queries a configuration failed
+    outright, independent of how well it did on the ones it got right.
+
+    Args:
+        retrieved: Retrieved identifiers, best first.
+        relevant: The gold relevant identifiers.
+        k: Cut-off rank.
+
+    Returns:
+        1.0 if any of the top-k retrieved items is relevant, else 0.0. 0.0
+        when ``k`` is not positive or there are no relevant items.
+    """
+    if k <= 0:
+        return 0.0
+    relevant_set = set(relevant)
+    if not relevant_set:
+        return 0.0
+    top = set(list(retrieved)[:k])
+    return 1.0 if top & relevant_set else 0.0
+
+
+def ndcg_at_k(retrieved: Sequence[str], relevant: Iterable[str], k: int) -> float:
+    """Normalised discounted cumulative gain at k, for binary relevance.
+
+    Unlike precision/recall@k, this is rank-sensitive within the cut-off: a
+    relevant chunk at position 1 counts more than the same chunk at position
+    k, which is what actually matters here -- the writer's prompt lists
+    source chunks in retrieval order, and a model is more likely to draw on
+    the passages nearer the top.
+
+    Args:
+        retrieved: Retrieved identifiers, best first.
+        relevant: The gold relevant identifiers.
+        k: Cut-off rank.
+
+    Returns:
+        nDCG@k in [0, 1]. 0.0 when ``k`` is not positive or there are no
+        relevant items (an ideal ranking would be undefined); 1.0 for a
+        ranking that places every relevant item as high as it can go.
+    """
+    if k <= 0:
+        return 0.0
+    relevant_set = set(relevant)
+    if not relevant_set:
+        return 0.0
+
+    top = list(retrieved)[:k]
+    dcg = sum(
+        1.0 / math.log2(rank + 1)
+        for rank, item in enumerate(top, start=1)
+        if item in relevant_set
+    )
+
+    ideal_hits = min(len(relevant_set), k)
+    idcg = sum(1.0 / math.log2(rank + 1) for rank in range(1, ideal_hits + 1))
+
+    return dcg / idcg if idcg else 0.0
 
 
 def binary_rates(pairs: Sequence[tuple[bool, bool]]) -> BinaryRates:

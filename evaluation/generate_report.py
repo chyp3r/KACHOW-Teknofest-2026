@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from app.ai.policy import POLICY_VERSION
-from evaluation.harness import draft_suite, intent_suite
+from evaluation.harness import draft_suite, intent_suite, retrieval_suite
 from evaluation.harness.runner import REPO_ROOT, EvalRun
 from evaluation.metrics import (
     Prediction,
@@ -39,7 +39,7 @@ from evaluation.metrics import (
 
 REPORT_DIR = REPO_ROOT / "evaluation" / "reports"
 
-SUITES = ("intents", "drafts")
+SUITES = ("intents", "drafts", "retrieval")
 
 
 def _intent_summary(run: EvalRun) -> dict[str, Any]:
@@ -113,15 +113,77 @@ def _draft_summary(run: EvalRun) -> dict[str, Any]:
     }
 
 
-def _run_suite(name: str, *, with_model: bool = False) -> tuple[EvalRun, dict[str, Any]]:
+def _retrieval_summary(*, k: int = retrieval_suite.DEFAULT_K) -> tuple[EvalRun, dict[str, Any]]:
+    """Run every chunking arm and score them into one comparison summary.
+
+    Unlike the intent/draft suites, "the suite" here is inherently a
+    comparison across configurations -- ``--suite retrieval`` means "run
+    the A/B", not "run one thing". All arms run in one call so that stays
+    true; ``evaluation.harness.retrieval_suite.ARMS`` is the source of
+    truth for which configurations exist.
+
+    Returns:
+        The baseline arm's ``EvalRun`` (for the report header's
+        dataset/timing line -- every arm shares the same gold set and ran
+        in the same invocation, so any one of them is representative) and
+        the combined summary dict.
+    """
+    arms: dict[str, dict[str, Any]] = {}
+    runs: dict[str, EvalRun] = {}
+
+    for arm_name in retrieval_suite.ARMS:
+        run, stats = retrieval_suite.run(arm_name, k=k)
+        runs[arm_name] = run
+        arms[arm_name] = {
+            **retrieval_suite.to_metrics(run, k=k),
+            "chunk_count": stats.chunk_count,
+            "mean_chunk_length": round(stats.mean_chunk_length, 1),
+            "p50_chunk_length": stats.p50_chunk_length,
+            "p95_chunk_length": stats.p95_chunk_length,
+            "page_attribution_rate": round(stats.page_attribution_rate, 4),
+            "answer_span_intactness": round(stats.answer_span_intactness, 4),
+            "by_category": {
+                category: metrics
+                for category, metrics in retrieval_suite.by_category_metrics(run, k=k).items()
+            },
+        }
+        for metric_key in (
+            "precision_at_k", "recall_at_k", "hit_rate_at_k",
+            "mean_reciprocal_rank", "ndcg_at_k", "mean_yok_top1_score",
+        ):
+            arms[arm_name][metric_key] = round(arms[arm_name][metric_key], 4)
+
+    baseline = retrieval_suite.BASELINE_ARM
+    summary = {
+        "k": k,
+        "baseline": baseline,
+        "arms": arms,
+        "delta_vs_baseline": {
+            arm_name: {
+                metric_key: round(arms[arm_name][metric_key] - arms[baseline][metric_key], 4)
+                for metric_key in ("precision_at_k", "ndcg_at_k", "mean_reciprocal_rank")
+            }
+            for arm_name in arms
+            if arm_name != baseline
+        },
+    }
+    return runs[baseline], summary
+
+
+def _run_suite(
+    name: str, *, with_model: bool = False, retrieval_k: int = retrieval_suite.DEFAULT_K
+) -> tuple[EvalRun, dict[str, Any]]:
     """Run one suite and score it.
 
     Args:
-        name: ``"intents"`` or ``"drafts"``.
+        name: ``"intents"``, ``"drafts"`` or ``"retrieval"``.
         with_model: Only meaningful for ``"intents"`` -- wires a real
             fast-tier model into the model band instead of the default fully
             offline run (see ``intent_suite.run_with_model``). Ignored for
-            ``"drafts"``, which has no model band to begin with.
+            ``"drafts"``/``"retrieval"``, which have no model band to begin
+            with.
+        retrieval_k: Only meaningful for ``"retrieval"`` -- the cut-off
+            rank every arm and every rank-sensitive metric uses.
 
     Returns:
         The run and its summary.
@@ -135,6 +197,8 @@ def _run_suite(name: str, *, with_model: bool = False) -> tuple[EvalRun, dict[st
     if name == "drafts":
         run = draft_suite.run()
         return run, _draft_summary(run)
+    if name == "retrieval":
+        return _retrieval_summary(k=retrieval_k)
     raise ValueError(f"Unknown suite: {name}")
 
 
@@ -259,23 +323,107 @@ def _format_draft_markdown(summary: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _format_retrieval_markdown(summary: dict[str, Any]) -> list[str]:
+    """Render the chunking-arm comparison as Markdown lines."""
+    baseline = summary["baseline"]
+    arms = summary["arms"]
+    metric_labels = (
+        ("precision_at_k", "Precision@k"),
+        ("recall_at_k", "Recall@k"),
+        ("hit_rate_at_k", "Hit rate@k"),
+        ("mean_reciprocal_rank", "MRR"),
+        ("ndcg_at_k", "nDCG@k"),
+        ("mean_yok_top1_score", "Yok top-1 skoru (düşük iyi)"),
+    )
+
+    lines = [
+        f"> Qdrant kullanılmaz, yerel RRF ile ölçülür (bkz. `docs/evaluation/retrieval.md`). "
+        f"k={summary['k']}, baseline=`{baseline}` (production ChunkingPolicy varsayılanları).",
+        "",
+        "### Kollar arası karşılaştırma",
+        "",
+        "| Metrik | "
+        + " | ".join(f"`{arm}`" + (" **(baseline)**" if arm == baseline else "") for arm in arms)
+        + " |",
+        "|---|" + "---|" * len(arms),
+    ]
+    for key, label in metric_labels:
+        cells = [f"{arms[arm][key]:.4f}" for arm in arms]
+        lines.append(f"| {label} | " + " | ".join(cells) + " |")
+
+    lines += [
+        "",
+        "### Baseline'a göre Δ (yalnızca cevaplanabilir vakalar)",
+        "",
+        "| Kol | ΔPrecision@k | ΔnDCG@k | ΔMRR |",
+        "|---|---|---|---|",
+    ]
+    for arm, deltas in summary["delta_vs_baseline"].items():
+        lines.append(
+            f"| `{arm}` | {deltas['precision_at_k']:+.4f} | "
+            f"{deltas['ndcg_at_k']:+.4f} | {deltas['mean_reciprocal_rank']:+.4f} |"
+        )
+
+    lines += [
+        "",
+        "### Korpus istatistikleri",
+        "",
+        "| Kol | Chunk sayısı | Ort. uzunluk | p50 | p95 | Sayfa atıf oranı | Span bütünlüğü |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for arm in arms:
+        stats = arms[arm]
+        lines.append(
+            f"| `{arm}` | {stats['chunk_count']} | {stats['mean_chunk_length']:.0f} | "
+            f"{stats['p50_chunk_length']:.0f} | {stats['p95_chunk_length']:.0f} | "
+            f"{stats['page_attribution_rate']:.2f} | {stats['answer_span_intactness']:.2f} |"
+        )
+
+    lines += ["", "### Kategori kırılımı (baseline kolu)", "", "| Kategori | Vaka | P@k | nDCG@k | MRR |", "|---|---|---|---|---|"]
+    for category in sorted(arms[baseline]["by_category"]):
+        cat_metrics = arms[baseline]["by_category"][category]
+        if cat_metrics["answerable_cases"] == 0:
+            # retrieval_suite.UNANSWERABLE_CATEGORY: precision/nDCG/MRR are
+            # undefined here (no gold answer_spans), not zero -- a literal
+            # 0.00 in this row would read as a miss, when the row is
+            # actually the mean_yok_top1_score diagnostic's territory
+            # (see the overall comparison table above).
+            lines.append(f"| `{category}` | {cat_metrics['cases']} | - | - | - |")
+            continue
+        lines.append(
+            f"| `{category}` | {cat_metrics['cases']} | {cat_metrics['precision_at_k']:.2f} | "
+            f"{cat_metrics['ndcg_at_k']:.2f} | {cat_metrics['mean_reciprocal_rank']:.2f} |"
+        )
+
+    return lines
+
+
 def _diff_lines(suite: str, current: dict[str, Any], baseline: dict[str, Any]) -> list[str]:
     """Render the headline deltas against a baseline report."""
-    keys = (
-        ("macro_f1", "Macro F1", True)
-        if suite == "intents"
-        else ("accuracy", "Doğruluk", True)
-    )
-    tracked = [keys]
-    if suite == "intents":
-        tracked += [
+    if suite == "retrieval":
+        # Nested one level deeper than the other two suites: the comparable
+        # numbers live under each report's own baseline arm, and a report's
+        # baseline arm name is itself worth surfacing if it ever changes
+        # between the two runs being compared (a policy default change).
+        current = current.get("arms", {}).get(current.get("baseline", ""), {})
+        baseline = baseline.get("arms", {}).get(baseline.get("baseline", ""), {})
+        tracked = [
+            ("precision_at_k", "Precision@k", True),
+            ("ndcg_at_k", "nDCG@k", True),
+            ("mean_reciprocal_rank", "MRR", True),
+            ("answer_span_intactness", "Span bütünlüğü", True),
+        ]
+    elif suite == "intents":
+        tracked = [
+            ("macro_f1", "Macro F1", True),
             ("accuracy_over_all", "Doğruluk (tüm vakalar)", True),
             ("abstention_rate", "Eskalasyon oranı", False),
             ("clarify_rate", "Clarify oranı", False),
             ("expected_calibration_error", "Kalibrasyon hatası", False),
         ]
     else:
-        tracked += [
+        tracked = [
+            ("accuracy", "Doğruluk", True),
             ("false_positive_rate", "Yanlış pozitif oranı", False),
             ("false_negative_rate", "Yanlış negatif oranı", False),
         ]
@@ -334,8 +482,10 @@ def build_report(
         ]
         if suite == "intents":
             lines += _format_intent_markdown(summaries[suite])
-        else:
+        elif suite == "drafts":
             lines += _format_draft_markdown(summaries[suite])
+        else:
+            lines += _format_retrieval_markdown(summaries[suite])
 
         if baseline and suite in baseline.get("suites", {}):
             lines += [""] + _diff_lines(
@@ -380,6 +530,17 @@ def main(argv: Optional[list[str]] = None) -> int:
             "Ollama calls -- see `make eval-llm`."
         ),
     )
+    parser.add_argument(
+        "--retrieval-k",
+        type=int,
+        default=retrieval_suite.DEFAULT_K,
+        help=(
+            "Retrieval suite only: cut-off rank for every chunking arm and "
+            "every rank-sensitive metric. Defaults to DraftPolicy."
+            "source_chunk_count -- change this to see how sensitive the "
+            "comparison is to the writer's actual retrieval budget."
+        ),
+    )
     args = parser.parse_args(argv)
 
     selected = SUITES if args.suite == "all" else (args.suite,)
@@ -387,7 +548,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     runs: dict[str, EvalRun] = {}
     summaries: dict[str, dict[str, Any]] = {}
     for suite in selected:
-        run, summary = _run_suite(suite, with_model=args.with_model)
+        run, summary = _run_suite(
+            suite, with_model=args.with_model, retrieval_k=args.retrieval_k
+        )
         runs[suite] = run
         summaries[suite] = summary
 
@@ -429,16 +592,25 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     for suite in selected:
         summary = summaries[suite]
-        headline = (
-            f"macro_f1={summary['macro_f1']:.4f} "
-            f"abstention={summary['abstention_rate']:.4f}"
-            if suite == "intents"
-            else (
+        if suite == "intents":
+            print(
+                f"[{suite}] {summary['cases']} vaka · "
+                f"macro_f1={summary['macro_f1']:.4f} "
+                f"abstention={summary['abstention_rate']:.4f}"
+            )
+        elif suite == "drafts":
+            print(
+                f"[{suite}] {summary['cases']} vaka · "
                 f"accuracy={summary['accuracy']:.4f} "
                 f"false_positive_rate={summary['false_positive_rate']:.4f}"
             )
-        )
-        print(f"[{suite}] {summary['cases']} vaka · {headline}")
+        else:
+            baseline_metrics = summary["arms"][summary["baseline"]]
+            print(
+                f"[{suite}] k={summary['k']} baseline=`{summary['baseline']}` · "
+                f"precision_at_k={baseline_metrics['precision_at_k']:.4f} "
+                f"ndcg_at_k={baseline_metrics['ndcg_at_k']:.4f}"
+            )
 
     print(f"\nRapor yazıldı:\n  {json_path}\n  {markdown_path}")
     return 0

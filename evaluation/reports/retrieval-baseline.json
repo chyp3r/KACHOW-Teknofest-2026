@@ -1,0 +1,375 @@
+{
+  "meta": {
+    "retrieval": {
+      "dataset": "retrieval",
+      "started_at": "2026-08-22T18:29:25",
+      "total_ms": 11.286
+    }
+  },
+  "policy_version": "3.0.0",
+  "suites": {
+    "retrieval": {
+      "arms": {
+        "recursive-1000-200": {
+          "answer_span_intactness": 1.0,
+          "answerable_cases": 19,
+          "by_category": {
+            "madde_listesi": {
+              "answerable_cases": 4,
+              "cases": 4,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 1.0,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 1.0,
+              "precision_at_k": 1.0,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "paragraf_arasi": {
+              "answerable_cases": 2,
+              "cases": 2,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 0.75,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 0.8154648767857288,
+              "precision_at_k": 0.5,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "sayfa_siniri": {
+              "answerable_cases": 4,
+              "cases": 4,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 1.0,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 1.0,
+              "precision_at_k": 0.875,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "tek_cumle": {
+              "answerable_cases": 6,
+              "cases": 6,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 0.9166666666666666,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 0.9384882922619097,
+              "precision_at_k": 0.8333333333333334,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "uzun_baglam": {
+              "answerable_cases": 3,
+              "cases": 3,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 0.8333333333333334,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 0.8769765845238192,
+              "precision_at_k": 0.8333333333333334,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "yok": {
+              "answerable_cases": 0,
+              "cases": 4,
+              "hit_rate_at_k": 0.0,
+              "mean_reciprocal_rank": 0.0,
+              "mean_yok_top1_score": 0.032720782654680064,
+              "ndcg_at_k": 0.0,
+              "precision_at_k": 0.0,
+              "recall_at_k": 0.0,
+              "unanswerable_cases": 4
+            }
+          },
+          "cases": 23,
+          "chunk_count": 8,
+          "hit_rate_at_k": 1.0,
+          "mean_chunk_length": 697.1,
+          "mean_reciprocal_rank": 0.9211,
+          "mean_yok_top1_score": 0.0327,
+          "ndcg_at_k": 0.9417,
+          "p50_chunk_length": 880.0,
+          "p95_chunk_length": 922.0,
+          "page_attribution_rate": 1.0,
+          "precision_at_k": 0.8421,
+          "recall_at_k": 1.0,
+          "unanswerable_cases": 4
+        },
+        "recursive-1500-300": {
+          "answer_span_intactness": 1.0,
+          "answerable_cases": 19,
+          "by_category": {
+            "madde_listesi": {
+              "answerable_cases": 4,
+              "cases": 4,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 1.0,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 1.0,
+              "precision_at_k": 1.0,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "paragraf_arasi": {
+              "answerable_cases": 2,
+              "cases": 2,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 1.0,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 1.0,
+              "precision_at_k": 1.0,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "sayfa_siniri": {
+              "answerable_cases": 4,
+              "cases": 4,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 1.0,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 1.0,
+              "precision_at_k": 1.0,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "tek_cumle": {
+              "answerable_cases": 6,
+              "cases": 6,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 1.0,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 1.0,
+              "precision_at_k": 1.0,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "uzun_baglam": {
+              "answerable_cases": 3,
+              "cases": 3,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 1.0,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 1.0,
+              "precision_at_k": 1.0,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "yok": {
+              "answerable_cases": 0,
+              "cases": 4,
+              "hit_rate_at_k": 0.0,
+              "mean_reciprocal_rank": 0.0,
+              "mean_yok_top1_score": 0.03278688524590164,
+              "ndcg_at_k": 0.0,
+              "precision_at_k": 0.0,
+              "recall_at_k": 0.0,
+              "unanswerable_cases": 4
+            }
+          },
+          "cases": 23,
+          "chunk_count": 6,
+          "hit_rate_at_k": 1.0,
+          "mean_chunk_length": 930.2,
+          "mean_reciprocal_rank": 1.0,
+          "mean_yok_top1_score": 0.0328,
+          "ndcg_at_k": 1.0,
+          "p50_chunk_length": 922.0,
+          "p95_chunk_length": 1172.0,
+          "page_attribution_rate": 1.0,
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "unanswerable_cases": 4
+        },
+        "recursive-512-128": {
+          "answer_span_intactness": 1.0,
+          "answerable_cases": 19,
+          "by_category": {
+            "madde_listesi": {
+              "answerable_cases": 4,
+              "cases": 4,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 0.75,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 0.8154648767857288,
+              "precision_at_k": 0.4583333333333333,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "paragraf_arasi": {
+              "answerable_cases": 2,
+              "cases": 2,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 1.0,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 1.0,
+              "precision_at_k": 0.26666666666666666,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "sayfa_siniri": {
+              "answerable_cases": 4,
+              "cases": 4,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 0.625,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 0.7231973151785931,
+              "precision_at_k": 0.3833333333333333,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "tek_cumle": {
+              "answerable_cases": 6,
+              "cases": 6,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 0.9166666666666666,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 0.9384882922619097,
+              "precision_at_k": 0.39444444444444443,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "uzun_baglam": {
+              "answerable_cases": 3,
+              "cases": 3,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 0.8333333333333334,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 0.8769765845238192,
+              "precision_at_k": 0.38888888888888884,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "yok": {
+              "answerable_cases": 0,
+              "cases": 4,
+              "hit_rate_at_k": 0.0,
+              "mean_reciprocal_rank": 0.0,
+              "mean_yok_top1_score": 0.032654680063458494,
+              "ndcg_at_k": 0.0,
+              "precision_at_k": 0.0,
+              "recall_at_k": 0.0,
+              "unanswerable_cases": 4
+            }
+          },
+          "cases": 23,
+          "chunk_count": 17,
+          "hit_rate_at_k": 1.0,
+          "mean_chunk_length": 333.9,
+          "mean_reciprocal_rank": 0.8158,
+          "mean_yok_top1_score": 0.0327,
+          "ndcg_at_k": 0.864,
+          "p50_chunk_length": 379.0,
+          "p95_chunk_length": 502.0,
+          "page_attribution_rate": 1.0,
+          "precision_at_k": 0.3912,
+          "recall_at_k": 1.0,
+          "unanswerable_cases": 4
+        },
+        "semantic-p85": {
+          "answer_span_intactness": 1.0,
+          "answerable_cases": 19,
+          "by_category": {
+            "madde_listesi": {
+              "answerable_cases": 4,
+              "cases": 4,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 1.0,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 1.0,
+              "precision_at_k": 0.75,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "paragraf_arasi": {
+              "answerable_cases": 2,
+              "cases": 2,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 0.75,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 0.8154648767857288,
+              "precision_at_k": 0.75,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "sayfa_siniri": {
+              "answerable_cases": 4,
+              "cases": 4,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 0.875,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 0.9077324383928644,
+              "precision_at_k": 0.75,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "tek_cumle": {
+              "answerable_cases": 6,
+              "cases": 6,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 0.9166666666666666,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 0.9384882922619097,
+              "precision_at_k": 0.75,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "uzun_baglam": {
+              "answerable_cases": 3,
+              "cases": 3,
+              "hit_rate_at_k": 1.0,
+              "mean_reciprocal_rank": 1.0,
+              "mean_yok_top1_score": 0.0,
+              "ndcg_at_k": 1.0,
+              "precision_at_k": 0.8333333333333334,
+              "recall_at_k": 1.0,
+              "unanswerable_cases": 0
+            },
+            "yok": {
+              "answerable_cases": 0,
+              "cases": 4,
+              "hit_rate_at_k": 0.0,
+              "mean_reciprocal_rank": 0.0,
+              "mean_yok_top1_score": 0.03278688524590164,
+              "ndcg_at_k": 0.0,
+              "precision_at_k": 0.0,
+              "recall_at_k": 0.0,
+              "unanswerable_cases": 4
+            }
+          },
+          "cases": 23,
+          "chunk_count": 9,
+          "hit_rate_at_k": 1.0,
+          "mean_chunk_length": 617.6,
+          "mean_reciprocal_rank": 0.9211,
+          "mean_yok_top1_score": 0.0328,
+          "ndcg_at_k": 0.9417,
+          "p50_chunk_length": 672.0,
+          "p95_chunk_length": 1078.0,
+          "page_attribution_rate": 0.0,
+          "precision_at_k": 0.7632,
+          "recall_at_k": 1.0,
+          "unanswerable_cases": 4
+        }
+      },
+      "baseline": "recursive-1000-200",
+      "delta_vs_baseline": {
+        "recursive-1500-300": {
+          "mean_reciprocal_rank": 0.0789,
+          "ndcg_at_k": 0.0583,
+          "precision_at_k": 0.1579
+        },
+        "recursive-512-128": {
+          "mean_reciprocal_rank": -0.1053,
+          "ndcg_at_k": -0.0777,
+          "precision_at_k": -0.4509
+        },
+        "semantic-p85": {
+          "mean_reciprocal_rank": 0.0,
+          "ndcg_at_k": 0.0,
+          "precision_at_k": -0.0789
+        }
+      },
+      "k": 6
+    }
+  }
+}
