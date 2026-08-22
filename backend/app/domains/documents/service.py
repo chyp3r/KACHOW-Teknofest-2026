@@ -329,6 +329,18 @@ class DocumentService:
         ``start_index``), so a search hit can be cited by page instead of
         being an anonymous passage.
 
+        Idempotent by construction: every call first deletes any chunks
+        already indexed under ``storage_path`` before upserting the new
+        ones. ``upsert_documents`` mints a random UUID per point, so without
+        this a second call for the same document (a re-analysis, or simply
+        calling this twice) would duplicate every chunk rather than replace
+        them -- and ``reciprocal_rank_fusion`` dedups on exact
+        ``page_content``, so duplicate points silently skew RRF ranking
+        toward whichever document happened to get indexed more than once.
+        Callers used to have to remember to delete first themselves; one
+        caller (the primary upload path in ``analyze_document``) didn't, so
+        the guarantee now lives here instead of at each call site.
+
         Args:
             storage_path: Storage reference, used as the document identifier.
             text: Full extracted document text.
@@ -347,6 +359,10 @@ class DocumentService:
             return
 
         try:
+            await self.vector_store.delete_by_filter(
+                QA_COLLECTION_NAME, {"storage_path": storage_path}
+            )
+
             chunker = RecursiveChunker(
                 chunk_size=QA_CHUNK_SIZE, chunk_overlap=QA_CHUNK_OVERLAP
             )
@@ -1366,18 +1382,11 @@ class DocumentService:
             if document is not None:
                 document.compliance_status = analysis.compliance_status.value
 
-        # _index_for_qa only ever ADDS chunks; it never replaces them.
-        # Delete the stale ones first, or both the garbled and corrected
-        # passages would stay retrievable, and hybrid search could still
-        # cite the garbled one.
-        if self.vector_store is not None:
-            try:
-                await self.vector_store.delete_by_filter(
-                    QA_COLLECTION_NAME, {"storage_path": storage_path}
-                )
-            except Exception:
-                logger.exception("Failed to delete indexed chunks for %s", storage_path)
-
+        # _index_for_qa deletes any chunks already indexed under
+        # storage_path before upserting the new ones (see its own
+        # docstring), so the stale, pre-correction passages don't stay
+        # retrievable alongside the corrected ones -- no separate delete
+        # needed here.
         await self._index_for_qa(
             storage_path,
             extracted_text,
