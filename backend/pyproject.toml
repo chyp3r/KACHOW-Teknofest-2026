@@ -8,8 +8,10 @@ filterwarnings = [
     "ignore::DeprecationWarning:langchain.*",
     "ignore::DeprecationWarning:pydantic.*",
 ]
+addopts = "-m 'not e2e'"
 markers = [
     "integration: exercises real infra (Postgres/Redis/Qdrant/Ollama); skipped by default in CI",
+    "e2e: real ASGI HTTP client against the full app (RLS, real lifespan, fake LLM/embeddings) -- deselected by addopts above, run explicitly with `pytest -m e2e`",
 ]
 
 [tool.coverage.run]

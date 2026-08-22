@@ -2,6 +2,45 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.34.0] - 2026-08-22
+Workstream C2: gerçek HTTP e2e testleri için ASGI app fixture'ı (#237).
+`backend/tests/e2e/conftest.py`, `httpx.AsyncClient(transport=
+ASGITransport(app=app))` ile uygulamanın tamamına (middleware, auth, RLS,
+gerçek `lifespan()`) karşı in-process test yazılabilmesini sağlıyor --
+mevcut 13 "end-to-end" testin `MemorySaver` ile graph seviyesinde
+kaldığı, HTTP'ye/RLS'e/gerçek Qdrant'a hiç dokunmadığı boşluğu kapatıyor.
+
+### Eklendi
+- `e2e_client` fixture'ı: sahte LLM/embeddings client'ları her import
+  yerinde (`app.api.dependency`, `app.ai.llms`,
+  `app.domains.training.router`) monkeypatch'liyor, önceki testlerin
+  derlediği graph/retriever singleton'larını sıfırlıyor, gerçek Qdrant'a
+  karşı test-başına izole `document_qa` koleksiyonu kullanıyor, ve
+  `app.infrastructure.database.session.AsyncSessionLocal`/
+  `OwnerAsyncSessionLocal` module-level sessionmaker'larını test'in kendi
+  throwaway Postgres'ine yönlendiriyor -- `app.dependency_overrides`
+  yerine bu yöntem seçildi çünkü `AuditService.record` ve her
+  "out-of-request writer" (chat/draft/run/guardrail recorder'lar)
+  `tenant_session()`'ı `Depends()` zincirinin dışından çağırıyor.
+- `e2e_register_user` fixture'ı: gerçek bcrypt-hash'li şifreyle şirket +
+  kullanıcı oluşturuyor, `POST /api/v1/auth/login` ile gerçek giriş
+  testine izin veriyor.
+- `tests/e2e/test_e2e_fixture_smoke.py`: 5 test (health, login, yanlış
+  şifre, RLS ile şirket-scoped belge listesi, token'sız erişim reddi).
+- `e2e` pytest marker'ı + `addopts = "-m 'not e2e'"` (varsayılan `pytest`
+  lane'i hızlı kalsın diye), `make test-e2e` hedefi.
+
+### Düzeltildi
+- **Gerçek bir production bug'ı**: `app/domains/companies/seeder.py`,
+  `app.infrastructure.database.session.AsyncSessionLocal`'ı isimle import
+  ediyordu (`from ... import AsyncSessionLocal`) -- `seed_demo_company()`
+  her lifespan başlangıcında (seed flag'i kapalı olsa bile, önce "zaten
+  var mı" kontrolü yaptığı için) bu sessionmaker'ı kullanıyor. e2e
+  fixture'ı bunu ayrıca monkeypatch'lemek zorunda kaldı; aksi halde her
+  test process'in gerçek dev veritabanına bir bağlantı açıyor ve sonraki
+  bir testin event loop'unda `pool_pre_ping`'in o bağlantıyı doğrulamaya
+  çalışması "attached to a different loop" hatasıyla patlıyordu.
+
 ## [3.33.0] - 2026-08-22
 Workstream C'nin (Backend HTTP e2e testleri) ilk adımı: paylaşılan RLS DB
 fixture'ları taşındı (#235). `backend/tests/e2e/` şu ana kadar tamamen
