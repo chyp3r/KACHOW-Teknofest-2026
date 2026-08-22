@@ -17,6 +17,22 @@ gösteriyordu.
   `docs/evaluation/retrieval.md` güncellendi; commit'li
   `evaluation/reports/retrieval-baseline.{json,md}` yeniden üretildi.
 
+`ChunkingPolicy.qa_chunk_size`/`qa_chunk_overlap` varsayılanı 1500/300'e
+çekildi (#231). Retrieval eval suite'i (#229) gerçek Ollama embedding'leriyle
+`1000/200` (o zamanki varsayılan) ile `1500/300`'ü resmi yazışma korpusu
+üzerinde karşılaştırdı: `1500/300` her metrikte kazandı (precision@6
+0.84→1.00, MRR 0.92→1.00, nDCG@6 0.94→1.00) -- daha büyük chunk'lar
+cevabın chunk sınırında kesilme riskini azaltıyor.
+
+### Değiştirildi
+- **`ChunkingPolicy.qa_chunk_size`**: 1000 → 1500, **`qa_chunk_overlap`**:
+  200 → 300. Yalnızca Document Q&A parametreleri; `mevzuat_chunk_size`/
+  `mevzuat_chunk_overlap` kapsam dışı bırakıldı (değiştirmek commit'li
+  mevzuat Qdrant koleksiyonunun yeniden indekslenmesini gerektiriyor, ayrı
+  bir iş). Zaten yüklenmiş belgelerin `document_qa` chunk'ları otomatik
+  yeniden indekslenmiyor -- `make reset-document-qa` ile temizlenip bir
+  sonraki analizde yeni değerle yeniden oluşturulabilir.
+
 ## [3.31.0] - 2026-08-22
 Chunk boyutu/overlap parametreleri (#227). `chunk_size=1000, chunk_overlap=200`
 çifti `service.py`, `mcp_mevzuat.py` ve `scripts/index_mevzuat.py`'de ayrı ayrı
