@@ -91,10 +91,13 @@ class ChunkingArm:
     """One chunking configuration to measure.
 
     Attributes:
-        name: Report label. ``recursive-1000-200`` is the production
-            baseline (ChunkingPolicy's defaults); the other recursive arms
-            are the parameter sweep this suite exists to inform.
-            ``semantic-p85`` is an eval-only exploration arm -- see
+        name: Report label. ``recursive-1500-300`` is the production
+            baseline (``ChunkingPolicy.qa_chunk_size``/``qa_chunk_overlap``
+            defaults -- raised from 1000/200 after this very suite measured
+            1500/300 winning on every metric, see
+            ``evaluation/reports/retrieval-baseline.md``); the other
+            recursive arms are the parameter sweep this suite exists to
+            inform. ``semantic-p85`` is an eval-only exploration arm -- see
             ``SemanticChunker``'s own docstring for why it is not wired
             into production, and why this suite is where that question
             gets an answer instead of a docstring opinion.
@@ -129,8 +132,11 @@ ARMS: dict[str, ChunkingArm] = {
 }
 
 #: The arm every other arm is compared against in the report -- today's
-#: actual production configuration (ChunkingPolicy's defaults).
-BASELINE_ARM = "recursive-1000-200"
+#: actual production configuration (ChunkingPolicy's defaults). Was
+#: "recursive-1000-200" until this suite's own measurement (see
+#: evaluation/reports/retrieval-baseline.md) moved the production default
+#: to 1500/300.
+BASELINE_ARM = "recursive-1500-300"
 
 
 #: Turkish-specific casefold: str.lower() alone maps 'İ' to a two-codepoint

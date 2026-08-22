@@ -3,6 +3,20 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [3.32.0] - 2026-08-22
+`retrieval_suite.BASELINE_ARM` production varsayılanıyla tutarsızdı (#233).
+`ChunkingPolicy.qa_chunk_size`/`qa_chunk_overlap` varsayılanı `1500/300`'e
+çekildi (#231), ama `evaluation/harness/retrieval_suite.py` ayrı bir dalda
+(#230) `main`'e merge olduğu için bu değişikliği görmedi -- `BASELINE_ARM`
+hâlâ eski `"recursive-1000-200"` değerini işaret ediyordu. Eval'in
+doğruluğunu etkilemiyordu (her kol doğru parametrelerle ölçülüyordu),
+yalnızca rapor etiketlemesi/docstring'ler yanlış kolu "baseline" diye
+gösteriyordu.
+
+### Düzeltildi
+- `BASELINE_ARM` artık `"recursive-1500-300"`; ilgili docstring'ler ve
+  `docs/evaluation/retrieval.md` güncellendi; commit'li
+  `evaluation/reports/retrieval-baseline.{json,md}` yeniden üretildi.
+
 `ChunkingPolicy.qa_chunk_size`/`qa_chunk_overlap` varsayılanı 1500/300'e
 çekildi (#231). Retrieval eval suite'i (#229) gerçek Ollama embedding'leriyle
 `1000/200` (o zamanki varsayılan) ile `1500/300`'ü resmi yazışma korpusu
