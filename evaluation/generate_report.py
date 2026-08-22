@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from app.ai.policy import POLICY_VERSION
-from evaluation.harness import draft_suite, intent_suite
+from evaluation.harness import draft_suite, evrak_suite, intent_suite
 from evaluation.harness.runner import REPO_ROOT, EvalRun
 from evaluation.metrics import (
     Prediction,
@@ -39,7 +39,7 @@ from evaluation.metrics import (
 
 REPORT_DIR = REPO_ROOT / "evaluation" / "reports"
 
-SUITES = ("intents", "drafts")
+SUITES = ("intents", "drafts", "evrak")
 
 
 def _intent_summary(run: EvalRun) -> dict[str, Any]:
@@ -113,15 +113,57 @@ def _draft_summary(run: EvalRun) -> dict[str, Any]:
     }
 
 
+def _evrak_summary(run: EvalRun) -> dict[str, Any]:
+    """Score an evrak run into a serialisable summary.
+
+    Şartname requirement 5 (mevzuat citation grounding) is scored here too,
+    from `evrak_suite.citation_fixture_rates()` -- a fixed fixture, not a
+    per-case observation, since a citation's groundedness is a pure function
+    of (citation, excerpts), not of a document's text.
+    """
+    ocr_rates = evrak_suite.ocr_routing_rates(run)
+    missing_rates = evrak_suite.missing_field_rates(run)
+    extraction = evrak_suite.extraction_totals(run)
+    extraction_total = sum(extraction.values())
+    citation_rates = evrak_suite.citation_fixture_rates()
+
+    categories: dict[str, dict[str, Any]] = {}
+    for category, results in run.by_category().items():
+        subset = EvalRun(suite=run.suite, dataset=run.dataset, results=results)
+        categories[category] = {
+            "cases": len(results),
+            "ocr_routing_accuracy": round(evrak_suite.ocr_routing_rates(subset).accuracy, 4),
+            "missing_field_false_positive_rate": round(
+                evrak_suite.missing_field_rates(subset).false_positive_rate, 4
+            ),
+        }
+
+    return {
+        "cases": len(run.results),
+        "ocr_routing_accuracy": round(ocr_rates.accuracy, 4),
+        "missing_field_false_positive_rate": round(missing_rates.false_positive_rate, 4),
+        "missing_field_false_negative_rate": round(missing_rates.false_negative_rate, 4),
+        "missing_field_counts": asdict(missing_rates),
+        "extraction_counts": extraction,
+        "extraction_correct_rate": round(
+            extraction["correct"] / extraction_total, 4
+        ) if extraction_total else 0.0,
+        "citation_grounding_accuracy": round(citation_rates.accuracy, 4),
+        "citation_grounding_counts": asdict(citation_rates),
+        "by_category": categories,
+        "failures": evrak_suite.failures(run),
+    }
+
+
 def _run_suite(name: str, *, with_model: bool = False) -> tuple[EvalRun, dict[str, Any]]:
     """Run one suite and score it.
 
     Args:
-        name: ``"intents"`` or ``"drafts"``.
+        name: ``"intents"``, ``"drafts"`` or ``"evrak"``.
         with_model: Only meaningful for ``"intents"`` -- wires a real
             fast-tier model into the model band instead of the default fully
             offline run (see ``intent_suite.run_with_model``). Ignored for
-            ``"drafts"``, which has no model band to begin with.
+            ``"drafts"``/``"evrak"``, which have no model band to begin with.
 
     Returns:
         The run and its summary.
@@ -135,6 +177,9 @@ def _run_suite(name: str, *, with_model: bool = False) -> tuple[EvalRun, dict[st
     if name == "drafts":
         run = draft_suite.run()
         return run, _draft_summary(run)
+    if name == "evrak":
+        run = evrak_suite.run()
+        return run, _evrak_summary(run)
     raise ValueError(f"Unknown suite: {name}")
 
 
@@ -259,25 +304,91 @@ def _format_draft_markdown(summary: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _format_evrak_markdown(summary: dict[str, Any]) -> list[str]:
+    """Render the evrak summary as Markdown lines.
+
+    Maps directly onto the şartname's six-bullet list: OCR routing (1),
+    field extraction (3), missing-field false positives (4), and mevzuat
+    citation grounding (5). Bullets 2 (type) and 6 (summary) need a live
+    model and are measured separately by
+    ``scripts/evaluate_classification.py`` / ``evaluate_summarization.py``.
+    """
+    missing_counts = summary["missing_field_counts"]
+    extraction = summary["extraction_counts"]
+    citation_counts = summary["citation_grounding_counts"]
+    lines = [
+        "### Genel -- şartname eşlemesi",
+        "",
+        "| Şartname maddesi | Metrik | Değer |",
+        "|---|---|---|",
+        f"| 1 -- OCR/doğrudan metin yönlendirmesi | Doğruluk | {summary['ocr_routing_accuracy']:.4f} |",
+        f"| 3 -- bilgi unsuru çıkarma (yalnız `sentetik`) | Doğru alan oranı | {summary['extraction_correct_rate']:.4f} |",
+        f"| 4 -- eksik bilgi tespiti | **Yanlış alarm oranı** | **{summary['missing_field_false_positive_rate']:.4f}** |",
+        f"| 4 -- eksik bilgi tespiti | Kaçırma oranı | {summary['missing_field_false_negative_rate']:.4f} |",
+        f"| 5 -- mevzuat atfı doğrulaması | Doğruluk | {summary['citation_grounding_accuracy']:.4f} |",
+        "",
+        f"Vaka sayısı: {summary['cases']} · "
+        f"Eksik-alan (alan, belge) çifti: TP={missing_counts['true_positive']} "
+        f"FP={missing_counts['false_positive']} TN={missing_counts['true_negative']} "
+        f"FN={missing_counts['false_negative']} · "
+        f"Çıkarım: doğru={extraction['correct']} kaçan={extraction['missed']} "
+        f"yanlış={extraction['wrong']} sahte={extraction['spurious']} · "
+        f"Atıf: TP={citation_counts['true_positive']} FP={citation_counts['false_positive']} "
+        f"TN={citation_counts['true_negative']} FN={citation_counts['false_negative']}",
+        "",
+        "### Kategori kırılımı",
+        "",
+        "| Kategori | Vaka | OCR yönlendirme doğruluğu | Eksik-alan yanlış alarm oranı |",
+        "|---|---|---|---|",
+    ]
+
+    for category in sorted(summary["by_category"]):
+        stats = summary["by_category"][category]
+        lines.append(
+            f"| `{category}` | {stats['cases']} | {stats['ocr_routing_accuracy']:.2f} | "
+            f"{stats['missing_field_false_positive_rate']:.2f} |"
+        )
+
+    failures = summary["failures"]
+    lines += ["", f"### Eksik-alan kümesi uyuşmayan belgeler ({len(failures)})", ""]
+    if not failures:
+        lines.append("Yok.")
+    else:
+        lines += [
+            "| ID | Kategori | Beklenen eksik | Gözlenen eksik |",
+            "|---|---|---|---|",
+        ]
+        for row in failures:
+            lines.append(
+                f"| `{row['id']}` | `{row['category']}` | "
+                f"`{row['expected_missing_fields']}` | `{row['observed_missing_fields']}` |"
+            )
+    return lines
+
+
 def _diff_lines(suite: str, current: dict[str, Any], baseline: dict[str, Any]) -> list[str]:
     """Render the headline deltas against a baseline report."""
-    keys = (
-        ("macro_f1", "Macro F1", True)
-        if suite == "intents"
-        else ("accuracy", "Doğruluk", True)
-    )
-    tracked = [keys]
     if suite == "intents":
-        tracked += [
+        tracked = [
+            ("macro_f1", "Macro F1", True),
             ("accuracy_over_all", "Doğruluk (tüm vakalar)", True),
             ("abstention_rate", "Eskalasyon oranı", False),
             ("clarify_rate", "Clarify oranı", False),
             ("expected_calibration_error", "Kalibrasyon hatası", False),
         ]
-    else:
-        tracked += [
+    elif suite == "drafts":
+        tracked = [
+            ("accuracy", "Doğruluk", True),
             ("false_positive_rate", "Yanlış pozitif oranı", False),
             ("false_negative_rate", "Yanlış negatif oranı", False),
+        ]
+    else:
+        tracked = [
+            ("ocr_routing_accuracy", "OCR yönlendirme doğruluğu", True),
+            ("extraction_correct_rate", "Doğru alan oranı", True),
+            ("missing_field_false_positive_rate", "Eksik-alan yanlış alarm oranı", False),
+            ("missing_field_false_negative_rate", "Eksik-alan kaçırma oranı", False),
+            ("citation_grounding_accuracy", "Mevzuat atfı doğrulama doğruluğu", True),
         ]
 
     lines = ["### Baseline karşılaştırması", "", "| Metrik | Baseline | Şimdi | Δ |", "|---|---|---|---|"]
@@ -334,8 +445,10 @@ def build_report(
         ]
         if suite == "intents":
             lines += _format_intent_markdown(summaries[suite])
-        else:
+        elif suite == "drafts":
             lines += _format_draft_markdown(summaries[suite])
+        else:
+            lines += _format_evrak_markdown(summaries[suite])
 
         if baseline and suite in baseline.get("suites", {}):
             lines += [""] + _diff_lines(
@@ -429,15 +542,21 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     for suite in selected:
         summary = summaries[suite]
-        headline = (
-            f"macro_f1={summary['macro_f1']:.4f} "
-            f"abstention={summary['abstention_rate']:.4f}"
-            if suite == "intents"
-            else (
+        if suite == "intents":
+            headline = (
+                f"macro_f1={summary['macro_f1']:.4f} "
+                f"abstention={summary['abstention_rate']:.4f}"
+            )
+        elif suite == "drafts":
+            headline = (
                 f"accuracy={summary['accuracy']:.4f} "
                 f"false_positive_rate={summary['false_positive_rate']:.4f}"
             )
-        )
+        else:
+            headline = (
+                f"ocr_routing_accuracy={summary['ocr_routing_accuracy']:.4f} "
+                f"missing_field_false_positive_rate={summary['missing_field_false_positive_rate']:.4f}"
+            )
         print(f"[{suite}] {summary['cases']} vaka · {headline}")
 
     print(f"\nRapor yazıldı:\n  {json_path}\n  {markdown_path}")

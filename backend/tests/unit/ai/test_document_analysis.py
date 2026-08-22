@@ -269,7 +269,10 @@ async def test_graph_suggests_mevzuat_from_retrieved_excerpts(mock_classify, moc
     retriever.retrieve.return_value = [
         Document(
             page_content="MADDE 11- Belgelerde sayı bulunması zorunludur.",
-            metadata={"mevzuat": "Resmî Yazışmalar Yönetmeliği"},
+            # Must resolve to the same law (2646) the suggestion cites --
+            # "RYUEHY" hits the alias table the same way the real corpus's
+            # full title hits LAW_TITLES, see citation_support/test_mevzuat_citation.py.
+            metadata={"mevzuat": "RYUEHY"},
         )
     ]
 
@@ -283,6 +286,121 @@ async def test_graph_suggests_mevzuat_from_retrieved_excerpts(mock_classify, moc
     # The query is built deterministically and must reach the retriever
     # carrying literal mandatory-element vocabulary ("sayı" among it).
     assert "sayı" in retriever.retrieve.call_args.args[0]
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_graph_drops_a_fabricated_citation_and_falls_back_to_raw_citation(
+    mock_classify, mock_suggest
+):
+    """The prompt asks the model not to invent a madde/kanun absent from the
+    excerpts; this is the check that actually enforces it. A suggestion
+    citing law 3071, when the only retrieved excerpt is RYUEHY, must never
+    reach the API response -- it is replaced by the grounded-by-construction
+    raw citation for the excerpt that *was* actually retrieved."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER,
+        "İzin talebi.",
+        **COMPLETE_FIELDS.model_copy(update={"sayi": None}).model_dump(),
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(
+        suggestions=[
+            MevzuatSuggestion(
+                mevzuat="3071 sayılı Dilekçe Hakkının Kullanılmasına Dair Kanun m.4",
+                aciklama="Dilekçede imza bulunması gerekir.",
+            )
+        ]
+    )
+
+    retriever = AsyncMock(spec=HybridRetriever)
+    retriever.retrieve.return_value = [
+        Document(page_content="MADDE 11- Belgelerde sayı bulunması zorunludur.", metadata={"mevzuat": "RYUEHY"})
+    ]
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=retriever
+    )
+    result = await graph.ainvoke({"input_text": INCOMPLETE_LETTER_TEXT})
+
+    assert result["mevzuat_suggestions"] == [
+        {
+            "mevzuat": "RYUEHY",
+            "aciklama": "İlgili olabilecek mevzuat alıntısı (otomatik açıklama üretilemedi).",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_graph_keeps_a_grounded_citation_but_replaces_an_ungrounded_explanation(
+    mock_classify, mock_suggest
+):
+    """The citation is real (law 2646, article 11 is genuinely in the
+    excerpt) but the explanation invents an institution the document never
+    mentions. Only the explanation should be swapped for the neutral
+    fallback text -- the citation itself is what requirement 5 needs and
+    must survive untouched."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER,
+        "İzin talebi.",
+        **COMPLETE_FIELDS.model_copy(update={"sayi": None}).model_dump(),
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(
+        suggestions=[
+            MevzuatSuggestion(
+                mevzuat="RYUEHY m.11",
+                aciklama=(
+                    "Bu husus Enerji ve Tabii Kaynaklar Bakanlığı Hukuk Müşavirliği "
+                    "tarafından da teyit edilmiştir."
+                ),
+            )
+        ]
+    )
+
+    retriever = AsyncMock(spec=HybridRetriever)
+    retriever.retrieve.return_value = [
+        Document(page_content="MADDE 11- Belgelerde sayı bulunması zorunludur.", metadata={"mevzuat": "RYUEHY"})
+    ]
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=retriever
+    )
+    result = await graph.ainvoke({"input_text": INCOMPLETE_LETTER_TEXT})
+
+    assert len(result["mevzuat_suggestions"]) == 1
+    assert result["mevzuat_suggestions"][0]["mevzuat"] == "RYUEHY m.11"
+    assert result["mevzuat_suggestions"][0]["aciklama"] == (
+        "İlgili olabilecek mevzuat alıntısı (otomatik açıklama üretilemedi)."
+    )
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_graph_keeps_an_empty_suggestion_list_empty_rather_than_backfilling(
+    mock_classify, mock_suggest
+):
+    """A model that looked at the excerpts and genuinely found nothing worth
+    suggesting must stay empty -- the raw-citation fallback exists for a
+    failed or fabricated answer, not to override a legitimate empty one."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "x", **COMPLETE_FIELDS.model_dump()
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(suggestions=[])
+
+    retriever = AsyncMock(spec=HybridRetriever)
+    retriever.retrieve.return_value = [
+        Document(page_content="MADDE 11-", metadata={"mevzuat": "RYUEHY"})
+    ]
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=retriever
+    )
+    result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    assert result["mevzuat_suggestions"] == []
 
 
 @pytest.mark.asyncio

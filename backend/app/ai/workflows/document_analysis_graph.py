@@ -15,6 +15,7 @@ from app.ai.compliance import (
     DOCUMENT_TYPE_QUERY_TERMS,
     EvrakField,
     check_required_fields,
+    citation_support,
     detect_structural_signal,
     format_parsed_fields,
     format_structural_signal,
@@ -29,6 +30,7 @@ from app.ai.llms.base import BaseLLMClient
 from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
 from app.ai.summarization import ocr_warning
+from app.ai.verification.draft_verifier import check_groundedness
 from app.ai.workflows.events import emit_node_end, emit_node_error, emit_node_start, emit_partial
 from app.ai.workflows.resilience import (
     IO_RETRY,
@@ -266,6 +268,42 @@ def _render_mevzuat_excerpts(documents: list[Document]) -> str:
         source = document.metadata.get("mevzuat", "bilinmiyor")
         parts.append(f"[ALINTI {index}] (Kaynak: {source})\n{document.page_content}")
     return "\n\n".join(parts)
+
+
+def _raw_citation_suggestions(documents: list[Document]) -> list[dict[str, str]]:
+    """Build one grounded-by-construction suggestion per retrieved excerpt.
+
+    Every citation names a law the excerpt was literally fetched under, so
+    there is nothing here for `citation_support` to ever reject. Used both
+    when the LLM call itself fails (existing degradation path) and when its
+    suggestions come back but every one fails grounding -- either way the
+    requirement is met with the retrieved citations, just without the
+    model's explanation of them.
+    """
+    return [
+        {
+            "mevzuat": document.metadata.get("mevzuat", "Bilinmeyen kaynak"),
+            "aciklama": "İlgili olabilecek mevzuat alıntısı (otomatik açıklama üretilemedi).",
+        }
+        for document in documents
+    ]
+
+
+def _flatten_fields_for_grounding(fields: dict[str, Any]) -> str:
+    """Render an EvrakField dict as plain text for a groundedness haystack.
+
+    `check_groundedness` matches by folded substring and token overlap, so a
+    faithful reconstruction of every value's exact string form is
+    unnecessary -- `str()` on a list value still leaves each item's words
+    inside the rendered text, which is all a substring/overlap match needs.
+
+    Args:
+        fields: The document's own extracted `EvrakField` values.
+
+    Returns:
+        Every non-empty value space-joined into one string.
+    """
+    return " ".join(str(value) for value in fields.values() if value)
 
 
 def create_document_analysis_graph(
@@ -667,6 +705,11 @@ def create_document_analysis_graph(
             "hükümlerini listele. Alıntılarda bulunmayan madde numarası veya kanun "
             "adı üretme."
         )
+        # Set inside the try block when the grounding filter runs; stays 0 on
+        # every other path (transient retry, total-failure fallback) since
+        # `_raw_citation_suggestions` is grounded by construction and never
+        # needs to drop anything.
+        dropped_suggestion_count = 0
         try:
             # Bounded *inside* the node, below the node's own budget, so an
             # overrun lands in the degradation path below instead of escaping to
@@ -696,26 +739,79 @@ def create_document_analysis_graph(
                 * SUGGESTION_BUDGET_SHARE,
             )
             suggestions = [item.model_dump() for item in res.suggestions]
+
+            # Verify each suggestion against the excerpts it was supposedly
+            # drawn from -- the prompt above asks the model not to invent a
+            # madde/kanun not present in ALINTILARI, but nothing enforced
+            # that until now. A suggestion citing a law absent from every
+            # excerpt is dropped outright (see `citation_support.grounded`);
+            # its explanation is not even worth checking if its citation is
+            # fabricated. A suggestion with a grounded citation but an
+            # explanation making unsupported sayı/tarih/kurum/tutar claims
+            # keeps the citation and only loses the explanation, the same
+            # neutral text the except-branch fallback below already uses --
+            # the citation itself is what requirement 5 actually needs.
+            source_materials = "\n\n".join(
+                part
+                for part in (
+                    excerpts,
+                    state.get("summary", ""),
+                    _flatten_fields_for_grounding(state.get("fields") or {}),
+                )
+                if part
+            )
+            grounded_suggestions = []
+            dropped = 0
+            for item in suggestions:
+                support = citation_support(item.get("mevzuat", ""), documents)
+                if not support.grounded:
+                    dropped += 1
+                    continue
+                if check_groundedness(
+                    item.get("aciklama", ""), source_materials=source_materials
+                ):
+                    item = {
+                        **item,
+                        "aciklama": (
+                            "İlgili olabilecek mevzuat alıntısı "
+                            "(otomatik açıklama üretilemedi)."
+                        ),
+                    }
+                grounded_suggestions.append(item)
+
+            dropped_suggestion_count = dropped
+            if dropped:
+                logger.warning(
+                    "Dropped %d ungrounded mevzuat suggestion(s) out of %d.",
+                    dropped,
+                    len(suggestions),
+                )
+            # Fall back to raw citations only when the model *produced*
+            # suggestions and grounding rejected every one of them. A model
+            # that itself returned an empty list made a legitimate "nothing
+            # worth suggesting" call and must stay empty, not be
+            # reinterpreted as a fabrication requiring the fallback.
+            if suggestions and not grounded_suggestions:
+                suggestions = _raw_citation_suggestions(documents)
+            else:
+                suggestions = grounded_suggestions
         except TRANSIENT_ERRORS:
             logger.warning("Mevzuat Suggestion Node hit a transient error; retrying.")
             raise
         except Exception:
             logger.exception("Mevzuat Suggestion Node failed")
             # Degrade to the raw citations rather than losing the requirement.
-            suggestions = [
-                {
-                    "mevzuat": document.metadata.get("mevzuat", "Bilinmeyen kaynak"),
-                    "aciklama": "İlgili olabilecek mevzuat alıntısı (otomatik açıklama üretilemedi).",
-                }
-                for document in documents
-            ]
+            suggestions = _raw_citation_suggestions(documents)
 
         await emit_node_end(
             config,
             "classification",
             "Evrak Analizi",
             "Evrak analizi tamamlandı.",
-            {"mevzuat_suggestions": suggestions},
+            {
+                "mevzuat_suggestions": suggestions,
+                "dropped_suggestion_count": dropped_suggestion_count,
+            },
         )
         return {"mevzuat_suggestions": suggestions}
 

@@ -1,0 +1,335 @@
+{
+  "model": "qwen3.5:9b",
+  "corpus": "both",
+  "repeat": 1,
+  "by_category": {
+    "gercek_tarama": {
+      "cases": 23,
+      "type_accuracy": 1.0,
+      "missing_field_match_rate": 0.0
+    },
+    "sentetik": {
+      "cases": 12,
+      "type_accuracy": 0.9167,
+      "missing_field_match_rate": 1.0
+    }
+  },
+  "elapsed_seconds": 1366.1,
+  "rows": [
+    {
+      "id": "evrak_01",
+      "category": "sentetik",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": true,
+      "summary_length": 243
+    },
+    {
+      "id": "evrak_02",
+      "category": "sentetik",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": true,
+      "summary_length": 320
+    },
+    {
+      "id": "evrak_03",
+      "category": "sentetik",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": true,
+      "summary_length": 159
+    },
+    {
+      "id": "evrak_04",
+      "category": "sentetik",
+      "expected_type": "petition",
+      "predicted_type": "petition",
+      "stable": true,
+      "missing_match": true,
+      "summary_length": 237
+    },
+    {
+      "id": "evrak_05",
+      "category": "sentetik",
+      "expected_type": "petition",
+      "predicted_type": "petition",
+      "stable": true,
+      "missing_match": true,
+      "summary_length": 128
+    },
+    {
+      "id": "evrak_06",
+      "category": "sentetik",
+      "expected_type": "information_request",
+      "predicted_type": "petition",
+      "stable": true,
+      "missing_match": true,
+      "summary_length": 220
+    },
+    {
+      "id": "evrak_07",
+      "category": "sentetik",
+      "expected_type": "information_request",
+      "predicted_type": "information_request",
+      "stable": true,
+      "missing_match": true,
+      "summary_length": 194
+    },
+    {
+      "id": "evrak_08",
+      "category": "sentetik",
+      "expected_type": "leave_request",
+      "predicted_type": "leave_request",
+      "stable": true,
+      "missing_match": true,
+      "summary_length": 147
+    },
+    {
+      "id": "evrak_09",
+      "category": "sentetik",
+      "expected_type": "circular",
+      "predicted_type": "circular",
+      "stable": true,
+      "missing_match": true,
+      "summary_length": 228
+    },
+    {
+      "id": "evrak_10",
+      "category": "sentetik",
+      "expected_type": "minutes",
+      "predicted_type": "minutes",
+      "stable": true,
+      "missing_match": true,
+      "summary_length": 310
+    },
+    {
+      "id": "evrak_11",
+      "category": "sentetik",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": true,
+      "summary_length": 131
+    },
+    {
+      "id": "evrak_12",
+      "category": "sentetik",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": true,
+      "summary_length": 197
+    },
+    {
+      "id": "CY-001",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 292
+    },
+    {
+      "id": "CY-003",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 225
+    },
+    {
+      "id": "CY-005",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 197
+    },
+    {
+      "id": "CY-009",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 235
+    },
+    {
+      "id": "CY-010",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 238
+    },
+    {
+      "id": "CY-012",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 289
+    },
+    {
+      "id": "CY-014",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 239
+    },
+    {
+      "id": "CY-017",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 237
+    },
+    {
+      "id": "CY-019",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 319
+    },
+    {
+      "id": "CY-021",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 235
+    },
+    {
+      "id": "CY-024",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 260
+    },
+    {
+      "id": "CY-030",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 233
+    },
+    {
+      "id": "CY-036",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 270
+    },
+    {
+      "id": "CY-006",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 323
+    },
+    {
+      "id": "CY-023",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 286
+    },
+    {
+      "id": "CY-028",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 290
+    },
+    {
+      "id": "CY-034",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 250
+    },
+    {
+      "id": "CY-002",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 217
+    },
+    {
+      "id": "CY-011",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 205
+    },
+    {
+      "id": "CY-033",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 276
+    },
+    {
+      "id": "CY-050",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 232
+    },
+    {
+      "id": "CY-039",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 249
+    },
+    {
+      "id": "CY-049",
+      "category": "gercek_tarama",
+      "expected_type": "official_letter",
+      "predicted_type": "official_letter",
+      "stable": true,
+      "missing_match": false,
+      "summary_length": 255
+    }
+  ]
+}

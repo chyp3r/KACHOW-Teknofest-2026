@@ -2,6 +2,105 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.30.0] - 2026-08-23
+Görev 1'in altı şartname maddesini denetleyen bir geçiş: madde 5 (ilgili
+mevzuat önerme) daha önce hiç doğrulanmıyordu -- `suggest_mevzuat_node`'un
+istemi modele "alıntılarda bulunmayan madde numarası veya kanun adı üretme"
+diyordu ve buna güveniliyordu, çıktısını kontrol eden hiçbir şey yoktu.
+Madde 1-4 ve 6'nın hepsi ya tamamen deterministik ya da başka bir yerde
+doğrulanıyordu (`app.ai.verification.draft_verifier`); madde 5 tek
+korumasız model çıktısıydı. Ayrıca Görev 1'in altı yeteneğinin hiçbiri
+`make eval`'e bağlı değildi -- sınıflandırma/çıkarım sayıları 12 sentetik
+belge üzerinde duruyordu, `datasets/resmi_yazisma/`'daki 23 elle etiketli
+gerçek tarama yalnızca OCR/imza etiketleri taşıyordu.
+
+### Eklendi
+- **`citation_support` -- mevzuat atfı doğrulaması**
+  ([mevzuat_citation.py](backend/app/ai/compliance/mevzuat_citation.py)):
+  bir önerinin atfını (`"RYUEHY m.11"` gibi) getirilen alıntılara karşı
+  denetler. Atfın kanunu hiçbir alıntıda yoksa ya da atıf hiç çözümlenemiyorsa
+  (`resolve_citation`'ın zaten döndürdüğü hem `kanun` hem `madde` `None`)
+  `grounded=False`; bir madde numarası belirtilmişse o maddenin, kanunu
+  destekleyen alıntılardan **en az birinin gövdesinde** geçmesi de gerekir
+  -- doğru kanunu yanlış madde numarasıyla eşleyen bir uydurmayı da yakalar,
+  yalnızca tamamen yabancı bir kanunu değil. `suggest_mevzuat_node` artık
+  her öneriyi bu denetimden geçiriyor: atfı doğrulanamayan öneri düşürülür,
+  yalnızca açıklaması doğrulanamayan öneri (`check_groundedness`,
+  `output_gate.py`'nin zaten kullandığı aynı iddia-eşleştirme boru hattı)
+  atfını koruyup açıklamasını nötr metinle değiştirir. Model hiç öneri
+  üretmezse ya da tamamı düşerse, getirilen her alıntı için zaten yapı
+  gereği doğrulanmış ham atıf listesine düşülür (var olan başarısızlık
+  yolunun aynısı, artık `_raw_citation_suggestions` olarak paylaşılıyor).
+  API yanıt şeması (`MevzuatReferenceSchema`) değişmedi.
+  - **Canlı doğrulama**: 12 sentetik belgenin tamamı gerçek `qwen3.5:9b` ve
+    gerçek yerel mevzuat getiriminden geçirildi. 23 önerinin **1'i**
+    düşürüldü -- `evrak_04`'te model getirilen alıntılar yalnızca Madde
+    4'ü içerdiği hâlde "Dilekçe Hakkının Kullanılmasına Dair Kanun -
+    Madde 3" atfı üretti: gerçek bir uydurma, doğru yakalandı. Diğer 22
+    öneriye hiç dokunulmadı. Bu vaka artık `evrak_suite.py`'nin sabit
+    örneğine kalıcı bir regresyon testi olarak eklendi.
+- **`evaluation/harness/evrak_suite.py`** -- Görev 1'in deterministik
+  yarısını `make eval`'e bağlıyor: OCR/doğrudan-metin yönlendirmesi
+  (madde 1), alan çıkarımı (madde 3, yalnız `sentetik` kategori --
+  gerçek korpus için bağımsız elle-yazılmış değer kümesi bu geçişin
+  kapsamı dışında, aksi hâlde ölçüm kendi çıktısına karşı totoloji
+  olurdu), eksik-bilgi tespiti (madde 4, **baş metrik: yanlış alarm
+  oranı**) ve mevzuat atfı doğrulaması (madde 5, sabit uydurma-atıf
+  örneği). 35 vakalık ortak altın küme
+  (`evaluation/datasets/evrak.jsonl`, `scripts/build_evrak_eval_set.py`
+  ile üretilir): 12 sentetik + `datasets/resmi_yazisma/ocr_ground_truth.json`'daki
+  23 gerçek tarama, `document_type` ve `expected_missing_fields` ile
+  genişletildi (`clean_text`'ten elle etiketlendi, hiçbir zaman
+  `check_required_fields` çalıştırılarak türetilmedi -- aksi hâlde kapıyı
+  kendi çıktısına karşı sınamış olurdu). Altı belge (TBMM Kanunlar ve
+  Kararlar Başkanlığı antetli, adı geçen bir milletvekiline hitap eden,
+  "T.C." satırı taşımayan şablon) `muhatap`/`gonderen_kurum`'u belgede
+  gerçekten mevcut sayıyor -- korpusun kendi `_meta` notunun zaten
+  belirttiği gibi, bu bir ayrıştırıcı-mimarisi boşluğu, belgenin kendisinin
+  eksikliği değil; bu boşluk madde 4'te değil, madde 3'ün çıkarım
+  sayısında görünür.
+  - **Ölçülen sonuç**: OCR yönlendirmesi 35/35 (1.0000); çıkarım 53/70 alan
+    doğru (0.7571, yalnız sentetik); eksik-bilgi yanlış alarm oranı
+    **0.2775** (58/209 alan-belge çifti, kaçırma oranı 0.0000); atıf
+    doğrulaması 3/3 (1.0000). Kategori kırılımı ve başarısız vaka listesi
+    `make eval`'in ürettiği rapora düşüyor.
+- **`scripts/evaluate_mevzuat_retrieval.py`**: CHANGELOG'un [1.35.0]
+  girdisinde düzyazıya gömülü kalan "6/6" ölçümünü regresyon-korumalı bir
+  sayıya çeviriyor. On `DocumentType` değerinin her biri için beklenen
+  kanunun top-3 getirilen alıntı içinde olup olmadığını denetler.
+  **10/10 isabet** (10 türün tamamı, 7 kanunun 4'ü).
+- **`docs/evaluation/gorev1-scorecard.md`**: şartnamenin altı maddesinin
+  her birini metriğine, korpusuna ve onu yeniden üreten komuta eşleyen tek
+  tablo.
+- `scripts/evaluate_classification.py` artık `--corpus {sample,real,both}`
+  ile 23 gerçek taramayı da (madde 2, `clean_text` üzerinden) koşabiliyor
+  ve `--report <isim>` ile `evaluation/reports/<isim>.json`'a yazabiliyor;
+  önceden yalnızca 12 sentetik belgeyi ölçüyordu.
+  - **Canlı koşum sonucu** (`qwen3.5:9b`): tür doğruluğu gerçek taramada
+    **23/23**, sentetikte **11/12** (tek hata: `evrak_06`,
+    `information_request` → `petition`). Aynı koşumun eksik-bilgi tarafını
+    elle incelemek gerçek bir bulgu çıkardı: `imza_sahibi`/`imza_unvani`
+    model kendi çıkardığı `entities` listesinde adı doğru tespit ettiği
+    hâlde ilgili alana yazmıyor (CY-009, CY-001) -- tutarsız, çünkü aynı
+    şekle sahip bir imza bloğu başka bir belgede (CY-010) doğru
+    çıkarılıyor. Bkz. `docs/evaluation/gorev1-scorecard.md`'nin Madde 2
+    bölümü.
+
+### Değiştirildi
+- `datasets/resmi_yazisma/ocr_ground_truth.json`'daki 23 gerçek taramanın
+  her biri `document_type` ve `expected_missing_fields` kazandı (yukarıya
+  bakınız); `_meta.gorev1_labelling` etiketleme yöntemini ve TBMM-şablonu
+  istisnasını kaydediyor.
+
+### Doğrulama
+- `docker compose exec backend pytest -q` 2533 test geçiyor (2 bilinen
+  önceden var olan MCP testi hariç, bu çalışmadan etkilenmedi), 9 yeni
+  `citation_support` birim testi ve 3 yeni düğüm-seviyesi doğrulama-filtresi
+  testi dahil.
+- `make eval`: `intents` (macro F1 0.9520) ve `drafts` (doğruluk 1.0000,
+  yanlış pozitif 0.0000) bu çalışmadan etkilenmeyen dosyalarda değişmedi;
+  `evrak` yukarıdaki sayıları üretiyor.
+
 ## [3.29.0] - 2026-08-21
 Eksik-bilgi kapısından geçen taslaklarda puan/kusur listesi metinle tutarsızdı
 (#223). Kök neden: kullanıcı eksik-bilgi sorularını yanıtlayıp yer tutucular

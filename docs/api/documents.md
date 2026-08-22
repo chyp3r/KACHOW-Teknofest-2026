@@ -119,6 +119,17 @@ Tüm uç noktalarda olduğu gibi birleşik `APIResponse` zarfı kullanılır.
 `incomplete`, yalnızca `onerilen` alan eksikse `partially_compliant`, hiçbiri
 eksik değilse `compliant`.
 
+**`mevzuat_references` doğrulanmıştır.** Her önerinin atfı (`mevzuat`),
+`retrieve_mevzuat` düğümünün getirdiği alıntılara karşı denetlenir
+(`app.ai.compliance.citation_support`): atfın kanunu hiçbir alıntıda yoksa
+ya da bir madde numarası belirtilip o madde hiçbir destekleyen alıntının
+gövdesinde geçmiyorsa öneri düşürülür. Yalnızca açıklaması (`aciklama`)
+doğrulanamayan bir öneri atfını korur, açıklaması nötr bir metinle
+değiştirilir. Model hiç öneri üretmezse ya da tamamı düşerse, getirilen her
+alıntı için zaten yapı gereği doğrulanmış ham bir atıf listesine düşülür --
+`mevzuat_references` bu durumda da boş dönmez. Bkz.
+[docs/evaluation/gorev1-scorecard.md](../evaluation/gorev1-scorecard.md).
+
 ---
 
 ## Hata durumları

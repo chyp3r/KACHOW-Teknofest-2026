@@ -17,10 +17,20 @@ canonicalisation and `LEGISLATION_PATTERN` (`draft_verifier.py`) for finding
 those spans inside prose -- its lookbehind guard against a document number's
 tail ("E-22222222-903-118 sayılı yazınız") matters here too, since `ilgi`-
 and `mevzuat`-style strings are full of document numbers.
+
+`citation_support` is the second consumer of the same join, for a different
+question: not "what does this citation refer to" but "is what it refers to
+actually present in the excerpts the model was given". This is what
+`suggest_mevzuat_node` (`document_analysis_graph.py`) checks a suggestion
+against before it reaches the API response -- the excerpts are the only
+legislation text the model saw, so a citation naming a law or article absent
+from all of them was not read off the retrieved text at all.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Sequence
+
+from langchain_core.documents import Document
 
 from app.ai.verification.draft_verifier import LEGISLATION_PATTERN
 from app.ai.verification.normalizers import _fold, canonical_legislation
@@ -104,6 +114,22 @@ def _resolve_madde(text: str) -> Optional[str]:
     return None
 
 
+def _resolve_all_madde(text: str) -> set[str]:
+    """Collect every article number mentioned anywhere in a longer passage.
+
+    `_resolve_madde` deliberately stops at the first match -- right for a
+    short one-citation string, wrong for a whole excerpt, which typically
+    spans several consecutive articles. `citation_support` needs every one
+    an excerpt mentions, not just the first.
+    """
+    found: set[str] = set()
+    for match in LEGISLATION_PATTERN.finditer(text):
+        canonical = canonical_legislation(match.group(0))
+        if canonical and canonical.startswith("madde:"):
+            found.add(canonical.removeprefix("madde:"))
+    return found
+
+
 def resolve_citation(text: str) -> CitationRef:
     """Resolve a free-text legislation citation to a law and article number.
 
@@ -120,3 +146,71 @@ def resolve_citation(text: str) -> CitationRef:
     """
     folded = _fold(text)
     return CitationRef(kanun=_resolve_kanun(text, folded), madde=_resolve_madde(text))
+
+
+@dataclass(frozen=True)
+class CitationSupport:
+    """Whether a citation's law and article are actually present in a set of
+    retrieved legislation excerpts.
+
+    ``article_supported`` is vacuously ``True`` when the citation names no
+    article at all -- a law-only citation ("Devlet Memurları Kanunu") makes no
+    article-level claim for the excerpts to fail, so there is nothing to
+    contradict. Callers that only need the combined verdict should use
+    `grounded`, not either flag alone.
+    """
+
+    law_supported: bool
+    article_supported: bool
+
+    @property
+    def grounded(self) -> bool:
+        """The single pass/fail verdict: both halves of the citation hold."""
+        return self.law_supported and self.article_supported
+
+
+def citation_support(citation: str, excerpts: Sequence[Document]) -> CitationSupport:
+    """Check a legislation citation against the excerpts it was supposedly drawn from.
+
+    Resolves the citation the same way `resolve_citation` resolves any other
+    citation string. Resolves each excerpt independently: its law from
+    `metadata["mevzuat"]` (the corpus's own title, via the same title/alias
+    matching `_resolve_kanun` already does for prose) and *every* article
+    number mentioned anywhere in its `page_content` (`_resolve_all_madde` --
+    an excerpt chunk commonly spans several consecutive articles, unlike a
+    short citation string).
+
+    Args:
+        citation: A `mevzuat_references[].mevzuat`-style citation string.
+        excerpts: The legislation passages retrieved for this document --
+            the only source the citation could legitimately have come from.
+
+    Returns:
+        `CitationSupport` reporting whether the citation's law and article
+        are each backed by at least one excerpt. A citation that resolves to
+        neither a law nor an article (`resolve_citation` found nothing
+        checkable) is reported as wholly unsupported regardless of the
+        excerpts -- it names no authority to verify against.
+    """
+    ref = resolve_citation(citation)
+    if ref.kanun is None and ref.madde is None:
+        return CitationSupport(law_supported=False, article_supported=False)
+
+    excerpt_refs = [
+        (_resolve_kanun(document.metadata.get("mevzuat", ""), _fold(document.metadata.get("mevzuat", ""))),
+         _resolve_all_madde(document.page_content))
+        for document in excerpts
+    ]
+
+    law_supported = ref.kanun is not None and any(
+        excerpt_kanun == ref.kanun for excerpt_kanun, _ in excerpt_refs
+    )
+    if ref.madde is None:
+        article_supported = True
+    else:
+        article_supported = any(
+            excerpt_kanun == ref.kanun and ref.madde in excerpt_maddeler
+            for excerpt_kanun, excerpt_maddeler in excerpt_refs
+        )
+
+    return CitationSupport(law_supported=law_supported, article_supported=article_supported)
