@@ -420,7 +420,16 @@ class ChunkingPolicy:
     Attributes:
         qa_chunk_size: Character length of each ``document_qa`` chunk (the
             per-upload Q&A index queried by ``retrieve_source_chunks_node``
-            and the ``search_document`` tool).
+            and the ``search_document`` tool). Raised from 1000 to 1500
+            after ``evaluation``'s retrieval suite measured it against
+            real Ollama embeddings on official-correspondence text: at
+            1000/200 the baseline scored precision@6=0.84/nDCG@6=0.94,
+            while 1500/300 scored 1.00/1.00 on the same gold set (see
+            ``evaluation/reports/retrieval-baseline.md``) -- fewer, larger
+            chunks meant fewer answers landing on a chunk boundary. This
+            does not retroactively re-chunk documents already indexed
+            under the old value; ``make reset-document-qa`` clears the
+            collection so the next analysis rebuilds it under the new one.
         qa_chunk_overlap: Character overlap between consecutive
             ``document_qa`` chunks -- keeps an answer that straddles a
             chunk boundary from being lost.
@@ -442,8 +451,8 @@ class ChunkingPolicy:
             same re-index caveat as ``mevzuat_chunk_size``.
     """
 
-    qa_chunk_size: int = 1000
-    qa_chunk_overlap: int = 200
+    qa_chunk_size: int = 1500
+    qa_chunk_overlap: int = 300
     mevzuat_chunk_size: int = 1000
     mevzuat_chunk_overlap: int = 200
 
