@@ -2,6 +2,31 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.33.0] - 2026-08-22
+Workstream C'nin (Backend HTTP e2e testleri) ilk adımı: paylaşılan RLS DB
+fixture'ları taşındı (#235). `backend/tests/e2e/` şu ana kadar tamamen
+boştu; planlanan HTTP e2e suite'i `backend/tests/integration/conftest.py`'deki
+gerçek Postgres + RLS fixture'larına (`pg_test_database`, `owner_engine`,
+`app_engine`, `app_session`, `two_companies`) ihtiyaç duyacak. Kopyalamak
+yerine (~380 satır ağır gerekçelendirilmiş docstring) ve `pytest_plugins`
+kullanamadan (pytest 8 kök olmayan conftest'lerde yasaklıyor), paylaşılan bir
+üst modüle taşındı.
+
+### Değiştirildi
+- `backend/tests/integration/conftest.py` → `backend/tests/_db_fixtures.py`
+  taşındı (saf taşıma, davranış değişikliği yok); `integration/conftest.py`
+  artık yalnızca `from tests._db_fixtures import *` re-export'u. Taşıma
+  sırasında `_BACKEND_DIR`'ın `Path(__file__).resolve().parents[2]` hesabı
+  (bir dizin seviyesi kaybolduğu için) `parents[1]`'e düzeltildi -- bu
+  düzeltme olmadan `alembic upgrade head` yanlış `cwd` (`/`) ile çalışıp
+  100 integration testin tamamını fixture kurulumunda patlatıyordu.
+- `backend/tests/e2e/conftest.py` bir sonraki C-workstream PR'ında aynı
+  import'u yapacak.
+
+Doğrulama: `docker compose run --rm backend pytest -q -m integration`
+(100 passed) ve `docker compose run --rm backend pytest -q` (2544 passed) --
+mevcut 24 integration test dosyası değişmeden geçti.
+
 ## [3.32.0] - 2026-08-22
 `retrieval_suite.BASELINE_ARM` production varsayılanıyla tutarsızdı (#233).
 `ChunkingPolicy.qa_chunk_size`/`qa_chunk_overlap` varsayılanı `1500/300`'e
