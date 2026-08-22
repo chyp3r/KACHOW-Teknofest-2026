@@ -505,6 +505,101 @@ async def test_index_for_qa_tags_each_chunk_with_its_page_number():
     assert stored_chunks[0].metadata["page"] == 2
 
 
+@pytest.mark.asyncio
+async def test_index_for_qa_deletes_stale_chunks_before_upserting():
+    """upsert_documents mints a random UUID per point, so without a delete
+    first, indexing the same storage_path twice duplicates every chunk and
+    skews reciprocal_rank_fusion's exact-page_content dedup (see
+    _index_for_qa's own docstring). The delete must happen, and it must
+    happen before the upsert -- deleting after would just remove the chunks
+    that were meant to replace the stale ones.
+    """
+    from app.ai.embeddings.service import EmbeddedChunk
+
+    embedding_service = MagicMock()
+    embedding_service.process_text = AsyncMock(
+        return_value=[
+            EmbeddedChunk(text="chunk", vector=[0.1, 0.2], metadata={"start_index": 0})
+        ]
+    )
+    embedding_service.embeddings_client = MagicMock()
+    embedding_service.embeddings_client.embed_query = AsyncMock(return_value=[0.1, 0.2])
+
+    call_order: list[str] = []
+    vector_store = AsyncMock()
+    vector_store.create_collection.return_value = True
+    vector_store.upsert_documents.side_effect = lambda *a, **k: call_order.append(
+        "upsert"
+    ) or True
+    vector_store.delete_by_filter.side_effect = lambda *a, **k: call_order.append(
+        "delete"
+    ) or True
+
+    service = DocumentService(
+        storage=AsyncMock(spec=BaseStorage),
+        extractor=AsyncMock(spec=BaseDocumentExtractor),
+        analysis_graph=MagicMock(),
+        embedding_service=embedding_service,
+        vector_store=vector_store,
+    )
+
+    import app.domains.documents.service as service_module
+
+    service_module._qa_vector_size = None
+    await service._index_for_qa("uploads/doc.pdf", "text", ["text"])
+
+    vector_store.delete_by_filter.assert_awaited_once_with(
+        service_module.QA_COLLECTION_NAME, {"storage_path": "uploads/doc.pdf"}
+    )
+    assert call_order == ["delete", "upsert"]
+
+
+@pytest.mark.asyncio
+async def test_index_for_qa_is_idempotent_across_repeated_calls():
+    """Re-analysing a document (or any other caller invoking _index_for_qa
+    twice for the same storage_path) must not leave duplicate chunks behind.
+    Each call deletes its own storage_path's chunks before upserting, so the
+    collection never accumulates points across repeated calls.
+    """
+    from app.ai.embeddings.service import EmbeddedChunk
+
+    embedding_service = MagicMock()
+    embedding_service.process_text = AsyncMock(
+        return_value=[
+            EmbeddedChunk(text="chunk", vector=[0.1, 0.2], metadata={"start_index": 0})
+        ]
+    )
+    embedding_service.embeddings_client = MagicMock()
+    embedding_service.embeddings_client.embed_query = AsyncMock(return_value=[0.1, 0.2])
+
+    vector_store = AsyncMock()
+    vector_store.create_collection.return_value = True
+    vector_store.upsert_documents.return_value = True
+    vector_store.delete_by_filter.return_value = True
+
+    service = DocumentService(
+        storage=AsyncMock(spec=BaseStorage),
+        extractor=AsyncMock(spec=BaseDocumentExtractor),
+        analysis_graph=MagicMock(),
+        embedding_service=embedding_service,
+        vector_store=vector_store,
+    )
+
+    import app.domains.documents.service as service_module
+
+    service_module._qa_vector_size = None
+    await service._index_for_qa("uploads/doc.pdf", "text", ["text"])
+    await service._index_for_qa("uploads/doc.pdf", "text", ["text"])
+
+    assert vector_store.delete_by_filter.await_count == 2
+    assert vector_store.upsert_documents.await_count == 2
+    for call in vector_store.delete_by_filter.await_args_list:
+        assert call.args == (
+            service_module.QA_COLLECTION_NAME,
+            {"storage_path": "uploads/doc.pdf"},
+        )
+
+
 # ==========================================
 # Ownership (Faz 5)
 # ==========================================
@@ -871,34 +966,33 @@ async def test_update_document_text_rejects_a_page_count_mismatch(tmp_path, monk
 
 
 @pytest.mark.asyncio
-async def test_update_document_text_deletes_stale_vectors_before_reindexing(
-    tmp_path, monkeypatch
-):
-    """_index_for_qa only ever adds chunks, it never replaces them -- without
-    deleting first, both the old (garbled) and corrected passages would stay
-    retrievable, and hybrid search could still cite the garbled one."""
+async def test_update_document_text_reindexes_the_corrected_text(tmp_path, monkeypatch):
+    """A hand-correction must reach the Q&A index, or hybrid search keeps
+    citing the pre-correction (garbled) passages after the user fixed them.
+    _index_for_qa itself now owns deleting the stale chunks before upserting
+    the corrected ones (see its own docstring and
+    test_index_for_qa_deletes_stale_chunks_before_upserting) -- this test
+    only has to confirm update_document_text reaches it with the corrected
+    text, not re-verify the delete-before-upsert ordering."""
     monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
     storage_path = "uploads/abc.pdf"
     analysis = _official_letter_analysis(storage_path)
     _write_cache(tmp_path, storage_path, analysis)
     service, _, _, _ = _build_service()
-    vector_store = AsyncMock()
-    service.vector_store = vector_store
 
-    call_order = []
-    vector_store.delete_by_filter.side_effect = lambda *a, **k: call_order.append("delete")
+    reindex_calls = []
 
-    async def _fake_index(*args, **kwargs):
-        call_order.append("index")
+    async def _fake_index(storage_path, text, pages=None, **kwargs):
+        reindex_calls.append((storage_path, text, pages))
 
     with patch.object(service, "_index_for_qa", side_effect=_fake_index):
         await service.update_document_text(storage_path, ["Sayı : E-123"], "company-1")
 
-    assert call_order == ["delete", "index"]
-    assert vector_store.delete_by_filter.await_args.args == (
-        "document_qa",
-        {"storage_path": storage_path},
-    )
+    assert len(reindex_calls) == 1
+    reindexed_path, reindexed_text, reindexed_pages = reindex_calls[0]
+    assert reindexed_path == storage_path
+    assert reindexed_pages == ["Sayı : E-123"]
+    assert "E-123" in reindexed_text
 
 
 @pytest.mark.asyncio

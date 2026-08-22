@@ -2,7 +2,7 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
-## [3.30.0] - 2026-08-22
+## [3.31.0] - 2026-08-22
 LLM'siz retrieval eval suite'i (#229). `evaluation/metrics.py` içinde
 `precision_at_k`/`recall_at_k` yazılmış ve unit-test edilmişti ama hiçbir
 suite onları çağırmıyordu -- sistemin çekirdek özelliği olan RAG retrieval
@@ -31,6 +31,26 @@ kalıyor.
   kanıtı).
 - `evaluation/generate_report.py --suite retrieval`, `make eval-retrieval`.
 - `docs/evaluation/retrieval.md`.
+
+## [3.30.0] - 2026-08-22
+`document_qa` Qdrant koleksiyonu, bir belge yeniden indekslendiğinde chunk'ları
+çoğaltabiliyordu (#225). Kök neden: `_index_for_qa`, `upsert_documents` ile her
+chunk için rastgele bir UUID üretiyor ve yalnızca ekliyor, hiç silmiyordu.
+Üç çağırandan ikisi (`_save_rederived_analysis`, `delete_document`) bu riski
+kendi taraflarında `delete_by_filter` çağırarak kapatmıştı, ama birincil
+yükleme yolu (`analyze_document`) hiç silme yapmıyordu -- aynı `storage_path`
+ikinci kez indekslendiğinde eski ve yeni chunk'lar koleksiyonda yan yana
+kalıyordu. Bu, `reciprocal_rank_fusion`'ın exact-`page_content` dedup'ını çift
+saymaya zorluyor ve RRF sıralamasını sessizce bozuyordu -- ölçülebilir bir
+retrieval eval'i kurmadan önce kapatılması gereken bir önkoşuldu.
+
+### Düzeltildi
+- **`_index_for_qa` artık idempotent**: Chunk'lamadan önce kendi
+  `storage_path`'ine ait mevcut point'leri koşulsuz siler, böylece metodun
+  herhangi bir sayıda çağrısı koleksiyonda birikme değil güncel durumu
+  bırakır. Garanti çağıranlardan metodun kendisine taşındı;
+  `_save_rederived_analysis`'teki artık gereksiz kalan silme çağrısı
+  kaldırıldı.
 
 ## [3.29.0] - 2026-08-21
 Eksik-bilgi kapısından geçen taslaklarda puan/kusur listesi metinle tutarsızdı
