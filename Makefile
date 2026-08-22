@@ -1,4 +1,4 @@
-.PHONY: setup-db bootstrap up down logs test eval eval-baseline eval-llm \
+.PHONY: setup-db bootstrap up down logs test eval eval-baseline eval-llm eval-retrieval \
 	migrate seed shell psql restart-backend \
 	reset-db reset-checkpoints reset-cache reset-storage reset-document-qa reset
 
@@ -103,6 +103,17 @@ eval-baseline:
 # way the backend service's own OLLAMA_BASE_URL is wired.
 eval-llm:
 	docker compose run --rm --no-deps backend python -m evaluation.generate_report --suite intents --with-model --label with-model
+
+# Chunking-configuration comparison (precision@k/recall@k/MRR/nDCG across
+# evaluation.harness.retrieval_suite.ARMS). Same --no-deps rationale as
+# `eval` above: everything here reads a precommitted embedding cache
+# (evaluation/datasets/retrieval_embeddings.json) and a stubbed in-memory
+# vector store, never live Qdrant/Ollama. Rebuild that cache after editing
+# evaluation/datasets/retrieval.jsonl or evaluation/datasets/
+# retrieval_corpus/ with:
+#   docker compose run --rm --no-deps backend python scripts/build_eval_embeddings.py --target retrieval
+eval-retrieval:
+	docker compose run --rm --no-deps backend python -m evaluation.generate_report --suite retrieval --label retrieval
 
 # ---------------------------------------------------------------------------
 # Reset: wipes application data (companies/users/documents/drafts/chat/...)

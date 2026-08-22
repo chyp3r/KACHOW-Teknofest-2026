@@ -11,6 +11,8 @@ abstention against recall but not against another label's precision. Both are
 deliberate, and both are easy to "simplify" into the wrong thing.
 """
 
+import math
+
 import pytest
 
 from evaluation.metrics import (
@@ -20,7 +22,10 @@ from evaluation.metrics import (
     binary_rates,
     confusion_matrix,
     expected_calibration_error,
+    hit_rate_at_k,
     macro_f1,
+    mean_reciprocal_rank,
+    ndcg_at_k,
     per_label_scores,
     precision_at_k,
     recall_at_k,
@@ -161,6 +166,42 @@ def test_precision_and_recall_at_k():
     assert recall_at_k(retrieved, relevant, 4) == pytest.approx(2 / 3)
     assert precision_at_k(retrieved, relevant, 0) == 0.0
     assert recall_at_k(retrieved, [], 4) == 0.0
+
+
+def test_mean_reciprocal_rank_averages_per_query_reciprocal_ranks():
+    rankings = [
+        (["a", "b", "c", "d"], ["a", "c", "e"]),  # first relevant at rank 1 -> 1.0
+        (["x", "y", "b"], ["b", "z"]),  # first relevant at rank 3 -> 1/3
+        (["p", "q"], ["z"]),  # no relevant item found at all -> 0.0, not excluded
+    ]
+
+    assert mean_reciprocal_rank(rankings) == pytest.approx((1.0 + 1 / 3 + 0.0) / 3)
+    assert mean_reciprocal_rank([]) == 0.0
+
+
+def test_hit_rate_at_k_is_a_pass_fail_signal():
+    retrieved = ["a", "b", "c", "d"]
+
+    assert hit_rate_at_k(retrieved, ["a", "c", "e"], 2) == 1.0
+    assert hit_rate_at_k(retrieved, ["e"], 1) == 0.0
+    assert hit_rate_at_k(retrieved, ["a", "c", "e"], 0) == 0.0
+    assert hit_rate_at_k(retrieved, [], 4) == 0.0
+
+
+def test_ndcg_at_k_rewards_relevant_items_ranked_higher():
+    relevant = ["a", "c"]
+
+    # a at rank 1, c at rank 3: DCG = 1/log2(2) + 1/log2(4) = 1.5, IDCG (both
+    # relevant items as high as they can go) = 1/log2(2) + 1/log2(3).
+    ndcg = ndcg_at_k(["a", "b", "c", "d"], relevant, 4)
+    idcg = 1.0 / math.log2(2) + 1.0 / math.log2(3)
+    assert ndcg == pytest.approx(1.5 / idcg)
+
+    # Same two relevant items, ranked as high as possible -> perfect score.
+    assert ndcg_at_k(["a", "c", "b", "d"], relevant, 4) == pytest.approx(1.0)
+
+    assert ndcg_at_k(["a", "b"], [], 2) == 0.0
+    assert ndcg_at_k(["a", "b"], relevant, 0) == 0.0
 
 
 def test_binary_rates_headline_is_the_false_positive_rate():

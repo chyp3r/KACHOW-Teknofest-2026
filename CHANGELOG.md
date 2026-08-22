@@ -2,6 +2,36 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.31.0] - 2026-08-22
+LLM'siz retrieval eval suite'i (#229). `evaluation/metrics.py` içinde
+`precision_at_k`/`recall_at_k` yazılmış ve unit-test edilmişti ama hiçbir
+suite onları çağırmıyordu -- sistemin çekirdek özelliği olan RAG retrieval
+kalitesi tamamen ölçüsüzdü. `evaluation/README.md`'nin LLM-as-judge/RAGAS'ı
+reddeden gerekçesi (yerel Ollama ~28 tok/s'de ölçüm aletinin kendisi en
+gürültülü terim olur) burada da geçerli, bu yüzden etiketleme LLM'siz bir
+şemayla çözüldü: bir chunk, gold `answer_spans` listesindeki en az bir
+span'i birebir içeriyorsa alakalı sayılıyor -- etiket chunker'dan bağımsız,
+farklı chunk yapılandırmaları farklı sınırlar üretse de aynı şema geçerli
+kalıyor.
+
+### Eklendi
+- `evaluation/metrics.py`: `mean_reciprocal_rank`, `hit_rate_at_k`,
+  `ndcg_at_k`.
+- `evaluation/datasets/retrieval_corpus/` (6 belge) ve
+  `evaluation/datasets/retrieval.jsonl` (23 gold vaka, 6 kategori).
+- `evaluation/harness/in_memory_store.py`: Qdrant'a bağımlı olmayan,
+  gerçek `HybridRetriever`/`SparseBM25Encoder`/`reciprocal_rank_fusion`
+  kodunu çalıştıran stand-in vector store -- `make eval`'in `--no-deps`
+  ilkesi korunuyor.
+- `evaluation/harness/retrieval_suite.py`: dört chunk kolu (üç
+  `RecursiveChunker` parametre kombinasyonu + `SemanticChunker` keşif
+  kolu) karşılaştırıyor. Gerçek Ollama ile uçtan uca doğrulandı --
+  `semantic-p85` kolunun `page_attribution_rate`'i beklendiği gibi 0.0
+  okuyor (`SemanticChunker`'ın `start_index` üretmediğinin sayısal
+  kanıtı).
+- `evaluation/generate_report.py --suite retrieval`, `make eval-retrieval`.
+- `docs/evaluation/retrieval.md`.
+
 ## [3.30.0] - 2026-08-22
 `document_qa` Qdrant koleksiyonu, bir belge yeniden indekslendiğinde chunk'ları
 çoğaltabiliyordu (#225). Kök neden: `_index_for_qa`, `upsert_documents` ile her
