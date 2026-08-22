@@ -7,13 +7,13 @@ Policy sürümü: `3.0.0`
 
 ## Suite: `retrieval`
 
-Altın küme: `evaluation/datasets/retrieval.jsonl` · Koşu: 2026-08-22T18:29:25 · Süre: 11.3 ms
+Altın küme: `evaluation/datasets/retrieval.jsonl` · Koşu: 2026-08-22T19:19:50 · Süre: 11.0 ms
 
-> Qdrant kullanılmaz, yerel RRF ile ölçülür (bkz. `docs/evaluation/retrieval.md`). k=6, baseline=`recursive-1000-200` (production ChunkingPolicy varsayılanları).
+> Qdrant kullanılmaz, yerel RRF ile ölçülür (bkz. `docs/evaluation/retrieval.md`). k=6, baseline=`recursive-1500-300` (production ChunkingPolicy varsayılanları).
 
 ### Kollar arası karşılaştırma
 
-| Metrik | `recursive-512-128` | `recursive-1000-200` **(baseline)** | `recursive-1500-300` | `semantic-p85` |
+| Metrik | `recursive-512-128` | `recursive-1000-200` | `recursive-1500-300` **(baseline)** | `semantic-p85` |
 |---|---|---|---|---|
 | Precision@k | 0.3912 | 0.8421 | 1.0000 | 0.7632 |
 | Recall@k | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
@@ -26,9 +26,9 @@ Altın küme: `evaluation/datasets/retrieval.jsonl` · Koşu: 2026-08-22T18:29:2
 
 | Kol | ΔPrecision@k | ΔnDCG@k | ΔMRR |
 |---|---|---|---|
-| `recursive-512-128` | -0.4509 | -0.0777 | -0.1053 |
-| `recursive-1500-300` | +0.1579 | +0.0583 | +0.0789 |
-| `semantic-p85` | -0.0789 | +0.0000 | +0.0000 |
+| `recursive-512-128` | -0.6088 | -0.1360 | -0.1842 |
+| `recursive-1000-200` | -0.1579 | -0.0583 | -0.0789 |
+| `semantic-p85` | -0.2368 | -0.0583 | -0.0789 |
 
 ### Korpus istatistikleri
 
@@ -44,9 +44,9 @@ Altın küme: `evaluation/datasets/retrieval.jsonl` · Koşu: 2026-08-22T18:29:2
 | Kategori | Vaka | P@k | nDCG@k | MRR |
 |---|---|---|---|---|
 | `madde_listesi` | 4 | 1.00 | 1.00 | 1.00 |
-| `paragraf_arasi` | 2 | 0.50 | 0.82 | 0.75 |
-| `sayfa_siniri` | 4 | 0.88 | 1.00 | 1.00 |
-| `tek_cumle` | 6 | 0.83 | 0.94 | 0.92 |
-| `uzun_baglam` | 3 | 0.83 | 0.88 | 0.83 |
+| `paragraf_arasi` | 2 | 1.00 | 1.00 | 1.00 |
+| `sayfa_siniri` | 4 | 1.00 | 1.00 | 1.00 |
+| `tek_cumle` | 6 | 1.00 | 1.00 | 1.00 |
+| `uzun_baglam` | 3 | 1.00 | 1.00 | 1.00 |
 | `yok` | 4 | - | - | - |
 

@@ -2,8 +2,8 @@
   "meta": {
     "retrieval": {
       "dataset": "retrieval",
-      "started_at": "2026-08-22T18:29:25",
-      "total_ms": 11.286
+      "started_at": "2026-08-22T19:19:50",
+      "total_ms": 11.046
     }
   },
   "policy_version": "3.0.0",
@@ -351,22 +351,22 @@
           "unanswerable_cases": 4
         }
       },
-      "baseline": "recursive-1000-200",
+      "baseline": "recursive-1500-300",
       "delta_vs_baseline": {
-        "recursive-1500-300": {
-          "mean_reciprocal_rank": 0.0789,
-          "ndcg_at_k": 0.0583,
-          "precision_at_k": 0.1579
+        "recursive-1000-200": {
+          "mean_reciprocal_rank": -0.0789,
+          "ndcg_at_k": -0.0583,
+          "precision_at_k": -0.1579
         },
         "recursive-512-128": {
-          "mean_reciprocal_rank": -0.1053,
-          "ndcg_at_k": -0.0777,
-          "precision_at_k": -0.4509
+          "mean_reciprocal_rank": -0.1842,
+          "ndcg_at_k": -0.136,
+          "precision_at_k": -0.6088
         },
         "semantic-p85": {
-          "mean_reciprocal_rank": 0.0,
-          "ndcg_at_k": 0.0,
-          "precision_at_k": -0.0789
+          "mean_reciprocal_rank": -0.0789,
+          "ndcg_at_k": -0.0583,
+          "precision_at_k": -0.2368
         }
       },
       "k": 6

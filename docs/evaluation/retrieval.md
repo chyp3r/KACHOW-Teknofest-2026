@@ -70,9 +70,12 @@ bunu göremez.
 
 `evaluation.harness.retrieval_suite.ARMS`:
 
-- `recursive-512-128`, `recursive-1000-200` (**baseline** — `ChunkingPolicy`
-  varsayılanları), `recursive-1500-300`: parametre süpürmesi. Asıl ayarlanabilir
-  kaldıraç bu — bu belge türünde `chunk_size` stratejiden çok daha fazla oynatır.
+- `recursive-512-128`, `recursive-1000-200`, `recursive-1500-300`
+  (**baseline** — `ChunkingPolicy` varsayılanları; bu suite'in kendi ilk
+  ölçümü `1000/200`'ün her metrikte kaybettiğini gösterdikten sonra
+  varsayılan buraya çekildi, bkz. `retrieval-baseline.md`): parametre
+  süpürmesi. Asıl ayarlanabilir kaldıraç bu — bu belge türünde `chunk_size`
+  stratejiden çok daha fazla oynatır.
 - `semantic-p85`: **yalnızca keşif kolu.** Production'a bağlı değil (bkz.
   `SemanticChunker`'ın kendi docstring'i). Bu suite tam da onu ölçmek/kanıtlamak
   için var. `page_attribution_rate=0.0` okuması beklenir — `start_index`
