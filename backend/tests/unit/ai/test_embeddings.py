@@ -102,6 +102,34 @@ async def test_semantic_chunker():
 
 
 @pytest.mark.asyncio
+async def test_semantic_chunker_does_not_emit_start_index():
+    """Counter-intuitive on purpose: this pins today's contract so nobody
+    wires SemanticChunker into DocumentService._index_for_qa believing page
+    citations survive the switch. _index_for_qa reads start_index to look
+    up a chunk's page via build_page_map (see
+    app.ai.documents.anchors and RecursiveChunker's own
+    test_recursive_chunker_tags_each_chunk_with_its_source_offset for the
+    contrast) -- SemanticChunker does not provide it. If this test starts
+    failing because start_index support was added, that's good; update it
+    to assert the offset is correct (see SemanticChunker's class docstring
+    for what "correct" requires), not just present, and only then consider
+    wiring this chunker into production."""
+    mock_client = MagicMock()
+    mock_client.embed_documents = AsyncMock(
+        return_value=[[1.0, 0.0, 0.0], [0.9, 0.1, 0.0], [0.0, 0.0, 1.0]]
+    )
+
+    chunker = SemanticChunker(
+        embeddings_client=mock_client, threshold_type="static", threshold_value=0.3
+    )
+    text = "Apple is great. I love Apple. Nuclear physics is complex."
+    docs = await chunker.split_text(text)
+
+    assert docs, "fixture must produce at least one chunk for this assertion to mean anything"
+    assert all("start_index" not in doc.metadata for doc in docs)
+
+
+@pytest.mark.asyncio
 async def test_agentic_chunker_success():
     mock_agent = MagicMock(spec=BaseAgent)
     mock_response = AgenticChunksResponse(

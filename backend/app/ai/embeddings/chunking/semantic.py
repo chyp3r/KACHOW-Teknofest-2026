@@ -22,9 +22,52 @@ def cosine_distance(u: List[float], v: List[float]) -> float:
 
 
 class SemanticChunker(BaseChunker):
-    """SOTA Semantic Chunker that splits text based on semantic similarity/distance
+    """Splits text based on semantic similarity/distance between consecutive
+    sentences rather than character lengths.
 
-    between consecutive sentences rather than character lengths.
+    NOT WIRED INTO PRODUCTION -- and must not be, as-is. The only chunker
+    any production call site uses is ``RecursiveChunker``
+    (``app.ai.embeddings.chunking.recursive``); ``ChunkingPolicy``
+    (``app.ai.policy.schema``) deliberately carries no strategy field
+    selecting this class. This is not an oversight to "finish wiring up" --
+    three concrete problems make it unsafe to plug into
+    ``DocumentService._index_for_qa`` today:
+
+    1. No ``start_index`` metadata. ``_index_for_qa`` reads a chunk's
+       ``start_index`` to look up its page via
+       ``app.ai.documents.anchors.build_page_map``, and
+       ``RecursiveChunker`` provides it via
+       ``RecursiveCharacterTextSplitter(add_start_index=True)``. This class
+       emits only ``chunk_index``/``sentence_count``. Bolting it on as-is
+       does not merely drop the ``[s. N]`` page citation -- if a future
+       change joins the grouped sentences with ``" ".join(...)`` and
+       treats a naive re-search as the offset, it collapses
+       ``app.ai.documents.anchors.PAGE_SEPARATOR`` (``"\\n\\n"``) into a
+       single space, so any offset computed from that joined string drifts
+       by exactly the amount ``build_page_map`` uses to find page
+       boundaries -- the citation would be *wrong*, not merely absent,
+       which is worse.
+    2. ``_split_into_sentences``'s regex is not safe for Turkish official
+       correspondence. The negative lookbehind ``(?<![A-Z][a-z]\\.)`` only
+       recognises ASCII uppercase, so it does not protect Turkish
+       abbreviation patterns using ``İ/Ş/Ğ/Ç/Ö/Ü``, and it has no exception
+       list for the common Turkish abbreviations ("Sn.", "Dr.", "T.C.",
+       "vb.", "md.") or numbered-item markers ("1.", "2.") this document
+       type is full of -- each one is a false sentence boundary.
+    3. No maximum chunk size and no overlap. A long, topically-homogeneous
+       document (which official correspondence often is) can produce one
+       very large chunk that ``DraftPolicy.source_chunk_char_budget``
+       drops entirely rather than truncating, and there is no overlap to
+       recover an answer that lands on a chunk boundary the way
+       ``RecursiveChunker``'s configured overlap does.
+
+    This class stays in the package, exported and unit-tested, as an
+    eval-only exploration arm (see ``evaluation``'s retrieval suite) --
+    whether it beats ``RecursiveChunker`` on this document type is a
+    measured question, not a settled one, and the answer belongs in a
+    report, not in a docstring. Do not wire it into ``DocumentService``
+    without first fixing (1)-(3) above and having eval numbers to justify
+    the switch.
     """
 
     def __init__(
