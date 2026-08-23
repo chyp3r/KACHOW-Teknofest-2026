@@ -1,0 +1,78 @@
+# A plain Deployment (not a StatefulSet) with a small PVC -- Redis here
+# backs both a cache and the arq job queue (LoRA/PEFT training runs, see
+# compose.yml's own `worker` service comment), so `appendonly yes` matters:
+# losing an in-flight training job enqueue on a pod restart is a real
+# regression, not just a cold cache. Single replica: Redis Cluster/Sentinel
+# is out of scope here, same call postgres.yaml/qdrant.yaml make.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: kachow
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: kachow
+spec:
+  selector:
+    app: kachow-redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: kachow
+spec:
+  replicas: 1
+  strategy:
+    # Recreate, not RollingUpdate -- two Redis pods would both try to bind
+    # the same ReadWriteOnce PVC at once and one would fail to schedule.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: kachow-redis
+  template:
+    metadata:
+      labels:
+        app: kachow-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args: ["--appendonly", "yes"]
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis-data

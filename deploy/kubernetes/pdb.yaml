@@ -1,0 +1,24 @@
+# PodDisruptionBudget for `frontend` only. `backend` runs a single replica
+# by default (see backend.yaml's own comment on why) -- a PDB with
+# minAvailable: 1 against exactly one replica would block every voluntary
+# eviction (node drains, cluster-autoscaler scale-down) indefinitely, since
+# there is never a second pod to fail over to. Add one here once backend.
+# yaml's `replicas` is raised past 1 (i.e. once STORAGE_TYPE is "s3").
+#
+# HPA is deliberately not included in this directory. CPU-based
+# autoscaling is the wrong signal for this workload: a backend pod spends
+# most of a request blocked waiting on Ollama, not burning CPU, so request
+# volume can spike while CPU stays flat and HPA never reacts. The correct
+# axis is queue depth or in-flight request count, which needs a custom
+# metrics adapter this deployment doesn't have yet -- left for a future
+# PR rather than shipped as a CPU-based HPA that would not actually help.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend-pdb
+  namespace: kachow
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: kachow-frontend

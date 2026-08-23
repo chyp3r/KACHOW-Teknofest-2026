@@ -2,6 +2,59 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.43.0] - 2026-08-23
+Workstream G: Kubernetes manifest'leri, self-hosted production deployment için (#255).
+
+Karar: manifest, Helm değil — dokuz yarı-şablonlanmış dosya yerine tek
+dürüst manifest seti; `deploy/helm/` ayrı bir takip PR'ına ertelendi.
+
+- `deploy/kubernetes/namespace.yaml` — ns `kachow`, `ResourceQuota`,
+  default-deny `NetworkPolicy` + DNS/intra-namespace/Ollama egress
+  istisnaları.
+- `configmap.yaml`, `secrets.yaml` (placeholder'lı + ExternalSecret
+  örneği).
+- `postgres.yaml`, `qdrant.yaml` — StatefulSet + headless Service + PVC.
+- `redis.yaml` — Deployment + PVC + `appendonly yes`.
+- `backend.yaml` — Deployment + Service + PVC, `replicas: 1` varsayılan
+  (J9/#254 `STORAGE_TYPE=s3` ile 2'ye çıkarmayı güvenli kılıyor, ama
+  gerçek bir S3/MinIO endpoint'i olmadan varsayılan `STORAGE_TYPE=local`
+  ile 2 kırılırdı — manifestte gerekçe yazılı), `migrate-job.yaml`'ın
+  ürettiği şemayı bekleyen bir initContainer (DDL çalıştırmaz).
+- `migrate-job.yaml` (yeni) — tek seferlik `alembic upgrade head`.
+- `frontend.yaml`, `ingress.yaml` (SSE için `proxy-buffering: off` vb.),
+  `pdb.yaml` (yalnızca `frontend` — `backend` tek replika'da anlamsız,
+  gerekçe yazılı; HPA bilinçli olarak eklenmedi).
+
+### Doğrulama
+Tüm set gerçek bir Kubernetes cluster'ına (`kind`) karşı uçtan uca
+uygulandı: postgres/qdrant/redis Running, initdb ConfigMap'i gerçekten
+`kachow_app` rolünü ve `langfuse` DB'sini oluşturdu, `migrate-job` gerçek
+Alembic zincirini (0001→0028) sıfırdan uyguladı ve Complete oldu,
+`backend` 1/1 Running (kısıtlı `kachow_app` rolüyle bağlandı, `?deep=true`
+health check'i gerçek DB+Qdrant kontrolleriyle 200, `uid=10001 gid=0`),
+`frontend` 2/2 Running (`readOnlyRootFilesystem: true`), `pdb`
+`ALLOWED DISRUPTIONS: 1` doğru hesaplandı, `ingress` şeması
+`--dry-run=server` ile doğrulandı.
+
+### Düzeltildi
+- `backend.yaml`'ın `wait-for-migrations` initContainer'ında `resources`
+  bloğu yoktu — `ResourceQuota` bunu zorunlu kılıyor, Pod oluşturma
+  tamamen reddediliyordu (`FailedCreate`). Canlı `kubectl apply` ile
+  yakalandı.
+- `:latest` etiketiyle varsayılan `imagePullPolicy: Always`, `kind`'e
+  yüklenen local imajı görmezden gelip gerçek registry'den çekmeye
+  çalışıyordu. `IfNotPresent` eklendi (backend/frontend/migrate-job).
+- Postgres probe'larında `pg_isready -U $(POSTGRES_USER)` — Kubernetes'in
+  `$(VAR)` ikamesi yalnızca container'ın kendi `command`/`args`'ına
+  uygulanıyor, probe `exec.command`'a değil; argümansız `pg_isready`'e
+  düzeltildi.
+
+### Notlar
+`SECRET_KEY` guard'ının (#250) gerçek cluster'da da çalıştığı doğrulandı:
+placeholder secret'la backend `CrashLoopBackOff`'a girdi, gerçek değerle
+düzgün başladı. `ingress-nginx` controller'ının bizzat kurulup uçtan uca
+test edilmesi bu PR'ın kapsamı dışında.
+
 ## [3.42.0] - 2026-08-23
 Workstream J9: belge analiz cache'ini `BaseStorage`'ın arkasına al (#253).
 

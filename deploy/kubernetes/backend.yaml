@@ -1,0 +1,239 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: kachow
+spec:
+  selector:
+    app: kachow-backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: kachow
+spec:
+  # 1, not 2, as shipped -- see configmap.yaml's top comment. The bug that
+  # made replicas>1 genuinely unsafe under the default STORAGE_TYPE=local
+  # (the analysis cache bypassing BaseStorage and always landing on
+  # whichever pod's own local disk handled the request) was fixed in J9
+  # (#254): STORAGE_TYPE=s3 now means *no* local file writes for a
+  # document, cache included. Raise this once configmap.yaml's
+  # STORAGE_TYPE is "s3" against a real S3/MinIO endpoint -- raising it
+  # first, against local storage, reintroduces the exact bug J9 fixed,
+  # just without a matching code path to blame.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kachow-backend
+  template:
+    metadata:
+      labels:
+        app: kachow-backend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 0
+        fsGroup: 0
+      # Waits for the schema migrate-job.yaml's Job produces; never runs
+      # DDL itself. Matters even when the Job is applied first by
+      # convention (kubectl/CI ordering, see that file's own comment)
+      # because ordering between separate `kubectl apply` invocations is
+      # not guaranteed -- a rollout that raced ahead of a still-running
+      # Job would otherwise boot against a stale schema instead of
+      # waiting a few seconds.
+      initContainers:
+        - name: wait-for-migrations
+          image: ghcr.io/chyp3r/kachow-backend:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - bash
+            - -c
+            - >-
+              until alembic current 2>/dev/null | grep -q '(head)'; do
+              echo 'Waiting for kachow-migrate Job to reach head...'; sleep 5; done
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: kachow-config
+                  key: POSTGRES_DB
+            - name: ALEMBIC_DATABASE_URL
+              value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)"
+          # Required, not optional, once namespace.yaml's ResourceQuota
+          # sets compute-resource limits at the namespace level -- a
+          # ResourceQuota with any cpu/memory key present rejects *every*
+          # container's Pod (initContainers included) that doesn't specify
+          # its own requests/limits. Caught live: applying this Deployment
+          # against that quota failed with "must specify limits.cpu ...
+          # for: wait-for-migrations" before this block existed.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+      containers:
+        - name: backend
+          # IfNotPresent, not the default Always a ":latest" tag implies --
+          # a real deployment should pin IMAGE_TAG to a real release tag
+          # (matching compose.prod.yml's own ${IMAGE_TAG:-latest}) rather
+          # than float on "latest" at all.
+          image: ghcr.io/chyp3r/kachow-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: kachow-config
+          env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: SECRET_KEY
+            - name: LANGFUSE_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: LANGFUSE_PUBLIC_KEY
+            - name: LANGFUSE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: LANGFUSE_SECRET_KEY
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: S3_ACCESS_KEY
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: S3_SECRET_KEY
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: POSTGRES_PASSWORD
+            - name: KACHOW_APP_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: KACHOW_APP_DB_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: kachow-config
+                  key: POSTGRES_DB
+            # The restricted kachow_app role -- Postgres RLS (migration
+            # 0013_rls) never applies to a table's owner, so the running
+            # app must never connect as one. See app.core.config.Settings.
+            # DATABASE_URL's own docstring.
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://kachow_app:$(KACHOW_APP_DB_PASSWORD)@postgres:5432/$(POSTGRES_DB)"
+            # Owner connection -- only app.infrastructure.database.session.
+            # get_owner_db's pre-tenant identity lookups (login/refresh/
+            # registration) use this at runtime; migrate-job.yaml is what
+            # actually runs DDL with it.
+            - name: ALEMBIC_DATABASE_URL
+              value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)"
+          # Shallow, not ?deep=true: same reasoning as livenessProbe below
+          # -- while this process is still warming up its LLM clients, a
+          # slow Qdrant/Ollama must not trigger a restart. Deep belongs to
+          # readiness alone.
+          startupProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8000
+            # High threshold: app.lifespan._warm_up_models/_warm_up_graphs
+            # load Ollama models and compile every LangGraph workflow
+            # before the app accepts traffic, capped at
+            # WARMUP_TIMEOUT_SECONDS=120 but not guaranteed to finish
+            # inside it on a cold cluster.
+            failureThreshold: 30
+            periodSeconds: 10
+          # ?deep=true -- exactly the 503 semantics app.api.routers.health
+          # already implements for this purpose: a pod that can accept TCP
+          # but whose Qdrant/Postgres/Ollama dependencies are unhealthy
+          # should stop receiving traffic without being killed.
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health?deep=true
+              port: 8000
+            periodSeconds: 10
+            failureThreshold: 3
+          # Shallow -- unlike readiness, a transient Qdrant/Ollama outage
+          # must not restart an otherwise-healthy process (same call
+          # backend.prod.Dockerfile's own HEALTHCHECK makes).
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8000
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: storage-data
+              mountPath: /workspace/storage_data
+      # 600s (a chat/document-analysis SSE stream's own proxy_read_timeout,
+      # see nginx.conf) plus a margin for an in-flight request to actually
+      # flush and close -- a pod killed mid-stream during a rollout drops
+      # the connection with no graceful [DONE] frame.
+      terminationGracePeriodSeconds: 620
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        # ReadWriteOnce is safe only because `replicas: 1` above pins this
+        # to a single pod -- see that field's own comment. STORAGE_TYPE=s3
+        # makes this volume unused (LocalStorage is never constructed --
+        # see app.infrastructure.storage.get_storage_client), so it can be
+        # dropped entirely once a real deployment switches over.
+        - name: storage-data
+          persistentVolumeClaim:
+            claimName: backend-storage-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backend-storage-data
+  namespace: kachow
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 10Gi
