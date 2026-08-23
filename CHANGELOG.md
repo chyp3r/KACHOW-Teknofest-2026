@@ -2,6 +2,56 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.41.0] - 2026-08-23
+Workstream F3/F4: production frontend Dockerfile + nginx.conf + `compose.prod.yml` (#251).
+
+- `deploy/docker/frontend.prod.Dockerfile` — `node:20-alpine` ile `vite build`
+  (mevcut arch-tespitli Rollup düzeltmesi aynen korundu), ardından
+  `nginxinc/nginx-unprivileged:1.27-alpine` ile statik servis (8080,
+  non-root varsayılan). `VITE_API_BASE_URL` build ARG'ı **eklenmedi** —
+  `frontend/src/services/apiClient.ts` yalnızca göreli `/api/v1/...`
+  yolları kullanıyor, hiçbir yerde `VITE_API_*` env'i okunmuyor
+  (doğrulandı); ihtiyaç yok.
+- `deploy/docker/nginx.conf` — daha önce yetim bir dosyaydı, artık
+  `frontend.prod.Dockerfile`'a bağlı: `listen 8080`, `gzip`, `/healthz`,
+  SSE için mevcut `proxy_buffering off`/600s zaman aşımı korundu.
+- `compose.prod.yml` — `compose.yml` üstüne override: kaynak bind mount
+  yok, `db`/`redis`/`qdrant` portları kapalı, healthcheck'ler
+  (`pg_isready`, `redis-cli ping`, `/readyz`), tek seferlik `migrate`
+  servisi (`alembic upgrade head`), `backend` ona
+  `condition: service_completed_successfully` ile bağlı, kaynak
+  limitleri, log rotasyonu, `${VAR:?...}` ile zorunlu sırlar (`up`
+  eksik sırla hemen reddediyor).
+- `.env.prod.example` — `compose.prod.yml`'in gerektirdiği değişkenlerin
+  listesi.
+
+### Düzeltildi
+- nginx, `backend` hostname'i DNS'te henüz kayıtlı değilken (frontend
+  container'ı backend'den önce ayağa kalkarsa) **boot'ta çöküyordu**
+  (`host not found in upstream`) — canlı imaj backend'siz bir ağda
+  koşturularak keşfedildi. `proxy_pass` bir literal yerine bir
+  `resolver 127.0.0.11` + değişken (`$backend_upstream`) üzerinden
+  çözülecek şekilde değiştirildi; artık nginx her koşulda açılıyor ve
+  backend henüz erişilemezken istek yalnızca 502 dönüyor (doğrulandı:
+  standalone imaj, backend'siz ağda `/` → 200, `/healthz` → 200,
+  `/api/...` → 502, container asla crash-loop'a girmedi).
+- `compose.prod.yml`'in ilk taslağında `frontend.ports`, `compose.yml`'in
+  dev `5173` portuyla **birleşiyordu** (Compose'un liste alanları
+  varsayılan olarak concat eder) — `docker compose config` çıktısında
+  hem `5173` hem `80:8080`'in aynı anda yayınlandığı görülerek
+  yakalandı; `ports: !override [...]` ile düzeltildi.
+
+### Notlar
+Tüm zincir gerçek, izole bir Compose projesinde (`-p
+kachow-prod-verify`, kullanıcının asıl dev volume'larına dokunmadan)
+uçtan uca doğrulandı: `migrate` gerçek Alembic migration'larını (0001→
+son) sıfırdan uyguladı (exit 0), `backend` `healthy` oldu ve kısıtlı
+`kachow_app` rolüyle bağlandı, `frontend` üzerinden `curl
+http://localhost/api/v1/health` → 200 (nginx proxy'si üzerinden), her
+iki container da non-root (`uid=10001 gid=0` / `uid=101`). Doğrulama
+sonunda izole proje tamamen silindi; kullanıcının gerçek dev ortamı
+(`docker compose up -d`) sağlıklı halde geri getirildi.
+
 ## [3.40.0] - 2026-08-23
 Workstream F1/F2: production backend Dockerfile + `.dockerignore` + `SECRET_KEY` guard'ı (#249).
 
