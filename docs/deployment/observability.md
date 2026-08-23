@@ -61,6 +61,29 @@ bir alert Alertmanager UI'ında görünür ama kimseyi uyandırmaz.
 Kubernetes yolunda Alertmanager de yok — kendi Prometheus operator'ünüzün
 kendi Alertmanager'ını kullanın.
 
+## OpenTelemetry (altyapı izleme)
+
+Langfuse yalnızca LLM çağrılarını görür (LangChain callback'i üzerinden).
+HTTP isteği, Postgres sorgusu, Redis komutu ve dışa giden `httpx` çağrısı
+(Qdrant, Ollama) hiçbirinde Langfuse span'i yoktur -- yavaş bir chat turunun
+modelde mi, veritabanında mı, vektör deposunda mı geçtiğini ayırt etmenin
+tek yolu budur.
+
+`backend/app/observability/otel.py::init_tracing` bunu sağlar:
+`OTEL_EXPORTER_OTLP_ENDPOINT` boşsa **hiçbir SDK modülü import edilmeden**
+no-op'a düşer -- Langfuse'un anahtar-yokken-degrade'iyle aynı ilke, eksik
+bir collector backend'in açılmasını engellemez. `compose.yml`/
+`compose.prod.yml` bu değişkeni varsayılan olarak kendi `jaeger`
+servisine (`jaegertracing/all-in-one`, OTLP/gRPC alıcısı `4317`, UI
+`16686`) işaret eder.
+
+**Langfuse vs OTel -- hangi soruyu hangisine sorarsınız:**
+- "Bu taslak neden düşük güven skoru aldı, prompt'a ne gönderildi?" →
+  Langfuse.
+- "Bu chat turu neden 8 saniye sürdü, zaman nerede geçti?" → OTel/Jaeger.
+
+İkisi rakip değil, aynı anda çalışırlar; biri diğerinin yerine geçmez.
+
 ## Langfuse (LLM izleme)
 
 `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` boşsa Langfuse sessizce devre

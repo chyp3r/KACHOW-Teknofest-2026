@@ -3,7 +3,7 @@
 #   docker compose -f compose.yml -f compose.prod.yml --env-file .env.prod up -d
 #
 # Services this file does not mention (worker, prometheus, grafana,
-# langfuse) are inherited from compose.yml unchanged -- monitoring/alerting
+# langfuse, jaeger) are inherited from compose.yml unchanged -- monitoring/alerting
 # wiring for a production stack is Workstream H, not this file. `${VAR:?...}`
 # throughout is deliberate: compose.yml's own `${VAR:-dev_default}` fallbacks
 # exist so a bare `docker compose up` works with zero setup, which is
@@ -65,6 +65,12 @@ services:
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
       - LANGFUSE_HOST=${LANGFUSE_HOST:-http://langfuse:3000}
+      # Infrastructure spans (HTTP/DB/Redis/outbound httpx) -- separate from
+      # Langfuse above. `jaeger` (inherited unchanged from compose.yml, see
+      # this file's header) is a fine default for a single-node deployment;
+      # point this at a real OTLP collector for a multi-node one. Empty
+      # disables it entirely (app/observability/otel.py's no-op degrade).
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
       # Live mevzuat.gov.tr scraping is off by default in the prod image
       # (backend.prod.Dockerfile's WITH_MEVZUAT_MCP=0) -- MEVZUAT_SOURCE
       # must match, or every legislation lookup pays a doomed MCP attempt
