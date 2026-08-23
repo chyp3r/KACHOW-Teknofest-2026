@@ -2,6 +2,54 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.42.0] - 2026-08-23
+Workstream J9: belge analiz cache'ini `BaseStorage`'ın arkasına al (#253).
+
+- `backend/app/domains/documents/cache_keys.py` (yeni) —
+  `analysis_cache_key(storage_path)` tek kaynağı.
+- `backend/app/domains/documents/service.py` — `_save_document_analysis_
+  cache`, `_read_analysis_cache`, `delete_document`, `_copy_analysis_cache`
+  artık `os.path.join(settings.LOCAL_STORAGE_DIR, ...)` + `open()`/
+  `os.remove` yerine `self.storage.put_file/get_file/delete_file`
+  kullanıyor — belgenin kendi baytlarıyla aynı backend.
+- `backend/app/domains/documents/provider.py` (yeni) —
+  `get_cached_document(document_id)`, planlama grafiğine enjekte edilen
+  callable.
+- `backend/app/ai/workflows/planning_graph.py` — `_load_cached_document`
+  artık enjekte edilmiş bir `document_cache_provider` callable'a
+  delege ediyor (`app.ai.*`'nin `app.domains.*`'ı doğrudan import
+  etmemesi kuralına uyarak — `test_ai_never_imports_domains.py`).
+- `backend/app/api/dependency.py::get_planning_graph` —
+  `document_cache_provider=get_cached_document` enjekte edildi.
+
+### Düzeltildi
+- Analiz cache'i `STORAGE_TYPE=s3` ayarlansa bile her zaman yerel diske
+  yazılıyordu — `S3Storage` tam bağlı olmasına rağmen. Bu,
+  Workstream G'nin backend Deployment'ını `replicas: 1`'e sabitlemesinin
+  doğrulanmış gerçek sebebiydi: bir replica'nın yazdığı cache dosyasını
+  diğer replica göremiyordu. Gerçek bir MinIO'ya karşı doğrulandı (put/
+  get/delete round-trip, silme sonrası `FileNotFoundError`).
+- **İkinci, bağımsız bir kopyası bulundu:** `planning_graph.py::
+  _load_cached_document` — sohbet/taslak akışının yüklü bir belgeye
+  referans verdiğinde önbelleklenmiş analizi okuyan fonksiyon — aynı hatayı
+  `service.py`'den tamamen ayrı taşıyordu. `STORAGE_TYPE=s3` ile bu
+  fonksiyon her zaman boş cache döndürüyordu, yani bir belgeyi analiz edip
+  sonra ona referans veren her sohbet/taslak turu belgenin içeriğini
+  sessizce kaybediyordu. Gerçek çalışan backend'e karşı canlı doğrulandı
+  (`get_cached_document` gerçek storage client'ın yazdığını okuyor).
+
+### Notlar
+`compose.prod.yml`'ye MinIO servisi eklemek ve `STORAGE_TYPE=s3` ile tam bir
+e2e koşusu bu PR'ın kapsamı dışında bırakıldı (ayrı bir takip işi) —
+abstraksiyonun kendisi gerçek bir MinIO'ya karşı doğrudan doğrulandı,
+ancak `compose.prod.yml`'in kalıcı MinIO kablolaması yapılmadı. Bu inince
+G'deki (henüz yazılmamış) `replicas: 1` notu kalkabilir.
+
+Doğrulama: `docker compose exec backend pytest -q` → 2561 passed, 34
+deselected (57+14 yeni test dahil); `docker compose exec backend pytest -q
+-m e2e` → 24 passed (regresyon yok); `test_ai_never_imports_domains.py`
+geçiyor (mimari sınır ihlal edilmedi).
+
 ## [3.41.0] - 2026-08-23
 Workstream F3/F4: production frontend Dockerfile + nginx.conf + `compose.prod.yml` (#251).
 

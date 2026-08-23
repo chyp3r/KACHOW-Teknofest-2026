@@ -12,7 +12,7 @@ from app.api.exceptions.not_found import NotFoundException
 from app.api.exceptions.validation import ValidationException
 from app.core.config import settings
 from app.domains.documents.model.document_model import DocumentModel
-from app.domains.documents.service import DocumentService
+from app.domains.documents.service import DocumentService, _analysis_cache_key
 from app.domains.pools.model.document_pool_item_model import DocumentPoolItemModel
 from app.domains.pools.model.document_pool_model import DocumentPoolModel
 from app.domains.users.model.user_model import UserModel
@@ -69,9 +69,31 @@ def _source_document(**overrides) -> DocumentModel:
 
 def _build_service(*, pool_item_repository=None, pool_repository=None, document_repository=None,
                     quota_service=None):
+    # A stateful fake, not a bare AsyncMock -- adopt_pool_item's cache copy
+    # (_copy_analysis_cache) now reads/writes through self.storage exactly
+    # like the blob does (see app.domains.documents.service.
+    # _analysis_cache_key), so get_file/put_file must actually distinguish
+    # the blob key from the cache key instead of returning one fixed value
+    # for every call.
+    blobs: dict[str, bytes] = {"uploads/sender.pdf": b"%PDF-1.7 fake bytes"}
+
+    async def _put_file(file_path: str, content: bytes) -> str:
+        blobs[file_path] = content
+        return "uploads/adopted.pdf"
+
+    async def _get_file(file_path: str) -> bytes:
+        if file_path not in blobs:
+            raise FileNotFoundError(file_path)
+        return blobs[file_path]
+
+    async def _delete_file(file_path: str) -> bool:
+        return blobs.pop(file_path, None) is not None
+
     storage = AsyncMock(spec=BaseStorage)
-    storage.get_file.return_value = b"%PDF-1.7 fake bytes"
-    storage.put_file.return_value = "uploads/adopted.pdf"
+    storage.put_file.side_effect = _put_file
+    storage.get_file.side_effect = _get_file
+    storage.delete_file.side_effect = _delete_file
+    storage.blobs = blobs
 
     extractor = AsyncMock(spec=BaseDocumentExtractor)
     analysis_graph = MagicMock()
@@ -214,7 +236,10 @@ async def test_copies_the_blob_under_a_new_storage_key():
 
     await service.adopt_pool_item(item_id="item-1", current_user=_user(), company_id="company-1")
 
-    storage.get_file.assert_awaited_once_with("uploads/sender.pdf")
+    # Also probes the analysis cache key (_analysis_cache_key) and finds
+    # nothing there -- no cache was seeded for this test -- so put_file is
+    # only called once, for the blob itself.
+    storage.get_file.assert_any_await("uploads/sender.pdf")
     storage.put_file.assert_awaited_once()
     assert storage.put_file.await_args.args[1] == b"%PDF-1.7 fake bytes"
 
@@ -296,38 +321,36 @@ async def test_increments_the_document_quota_when_a_quota_service_is_configured(
 # ---------- analysis cache + reindexing ----------
 
 
-async def test_copies_the_analysis_cache_under_the_new_storage_key(tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
+async def test_copies_the_analysis_cache_under_the_new_storage_key():
     pool_item_repository = AsyncMock()
     pool_item_repository.get_by_id.return_value = _item()
     pool_repository = AsyncMock()
     pool_repository.get_by_id.return_value = _pool()
     document_repository = AsyncMock()
     document_repository.get_by_id.return_value = _source_document()
-    service, _ = _build_service(
+    service, storage = _build_service(
         pool_item_repository=pool_item_repository,
         pool_repository=pool_repository,
         document_repository=document_repository,
     )
     service._index_for_qa = AsyncMock()
 
-    old_cache = tmp_path / "uploads/sender.pdf_analysis.json"
-    old_cache.parent.mkdir(parents=True, exist_ok=True)
     cache_payload = {"extracted_text": "İçerik.", "pages": ["İçerik."], "analysis": {"summary": "Özet."}}
-    old_cache.write_text(json.dumps(cache_payload, ensure_ascii=False), encoding="utf-8")
+    storage.blobs[_analysis_cache_key("uploads/sender.pdf")] = json.dumps(
+        cache_payload, ensure_ascii=False
+    ).encode("utf-8")
 
     await service.adopt_pool_item(item_id="item-1", current_user=_user(), company_id="company-1")
 
-    new_cache = tmp_path / "uploads/adopted.pdf_analysis.json"
-    assert json.loads(new_cache.read_text(encoding="utf-8")) == cache_payload
+    new_cache = json.loads(storage.blobs[_analysis_cache_key("uploads/adopted.pdf")])
+    assert new_cache == cache_payload
     service._index_for_qa.assert_awaited_once()
     call_args = service._index_for_qa.await_args
     assert call_args.args[0] == "uploads/adopted.pdf"
     assert call_args.args[1] == "İçerik."
 
 
-async def test_skips_reindexing_when_the_source_has_no_cache(tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "LOCAL_STORAGE_DIR", str(tmp_path))
+async def test_skips_reindexing_when_the_source_has_no_cache():
     pool_item_repository = AsyncMock()
     pool_item_repository.get_by_id.return_value = _item()
     pool_repository = AsyncMock()

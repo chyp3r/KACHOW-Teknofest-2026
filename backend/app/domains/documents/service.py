@@ -15,6 +15,7 @@ from app.ai.guardrails.injection import scrub_extracted_text
 from app.ai.guardrails.sensitivity import assess as assess_sensitivity
 from app.ai.policy import get_policy
 from app.ai.summarization import build_detailed_summary
+from app.domains.documents.cache_keys import analysis_cache_key
 from app.domains.documents.model.document_model import DocumentModel
 from app.domains.documents.repository import DocumentRepository
 from app.domains.pools.model.document_pool_item_model import DocumentPoolItemModel
@@ -108,6 +109,14 @@ QA_CHUNK_OVERLAP = get_policy().chunking.qa_chunk_overlap
 
 #: Cached embedding dimension, probed once per process.
 _qa_vector_size: Optional[int] = None
+
+
+#: Re-exported under its old private name -- this module's own call sites
+#: and existing tests both spell it `_analysis_cache_key`. The definition
+#: itself moved to `cache_keys.py` so `app.domains.documents.provider`
+#: (read by the planning graph via an injected callable, never a direct
+#: import -- see that module's own docstring) can share it too.
+_analysis_cache_key = analysis_cache_key
 
 
 class DocumentService:
@@ -852,41 +861,36 @@ class DocumentService:
         pages: list[str],
         response: DocumentAnalysisResponseSchema,
     ) -> None:
-        """Save full document analysis, extracted text and per-page text to a
-        local cache JSON file.
+        """Save full document analysis, extracted text and per-page text to
+        the configured storage backend's analysis cache key (see
+        ``_analysis_cache_key`` -- ``self.storage``, the same backend the
+        document's own bytes live in, not necessarily local disk).
 
         ``pages`` backs the ``get_document_outline``/``get_document_section``
         tools (see ``app.ai.tools.document_tools``) -- without it, a page
         request would have nothing to index into once the analysis workflow
         has already returned.
         """
-        import json
-        from app.core.config import settings
-
-        cache_file = os.path.join(settings.LOCAL_STORAGE_DIR, f"{storage_path}_analysis.json")
-
-        def _write():
-            cache_data = {
-                "extracted_text": extracted_text,
-                "pages": pages,
-                "analysis": response.model_dump(mode="json")
-            }
-            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-            with open(cache_file, "w", encoding="utf-8") as f:
-                json.dump(cache_data, f, ensure_ascii=False, indent=2)
-
+        cache_data = {
+            "extracted_text": extracted_text,
+            "pages": pages,
+            "analysis": response.model_dump(mode="json"),
+        }
         try:
-            await asyncio.to_thread(_write)
+            await self.storage.put_file(
+                _analysis_cache_key(storage_path),
+                json.dumps(cache_data, ensure_ascii=False, indent=2).encode("utf-8"),
+            )
         except Exception as e:
             logger.error(f"Failed to save document analysis cache: {e}")
 
     async def _read_analysis_cache(self, storage_path: str) -> Optional[dict]:
-        """Read and JSON-parse the on-disk analysis cache file, if it exists.
+        """Read and JSON-parse the analysis cache from storage, if it exists.
 
         Shared by every read-then-mutate method below (``get_cached_analysis``,
         ``update_document_fields``, ``generate_detailed_summary``) -- each owns
         a different slice of what happens after the read (a different field
-        gets mutated, a different re-save follows), but "does the cache file
+        gets mutated, a different re-save follows), but "does the cache key
         exist, does it parse as JSON" was previously copy-pasted three times.
 
         Args:
@@ -895,19 +899,19 @@ class DocumentService:
         Returns:
             The parsed cache dict (with ``extracted_text``/``pages``/``analysis``
             keys -- see ``_save_document_analysis_cache``), or None if no
-            cache file exists for ``storage_path`` or reading/parsing it
-            fails for any reason.
+            cache exists for ``storage_path`` or reading/parsing it fails for
+            any reason.
         """
-        cache_file = os.path.join(settings.LOCAL_STORAGE_DIR, f"{storage_path}_analysis.json")
-
-        def _read():
-            if not os.path.exists(cache_file):
-                return None
-            with open(cache_file, "r", encoding="utf-8") as f:
-                return json.load(f)
+        try:
+            content = await self.storage.get_file(_analysis_cache_key(storage_path))
+        except FileNotFoundError:
+            return None
+        except Exception:
+            logger.exception("Failed to read cached analysis for %s", storage_path)
+            return None
 
         try:
-            return await asyncio.to_thread(_read)
+            return json.loads(content)
         except Exception:
             logger.exception("Failed to read cached analysis for %s", storage_path)
             return None
@@ -1574,14 +1578,8 @@ class DocumentService:
         except Exception:
             logger.exception("Failed to delete stored file for %s", storage_path)
 
-        cache_file = os.path.join(settings.LOCAL_STORAGE_DIR, f"{storage_path}_analysis.json")
-
-        def _remove_cache():
-            if os.path.exists(cache_file):
-                os.remove(cache_file)
-
         try:
-            await asyncio.to_thread(_remove_cache)
+            await self.storage.delete_file(_analysis_cache_key(storage_path))
         except Exception:
             logger.exception("Failed to delete cached analysis for %s", storage_path)
 
@@ -1712,39 +1710,35 @@ class DocumentService:
     async def _copy_analysis_cache(
         self, source_storage_path: str, new_storage_path: str
     ) -> Optional[dict]:
-        """Copy the local analysis-cache JSON under a new storage key, for
+        """Copy the analysis-cache JSON under a new storage key, for
         `adopt_pool_item` -- the cache is keyed by storage_path (see
-        `_save_document_analysis_cache`), independent of the storage
-        backend, so an adopted copy needs its own cache file too, not just
-        the blob.
+        `_save_document_analysis_cache`), so an adopted copy needs its own
+        cache entry too, not just the blob.
 
         Returns:
             The copied cache dict (so the caller can reindex immediately
-            without a second disk read), or `None` when the source had no
+            without a second read), or `None` when the source had no
             cache to copy -- a degraded but non-fatal case (adopt still
             succeeds, just without Q&A indexing), the same "best-effort
             past the registry row" tolerance `delete_document` already
             applies to its own cleanup steps.
         """
-        import json
-
-        old_path = os.path.join(settings.LOCAL_STORAGE_DIR, f"{source_storage_path}_analysis.json")
-        new_path = os.path.join(settings.LOCAL_STORAGE_DIR, f"{new_storage_path}_analysis.json")
-
-        def _copy() -> Optional[dict]:
-            if not os.path.exists(old_path):
-                return None
-            with open(old_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            os.makedirs(os.path.dirname(new_path), exist_ok=True)
-            with open(new_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            return data
-
         try:
-            return await asyncio.to_thread(_copy)
+            content = await self.storage.get_file(_analysis_cache_key(source_storage_path))
+        except FileNotFoundError:
+            return None
         except Exception:
             logger.exception(
                 "Failed to copy analysis cache from %s to %s", source_storage_path, new_storage_path
             )
             return None
+
+        try:
+            data = json.loads(content)
+            await self.storage.put_file(_analysis_cache_key(new_storage_path), content)
+        except Exception:
+            logger.exception(
+                "Failed to copy analysis cache from %s to %s", source_storage_path, new_storage_path
+            )
+            return None
+        return data
