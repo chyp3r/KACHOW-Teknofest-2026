@@ -2,6 +2,24 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.48.0] - 2026-08-23
+Workstream J4: prompt çıktı regresyonu -- golden file testi (#265).
+
+- **Doğrulandı, tekrar yazılmadı:** prompt kontrat testleri
+  (`TEMPLATE_CONTRACTS`, `test_prompt_templates.py`'nin 7 testi) zaten
+  kapsamlı; eksik olan tek şey render edilmiş *çıktı* üstünde bir
+  regresyon testiydi.
+- Yeni `backend/tests/unit/ai/golden/*.txt` (11 dosya) — her şablonun,
+  `test_prompt_templates.py`'nin zaten kullandığı sabit placeholder
+  değerleriyle (`f"<{placeholder}>"`) render edilmiş hali, komitli.
+- Yeni `backend/tests/unit/ai/test_prompt_golden.py` — render → golden
+  karşılaştırma; `KACHOW_UPDATE_GOLDEN=1` ile kasıtlı yenileme.
+- **Canlı doğrulandı:** `writer.md`'nin gövdesi placeholder setini
+  değiştirmeden düzenlenip test suite'i koşuldu — `test_prompt_golden.py`
+  kırıldı, `test_prompt_templates.py`'nin 7 testi (doğru şekilde)
+  kırılmadı; değişiklik geri alındıktan sonra tüm 59 test tekrar yeşil.
+- `docker compose exec backend pytest -q` → 2587 passed (2575'ten +12).
+
 ## [3.47.0] - 2026-08-23
 Workstream J3: chaos/failure-injection testi (#263).
 
