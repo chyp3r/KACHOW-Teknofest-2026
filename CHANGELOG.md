@@ -2,6 +2,45 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.31.1] - 2026-08-24
+[3.31.0]'daki parser/merge düzeltmesinin canlı doğrulaması: aynı 4 gerçek
+belge (CY-009/CY-003/CY-010/CY-033) tam ardışık düzenden (`qwen3.5:9b`,
+üretim sıcaklığı 0.7) geçirildi. Düzeltmeler öncesi **0/4**'ü altın
+etiketle tam eşleşiyordu, sonrası **4/4**.
+
+### Düzeltildi
+- **`merge_parsed_over_model`'e sıralama-toleranslı kanıt kontrolü
+  eklendi, ama yalnızca iki alana.** Canlı ölçüm CY-033'te ikinci bir
+  boşluk açığa çıkardı: model `muhatap`'ı doğru buldu ama sırasını
+  değiştirdi ("Ankara Milletvekili İdris ŞAHİN", belge "Sayın İdris
+  ŞAHİN\nAnkara Milletvekili" yazıyorken) -- katlanmış alt-dize kontrolü
+  aynı bilgiyi farklı sırada tanımadığı için reddetti.
+  `draft_verifier`'ın kendi `_token_overlap`/`TOKEN_OVERLAP_THRESHOLD`
+  mantığı yeniden kullanılarak bir tolerans kademesi eklendi. **İlk
+  sürüm tüm `_EVIDENCE_RESCUABLE_FIELD` alanlarına açıktı ve bu, ikinci
+  ve daha ciddi bir boşluğu ortaya çıkardı**: CY-010'da (hiç "Konu:"
+  satırı olmayan bir belge) model gövde kelimelerinden kendi **özetini**
+  üretti ve bu, 0.857 kelime örtüşmesiyle yanlışlıkla kurtarıldı -- bir
+  sıralama farkı değil, gerçek bir sentezdi.
+  Kademe yalnızca `muhatap`/`gonderen_kurum`'a daraltıldı: ikisi de adlandırılmış
+  kişi/kurum, model gerçekçi olarak yeniden sıralar ama uydurmaz;
+  `konu`/`tarih`/`sayi` modelin doğal olarak özetlemeye/yeniden ifade
+  etmeye eğilimli olduğu alanlar, o yüzden yalnız katı alt-dize kontrolünde
+  kaldılar.
+
+### Eklendi
+- İki kalıcı regresyon testi (`backend/tests/unit/ai/test_field_parser.py`):
+  sıralaması değişmiş `muhatap`'ın kurtarıldığını, ve CY-010'un özet-tarzı
+  `konu`'sunun kurtarılmadığını kilitliyor.
+
+### Doğrulama
+- `docker compose exec backend pytest -q` 2545 test geçiyor (2 bilinen
+  önceden var olan MCP testi hariç), 2 yeni test dahil.
+- Canlı doğrulama: aynı 4 gerçek belge üzerinde 0/4 → 4/4 (yukarıya
+  bakınız). `make eval`'in `evrak` suite'i bu değişiklikten etkilenmedi
+  (kasıtlı olarak yalnız parser'ı ölçüyor, LLM/merge hiç çağrılmıyor) --
+  sayı hâlâ **0.1148**.
+
 ## [3.31.0] - 2026-08-23
 Zorunlu alan doldurmanın kök nedeni "OCR yetersizliği" sanılıyordu; ölçüm
 farklı bir yer gösterdi. 23 elle etiketlenmiş gerçek belgenin *mükemmel*

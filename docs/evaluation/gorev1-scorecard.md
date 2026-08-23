@@ -127,11 +127,28 @@ kendi konumsal aday sıralamasını etkiliyordu). Düzeltme sonrası regex
 kendisi `imza_sahibi`/`imza_unvani`'i mükemmel metinde **0/23** kayıpla
 buluyor -- artık LLM'in tutarlılığına muhtaç değil. TBMM-şablonu
 `muhatap`/`gonderen_kurum` boşluğu ise `merge_parsed_over_model`'in yeni
-kanıta dayalı kurtarma yolunca kapsanıyor (parser hâlâ ulaşamıyor ama
-model değeri belgede geçtiği için artık kabul ediliyor). Tam ardışık
-düzenin canlı-model yeniden ölçümü ayrı yürütülüyor; deterministik
-katmanın kendi yeni sayısı (Madde 4, **0.1148**, önceki **0.2775**'ten)
-zaten büyük kazancı yakalıyor.
+kanıta dayalı kurtarma yolunca kapsanıyor.
+
+**Tam ardışık düzen canlı olarak yeniden ölçüldü** (aynı 4 belge: CY-001'in
+yerine CY-009/CY-003/CY-010/CY-033 kullanıldı, `qwen3.5:9b`, üretim
+sıcaklığı 0.7). Düzeltmeler öncesi bu 4 belgenin **0/4**'ü altın etiketle
+tam eşleşiyordu; düzeltmeler sonrası **4/4**. Yol boyunca ikinci bir bulgu
+çıktı ve düzeltildi: CY-033'te model `muhatap`'ı doğru buldu ama sırayı
+değiştirdi ("Ankara Milletvekili İdris ŞAHİN", belge "Sayın İdris
+ŞAHİN\nAnkara Milletvekili" yazıyorken) -- katlanmış alt-dize kontrolü bunu
+reddetti, çünkü aynı bilgiyi farklı sırada tanımıyordu.
+`merge_parsed_over_model`'e `draft_verifier`'ın kendi `_token_overlap`
+mantığıyla (aynı `TOKEN_OVERLAP_THRESHOLD`) bir tolerans kademesi eklendi.
+**Bu kademe kasıtlı olarak yalnızca `muhatap`/`gonderen_kurum`'a
+kapsandı** -- ilk sürüm tüm alanlara açıktı ve CY-010'da (hiç "Konu:"
+satırı olmayan bir belge) modelin gövdeden ürettiği bir **özeti**
+(`"...istemlerine ilişkin soruların cevabı"`, gövdedeki
+`"...istemlerine ilişkin ilgi önergenizde yer alan sorularınız..."`
+ifadesinin hafif yeniden yazımı) 0.857 örtüşmeyle yanlışlıkla kurtardı --
+bu bir sıralama farkı değil, gerçek bir sentezdi. `konu` bu kademenin
+kapsamından çıkarıldı; iki senaryo da (`test_reordered_model_value_is_rescued_via_token_overlap`,
+`test_konu_paraphrase_is_not_rescued_by_token_overlap`) kalıcı regresyon
+testi olarak eklendi.
 
 ---
 

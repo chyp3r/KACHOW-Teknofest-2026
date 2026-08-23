@@ -28,7 +28,7 @@ import re
 from typing import Any, Optional
 
 from app.ai.compliance.checker import is_blank, normalize_value
-from app.ai.verification.draft_verifier import INSTITUTION_PATTERN
+from app.ai.verification.draft_verifier import INSTITUTION_PATTERN, TOKEN_OVERLAP_THRESHOLD
 
 # Every label that can terminate a preceding value on the same line. The
 # regulation places "Tarih" to the right of "Sayı" on one line, so a value must
@@ -502,6 +502,27 @@ _EVIDENCE_RESCUABLE_FIELD: frozenset[str] = frozenset(
     {"sayi", "tarih", "konu", "muhatap", "gonderen_kurum"}
 )
 
+#: The subset of `_EVIDENCE_RESCUABLE_FIELD` also eligible for the
+#: token-overlap fallback (see `_token_overlap`), below the exact substring
+#: check. Deliberately narrower still: `muhatap` and `gonderen_kurum` name a
+#: specific person or institution, which a model realistically reorders
+#: ("Ankara Milletvekili İdris ŞAHİN" for a document that writes it name-
+#: first) but does not synthesise wholesale, since a person/institution
+#: name is not something a model paraphrases the way it paraphrases a
+#: topic. `konu`/`tarih`/`sayi` stay on the strict substring check only --
+#: measured live against qwen3.5:9b on CY-010, a document with no "Konu:"
+#: line at all: the model produced a `konu` value built by lightly
+#: rewording body vocabulary ("...istemlerine ilişkin ilgi önergenizde
+#: yer alan sorularınız..." into "...istemlerine ilişkin soruların
+#: cevabı"), which scored 0.857 token overlap -- comfortably past
+#: `TOKEN_OVERLAP_THRESHOLD` -- despite being a synthesised summary, not an
+#: extracted value. `konu` is exactly the shape of field a model is
+#: naturally inclined to summarise rather than quote, so it is the one
+#: `_EVIDENCE_RESCUABLE_FIELD` member the token-overlap fallback must not
+#: reach; `tarih`/`sayi` are excluded too since neither field's failure
+#: mode is "same value, different word order" the way a name is.
+_TOKEN_OVERLAP_ELIGIBLE_FIELD: frozenset[str] = frozenset({"muhatap", "gonderen_kurum"})
+
 
 def _header_region(text: str) -> str:
     """Return `text` up to (excluding) the first addressee or closing-formula line.
@@ -528,6 +549,42 @@ def _header_region(text: str) -> str:
     return text
 
 
+def _token_overlap(value: str, haystack: str) -> float:
+    """Share of `value`'s significant tokens (length > 2) present in `haystack`.
+
+    A tolerant fallback below the exact substring check in
+    `merge_parsed_over_model`: a model may correctly report a value while
+    reordering it relative to how it sits in the source. Measured live
+    against qwen3.5:9b on a real document (CY-033), the model returned
+    "Ankara Milletvekili İdris ŞAHİN" for a `muhatap` the text itself
+    writes as "Sayın İdris ŞAHİN\\nAnkara Milletvekili" -- the same two
+    facts (name, title), reversed order, which a plain substring check
+    rejects outright even though nothing was invented.
+
+    Same shape and threshold (`TOKEN_OVERLAP_THRESHOLD`) as
+    `app.ai.verification.draft_verifier`'s own `_token_overlap`,
+    reimplemented rather than imported so this module's grounding check
+    folds through `normalize_value` -- its own existing convention, which
+    strips punctuation -- instead of introducing `draft_verifier`'s `_fold`
+    (which keeps it) as a second folding contract here.
+
+    Args:
+        value: The candidate value, unfolded.
+        haystack: The trusted text to check against, unfolded.
+
+    Returns:
+        The overlap in [0, 1]. Values with fewer than two significant
+        tokens score 0.0 -- a single token is not meaningful evidence on
+        its own, the same reasoning `INSTITUTION_PATTERN`'s multi-word
+        requirement and `_PERSON_NAME_LINE`'s 2-4 word shape both rely on.
+    """
+    tokens = [token for token in normalize_value(value).split() if len(token) > 2]
+    if len(tokens) < 2:
+        return 0.0
+    folded_haystack = normalize_value(haystack)
+    return sum(1 for token in tokens if token in folded_haystack) / len(tokens)
+
+
 def merge_parsed_over_model(
     model_fields: dict[str, Any], parsed: dict[str, Any], document_text: str = ""
 ) -> dict[str, Any]:
@@ -538,9 +595,19 @@ def merge_parsed_over_model(
     * where it found a value, that value replaces the model's;
     * where it found nothing, the model's value is discarded -- *unless*
       `document_text` is given, the field is in `_EVIDENCE_RESCUABLE_FIELD`,
-      and the model's value is genuinely grounded (a folded substring match,
-      via `normalize_value`, same as `is_blank`'s own folding) in the
-      document text (`_header_region` for `tarih` specifically). This
+      and the model's value is genuinely grounded -- a folded substring
+      match (via `normalize_value`, same as `is_blank`'s own folding), or,
+      for `muhatap`/`gonderen_kurum` specifically
+      (`_TOKEN_OVERLAP_ELIGIBLE_FIELD`) and failing the substring check, a
+      token-overlap match (`_token_overlap`, same `TOKEN_OVERLAP_THRESHOLD`
+      `draft_verifier` uses) for a name the model reported correctly but
+      reordered relative to the source (see `_token_overlap`'s own
+      docstring for the live CY-033 case this covers, and
+      `_TOKEN_OVERLAP_ELIGIBLE_FIELD`'s own docstring for why `konu` in
+      particular must stay off this path -- a live counter-example on
+      CY-010, where it rescued a model-synthesised summary instead of a
+      reordered extraction). Grounding checks run against the document
+      text (`_header_region` for `tarih` specifically). This
       matters: measured directly against 23 hand-labelled real documents,
       the parser is structurally unable to reach some of these values at
       all -- `muhatap` when the addressee is a named person rather than a
@@ -585,7 +652,11 @@ def merge_parsed_over_model(
             value = model_fields.get(name)
             if not is_blank(value):
                 haystack = header_text if name == "tarih" else document_text
-                if normalize_value(str(value)) in normalize_value(haystack):
+                text_value = str(value)
+                grounded = normalize_value(text_value) in normalize_value(haystack)
+                if not grounded and name in _TOKEN_OVERLAP_ELIGIBLE_FIELD:
+                    grounded = _token_overlap(text_value, haystack) >= TOKEN_OVERLAP_THRESHOLD
+                if grounded:
                     # Grounded: keep the model's value, already sitting in
                     # `merged` from the initial `dict(model_fields)` copy.
                     continue

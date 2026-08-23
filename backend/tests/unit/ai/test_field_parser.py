@@ -302,6 +302,63 @@ def test_ungrounded_model_value_is_still_discarded_with_document_text():
     assert merged["muhatap"] is None
 
 
+def test_reordered_model_value_is_rescued_via_token_overlap():
+    """Real live case, measured against qwen3.5:9b on CY-033: the model
+    reported `muhatap` as "Ankara Milletvekili İdris ŞAHİN", but the
+    document itself writes it name-first ("Sayın İdris ŞAHİN\\nAnkara
+    Milletvekili") -- the exact substring check rejected this correct
+    value outright. Token overlap (both "significant" tokens still present,
+    just reordered) rescues it instead."""
+    doc = (
+        "Sayı : Z-1\nTarih : 02.04.2026\nKonu : Soru Önergesi\n\n"
+        "Sayın İdris ŞAHİN\nAnkara Milletvekili\n\n"
+        "İlgi : bir şey.\n\nMetin.\nRica ederim.\n\n"
+        "Bekir BOZDAĞ\nTürkiye Büyük Millet Meclisi\nBaşkanvekili"
+    )
+    merged = merge_parsed_over_model(
+        {"muhatap": "Ankara Milletvekili İdris ŞAHİN"}, {}, document_text=doc
+    )
+    assert merged["muhatap"] == "Ankara Milletvekili İdris ŞAHİN"
+
+
+def test_token_overlap_does_not_rescue_an_unrelated_fabrication():
+    """The tolerant fallback must still reject a value whose tokens simply
+    don't appear in a document that names no addressee at all."""
+    doc = (
+        "T.C.\nÖRNEK BAKANLIĞI\n\nKonu : Bir şey\n\n"
+        "Bu belgede hiç muhatap veya makam adı geçmiyor sadece metin var.\n\n"
+        "Ahmet YILMAZ"
+    )
+    merged = merge_parsed_over_model({"muhatap": "FANTEZİ VALİLİĞİNE"}, {}, document_text=doc)
+    assert merged["muhatap"] is None
+
+
+def test_konu_paraphrase_is_not_rescued_by_token_overlap():
+    """Real live case, measured against qwen3.5:9b on CY-010 -- a document
+    with no "Konu:" line at all. The model built a `konu` value by lightly
+    rewording body vocabulary ("...istemlerine ilişkin ilgi önergenizde
+    yer alan sorularınız..." into "...istemlerine ilişkin soruların
+    cevabı"), which scores 0.857 token overlap despite being a synthesised
+    summary, not an extracted value -- `konu` must therefore stay off the
+    token-overlap path entirely (`_TOKEN_OVERLAP_ELIGIBLE_FIELD` excludes
+    it), unlike `muhatap`/`gonderen_kurum` where reordering, not
+    paraphrase, is the realistic failure mode."""
+    doc = (
+        "TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞI\nKanunlar ve Kararlar Başkanlığı\n\n"
+        "Sayı : Z-1\nTarih : 20.04.2026\n\n"
+        "Sayın Ceylan AKÇA CUPOLO\nDiyarbakır Milletvekili\n\n"
+        "TBMM Başkanlığına gelen yasama dokunulmazlığının kaldırılması istemlerine "
+        "ilişkin ilgi önergenizde yer alan sorularınız ekte cevaplandırılmıştır.\n"
+        "Bilgilerinizi rica ederim.\n\nBekir BOZDAĞ\nBaşkanvekili"
+    )
+    merged = merge_parsed_over_model(
+        {"konu": "Yasama dokunulmazlığının kaldırılması istemlerine ilişkin soruların cevabı"},
+        {},
+        document_text=doc,
+    )
+    assert merged["konu"] is None
+
+
 def test_body_text_date_is_not_rescued_into_tarih():
     """The documented failure mode this rule exists to prevent: a leave
     request's start date, which the model may read out of the body, must
