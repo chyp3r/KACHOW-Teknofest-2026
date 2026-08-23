@@ -1,0 +1,14 @@
+{
+  "node_seconds": {
+    "analyze": 140.0,
+    "assist": 70.0,
+    "retrieve_examples": 25.0,
+    "retrieve_mevzuat": 25.0,
+    "retrieve_source_chunks": 25.0,
+    "route": 45.0,
+    "scan_sensitivity": 25.0,
+    "suggest_mevzuat": 70.0,
+    "writer": 180.0
+  },
+  "workflow_ceiling_seconds": 480.0
+}

@@ -2,6 +2,37 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.38.0] - 2026-08-23
+Workstream E2: k6 yük testleri + `node_seconds` bütçe export'u (#245).
+
+- `scripts/export_budgets.py` — `BudgetPolicy`'yi `perf/k6/lib/budgets.json`'a
+  yazar (commit'li); `backend/tests/unit/ai/test_budget_export_freshness.py`
+  taze kalmasını garanti eder (Ollama gerektirmez).
+- `perf/k6/` — `smoke.js`, `chat_stream.js`, `document_upload.js`,
+  `lib/thresholds.js`, `fixtures/sample.pdf`. Üçü de gerçek çalışan stack'e
+  (gerçek Ollama, gerçek Qdrant, seed'li `employee` hesabı) karşı bizzat
+  koşturularak doğrulandı.
+- `Makefile`: `export-budgets`/`perf-smoke`/`perf-chat`/`perf-document`.
+  `compose.yml`: `./perf:/workspace/perf` mount'u.
+
+### Düzeltildi
+- k6'nın varsayılan istek timeout'u (60s) belge analizi gibi çok adımlı LLM
+  çağrıları içeren endpoint'lerin gerçek maliyetinin altında kalıyordu —
+  gerçek bir koşuda "request timeout" ile ortaya çıktı. Her iki LLM-bağımlı
+  script'e (`chat_stream.js`, `document_upload.js`)
+  `BudgetPolicy.workflow_ceiling_seconds`'a eşit açık bir istek timeout'u
+  eklendi.
+- `.gitignore`'daki genel Python-paketleme `lib/` kuralı (`lib64/`,
+  `eggs/` ile aynı standart blok) her derinlikte eşleşiyor ve
+  `perf/k6/lib/`'i (bir Python build artifact'ı değil, k6 yardımcı
+  dosyaları) sessizce yutuyordu -- ilk commit denemesinde fark edildi.
+  `!perf/k6/lib/` istisnası eklendi.
+
+### Notlar
+`perf/k6/README.md`: locust'un neden seçilmediği (Workstream E4'ün kararı)
+ve k6'nın SSE disconnect senaryosunu neden kapsayamadığı (backend/tests/
+e2e/'nin `ASGITransport`'la aynı kapsayamadığı boşluk) belgelendi.
+
 ## [3.37.0] - 2026-08-23
 Workstream E1: performans testleri (#243). `backend/tests/performance/`
 artık boş değil -- iki katman eklendi:
