@@ -1,0 +1,66 @@
+# Non-secret configuration, mirroring compose.prod.yml's backend
+# environment block (see that file's own comments for the reasoning behind
+# each value) minus everything that belongs in secrets.yaml instead
+# (SECRET_KEY, POSTGRES_PASSWORD, KACHOW_APP_DB_PASSWORD, LANGFUSE_*, S3_*
+# credentials).
+#
+# STORAGE_TYPE=local + a single backend replica is the default here --
+# not because replicas>1 is unsupported (see backend.yaml's own note: the
+# analysis-cache bug that made local storage genuinely unsafe under
+# multiple replicas was fixed in J9, #254), but because switching to
+# STORAGE_TYPE=s3 requires a real S3/MinIO endpoint this file cannot
+# assume exists. To scale backend past 1 replica: stand up an S3-
+# compatible store, flip STORAGE_TYPE to "s3" below, fill in
+# S3_BUCKET_NAME/S3_ENDPOINT_URL here and S3_ACCESS_KEY/S3_SECRET_KEY in
+# secrets.yaml, and only then raise backend.yaml's `replicas`.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kachow-config
+  namespace: kachow
+data:
+  ENVIRONMENT: "production"
+  REQUIRE_AUTH: "true"
+
+  # -- Datastores (in-cluster Service DNS names -- see postgres.yaml/
+  # qdrant.yaml/redis.yaml's own headless Service definitions) --
+  QDRANT_URL: "http://qdrant:6333"
+  REDIS_URL: "redis://redis:6379/0"
+  POSTGRES_DB: "kachow"
+
+  # -- Ollama --
+  # Cluster/host-specific, same as namespace.yaml's allow-backend-ollama-
+  # egress placeholder -- EDIT before applying. host.docker.internal (the
+  # compose.yml dev default) does not resolve inside a Pod.
+  OLLAMA_BASE_URL: "http://ollama.example.internal:11434"
+  OLLAMA_MODEL: "qwen3.5:9b"
+  OLLAMA_TEMPERATURE: "0.7"
+  OLLAMA_REASONING: "false"
+  OLLAMA_MAX_TOKENS: "4096"
+  OLLAMA_NUM_CTX: "8192"
+  OLLAMA_KEEP_ALIVE: "30m"
+  OLLAMA_FAST_MODEL: ""
+  OLLAMA_EMBEDDING_MODEL: "nomic-embed-text:latest"
+
+  # -- AI workflow timeouts (seconds) -- same defaults as .env.example --
+  AI_WORKFLOW_TIMEOUT_SECONDS: "480"
+  REVISION_RERETRIEVAL_TIMEOUT_SECONDS: "10"
+  DRAFT_JUDGE_TIMEOUT_SECONDS: "30"
+  GUARDRAIL_JUDGE_TIMEOUT_SECONDS: "15"
+  MEVZUAT_MCP_TIMEOUT_SECONDS: "25"
+
+  # -- Legislation source -- local (commit-committed corpus) matches
+  # backend.prod.Dockerfile's default WITH_MEVZUAT_MCP=0 build (no
+  # Chromium/mevzuat-mcp baked in); flip both together, not just this one,
+  # or every lookup pays a doomed MCP attempt before falling back.
+  MEVZUAT_SOURCE: "local"
+  MEVZUAT_MCP_ENABLED: "false"
+
+  # -- Storage backend -- see this file's own top comment.
+  STORAGE_TYPE: "local"
+  LOCAL_STORAGE_DIR: "/workspace/storage_data"
+  # S3_BUCKET_NAME: ""
+  # S3_ENDPOINT_URL: ""
+
+  # -- Langfuse (optional LLM tracing) --
+  LANGFUSE_HOST: "http://langfuse.kachow.svc.cluster.local:3000"

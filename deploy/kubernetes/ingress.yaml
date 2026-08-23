@@ -1,0 +1,61 @@
+# Assumes ingress-nginx (the annotations below are ingress-nginx-specific,
+# not part of the core Ingress API) and cert-manager for TLS. EDIT
+# `spec.tls[0].hosts`/`spec.rules[0].host`/the cert-manager issuer name
+# before applying -- these are placeholders.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kachow
+  namespace: kachow
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # SSE (chat/document-analysis streaming) needs both proxy buffering
+    # directions off -- nginx-ingress buffers by default, which would
+    # collect an entire response before forwarding it, defeating streaming
+    # entirely (the browser would see nothing until the whole answer was
+    # ready, then get it all at once). app.api.routers.chat's own
+    # _sse_response already sets `X-Accel-Buffering: no` on every SSE
+    # response; nginx-ingress honours that header too, but setting it at
+    # the Ingress level as well means it applies even to a response that
+    # forgot to set it itself.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    # Matches backend.prod.Dockerfile/nginx.conf's own 600s SSE timeouts --
+    # a document-analysis or long draft turn can legitimately run close to
+    # AI_WORKFLOW_TIMEOUT_SECONDS (480s) before its first byte back.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    # A multi-page scanned evrak upload (POST /api/v1/documents) can run
+    # into the tens of MB; ingress-nginx's own default (1m) is too tight.
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - kachow.example.com
+      secretName: kachow-tls
+  rules:
+    - host: kachow.example.com
+      http:
+        paths:
+          # More specific path first -- ingress-nginx evaluates rules in
+          # the order most-specific-prefix-wins regardless of manifest
+          # order, but keeping /api first here documents the intent: the
+          # backend Service owns everything under /api, the frontend
+          # Service (nginx serving the SPA) owns the rest, including its
+          # own client-side routed paths via its try_files fallback (see
+          # deploy/docker/nginx.conf).
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 8080

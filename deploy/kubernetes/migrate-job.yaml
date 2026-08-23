@@ -1,0 +1,63 @@
+# One-shot schema migration, applied before backend.yaml's Deployment
+# rolls out (kubectl apply -f migrate-job.yaml, wait for completion, then
+# apply backend.yaml -- or let a CI pipeline / Helm pre-upgrade hook,
+# whichever lands first, sequence the two). A `Job`, not a Deployment
+# initContainer: with backend.yaml's `replicas` above 1, every pod's own
+# initContainer running `alembic upgrade head` concurrently would race on
+# the same migration -- this runs it exactly once regardless of how many
+# backend replicas come up afterward. backend.yaml's own initContainer
+# only *waits* for the schema this Job produces; it never runs DDL itself.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kachow-migrate
+  namespace: kachow
+spec:
+  # A finished Job's Pod stays around by default -- gone in an hour so
+  # repeated deploys don't accumulate one completed Pod per release.
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          # Same image as backend.yaml -- keep the two in sync (same
+          # IMAGE_TAG); a migration Job running older/newer app code than
+          # the Deployment it precedes is exactly the drift this Job
+          # exists to prevent.
+          image: ghcr.io/chyp3r/kachow-backend:latest
+          imagePullPolicy: IfNotPresent
+          command: ["alembic", "upgrade", "head"]
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: kachow-config
+                  key: POSTGRES_DB
+            # The schema-owner connection -- Alembic always reads
+            # settings.effective_alembic_database_url, never the
+            # restricted DATABASE_URL a running backend pod connects with
+            # (see alembic/env.py's own comment on why). $(POSTGRES_USER)/
+            # $(POSTGRES_PASSWORD) reference the two env entries above --
+            # Kubernetes expands $(VAR_NAME) against earlier entries in
+            # the same container's own env list, no wrapper script needed.
+            - name: ALEMBIC_DATABASE_URL
+              value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
