@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from app.ai.policy import POLICY_VERSION
-from evaluation.harness import draft_suite, intent_suite, retrieval_suite
+from evaluation.harness import draft_suite, intent_suite, retrieval_suite, trajectory_suite
 from evaluation.harness.runner import REPO_ROOT, EvalRun
 from evaluation.metrics import (
     Prediction,
@@ -39,7 +39,7 @@ from evaluation.metrics import (
 
 REPORT_DIR = REPO_ROOT / "evaluation" / "reports"
 
-SUITES = ("intents", "drafts", "retrieval")
+SUITES = ("intents", "drafts", "retrieval", "trajectories")
 
 
 def _intent_summary(run: EvalRun) -> dict[str, Any]:
@@ -110,6 +110,32 @@ def _draft_summary(run: EvalRun) -> dict[str, Any]:
         "by_category": categories,
         "failures": draft_suite.failures(run),
         "claim_detection_gaps": draft_suite.claim_detection_gaps(run),
+    }
+
+
+def _trajectory_summary(run: EvalRun) -> dict[str, Any]:
+    """Score a trajectory run into a serialisable summary."""
+    summary = trajectory_suite.sequence_summary(run)
+
+    categories: dict[str, dict[str, Any]] = {}
+    for category, results in run.by_category().items():
+        subset = trajectory_suite.sequence_summary(
+            EvalRun(suite=run.suite, dataset=run.dataset, results=results)
+        )
+        categories[category] = {
+            "cases": subset["cases"],
+            "exact_match_rate": round(subset["exact_match_rate"], 4),
+            "mean_edit_distance": round(subset["mean_edit_distance"], 4),
+        }
+
+    return {
+        "cases": summary["cases"],
+        "exact_match_rate": round(summary["exact_match_rate"], 4),
+        "mean_edit_distance": round(summary["mean_edit_distance"], 4),
+        "unexpected_node_rate": round(summary["unexpected_node_rate"], 4),
+        "paused_at_mismatches": summary["paused_at_mismatches"],
+        "by_category": categories,
+        "failures": trajectory_suite.failures(run),
     }
 
 
@@ -199,6 +225,9 @@ def _run_suite(
         return run, _draft_summary(run)
     if name == "retrieval":
         return _retrieval_summary(k=retrieval_k)
+    if name == "trajectories":
+        run = trajectory_suite.run()
+        return run, _trajectory_summary(run)
     raise ValueError(f"Unknown suite: {name}")
 
 
@@ -398,6 +427,57 @@ def _format_retrieval_markdown(summary: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _format_trajectory_markdown(summary: dict[str, Any]) -> list[str]:
+    """Render the trajectory summary as Markdown lines."""
+    lines = [
+        "### Genel",
+        "",
+        "| Metrik | Değer |",
+        "|---|---|",
+        f"| Vaka sayısı | {summary['cases']} |",
+        f"| **Tam eşleşme oranı** | **{summary['exact_match_rate']:.4f}** |",
+        f"| Ortalama edit mesafesi (node-ziyareti) | {summary['mean_edit_distance']:.4f} |",
+        f"| Beklenmeyen node oranı | {summary['unexpected_node_rate']:.4f} |",
+        "",
+        "### Kategori kırılımı",
+        "",
+        "| Kategori | Vaka | Tam eşleşme | Ort. edit mesafesi |",
+        "|---|---|---|---|",
+    ]
+    for category in sorted(summary["by_category"]):
+        stats = summary["by_category"][category]
+        lines.append(
+            f"| `{category}` | {stats['cases']} | {stats['exact_match_rate']:.2f} | "
+            f"{stats['mean_edit_distance']:.2f} |"
+        )
+
+    mismatches = summary["paused_at_mismatches"]
+    lines += ["", f"### Beklenmeyen duraklama noktası ({len(mismatches)})", ""]
+    if not mismatches:
+        lines.append("Yok.")
+    else:
+        lines += ["| ID | Beklenen | Gözlenen |", "|---|---|---|"]
+        for row in mismatches:
+            lines.append(f"| `{row['id']}` | `{row['expected']}` | `{row['observed']}` |")
+
+    failures = summary["failures"]
+    lines += ["", f"### Başarısız vakalar ({len(failures)})", ""]
+    if not failures:
+        lines.append("Yok.")
+    else:
+        lines += [
+            "| ID | Kategori | Mesaj | Beklenen dizi | Gözlenen dizi | Edit mesafesi |",
+            "|---|---|---|---|---|---|",
+        ]
+        for row in failures:
+            message = row["message"].replace("|", "\\|")
+            lines.append(
+                f"| `{row['id']}` | `{row['category']}` | {message} | "
+                f"`{row['expected']}` | `{row['observed']}` | {row['edit_distance']} |"
+            )
+    return lines
+
+
 def _diff_lines(suite: str, current: dict[str, Any], baseline: dict[str, Any]) -> list[str]:
     """Render the headline deltas against a baseline report."""
     if suite == "retrieval":
@@ -420,6 +500,12 @@ def _diff_lines(suite: str, current: dict[str, Any], baseline: dict[str, Any]) -
             ("abstention_rate", "Eskalasyon oranı", False),
             ("clarify_rate", "Clarify oranı", False),
             ("expected_calibration_error", "Kalibrasyon hatası", False),
+        ]
+    elif suite == "trajectories":
+        tracked = [
+            ("exact_match_rate", "Tam eşleşme oranı", True),
+            ("mean_edit_distance", "Ortalama edit mesafesi", False),
+            ("unexpected_node_rate", "Beklenmeyen node oranı", False),
         ]
     else:
         tracked = [
@@ -484,6 +570,8 @@ def build_report(
             lines += _format_intent_markdown(summaries[suite])
         elif suite == "drafts":
             lines += _format_draft_markdown(summaries[suite])
+        elif suite == "trajectories":
+            lines += _format_trajectory_markdown(summaries[suite])
         else:
             lines += _format_retrieval_markdown(summaries[suite])
 
@@ -603,6 +691,12 @@ def main(argv: Optional[list[str]] = None) -> int:
                 f"[{suite}] {summary['cases']} vaka · "
                 f"accuracy={summary['accuracy']:.4f} "
                 f"false_positive_rate={summary['false_positive_rate']:.4f}"
+            )
+        elif suite == "trajectories":
+            print(
+                f"[{suite}] {summary['cases']} vaka · "
+                f"exact_match_rate={summary['exact_match_rate']:.4f} "
+                f"mean_edit_distance={summary['mean_edit_distance']:.4f}"
             )
         else:
             baseline_metrics = summary["arms"][summary["baseline"]]

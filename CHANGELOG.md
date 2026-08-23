@@ -2,6 +2,35 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.46.0] - 2026-08-23
+Workstream J2: agent trajectory eval -- planlama grafiğinin node dizisini
+ölçme (#261).
+
+- Yeni `evaluation/datasets/trajectories.jsonl` (6 vaka, 3 kategori:
+  `sohbet`, `taslak_yuksek_guven`, `taslak_dusuk_guven_onay`) -- sabit
+  girdi -> beklenen top-level graph node dizisi.
+- Yeni `evaluation/harness/trajectory_suite.py` -- gerçek derlenmiş
+  `create_planning_graph`'ı `astream(..., stream_mode="updates")` ile
+  çalıştırıp gözlenen node dizisini toplar (alt-graph'lar case başına
+  yapılandırılabilir `AsyncMock`, `run_recorder`'ın üç girişi no-op'a
+  patch'lenir — tamamen offline). Metrikler: tam eşleşme oranı,
+  node-token'ları üzerinde Levenshtein dizi mesafesi, beklenmeyen node
+  oranı, beklenmeyen duraklama noktası sapmaları.
+- **Canlı doğrulandı:** dört adet düşük-güven taslak vakası gerçekten
+  `human_gate`'te duruyor (LangGraph `stream_mode="updates"`'in bunu
+  `human_gate` güncellemesi olarak değil `__interrupt__` işareti olarak
+  yayınladığı ampirik olarak doğrulandı — node kendi güncellemesini hiç
+  döndürmüyor), yüksek-güven vakaları hiçbir gate'e uğramadan
+  `consolidate_memory`'ye kadar tamamlanıyor.
+- `evaluation/generate_report.py` — `SUITES`'e `"trajectories"` eklendi;
+  `--suite trajectories` ve `--suite all` ikisi de çalışır.
+- `backend/tests/unit/evaluation/test_trajectory_suite.py` (10 test) —
+  metrik hesaplama (edit mesafesi, beklenmeyen node oranı) + gerçek
+  planlama grafiğine karşı iki uçtan uca doğrulama (sohbet ve
+  human_gate duraklaması) + komitli gold set'in tamamının gerçekten
+  koştuğu ve tam eşleştiği kontratı.
+- `docker compose exec backend pytest -q` → 2575 passed (2565'ten +10).
+
 ## [3.45.0] - 2026-08-23
 Workstream J1: OpenTelemetry ile altyapı seviyesi izleme (#259).
 
