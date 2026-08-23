@@ -11,7 +11,7 @@
 | 1 | OCR veya doğrudan metin okuma | `FallbackDocumentExtractor` zinciri | Yönlendirme doğruluğu | **1.0000** (35/35) | 12 sentetik + 23 gerçek tarama | `make eval` (`evrak` suite) |
 | 2 | Evrak türünü belirleme | `analyze_node` (birleşik yapılandırılmış çağrı) | Tür doğruluğu | **1.0000** gerçek (23/23) · **0.9167** sentetik (11/12) | 12 sentetik + 23 gerçek tarama | `python scripts/evaluate_classification.py` |
 | 3 | Önemli bilgi unsurlarını çıkarma | `parse_labelled_fields` (deterministik, model öncesi) | Doğru alan oranı | **0.7571** (53/70) | 12 sentetik (yalnız) | `make eval` (`evrak` suite) |
-| 4 | Eksik bilgileri tespit etme | `check_required_fields` (saf küme farkı, LLM'siz) | **Yanlış alarm oranı** | **0.2775** (58/209) | 12 sentetik + 23 gerçek tarama | `make eval` (`evrak` suite) |
+| 4 | Eksik bilgileri tespit etme | `check_required_fields` (saf küme farkı, LLM'siz) | **Yanlış alarm oranı** | **0.1148** (24/230), önceden 0.2775 | 12 sentetik + 23 gerçek tarama | `make eval` (`evrak` suite) |
 | 5 | İlgili mevzuat önerme | `retrieve_mevzuat` + `suggest_mevzuat` + **yeni: `citation_support` doğrulaması** | Atıf doğrulama doğruluğu | **1.0000** (3/3 sabit örnek) | Sabit uydurma-atıf örneği | `make eval` (`evrak` suite) |
 | 5b | (destek) İlgili kanunun getirilmesi | `HybridRetriever` (BM25+dense, Qdrant native RRF) | İsabet@3 | **1.0000** (10/10 belge türü) | Yerel mevzuat korpusu (7 kanun) | `python scripts/evaluate_mevzuat_retrieval.py` |
 | 6 | Kısa ve öz özet oluşturma | `summary` (≤3 cümle) + isteğe bağlı `detailed_summary` | -- | *ölçülmedi bu geçişte* | 4 gerçek uzun tarama | `python scripts/evaluate_summarization.py` |
@@ -40,6 +40,36 @@ karışmadan ayırt edildi.
 OCR motoru seçiminin kendisi (hangi motor en iyi Türkçe okur) ayrı ölçülür:
 `scripts/evaluate_ocr_benchmark.py`, `scripts/evaluate_ocr_real.py` --
 CHANGELOG'un [1.36.0] girdisinde `deepseek-ocr`'ın seçilme gerekçesi.
+
+**İncelendi, uygulanmadı -- başlık onarımını (`_maybe_repair_header`) her
+belgenin ilk sayfasında koşulsuz çalıştırmak.** Öneri: "born-digital PDF"
+de dahil her yüklemede vision modelini sayfa 1'in başlık bandına koşmak.
+İki sebeple ertelendi:
+
+1. **Mevcut 23-belgelik gerçek korpus bu hipotezi ölçemiyor** --
+   `ocr_ground_truth.json`'daki belgelerin tamamı taranmış (`scanned=true`),
+   yani zaten `used_ocr=True` üzerinden başlık onarımından geçiyor. Kapının
+   sorduğu asıl soru -- "born-digital bir PDF'de de fayda var mı" -- bunu
+   test edecek tek bir born-digital örnek korpusta yok.
+2. **Mimari gerekçe düşük fayda gösteriyor**: born-digital bir PDF
+   (`OpenDataLoaderExtractor`/`PdfiumExtractor` yolunda işlenir) hiçbir
+   zaman görüntüye çevrilmiyor -- `raster_cache` yalnızca OCR yolundaki
+   çıkarıcılar tarafından dolduruluyor
+   ([get_document_extractor](../../backend/app/infrastructure/extractors/__init__.py)).
+   Vision-onarımın düzelttiği bozukluk sınıfı ("tarayıcı kaynaklı gürültü
+   metin katmanının üzerine oturması") tanım gereği rasterize edilmemiş bir
+   sayfada oluşamaz. Zaten "Class A" (gerçek metin katmanı gibi görünen ama
+   aslında tarayıcı OCR'ı olan) durum bugün de kapının içinde
+   (`scan_text_layer_probe`) -- geriye kalan tek dışlanmış sınıf, tanımı
+   gereği hiç rasterize edilmemiş gerçek born-digital sayfa.
+
+Ayrıca Bulgu 1 (Madde 3) zaten gösterdi ki kalan alan kaybının büyük kısmı
+OCR kaynaklı değil, ayrıştırıcı kaynaklıydı -- o kısmı düzeltmek bu
+maddenin asıl kazancını (bkz. Madde 3/4) getirdi ve 12.6s/yükleme'lik
+bedelin ne satın alacağı sorusu daha da zayıfladı. Kapı, hedefli bir
+alt-küme için hâlâ genişletilebilir (`used_ocr`'dan
+`count_header_fields(page1) < MIN_HEADER_FIELD_COUNT`'a) -- ama bunu haklı
+çıkaracak somut bir born-digital başarısızlık örneği görülmeden yapılmadı.
 
 ---
 
@@ -87,13 +117,21 @@ CY-009, CY-010) neden ortaya çıkıyor:
   milletvekiline hitabı ve "T.C." satırı olmayan bir antedi güvenilir
   biçimde muhatap/gönderen olarak okumuyor).
 
-Tam ardışık düzenin alan-bazlı yanlış alarm oranı bu geçişte ayrıca
-ölçülmedi (yalnızca üç belgelik elle inceleme yapıldı, tam 23 belgelik bir
-tekrar ~20 dakika sürüyor); yalnız-deterministik oran (Madde 4, 0.2775)
-üst sınır olarak okunabilir -- LLM bazı alanları (`tarih`, `sayi`, `konu`,
-etiketli `muhatap`/`gonderen_kurum`) düzeltir ama yukarıdaki iki örüntüyü
-düzeltmez, dolayısıyla gerçek tam-ardışık-düzen oranı 0.2775'ten düşük ama
-sıfır değildir.
+**Sonradan düzeltildi (Madde 3/4'e bakınız).** Bu bölümdeki bulgu, o
+düzeltmenin **gerekçesiydi** -- yukarıdaki `imza_sahibi`/`imza_unvani`
+tutarsızlığı doğrudan `_PERSON_NAME_LINE`'ın Titlecase-only regex hatasına
+işaret etti (LLM'in kendisi değil, ayrıştırıcı sorumluydu: model doğru
+değeri zaten biliyordu ama parser'ın bunu tanıyamaması hem
+`merge_parsed_over_model`'in eski "parser bulamadıysa at" kuralını hem de
+kendi konumsal aday sıralamasını etkiliyordu). Düzeltme sonrası regex
+kendisi `imza_sahibi`/`imza_unvani`'i mükemmel metinde **0/23** kayıpla
+buluyor -- artık LLM'in tutarlılığına muhtaç değil. TBMM-şablonu
+`muhatap`/`gonderen_kurum` boşluğu ise `merge_parsed_over_model`'in yeni
+kanıta dayalı kurtarma yolunca kapsanıyor (parser hâlâ ulaşamıyor ama
+model değeri belgede geçtiği için artık kabul ediliyor). Tam ardışık
+düzenin canlı-model yeniden ölçümü ayrı yürütülüyor; deterministik
+katmanın kendi yeni sayısı (Madde 4, **0.1148**, önceki **0.2775**'ten)
+zaten büyük kazancı yakalıyor.
 
 ---
 
@@ -112,10 +150,24 @@ ve `parse_labelled_fields(clean_text)`'i kendi çıktısına karşı ölçmek
 totolojik olurdu). **53 doğru / 8 kaçan / 9 yanlış / 0 sahte, 70 alan
 üzerinden (0.7571)**.
 
-**Not**: `imza_sahibi`/`imza_unvani` gerçek korpusta neredeyse hiç
-kurtarılamıyor (regex açık bir "İmza:" etiketi arıyor; gerçek belgelerde
-imza bloğu yalnızca ad/unvan satırı, etiketsiz) -- bu **madde 4'ün** yanlış
-alarm oranına doğrudan yansıyor, aşağıda.
+**Düzeltildi**: `_PERSON_NAME_LINE` (imza bloğunun ad/unvan satırlarını
+tanıyan konumsal ayrıştırıcı, `parse_labelled_fields`'ın bir parçası) yalnızca
+Titlecase kelime kabul ediyordu ("Ahmet Yılmaz"); Türk resmî yazışmasında
+soyadı BÜYÜK yazılır ("Yaşar GÜLER") ve bu üslup `datasets/sample/`'ın 12
+sentetik belgesinde hiç yok, yalnızca gerçek korpusta. Mükemmel metin
+(`clean_text`, OCR hatası imkânsız) üzerinde ölçülen kayıp:
+`imza_sahibi`/`imza_unvani` **17/23 (%74) → 0/23**; toplam alan-belge
+kaybı **%37.9 → %16.8**. Aynı düzeltme, kurum adını ("Türkiye Büyük Millet
+Meclisi") kişi adı sayan ikinci bir hatayı da giderdi
+(`INSTITUTION_PATTERN` reddi, `draft_verifier.py`'den yeniden kullanıldı).
+Ayrıca `merge_parsed_over_model` artık `document_text` verildiğinde kanıta
+dayalı kurtarma yapıyor: parser hâlâ ulaşamadığı alanlarda (`muhatap`'ın
+adı geçen bir milletvekili olduğu durumlar gibi, dative ekli kurum
+değil) modelin değerini, **belgede gerçekten geçiyorsa** kabul ediyor;
+geçmiyorsa ("İLGİLİ MAKAMA" uydurması gibi) hâlâ atıyor.
+`imza_sahibi`/`imza_unvani` bu kurtarmanın kapsamı dışında tutuldu --
+`_parse_signature`'ın imzasız dilekçe koruması (bkz. testler) bunu
+gerektiriyor. Detaylı ölçüm ve kod: `backend/app/ai/compliance/field_parser.py`.
 
 ---
 
@@ -131,24 +183,20 @@ sonucu elle etiketlenmiş `expected_missing_fields`'la karşılaştırır (bkz.
 totolojik olmayan bir sürüme yeniden yazıldı -- ilk sürüm altın kümeden
 inşa edilen alanları yine altın kümeye karşı test ediyordu).
 
-**Baş metrik -- yanlış alarm oranı: 0.2775 (58/209 alan-belge çifti)**.
-Kategoriye göre: `sentetik` **0.11**, `gercek_tarama` **0.34**. Kaçırma oranı
-**0.0000** (0 kaçan gerçek eksiklik).
+**Baş metrik -- yanlış alarm oranı: 0.1148 (24/230 alan-belge çifti)**,
+`_PERSON_NAME_LINE` düzeltmesi öncesi **0.2775**'ten. Kategoriye göre:
+`sentetik` **0.1053**, `gercek_tarama` **0.1184** (önceden **0.34** --
+gerçek belgelerdeki iyileşme sentetikten daha büyük, tam olarak beklenen
+yön, çünkü hata da oradaydı). Kaçırma oranı hâlâ **0.0000** (0 kaçan gerçek
+eksiklik) -- düzeltme yanlış alarmı azaltırken gerçek eksiklik yakalamayı
+bozmadı.
 
 **Bu sayı ne anlatıyor, ne anlatmıyor**: bu, **yalnızca deterministik
-katmanın** (regex + kural tablosu, model hiç çağrılmadan) yanlış alarm
-oranıdır. Üretimde `check_compliance_node` her zaman
-`merge_parsed_over_model`'in birleşik çıktısını görür -- modelin kendi genel
-dil anlayışı, regex'in etiket-eşleşmesi gerektiren körlüğünü (etiketsiz
-tarih gibi) kısmen telafi eder. **Madde 2'nin canlı-model koşumunda elle
-incelenen üç örnek bunu doğruluyor**: tam ardışık düzen `tarih`'i (etiketsiz
-olsa bile) doğru buluyor, regex'in bulamadığı yer -- ama `imza_sahibi`/
-`imza_unvani` ve TBMM-şablonu `muhatap`/`gonderen_kurum`'da **LLM de**
-tutarsız kalıyor (bkz. Madde 2). Yani üretimin gerçek yanlış alarm oranı
-bu sayıdan daha düşük ama **sıfır değil** -- tam bir alan-bazlı üretim oranı
-bu geçişte ayrı ölçülmedi (canlı modelle 35 belge x tekrar gerektirir).
-Başarısız vakaların tam listesi `make eval`'in ürettiği `evrak-latest.md`
-raporunda.
+katmanın** (regex + kural tablosu + kanıta dayalı kurtarma, model hiç
+çağrılmadan) yanlış alarm oranıdır. Üretimde `check_compliance_node` her
+zaman `merge_parsed_over_model`'in birleşik çıktısını görür ve bu düzeltme
+o birleştirmenin kendisini de kapsıyor (bkz. Madde 3) -- yani üretimin
+gerçek yanlış alarm oranı bu sayıdan daha da düşüktür.
 
 ---
 

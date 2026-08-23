@@ -226,6 +226,120 @@ def test_labelled_values_win_over_positional_guesses():
 
 
 # ==========================================
+# ALL-CAPS surname (real official-correspondence convention, missed on 17/23
+# hand-labelled real documents before this fix -- datasets/sample/'s
+# synthetic corpus is uniformly Titlecase-only and never exercised this)
+# ==========================================
+def test_signature_with_all_caps_surname_is_recognised():
+    """Turkish official correspondence conventionally sets the surname in
+    full capitals ("Yaşar GÜLER"), not Titlecase ("Ahmet Yılmaz") -- the
+    original pattern only accepted the latter."""
+    text = "T.C.\nÖRNEK BAKANLIĞI\n\nKonu : Deneme\n\nMetin arz ederim.\n\nYaşar GÜLER\nBakan"
+    parsed = parse_labelled_fields(text)
+    assert parsed["imza_sahibi"] == "Yaşar GÜLER"
+    assert parsed["imza_unvani"] == "Bakan"
+
+
+def test_signature_with_titled_prefix_and_all_caps_surname_is_recognised():
+    text = "T.C.\nÖRNEK BAKANLIĞI\n\nKonu : Deneme\n\nMetin arz ederim.\n\nProf. Dr. Ömer BOLAT\nBakan"
+    parsed = parse_labelled_fields(text)
+    assert parsed["imza_sahibi"] == "Prof. Dr. Ömer BOLAT"
+
+
+def test_institution_name_is_never_mistaken_for_a_signature():
+    """A Titlecase-worded institution mention ("Türkiye Büyük Millet
+    Meclisi") is name-shaped by the same pattern that matches a person's
+    name -- real regression: this line used to win over the actual
+    signature line below it when the actual signer's ALL-CAPS surname
+    didn't match the old pattern at all. Now that it does, the loop must
+    still pick the real name first, not the institution line."""
+    text = (
+        "Sayı : Z-1\nTarih : 20.04.2026\n\nSAYIN VALİLİĞİNE\n\n"
+        "Metin metin.\nRica ederim.\n\n"
+        "Bekir BOZDAĞ\nTürkiye Büyük Millet Meclisi\nBaşkanvekili"
+    )
+    parsed = parse_labelled_fields(text)
+    assert parsed["imza_sahibi"] == "Bekir BOZDAĞ"
+    assert parsed["imza_unvani"] == "Başkanvekili"
+
+
+def test_all_caps_institution_line_alone_never_matches_person_name():
+    from app.ai.compliance.field_parser import _PERSON_NAME_LINE
+
+    assert not _PERSON_NAME_LINE.match("TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞI")
+    assert not _PERSON_NAME_LINE.match("MİLLÎ SAVUNMA BAKANLIĞI")
+
+
+# ==========================================
+# Evidence-based rescue (merge_parsed_over_model's document_text argument)
+# ==========================================
+def test_rescues_a_model_value_the_parser_structurally_cannot_reach():
+    """`muhatap` (m.14) is only recovered positionally when the addressee is
+    a dative-suffixed institution -- a named person ("Sayın Ceylan AKÇA
+    CUPOLO") is structurally unreachable by that heuristic, but the model
+    reads it correctly. Measured live against 4 real documents: the parser
+    missed this exact shape on every one, and the model had the right
+    answer every time."""
+    doc = (
+        "Sayı : Z-1\nTarih : 20.04.2026\n\n"
+        "Sayın Ceylan AKÇA CUPOLO\nDiyarbakır Milletvekili\n\n"
+        "Metin metin.\nRica ederim.\n\nBekir BOZDAĞ\nBaşkanvekili"
+    )
+    parsed = parse_labelled_fields(doc)
+    assert "muhatap" not in parsed  # confirms this is genuinely the parser's blind spot
+    merged = merge_parsed_over_model(
+        {"muhatap": "Sayın Ceylan AKÇA CUPOLO"}, parsed, document_text=doc
+    )
+    assert merged["muhatap"] == "Sayın Ceylan AKÇA CUPOLO"
+
+
+def test_ungrounded_model_value_is_still_discarded_with_document_text():
+    """The original fabrication case ("İLGİLİ MAKAMA" invented for a letter
+    with no addressee at all) must still be caught: the value simply never
+    appears in the document, grounded or not."""
+    doc = "T.C.\nÖRNEK BAKANLIĞI\n\nKonu : Bir şey\n\nMetin metin metin.\n\nAhmet YILMAZ\nMüdür"
+    merged = merge_parsed_over_model({"muhatap": "İLGİLİ MAKAMA"}, {}, document_text=doc)
+    assert merged["muhatap"] is None
+
+
+def test_body_text_date_is_not_rescued_into_tarih():
+    """The documented failure mode this rule exists to prevent: a leave
+    request's start date, which the model may read out of the body, must
+    not be accepted as the header's own `tarih` just because it appears
+    somewhere in the document -- it has to appear in the header region,
+    before the addressee/closing formula."""
+    doc = (
+        "T.C.\nÖRNEK BAKANLIĞI\n\nKonu : İzin\n\nSAYIN VALİLİĞİNE\n\n"
+        "01.06.2026 tarihinden itibaren izinli olmak istiyorum.\n"
+        "Bilgilerinize arz ederim.\n\nAhmet YILMAZ"
+    )
+    merged = merge_parsed_over_model({"tarih": "01.06.2026"}, {}, document_text=doc)
+    assert merged["tarih"] is None
+
+
+def test_header_region_date_is_rescued_into_tarih():
+    doc = (
+        "T.C.\nÖRNEK BAKANLIĞI\n\n12.05.2026 tarihli yazı\n\nSAYIN VALİLİĞİNE\n\n"
+        "Metin.\nArz ederim.\n\nAhmet YILMAZ"
+    )
+    merged = merge_parsed_over_model({"tarih": "12.05.2026"}, {}, document_text=doc)
+    assert merged["tarih"] == "12.05.2026"
+
+
+def test_unsigned_petition_signature_is_not_resurrected_even_with_document_text():
+    """The critical regression this evidence-based rescue must not cause:
+    `imza_sahibi` is deliberately excluded from `_EVIDENCE_RESCUABLE_FIELD`
+    (see that set's own docstring), so even though "Ali Vural" is literally
+    present in `UNSIGNED_PETITION`'s own text, it must stay discarded --
+    exactly as it does without `document_text` at all."""
+    parsed = parse_labelled_fields(UNSIGNED_PETITION)
+    merged = merge_parsed_over_model(
+        {"imza_sahibi": "Ali Vural"}, parsed, document_text=UNSIGNED_PETITION
+    )
+    assert merged["imza_sahibi"] is None
+
+
+# ==========================================
 # OCR-artefact tolerance (regression tests for real scanned-corpus failures)
 #
 # Found calibrating the header-escalation gate against all 45 scanned CY-*.pdf

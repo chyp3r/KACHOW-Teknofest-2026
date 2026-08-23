@@ -505,7 +505,12 @@ def create_document_analysis_graph(
             # must not discard values read straight off the document.
             model_fields = EvrakField().model_dump()
 
-        merged_fields = merge_parsed_over_model(model_fields, parsed)
+        # The full, untrimmed document -- not the head/tail-trimmed `text`
+        # the prompt above was built from -- so evidence-based rescue can
+        # ground a value even when it happens to sit in the elided middle.
+        merged_fields = merge_parsed_over_model(
+            model_fields, parsed, document_text=state["input_text"]
+        )
         update = {
             "document_type": document_type.value,
             "document_type_label": DOCUMENT_TYPE_LABELS[document_type],

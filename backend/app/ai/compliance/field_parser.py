@@ -27,7 +27,8 @@ over model output for the same field.
 import re
 from typing import Any, Optional
 
-from app.ai.compliance.checker import normalize_value
+from app.ai.compliance.checker import is_blank, normalize_value
+from app.ai.verification.draft_verifier import INSTITUTION_PATTERN
 
 # Every label that can terminate a preceding value on the same line. The
 # regulation places "Tarih" to the right of "Sayı" on one line, so a value must
@@ -180,9 +181,30 @@ _ADDRESSEE_SUFFIX = r"(?:NA|NE|YA|YE|MAKAMA|YERLERİNE|BAŞKANLIĞINA)"
 #: annotation to a reference-number shape closes it while still matching
 #: every real handwritten-reference case measured in the corpus.
 _ADDRESSEE_LINE = re.compile(rf"^.{{6,40}}?{_ADDRESSEE_SUFFIX}(?:\s+[0-9/]{{1,12}})?\s*$")
-#: A personal name line in the signature block: 2-4 capitalised words, no digits.
+#: A name-shaped word: Titlecase ("Ahmet") or an ALL-CAPS Turkish surname
+#: ("GÜLER"). Official correspondence conventionally sets the surname (and
+#: sometimes a title abbreviation, "Prof. Dr.") in full capitals -- the
+#: original Titlecase-only pattern rejected "Yaşar GÜLER" outright.
+#: Measured against the 23 hand-labelled real documents' `clean_text`
+#: (OCR-error-free by construction): the Titlecase-only pattern lost
+#: `imza_sahibi`/`imza_unvani` on 17/23 of them, all ALL-CAPS-surname
+#: documents that datasets/sample/'s uniformly "Ahmet Yılmaz"-styled
+#: synthetic corpus never exercised.
+_NAME_WORD = r"(?:[A-ZÇĞİÖŞÜ][a-zçğıöşü]+|[A-ZÇĞİÖŞÜ]{2,})"
+#: A personal name line in the signature block: 2-4 name-shaped words, no
+#: digits. The leading lookahead requires at least one lower-case letter
+#: somewhere on the line, so a line made entirely of ALL-CAPS words -- an
+#: institution/letterhead line such as "TÜRKİYE BÜYÜK MİLLET MECLİSİ
+#: BAŞKANLIĞI" -- can never match on its own; a genuine signature always
+#: carries at least one Titlecase given name. This does not catch every
+#: institution-name false-positive on its own (a *Titlecase-worded*
+#: institution mention, e.g. "Türkiye Büyük Millet Meclisi" used in running
+#: text, still matches this pattern) -- `_parse_signature` below additionally
+#: rejects a candidate that looks like an institution name via
+#: `INSTITUTION_PATTERN`, and relies on trying candidates in document order
+#: (the real name line comes first) as the primary defense for the rest.
 _PERSON_NAME_LINE = re.compile(
-    r"^(?:[A-ZÇĞİÖŞÜ][a-zçğıöşü]+\.?\s+){1,3}[A-ZÇĞİÖŞÜ][a-zçğıöşü]+$"
+    rf"^(?=.*[a-zçğıöşü])(?:{_NAME_WORD}\.?\s+){{1,3}}{_NAME_WORD}$"
 )
 #: Words that mark a line as a title rather than a name.
 _TITLE_HINT = re.compile(
@@ -289,7 +311,15 @@ def _parse_signature(lines: list[str]) -> dict[str, str]:
 
     parsed: dict[str, str] = {}
     for index, line in enumerate(tail):
-        if not _PERSON_NAME_LINE.match(line) or _TITLE_HINT.search(line):
+        if (
+            not _PERSON_NAME_LINE.match(line)
+            or _TITLE_HINT.search(line)
+            # A Titlecase-worded institution mention ("Türkiye Büyük Millet
+            # Meclisi") still matches _PERSON_NAME_LINE -- see that pattern's
+            # own docstring. Reject any candidate shaped like an institution
+            # name outright rather than accepting it as a person.
+            or INSTITUTION_PATTERN.search(line)
+        ):
             continue
         title = next(
             (
@@ -452,23 +482,86 @@ def count_header_fields(text: str) -> int:
     return sum(1 for name in HEADER_FIELD if parsed.get(name))
 
 
+#: `AUTHORITATIVE_FIELD` members eligible for evidence-based rescue (see
+#: `merge_parsed_over_model`) when the parser found nothing but the model's
+#: value is genuinely grounded in the document text. Deliberately narrower
+#: than `AUTHORITATIVE_FIELD`:
+#:
+#: * `imza_sahibi`/`imza_unvani`'s absence from `_parse_signature`'s output
+#:   is a *considered* decision, not a coverage gap -- that function
+#:   deliberately declines a bare trailing name without a title line,
+#:   signature marker or letterhead to corroborate it (the unsigned-petition
+#:   guard, see `UNSIGNED_PETITION`'s own test). The name is almost always
+#:   still sitting right there in the text either way, so a plain
+#:   substring-grounding check would rescue it and reintroduce exactly the
+#:   omission that guard exists to catch.
+#: * `ilgi`/`ekler` name specific document references; an invented one
+#:   carries the same fabrication risk `imza_sahibi` does, so they stay
+#:   strict too.
+_EVIDENCE_RESCUABLE_FIELD: frozenset[str] = frozenset(
+    {"sayi", "tarih", "konu", "muhatap", "gonderen_kurum"}
+)
+
+
+def _header_region(text: str) -> str:
+    """Return `text` up to (excluding) the first addressee or closing-formula line.
+
+    The header block (Sayı/Tarih/Konu, m.11-13) always precedes both in a
+    well-formed document. Used to scope `tarih`'s evidence-based rescue in
+    `merge_parsed_over_model`: without this, a leave request's start date
+    sitting in the body would ground exactly as well as a genuine header
+    date, resurrecting the specific failure mode `merge_parsed_over_model`'s
+    own docstring already names ("lifting a leave start date ... into
+    `tarih`") the moment the substring check is loosened for anything else.
+
+    Args:
+        text: Full extracted document text.
+
+    Returns:
+        The leading lines, joined, or the whole text when neither an
+        addressee nor a closing formula is found.
+    """
+    lines = _content_lines(text)
+    for index, line in enumerate(lines):
+        if _ADDRESSEE_LINE.match(line) or _CLOSING_FORMULA.search(line):
+            return "\n".join(lines[:index])
+    return text
+
+
 def merge_parsed_over_model(
-    model_fields: dict[str, Any], parsed: dict[str, Any]
+    model_fields: dict[str, Any], parsed: dict[str, Any], document_text: str = ""
 ) -> dict[str, Any]:
     """Combine deterministically parsed values with model output.
 
     The parser wins in both directions for `AUTHORITATIVE_FIELD`:
 
     * where it found a value, that value replaces the model's;
-    * where it found nothing, the model's value is **discarded**.
+    * where it found nothing, the model's value is discarded -- *unless*
+      `document_text` is given, the field is in `_EVIDENCE_RESCUABLE_FIELD`,
+      and the model's value is genuinely grounded (a folded substring match,
+      via `normalize_value`, same as `is_blank`'s own folding) in the
+      document text (`_header_region` for `tarih` specifically). This
+      matters: measured directly against 23 hand-labelled real documents,
+      the parser is structurally unable to reach some of these values at
+      all -- `muhatap` when the addressee is a named person rather than a
+      dative-suffixed institution ("Sayın Ceylan AKÇA CUPOLO"), a
+      `gonderen_kurum` with no "T.C." letterhead line -- while the model
+      reads them correctly every time in that same measurement. Blanket
+      discard was silently turning those into false "missing information"
+      findings.
+    * discarding remains unconditional for a field outside
+      `_EVIDENCE_RESCUABLE_FIELD` (see that set's own docstring for why),
+      and for any field when `document_text` is omitted -- every existing
+      caller that does not pass it keeps exactly today's strict behaviour.
 
-    The second rule matters more than it looks. The regulation prescribes how these
-    fields appear, so a missing label means the field is genuinely absent -- and a
-    model that fills it anyway converts an incomplete document into an apparently
-    compliant one, hiding the very omission this pipeline exists to report. Observed
-    cases include inventing the stock addressee "İLGİLİ MAKAMA" for a letter that
-    has none, and lifting a leave start date out of the body into `tarih` for a
-    document carrying no date at all.
+    The regulation prescribes how these fields appear, so a missing label
+    together with no grounded model value means the field is genuinely
+    absent -- and a model that filled it anyway would convert an incomplete
+    document into an apparently compliant one, hiding the very omission this
+    pipeline exists to report. The original, still-live example: the model
+    inventing the stock addressee "İLGİLİ MAKAMA" for a letter that has
+    none -- "İLGİLİ MAKAMA" is not itself grounded in such a letter's text,
+    so it is discarded exactly as before.
 
     Fields outside `AUTHORITATIVE_FIELD` are left exactly as the model produced
     them, because for those an absent parse means "unknown", not "absent".
@@ -476,14 +569,27 @@ def merge_parsed_over_model(
     Args:
         model_fields: The model's `EvrakField` dump.
         parsed: Output of `parse_labelled_fields`.
+        document_text: The full extracted document text, for evidence-based
+            rescue. Omit (the default, `""`) to keep every unparsed
+            `AUTHORITATIVE_FIELD` value discarded unconditionally.
 
     Returns:
         The merged field mapping.
     """
     merged = dict(model_fields)
+    header_text = _header_region(document_text) if document_text else ""
     for name in AUTHORITATIVE_FIELD:
-        if name not in parsed:
-            merged[name] = [] if name in _LIST_FIELD else None
+        if name in parsed:
+            continue
+        if document_text and name in _EVIDENCE_RESCUABLE_FIELD:
+            value = model_fields.get(name)
+            if not is_blank(value):
+                haystack = header_text if name == "tarih" else document_text
+                if normalize_value(str(value)) in normalize_value(haystack):
+                    # Grounded: keep the model's value, already sitting in
+                    # `merged` from the initial `dict(model_fields)` copy.
+                    continue
+        merged[name] = [] if name in _LIST_FIELD else None
     merged.update(parsed)
     return merged
 

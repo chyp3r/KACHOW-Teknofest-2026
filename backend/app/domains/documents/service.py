@@ -1317,7 +1317,9 @@ class DocumentService:
         extracted_text = "\n\n".join(scrubbed_pages)
 
         parsed = parse_labelled_fields(extracted_text)
-        merged_fields = merge_parsed_over_model(analysis.fields.model_dump(), parsed)
+        merged_fields = merge_parsed_over_model(
+            analysis.fields.model_dump(), parsed, document_text=extracted_text
+        )
         analysis.fields = EvrakField(**merged_fields)
 
         report = check_required_fields(analysis.document_type, analysis.fields)

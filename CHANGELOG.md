@@ -2,6 +2,73 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.31.0] - 2026-08-23
+Zorunlu alan doldurmanın kök nedeni "OCR yetersizliği" sanılıyordu; ölçüm
+farklı bir yer gösterdi. 23 elle etiketlenmiş gerçek belgenin *mükemmel*
+metni (`clean_text`, OCR hatası tanım gereği imkânsız) `parse_labelled_fields`'tan
+geçirildiğinde bile alanların **%37.9'u** kayboluyordu -- yani kayıpların
+büyük kısmı OCR'dan önce, ayrıştırıcıda oluşuyordu.
+
+### Düzeltildi
+- **`_PERSON_NAME_LINE` artık BÜYÜK HARF soyadını tanıyor**
+  ([field_parser.py](backend/app/ai/compliance/field_parser.py)). Kök
+  neden tek bir regex satırıydı: imza bloğunun ad/unvan satırını tanıyan
+  desen yalnızca Titlecase kelimeleri kabul ediyordu ("Ahmet Yılmaz"), ama
+  Türk resmî yazışmasında soyadı BÜYÜK yazılır ("Yaşar GÜLER", "Cevdet
+  YILMAZ"). `datasets/sample/`'ın 12 sentetik belgesinin tamamı
+  Titlecase-soyadı üslubunda olduğu için hata görünmüyordu; ölçülen kayıp
+  gerçek korpusta `imza_sahibi`/`imza_unvani`'de **17/23 (%74)**, düzeltme
+  sonrası **0/23**. Aynı düzeltme kurum adını ("Türkiye Büyük Millet
+  Meclisi") kişi adı sayan ikinci bir hatayı da giderdi --
+  `draft_verifier.py`'nin `INSTITUTION_PATTERN`'i imza adayı reddi olarak
+  yeniden kullanıldı. Toplam alan-belge kaybı mükemmel metinde **%37.9 →
+  %16.8**.
+- **`merge_parsed_over_model` artık kanıta dayalı kurtarma yapıyor**
+  (yeni `document_text` argümanı). Eskiden kural mutlaktı: "parser
+  bulamadıysa modelin değerini at" -- gerekçesi gerçek ve belgelenmişti
+  (model olmayan bir muhatap için "İLGİLİ MAKAMA" uyduruyor, gövdeden izin
+  başlangıç tarihini `tarih`'e çekiyor), ama tedavi artık hastalıktan
+  pahalıydı: canlı `qwen3.5:9b` ile 4 belge üzerinde ölçüldü, parser'ın
+  kaybettiği **her** alanda model doğru değere sahipti (CY-010'un adı geçen
+  milletvekili muhatabı gibi, dative ekli kurum olmayan durumlar), ve
+  merge hepsini siliyordu. Yeni davranış: `sayi`/`tarih`/`konu`/`muhatap`/
+  `gonderen_kurum` için parser boş, model dolu ve değer **belgede gerçekten
+  geçiyorsa** kabul edilir (`normalize_value` ile katlanmış alt-dize
+  karşılaştırması); geçmiyorsa hâlâ atılır. `tarih` için ek konum kısıtı --
+  yalnızca başlık bölgesinde (ilk muhatap/kapanış satırından önce) geçen
+  değer kabul edilir, gövde tarihi sızıntısı korunmaya devam ediyor.
+  `imza_sahibi`/`imza_unvani` bu kurtarmanın **kapsamı dışında** tutuldu:
+  `_parse_signature`'ın imzasız-dilekçe koruması (bir isim satırının tek
+  başına imza sayılmaması) kasıtlı bir karar, kapsam boşluğu değil -- ismi
+  belgede aramak bu korumayı doğrudan bozardı, kilitleyen bir birim testi
+  eklendi.
+
+### Eklendi
+- `backend/tests/unit/ai/test_field_parser.py`: 9 yeni test -- BÜYÜK HARF
+  soyadı tanıma, `Prof. Dr.` önekli ad, kurum-adı-imza-değil negatifi,
+  kanıta dayalı kurtarma (isimli muhatap), uydurma reddi ("İLGİLİ MAKAMA"),
+  gövde-tarih sızıntısı reddi, başlık-bölgesi tarih kurtarma, ve kritik
+  regresyon testi: imzasız dilekçenin uygulanan adı, `document_text`
+  verilse bile hâlâ diriltilmiyor.
+
+### İncelendi, uygulanmadı
+- Başlık onarımını (`_maybe_repair_header`) her belgenin ilk sayfasında
+  koşulsuz çalıştırmak (vision modeli her yüklemede sayfa 1'e). Gerçek
+  23-belgelik korpusun tamamı zaten taranmış olduğu için bu hipotezi
+  ölçemiyor, ve mimari gerekçe düşük fayda gösteriyor: born-digital bir PDF
+  hiçbir zaman rasterize edilmiyor, dolayısıyla vision-onarımın düzelttiği
+  bozukluk sınıfı orada oluşamaz. Ayrıntı: `docs/evaluation/gorev1-scorecard.md`'nin
+  Madde 1 bölümü.
+
+### Doğrulama
+- `docker compose exec backend pytest -q` 2542 test geçiyor (2 bilinen
+  önceden var olan MCP testi hariç), 9 yeni test dahil, hiç regresyon yok.
+- `make eval`: `evrak`'ın `missing_field_false_positive_rate`'i **0.2775 →
+  0.1148** (gerçek taramada 0.34 → 0.1184); kaçırma oranı 0.0000'da sabit
+  kaldı (düzeltme yanlış alarmı azaltırken gerçek eksiklik yakalamayı
+  bozmadı). `intents` (macro F1 0.9520) ve `drafts` (doğruluk 1.0000)
+  bu çalışmadan etkilenmeyen dosyalarda tıpatıp aynı.
+
 ## [3.30.0] - 2026-08-23
 Görev 1'in altı şartname maddesini denetleyen bir geçiş: madde 5 (ilgili
 mevzuat önerme) daha önce hiç doğrulanmıyordu -- `suggest_mevzuat_node`'un
