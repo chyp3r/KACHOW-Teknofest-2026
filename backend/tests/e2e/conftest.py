@@ -179,6 +179,7 @@ async def e2e_client(
     import app.domains.users.seeder as users_seeder
     import app.infrastructure.database.session as session_module
     import app.infrastructure.storage as storage_module
+    import app.infrastructure.vectorstore as vectorstore_module
 
     # 1. Point the LangGraph checkpointer (see app.lifespan.lifespan ->
     # init_checkpointer) at this test's own throwaway database instead of
@@ -220,6 +221,15 @@ async def e2e_client(
     # the test's first request) uses the fakes.
     for singleton_name in _DEPENDENCY_SINGLETONS:
         monkeypatch.setattr(dependency, singleton_name, None)
+    # app.infrastructure.vectorstore.get_vector_store() is the same
+    # lazy-singleton idiom, and AsyncQdrantClient's transport is bound to the
+    # event loop that constructed it -- a real, observed failure here:
+    # running this file's tests alongside another e2e test that ran first
+    # left a Qdrant client from a since-closed event loop in this module
+    # global, and the deep health probe's own `await
+    # store.client.get_collections()` raised on it in a later test. Reset it
+    # for the same reason the LLM-client singletons above are reset.
+    monkeypatch.setattr(vectorstore_module, "_vector_store", None)
 
     # 5. An isolated document_qa Qdrant collection for this test alone (see
     # module docstring on why the same literal is duplicated three times).
@@ -293,6 +303,10 @@ async def e2e_client(
         async with fastapi_app.router.lifespan_context(fastapi_app):
             transport = ASGITransport(app=fastapi_app)
             async with httpx.AsyncClient(transport=transport, base_url="http://e2e.test") as client:
+                # Exposed so a test can assert directly against Qdrant (e.g.
+                # payload fields on indexed document_qa chunks) without
+                # hand-deriving this test's random collection suffix itself.
+                client.e2e_qa_collection = qa_collection
                 yield client
     finally:
         await e2e_app_engine.dispose()
@@ -305,6 +319,36 @@ async def e2e_client(
                 await qdrant_client.delete(f"/collections/{qa_collection}")
         except Exception:
             pass
+
+
+@pytest.fixture
+def make_pdf_bytes() -> Callable[..., bytes]:
+    """Factory: a real, multi-page PDF as bytes, for ``POST /documents/analyze``.
+
+    A real ``reportlab``-written PDF, not a hand-rolled ``b"%PDF-1.4..."``
+    string -- ``DocumentService._validate_upload`` runs a magic-byte/real-
+    parse integrity check (``check_file_integrity``) a fake byte string is
+    not guaranteed to survive.
+    """
+
+    def _build(pages: list[str], *, page_size: str = "A4") -> bytes:
+        from io import BytesIO
+
+        from reportlab.lib.pagesizes import A4, LETTER
+        from reportlab.pdfgen import canvas
+
+        buffer = BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=A4 if page_size == "A4" else LETTER)
+        for page_text in pages:
+            y = 800
+            for line in page_text.splitlines():
+                pdf.drawString(72, y, line)
+                y -= 18
+            pdf.showPage()
+        pdf.save()
+        return buffer.getvalue()
+
+    return _build
 
 
 @pytest.fixture
