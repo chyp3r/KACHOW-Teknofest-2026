@@ -2,6 +2,19 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.50.0] - 2026-08-23
+Workstream J6: OpenAPI şema snapshot testi (#269).
+
+- Yeni `backend/tests/unit/api/test_openapi_snapshot.py` — `app.openapi()`
+  çıktısını commit'li `openapi.snapshot.json`'a karşı karşılaştırır.
+  `KACHOW_UPDATE_OPENAPI_SNAPSHOT=1` ile kasıtlı yenileme (frontend'in
+  `api:types:check`'i yalnızca *kendi* generated types'ının şemayla senkron
+  kaldığını doğruluyordu; şemanın kaynağında hiçbir kontrat testi yoktu).
+- **Canlı doğrulandı:** `/health` endpoint'ine geçici bir sanity-check query
+  parametresi eklendi, snapshot testi kırıldı (99 path'in diff'i doğru
+  raporlandı), değişiklik geri alındı, test tekrar yeşil.
+- `docker compose exec backend pytest -q` → 2588 passed (2587'den +1).
+
 ## [3.49.0] - 2026-08-23
 Workstream J5: coverage ratchet -- backend pytest-cov + frontend vitest v8
 (#267).
