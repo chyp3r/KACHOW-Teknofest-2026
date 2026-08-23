@@ -61,50 +61,6 @@ Bu doküman migration yazma sürecini kapsamaz (bkz.
 `docs/development/backend-standards.md` ve `backend/alembic/`'in kendi
 şablon dosyaları) — yalnızca üretime nasıl uygulandığını anlatır.
 
-## Embedding modeli değiştirmek (Alembic'in kapsamı dışında)
-
-`OLLAMA_EMBEDDING_MODEL` (varsayılan `leoipulsar/harrier-0.6b`, 1024
-boyut) değiştirmek bir DB migration'ı değil, ama benzer disiplinle
-yönetilmesi gereken bir "her yerde aynı vektör boyutu" göçüdür. Yeni
-model **farklı bir boyutta** vektör üretiyorsa, aşağıdakilerin **hepsi**
-yeniden üretilmeli — hiçbiri otomatik olarak senkron kalmaz:
-
-```bash
-# 1. Semantik prototipler (niyet/yazışma türü sınıflandırması)
-docker compose exec backend python scripts/build_prototypes.py
-
-# 2. Router füzyon ağırlıkları (prototiplere bağlı feature'lar taşıyor)
-docker compose exec backend python scripts/fit_router.py
-
-# 3. Eval embedding cache'leri (make eval'in offline ölçtüğü değerler)
-docker compose exec backend python scripts/build_eval_embeddings.py
-docker compose exec backend python scripts/build_eval_embeddings.py --target retrieval
-
-# 4. Stil örnekleri koleksiyonu (resmi_yazisma_ornek) -- eski boyutta
-#    kalan bir koleksiyon ExampleRetriever'ı sessizce boş sonuç
-#    döndürmeye düşürür (HybridRetriever.retrieve'in kendi degrade'i),
-#    hata vermez, yalnızca örneksiz taslak üretilir.
-docker compose exec backend python scripts/index_yazisma_examples.py
-
-# 5. document_qa koleksiyonu -- elle bir şey YAPMANIZ gerekmiyor.
-#    DocumentService._index_for_qa kendi boyut uyuşmazlığını proaktif
-#    algılayıp koleksiyonu otomatik siler+yeniden yaratır (bir sonraki
-#    belge analizinde) -- ama bu, o ana kadar indekslenmiş her belgenin
-#    Q&A aramasının boş dönmesi anlamına gelir. Hazır bir kesinti
-#    penceresi varsa önceden elle sıfırlamak (silip ilk yüklemeyi
-#    tetiklemek) kullanıcıya sürpriz bir "sonuç bulunamadı" yaşatmaz.
-
-# 6. mevzuat koleksiyonu (varsa; MEVZUAT_SOURCE=local kullanan
-#    kurulumlarda) -- scripts/index_mevzuat.py.
-```
-
-Canlı doğrulandı (Workstream J7, `nomic-embed-text` → `leoipulsar/
-harrier-0.6b`, 768→1024): adım 1-3 atlanınca `test_prototype_freshness.py`
-kırılıyor (`POLICY_VERSION`/boyut uyuşmazlığı) ve `/api/v1/health?deep=true`
-`router_semantic: unavailable` dönüyor; adımlar tamamlanınca (ardından
-backend'in kendi process'inin yeniden başlatılması gerekir -- `PrototypeMatcher`
-prototip dosyalarını yalnızca lifespan'de bir kez okur) her ikisi de düzeliyor.
-
 ## LangGraph checkpoint tabloları — Alembic'in kapsamı dışında
 
 `checkpoint*` önekli tablolar (`AsyncPostgresSaver`) Alembic'le değil,

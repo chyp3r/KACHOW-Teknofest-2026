@@ -199,47 +199,6 @@ def test_chunk_size_must_be_positive():
         broken.check_invariants()
 
 
-def test_rerank_candidate_count_must_be_positive():
-    policy = get_policy()
-    broken = replace(policy, rerank=replace(policy.rerank, candidate_count=0))
-
-    with pytest.raises(ValueError, match="candidate_count"):
-        broken.check_invariants()
-
-
-def test_rerank_candidate_count_must_exceed_the_draft_source_chunk_count():
-    """A candidate pool no wider than the caller's own cut has nothing left
-    for reranking to reorder -- see RerankPolicy's own docstring."""
-    policy = get_policy()
-    broken = replace(
-        policy,
-        rerank=replace(
-            policy.rerank, candidate_count=policy.draft.source_chunk_count
-        ),
-    )
-
-    with pytest.raises(ValueError, match="source_chunk_count"):
-        broken.check_invariants()
-
-
-def test_rerank_candidate_count_must_exceed_the_style_example_count():
-    # source_chunk_count is checked first in the same loop and would
-    # otherwise mask this constraint (it is the larger of the two caller
-    # limits under the shipped defaults) -- lowered below candidate_count
-    # here so only the style_example_count branch can fail.
-    policy = get_policy()
-    broken = replace(
-        policy,
-        draft=replace(policy.draft, source_chunk_count=1),
-        rerank=replace(
-            policy.rerank, candidate_count=policy.draft.style_example_count
-        ),
-    )
-
-    with pytest.raises(ValueError, match="style_example_count"):
-        broken.check_invariants()
-
-
 def test_the_policy_is_a_single_frozen_instance():
     """No setter, no reload: a threshold change is a code change."""
     assert get_policy() is get_policy()

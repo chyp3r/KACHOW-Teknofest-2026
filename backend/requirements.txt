@@ -52,17 +52,6 @@ opentelemetry-instrumentation-fastapi==0.62b1
 opentelemetry-instrumentation-sqlalchemy==0.62b1
 opentelemetry-instrumentation-httpx==0.62b1
 opentelemetry-instrumentation-redis==0.62b1
-# Cross-encoder reranker (Workstream J7, app.ai.retrieval.reranker.
-# CrossEncoderReranker, RerankPolicy) -- an in-process sentence-transformers
-# model, not another Ollama model: three separate Ollama-hosted Qwen3-
-# Reranker-0.6B GGUF uploads were tried first and each failed for a
-# distinct, reproducible reason (see that class's own docstring). Ships
-# enabled by default (RerankPolicy.enabled), so this must be in the
-# production image, not only requirements-dev.txt -- unlike
-# WITH_MEVZUAT_MCP=0's opt-in shape for a different heavy optional
-# dependency. CPU-only torch, not the default CUDA wheel.
---extra-index-url https://download.pytorch.org/whl/cpu
-sentence-transformers==5.1.2
 mcp==1.29.0
 fastmcp==3.4.5
 bcrypt==5.0.0
