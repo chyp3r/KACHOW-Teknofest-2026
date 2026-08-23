@@ -2,6 +2,35 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.40.0] - 2026-08-23
+Workstream F1/F2: production backend Dockerfile + `.dockerignore` + `SECRET_KEY` guard'ı (#249).
+
+- `deploy/docker/backend.prod.Dockerfile` — üç aşamalı build (`builder` →
+  yalnızca `requirements.txt`; `mcp` → `mevzuat-mcp`+Chromium, `ARG
+  WITH_MEVZUAT_MCP=0` arkasında varsayılan kapalı; `runtime` → yalnızca
+  runtime apt paketleri, test suite'i/`evaluation/` yok, non-root
+  `10001:0`, curl'süz Python healthcheck). Doğrulandı: imaj **1.36GB**
+  (dev imajı 4.16GB), `docker exec ... id` → `uid=10001(kachow) gid=0`,
+  healthcheck `healthy`, `/api/v1/health` → 200.
+- Kök `.dockerignore` — daha önce yoktu; `.git`, `__pycache__`,
+  `node_modules`, `storage_data`, ve en önemlisi git'te takipsiz kök
+  `.env` artık build context'ine girmiyor.
+- `backend/app/lifespan.py::_require_secret_key_in_production` —
+  `_require_auth_in_production` ile aynı desen: `ENVIRONMENT=production`
+  + varsayılan `SECRET_KEY` ile boot reddedilir. Gerçek prod imajına
+  karşı koşturularak doğrulandı (`RuntimeError: SECRET_KEY must be
+  changed...` ile başlatma reddi).
+
+### Notlar
+`MEVZUAT_SOURCE`'u açıkça `local`'a çekmeden `WITH_MEVZUAT_MCP=0` ile
+koşan bir imaj, canlı mevzuat.gov.tr çağrısını dener ve başarısız olur —
+ama bu bir çökme değil: `FallbackMevzuatRetriever` beklendiği gibi
+commit'li korpusa düşüyor (canlı imajda doğrulandı, log: "MCP-first
+legislation warm-up fetched nothing (7/7 laws failed); staying on the
+local corpus"). Operatörler `MEVZUAT_SOURCE=local` ile bu denemeyi
+tamamen atlayabilir; `docs/deployment/configuration.md` (Workstream H3)
+bunu belgeleyecek.
+
 ## [3.39.0] - 2026-08-23
 Workstream E3: gözlenen node gecikmesi bütçe raporu (#247).
 
