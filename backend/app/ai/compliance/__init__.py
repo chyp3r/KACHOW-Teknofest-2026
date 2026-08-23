@@ -5,6 +5,7 @@ from app.ai.compliance.field_parser import (
     HEADER_FIELD,
     count_header_fields,
     format_parsed_fields,
+    has_signature,
     merge_parsed_over_model,
     parse_labelled_fields,
 )
@@ -51,6 +52,7 @@ __all__ = [
     "detect_structural_signal",
     "format_parsed_fields",
     "format_structural_signal",
+    "has_signature",
     "is_blank",
     "merge_parsed_over_model",
     "normalize_value",

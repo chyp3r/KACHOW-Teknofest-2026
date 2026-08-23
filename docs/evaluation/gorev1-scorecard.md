@@ -186,6 +186,36 @@ geçmiyorsa ("İLGİLİ MAKAMA" uydurması gibi) hâlâ atıyor.
 `_parse_signature`'ın imzasız dilekçe koruması (bkz. testler) bunu
 gerektiriyor. Detaylı ölçüm ve kod: `backend/app/ai/compliance/field_parser.py`.
 
+**İkinci düzeltme turu -- kullanıcı bildirimi, "imza isim üzerine geldiyse
+bulunamıyor".** Yukarıdaki regex düzeltmesi tek başına yeterli değildi.
+Üç bağımsız hata modu daha bulundu ve ölçüldü:
+
+1. **Arama yönü tersti.** `_parse_signature` imzayı kapanış formülünden
+   sonraki *son 4 satırda* arıyordu -- gerçek letterhead'lerde o satırlar
+   antet footer'ı, imza onun üstünde. İleri aramaya çevrildi
+   (`SIGNATURE_WINDOW_LINES=6`).
+2. **İmza mürekkebi metni yok ediyor.** 4 belgede (CY-002/010/011/050)
+   OpenDataLoader/Tesseract imza satırını ya hiç içermiyor ya da
+   `"İF; BOZDAG ;"` gibi bozuyor -- hiçbir ayrıştırıcı bunu kurtaramaz.
+   `FallbackDocumentExtractor`'a yeni `signature_probe`: imza
+   okunamıyorsa sayfa 1 başlık-bandı yerine **tam sayfa** vision ile
+   yeniden okunuyor. 4/4 kurtarıldı.
+3. **Kırpma kısa belgelerde imzayı siliyordu.** Başlık-bandı onarımının
+   `HEADER_REPAIR_LINE_COUNT=14` satırlık değiştirmesi, 3 kısa belgede
+   (CY-003/023/028) imza bloğunu tam da o aralığa denk getirip
+   yutuyordu. Onarım sonrası `signature_probe` tekrar kontrol ediliyor;
+   yutulmuşsa tam sayfaya kaçılıyor.
+4. **Üretim tüm sayfaları birleştirilmiş metne uyguluyor**, sayfa 1'e
+   değil -- bir "Ek:" ekinin kendi kapanış formülü, "son eşleşmeyi al"
+   mantığını yanlış yere çapalıyordu (CY-002, CY-034). İlk eşleşmeye
+   çevrildi.
+
+**Sonuç -- 23 belgenin tamamı, tam üretim zinciri, üretimin gerçekte
+kullandığı tam-metin yolu**: imza bulunan **0/23 → 23/23**, birebir doğru
+**22/23**. `make eval`'in `evrak` suite'i bunu **göstermiyor**
+(`missing_field_false_positive_rate` 0.1148'de sabit) -- bu bir körlük,
+Madde 4'te açıklanıyor.
+
 ---
 
 ## Madde 4 -- Eksik bilgileri tespit etme
@@ -214,6 +244,18 @@ katmanın** (regex + kural tablosu + kanıta dayalı kurtarma, model hiç
 zaman `merge_parsed_over_model`'in birleşik çıktısını görür ve bu düzeltme
 o birleştirmenin kendisini de kapsıyor (bkz. Madde 3) -- yani üretimin
 gerçek yanlış alarm oranı bu sayıdan daha da düşüktür.
+
+**Madde 3'ün imza düzeltmesi bu sayıya neden yansımıyor.** `evrak_suite.py`'nin
+gerçek-belge altın kümesi `datasets/resmi_yazisma/ocr_ground_truth.json`'daki
+`clean_text` -- elle transkribe edilmiş, **tek sayfa, footer'sız, ek'siz**
+temiz metin. İmza düzeltmesinin kapattığı üç hata modu (footer'lı arama
+penceresi, ekin kendi kapanış formülü, kırpmanın imzayı yutması) tanım
+gereği bu metinde **hiç oluşamaz** -- hepsi ya birden çok sayfa/footer
+gerektiriyor ya da gerçek OCR çıktısının kaba yapısına özgü. Bu yüzden
+`evrak_suite`'in sayısı bu düzeltmeden **etkilenmiyor olması beklenen**
+bir şey, ölçülmemiş bir kazanç değil -- gerçek kanıt Madde 3'teki 23/23
+canlı ölçüm, tam üretim zinciriyle (vision dahil) ve üretimin gerçekte
+kullandığı çok-sayfalı birleştirilmiş metin yoluyla alındı.
 
 ---
 

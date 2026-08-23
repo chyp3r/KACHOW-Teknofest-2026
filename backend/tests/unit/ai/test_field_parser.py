@@ -226,6 +226,93 @@ def test_labelled_values_win_over_positional_guesses():
 
 
 # ==========================================
+# Forward signature search (real regression: `_parse_signature` used to
+# search the document's own last 4 lines, which on a real letterhead
+# template is the antet footer, not the signature -- measured 0/23 on the
+# real scanned corpus. Every OFFICIAL_LETTER/UNSIGNED_PETITION fixture
+# above happens to end right at the signature block with no footer and no
+# closing formula, so none of them exercised this path at all.)
+# ==========================================
+def test_signature_is_found_ahead_of_a_real_letterhead_footer():
+    """The actual shape that broke in production: a closing formula,
+    then the signature block, then an antet footer (address, santral,
+    fax, web) -- real templates always carry the footer, and the old
+    backward-from-end-of-page window landed there instead of on the
+    signature above it."""
+    text = (
+        "T.C.\nÖRNEK BAKANLIĞI\nHukuk Hizmetleri Genel Müdürlüğü\n\n"
+        "Sayı : Z-1\nKonu : Yazılı Soru Önergesi\n\n"
+        "SAYIN VALİLİĞİNE\n\n"
+        "İlgi : 07.04.2026 tarihli yazınız.\n\n"
+        "Konu hakkında bilgiler aşağıda sunulmuştur.\n"
+        "Arz ederim.\n\n"
+        "Yaşar GÜLER\n"
+        "Bakan\n\n"
+        "Mevzuat Daire Başkanlığı Soru Önergeleri Şube Müdürlüğü\n"
+        "Güvenevler Mah.Kuzgun Cad.No:51 Aşağı Ayrancı/ANKARA\n"
+        "Santral: (0312) 466 07 37 Belgegeçer No: (0312) 417 94 41\n"
+        "İnternet Adresi:www.msb.gov.tr"
+    )
+    parsed = parse_labelled_fields(text)
+    assert parsed["imza_sahibi"] == "Yaşar GÜLER"
+    assert parsed["imza_unvani"] == "Bakan"
+
+
+def test_footer_name_title_pair_is_not_mistaken_for_the_signature():
+    """A footer routinely carries its own "Bilgi için: <ad> / <unvan>"
+    pair -- name-shaped and title-shaped, same as the real signature, just
+    further down. The real signature (found first) must win."""
+    text = (
+        "T.C.\nÖRNEK BAKANLIĞI\n\nKonu : Deneme\n\n"
+        "Metin.\nArz ederim.\n\n"
+        "Yaşar GÜLER\n"
+        "Bakan\n\n"
+        "Bilgi için: Erkut GÜLTEKİN\n"
+        "Milli Savunma Uzmanı\n"
+        "Telefon No: Dahili 2272"
+    )
+    parsed = parse_labelled_fields(text)
+    assert parsed["imza_sahibi"] == "Yaşar GÜLER"
+    assert parsed["imza_unvani"] == "Bakan"
+
+
+def test_no_closing_formula_keeps_the_old_backward_tail_behaviour():
+    """A tutanak has no closing formula at all -- the signature genuinely
+    is the document's own tail, and the old backward window is correct
+    there. Must not regress once forward search exists for the formula
+    case."""
+    text = "T.C.\nÖRNEK BAKANLIĞI\n\nKonu : Tutanak\n\nOlay tutanağı metni.\n\nMustafa Şahin\nŞef"
+    parsed = parse_labelled_fields(text)
+    assert parsed["imza_sahibi"] == "Mustafa Şahin"
+    assert parsed["imza_unvani"] == "Şef"
+
+
+def test_an_attachments_own_closing_formula_does_not_hijack_the_search():
+    """Production feeds `parse_labelled_fields` the whole extracted
+    document -- every page joined, not page 1 alone (see
+    `merge_parsed_over_model`'s own `document_text` handling). An "Ek:"
+    attachment routinely carries its own closing formula further down the
+    joined text; anchoring on the *last* match in the whole text (the
+    attachment's) instead of the *first* (the actual letter's own) misses
+    the real signature entirely -- measured on two real multi-page
+    documents (CY-002, CY-034)."""
+    text = (
+        "T.C.\nÖRNEK BAKANLIĞI\n\nKonu : Deneme\n\n"
+        "Metin.\nBilgilerinizi rica ederim.\n\n"
+        "Yaşar GÜLER\n"
+        "Bakan\n\n"
+        "Ek: Cevabi Yazı\n\n"
+        # The attachment's own, unrelated closing formula and signature --
+        # must never become the anchor.
+        "Sayı : Z-9\nKonu : Ek yazı\n\nBaşka bir metin.\nBilgilerinize arz ederim.\n\n"
+        "Fatma Kaya\nŞube Müdürü"
+    )
+    parsed = parse_labelled_fields(text)
+    assert parsed["imza_sahibi"] == "Yaşar GÜLER"
+    assert parsed["imza_unvani"] == "Bakan"
+
+
+# ==========================================
 # ALL-CAPS surname (real official-correspondence convention, missed on 17/23
 # hand-labelled real documents before this fix -- datasets/sample/'s
 # synthetic corpus is uniformly Titlecase-only and never exercised this)

@@ -1,6 +1,6 @@
 from typing import Optional
 
-from app.ai.compliance import count_header_fields
+from app.ai.compliance import count_header_fields, has_signature
 from app.infrastructure.extractors.base import (
     BaseDocumentExtractor,
     DocumentExtractionError,
@@ -58,6 +58,15 @@ def get_document_extractor() -> BaseDocumentExtractor:
             # full-page scan image (Class A), which OpenDataLoader/Pdfium
             # otherwise read exactly like a genuine born-digital text layer.
             scan_text_layer_probe=is_scanned_text_layer,
+            # `app.ai.compliance.has_signature` -- escalates to a full-page
+            # vision transcription instead of the header-band-only crop
+            # when the signer's name doesn't parse at all, the one failure
+            # mode header-band repair structurally cannot reach (wet
+            # signature ink over the printed name, well below the header
+            # band). Measured on the real scanned corpus: 4 documents where
+            # OpenDataLoader/Tesseract lost or garbled the name entirely,
+            # full-page transcription recovered it on all 4.
+            signature_probe=has_signature,
         )
     return _document_extractor
 

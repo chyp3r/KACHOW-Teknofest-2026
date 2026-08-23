@@ -449,3 +449,39 @@ class OllamaVisionExtractor(BaseDocumentExtractor):
             raise DocumentExtractionError(
                 f"Görsel dil modeli ile başlık onarımı başarısız oldu: {exc}"
             ) from exc
+
+    async def transcribe_page(self, page_image) -> str:
+        """Transcribe one already-rasterised page in full, no crop.
+
+        Sibling to `transcribe_header_band` -- same model call, same
+        `self.prompt`, just the whole page instead of the top
+        `HEADER_BAND_FRACTION` band. Used by `FallbackDocumentExtractor`'s
+        signature-recovery step (see that class's `_maybe_repair_signature`)
+        for the failure mode header-band repair cannot reach: wet-signature
+        ink obscuring the printed name below it sits well past the header
+        band, in the lower half of the page. Measured directly on four real
+        documents where OpenDataLoader/Tesseract lost or garbled the
+        signer's name entirely (a missing line, or "İF; BOZDAG ;" for
+        "Bekir BOZDAĞ") -- full-page transcription recovered the correct
+        name on all four.
+
+        Args:
+            page_image: A rasterised PIL page image, same shape
+                `transcribe_header_band` and `TesseractExtractor` share a
+                `raster_cache` entry for.
+
+        Returns:
+            The page's full transcription. May be empty on total failure;
+            callers should treat that the same as any other best-effort
+            failure, not retry.
+
+        Raises:
+            DocumentExtractionError: If the model call itself fails.
+        """
+        try:
+            encoded = await asyncio.to_thread(self._encode_png, [page_image])
+            return await asyncio.to_thread(self._transcribe, encoded[0])
+        except Exception as exc:
+            raise DocumentExtractionError(
+                f"Görsel dil modeli ile tam sayfa okuma başarısız oldu: {exc}"
+            ) from exc

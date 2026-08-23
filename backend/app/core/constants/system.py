@@ -69,6 +69,28 @@ HEADER_BAND_FRACTION: float = 0.28
 # flat list[str]), so this is the same line-count approximation used to
 # calibrate HEADER_BAND_FRACTION above, not a precise mapping.
 HEADER_REPAIR_LINE_COUNT: int = 14
+# How many lines after the closing formula (Arz/Rica ederim, m.17)
+# `_parse_signature` searches forward for the name/title lines. A real
+# signature block sits immediately after the closing formula and is
+# followed by an antet footer (address, santral, fax, web) on real
+# letterhead templates -- the footer is what a *backward*-from-end-of-page
+# window used to catch instead, missing the signature entirely (measured
+# 0/23 on the real scanned corpus before this constant existed). Calibrated
+# against that same corpus (21 of 23 documents carry a closing formula; the
+# other 2 fall back to the no-formula tail path, unaffected by this
+# constant): the name line lands 0-3 lines after the closing formula, and
+# the title line 1-4 -- the widest case (CY-050, whose signature ink
+# partially obscures the name) puts the title at +4. 6 gives two lines of
+# slack over that observed maximum.
+#
+# The window is NOT guaranteed footer-free -- measured minimum gap between
+# the title line and the first footer line (Santral/Tel/Bilgi için/İnternet
+# Adresi) is 0 on this same corpus, so a size-6 window routinely includes
+# a line or two of footer. Harmless: `_parse_signature` takes the first
+# name-shaped candidate and the first title-hint match after it, both of
+# which always precede the footer in document order, so extra trailing
+# footer content in the window is never reached.
+SIGNATURE_WINDOW_LINES: int = 6
 # Minimum count of `count_header_fields` (out of 5: sayi/tarih/konu/muhatap/
 # gonderen_kurum) on an extraction's page 1 for FallbackDocumentExtractor to
 # accept it outright. `quality_ratio`/`char_count` alone cannot catch this

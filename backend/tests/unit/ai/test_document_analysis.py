@@ -533,6 +533,89 @@ async def test_graph_degrades_to_raw_citations_when_suggestion_fails(mock_classi
 
 
 @pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_graph_dedupes_model_suggestions_citing_the_same_article(
+    mock_classify, mock_suggest
+):
+    """Real reported bug: the same RYUEHY article showed up twice in
+    "Mevzuat ve Dayanaklar". `MEVZUAT_RESULT_LIMIT` excerpts from a
+    chunked corpus can land on the same article more than once, and the
+    model then has no reason not to write a suggestion per excerpt it saw
+    -- both grounded, both citing the same law, so citation_support keeps
+    both. Deduplication is the layer that actually collapses them."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER,
+        "İzin talebi.",
+        **COMPLETE_FIELDS.model_copy(update={"sayi": None}).model_dump(),
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(
+        suggestions=[
+            MevzuatSuggestion(
+                mevzuat="RYUEHY m.11",
+                aciklama="Belgelerde sayı bulunması zorunludur (1. alıntı).",
+            ),
+            MevzuatSuggestion(
+                mevzuat="RYUEHY m.11",
+                aciklama="Belgelerde sayı bulunması zorunludur (2. alıntı, farklı ifade).",
+            ),
+        ]
+    )
+
+    retriever = AsyncMock(spec=HybridRetriever)
+    retriever.retrieve.return_value = [
+        Document(page_content="MADDE 11- Belgelerde sayı bulunması zorunludur.", metadata={"mevzuat": "RYUEHY"}),
+        Document(page_content="MADDE 11- ...aynı maddenin bir başka parçası.", metadata={"mevzuat": "RYUEHY"}),
+    ]
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=retriever
+    )
+    result = await graph.ainvoke({"input_text": INCOMPLETE_LETTER_TEXT})
+
+    assert len(result["mevzuat_suggestions"]) == 1
+    assert result["mevzuat_suggestions"][0]["aciklama"] == "Belgelerde sayı bulunması zorunludur (1. alıntı)."
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_graph_dedupes_raw_citation_fallback_from_repeated_excerpts(
+    mock_classify, mock_suggest
+):
+    """Same bug, the degradation path: `_raw_citation_suggestions` builds
+    one entry per retrieved excerpt, so two excerpts from the same article
+    reproduced the duplication just as directly as the model did."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "x", **COMPLETE_FIELDS.model_dump()
+    )
+    mock_suggest.side_effect = Exception("LLM timeout")
+
+    retriever = AsyncMock(spec=HybridRetriever)
+    retriever.retrieve.return_value = [
+        Document(page_content="MADDE 11-", metadata={"mevzuat": "RYUEHY"}),
+        Document(page_content="MADDE 11- (aynı maddenin başka bir parçası)", metadata={"mevzuat": "RYUEHY"}),
+        Document(page_content="MADDE 5-", metadata={"mevzuat": "Devlet Memurları Kanunu"}),
+    ]
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=retriever
+    )
+    result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    assert result["mevzuat_suggestions"] == [
+        {
+            "mevzuat": "RYUEHY",
+            "aciklama": "İlgili olabilecek mevzuat alıntısı (otomatik açıklama üretilemedi).",
+        },
+        {
+            "mevzuat": "Devlet Memurları Kanunu",
+            "aciklama": "İlgili olabilecek mevzuat alıntısı (otomatik açıklama üretilemedi).",
+        },
+    ]
+
+
+@pytest.mark.asyncio
 @patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
 async def test_graph_survives_retriever_failure(mock_classify):
     mock_classify.return_value = _merged(

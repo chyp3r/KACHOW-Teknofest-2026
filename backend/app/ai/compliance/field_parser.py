@@ -29,6 +29,7 @@ from typing import Any, Optional
 
 from app.ai.compliance.checker import is_blank, normalize_value
 from app.ai.verification.draft_verifier import INSTITUTION_PATTERN, TOKEN_OVERLAP_THRESHOLD
+from app.core.constants import SIGNATURE_WINDOW_LINES
 
 # Every label that can terminate a preceding value on the same line. The
 # regulation places "Tarih" to the right of "Sayı" on one line, so a value must
@@ -206,6 +207,19 @@ _NAME_WORD = r"(?:[A-ZÇĞİÖŞÜ][a-zçğıöşü]+|[A-ZÇĞİÖŞÜ]{2,})"
 _PERSON_NAME_LINE = re.compile(
     rf"^(?=.*[a-zçğıöşü])(?:{_NAME_WORD}\.?\s+){{1,3}}{_NAME_WORD}$"
 )
+#: Institution-name suffixes `INSTITUTION_PATTERN` (draft_verifier.py)
+#: doesn't cover. That pattern is tuned for extracting an institution claim
+#: out of *draft* text (`drafts` suite's own gold set), so a new suffix
+#: added there could move numbers this module has no business touching --
+#: kept local instead, same shape (1-5 leading Titlecase words + suffix).
+#: "Meclisi" specifically is what let "Türkiye Büyük Millet Meclisi" through
+#: as a signature candidate in `_parse_signature` below: measured on the
+#: real corpus, four documents under the same TBMM letterhead template
+#: (CY-010/011/033/050) all have this exact institution line sitting where
+#: a signature line would otherwise be expected.
+_LOCAL_INSTITUTION_SUFFIX_PATTERN = re.compile(
+    r"\b(?:[A-ZÇĞİÖŞÜ][\wçğıöşüÇĞİÖŞÜ]*\s+){1,5}(?:Meclisi|Kurulu|Komisyonu)\b"
+)
 #: Words that mark a line as a title rather than a name.
 _TITLE_HINT = re.compile(
     r"(Müdür|Başkan|Bakan|Vali|Kaymakam|Rektör|Dekan|Müsteşar|Amir|Şef|"
@@ -285,15 +299,45 @@ def _parse_signature(lines: list[str]) -> dict[str, str]:
     Returns:
         Mapping possibly containing `imza_sahibi` and `imza_unvani`.
     """
-    # The signature block is what follows the closing formula; fall back to the
-    # tail of the document when no formula is present (e.g. a tutanak).
+    # The signature block is what follows the closing formula. Search
+    # *forward* from there, not backward from the document's own end: real
+    # letterhead templates carry an antet footer (address, santral, fax,
+    # web) after the signature, so a backward window from end-of-page
+    # lands on the footer and misses the signature entirely -- measured
+    # 0/23 on the real scanned corpus with the old backward window, 21/23
+    # with this one (see SIGNATURE_WINDOW_LINES's own calibration comment).
+    # No formula present (e.g. a tutanak) falls back to the document's own
+    # tail, where the old backward behaviour is correct.
+    #
+    # The *first* match wins, not the last: `lines` is not always a single
+    # page. Production feeds this the whole extracted document -- every
+    # page joined -- and an attached document (an "Ek:" reply the letter
+    # forwards, or an earlier letter quoted in İlgi) routinely carries its
+    # own closing formula further down. Taking the last occurrence anchors
+    # the search on that attachment's closing instead of the current
+    # document's own, missing the real signature entirely -- measured on
+    # two real multi-page documents (CY-002, CY-034), each pulled in by an
+    # attachment's own "Bilgilerinize/arz ederim". Confirmed safe for the
+    # single-page case this otherwise matters for: none of the 23
+    # hand-labelled real documents' own `clean_text` (page 1 only) ever
+    # matches this pattern more than once, so `first` and `last` agree on
+    # every one of them individually -- the difference only ever shows up
+    # once later pages enter the text at all.
     start = 0
+    closing_formula_found = False
     for index, line in enumerate(lines):
         if _CLOSING_FORMULA.search(line):
             start = index + 1
+            closing_formula_found = True
+            break
+    window = (
+        lines[start : start + SIGNATURE_WINDOW_LINES]
+        if closing_formula_found
+        else lines[start:][-4:]
+    )
     tail = [
         line
-        for line in lines[start:][-4:]
+        for line in window
         if not _ANY_LABEL_LINE.match(line) and line.lower() != "imza"
     ]
 
@@ -317,8 +361,11 @@ def _parse_signature(lines: list[str]) -> dict[str, str]:
             # A Titlecase-worded institution mention ("Türkiye Büyük Millet
             # Meclisi") still matches _PERSON_NAME_LINE -- see that pattern's
             # own docstring. Reject any candidate shaped like an institution
-            # name outright rather than accepting it as a person.
+            # name outright rather than accepting it as a person -- checked
+            # against both the shared pattern and the suffixes it doesn't
+            # cover (see _LOCAL_INSTITUTION_SUFFIX_PATTERN's own docstring).
             or INSTITUTION_PATTERN.search(line)
+            or _LOCAL_INSTITUTION_SUFFIX_PATTERN.search(line)
         ):
             continue
         title = next(
@@ -480,6 +527,28 @@ def count_header_fields(text: str) -> int:
     """
     parsed = parse_labelled_fields(text)
     return sum(1 for name in HEADER_FIELD if parsed.get(name))
+
+
+def has_signature(text: str) -> bool:
+    """Report whether `imza_sahibi` is recoverable from `text`.
+
+    Backs `FallbackDocumentExtractor`'s signature-recovery escalation (see
+    that class's `signature_probe` parameter, injected the same way
+    `count_header_fields` is via `header_field_probe`). Measures a
+    different failure than `count_header_fields`: a page can read as fine
+    Turkish prose overall, with every `HEADER_FIELD` intact, while its
+    signature block specifically is destroyed -- wet-signature ink
+    obscuring the printed name below it, well outside the header band a
+    document-wide `quality_ratio` or `count_header_fields` would ever
+    notice.
+
+    Args:
+        text: Extracted document text (page 1).
+
+    Returns:
+        True when `imza_sahibi` parses out.
+    """
+    return bool(parse_labelled_fields(text).get("imza_sahibi"))
 
 
 #: `AUTHORITATIVE_FIELD` members eligible for evidence-based rescue (see

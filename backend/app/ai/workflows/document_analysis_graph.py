@@ -20,6 +20,7 @@ from app.ai.compliance import (
     format_parsed_fields,
     format_structural_signal,
     merge_parsed_over_model,
+    normalize_value,
     parse_labelled_fields,
 )
 from app.ai.agents.guardrail_judge import GuardrailJudgeAgent
@@ -270,6 +271,37 @@ def _render_mevzuat_excerpts(documents: list[Document]) -> str:
     return "\n\n".join(parts)
 
 
+def _dedupe_suggestions(suggestions: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Drop a second and later suggestion citing the same legislation.
+
+    `mevzuat` carries both the law and its article together (e.g. "RYUEHY
+    m.11"), so two suggestions with the same folded `mevzuat` really are
+    the same finding -- a different article of the same law is a distinct
+    string and survives untouched. Retrieval can hand back several excerpts
+    from the same article (`MEVZUAT_RESULT_LIMIT` excerpts, a chunked
+    corpus), and both the model and `_raw_citation_suggestions` (one
+    per excerpt) then reproduce that duplication verbatim, so a user
+    reading `mevzuat_references` sees the same rule listed two or three
+    times. First occurrence wins -- retrieval order is relevance order.
+
+    Args:
+        suggestions: Suggestions in order, each carrying `mevzuat`.
+
+    Returns:
+        The same suggestions, in order, with later same-citation entries
+        removed.
+    """
+    seen: set[str] = set()
+    deduped = []
+    for item in suggestions:
+        key = normalize_value(item.get("mevzuat", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
 def _raw_citation_suggestions(documents: list[Document]) -> list[dict[str, str]]:
     """Build one grounded-by-construction suggestion per retrieved excerpt.
 
@@ -279,14 +311,21 @@ def _raw_citation_suggestions(documents: list[Document]) -> list[dict[str, str]]
     suggestions come back but every one fails grounding -- either way the
     requirement is met with the retrieved citations, just without the
     model's explanation of them.
+
+    Deduplicated via `_dedupe_suggestions`: `documents` is one entry per
+    retrieved excerpt, and two excerpts from the same article (a chunked
+    corpus routinely returns this) would otherwise produce two identical
+    rows here.
     """
-    return [
-        {
-            "mevzuat": document.metadata.get("mevzuat", "Bilinmeyen kaynak"),
-            "aciklama": "İlgili olabilecek mevzuat alıntısı (otomatik açıklama üretilemedi).",
-        }
-        for document in documents
-    ]
+    return _dedupe_suggestions(
+        [
+            {
+                "mevzuat": document.metadata.get("mevzuat", "Bilinmeyen kaynak"),
+                "aciklama": "İlgili olabilecek mevzuat alıntısı (otomatik açıklama üretilemedi).",
+            }
+            for document in documents
+        ]
+    )
 
 
 def _flatten_fields_for_grounding(fields: dict[str, Any]) -> str:
@@ -799,7 +838,12 @@ def create_document_analysis_graph(
             if suggestions and not grounded_suggestions:
                 suggestions = _raw_citation_suggestions(documents)
             else:
-                suggestions = grounded_suggestions
+                # `MEVZUAT_RESULT_LIMIT` excerpts from a chunked corpus can
+                # land on the same article more than once; the model then
+                # has no reason not to write a suggestion per excerpt it
+                # was handed, reproducing that duplication in its own
+                # output the same way the raw-citation fallback would.
+                suggestions = _dedupe_suggestions(grounded_suggestions)
         except TRANSIENT_ERRORS:
             logger.warning("Mevzuat Suggestion Node hit a transient error; retrying.")
             raise

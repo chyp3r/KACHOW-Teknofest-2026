@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 #: render density, so a descriptive string is clearer than reusing DPI as a
 #: key for something DPI doesn't actually vary by within one call.
 _REPAIR_TEXT_CACHE_KEY = "header_text"
+#: Same role as `_REPAIR_TEXT_CACHE_KEY`, for `_repair_signature`'s
+#: full-page transcription -- a distinct key in the same `repair_cache`
+#: dict, since the two repair steps are mutually exclusive per document
+#: (see `_maybe_repair_page_one`) but share the dict's lifetime.
+_REPAIR_PAGE_CACHE_KEY = "full_page_text"
 
 
 class FallbackDocumentExtractor(BaseDocumentExtractor):
@@ -46,6 +51,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         header_field_probe: Optional[Callable[[str], int]] = None,
         min_header_field_count: int = MIN_HEADER_FIELD_COUNT,
         scan_text_layer_probe: Optional[Callable[[bytes], bool]] = None,
+        signature_probe: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialise the chain.
 
@@ -89,6 +95,18 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
                 that widening, so a caller that omits it keeps header repair
                 gated on `used_ocr` alone, exactly as before this parameter
                 existed.
+            signature_probe: Optional callable reporting whether a
+                document's signer name (`imza_sahibi`) parses out of a page
+                of text -- typically `app.ai.compliance.has_signature`.
+                Injected the same way and for the same reason as
+                `header_field_probe`. When it reports the signature
+                unparseable, `_maybe_repair_page_one` replaces page 1
+                wholesale with a full-page vision transcription instead of
+                the header-band-only crop (see `_repair_signature`) --
+                header-band repair alone cannot reach a signature block,
+                which sits well below the header. None disables the
+                signature-recovery escalation entirely, restoring exactly
+                today's header-band-only repair.
         """
         self.extractors = extractors
         self.min_char_count = min_char_count
@@ -97,6 +115,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         self.header_field_probe = header_field_probe
         self.min_header_field_count = min_header_field_count
         self.scan_text_layer_probe = scan_text_layer_probe
+        self.signature_probe = signature_probe
 
     def _is_acceptable(self, result: ExtractedDocument) -> bool:
         """Report whether a result is good enough to stop the chain.
@@ -182,6 +201,197 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         """
         return (self._header_field_count(result), result.quality_ratio)
 
+    async def _rasterise_page_one(self, content: bytes, raster_cache: dict):
+        """Return a rasterised page-1 image for vision repair.
+
+        Shared by `_maybe_repair_header` and `_repair_signature` -- both
+        need exactly this image, from exactly the same source, at exactly
+        `self.header_repair.dpi`, so there is exactly one place that
+        reuses `raster_cache` or falls back to rendering fresh.
+
+        Args:
+            content: The raw document bytes, needed to self-rasterise page 1
+                when `raster_cache` has nothing at `header_repair.dpi` (the
+                Class-A case: its extractor never rasterises anything).
+            raster_cache: The same cache the chain's extractors rasterised
+                into -- reused here so no page is rendered a second time.
+
+        Returns:
+            The image, or None when rasterisation isn't possible or fails --
+            callers must treat that as "repair unavailable", never retry.
+        """
+        images = raster_cache.get(self.header_repair.dpi)
+        if images:
+            return images[0]
+        # Never rasterised by this chain at all (Class A: its extractor
+        # read the text layer directly and rendered nothing) -- render
+        # page 1 ourselves. Deliberately NOT written into raster_cache: a
+        # partial, page-1-only entry there would make a later
+        # full-document OCR pass silently transcribe only page 1 and drop
+        # the rest of the document.
+        try:
+            return await self.header_repair.render_first_page(content)
+        except Exception:
+            logger.warning(
+                "Could not rasterise page 1 for vision repair; keeping "
+                "the original text.",
+                exc_info=True,
+            )
+            return None
+
+    async def _maybe_repair_page_one(
+        self,
+        result: ExtractedDocument,
+        raster_cache: dict,
+        content: bytes,
+        repair_cache: dict,
+    ) -> ExtractedDocument:
+        """Repair page 1 with vision -- header band, or, when the signature
+        can't be parsed (before or after that crop), the whole page instead.
+
+        Dispatches to exactly one of `_maybe_repair_header` (crop-only,
+        today's behaviour) or `_repair_signature` (full-page replacement)
+        in the common case -- a document only ever pays one of the two
+        vision costs then. `signature_probe` decides which: header-band
+        repair alone cannot reach a signature block, which sits well below
+        the header band (`HEADER_BAND_FRACTION`), so when the signer's name
+        isn't parseable at all, a full-page transcription is what actually
+        has a chance at it -- and that transcription already covers the
+        header too, so cropping it separately afterwards would be paying
+        for the same page twice. See `_repair_signature`'s own docstring
+        for the measurement behind this.
+
+        One case pays for both: header-band repair's own splice replaces
+        only the leading `HEADER_REPAIR_LINE_COUNT` lines of the page, an
+        approximation calibrated for a typical multi-paragraph letter --
+        on a short document (measured on the real corpus: CY-003/023/028,
+        each a brief one-paragraph reply) the signature block itself can
+        sit inside that range, and the splice silently discards it even
+        though it parsed fine from the pre-repair text. This is detected
+        after the fact, not predicted: if the signature was parseable
+        before header-band repair and isn't afterwards, the crop ate it --
+        fall through to a full-page transcription of the *original*
+        result. Rare (3/23 on the measured corpus) and worth the double
+        vision cost when it happens: reporting a real signer as a missing
+        required field is worse than one slow upload.
+
+        Args:
+            result: The chain's chosen result.
+            raster_cache: The same cache the chain's extractors rasterised
+                into.
+            content: The raw document bytes.
+            repair_cache: Per-`extract()`-call memoisation, shared across
+                both repair paths (each keyed separately).
+
+        Returns:
+            `result`, repaired by whichever path applied, or unchanged if
+            none did.
+        """
+        if self.header_repair is None or not result.pages:
+            return result
+        if not result.used_ocr and not self._is_scan_text_layer(content):
+            return result
+        if self.signature_probe is not None and not self.signature_probe(
+            self._page_one(result)
+        ):
+            return await self._repair_signature(
+                result, raster_cache, content, repair_cache
+            )
+
+        repaired = await self._maybe_repair_header(
+            result, raster_cache, content, repair_cache
+        )
+        if self.signature_probe is not None and not self.signature_probe(
+            self._page_one(repaired)
+        ):
+            logger.info(
+                "Header-band repair on [%s] discarded a previously-"
+                "parseable signature (short document); escalating to a "
+                "full-page transcription instead.",
+                result.extractor,
+            )
+            return await self._repair_signature(
+                result, raster_cache, content, repair_cache
+            )
+        return repaired
+
+    async def _repair_signature(
+        self,
+        result: ExtractedDocument,
+        raster_cache: dict,
+        content: bytes,
+        repair_cache: dict,
+    ) -> ExtractedDocument:
+        """Best-effort: replace page 1 entirely with a full-page vision
+        transcription, for the one failure mode header-band repair cannot
+        reach.
+
+        Header-band repair only ever touches the top `HEADER_BAND_FRACTION`
+        of the page, but a signature block sits well below it -- so no
+        amount of header-band repair can recover a signer's name garbled
+        or destroyed by wet-signature ink over the printed text. Measured
+        directly on four real documents where OpenDataLoader/Tesseract lost
+        the signature line entirely or mangled it beyond recognition
+        (`"İF; BOZDAG ;"` for `"Bekir BOZDAĞ"`): full-page vision
+        transcription recovered the correct name on all four (see
+        `OllamaVisionExtractor.transcribe_page`'s own docstring).
+
+        Only called once `_maybe_repair_page_one` has already established
+        `signature_probe` reports the signature unparseable -- this method
+        itself does not re-check that, so it always replaces page 1 when
+        it successfully transcribes something.
+
+        Args:
+            result: The chain's chosen result.
+            raster_cache: The same cache the chain's extractors rasterised
+                into -- reused here so no page is rendered a second time.
+            content: The raw document bytes, for `_rasterise_page_one`.
+            repair_cache: Memoises the full-page transcription across every
+                candidate this one `extract()` call repairs, under its own
+                key (`_REPAIR_PAGE_CACHE_KEY`) separate from header-band
+                repair's -- the two never fire for the same document (see
+                `_maybe_repair_page_one`), but share the dict's lifetime.
+
+        Returns:
+            `result` with its first page replaced by the vision model's
+            full transcription, or `result` completely unchanged on any
+            failure or empty output -- this step must never turn a working
+            extraction into a failed one.
+        """
+        if _REPAIR_PAGE_CACHE_KEY in repair_cache:
+            page_text = repair_cache[_REPAIR_PAGE_CACHE_KEY]
+        else:
+            page_one_image = await self._rasterise_page_one(content, raster_cache)
+            if page_one_image is None:
+                return result
+            try:
+                page_text = await self.header_repair.transcribe_page(page_one_image)
+            except Exception:
+                logger.warning(
+                    "Full-page signature repair failed for [%s]; keeping "
+                    "its original text.",
+                    result.extractor,
+                    exc_info=True,
+                )
+                return result
+            page_text = page_text.strip()
+            repair_cache[_REPAIR_PAGE_CACHE_KEY] = page_text
+
+        if not page_text:
+            return result
+
+        pages = [page_text, *result.pages[1:]]
+        logger.info(
+            "Replaced [%s]'s first page with a full-page vision "
+            "transcription (%d characters) -- its signature could not be "
+            "parsed from the original.",
+            result.extractor,
+            len(page_text),
+        )
+        return result.model_copy(
+            update={"pages": pages, "text": "\n\n".join(pages).strip()}
+        )
+
     async def _maybe_repair_header(
         self,
         result: ExtractedDocument,
@@ -238,30 +448,9 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         if _REPAIR_TEXT_CACHE_KEY in repair_cache:
             header_text = repair_cache[_REPAIR_TEXT_CACHE_KEY]
         else:
-            images = raster_cache.get(self.header_repair.dpi)
-            if images:
-                page_one_image = images[0]
-            else:
-                # Never rasterised by this chain at all (Class A: its
-                # extractor read the text layer directly and rendered
-                # nothing) -- render page 1 ourselves. Deliberately NOT
-                # written into raster_cache: a partial, page-1-only entry
-                # there would make a later full-document OCR pass silently
-                # transcribe only page 1 and drop the rest of the document.
-                try:
-                    page_one_image = await self.header_repair.render_first_page(
-                        content
-                    )
-                except Exception:
-                    logger.warning(
-                        "Could not rasterise page 1 for header repair on "
-                        "[%s]; keeping its original text.",
-                        result.extractor,
-                        exc_info=True,
-                    )
-                    return result
-                if page_one_image is None:
-                    return result
+            page_one_image = await self._rasterise_page_one(content, raster_cache)
+            if page_one_image is None:
+                return result
 
             try:
                 header_text = await self.header_repair.transcribe_header_band(
@@ -417,7 +606,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
                 result.char_count,
                 result.quality_ratio,
             )
-            result = await self._maybe_repair_header(
+            result = await self._maybe_repair_page_one(
                 result, raster_cache, content, repair_cache
             )
 
@@ -445,7 +634,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
             )
             if best_repaired:
                 return best
-            return await self._maybe_repair_header(
+            return await self._maybe_repair_page_one(
                 best, raster_cache, content, repair_cache
             )
 

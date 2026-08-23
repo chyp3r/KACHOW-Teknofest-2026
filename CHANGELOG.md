@@ -2,6 +2,106 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.32.0] - 2026-08-24
+İki kullanıcı bildirimi: gerçek taranmış belgelerde `İmza sahibi`/`İmza
+sahibinin unvanı` neredeyse hep boş kalıyor ("imza isim üzerine geldiyse
+OpenDataLoader/Tesseract bulamıyor"), ve "Mevzuat ve Dayanaklar" listesinde
+aynı hüküm iki kez görünüyor. Ölçüm ikincisini doğrudan doğruladı; birincisi
+için tek bir nedenin yeterli açıklama olmadığı, **üç ayrı hata modunun**
+üst üste bindiği ortaya çıktı -- üretim yolunun (23 belgenin tamamı, gerçek
+`get_document_extractor()` zinciri) canlı ölçümü: **imza bulma 0/23 → 23/23,
+birebir doğru 22/23**.
+
+### Düzeltildi
+- **İmza arama yönü ters çevrildi (mod A).** `_parse_signature`
+  ([field_parser.py](backend/app/ai/compliance/field_parser.py)) imzayı
+  kapanış formülünden sonraki **son 4 satırda** arıyordu; gerçek
+  letterhead'lerde o satırlar antet footer'ı (adres/santral/web), imza
+  bloğu onun üstünde. Kapanış formülü bulunduğunda arama artık **ileri**
+  yapılıyor (`SIGNATURE_WINDOW_LINES=6`, yeni sabit,
+  [system.py](backend/app/core/constants/system.py)); formül yoksa (tutanak)
+  eski geriye-dönük davranış korunuyor. Tek başına: mükemmel metinde
+  imza kaybı 17/23 → 0/23.
+- **Kurum adı reddi tamamlandı.** Önceki turda eklenen `INSTITUTION_PATTERN`
+  reddi "Meclisi" son-ekini kapsamıyordu, o yüzden "Türkiye Büyük Millet
+  Meclisi" hâlâ kişi adı sanılıyordu (4 TBMM-şablonu belge). Yerel bir
+  tamamlayıcı desen eklendi (`Meclisi`/`Kurulu`/`Komisyonu`) --
+  `draft_verifier`'ın kendi deseni bilerek değiştirilmedi, `drafts`
+  suite'ini etkilememesi için.
+- **İmza okunamadığında tam sayfa vision'a yükseliyor (mod B).** Bazı
+  belgelerde imza mürekkebi basılı ismi tamamen yok ediyor veya bozuyor
+  (`OpenDataLoader`/`Tesseract`: satır kayboluyor ya da `"İF; BOZDAG ;"`
+  gibi bozuluyor) -- bu durumda ayrıştırıcı hiçbir pencereyle
+  kurtaramaz, çünkü metnin kendisi yok. `FallbackDocumentExtractor`'a
+  yeni `signature_probe` parametresi (`app.ai.compliance.has_signature`,
+  `header_field_probe` ile aynı enjeksiyon deseniyle) eklendi:
+  imza ayrıştırılamıyorsa sayfa 1, başlık-bandı kırpması yerine **tam
+  sayfa** `OllamaVisionExtractor.transcribe_page` (yeni metot) ile
+  yeniden okunuyor -- bu aynı zamanda başlığı da onardığı için iki
+  vision maliyeti üst üste ödenmiyor. Ölçüm: dört belgede
+  (CY-002/010/011/034/050) diğer motorların kaybettiği/bozduğu isim
+  4/4 kurtarıldı.
+  - **Bulunmuş, düzeltilmiş bir yan etki**: başlık-bandı kırpması
+    (`HEADER_REPAIR_LINE_COUNT=14`) kısa belgelerde (CY-003/023/028,
+    tek paragraflık kısa cevaplar) imza bloğunu de facto siliyordu --
+    imza kırpılan ilk 14 satırın içinde kalıyordu. `_maybe_repair_page_one`
+    artık başlık-bandı onarımından **sonra** da `signature_probe`'u tekrar
+    kontrol ediyor; kırpma imzayı yuttuysa tam sayfaya kaçıyor (bu üç
+    belgede iki vision maliyeti de ödeniyor, kasıtlı: yanlış "eksik bilgi"
+    raporlamaktan iyi).
+- **Kapanış formülü araması artık ilk eşleşmeyi alıyor, sonuncuyu değil
+  (mod C, en ince olanı).** Üretim `parse_labelled_fields`'ı **tüm belge
+  metnine** (sayfalar birleşik) uyguluyor, sayfa 1'e değil. Bir "Ek:"
+  ekinin kendi kapanış formülü olduğunda, "son eşleşmeyi al" mantığı
+  o ek sayfasına çapalanıp gerçek imzayı tamamen kaçırıyordu -- ölçülen
+  iki gerçek belgede (CY-002, CY-034). Tek sayfalı `clean_text`'in
+  hiçbirinde birden fazla eşleşme olmadığı doğrulandı, yani bu değişiklik
+  hiçbir tek-sayfalık davranışı bozmuyor.
+- **Mevzuat önerileri atfa göre tekilleştiriliyor.**
+  `suggest_mevzuat_node`'da hiçbir yerde yinelenen öneri elenmiyordu;
+  `_raw_citation_suggestions` de her getirilen alıntı için bir kayıt
+  üretiyordu -- `MEVZUAT_RESULT_LIMIT=3` ve parçalı bir korpusla aynı
+  kanundan birden fazla parça geldiğinde aynı satır iki-üç kez
+  görünüyordu. Yeni `_dedupe_suggestions`, katlanmış `mevzuat` değerine
+  göre ilk eşleşmeyi tutup sonrakileri düşürüyor; hem model çıktısına hem
+  `_raw_citation_suggestions`'a (dolayısıyla her iki degradasyon yoluna
+  da) uygulanıyor.
+
+### Eklendi
+- `app.ai.compliance.has_signature`: `imza_sahibi`'nin bir metinden
+  ayrıştırılıp ayrıştırılamadığını raporlayan küçük fonksiyon --
+  `count_header_fields`'ın deseniyle aynı, `signature_probe` olarak
+  enjekte ediliyor.
+- `OllamaVisionExtractor.transcribe_page`: `transcribe_header_band`'in
+  kırpmasız kardeşi.
+- 10 yeni birim testi: gerçek footer'lı imza bloğu, tutanak (kapanış
+  formülsüz) yolunun bozulmadığı, footer'daki ikincil ad/unvan çiftinin
+  imza sanılmadığı, bir ekin kendi kapanış formülünün gerçek imzayı
+  ele geçirmediği (`test_field_parser.py`); imza okunamadığında tam
+  sayfaya yükselme, imza okunabiliyorsa yalnızca başlık-bandı (maliyet
+  regresyon koruması), kırpmanın imzayı yuttuğu kısa-belge durumunun
+  tam sayfaya kaçtığı, `signature_probe` verilmediğinde eski davranışın
+  korunduğu (`test_extractor.py`); model çıktısında ve ham-atıf
+  fallback'inde aynı maddenin tekilleştiği (`test_document_analysis.py`).
+
+### Doğrulama
+- `docker compose exec backend pytest -q` 2555 test geçiyor (2 bilinen
+  önceden var olan MCP testi hariç), 10 yeni test dahil.
+- **Kararı taşıyan ölçüm**: 23 gerçek belge, tam üretim zinciri
+  (`get_document_extractor()`, vision dahil), üretimin gerçekte kullandığı
+  tam-metin yoluyla (`extracted.text`, sayfa 1 değil): `imza_sahibi`
+  bulunan **0/23 → 23/23**, birebir doğru (Türkçe karakter toleranslı)
+  **22/23** (tek fark bir OCR karakter kaybı, kozmetik).
+- `make eval`: `intents` (macro F1 **0.9520**, birebir aynı) ve `drafts`
+  (doğruluk **1.0000**, yanlış pozitif **0.0000**, birebir aynı) bu
+  çalışmadan etkilenmedi -- `INSTITUTION_PATTERN`'e dokunmama kararının
+  doğrulaması. `evrak`'ın `missing_field_false_positive_rate`'i
+  **0.1148**'de sabit kaldı -- **beklenen**, körlük değil: o suite'in
+  gerçek-belge altın kümesi `clean_text` (tek sayfa, footer'sız, eksiz)
+  kullanıyor, tam olarak bu turun düzelttiği üç hata modunun hiçbirini
+  (footer, ek, kırpma) yapısal olarak taşımıyor. Gerçek kanıt yukarıdaki
+  23/23 canlı ölçüm.
+
 ## [3.31.1] - 2026-08-24
 [3.31.0]'daki parser/merge düzeltmesinin canlı doğrulaması: aynı 4 gerçek
 belge (CY-009/CY-003/CY-010/CY-033) tam ardışık düzenden (`qwen3.5:9b`,
