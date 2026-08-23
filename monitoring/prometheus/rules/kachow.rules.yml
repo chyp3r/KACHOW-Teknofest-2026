@@ -1,0 +1,148 @@
+# Every rule below fires against a metric name/label set verified to
+# actually exist -- either read straight from app/observability/*.py's
+# collector definitions, or (for the job="kachow-backend"/"qdrant" labels)
+# confirmed against a live-running backend's own /metrics output.
+#
+# Deliberately does NOT include Postgres/Redis "up" alerts: neither has a
+# Prometheus exporter deployed anywhere in this repo (compose.yml,
+# compose.prod.yml, deploy/kubernetes/*.yaml) today, only qdrant natively
+# exposes /metrics. An `up{job="postgres"} == 0` rule against a job that
+# is never scraped would not error -- it would just silently never fire,
+# which is worse than no rule at all (see app.observability.ai_metrics.
+# ROUTER_SEMANTIC_AVAILABLE's own docstring on exactly this failure mode).
+# Deploying postgres_exporter/redis_exporter and adding their scrape
+# configs + alert rules is a real follow-up, not done here.
+groups:
+  - name: kachow.availability
+    rules:
+      - alert: KachowBackendDown
+        expr: up{job="kachow-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backend {{ $labels.instance }} 2 dakikadır erişilemez durumda."
+          runbook_url: "docs/deployment/runbook.md#kachowbackenddown"
+
+      - alert: KachowQdrantDown
+        expr: up{job="qdrant"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Qdrant {{ $labels.instance }} 2 dakikadır erişilemez durumda -- retrieval ve belge indeksleme çalışmaz."
+          runbook_url: "docs/deployment/runbook.md#kachowqdrantdown"
+
+      - alert: KachowHighErrorRate
+        expr: >
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          / sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HTTP isteklerinin %5'inden fazlası 5xx dönüyor (5 dakikalık ortalama)."
+          runbook_url: "docs/deployment/runbook.md#kachowhigherrorrate"
+
+  - name: kachow.ai_workflow
+    rules:
+      # kachow_node_budget_seconds (H1, backend/app/observability/
+      # ai_metrics.py::init_ai_metrics) is what makes the right-hand side
+      # of this comparison possible at all -- without it, this rule would
+      # have no budget to compare each node's observed p95 against.
+      - alert: KachowNodeBudgetExhaustion
+        expr: >
+          histogram_quantile(0.95,
+            sum by (node, le) (rate(kachow_node_duration_seconds_bucket{graph="node_budget"}[15m]))
+          ) > on (node) (0.8 * kachow_node_budget_seconds)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node '{{ $labels.node }}' p95 süresi kendi bütçesinin %80'ini aşıyor."
+          runbook_url: "docs/deployment/runbook.md#kachownodebudgetexhaustion"
+
+      - alert: KachowJudgeDegraded
+        expr: rate(kachow_judge_failures_total[15m]) > 0.1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Taslak kalite yargıcı (LLM judge) verdict yerine sık sık degrade ediyor."
+          runbook_url: "docs/deployment/runbook.md#kachowjudgedegraded"
+
+      # Ayrı bir alert, GuardrailJudgeFailures'ın kendisiyle aynı seviyede
+      # değil -- bu sayacın kendi docstring'i deterministik-yalnız
+      # verdict'e düşüşün güvenlik ilgili olduğunu söylüyor
+      # (backend/app/observability/ai_metrics.py::GUARDRAIL_JUDGE_FAILURES).
+      - alert: KachowGuardrailJudgeDegraded
+        expr: rate(kachow_guardrail_judge_failures_total[15m]) > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Guardrail nüans katmanı LLM yargıcı deterministik-yalnız verdict'e düşüyor -- güvenlik ilgili."
+          runbook_url: "docs/deployment/runbook.md#kachowguardrailjudgedegraded"
+
+      - alert: KachowRouterSemanticUnavailable
+        expr: kachow_router_semantic_available == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Niyet çözümleme ladder'ının semantik katmanı devre dışı -- prototip vektörleri bayat veya eksik. scripts/build_prototypes.py'yi çalıştırın."
+          runbook_url: "docs/deployment/runbook.md#kachowroutersemanticunavailable"
+
+      # 60, iki policy eşiğinin arasında: 50 = route edilemez, 70 =
+      # incelemesiz gönderilebilir (backend/app/ai/policy/schema.py).
+      - alert: KachowDraftQualityDrop
+        expr: >
+          histogram_quantile(0.5, sum by (le) (rate(kachow_draft_confidence_score_bucket[30m]))) < 60
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Taslak güven skorunun medyanı 30 dakikadır 60'ın altında."
+          runbook_url: "docs/deployment/runbook.md#kachowdraftqualitydrop"
+
+      - alert: KachowHITLBacklog
+        expr: >
+          sum(increase(kachow_hitl_interrupts_total[1h])) - sum(increase(kachow_hitl_resume_total[1h])) > 5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Son 1 saatte, cevaplanmadan biriken human-in-the-loop duraklaması sayısı 5'i aşıyor."
+          runbook_url: "docs/deployment/runbook.md#kachowhitlbacklog"
+
+      - alert: KachowStructuredRetryStorm
+        expr: rate(kachow_structured_retry_total[15m]) > 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Model, yapılandırılmış (JSON) çıktı üretmede sık sık ilk denemede başarısız oluyor."
+          runbook_url: "docs/deployment/runbook.md#kachowstructuredretrystorm"
+
+  - name: kachow.guardrail
+    rules:
+      - alert: KachowGuardrailBlockSpike
+        expr: sum(rate(kachow_company_guardrail_blocks_total[15m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Guardrail engelleme (block) oranı normalin üzerinde -- toplu bir yanlış-pozitif ya da gerçek bir kötüye kullanım denemesi olabilir."
+          runbook_url: "docs/deployment/runbook.md#kachowguardrailblockspike"
+
+  - name: kachow.llm_latency
+    rules:
+      - alert: KachowLLMCallLatencyHigh
+        expr: >
+          histogram_quantile(0.95, sum by (agent, le) (rate(kachow_llm_call_duration_seconds_bucket[15m]))) > 60
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent '{{ $labels.agent }}' için LLM çağrısı p95 süresi 60 saniyeyi aşıyor."
+          runbook_url: "docs/deployment/runbook.md#kachowllmcalllatencyhigh"

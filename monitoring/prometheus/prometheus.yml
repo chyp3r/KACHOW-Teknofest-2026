@@ -2,6 +2,18 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Only resolved in compose.prod.yml (kachow.rules.yml's own alerts fire and
+# are visible in this Prometheus's own UI regardless -- routing them
+# somewhere a human sees without opening that UI is what alertmanager
+# adds, and only compose.prod.yml runs it).
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+rule_files:
+  - /etc/prometheus/rules/kachow.rules.yml
+
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
@@ -11,3 +23,12 @@ scrape_configs:
     metrics_path: '/metrics'
     static_configs:
       - targets: ['backend:8000']
+
+  # qdrant/qdrant ships a native /metrics endpoint (verified: curl
+  # localhost:6333/metrics against the real dev instance) -- no exporter
+  # sidecar needed, unlike Postgres/Redis (see kachow.rules.yml's own
+  # top comment on why those two have no "up" alert yet).
+  - job_name: 'qdrant'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['qdrant:6333']
