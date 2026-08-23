@@ -2,6 +2,36 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.49.0] - 2026-08-23
+Workstream J5: coverage ratchet -- backend pytest-cov + frontend vitest v8
+(#267).
+
+- `backend/pyproject.toml` — `addopts`'a `--cov=app --cov-report=term-
+  missing:skip-covered` (her `pytest` çağrısında ölçüm+rapor, hiçbir zaman
+  başarısızlık değil). `Makefile`'ın `test:` hedefine `--cov-fail-under=86`
+  (ölçülen değer: 14561/16913 = 86.09%) — bilinçli olarak `pyproject.toml`
+  değil: global bir `fail_under` bir geliştiricinin tek dosyalık dar bir
+  koşusunu da etkiler ve o dilim asla %86'ya yaklaşmaz. `test-e2e`/
+  `test-all` hedeflerine `--no-cov` (marker-filtrelenmiş bir alt kümenin
+  kendi coverage'ı anlamsız bir sayı).
+- `frontend/vitest.config.ts` — `coverage: { provider: 'v8', thresholds:
+  {...} }` (ölçülen değer: Statements/Lines 79.82%, Branches 77.99%,
+  Functions 55.37%), opt-in (`npm run test:coverage`, `--coverage` bayrağı
+  olmadan Vitest zaten coverage toplamıyor) — `npm test` değişmeden kalır.
+- **Canlı doğrulandı:** `make test` → "Required test coverage of 86%
+  reached"; dar bir dosya koşusu (`pytest -q tests/unit/ai/
+  test_prompt_golden.py`) coverage gate'ine takılmadı (yalnızca bilgilendirici
+  rapor); `make test-e2e`/`make test-all` `--no-cov` ile sorunsuz geçti;
+  `npm run test:coverage` eşiklerle geçti, `npm test` (332 test) değişmeden
+  çalıştı.
+- Bir bind-mount tuhaflığı canlı yakalandı ve not edildi (kod değişikliği
+  gerektirmedi): uzun süredir çalışan `kachow_backend_dev` container'ı tek
+  dosyalık `pyproject.toml` bind mount'unun host'taki bir düzenlemeden sonra
+  bayatladığını gösterdi (`docker compose exec` 2275 byte okurken host 2811
+  byte'tı) -- `docker compose restart backend` ile çözüldü; `docker compose
+  run --rm` (yani `make test`'in kendisi) her zaman taze bir mount kullandığı
+  için bundan hiç etkilenmedi.
+
 ## [3.48.0] - 2026-08-23
 Workstream J4: prompt çıktı regresyonu -- golden file testi (#265).
 

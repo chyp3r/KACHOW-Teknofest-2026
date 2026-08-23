@@ -12,7 +12,7 @@ filterwarnings = [
     # (pytest_benchmark/plugin.py) -- nothing this repo's code does.
     "ignore::DeprecationWarning:pytest_benchmark.*",
 ]
-addopts = "-m 'not e2e and not performance'"
+addopts = "-m 'not e2e and not performance' --cov=app --cov-report=term-missing:skip-covered"
 markers = [
     # Deliberately NOT deselected by addopts above -- this repo has no
     # separate CI-only lane (see tests/_db_fixtures.py's own module
@@ -41,3 +41,10 @@ omit = ["app/main.py"]
 
 [tool.coverage.report]
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]
+# No `fail_under` here on purpose -- coverage.py/pytest-cov apply it to
+# *any* `pytest` invocation using this config, including a developer
+# running a single narrow test file during development (whose own,
+# tiny slice of `app` is nowhere near the full-suite number below). The
+# ratchet is enforced explicitly instead, only for the full default lane,
+# via `--cov-fail-under=86` on the `test` target in the root Makefile --
+# see that target's own comment for where the 86 came from.

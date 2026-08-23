@@ -83,22 +83,42 @@ restart-backend:
 # by the `integration`-marked tests -- `e2e` and `performance` are
 # deselected here by pyproject.toml's `addopts` (see `test-e2e`/`test-all`
 # below), and no other test in this lane touches real infra at all.
+# --cov-fail-under=86 (Workstream J5): the measured value the day this gate
+# was added (`pytest -q --cov=app --cov-report=term-missing:skip-covered`
+# -> TOTAL 86%, 14561/16913 statements = 86.09%), not an aspirational
+# target -- an aspirational number starts the ratchet red and gets it
+# disabled by the first person annoyed by it. Only ever moves up as
+# coverage genuinely improves; a PR that lowers this number is a PR that
+# removed tests, not one that should edit this number down to make CI
+# green again. Deliberately only here, not in pyproject.toml's
+# [tool.coverage.report] -- that file's addopts already turns on `--cov`
+# for every pytest invocation (including a developer running one narrow
+# test file, whose own tiny slice of `app` is nowhere near 86%), and a
+# global `fail_under` there would fail that unrelated case for a reason
+# that has nothing to do with what changed.
 test:
-	docker compose run --rm backend pytest -q
+	docker compose run --rm backend pytest -q --cov-fail-under=86
 
 # Real ASGI HTTP e2e tests (tests/e2e/, Workstream C): RLS through a real
 # Postgres, a real app lifespan (LangGraph checkpointer included), fake LLM/
 # embeddings clients only. Deselected from the default `test` lane by
 # pyproject.toml's `addopts` -- needs db/redis/qdrant up, unlike the fast
 # default lane, which needs no infra at all.
+# --no-cov: pyproject.toml's `addopts` turns coverage measurement on for
+# every pytest invocation by default (Workstream J5); a marker-filtered
+# subset like this one covers a different, much smaller slice of `app` on
+# purpose, so its own coverage percentage is not a meaningful number to
+# print here -- the real gate (`--cov-fail-under=86`) lives on `test`
+# above, against the full default lane.
 test-e2e:
-	docker compose run --rm backend pytest -q -m e2e
+	docker compose run --rm backend pytest -q -m e2e --no-cov
 
 # Everything: integration (already included in `test` above) plus e2e and
 # performance (both deselected by pyproject.toml's `addopts` otherwise).
-# Needs the full compose stack up, same as `test-e2e`.
+# Needs the full compose stack up, same as `test-e2e`. --no-cov: see
+# test-e2e's own comment.
 test-all:
-	docker compose run --rm backend pytest -q -m ""
+	docker compose run --rm backend pytest -q -m "" --no-cov
 
 # Deterministic evaluation of the non-LLM decision layer. Deliberately a
 # separate target rather than a test: the full run is a measurement, not a
