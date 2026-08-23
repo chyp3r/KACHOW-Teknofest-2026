@@ -1,5 +1,5 @@
 .PHONY: setup-db bootstrap up down logs test test-e2e test-all eval eval-baseline eval-llm eval-retrieval \
-	benchmark benchmark-baseline \
+	benchmark benchmark-baseline export-budgets perf-smoke perf-chat perf-document \
 	migrate seed shell psql restart-backend \
 	reset-db reset-checkpoints reset-cache reset-storage reset-document-qa reset
 
@@ -151,6 +151,26 @@ benchmark:
 	rm -f evaluation/benchmarks/*/*_latest.json
 	docker compose run --rm --no-deps backend pytest -q tests/performance/test_benchmarks.py -m performance --benchmark-only --benchmark-storage=file://evaluation/benchmarks --benchmark-save=latest
 	docker compose run --rm --no-deps backend python evaluation/benchmarks/report.py
+
+# Regenerates perf/k6/lib/budgets.json from the live BudgetPolicy -- run
+# after changing any node_seconds/workflow_ceiling_seconds value.
+export-budgets:
+	docker compose run --rm --no-deps backend python scripts/export_budgets.py
+
+# k6 load tests (Workstream E2, perf/k6/ -- see perf/k6/README.md for the
+# full rationale). Needs a real running stack (`make bootstrap`/`make up`)
+# with the default seeded accounts; --network host isn't supported the same
+# way on Docker Desktop (macOS/Windows), so host.docker.internal + an
+# explicit K6_BASE_URL is what's used instead, matching every contributor's
+# environment instead of only Linux's.
+perf-smoke:
+	docker run --rm -i -v "$(CURDIR)/perf/k6:/scripts" -e K6_BASE_URL=http://host.docker.internal:8000 grafana/k6 run /scripts/smoke.js
+
+perf-chat:
+	docker run --rm -i -v "$(CURDIR)/perf/k6:/scripts" -e K6_BASE_URL=http://host.docker.internal:8000 grafana/k6 run /scripts/chat_stream.js
+
+perf-document:
+	docker run --rm -i -v "$(CURDIR)/perf/k6:/scripts" -e K6_BASE_URL=http://host.docker.internal:8000 grafana/k6 run /scripts/document_upload.js
 
 # ---------------------------------------------------------------------------
 # Reset: wipes application data (companies/users/documents/drafts/chat/...)

@@ -16,6 +16,10 @@ eggs/
 .eggs/
 lib/
 lib64/
+# The Python-packaging `lib/` rule above matches at any depth, which was
+# silently swallowing perf/k6/lib/ (k6 test helpers, not a Python build
+# artifact) -- found the moment that directory was first committed.
+!perf/k6/lib/
 parts/
 sdist/
 var/

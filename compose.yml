@@ -19,6 +19,10 @@ services:
       # baked into the image so `make eval` picks up dataset edits without a
       # rebuild -- the gold sets are edited far more often than the code.
       - ./evaluation:/workspace/evaluation
+      # k6 load-test scripts and scripts/export_budgets.py's own output
+      # (perf/k6/lib/budgets.json) -- mounted so that script's write lands
+      # on the host to be committed, not lost with the container on --rm.
+      - ./perf:/workspace/perf
       # Uploaded documents and their analysis cache (settings.LOCAL_STORAGE_DIR,
       # "./storage_data" relative to /workspace). Without this mount it lives
       # only in the container's writable layer: every document's DB row
