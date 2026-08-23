@@ -45,13 +45,7 @@ services:
       - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-8192}
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
       - OLLAMA_FAST_MODEL=${OLLAMA_FAST_MODEL:-}
-      - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-leoipulsar/harrier-0.6b}
-      # OLLAMA_EMBEDDING_INSTRUCT_PREFIX deliberately NOT listed here --
-      # its real default (the harrier-oss-v1-0.6b instruction string) lives
-      # in app.core.config.Settings and would be near-unreadable escaped
-      # into a single-line compose env value (it embeds a literal
-      # newline). Override it in a root .env file only if you switch to a
-      # different embedding model that wants a different prefix (or none).
+      - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text:latest}
       # AI workflow timeouts (seconds). Raise these to test long-running
       # "deep" reasoning runs locally without them being cut off early.
       - AI_WORKFLOW_TIMEOUT_SECONDS=${AI_WORKFLOW_TIMEOUT_SECONDS:-480}

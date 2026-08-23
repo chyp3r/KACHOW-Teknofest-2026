@@ -41,11 +41,9 @@ by omission.
 
 import asyncio
 import re
-from contextlib import contextmanager, nullcontext
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
-from unittest.mock import patch
 
 from app.ai.documents.anchors import PAGE_SEPARATOR, build_page_map
 from app.ai.embeddings.chunking.base import BaseChunker
@@ -53,9 +51,7 @@ from app.ai.embeddings.chunking.recursive import RecursiveChunker
 from app.ai.embeddings.chunking.semantic import SemanticChunker
 from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.embeddings.service import EmbeddedChunk, EmbeddingService
-from app.ai.policy import get_policy
 from app.ai.retrieval.hybrid import HybridRetriever
-from app.ai.retrieval.reranker import CrossEncoderReranker
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from evaluation.harness.cached_embeddings import CachedEmbeddingsClient
 from evaluation.harness.in_memory_store import InMemoryHybridStore
@@ -319,26 +315,6 @@ def _corpus_stats(indexed: list[_IndexedChunk], cases: list[EvalCase]) -> Corpus
     )
 
 
-@contextmanager
-def _rerank_enabled(candidate_count: int):
-    """Monkeypatch the real, global ``RerankPolicy`` on for the duration of
-    one retrieval run, and build the real ``CrossEncoderReranker``.
-
-    Unlike the chunkers above (see this module's own docstring on why
-    those are built directly, never through ``get_policy()``), reranking
-    is a ``DraftPolicy.style_examples_enabled``-shaped production A/B
-    lever -- this suite exists specifically to answer whether
-    ``RerankPolicy.enabled`` should flip, so it measures the real
-    production wiring (``app.ai.retrieval.hybrid.HybridRetriever`` reading
-    ``get_policy().rerank``) rather than a parallel path of its own.
-    """
-    policy = get_policy()
-    enabled = replace(policy, rerank=replace(policy.rerank, enabled=True))
-    reranker = CrossEncoderReranker(model_name=policy.rerank.model_name)
-    with patch("app.ai.retrieval.hybrid.get_policy", return_value=enabled):
-        yield reranker, candidate_count
-
-
 def run(
     arm_name: str,
     *,
@@ -346,7 +322,6 @@ def run(
     corpus_dir: Optional[Path] = None,
     dataset_dir: Optional[Path] = None,
     cache_path: Optional[Path] = None,
-    rerank: bool = False,
 ) -> tuple[EvalRun, CorpusStats]:
     """Run the whole retrieval gold set under one chunking arm.
 
@@ -359,13 +334,6 @@ def run(
             ``evaluation.harness.runner.load_cases``).
         cache_path: Override for the embeddings cache file, for tests (see
             ``evaluation.harness.cached_embeddings.CachedEmbeddingsClient``).
-        rerank: When True, wires the real ``CrossEncoderReranker`` (see
-            ``app.ai.retrieval.reranker``) into the retriever with
-            ``RerankPolicy.enabled`` monkeypatched on for this run's
-            duration -- see ``_rerank_enabled``. Loads the real
-            ``sentence-transformers`` model on first use (network access
-            and ``sentence-transformers``/``torch`` installed required);
-            False (the default) never imports either.
 
     Returns:
         The completed run and the arm's corpus statistics.
@@ -385,51 +353,40 @@ def run(
     collection_name = f"retrieval_eval::{arm.name}"
     store = InMemoryHybridStore()
     store.load(collection_name, embedded_chunks)
+    retriever = HybridRetriever(
+        vector_store=store,
+        embeddings_client=embeddings_client,
+        collection_name=collection_name,
+    )
 
     by_document: dict[str, list[_IndexedChunk]] = {}
     for chunk in indexed_chunks:
         by_document.setdefault(chunk.document, []).append(chunk)
 
-    def _decide_with(retriever: HybridRetriever) -> Callable[[EvalCase], dict[str, Any]]:
-        def decide(case: EvalCase) -> dict[str, Any]:
-            query = case.payload.get("query", "")
-            document = case.payload.get("document", "")
-            spans = case.expected.get("answer_spans") or []
+    def decide(case: EvalCase) -> dict[str, Any]:
+        query = case.payload.get("query", "")
+        document = case.payload.get("document", "")
+        spans = case.expected.get("answer_spans") or []
 
-            results = asyncio.run(
-                retriever.retrieve(query, limit=k, filter_dict={"storage_path": document})
-            )
-            retrieved_ids = [doc.page_content for doc in results]
-            retrieved_scores = [doc.metadata.get("score", 0.0) for doc in results]
-            relevant_ids = [
-                chunk.text
-                for chunk in by_document.get(document, [])
-                if any(_contains_span(chunk.text, span) for span in spans)
-            ]
+        results = asyncio.run(
+            retriever.retrieve(query, limit=k, filter_dict={"storage_path": document})
+        )
+        retrieved_ids = [doc.page_content for doc in results]
+        retrieved_scores = [doc.metadata.get("score", 0.0) for doc in results]
+        relevant_ids = [
+            chunk.text
+            for chunk in by_document.get(document, [])
+            if any(_contains_span(chunk.text, span) for span in spans)
+        ]
 
-            return {
-                "retrieved_ids": retrieved_ids,
-                "relevant_ids": relevant_ids,
-                "top1_score": retrieved_scores[0] if retrieved_scores else 0.0,
-            }
-
-        return decide
+        return {
+            "retrieved_ids": retrieved_ids,
+            "relevant_ids": relevant_ids,
+            "top1_score": retrieved_scores[0] if retrieved_scores else 0.0,
+        }
 
     cases = load_cases(DATASET, dataset_dir=dataset_dir)
-
-    with _rerank_enabled(get_policy().rerank.candidate_count) if rerank else nullcontext(
-        (None, None)
-    ) as (reranker, _candidate_count):
-        retriever = HybridRetriever(
-            vector_store=store,
-            embeddings_client=embeddings_client,
-            collection_name=collection_name,
-            reranker=reranker,
-        )
-        run_result = run_cases(
-            f"{SUITE}::{arm_name}", DATASET, cases, _decide_with(retriever)
-        )
-
+    run_result = run_cases(f"{SUITE}::{arm_name}", DATASET, cases, decide)
     stats = _corpus_stats(indexed_chunks, cases)
     return run_result, stats
 

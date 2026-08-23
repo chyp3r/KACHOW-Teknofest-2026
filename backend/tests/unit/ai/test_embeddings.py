@@ -7,7 +7,6 @@ from app.ai.embeddings import (
     get_embeddings_client,
     EmbeddingService,
 )
-from app.core.config import settings
 from app.ai.embeddings.chunking import (
     CharacterChunker,
     RecursiveChunker,
@@ -39,49 +38,7 @@ async def test_ollama_embeddings_client(mock_ollama_class):
     assert docs_vectors == [[0.1, 0.2], [0.3, 0.4]]
     assert query_vector == [0.1, 0.2]
     mock_instance.aembed_documents.assert_called_once_with(["doc1", "doc2"])
-    # get_embeddings_client's own factory wires settings.
-    # OLLAMA_EMBEDDING_INSTRUCT_PREFIX into every query embedding (harrier-
-    # oss-v1-0.6b's own model card: query embeddings need it, document
-    # embeddings do not -- see OLLAMA_EMBEDDING_INSTRUCT_PREFIX's docstring).
-    mock_instance.aembed_query.assert_called_once_with(
-        settings.OLLAMA_EMBEDDING_INSTRUCT_PREFIX + "query"
-    )
-
-
-@pytest.mark.asyncio
-@patch("app.ai.embeddings.models.OllamaEmbeddings")
-async def test_instruct_prefix_applies_only_to_queries_not_documents(mock_ollama_class):
-    """OllamaEmbeddingsClient's own contract, independent of the factory
-    default above -- an explicit instruct_prefix must never leak into
-    embed_documents, which harrier-oss-v1-0.6b's model card says needs
-    none."""
-    mock_instance = MagicMock()
-    mock_instance.aembed_documents = AsyncMock(return_value=[[0.1, 0.2]])
-    mock_instance.aembed_query = AsyncMock(return_value=[0.1, 0.2])
-    mock_ollama_class.return_value = mock_instance
-
-    client = OllamaEmbeddingsClient(
-        base_url="http://localhost:11434", model="harrier", instruct_prefix="Instruct: x\nQuery: "
-    )
-
-    await client.embed_documents(["plain document text"])
-    await client.embed_query("plain query text")
-
-    mock_instance.aembed_documents.assert_called_once_with(["plain document text"])
-    mock_instance.aembed_query.assert_called_once_with("Instruct: x\nQuery: plain query text")
-
-
-@pytest.mark.asyncio
-@patch("app.ai.embeddings.models.OllamaEmbeddings")
-async def test_empty_instruct_prefix_reproduces_pre_existing_behaviour(mock_ollama_class):
-    mock_instance = MagicMock()
-    mock_instance.aembed_query = AsyncMock(return_value=[0.1])
-    mock_ollama_class.return_value = mock_instance
-
-    client = OllamaEmbeddingsClient(base_url="http://localhost:11434", model="m")
-    await client.embed_query("bare query")
-
-    mock_instance.aembed_query.assert_called_once_with("bare query")
+    mock_instance.aembed_query.assert_called_once_with("query")
 
 
 @pytest.mark.asyncio

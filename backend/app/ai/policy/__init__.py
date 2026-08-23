@@ -18,7 +18,6 @@ from app.ai.policy.schema import (
     IntentPolicy,
     MemoryPolicy,
     Policy,
-    RerankPolicy,
     RoutingPolicy,
     SemanticPolicy,
     VerificationPolicy,
@@ -48,15 +47,7 @@ from app.ai.policy.schema import (
 #: 3.0.0 goes stale. It carries no new production behaviour by itself; it
 #: only replaces four copy-pasted literals with one source of truth (see
 #: ChunkingPolicy's own docstring).
-#: 3.1.0: added RerankPolicy, enabled by default -- unlike ChunkingPolicy/
-#: judge_promotion_confidence above, this is NOT an inert additive default:
-#: HybridRetriever.retrieve now actually calls out to a second Ollama
-#: model (settings.OLLAMA_RERANKER_MODEL) for every query with a wider
-#: candidate pool than its own limit. Bumped as a real minor version for
-#: that reason. See RerankPolicy's own docstring for why this shipped
-#: enabled despite evaluation's retrieval suite (Workstream B) being too
-#: small a corpus to itself demonstrate the nDCG uplift.
-POLICY_VERSION = "3.1.0"
+POLICY_VERSION = "3.0.0"
 
 _POLICY = Policy(version=POLICY_VERSION)
 
@@ -83,7 +74,6 @@ __all__ = [
     "MemoryPolicy",
     "POLICY_VERSION",
     "Policy",
-    "RerankPolicy",
     "RoutingPolicy",
     "SemanticPolicy",
     "VerificationPolicy",
