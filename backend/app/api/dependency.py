@@ -488,6 +488,7 @@ async def get_planning_graph(
             get_company_profile,
             get_company_rules,
         )
+        from app.domains.documents.provider import get_cached_document
         from app.domains.transfers.provider import build_transfer_graph_provider
         from app.domains.units.provider import get_active_units_for_routing
         from app.infrastructure.checkpointing import get_checkpointer
@@ -515,6 +516,7 @@ async def get_planning_graph(
             # would just be a second place the flag has to be checked
             # correctly.
             transfer_provider=build_transfer_graph_provider(),
+            document_cache_provider=get_cached_document,
         )
     return _planning_graph
 

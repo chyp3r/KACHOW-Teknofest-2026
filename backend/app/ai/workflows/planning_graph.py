@@ -1,8 +1,6 @@
 import asyncio
 import hashlib
-import json
 import logging
-import os
 import time
 from typing import Annotated, Any, Awaitable, Callable, Optional, TypedDict
 from uuid import uuid4
@@ -404,30 +402,33 @@ def _requested_correspondence_type(classification: dict[str, Any]) -> str | None
     )
 
 
-def _load_cached_document(document_id: str | None) -> dict[str, Any]:
+async def _load_cached_document(
+    document_cache_provider: Callable[[str], Awaitable[dict[str, Any]]] | None,
+    document_id: str | None,
+) -> dict[str, Any]:
     """Read the cached analysis and extracted text for an uploaded document.
 
+    Delegates to ``document_cache_provider`` -- an injected callable (see
+    ``create_planning_graph``'s own docstring), never a direct
+    ``app.domains.documents`` import: this module must stay domain-free
+    (``backend/tests/unit/ai/test_ai_never_imports_domains.py`` enforces it
+    statically), the same reason ``units_provider``/``adapter_provider``
+    are plain callables rather than imported repositories.
+
     Args:
+        document_cache_provider: Async callable resolving a document's
+            cached analysis (see ``app.domains.documents.provider.
+            get_cached_document``), or None (a document-less graph build,
+            e.g. some test fixtures) -- degrades to "no cache", same as a
+            cache miss.
         document_id: The document's storage path, or None.
 
     Returns:
         The cache payload, or an empty dict when there is nothing to load.
     """
-    if not document_id:
+    if not document_id or document_cache_provider is None:
         return {}
-
-    cache_file = os.path.join(
-        settings.LOCAL_STORAGE_DIR, f"{document_id}_analysis.json"
-    )
-    if not os.path.exists(cache_file):
-        return {}
-
-    try:
-        with open(cache_file, "r", encoding="utf-8") as handle:
-            return json.load(handle)
-    except Exception:
-        logger.exception("Failed to read cached analysis for %s", document_id)
-        return {}
+    return await document_cache_provider(document_id)
 
 
 def _mevzuat_context(classification: dict[str, Any]) -> str:
@@ -666,6 +667,7 @@ def create_planning_graph(
     rules_provider: Any = None,
     transfer_provider: Any = None,
     units_provider: Any = None,
+    document_cache_provider: Callable[[str], Awaitable[dict[str, Any]]] | None = None,
 ):
     """Create and compile the master orchestration workflow.
 
@@ -740,6 +742,14 @@ def create_planning_graph(
             referring to one of the company's own departments as the
             sender, not a document's addressee. `None` degrades to no unit
             names at all, same as an absent `profile_provider`.
+        document_cache_provider: Optional async callable (see
+            `app.domains.documents.provider.get_cached_document`) resolving
+            an uploaded document's analysis cache for the planning step
+            (`state["cached_document"]`) -- injected rather than imported
+            for the same reason as `units_provider`/`adapter_provider` (see
+            `_load_cached_document`'s own docstring). `None` degrades to
+            "no cache" for every document_id, same as before this
+            parameter existed.
 
     Returns:
         The compiled LangGraph workflow.
@@ -897,7 +907,9 @@ def create_planning_graph(
             "plan_evidence": decision.evidence,
             "current_step_idx": 0,
             "_last_ran_step": None,
-            "cached_document": _load_cached_document(state.get("document_id")),
+            "cached_document": await _load_cached_document(
+                document_cache_provider, state.get("document_id")
+            ),
             "classification_result": {},
             "brief_result": {},
             "brief_gate_round": 0,
