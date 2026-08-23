@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from typing import Any, Sequence, TypedDict
 
 from langchain_core.runnables import RunnableConfig
@@ -58,7 +59,7 @@ from app.ai.workflows.writing_brief import format_writing_brief
 from app.ai.reasoning_levels import ReasoningLevelPreset, get_reasoning_level_preset
 from app.core.config import settings
 from app.core.enums.reasoning_level import ReasoningLevel
-from app.observability.ai_metrics import DRAFT_REVISIONS, DRAFT_SCORE, LLM_TOKENS
+from app.observability.ai_metrics import DRAFT_REVISIONS, DRAFT_SCORE, LLM_TOKENS, NODE_DURATION
 
 logger = logging.getLogger(__name__)
 
@@ -886,6 +887,7 @@ def create_draft_graph(
 
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
         budget = node_budget("retrieve_examples", preset.level)
+        started = time.perf_counter()
         try:
             async with asyncio.timeout(budget):
                 examples = await example_retriever.retrieve(
@@ -899,6 +901,9 @@ def create_draft_graph(
             # to []) -- the only thing this can catch is the asyncio.timeout
             # above firing. Caught broadly anyway so a future change to the
             # retriever can't turn an optional lookup into a failed draft.
+            NODE_DURATION.labels(
+                graph="node_budget", node="retrieve_examples", status="failed"
+            ).observe(time.perf_counter() - started)
             logger.exception("Style example retrieval failed; continuing without examples.")
             await emit_node_error(
                 config,
@@ -908,6 +913,9 @@ def create_draft_graph(
                 fatal=False,
             )
             return {"style_examples": []}
+        NODE_DURATION.labels(
+            graph="node_budget", node="retrieve_examples", status="completed"
+        ).observe(time.perf_counter() - started)
 
         style_examples = [
             {
@@ -981,6 +989,7 @@ def create_draft_graph(
 
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
         budget = node_budget("retrieve_source_chunks", preset.level)
+        started = time.perf_counter()
         try:
             async with asyncio.timeout(budget):
                 documents = await document_qa_retriever.retrieve(
@@ -995,6 +1004,9 @@ def create_draft_graph(
             # retrieve_examples_node is: a future change to the retriever
             # must never be able to turn an optional lookup into a failed
             # draft.
+            NODE_DURATION.labels(
+                graph="node_budget", node="retrieve_source_chunks", status="failed"
+            ).observe(time.perf_counter() - started)
             logger.exception(
                 "Source chunk retrieval failed; continuing with the summary alone."
             )
@@ -1006,6 +1018,9 @@ def create_draft_graph(
                 fatal=False,
             )
             return {"source_chunks": []}
+        NODE_DURATION.labels(
+            graph="node_budget", node="retrieve_source_chunks", status="completed"
+        ).observe(time.perf_counter() - started)
 
         trimmed = []
         used = 0
