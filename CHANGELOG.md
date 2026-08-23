@@ -2,6 +2,43 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.35.0] - 2026-08-23
+Workstream C3: gerçek e2e testleri (#239) -- `backend/tests/e2e/`'e C2'nin
+(#238) kurduğu fixture altyapısını tüketen 6 test dosyası ve 19 yeni test
+eklendi: `test_auth_and_tenancy_e2e.py` (refresh, logout+blacklist, şirketler
+arası belge erişimi 403), `test_document_upload_analysis_e2e.py` (gerçek
+`reportlab` PDF'i → analiz → Qdrant'ta `page`/`sensitivity_rank` payload'lı
+chunk'lar, yeniden indeksleme idempotency'si), `test_chat_stream_sse_e2e.py`
+(SSE kontratı: `session` ilk, `[DONE]` son), `test_chat_hitl_resume_e2e.py`
+(chat üzerinden taslak isteği `writing_brief` ve `missing_information`
+gate'lerinde duraklayıp gerçek Postgres checkpointer üzerinden resume ile
+tamamlanıyor), `test_draft_lifecycle_e2e.py` (doğrudan `POST /documents/draft`),
+`test_health_and_metrics_e2e.py` (`deep=true` probe'ları, `/metrics` kontratı).
+
+### Düzeltildi
+- `app.infrastructure.vectorstore.get_vector_store()`'un process-wide
+  singleton'ı artık `e2e_client` fixture'ında her testte sıfırlanıyor --
+  `AsyncQdrantClient`'ın event-loop'a bağlı transport'u, C2'nin LLM-client
+  singleton reset'inin kapsamadığı aynı sınıf bir hataya (bir testte
+  kurulan client'ın sonraki testin farklı event loop'unda kullanılmaya
+  çalışılması) yol açıyordu -- `test_deep_health_check_probes_postgres_
+  and_redis_and_qdrant`'ı başka bir e2e testiyle birlikte koşturunca ortaya
+  çıktı, izole çalıştırıldığında görünmüyordu.
+
+### Notlar
+HITL akışında deneysel olarak keşfedilen bir davranış: `interrupt()` resume
+sırasında kendinden önceki her şeyi yeniden çalıştırdığı için (bkz.
+`brief_gate_node`'un kendi yorumu), başarılı bir resume'un SSE akışı bile az
+önce cevaplanan duraklamanın "yankısı" olan bir `interrupt` event'i
+içerebiliyor. `test_chat_hitl_resume_e2e.py`'nin duraklama tespiti bunu
+hesaba katıyor: bir turdaki **son** `interrupt` event'i asıl durumu
+yansıtır, öncekiler yankı olabilir.
+
+Doğrulama: `docker compose run --rm backend pytest -q -m e2e` (24 passed,
+iki kez tekrar koşuldu, flake yok) ve `docker compose run --rm backend
+pytest -q` (2544 passed, 24 deselected -- varsayılan lane etkilenmedi).
+Qdrant'ta test sonrası sızıntı kontrolü yapıldı.
+
 ## [3.34.0] - 2026-08-22
 Workstream C2: gerçek HTTP e2e testleri için ASGI app fixture'ı (#237).
 `backend/tests/e2e/conftest.py`, `httpx.AsyncClient(transport=
