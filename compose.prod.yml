@@ -214,5 +214,24 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Not present in compose.yml at all -- dev relies on Prometheus/Grafana's
+  # own UI to see a firing alert (see kachow.rules.yml, Workstream H2);
+  # only a production stack routes alerts somewhere a human sees without
+  # opening that UI. prometheus.yml's `alerting:` block already points at
+  # `alertmanager:9093` unconditionally (harmless in dev -- Prometheus
+  # tolerates an unreachable alertmanager target, verified), so no
+  # override of the `prometheus` service is needed here, only this.
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: !reset null
+    volumes:
+      - ./monitoring/alertmanager:/etc/alertmanager
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   backend_storage_data:

@@ -2,6 +2,55 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.44.0] - 2026-08-23
+Workstream H: alerting (node budget gauge + Prometheus kuralları +
+Alertmanager) ve deploy dokümantasyonu (#257).
+
+- `backend/app/observability/ai_metrics.py::NODE_BUDGET_SECONDS` (H1) —
+  `BudgetPolicy.node_seconds`'ı `init_ai_metrics()`'te Prometheus'a set
+  eder, `kachow_node_duration_seconds` ile PromQL'de `join` edilebilir.
+- `monitoring/prometheus/rules/kachow.rules.yml` (H2, yeni) — 12 alert
+  kuralı, 4 grup (`availability`, `ai_workflow`, `guardrail`,
+  `llm_latency`).
+- `monitoring/prometheus/prometheus.yml` — `rule_files`, `alerting:`
+  bloğu, `qdrant` scrape config'i (native `/metrics`, doğrulandı).
+- `monitoring/alertmanager/alertmanager.yml` (yeni, placeholder
+  receiver'lı) + `compose.prod.yml`'e `alertmanager` servisi.
+- `docs/deployment/` (H3) — 12 dosya: README, prerequisites,
+  docker-compose, kubernetes, configuration, secrets, migrations,
+  observability, runbook, backup-restore, upgrade, hardening.
+- `backend/tests/e2e/test_health_and_metrics_e2e.py`'nin metrik-adı
+  kontrat listesi genişletildi (`kachow_node_budget_seconds`,
+  `kachow_judge_failures_total`, `kachow_draft_confidence_score`).
+- `backend/tests/unit/observability/test_ai_metrics.py` (yeni).
+
+### Düzeltildi
+- **`.env.prod` `.gitignore`'da değildi** — yalnızca `.env` pattern'i
+  vardı, farklı bir dosya adı olduğu için `.env.prod` eşleşmiyordu
+  (`git check-ignore -v .env.prod` boş dönüyordu). `docs/deployment/
+  secrets.md` yazılırken fark edildi, doğrulanıp düzeltildi.
+- `KachowNodeBudgetExhaustion` kuralının ilk hali Prometheus tarafından
+  canlı reddedildi: `histogram_quantile(...) > 0.8 * on(node)
+  group_left() kachow_node_budget_seconds` — skaler (`0.8`) ile vector
+  matching birlikte kullanılamıyor (`vector matching only allowed
+  between instant vectors`). `> on (node) (0.8 *
+  kachow_node_budget_seconds)` ile düzeltildi.
+- `KachowHITLBacklog` farklı label setlerine sahip iki Counter'ı
+  (`kachow_hitl_interrupts_total{kind}` vs `kachow_hitl_resume_
+  total{action}`) doğrudan çıkarıyordu; `sum()` ile önce label'lar
+  temizlendi.
+
+### Doğrulama
+`NODE_BUDGET_SECONDS`: çalışan dev backend'in `/metrics`'inde 9 node'un
+tümü için gerçek bütçe değerleri görüldü. Alert kuralları: `promtool
+check rules/config` ile syntax doğrulandı; **canlı bir alert'in tüm
+yaşam döngüsü** test edildi — `qdrant` durdurulup `KachowQdrantDown`'ın
+gerçekten `pending` → `firing` → (qdrant geri açılınca) `inactive`
+olduğu izlendi. `alertmanager.yml`: gerçek `prom/alertmanager` imajıyla
+`amtool check-config` + gerçek server boot (`/-/ready` → 200) ile
+doğrulandı. `docker compose exec backend pytest -q` → 2563 passed;
+`pytest -q -m e2e` → 24 passed.
+
 ## [3.43.0] - 2026-08-23
 Workstream G: Kubernetes manifest'leri, self-hosted production deployment için (#255).
 

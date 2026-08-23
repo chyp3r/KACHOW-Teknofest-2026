@@ -26,12 +26,15 @@ pytestmark = pytest.mark.e2e
 #: that list to keep in sync by hand.
 _EXPECTED_METRIC_NAMES = [
     "kachow_node_duration_seconds",
+    "kachow_node_budget_seconds",
     "kachow_llm_call_duration_seconds",
     "kachow_hitl_interrupts_total",
     "kachow_hitl_resume_total",
     "kachow_structured_retry_total",
+    "kachow_judge_failures_total",
     "kachow_guardrail_judge_failures_total",
     "kachow_router_semantic_available",
+    "kachow_draft_confidence_score",
     "kachow_company_requests_total",
     "kachow_company_guardrail_blocks_total",
     "kachow_artifact_transfers_total",
