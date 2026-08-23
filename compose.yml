@@ -71,6 +71,10 @@ services:
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-1234567890}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-1234567890}
       - LANGFUSE_HOST=http://langfuse:3000
+      # Infrastructure spans (HTTP/DB/Redis/outbound httpx) -- separate from
+      # Langfuse above, which only sees LLM calls. Empty this to verify the
+      # no-op degrade in app/observability/otel.py.
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
       # mevzuat-mcp is baked into the image (backend.Dockerfile) at this
       # exact path -- without pointing this at it, MEVZUAT_MCP_COMMAND falls
       # back to the bare "mevzuat-mcp", which is not on PATH, and every
@@ -86,6 +90,7 @@ services:
       - db
       - redis
       - qdrant
+      - jaeger
 
   # LoRA/PEFT training worker (Faz C3 Aşama 3, #191). Deliberately under a
   # profile, not a plain service: `docker compose up`/`up -d` never starts
@@ -213,6 +218,20 @@ services:
       - TELEMETRY_ENABLED=false
     depends_on:
       - db
+
+  # OTLP collector + UI for the infrastructure spans app/observability/otel.py
+  # emits (HTTP/DB/Redis/outbound httpx) -- deliberately separate from
+  # Langfuse, which only ever sees LLM calls. All-in-one exposes an OTLP/gRPC
+  # receiver on 4317 out of the box, no extra collector config needed for a
+  # single-service dev setup.
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    container_name: kachow_jaeger_dev
+    ports:
+      - "16686:16686"  # UI
+      - "4317:4317"    # OTLP gRPC receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
 
   frontend:
     build:

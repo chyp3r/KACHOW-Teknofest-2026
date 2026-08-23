@@ -35,6 +35,23 @@ rank-bm25==0.2.2
 prometheus-fastapi-instrumentator==8.1.0
 prometheus-client==0.26.0
 langfuse==4.14.2
+# Infrastructure-level tracing (HTTP/DB/Redis/outbound httpx spans) -- Langfuse
+# above only ever sees LLM calls routed through LangChain callbacks. See
+# app/observability/otel.py for the no-op-when-unconfigured wiring.
+# opentelemetry-api/sdk must be >=1.33.1 to satisfy langfuse's own
+# "opentelemetry-api<2,>=1.33.1" constraint above. Also must NOT be pinned
+# to an older contrib release (e.g. 0.54b1, verified live): fastapi==0.141.1
+# pins a rewritten starlette==1.6.0 whose Router objects that release's
+# opentelemetry-instrumentation-fastapi cannot read
+# ("'_IncludedRouter' object has no attribute 'path'", crashing every
+# request) -- 0.62b1 is the first line confirmed compatible against it.
+opentelemetry-api==1.41.1
+opentelemetry-sdk==1.41.1
+opentelemetry-exporter-otlp-proto-grpc==1.41.1
+opentelemetry-instrumentation-fastapi==0.62b1
+opentelemetry-instrumentation-sqlalchemy==0.62b1
+opentelemetry-instrumentation-httpx==0.62b1
+opentelemetry-instrumentation-redis==0.62b1
 mcp==1.29.0
 fastmcp==3.4.5
 bcrypt==5.0.0

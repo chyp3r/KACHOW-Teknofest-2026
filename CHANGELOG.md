@@ -2,6 +2,39 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.45.0] - 2026-08-23
+Workstream J1: OpenTelemetry ile altyapı seviyesi izleme (#259).
+
+- Yeni `backend/app/observability/otel.py::init_tracing` — HTTP
+  (FastAPI/ASGI), Postgres (SQLAlchemy, her iki motor: `kachow_app` ve
+  owner), Redis ve dışa giden `httpx` (Qdrant, Ollama) span'lerini OTLP/gRPC
+  üzerinden yayınlar. `OTEL_EXPORTER_OTLP_ENDPOINT` boşsa SDK hiç import
+  edilmeden no-op'a düşer — Langfuse'un (`app.observability.tracer`)
+  anahtar-yokken-degrade idiom'unun aynısı; eksik bir collector backend'in
+  açılmasını engellemez (doğrulandı: `OTEL_EXPORTER_OTLP_ENDPOINT=` ile
+  `python -c "from app.main import app"` sorunsuz döner).
+- `backend/app/core/config.py` — `OTEL_EXPORTER_OTLP_ENDPOINT: str | None`.
+- `compose.yml`/`compose.prod.yml` — `jaeger` servisi
+  (`jaegertracing/all-in-one`, OTLP/gRPC alıcı `4317`, UI `16686`),
+  `backend`'in `OTEL_EXPORTER_OTLP_ENDPOINT` varsayılanı ona işaret eder.
+- **Canlı doğrulandı, gerçek bir sürüm uyumsuzluğu bulundu ve düzeltildi:**
+  `opentelemetry-instrumentation-fastapi==0.54b1`,
+  `fastapi==0.141.1`'in taşıdığı yeniden yazılmış `starlette==1.6.0`'ın
+  router nesnelerini okuyamıyor (`'_IncludedRouter' object has no attribute
+  'path'`), her isteği 500'e düşürüyordu — `0.62b1`'e (ve eşlik eden
+  `opentelemetry-api/sdk==1.41.1`) yükseltilerek çözüldü.
+- **Canlı doğrulandı, ikinci bir gerçek bug bulundu ve düzeltildi:**
+  `SQLAlchemyInstrumentor().instrument(engine=...)` iki ayrı motor için iki
+  kez çağrılınca (bu instrumentor singleton, ikinci çağrı sessizce no-op
+  oluyor — "Attempting to instrument while already instrumented") yalnızca
+  ilk motor izleniyordu; tek çağrıda `engines=[...]` listesi verilerek
+  düzeltildi.
+- `docs/deployment/observability.md` — Langfuse vs OTel ayrımı: "hangi
+  soruyu hangisine sorarsınız" bölümü.
+- Jaeger UI'da (`http://localhost:16686`) `/api/v1/health?deep=true`
+  isteğinin `PING` (Redis), `SELECT` (Postgres) ve `GET`/`connect` (httpx)
+  span'lerini tek bir trace altında gösterdiği canlı doğrulandı.
+
 ## [3.44.0] - 2026-08-23
 Workstream H: alerting (node budget gauge + Prometheus kuralları +
 Alertmanager) ve deploy dokümantasyonu (#257).

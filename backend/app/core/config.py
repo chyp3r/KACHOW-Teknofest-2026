@@ -337,6 +337,14 @@ class Settings(BaseSettings):
     #: service, not baked in here, since it varies per company.
     GRAFANA_URL: str = "http://localhost:3001"
 
+    #: OTLP/gRPC collector endpoint (e.g. `http://jaeger:4317`) for
+    #: infrastructure-level tracing -- see `app/observability/otel.py`. `None`
+    #: (the default) disables OpenTelemetry entirely: no SDK import, no
+    #: exporter, no instrumentation patching. Complements, not replaces,
+    #: `LANGFUSE_*` above -- see docs/deployment/observability.md for which
+    #: question each answers.
+    OTEL_EXPORTER_OTLP_ENDPOINT: str | None = None
+
     # Semantic prototype vectors, written by scripts/build_prototypes.py.
     # Same relative-to-working-directory convention as the corpus below, which
     # is what makes it resolve identically in the container (/workspace) and in

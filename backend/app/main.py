@@ -23,6 +23,7 @@ from app.lifespan import lifespan
 from app.observability.ai_metrics import init_ai_metrics
 from app.observability.company_metrics import init_company_metrics
 from app.observability.metrics import init_metrics
+from app.observability.otel import init_tracing
 from app.observability.transfer_metrics import init_transfer_metrics
 from app.observability.logger import setup_logging
 
@@ -63,6 +64,10 @@ init_metrics(app)
 init_ai_metrics()
 init_company_metrics()
 init_transfer_metrics()
+
+# Infrastructure-level tracing (HTTP/DB/Redis/outbound-httpx spans) -- no-op
+# when OTEL_EXPORTER_OTLP_ENDPOINT is unset. See app/observability/otel.py.
+init_tracing(app)
 
 # Register Global Exception Handlers
 app.add_exception_handler(BaseAppException, app_exception_handler)
