@@ -30,6 +30,17 @@ NODE_DURATION = Histogram(
     "kachow_node_duration_seconds",
     "Wall-clock duration of a single workflow node execution.",
     ["graph", "node", "status"],
+    # prometheus_client's own default buckets top out at 10.0s -- far too
+    # coarse for this metric's actual subjects: BudgetPolicy.node_seconds
+    # ranges from 25s to 180s, and workflow_ceiling_seconds is 480s. Every
+    # real observation was silently collapsing into the +Inf bucket,
+    # discovered running evaluation/latency/budget_report.py (Workstream
+    # E3) against a live analyze run -- p50/p95/p99 all read back as the
+    # same floor value (10.0) regardless of the true duration. Spans from
+    # sub-second (the fastest node, retrieve_mevzuat, ~12ms) past the
+    # workflow ceiling, with enough resolution in the 25-180s band the
+    # actual budgets live in to make a p95-vs-budget comparison meaningful.
+    buckets=(0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 20.0, 30.0, 45.0, 60.0, 90.0, 120.0, 180.0, 240.0, 300.0, 480.0),
 )
 
 LLM_DURATION = Histogram(

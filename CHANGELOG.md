@@ -2,6 +2,42 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.39.0] - 2026-08-23
+Workstream E3: gözlenen node gecikmesi bütçe raporu (#247).
+
+- `evaluation/latency/budget_report.py` — çalışan backend'in gerçek
+  `/metrics`'inden okuyup `BudgetPolicy.node_seconds`'a karşı p50/p95/p99
+  raporluyor; p95 bütçenin %80'ini aşan node'u işaretliyor.
+- `backend/tests/performance/test_node_budget_coverage.py` — `node_seconds`
+  içindeki her anahtarın gerçekten bir `node_timeout`/`node_budget`
+  çağrısında kullanıldığını statik kaynak taramasıyla doğruluyor.
+- `Makefile`: `latency-report` hedefi.
+
+### Düzeltildi
+- `NODE_DURATION` Prometheus histogram'ının bucket sınırları 10.0s'de
+  tıkanıyordu (`prometheus_client`'ın varsayılanı) — `node_seconds`
+  bütçeleri 25-180s aralığındayken. Gerçek her gözlem sessizce `+Inf`
+  bucket'ına düşüyor, p50/p95/p99 tahmini gerçek süreden bağımsız hep aynı
+  "taban" değerini (10.0) okuyordu — canlı bir belge analizi koşturularak
+  keşfedildi. 480s'e kadar uzanan açık bucket sınırları eklendi.
+- `kachow_node_duration_seconds` yalnızca "plan step" (classification/
+  brief/draft/routing) granülaritesinde kaydediliyordu, `node_seconds`'ın 9
+  daha ince anahtarında hiç değil — rapor scriptinin okuyacağı veri yoktu.
+  `app/ai/workflows/resilience.py`'nin `node_timeout` decorator'ına (5
+  anahtar) ve `draft_graph.py`'nin iki inline retrieval node'una (2 anahtar)
+  `NODE_DURATION.observe(...)` eklendi — 9 anahtardan 7'si artık enstrümante.
+
+### Notlar
+`writer` ve `assist` bilinçli olarak enstrümante edilmedi — ikisi de bu
+PR'da riskli bulunan çok-yollu exception handling'e sahip. `evaluation/
+latency/README.md` bunu açıkça "no observations yet" olarak raporluyor.
+
+Doğrulama: canlı backend'e karşı gerçek bir belge yükleyip iki kez
+koşturuldu — bucket düzeltmesinden önce tüm p50/p95/p99'lar anlamsız
+"10.00" okuyordu, düzeltmeden sonra gerçek sayılar ortaya çıktı (`suggest_
+mevzuat` p95=59.25s, bütçe 70s → doğru "BÜTÇE TÜKENMEK ÜZERE"). `docker
+compose run --rm --no-deps backend pytest -q`: 2551 passed, 34 deselected.
+
 ## [3.38.0] - 2026-08-23
 Workstream E2: k6 yük testleri + `node_seconds` bütçe export'u (#245).
 

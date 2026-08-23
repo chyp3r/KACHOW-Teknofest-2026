@@ -1,5 +1,5 @@
 .PHONY: setup-db bootstrap up down logs test test-e2e test-all eval eval-baseline eval-llm eval-retrieval \
-	benchmark benchmark-baseline export-budgets perf-smoke perf-chat perf-document \
+	benchmark benchmark-baseline export-budgets perf-smoke perf-chat perf-document latency-report \
 	migrate seed shell psql restart-backend \
 	reset-db reset-checkpoints reset-cache reset-storage reset-document-qa reset
 
@@ -171,6 +171,13 @@ perf-chat:
 
 perf-document:
 	docker run --rm -i -v "$(CURDIR)/perf/k6:/scripts" -e K6_BASE_URL=http://host.docker.internal:8000 grafana/k6 run /scripts/document_upload.js
+
+# Observed per-node latency vs. BudgetPolicy.node_seconds (Workstream E3,
+# evaluation/latency/). Needs the `backend` service actually running with
+# real traffic behind it already (a perf-chat/perf-document run, or real
+# usage) -- there is nothing to report against a freshly booted backend.
+latency-report:
+	docker compose run --rm backend python -m evaluation.latency.budget_report
 
 # ---------------------------------------------------------------------------
 # Reset: wipes application data (companies/users/documents/drafts/chat/...)
