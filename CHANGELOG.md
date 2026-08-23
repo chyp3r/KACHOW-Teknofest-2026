@@ -2,6 +2,21 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.51.0] - 2026-08-24
+#272'nin ("feat(ai): cross-encoder reranker (J7) + embedding model ->
+harrier-oss-v1-0.6b") tam geri alınması (revert).
+
+- `CrossEncoderReranker`/`RerankPolicy`, `HybridRetriever`'ın opsiyonel
+  reranker collaborator'ı, `OLLAMA_EMBEDDING_MODEL`'in `leoipulsar/
+  harrier-0.6b`'ye geçişi ve bu geçişin tetiklediği tüm yeniden-üretilmiş
+  artefaktlar (semantik prototipler, router füzyon ağırlıkları, eval
+  embedding cache'leri, stil örnekleri koleksiyonu) `nomic-embed-text` +
+  reranker'sız duruma döndü. `POLICY_VERSION` `3.1.0` -> `3.0.0`'a düşer.
+- `git revert -m 1` ile tek commit, `81f11cf`'in tersi. Gerekçe kod
+  incelemesinden değil, ürün kararından geliyor -- bu PR'ın kendisi neden
+  geri alındığını açıklamıyor, yalnızca hangi durumun eski hale
+  döndürüldüğünü kaydediyor.
+
 ## [3.50.0] - 2026-08-23
 Workstream J6: OpenAPI şema snapshot testi (#269).
 
