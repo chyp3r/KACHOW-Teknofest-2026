@@ -2,6 +2,40 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.37.0] - 2026-08-23
+Workstream E1: performans testleri (#243). `backend/tests/performance/`
+artık boş değil -- iki katman eklendi:
+
+- **`test_operation_counts.py`** (donanımdan bağımsız, varsayılan `make
+  test` lane'inde de koşuyor): temiz bir taslak koşusunun LLM'i tam bir kez
+  çağırdığı, Qdrant'a tam iki gidiş-dönüş yaptığı (`retrieve_examples` +
+  `retrieve_source_chunks`), bir belgenin chunk'larının tek bir batch
+  `embed_documents` çağrısında embed edildiği, ve sabit 50KB girdi için
+  `RecursiveChunker`'ın chunk sayısının (qa: 42, mevzuat: 62) pinlendiği 4
+  test.
+- **`test_benchmarks.py`** (`pytest-benchmark`, `performance` marker'lı,
+  `-m performance` ile opt-in): `SparseBM25Encoder`, `reciprocal_rank_
+  fusion`, `build_page_map`, `RecursiveChunker.split_text`, `verify_draft`,
+  `confidence_rules.score_findings`, `PrototypeMatcher.match`, `find_pii`,
+  `make_serializable` için 10 wall-clock benchmark.
+
+`evaluation/benchmarks/report.py` + `make benchmark-baseline`/`make
+benchmark` -- committed baseline'a karşı yalnızca >3x regresyonda kırılan
+karşılaştırma.
+
+### Notlar
+Planın önerdiği `pytest-benchmark --benchmark-compare-fail=mean:200%`
+mekanizması kullanılamadı -- `pytest_benchmark.utils.parse_compare_fail`'in
+kendi regex'i yüzde değerini ≤99 ile sınırlıyor, ">200%" ifade edilemiyor.
+Bunun yerine `evaluation/benchmarks/report.py` aynı JSON şemasını okuyup
+oranı doğrudan hesaplıyor (`evaluation/generate_report.py`'nin baseline-diff
+idiomunun aynısı). `pytest_benchmark`'ın kendi `datetime.utcnow()` (deprecated)
+kullanımı için `filterwarnings`'e bir istisna eklendi.
+
+Doğrulama: sahte bir regresyon enjekte edilip `report.py`'nin `exit 1` ile
+kırıldığı doğrulandı; `docker compose run --rm backend pytest -q` 2548
+passed/34 deselected (önceki 2544'e +4 operation-count testi).
+
 ## [3.36.0] - 2026-08-23
 Workstream C4: marker stratejisi (#241). `backend/pyproject.toml`'a
 `performance` (Workstream E'nin henüz yazılmamış testleri için) ve

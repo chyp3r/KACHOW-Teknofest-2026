@@ -7,6 +7,10 @@ filterwarnings = [
     "error::DeprecationWarning",
     "ignore::DeprecationWarning:langchain.*",
     "ignore::DeprecationWarning:pydantic.*",
+    # pytest_benchmark 4.0.0's own JSON-report writer calls the
+    # now-deprecated datetime.datetime.utcnow() internally
+    # (pytest_benchmark/plugin.py) -- nothing this repo's code does.
+    "ignore::DeprecationWarning:pytest_benchmark.*",
 ]
 addopts = "-m 'not e2e and not performance'"
 markers = [

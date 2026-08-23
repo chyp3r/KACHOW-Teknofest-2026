@@ -1,4 +1,5 @@
 .PHONY: setup-db bootstrap up down logs test test-e2e test-all eval eval-baseline eval-llm eval-retrieval \
+	benchmark benchmark-baseline \
 	migrate seed shell psql restart-backend \
 	reset-db reset-checkpoints reset-cache reset-storage reset-document-qa reset
 
@@ -133,6 +134,23 @@ eval-llm:
 #   docker compose run --rm --no-deps backend python scripts/build_eval_embeddings.py --target retrieval
 eval-retrieval:
 	docker compose run --rm --no-deps backend python -m evaluation.generate_report --suite retrieval --label retrieval
+
+# Wall-clock micro-benchmarks (Workstream E1, backend/tests/performance/
+# test_benchmarks.py) -- pure-CPU, I/O-free functions only, --no-deps like
+# every other eval/benchmark target. One-time setup: run this to record the
+# numbers this container's own hardware produces today, then commit the
+# result (evaluation/benchmarks/*/*_baseline.json).
+benchmark-baseline:
+	docker compose run --rm --no-deps backend pytest -q tests/performance/test_benchmarks.py -m performance --benchmark-only --benchmark-storage=file://evaluation/benchmarks --benchmark-save=baseline
+
+# Re-runs the benchmarks and fails only on a >3x regression against the
+# committed baseline -- see evaluation/benchmarks/report.py's own docstring
+# for why this isn't pytest-benchmark's built-in --benchmark-compare-fail
+# (its percentage syntax caps at 99%, so ">200%" can't be expressed with it).
+benchmark:
+	rm -f evaluation/benchmarks/*/*_latest.json
+	docker compose run --rm --no-deps backend pytest -q tests/performance/test_benchmarks.py -m performance --benchmark-only --benchmark-storage=file://evaluation/benchmarks --benchmark-save=latest
+	docker compose run --rm --no-deps backend python evaluation/benchmarks/report.py
 
 # ---------------------------------------------------------------------------
 # Reset: wipes application data (companies/users/documents/drafts/chat/...)
