@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Optional
 from langchain_core.documents import Document
 
 from app.ai.embeddings.models import BaseEmbeddingsClient
+from app.ai.policy import get_policy
+from app.ai.retrieval.reranker import BaseReranker
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.infrastructure.vectorstore.base import BaseVectorStore
 
@@ -23,6 +25,7 @@ class HybridRetriever:
         embeddings_client: BaseEmbeddingsClient,
         collection_name: str = "documents",
         sparse_vocab_path: str = "",
+        reranker: Optional[BaseReranker] = None,
     ):
         """Initialize Native Hybrid Retriever.
 
@@ -31,11 +34,17 @@ class HybridRetriever:
             embeddings_client: BaseEmbeddingsClient to generate query vector.
             collection_name: Qdrant collection name to search.
             sparse_vocab_path: Path to the fitted sparse vocab JSON file.
+            reranker: Optional cross-encoder second pass (see
+                ``app.ai.retrieval.reranker``, ``RerankPolicy``). ``None``
+                (the default) reproduces this class's exact pre-reranker
+                behaviour -- ``retrieve`` never widens its Qdrant fetch
+                past ``limit`` and returns the RRF-fused order unchanged.
         """
         self.vector_store = vector_store
         self.embeddings_client = embeddings_client
         self.collection_name = collection_name
         self.sparse_vocab_path = sparse_vocab_path
+        self.reranker = reranker
 
         self.sparse_encoder = SparseBM25Encoder()
         if sparse_vocab_path and os.path.exists(sparse_vocab_path):
@@ -69,6 +78,18 @@ class HybridRetriever:
             return []
 
         try:
+            # 0. Reranking (if wired) needs a wider candidate pool than
+            # `limit` to actually have something to reorder -- fetch
+            # `RerankPolicy.candidate_count` from Qdrant instead, and trim
+            # to `limit` only after the rerank pass below. `max(...)`
+            # guards a caller passing a `limit` larger than the pool size.
+            policy = get_policy().rerank
+            fetch_limit = (
+                max(limit, policy.candidate_count)
+                if self.reranker is not None and policy.enabled
+                else limit
+            )
+
             # 1. Embed dense query
             query_vector = await self.embeddings_client.embed_query(query)
 
@@ -81,7 +102,7 @@ class HybridRetriever:
                 query_vector=query_vector,
                 sparse_indices=sparse_indices,
                 sparse_values=sparse_values,
-                limit=limit,
+                limit=fetch_limit,
                 filter_dict=filter_dict,
             )
 
@@ -99,6 +120,18 @@ class HybridRetriever:
             logger.info(
                 f"HybridRetriever found {len(documents)} results natively from Qdrant."
             )
+
+            # 5. Cross-encoder second pass, if enabled -- reorders the wider
+            # candidate pool by (query, candidate) relevance and trims to
+            # the caller's actual `limit`. Never raises: CrossEncoderReranker.
+            # rerank() degrades to the fused (pre-rerank) order on any
+            # failure, so a reranker outage narrows this back to `limit`
+            # exactly as if `fetch_limit == limit` had been requested.
+            if self.reranker is not None and policy.enabled and len(documents) > limit:
+                documents = await self.reranker.rerank(query, documents, top_k=limit)
+            else:
+                documents = documents[:limit]
+
             return documents
 
         except Exception as e:

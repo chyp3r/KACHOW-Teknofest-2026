@@ -131,3 +131,27 @@ Chunk karşılaştırması bu suite'in ilk kullanım alanı, tek kullanım alan�
 Bir cross-encoder reranker eklenirse (bkz. proje planındaki J7), aynı suite
 onun nDCG/MRR üzerindeki etkisini ölçecek alettir — kabul kriteri baseline'a
 göre anlamlı bir artış olmalı.
+
+## J7: reranker ölçümü ve komitli gold set'in tavan etkisi
+
+`retrieval_suite.run(arm, rerank=True)` (bkz. `_rerank_enabled`) gerçek
+`RerankPolicy`'yi ve gerçek `CrossEncoderReranker`'ı devreye alarak aynı
+gold set üzerinde `rerank=False`'a karşı koşulabilir. Canlı ölçüldü:
+**bu suite'in komitli gold set'i (6 belge) reranker'ın etkisini ölçemiyor**
+— baseline kolunda (`recursive-1500-300`) her belge tam olarak **1 chunk**'a
+düşüyor (belgeler kısa, chunk boyutu 1500), yani `HybridRetriever.retrieve`
+`limit`'ten (6) daha geniş bir aday havuzu hiç göremiyor ve reranker asla
+tetiklenmiyor. nDCG@6 zaten 1.0 (tavan) olduğundan matematiksel olarak da
+artış göstermesi mümkün değil.
+
+Bu bir "reranker işe yaramıyor" bulgusu **değil** — `cross-encoder/
+mmarco-mMiniLMv2-L12-H384-v1` modeli gerçek bir Türkçe sorgu/pasaj setinde
+canlı doğrulandı (bkz. `backend/tests/unit/ai/test_reranker.py`'nin kendi
+docstring'i: ilgili pasaj 5.96, ilgisiz ikisi -6.43/-4.90 skorladı — doğru
+ayrışma). Reranker'ın gerçek etki alanı, aday havuzunun `limit`'ten daha
+geniş olduğu yerler: `mevzuat` (852 chunk, belge-bazlı filtre yok) ve stil
+örnekleri (429 örnek, `resmi_yazisma_ornek`) korpusları — bu suite'in
+kapsamadığı, henüz etiketli bir gold set'i olmayan iki yer. `RerankPolicy.
+enabled=True` varsayılanı yine de ürün kararıyla verildi (bkz. o alanın
+kendi docstring'i); bu suite'in kanıtlayamaması bir eksiklik olarak
+kaydedildi, karar bunun üzerine değil.

@@ -49,7 +49,11 @@ services:
       - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-8192}
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
       - OLLAMA_FAST_MODEL=${OLLAMA_FAST_MODEL:-}
-      - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text:latest}
+      - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-leoipulsar/harrier-0.6b}
+      # OLLAMA_EMBEDDING_INSTRUCT_PREFIX -- see compose.yml's own comment on
+      # why this is not listed here (its real default lives in
+      # app.core.config.Settings, unrepresentable as a clean single-line
+      # compose value).
       - AI_WORKFLOW_TIMEOUT_SECONDS=${AI_WORKFLOW_TIMEOUT_SECONDS:-480}
       - REVISION_RERETRIEVAL_TIMEOUT_SECONDS=${REVISION_RERETRIEVAL_TIMEOUT_SECONDS:-10}
       - DRAFT_JUDGE_TIMEOUT_SECONDS=${DRAFT_JUDGE_TIMEOUT_SECONDS:-30}

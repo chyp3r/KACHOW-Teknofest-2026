@@ -26,15 +26,24 @@ class BaseEmbeddingsClient(ABC):
 class OllamaEmbeddingsClient(BaseEmbeddingsClient):
     """Ollama implementation for embedding generation."""
 
-    def __init__(self, base_url: str, model: str):
+    def __init__(self, base_url: str, model: str, instruct_prefix: str = ""):
         """Initialize Ollama Embeddings client.
 
         Args:
             base_url: The URL where the Ollama service is running.
             model: The name of the embedding model (e.g. "nomic-embed-text:latest").
+            instruct_prefix: Prepended to every ``embed_query`` call only,
+                never ``embed_documents`` -- some models (e.g.
+                harrier-oss-v1-0.6b, see ``settings.
+                OLLAMA_EMBEDDING_INSTRUCT_PREFIX``'s own docstring) are
+                trained with an asymmetric query/passage instruction
+                format and measurably degrade without it. Empty (the
+                default) reproduces this class's exact pre-existing
+                behaviour for a model that wants no prefix at all.
         """
         self.base_url = base_url
         self.model_name = model
+        self.instruct_prefix = instruct_prefix
         self._embeddings = OllamaEmbeddings(base_url=base_url, model=model)
         logger.info(
             f"Initialized OllamaEmbeddingsClient with base_url={base_url}, model={model}"
@@ -54,7 +63,7 @@ class OllamaEmbeddingsClient(BaseEmbeddingsClient):
     async def embed_query(self, text: str) -> List[float]:
         """Generate embedding for query asynchronously."""
         try:
-            return await self._embeddings.aembed_query(text)
+            return await self._embeddings.aembed_query(self.instruct_prefix + text)
         except Exception as e:
             logger.error(
                 f"OllamaEmbeddingsClient failed to embed query: {e}",
@@ -80,6 +89,10 @@ def get_embeddings_client(
     if provider_lower == "ollama":
         url = base_url or settings.OLLAMA_BASE_URL
         model_name = model or settings.OLLAMA_EMBEDDING_MODEL
-        return OllamaEmbeddingsClient(base_url=url, model=model_name)
+        return OllamaEmbeddingsClient(
+            base_url=url,
+            model=model_name,
+            instruct_prefix=settings.OLLAMA_EMBEDDING_INSTRUCT_PREFIX,
+        )
     else:
         raise ValueError(f"Unsupported embeddings provider: {provider}")
