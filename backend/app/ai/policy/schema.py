@@ -458,6 +458,66 @@ class ChunkingPolicy:
 
 
 @dataclass(frozen=True)
+class RerankPolicy:
+    """Cross-encoder second-pass reranking over ``HybridRetriever``'s
+    RRF-fused hits (``app.ai.retrieval.reranker``).
+
+    Nothing upstream of this policy actually judges query-against-candidate
+    relevance jointly -- RRF only ever combines two independent rankings
+    (dense cosine, sparse BM25). The failure this exists to catch: the
+    right chunk was retrieved, but ranked outside the writer's top-``limit``
+    cut (``DraftPolicy.source_chunk_count``/``style_example_count``) purely
+    because fusion, not relevance, put it there.
+
+    Scored by ``app.ai.retrieval.reranker.CrossEncoderReranker`` -- an
+    in-process ``sentence-transformers`` model, not another Ollama model:
+    three separate Ollama-hosted Qwen3-Reranker-0.6B GGUF uploads were
+    tried first and each failed for a distinct, reproducible reason (one
+    whose conversion Ollama's backend cannot load at all, two others that
+    load but return degenerate, byte-identical logprobs regardless of
+    prompt) -- see ``CrossEncoderReranker``'s own docstring for the full
+    account.
+
+    Attributes:
+        enabled: Master switch, same A/B and emergency-rollback shape as
+            ``DraftPolicy.style_examples_enabled``/``source_chunks_enabled``.
+            ``evaluation``'s retrieval suite (Workstream B)'s own committed
+            gold set is too small to demonstrate a measurable nDCG@k
+            uplift from reranking on its own (each of its 6 documents
+            chunks down to exactly 1 chunk under the production 1500/300
+            policy, so there is no wider candidate pool for any reranker
+            to reorder there -- see ``docs/evaluation/retrieval.md``) --
+            this is a real corpus-size ceiling, not a verdict against
+            reranking itself, which does have real effect where a query
+            actually has more than ``limit`` candidates (the ``mevzuat``/
+            style-example corpora, both far larger and never per-document
+            filtered). Enabled by product decision even though the B
+            suite could not itself prove the uplift; latency stays
+            observable via ``BudgetPolicy.node_seconds[
+            "retrieve_source_chunks"]``'s 25s ceiling and
+            ``KachowNodeBudgetExhaustion`` (H2) regardless.
+        candidate_count: Hits fetched from Qdrant before reranking narrows
+            them down to the caller's own ``limit`` -- must exceed every
+            caller's own ``limit`` (``DraftPolicy.source_chunk_count`` = 6,
+            ``style_example_count`` = 2) by a wide enough margin that
+            reranking has a real pool to reorder rather than just
+            re-sorting the same handful fusion already picked.
+        model_name: A small, multilingual (Turkish-covering)
+            ``sentence-transformers`` cross-encoder id. Multilingual rather
+            than Turkish-only or English-only: the corpus this reranks
+            (official Turkish correspondence, `mevzuat`) is Turkish, but a
+            model trained only on Turkish pairs is a far narrower research
+            artifact than a multilingual one fine-tuned on mMARCO (which
+            includes Turkish among its language set). Live-verified during
+            development on real Turkish official-correspondence text.
+    """
+
+    enabled: bool = True
+    candidate_count: int = 20
+    model_name: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+
+
+@dataclass(frozen=True)
 class Policy:
     """The complete parameter surface of the deterministic decision layer."""
 
@@ -471,6 +531,7 @@ class Policy:
     guardrail: GuardrailPolicy = field(default_factory=GuardrailPolicy)
     draft: DraftPolicy = field(default_factory=DraftPolicy)
     chunking: ChunkingPolicy = field(default_factory=ChunkingPolicy)
+    rerank: RerankPolicy = field(default_factory=RerankPolicy)
 
     def check_invariants(self) -> None:
         """Assert the relationships between parameters that must always hold.
@@ -590,4 +651,17 @@ class Policy:
                 raise ValueError(
                     f"{overlap_name} ({overlap}) must be smaller than "
                     f"{size_name} ({size})"
+                )
+
+        if self.rerank.candidate_count <= 0:
+            raise ValueError("rerank.candidate_count must be positive")
+        for name, caller_limit in (
+            ("draft.source_chunk_count", self.draft.source_chunk_count),
+            ("draft.style_example_count", self.draft.style_example_count),
+        ):
+            if self.rerank.candidate_count <= caller_limit:
+                raise ValueError(
+                    f"rerank.candidate_count ({self.rerank.candidate_count}) must "
+                    f"exceed {name} ({caller_limit}) -- otherwise reranking has no "
+                    "wider pool to reorder than the caller's own cut already is"
                 )

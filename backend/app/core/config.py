@@ -289,7 +289,32 @@ class Settings(BaseSettings):
 
     # Embedding Configuration
     EMBEDDING_PROVIDER: str = "ollama"
-    OLLAMA_EMBEDDING_MODEL: str = "nomic-embed-text:latest"
+    #: microsoft/harrier-oss-v1-0.6b (MIT), pulled via Ollama as
+    #: leoipulsar/harrier-0.6b -- 1024-dim, 94-language, decoder-only.
+    #: Switching this (or OLLAMA_EMBEDDING_INSTRUCT_PREFIX below) changes
+    #: the dimension/semantics of every existing vector: every Qdrant
+    #: collection (document_qa, mevzuat, resmi_yazisma_ornek) and every
+    #: committed prototype/eval-cache JSON was built against whatever
+    #: model produced it and must be rebuilt from scratch after a change
+    #: here -- see docs/deployment/migrations.md.
+    OLLAMA_EMBEDDING_MODEL: str = "leoipulsar/harrier-0.6b"
+    #: harrier-oss-v1-0.6b's own model card: query embeddings need a task
+    #: instruction prefix, document/passage embeddings do not -- "this is
+    #: how the model is trained, otherwise you will see a performance
+    #: degradation". Applied only to embed_query, never embed_documents
+    #: (see OllamaEmbeddingsClient). Empty disables the prefix entirely,
+    #: for a future embedding model (e.g. nomic-embed-text) that does not
+    #: want one.
+    OLLAMA_EMBEDDING_INSTRUCT_PREFIX: str = (
+        "Instruct: Given a search query, retrieve relevant passages that "
+        "answer the query\nQuery: "
+    )
+    #: The reranker (app.ai.retrieval.reranker.CrossEncoderReranker,
+    #: RerankPolicy.model_name) is an in-process sentence-transformers
+    #: model, not another Ollama model -- see that class's own docstring
+    #: for why three separate Ollama-hosted reranker uploads were tried
+    #: and rejected first. No OLLAMA_RERANKER_MODEL setting exists here on
+    #: purpose.
 
     # Redis Configuration
     REDIS_URL: str = "redis://localhost:6379/0"

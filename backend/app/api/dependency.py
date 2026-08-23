@@ -9,9 +9,11 @@ from app.ai.agents.summarizer import SummarizerAgent
 from app.ai.embeddings.models import get_embeddings_client
 from app.ai.embeddings.service import EmbeddingService
 from app.ai.llms import get_fast_llm_client, get_llm_client
+from app.ai.policy import get_policy
 from app.ai.retrieval.examples import ExampleRetriever
 from app.ai.retrieval.hybrid import HybridRetriever
 from app.ai.retrieval.mcp_mevzuat import FallbackMevzuatRetriever, McpMevzuatRetriever
+from app.ai.retrieval.reranker import BaseReranker, CrossEncoderReranker
 from app.ai.workflows.document_analysis_graph import create_document_analysis_graph
 from app.ai.workflows.draft_graph import create_draft_graph
 from app.ai.workflows.routing_graph import create_routing_graph
@@ -152,6 +154,27 @@ _mevzuat_retriever: Optional[HybridRetriever] = None
 _document_analysis_mevzuat_retriever: Any = None
 _document_analysis_graph: Any = None
 
+_reranker: Optional[BaseReranker] = None
+
+
+def get_reranker() -> Optional[BaseReranker]:
+    """Build the shared cross-encoder reranker once per process, or return
+    None when disabled (``RerankPolicy.enabled``).
+
+    Every ``HybridRetriever`` (mevzuat, examples, document Q&A) shares this
+    one instance -- ``CrossEncoderReranker`` lazily loads and caches its
+    model on first use (see that class's own docstring), so a shared
+    instance means the model is only ever loaded once regardless of how
+    many retrievers end up using it, not once per retriever.
+    """
+    global _reranker
+    policy = get_policy().rerank
+    if not policy.enabled:
+        return None
+    if _reranker is None:
+        _reranker = CrossEncoderReranker(model_name=policy.model_name)
+    return _reranker
+
 
 async def get_mevzuat_retriever() -> HybridRetriever:
     """Build the local legislation retriever once per process.
@@ -173,6 +196,7 @@ async def get_mevzuat_retriever() -> HybridRetriever:
             sparse_vocab_path=os.path.join(
                 settings.MEVZUAT_CORPUS_DIR, "sparse_vocab.json"
             ),
+            reranker=get_reranker(),
         )
     return _mevzuat_retriever
 
@@ -198,6 +222,7 @@ async def get_example_retriever() -> ExampleRetriever:
             sparse_vocab_path=os.path.join(
                 os.path.dirname(settings.RESMI_YAZISMA_EXAMPLES_PATH), "sparse_vocab.json"
             ),
+            reranker=get_reranker(),
         )
         _example_retriever = ExampleRetriever(hybrid)
     return _example_retriever
@@ -230,6 +255,7 @@ async def get_document_qa_retriever() -> HybridRetriever:
             vector_store=get_vector_store(),
             embeddings_client=get_embeddings_client(),
             collection_name=_DOCUMENT_QA_COLLECTION_NAME,
+            reranker=get_reranker(),
         )
     return _document_qa_retriever
 

@@ -2,6 +2,69 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.51.0] - 2026-08-24
+Workstream J7: cross-encoder reranker + embedding modelini
+`leoipulsar/harrier-0.6b`'ye taşıma (#271).
+
+### Reranker
+- Yeni `backend/app/ai/retrieval/reranker.py::CrossEncoderReranker` --
+  `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (sentence-transformers, çok
+  dilli, Türkçe dahil), `HybridRetriever`'a opsiyonel collaborator olarak
+  bağlandı (mevzuat/örnek/document_qa retriever'larının üçü de paylaşıyor).
+  Reranker hatası hiçbir zaman retrieval'ı başarısız kılmıyor -- fused
+  (RRF) sıraya düşüyor.
+- Yeni `RerankPolicy` (`app.ai.policy`) -- `enabled=True` (varsayılan),
+  `candidate_count=20`, `model_name`. `POLICY_VERSION` 3.0.0 → **3.1.0**
+  (gerçek bir davranış değişikliği, inert bir additive default değil).
+- **Canlı denendi, üç ayrı Ollama-hosted Qwen3-Reranker-0.6B yüklemesi
+  reddedildi:** `pdurugyan/qwen3-reranker-0.6b-q8_0` (sınıflandırıcı-kafa
+  mimarisi Ollama'nın backend'inde hiç yüklenmiyor), `dengcao/Qwen3-
+  Reranker-0.6B:Q8_0` ve `sam860/qwen3-reranker:0.6b-Q8_0` (ikisi de
+  yükleniyor ama tüm vocab için birebir aynı, bozuk logprob üretiyor --
+  `qwen3.5:4b` ile aynı istek şekliyle karşılaştırılıp istek formatının
+  doğru olduğu doğrulandı). Bu yüzden in-process sentence-transformers'a
+  geçildi -- bkz. `CrossEncoderReranker`'ın kendi docstring'i.
+- `evaluation/harness/retrieval_suite.py::run(..., rerank=True)` --
+  gerçek `RerankPolicy`'yi ve gerçek reranker'ı devreye alıp aynı gold set
+  üzerinde karşılaştırma yapar. **Canlı ölçüldü:** komitli gold set'in 6
+  belgesi baseline chunking'de (1500/300) her biri tam 1 chunk'a düşüyor,
+  yani reranker'ın aday havuzu `limit`'ten hiç geniş olmuyor ve nDCG@6
+  zaten 1.0 (tavan) -- bu suite reranker'ın gerçek etkisini kanıtlayamıyor
+  (bkz. `docs/evaluation/retrieval.md`'nin yeni bölümü). Ürün kararıyla
+  yine de `enabled=True` sevk edildi.
+- `backend/tests/unit/ai/test_reranker.py` (7 test) + `test_retrieval.py`
+  (3 yeni entegrasyon testi) + `test_policy.py` (3 yeni invariant testi).
+
+### Embedding modeli: `nomic-embed-text` → `leoipulsar/harrier-0.6b`
+- `microsoft/harrier-oss-v1-0.6b`'nin Ollama GGUF'u (MIT lisans), 1024
+  boyut, 94 dil, decoder-only. Yeni `OLLAMA_EMBEDDING_INSTRUCT_PREFIX`
+  ayarı -- yalnızca `embed_query`'e uygulanıyor, `embed_documents`'a asla
+  (modelin kendi kart notu: "aksi halde performans düşer").
+- **Etkilenen her şey yeniden üretildi ve canlı doğrulandı:** semantik
+  prototipler (`scripts/build_prototypes.py`, 768→1024 boyut), router
+  füzyon ağırlıkları (`scripts/fit_router.py`, 5-katlı CV doğruluğu hâlâ
+  1.0000), eval embedding cache'leri (`scripts/build_eval_embeddings.py`,
+  her iki hedef), `resmi_yazisma_ornek` koleksiyonu (`scripts/
+  index_yazisma_examples.py`, 429 örnek). `document_qa` koleksiyonu kendi
+  otomatik boyut-uyuşmazlığı algılamasıyla (`DocumentService.
+  _index_for_qa`'nın zaten var olan `create_collection` dönüş değeri
+  kontrolü) bir sonraki belge analizinde kendini siler+yeniden yaratır --
+  canlı doğrulandı (`create_collection` gerçekten `False` döndü, gerçek
+  hata mesajıyla).
+- `docs/deployment/migrations.md`'ye tam göç prosedürü eklendi.
+- **İlk denemede yanlış env değeri yakalandı:** `compose.yml`'in yeni
+  varsayımı kök `.env`'deki eski `OLLAMA_EMBEDDING_MODEL=nomic-embed-
+  text:latest` tarafından gölgeleniyordu (`.env` her zaman compose'un
+  `${VAR:-default}`'ından önceliklidir) -- `.env`'in kendisi güncellendi.
+
+### Doğrulama
+- `docker compose exec backend pytest -q` → 2603 passed.
+- `docker compose exec backend pytest -q -m e2e` → 25 passed.
+- `curl /api/v1/health?deep=true` → `router_semantic: ok`.
+- `python -m evaluation.generate_report --suite all` → intents (macro_f1
+  0.9520), drafts (1.0/0.0), retrieval (1.0/1.0), trajectories (1.0/0.0) --
+  hepsi değişiklik öncesiyle birebir aynı.
+
 ## [3.50.0] - 2026-08-23
 Workstream J6: OpenAPI şema snapshot testi (#269).
 
