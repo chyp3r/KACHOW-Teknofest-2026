@@ -2,6 +2,32 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.36.0] - 2026-08-23
+Workstream C4: marker stratejisi (#241). `backend/pyproject.toml`'a
+`performance` (Workstream E'nin henüz yazılmamış testleri için) ve
+`needs_ollama` (Workstream I'nin CI'ı açacağı gün deselect edebilmesi için)
+marker'ları eklendi; `addopts` artık `-m 'not e2e and not performance'`.
+`Makefile`'a `test-all:` (`pytest -q -m ""`, her şey) eklendi.
+
+### Düzeltildi
+- `integration` marker'ının açıklaması "CI'da varsayılan olarak atlanır"
+  diyordu -- bu repoda CI yok, hiçbir mekanizma bunu yapmıyor. Gerçek
+  davranışı (hiçbir zaman deselect edilmiyor) ve gerçek bağımlılığı
+  (yalnızca Postgres) anlatacak şekilde düzeltildi.
+- `Makefile`'ın `test:` hedefindeki "Postgres ve Qdrant integration testleri
+  için gerekli" yorumu da yanlıştı -- `redis`+`qdrant` durdurulup tam suite
+  koşturularak (2544 test, hepsi geçti) doğrulandı: yalnızca Postgres
+  gerekiyor.
+
+### Notlar
+`needs_ollama` bugün hiçbir teste uygulanmadı: mevcut suite'te gerçek bir
+Ollama çağrısı yapan test yok, `test_prototype_freshness.py` dahil (yalnızca
+commit'li JSON metadata'sını karşılaştırıyor) -- planın bu testin canlı
+çağrı yaptığı varsayımı yanlıştı.
+
+Doğrulama: `test`/`test-e2e`/`test-all` ayrı ayrı koşturuldu --
+2544 + 24 = 2568, çakışma veya kayıp yok.
+
 ## [3.35.0] - 2026-08-23
 Workstream C3: gerçek e2e testleri (#239) -- `backend/tests/e2e/`'e C2'nin
 (#238) kurduğu fixture altyapısını tüketen 6 test dosyası ve 19 yeni test

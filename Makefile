@@ -1,4 +1,4 @@
-.PHONY: setup-db bootstrap up down logs test test-e2e eval eval-baseline eval-llm eval-retrieval \
+.PHONY: setup-db bootstrap up down logs test test-e2e test-all eval eval-baseline eval-llm eval-retrieval \
 	migrate seed shell psql restart-backend \
 	reset-db reset-checkpoints reset-cache reset-storage reset-document-qa reset
 
@@ -71,12 +71,17 @@ psql:
 restart-backend:
 	docker compose restart backend
 
-# Runs with the compose services up. Redis used to be load-bearing here: seven
-# API tests failed without it, because rate_limit() sits in front of the document
-# endpoints and turned a cache outage into a 500. That was the limiter failing
-# closed, not a test-environment requirement -- it now fails open, and the suite
-# passes with Redis reachable or unreachable alike. Postgres and Qdrant are still
-# genuinely needed by the integration tests.
+# Runs with the compose services up, though as of this writing that's a
+# convenience, not a hard requirement: Redis used to be load-bearing here
+# (seven API tests failed without it, because rate_limit() sits in front of
+# the document endpoints and turned a cache outage into a 500), but that was
+# the limiter failing closed, not a test-environment requirement -- it now
+# fails open. Verified by actually stopping both `redis` and `qdrant` and
+# re-running this target: all 2544 non-deselected tests still pass. Only
+# Postgres (real, throwaway, via tests/_db_fixtures.py) is genuinely needed,
+# by the `integration`-marked tests -- `e2e` and `performance` are
+# deselected here by pyproject.toml's `addopts` (see `test-e2e`/`test-all`
+# below), and no other test in this lane touches real infra at all.
 test:
 	docker compose run --rm backend pytest -q
 
@@ -87,6 +92,12 @@ test:
 # default lane, which needs no infra at all.
 test-e2e:
 	docker compose run --rm backend pytest -q -m e2e
+
+# Everything: integration (already included in `test` above) plus e2e and
+# performance (both deselected by pyproject.toml's `addopts` otherwise).
+# Needs the full compose stack up, same as `test-e2e`.
+test-all:
+	docker compose run --rm backend pytest -q -m ""
 
 # Deterministic evaluation of the non-LLM decision layer. Deliberately a
 # separate target rather than a test: the full run is a measurement, not a
