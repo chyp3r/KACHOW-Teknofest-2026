@@ -2,6 +2,25 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.47.0] - 2026-08-23
+Workstream J3: chaos/failure-injection testi (#263).
+
+- **Doğrulandı, ekleme gerekmedi:** plandaki 5 degrade iddiasından 4'ü
+  (`retrieve_source_chunks`, `retrieve_examples`, `PrototypeMatcher`, rate
+  limiter fail-open) zaten kendi unit test dosyalarında ayrı ayrı test
+  ediliyor — kod okunarak doğrulandı, tekrar test edilmedi.
+- Yeni `backend/tests/e2e/test_degradation_e2e.py` — eksik olan tek gerçek
+  boşluk: `QdrantStore.delete_by_filter`/`create_collection`/
+  `upsert_documents` gerçek bir kesintiyi simüleyecek şekilde raise
+  ettirilir, `POST /api/v1/documents/analyze`'ın gerçek HTTP+RLS+Qdrant
+  yığını üzerinde yine de 200 döndüğü ve belgenin sonrasında tam
+  kullanılabilir kaldığı doğrulanır (`DocumentService._index_for_qa`'nın
+  kendi `except Exception: logger.exception(...)` swallow'ının bu güne
+  kadar hiç uçtan uca test edilmemiş olması).
+- `docker compose exec backend pytest -q -m e2e` → 25 passed (24'ten +1).
+- `docker compose exec backend pytest -q` (varsayılan lane) → 2575 passed,
+  değişmedi.
+
 ## [3.46.0] - 2026-08-23
 Workstream J2: agent trajectory eval -- planlama grafiğinin node dizisini
 ölçme (#261).
