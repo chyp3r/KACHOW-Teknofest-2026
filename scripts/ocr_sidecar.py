@@ -211,7 +211,11 @@ BACKENDS = {"native": NativeVLBackend, "internvl": InternVLBackend}
 def _pick_device() -> str:
     import torch
 
-    return "mps" if torch.backends.mps.is_available() else "cpu"
+    if torch.cuda.is_available():
+        return "cuda"
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
 
 
 def _make_handler(backend: Backend, lock: threading.Lock):

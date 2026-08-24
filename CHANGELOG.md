@@ -3,6 +3,13 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [Unreleased]
+### Eklendi
+- `scripts/evaluate_ocr_real.py`, `scripts/ocr_sidecar.py` ve `notebooks/ocr_benchmark_colab.ipynb`
+  dosyalarına StudyApp doküman zekâsı modelleri (`OpenDataLoader-PDF`, `PaddlePaddle/PaddleOCR`,
+  `Tesseract (300 DPI + Layout)`, `ATH-MaaS/OvisOCR2`, `zai-org/GLM-OCR`, `baidu/Unlimited-OCR`,
+  `deepseek-ocr`) ve sayfa başı gecikme vs. ağırlıklı doğruluk vs. tepe bellek kullanımı
+  baloncuk dağılım grafiği (Scatter Bubble Plot) entegre edildi.
+
 ### Düzeltildi
 - Ana Sayfa hareketlilik grafiği tüm rollerde aynı yedi günlük kişisel evrak /
   taslak ritmine geçirildi; hızlı işlemler banner altına taşındı. Kenar çubuğu

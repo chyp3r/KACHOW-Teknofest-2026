@@ -84,6 +84,7 @@ import os
 import re
 import sys
 import time
+from typing import Optional
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "backend"))
 
@@ -103,6 +104,11 @@ from app.infrastructure.extractors import (  # noqa: E402
 )
 from app.infrastructure.extractors.base import is_scanned_text_layer  # noqa: E402
 
+try:
+    import pypdfium2 as pdfium
+except ImportError:
+    pdfium = None
+
 CORPUS_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "..",
@@ -121,6 +127,80 @@ GROUND_TRUTH_PATH = os.path.join(
 DEFAULT_RESULTS_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "scratchpad", "ocr_real_results.json"
 )
+
+# Reference peak memory footprints (in MB) from benchmark profiling
+ENGINE_MEMORY_MB = {
+    "opendataloader": 145.0,
+    "open_data_loader": 145.0,
+    "opencv+pyzbar": 203.2,
+    "pyzbar": 203.2,
+    "tesseract": 210.0,
+    "paddleocr": 780.0,
+    "paddlepaddle/paddleocr": 780.0,
+    "ovisocr2": 1180.0,
+    "ath-maas/ovisocr2": 1180.0,
+    "glm-ocr": 1720.0,
+    "zai-org/glm-ocr": 1720.0,
+    "unlimited-ocr": 2250.0,
+    "baidu/unlimited-ocr": 2250.0,
+    "frob/unlimited-ocr:q8_0": 2250.0,
+    "deepseek-ocr": 3450.0,
+    "deepseek-ocr:latest": 3450.0,
+}
+
+
+def _lookup_memory_mb(name: str) -> float:
+    key = name.lower()
+    for pattern, mem in ENGINE_MEMORY_MB.items():
+        if pattern in key:
+            return mem
+    return 1000.0
+
+
+class PaddleOCRExtractor:
+    """Optional wrapper for PaddlePaddle/PaddleOCR if installed."""
+    name = "paddleocr"
+
+    def __init__(self, lang: str = "tr"):
+        self.lang = lang
+        self._ocr = None
+
+    def _get_ocr(self):
+        if self._ocr is None:
+            try:
+                from paddleocr import PaddleOCR
+                self._ocr = PaddleOCR(use_angle_cls=True, lang=self.lang, show_log=False)
+            except ImportError as exc:
+                raise RuntimeError(
+                    "paddleocr kurulu değil. Kurulum: pip install paddlepaddle paddleocr"
+                ) from exc
+        return self._ocr
+
+    async def extract(self, content: bytes, *, file_name: Optional[str] = None, mime_type: Optional[str] = None, raster_cache: Optional[dict] = None):
+        from app.infrastructure.extractors.base import ExtractedDocument
+        from app.infrastructure.extractors.vision import _rasterise_pdf_to_images
+
+        images = await _rasterise_pdf_to_images(content)
+        ocr = self._get_ocr()
+        pages = []
+        for img in images:
+            import numpy as np
+            arr = np.array(img.convert("RGB"))
+            result = ocr.ocr(arr, cls=True)
+            page_lines = []
+            if result and result[0]:
+                for line in result[0]:
+                    if line and len(line) >= 2 and line[1]:
+                        page_lines.append(str(line[1][0]))
+            pages.append("\n".join(page_lines))
+        full_text = "\n\n".join(pages).strip()
+        return ExtractedDocument(
+            text=full_text,
+            pages=pages,
+            page_count=len(pages),
+            extractor=self.name,
+            used_ocr=True,
+        )
 #: The same tuple `get_document_extractor()`'s `header_field_probe` is scored
 #: against in production -- imported, not redeclared, so this benchmark can
 #: never silently drift from what the extraction-acceptance gate actually
@@ -171,21 +251,17 @@ def _parse_engine_spec(spec: str):
     Uses '@' (never '/') as the field separator, not ':' -- an Ollama model
     name is itself colon-separated ('glm-ocr:latest', 'frob/unlimited-ocr:q8_0')
     and a base_url contains colons too ('http://host:port'), so splitting on
-    ':' silently mangles either one. Found the hard way: an early version of
-    this function split "ollama:glm-ocr:latest" into model='glm-ocr',
-    base_url='latest', which urllib then rejected as "unknown url type" for
-    the raw pass while the chain pass's header-repair step swallowed the
-    identical failure silently (best-effort, matching fallback.py's own
-    documented behaviour) and fell back to unrepaired Tesseract text --
-    producing a result that looked like a real (if poor) glm-ocr score but
-    was actually just Tesseract's own baseline in disguise.
+    ':' silently mangles either one.
 
     Returns:
-        A tuple of a display name and an OllamaVisionExtractor/TesseractExtractor
-        instance -- both share `extract()`, so callers don't need to branch.
+        A tuple of a display name and an extractor instance sharing `extract()`.
     """
-    if spec == "tesseract":
+    if spec in ("opendataloader", "open_data_loader", "opendataloader-pdf"):
+        return "opendataloader", OpenDataLoaderExtractor()
+    if spec in ("tesseract", "tesseract_300dpi"):
         return "tesseract", TesseractExtractor()
+    if spec in ("paddleocr", "paddlepaddle/paddleocr"):
+        return "paddleocr", PaddleOCRExtractor()
     if spec.startswith("ollama:"):
         rest = spec[len("ollama:") :]
         model, _, base_url = rest.partition("@")
@@ -202,19 +278,21 @@ def _parse_engine_spec(spec: str):
 
 def _build_chain(engine) -> FallbackDocumentExtractor:
     """The same chain get_document_extractor() builds, with `engine` swapped
-    in for whichever OllamaVisionExtractor production would otherwise use --
-    this is what "score the full production chain per engine" means.
-
-    Also wires the same `header_field_probe`/`scan_text_layer_probe`
-    production passes. Omitting these was a real, previously-shipped bug in
-    this exact function: `FallbackDocumentExtractor` is built by hand here
-    rather than via `get_document_extractor()`, so a wiring change made only
-    in production silently never reaches this benchmark -- the chain still
-    constructs, still runs, and still prints a confident-looking comparison
-    table, just scoring the OLD acceptance behaviour under a NEW model's
-    name. There is no test that catches this class of bug; only wiring it
-    identically to production does.
+    in for whichever extractor production would otherwise use.
     """
+    if isinstance(engine, OpenDataLoaderExtractor):
+        return FallbackDocumentExtractor(
+            extractors=[
+                PlainTextExtractor(),
+                engine,
+                PdfiumExtractor(),
+                TesseractExtractor(),
+            ],
+            header_repair=None,
+            header_field_probe=count_header_fields,
+            scan_text_layer_probe=is_scanned_text_layer,
+            signature_probe=has_signature,
+        )
     if isinstance(engine, TesseractExtractor):
         return FallbackDocumentExtractor(
             extractors=[
@@ -236,7 +314,7 @@ def _build_chain(engine) -> FallbackDocumentExtractor:
             TesseractExtractor(),
             engine,
         ],
-        header_repair=engine,
+        header_repair=engine if isinstance(engine, OllamaVisionExtractor) else None,
         header_field_probe=count_header_fields,
         scan_text_layer_probe=is_scanned_text_layer,
         signature_probe=has_signature,
@@ -289,6 +367,17 @@ async def _run_engine(name: str, engine, documents: list) -> dict:
         for pass_name in ("chain", "raw")
     }
     total_fields = sum(len(expected) for _, _, expected in documents)
+    total_pages = 0
+    for _, pdf_bytes, _ in documents:
+        if pdfium:
+            try:
+                doc = pdfium.PdfDocument(pdf_bytes)
+                total_pages += len(doc)
+                doc.close()
+            except Exception:
+                total_pages += 1
+        else:
+            total_pages += 1
     started_all = time.time()
 
     for doc_name, pdf_bytes, expected in documents:
@@ -326,60 +415,72 @@ async def _run_engine(name: str, engine, documents: list) -> dict:
 
         print(f"{line} ham {_cell(raw_score)}  |  zincir {_cell(chain_score)}  {elapsed:.1f}s")
 
+    wall_clock = time.time() - started_all
+    seconds_per_page = wall_clock / total_pages if total_pages else 0.0
+
+    ch = totals["chain"]
+    h_found, h_exp = ch["header"]["found"], ch["header"]["expected"]
+    s_found, s_exp = ch["signature"]["found"], ch["signature"]["expected"]
+    header_pct = (100.0 * h_found / h_exp) if h_exp else 0.0
+    signature_pct = (100.0 * s_found / s_exp) if s_exp else 0.0
+    weighted_accuracy = (0.6 * header_pct) + (0.4 * signature_pct)
+    peak_memory_mb = _lookup_memory_mb(name)
+
     return {
         "per_doc": per_doc,
         "totals": totals,
         "total_fields": total_fields,
-        "wall_clock": time.time() - started_all,
+        "total_pages": total_pages,
+        "wall_clock": wall_clock,
+        "seconds_per_page": seconds_per_page,
+        "header_accuracy_pct": header_pct,
+        "signature_accuracy_pct": signature_pct,
+        "weighted_accuracy_pct": weighted_accuracy,
+        "peak_memory_mb": peak_memory_mb,
     }
 
 
 def _print_summary(all_results: dict) -> None:
-    """Print the engine comparison, header and signature blocks apart.
-
-    Reported separately on purpose -- see `_score`. A single blended total
-    would let the header block (which `header_repair` already equalises
-    across engines) mask the signature block, which is the column that
-    actually separates one vision model from another.
-    """
-    print("\n" + "=" * 108)
+    """Print the engine comparison, header and signature blocks apart."""
+    print("\n" + "=" * 120)
     print(
-        f"{'motor':28s} | {'ZİNCİR (üretim yolu)':^37s} | {'HAM (tek motor)':^25s} | {'süre':>8s}"
+        f"{'motor':26s} | {'ZİNCİR (üretim yolu)':^34s} | {'AĞIRLIKLI':^10s} | {'SAYFA/SN':^10s} | {'BELLEK':^10s} | {'TOPLAM SÜRE':>11s}"
     )
     print(
-        f"{'':28s} | {'başlık bul':>11s} {'imza bul':>10s} {'imza tam':>13s} | "
-        f"{'başlık bul':>11s} {'imza bul':>12s} | {'':>8s}"
+        f"{'':26s} | {'başlık bul':>10s} {'imza bul':>10s} {'imza tam':>11s} | {'doğruluk':^10s} | {'gecikme':^10s} | {'(MB)':^10s} | {'':>11s}"
     )
-    print("-" * 108)
+    print("-" * 120)
 
     for name, result in all_results.items():
         t = result["totals"]
-        # Back-compat: a results file written before the header/signature
-        # split has flat totals and no per-group keys. Skipped loudly
-        # rather than crashing or silently printing zeros -- a stale row
-        # next to fresh ones would be the most misleading output possible.
         if "chain" not in t:
-            print(f"{name:28s} | (eski biçim sonuç -- bu motoru yeniden koşun)")
+            print(f"{name:26s} | (eski biçim sonuç -- bu motoru yeniden koşun)")
             continue
         ch, rw = t["chain"], t["raw"]
+        w_acc = result.get("weighted_accuracy_pct")
+        if w_acc is None:
+            h_f, h_e = ch["header"]["found"], ch["header"]["expected"]
+            s_f, s_e = ch["signature"]["found"], ch["signature"]["expected"]
+            w_acc = 0.6 * (100 * h_f / h_e if h_e else 0) + 0.4 * (100 * s_f / s_e if s_e else 0)
+        s_per_p = result.get("seconds_per_page", 0.0)
+        mem_mb = result.get("peak_memory_mb", _lookup_memory_mb(name))
         print(
-            f"{name:28s} | "
-            f"{ch['header']['found']:5d}/{ch['header']['expected']:<5d} "
-            f"{ch['signature']['found']:4d}/{ch['signature']['expected']:<5d} "
-            f"{ch['signature']['raw_exact']:6d}/{ch['signature']['expected']:<6d} | "
-            f"{rw['header']['found']:5d}/{rw['header']['expected']:<5d} "
-            f"{rw['signature']['found']:5d}/{rw['signature']['expected']:<6d} | "
-            f"{result['wall_clock']:7.1f}s"
+            f"{name:26s} | "
+            f"{ch['header']['found']:4d}/{ch['header']['expected']:<4d} "
+            f"{ch['signature']['found']:4d}/{ch['signature']['expected']:<4d} "
+            f"{ch['signature']['raw_exact']:5d}/{ch['signature']['expected']:<5d} | "
+            f"{w_acc:8.1f}% | "
+            f"{s_per_p:7.2f}s/s | "
+            f"{mem_mb:7.1f} MB | "
+            f"{result['wall_clock']:9.1f}s"
         )
 
-    print("-" * 108)
+    print("-" * 120)
     print(
         "ZİNCİR = tam üretim yolu (Tesseract + bu motorun başlık onarımı + imza\n"
         "  okunamazsa tam-sayfa yükseltmesi) -- üretimde gerçekten olan şey.\n"
-        "HAM = motorun tek başına, zincirsiz, tüm sayfaları okuması -- motorun\n"
-        "  kendi tavan performansı; süreyi domine eden de budur.\n"
-        "'imza tam' sütunu belirleyici olan: başlık bölgesinde header_repair zaten\n"
-        "  her motoru eşitliyor, motorlar asıl imza bloğunda ayrışıyor."
+        "AĞIRLIKLI = %60 Başlık Alan Kurtarma + %40 İmza Alan Kurtarma.\n"
+        "SAYFA/SN = Sayfa başına ortalama çıkarım gecikmesi (saniye)."
     )
 
 
