@@ -35,7 +35,7 @@ TEKNOFEST 2026 · Türkçe kamu yazışma otomasyonu için LangGraph üzerine ku
 4. [Mimari Stil](#mimari-stil)
 5. [Sistem Mimarisi](#sistem-mimarisi)
 6. [Çok Kiracılı Roller ve Yetkilendirme](#cok-kiracili-roller-ve-yetkilendirme)
-7. [Uyum Bilgi Grafiği (Knowledge Graph)](#uyum-bilgi-grafigi-knowledge-graph)
+7. [Uyum Bilgi Grafiği](#uyum-bilgi-grafigi-knowledge-graph)
 8. [Adaptif Öğrenme](#adaptif-ogrenme)
 9. [Dikkat Çeken Tasarım Kararları](#dikkat-ceken-tasarim-kararlari)
 10. [Teknoloji Yığını](#teknoloji-yigini)
@@ -49,14 +49,14 @@ TEKNOFEST 2026 · Türkçe kamu yazışma otomasyonu için LangGraph üzerine ku
 18. [Gözlemlenebilirlik ve Metrikler](#gozlemlenebilirlik-ve-metrikler)
 19. [Hızlı Başlangıç](#hizli-baslangic)
 20. [Ortam Değişkenleri ve Gerekli Dosyalar](#ortam-degiskenleri-ve-gerekli-dosyalar)
-21. [Dağıtım Topolojisi: Docker Compose (dev) vs Kubernetes (prod)](#dagitim-topolojisi-docker-compose-dev-vs-kubernetes-prod)
+21. [Dağıtım Topolojisi: Docker Compose vs Kubernetes](#dagitim-topolojisi-docker-compose-dev-vs-kubernetes-prod)
 22. [Kubernetes Prodüksiyon Ortamı](#kubernetes-produksiyon-ortami)
 23. [Depo Yapısı](#depo-yapisi)
 24. [Katkı, Güvenlik, Lisans](#katki-guvenlik-lisans)
 
 ---
 
-## Bu ne yapıyor
+## Proje Hakkında
 
 Bir memur elinize bir dilekçe, üst yazı ya da şikâyet evrakı tutuşturduğunda önündeki iş şu: evrakı oku, türünü anla, eksik ne var bak, hangi mevzuata dayanıyor öğren, resmî üslupta bir cevap yaz, imzaya çıkmadan önce her şeyi kontrol et, doğru birime havale et. KACHOW bu zincirin tamamını — insanı devre dışı bırakmadan — otomatikleştiriyor:
 
@@ -66,12 +66,12 @@ Evrakı oku  →  sınıflandır  →  alanları çıkar  →  eksikleri bul  �
    →  gerekirse kullanıcıdan bilgi iste  →  birim öner  →  onay/revizyon  →  kaydet
 ```
 
-Her adım LangGraph üzerinde ayrı bir **ajan/düğüm**; her düğümün kendi başarısızlık modu, zaman aşımı ve geri dönüş yolu var. Sistem hiçbir zaman "LLM ne dediyse odur" demiyor — **retrieval-augmented generation (RAG)** ile üretilen her iddia (tarih, tutar, kişi, kurum, mevzuat atfı) **groundedness verification** katmanında kaynak evrakla satır satır karşılaştırılıyor, ve kritik bir tutarsızlık bulunduğunda bu bulgu bir ortalama skorun içinde kaybolmuyor: taslak otomatik olarak **human-in-the-loop (HITL)** onayına düşüyor.
+Her adım LangGraph üzerinde ayrı bir **ajan/düğüm**; her düğümün kendi başarısızlık modu, zaman aşımı ve geri dönüş yolu var. Sistem hiçbir zaman "LLM ne dediyse odur" demiyor — **dış kaynak destekli üretim** ile üretilen her iddia (tarih, tutar, kişi, kurum, mevzuat atfı) **kaynak doğrulama** katmanında kaynak evrakla satır satır karşılaştırılıyor, ve kritik bir tutarsızlık bulunduğunda bu bulgu bir ortalama skorun içinde kaybolmuyor: taslak otomatik olarak **kullanıcı onayı** onayına düşüyor.
 
-## Neler var — özellik envanteri
+## Sistemin Yetenekleri
 
-<table>
-<tr><td width="50%" valign="top">
+
+
 
 **Evrak analizi**
 - Metin katmanlı PDF + taranmış PDF/görsel OCR, otomatik geçiş zinciri
@@ -81,7 +81,7 @@ Her adım LangGraph üzerinde ayrı bir **ajan/düğüm**; her düğümün kendi
 - **RAG** ile mevzuat önerisi — kanun/madde adı + alıntı + kaynak, retrieval ile üretim ayrışık
 - 3 cümlelik kısa özet + isteğe bağlı ayrıntılı özet (map-reduce)
 
-</td><td width="50%" valign="top">
+
 
 **Taslak üretimi ve doğrulama**
 - 4 resmî yazışma türü (üst yazı, cevap yazısı, bilgilendirme, diğer + serbest alt-tür)
@@ -91,33 +91,33 @@ Her adım LangGraph üzerinde ayrı bir **ajan/düğüm**; her düğümün kendi
 - Hedefli revizyon, değişiklik günlüğü, tam sürüm zinciri
 - Talimat–mevzuat çelişki tespiti
 
-</td></tr>
-<tr><td width="50%" valign="top">
+
+
 
 **Birim yönlendirme**
 - İçerik tabanlı hedef birim önerisi + gerekçe + güven durumu
 - Alternatif birimler ve bağımsız `/routing/suggest` uç noktası
 - Öneri hiçbir zaman kesin idari karar olarak sunulmuyor
 
-</td><td width="50%" valign="top">
 
-**İnsan-döngüde (HITL)**
+
+**İnsan-döngüde**
 - Kritik eksik bilgide workflow duruyor, gerekçeli form ile soruyor
 - `resume` ile kaldığı yerden devam, çift gönderim ve bayat onay koruması
 - Sayfa yenilenince bekleyen onay + mesaj geçmişi geri yükleniyor
 
-</td></tr>
-</table>
+
+
 
 ## Demo ve Uygulama Akışı
 
 > [!NOTE] 
 > **Demo Video & Ekran Görüntüleri:** [Buraya uygulamanın arayüzünden örnek ekran görüntüleri veya YouTube/Loom video linki eklenecek]
 
-Sistemin kalbinde yer alan, hiçbir işlemi kullanıcıdan gizlemeyen ve "kara kutu" (black box) yapısını reddeden şeffaf ekranı:
+Sistemin kalbinde yer alan, hiçbir işlemi kullanıcıdan gizlemeyen ve "kara kutu" yapısını reddeden şeffaf ekranı:
 1. Evrak yükleme arayüzü
 2. Ajanların adım adım ilerleme ekranı (SSE ile canlı yayın)
-3. İnsan Onayı (Human-in-the-Loop) - Eksik/hatalı bilgide sistemin kullanıcıyı beklemesi
+3. İnsan Onayı - Eksik/hatalı bilgide sistemin kullanıcıyı beklemesi
 
 ## Mimari Stil
 
@@ -129,19 +129,19 @@ Backend tek bir **modüler monolit** — mikroservis değil, tek deploy edilebil
 | **Clean / Hexagonal Architecture** (Ports & Adapters) | `api` → `domains` → `ai` → `infrastructure` | Bağımlılık yönü hep içe doğru (**Dependency Inversion**). `infrastructure` bir adaptör katmanı — `Ollama ⇄ Evren` LLM sağlayıcısı, `local ⇄ S3` depolama arka ucu — domain kodu hiç değişmeden takas edilebiliyor. |
 | **Modüler Monolit** | Tek backend imajı, tek Postgres, tek deploy birimi | Mikroservis karmaşıklığı (dağıtık transaction, servisler-arası ağ) yok; yalnızca ağır ML bağımlılıkları (`torch`/`peft`/`trl`) olan LoRA eğitim işi ayrı bir `worker` sürecine/imajına bölünmüş. |
 | **Event-Driven + Checkpointed State Machine** | `ai/workflows/*`, SSE (`/chat/stream`) | Her iş akışı LangGraph üzerinde durum makinesi olarak modellenmiş; her adım Postgres'e checkpoint'leniyor (event-sourcing'e yakın), istemciye `node_start`/`node_end` olayları SSE ile akıyor. |
-| **CQRS'e yakın bir okuma modeli** | `GET /documents/graph` (Compliance Knowledge Graph) | Ayrı bir graph veritabanı yok — grafik, Postgres + analiz cache'inden **okuma anında (read-time)** türetiliyor. |
+| **CQRS'e yakın bir okuma modeli** | `GET /documents/graph` (Compliance Knowledge Graph) | Ayrı bir graph veritabanı yok — grafik, Postgres + analiz cache'inden **okuma anında** türetiliyor. |
 | **Zero-Trust yetkilendirme** | `core/authz/*` | Her istekte kimlik + rol + sahiplik + gizlilik derecesi ayrı ayrı doğrulanıyor; frontend'in "gizlemesi" hiçbir zaman tek güvenlik katmanı değil. |
 
 ## Sistem Mimarisi
+
+Daha okunabilir olması için mimari yapı 3 ana modüle bölünmüştür.
+
+### 1. Kullanıcı Arayüzü ve API Geçidi (Frontend & Gateway)
 
 ```mermaid
 graph TD
     classDef client fill:#1e1e1e,stroke:#00a8cc,stroke-width:2px,color:#fff;
     classDef api fill:#1c2833,stroke:#e67e22,stroke-width:2px,color:#fff;
-    classDef orch fill:#0b5345,stroke:#2ecc71,stroke-width:2px,color:#fff;
-    classDef guard fill:#7b241c,stroke:#e74c3c,stroke-width:2px,color:#fff;
-    classDef storage fill:#4a235a,stroke:#9b59b6,stroke-width:2px,color:#fff;
-    classDef external fill:#34495e,stroke:#bdc3c7,stroke-width:2px,color:#fff;
     classDef obs fill:#1b2631,stroke:#5dade2,stroke-width:1.5px,color:#fff;
 
     A[React 18 / TypeScript İstemcisi<br/>TanStack Query + Context, SSE]:::client -->|REST + SSE| B
@@ -152,24 +152,61 @@ graph TD
         B --> C
     end
 
+    O2[Prometheus + Grafana]:::obs
+    O3[Jaeger — OpenTelemetry trace]:::obs
+    
+    B -.-> O2
+    B -.-> O3
+```
+
+### 2. Yapay Zeka Orkestrasyonu (LangGraph)
+
+```mermaid
+graph TD
+    classDef api fill:#1c2833,stroke:#e67e22,stroke-width:2px,color:#fff;
+    classDef orch fill:#0b5345,stroke:#2ecc71,stroke-width:2px,color:#fff;
+    classDef obs fill:#1b2631,stroke:#5dade2,stroke-width:1.5px,color:#fff;
+
+    C{JWT Auth + ABAC}:::api --> P
+
     subgraph "Orkestrasyon — LangGraph"
         P(Planning Graph<br/>retry/timeout/döngü limiti):::orch
         DA(Document Analysis Graph<br/>extract → classify → fields → missing → mevzuat → özet):::orch
         DR(Draft Graph<br/>writer → verify → repair):::orch
         RV(Revise Graph<br/>hedefli revizyon → changelog):::orch
         RT(Routing Graph<br/>birim önerisi + gerekçe):::orch
-        C --> P
+        
         P --> DA
         P --> DR
         P --> RV
         P --> RT
     end
+    
+    O1[Langfuse — LLM/token izleme]:::obs
+    P -.-> O1
+```
+
+### 3. Güvenlik, Veri ve Dış Kaynaklar (Guardrails & Persistence)
+
+```mermaid
+graph TD
+    classDef orch fill:#0b5345,stroke:#2ecc71,stroke-width:2px,color:#fff;
+    classDef guard fill:#7b241c,stroke:#e74c3c,stroke-width:2px,color:#fff;
+    classDef storage fill:#4a235a,stroke:#9b59b6,stroke-width:2px,color:#fff;
+    classDef external fill:#34495e,stroke:#bdc3c7,stroke-width:2px,color:#fff;
+
+    DA(Document Analysis Graph):::orch
+    DR(Draft Graph):::orch
+    RT(Routing Graph):::orch
+    RV(Revise Graph):::orch
+    P(Planning Graph):::orch
 
     subgraph "Guardrail Katmanı"
         GI[Prompt-Injection Scrub]:::guard
         GP[PII / Checksum]:::guard
         GS[Gizlilik ve Clearance Gate]:::guard
         GV[Groundedness / Claim-Check<br/>Verifier + LLM Judge]:::guard
+        
         DA -.-> GI
         DA -.-> GP
         DA -.-> GS
@@ -177,32 +214,25 @@ graph TD
         RV -.-> GV
     end
 
-    M{{"Ollama (yerel) ⇄ Evren (Teknofest-hosted)<br/>LOCAL_MODE anahtarı"}}:::external
-    N{{"mevzuat-mcp<br/>canlı mevzuat + yerel fallback korpüs"}}:::external
+    M{{"Ollama (yerel) ⇄ Evren (Teknofest-hosted)"}}:::external
+    N{{"mevzuat-mcp<br/>canlı mevzuat + yerel fallback"}}:::external
+    
     GV <--> M
     DA <--> N
 
     subgraph "Kalıcılık"
-        I[(PostgreSQL<br/>RLS + LangGraph Checkpointer)]:::storage
-        J[(Qdrant<br/>mevzuat vs. document_qa — izole)]:::storage
-        K[(Redis<br/>oturum ve kısa süreli state)]:::storage
+        I[(PostgreSQL<br/>RLS + Checkpointer)]:::storage
+        J[(Qdrant<br/>Vektör DB)]:::storage
+        K[(Redis<br/>Oturum state)]:::storage
+        
         P --> I
         DA --> J
         RT --> J
         P --> K
     end
-
-    subgraph "Gözlemlenebilirlik"
-        O1[Langfuse — LLM/token izleme]:::obs
-        O2[Prometheus + Grafana]:::obs
-        O3[Jaeger — OpenTelemetry trace]:::obs
-    end
-    P -.-> O1
-    B -.-> O2
-    B -.-> O3
 ```
 
-## Çok Kiracılı Roller ve Yetkilendirme
+## Çok Kiracılı Roller ve İzinler
 
 Sistem baştan **multi-tenant SaaS** olarak tasarlanmış: platformda birden fazla şirket/kurum hesabı aynı anda çalışabiliyor (`POST /companies`), her biri kendi kullanıcılarını, evraklarını, taslaklarını, mevzuat izlerini ve **adaptif stil profilini** izole biçimde tutuyor. Yetkilendirme salt **RBAC** değil, rol + sahiplik + gizlilik derecesini birlikte değerlendiren bir **ABAC (Attribute-Based Access Control)** motoru (`core/authz/engine.py`) üzerinden çalışıyor — her görevin (task) yetki tavanı farklı:
 
@@ -213,18 +243,18 @@ Sistem baştan **multi-tenant SaaS** olarak tasarlanmış: platformda birden faz
 | **MANAGER** | Tek şirket | ADMIN ile aynı tam erişim tavanı — güvenilir yönetici konumu |
 | **EMPLOYEE** | Tek şirket | Yetki tavanı role göre **sabit değil** — o kullanıcının kendi `clearance_level`'ına göre değişir; aynı roldeki iki çalışan farklı gizlilik seviyesine erişebilir |
 
-Her aksiyon (`documents:read`, `permission:grant`, `training:export`…) ayrı bir `Action` enum değeri olarak modellenmiş ve `PermissionGrantModel` üzerinden şirket-bazlı devredilebiliyor — statik rol listesine sığmayan ince-taneli (fine-grained) yetkiler için.
+Her aksiyon (`documents:read`, `permission:grant`, `training:export`…) ayrı bir `Action` enum değeri olarak modellenmiş ve `PermissionGrantModel` üzerinden şirket-bazlı devredilebiliyor — statik rol listesine sığmayan ince-taneli yetkiler için.
 
-## Uyum Bilgi Grafiği (Knowledge Graph)
+## Mevzuat ve Uyum Grafiği
 
-`GET /documents/graph` — kodun kendi docstring'inde birebir şöyle tanımlanmış: *"the compliance knowledge graph over every document the caller may see."* Bu bir görsel süs değil, gerçek bir **knowledge graph** motoru:
+`GET /documents/graph` — kodun kendi docstring'inde birebir şöyle tanımlanmış: *"the compliance bilgi grafiği over every document the caller may see."* Bu sadece arayüzde güzel dursun diye yapılmadı, arka planda tam teşekküllü bir **bilgi grafiği** motoru:
 
 - **Node/edge çıkarımı** — belgeler ve atıf yaptıkları mevzuat maddeleri (`Document → Madde`) arasında graf ilişkisi kuruluyor; paylaşılan madde atıflarıyla dolaylı olarak birbirine bağlanan evrak kümeleri ortaya çıkıyor.
 - **Ayrı bir graph veritabanı yok** — grafik Postgres + analiz cache'inden **okuma anında** türetiliyor (`build_corpus_graph`), senkronizasyon/tutarlılık sorunu yaratmıyor.
 - **Gizlilik-farkında (clearance-aware) filtreleme** — çağıranın erişemeyeceği bir evrak grafikten sessizce çıkarılıyor; varlığı bile ifşa edilmiyor, yalnızca `hidden_document_count` olarak sayılıyor.
 - **Force-directed görselleştirme** — frontend'de `KnowledgeGraphView.tsx`, `EntityGraphView.tsx`, `NodeInspector.tsx` ve kendi `useForceSimulation`/`forceLayout` motoruyla interaktif düğüm-kenar grafiği, filtrelenebilir (`GraphFilters.tsx`).
 
-## Adaptif Öğrenme
+## Kuruma Özel Öğrenme
 
 Her şirket, sisteme kendi resmî yazışma "sesini" öğretebiliyor — statik bir prompt şablonu değil, **feedback'ten öğrenen, şirkete özel bir adaptasyon hattı** (`app/ai/training/*`):
 
@@ -234,7 +264,7 @@ Her şirket, sisteme kendi resmî yazışma "sesini" öğretebiliyor — statik 
 
 Her şirketin adaptasyonu diğerinden **izole** — bir şirketin öğrenilen üslubu başka bir kiracının taslaklarına asla sızmıyor.
 
-## Dikkat Çeken Tasarım Kararları
+## Önemli Mimari Kararlar
 
 Kodun kendi içinde gerekçesiyle birlikte belgelenmiş, öne çıkan kararlar:
 
@@ -248,7 +278,7 @@ Kodun kendi içinde gerekçesiyle birlikte belgelenmiş, öne çıkan kararlar:
 | **Yerel/barındırılan model geçişi tek bayrakla** | `LOCAL_MODE=true` → Ollama + yerel Qdrant; `false` → TEKNOFEST'in barındırdığı Evren çıkarım kümesi + kendi Qdrant kümesi. Kod hiçbir yerde sağlayıcıya göre dallanmıyor. |
 | **Mevzuat sorgusu asla kaynaksız kalmıyor** | Canlı MCP sunucusu (`mevzuat-mcp`) yanıt vermezse `datasets/mevzuat/` altındaki commit'li korpüse otomatik düşülüyor — sonuç yoksa kaynak uydurulmuyor, boş dönülüyor. |
 
-## Teknoloji Yığını
+## Kullanılan Teknolojiler
 
 | Katman | Teknoloji | Notlar |
 | :--- | :--- | :--- |
@@ -263,7 +293,7 @@ Kodun kendi içinde gerekçesiyle birlikte belgelenmiş, öne çıkan kararlar:
 | **CI/CD** | GitHub Actions (`.github/workflows/ci.yml`) | Backend (`pytest` + coverage gate) ve frontend (`eslint`, `tsc`, `vitest` + coverage) ayrı job'larda, gerçek `docker compose` servisleriyle; manuel tetiklenir (`workflow_dispatch`) |
 | **Dağıtım** | Docker Compose (dev/prod ayrı dosya), Kubernetes (11 manifest) | Prod imajları `ghcr.io/chyp3r/kachow-*` |
 
-## Uçtan Uca İş Akışı
+## Baştan Sona İşlem Adımları
 
 ```mermaid
 sequenceDiagram
@@ -292,7 +322,7 @@ sequenceDiagram
     D->>G: Claim-check (tarih/tutar/kişi/kurum/mevzuat) + LLM Judge
     alt Kritik bulgu (skor ne olursa olsun)
         G-->>H: forces_approval = true
-        H-->>F: Eksik bilgi formu / onay bekleniyor (interrupt)
+        H-->>F: Eksik bilgi formu / onay bekleniyor
         U->>F: Yanıt / onay / revizyon talimatı
         F->>D: Resume (thread state korunur)
     else Bulgu yok / düzeltilebilir
@@ -306,7 +336,7 @@ sequenceDiagram
     F-->>U: Kalıcı kayıt — sürüm geçmişinden geri dönülebilir
 ```
 
-## Router'dan Başlayan İstek Akışı
+## Gelen İsteğin Yönlendirme Adımları
 
 `backend/app/api/router.py`, 20 domain router'ını tek bir `api_router` altında topluyor. Bir isteğin FastAPI uygulamasına girişten domain servisine ulaşana kadar geçtiği gerçek sıra:
 
@@ -353,7 +383,7 @@ flowchart TD
     class SVC1,SVC2,SVC3,SVC4 svc;
 ```
 
-## Taslak Doğrulama Karar Ağacı
+## Otomatik Doğrulama ve Onay Mekanizması
 
 Bir taslağın "otomatik geç", "otomatik onar" ya da "insana düşür" arasında nasıl ayrıldığı — `draft_verifier.py` + `confidence_rules.py`'nin gerçek karar mantığı:
 
@@ -392,7 +422,7 @@ flowchart TD
     class SCORE,JUDGE,REPAIR neutral;
 ```
 
-## HITL — İnsan Onayı Durum Makinesi
+## Kullanıcı Onayı ve Müdahale Sistemi
 
 ```mermaid
 stateDiagram-v2
@@ -412,7 +442,7 @@ stateDiagram-v2
     Reddedildi --> BeklemedeForm: "Bekleyen onay artık geçerli değil"<br/>state yeniden çekilir
 ```
 
-## Test, Kalite Kapıları ve CI
+## Test Süreçleri ve Kalite Kontrol
 
 Bu bölümdeki sayılar iddia değil — bu dokümantasyon hazırlanırken (**2026-08-24**) `docker compose run --rm backend pytest` ve `docker compose run --rm frontend npm test` ile gerçekten çalıştırılıp doğrulanmıştır.
 
@@ -472,7 +502,7 @@ Tetikleme yalnızca manuel: `on: workflow_dispatch` — push/PR'da otomatik çal
 
 Testlerin ötesinde, `evaluation/` altında ayrı bir LLM/RAG kalite ölçüm hattı var — `make eval`, `make eval-baseline`, `make eval-llm`, `make eval-retrieval`, `make benchmark`, `make perf-smoke|chat|document`, `make latency-report`. Bunlar birer unit test değil; retrieval kalitesi, **LLM-as-a-judge** tutarlılığı ve gecikme regresyonu için ayrı, veri setine dayalı ölçümler üretiyor (bkz. [Değerlendirme metrikleri](#değerlendirme-metrikleri-ve-model-karşılaştırması)).
 
-## Veri Setleri
+## Eğitim ve Test Verileri
 
 | Kaynak | İçerik | Boyut |
 | :--- | :--- | ---: |
@@ -499,7 +529,7 @@ pie showData
     "Yönetmelik ve kurallar" : 3
 ```
 
-## Değerlendirme Metrikleri ve Model Karşılaştırması
+## Başarım Ölçümleri ve Model Sonuçları
 
 > Bu bölüm bilinçli olarak **şablon** — sayılar `make eval` / `make eval-llm` / `make eval-retrieval` çalıştırıldıktan sonra doldurulacak.
 
@@ -529,7 +559,7 @@ pie showData
 
 ### Latency ve Performans Testleri
 
-| Metrik (Endpoint / Graph) | P50 (ms) | P95 (ms) | P99 (ms) | İstek/Sn (RPS) |
+| Metrik (Endpoint / Graph) | P50 (ms) | P95 (ms) | P99 (ms) | İstek/Sn |
 | :--- | ---: | ---: | ---: | ---: |
 | `POST /api/v1/documents` (OCR hariç) | — | — | — | — |
 | `POST /api/v1/documents` (Tesseract OCR dahil) | — | — | — | — |
@@ -539,21 +569,21 @@ pie showData
 
 ### LLM Judge - İnsan Değerlendirmesi Karşılaştırması
 
-| Kriter (1-5 Puan Aralığı) | LLM Judge Ortalama | Uzman İnsan Ortalama | Korelasyon (Pearson) |
+| Kriter (1-5 Puan Aralığı) | LLM Judge Ortalama | Uzman İnsan Ortalama | Korelasyon |
 | :--- | ---: | ---: | ---: |
 | Kurumsal üslup uygunluğu | — | — | — |
-| İddia (Claim) tutarlılığı | — | — | — |
+| İddia tutarlılığı | — | — | — |
 | Eksik bilgi hassasiyeti | — | — | — |
 | Format ve şablon uyumu | — | — | — |
 
 ### Güvenlik ve Guardrail Başarımı (Red Team)
 
-| Güvenlik Testi Vektörü | Başarı Oranı (%) | Atlatma Sayısı (Bypass) |
+| Güvenlik Testi Vektörü | Başarı Oranı (%) | Atlatma Sayısı |
 | :--- | ---: | ---: |
 | Prompt Injection (Talimat Sızdırma) | — | — |
 | PII Çıkarımı (Maskeleme Atlatma) | — | — |
-| Mevzuat Uydurma (Hallucination) | — | — |
-| Sınır Dışı Konu (Off-topic) | — | — |
+| Mevzuat Uydurma | — | — |
+| Sınır Dışı Konu | — | — |
 
 ```mermaid
 xychart-beta
@@ -563,14 +593,14 @@ xychart-beta
     bar [0, 0, 0, 0]
 ```
 
-## Gözlemlenebilirlik ve Metrikler
+## Sistem İzleme ve Metrikler
 
 Sistem "çalışıyor gibi görünüyor" değil, ölçülüyor:
 
 - **Prometheus** — 3 scrape job'ı (`prometheus`, `kachow-backend`, `qdrant`), `monitoring/prometheus/rules/kachow.rules.yml` içinde **12 alert kuralı** (`KachowBackendDown` dahil, her biri `docs/deployment/runbook.md`'de bir runbook bölümüne bağlı). Postgres/Redis için "up" alarmı bilinçli olarak yok, çünkü hiçbiri için exporter deploy edilmemiş — hiç scrape edilmeyen bir job'a alarm bağlamak sessizce hiç tetiklenmeyen, olmayan bir güvenlik hissi verir.
 - **Grafana** — `company_dashboard.json`, `fastapi_dashboard.json`, `transfers_dashboard.json` — otomatik provisioning ile yükleniyor (`monitoring/grafana/provisioning/`).
 - **Langfuse** — LLM çağrısı başına token/maliyet/gecikme izleme, `compose.yml`'de kendi Postgres veritabanıyla ayrı bir servis.
-- **Jaeger + OpenTelemetry** — HTTP, DB (SQLAlchemy) ve Redis/httpx span'leri **distributed tracing** olarak toplanıyor.
+- **Jaeger + OpenTelemetry** — HTTP, DB (SQLAlchemy) ve Redis/httpx span'leri **dağıtık izleme** olarak toplanıyor.
 - **Correlation ID** — `X-Request-ID`, `CorrelationIdMiddleware` tarafından üretilip yanıt header'ına ve `AuditLogModel.correlation_id`'e yazılıyor.
 
 ## Hızlı Başlangıç
@@ -636,7 +666,7 @@ deploy/docker/nginx.conf                # prod Nginx yapılandırması (SSE dahi
 .env                                    # cp .env.example .env sonrası doldurulur
 ```
 
-## Dağıtım Topolojisi: Docker Compose (dev) vs Kubernetes (prod)
+## Sunucu ve Dağıtım Altyapısı
 
 **Geliştirme — `compose.yml` (15 servis):**
 
@@ -678,7 +708,7 @@ graph TD
     BEPOD --> RD[("Redis<br/>Deployment")]:::store
 ```
 
-## Kubernetes Prodüksiyon Ortamı
+## Canlı Ortam Kurulumu
 
 `deploy/kubernetes/` — 11 manifest, `kachow` namespace'i altında; her biri kararının gerekçesini kendi içinde belgeliyor:
 
@@ -700,7 +730,7 @@ Prod imajları: `ghcr.io/chyp3r/kachow-backend`, `ghcr.io/chyp3r/kachow-frontend
 
 Detaylı runbook, secrets yönetimi, backup/restore ve upgrade prosedürleri için: [docs/deployment/](docs/deployment/)
 
-## Depo Yapısı
+## Proje Klasör Yapısı
 
 ```
 backend/app/
@@ -717,7 +747,7 @@ backend/app/
 └── infrastructure/ # extractors (PDF/OCR/vision), storage, vectorstore, LLM sağlayıcıları
 
 frontend/src/
-├── features/       # documents, drafts, chat, graph (knowledge graph UI), admin, messaging…
+├── features/       # documents, drafts, chat, graph (bilgi grafiği UI), admin, messaging…
 ├── pages/, hooks/, api/, contexts/, providers/
 
 docs/               # mimari, API, deployment, geliştirme standartları — 45 sayfa
@@ -727,7 +757,7 @@ datasets/           # mevzuat korpüsü fallback'i, resmî yazışma örnekleri
 .github/workflows/  # CI — backend + frontend, Actions sekmesinden manuel tetiklenir
 ```
 
-## Katkı, Güvenlik, Lisans
+## Katkı Sağlama ve Lisans
 
 - Geliştirme akışı, branch/commit kuralları: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Güvenlik sınırları ve yerleşik koruma katmanları: [SECURITY.md](SECURITY.md)
