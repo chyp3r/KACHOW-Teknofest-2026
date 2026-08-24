@@ -1,73 +1,66 @@
-# Yedekleme ve Geri Yükleme
+# Yedekleme ve Geri Yükleme (Backup & Restore)
 
-Üç bağımsız veri kaynağı yedeklenmeli: Postgres (kayıtlar, kullanıcılar,
-taslaklar, audit log, RLS tenant verisi), Qdrant (vektör indeksleri --
-kaybı yalnızca retrieval kalitesini düşürür, kayıt kaybı değildir, ama
-yeniden indekslemek zaman alır) ve belge depolama (`storage_data`
-PVC/volume ya da S3 bucket'ı -- ham belge blob'ları + analiz cache'i).
+> Sistemin kalıcı (Persistent) verileri üç ayrı kaynağa ayrılır: Postgres (İlişkisel), Qdrant (Vektörel) ve Object Storage (Dosyalar).
 
-## Postgres
+---
 
+## 1. PostgreSQL (Kritik)
+
+Kullanıcılar, kayıtlar, taslaklar, denetim izleri (Audit) ve RLS Tenant verilerini taşır. Mutlaka düzenli yedeklenmelidir.
+
+Standart SQL (`.sql`) yerine `pg_dump`'ın Özel Formatı (`-Fc` Custom Format) kullanılmalıdır. Bu sayede geri yüklemede (Restore) seçici tablo aktarımı ve paralel işleme yapılabilir.
+
+**Yedek Alma (Backup):**
 ```bash
 # Docker Compose
 docker compose -f compose.yml -f compose.prod.yml --env-file .env.prod \
   exec db pg_dump -U "$POSTGRES_USER" -Fc kachow > kachow-$(date +%F).dump
 
 # Kubernetes
-kubectl -n kachow exec postgres-0 -- pg_dump -U postgres -Fc kachow \
-  > kachow-$(date +%F).dump
+kubectl -n kachow exec postgres-0 -- pg_dump -U postgres -Fc kachow > kachow-$(date +%F).dump
 ```
 
-`-Fc` (custom format) tercih edilir -- `pg_restore` ile paralel restore
-ve seçici tablo geri yüklemeyi destekler, düz SQL dump'ın aksine.
-
-**Geri yükleme:**
+**Geri Yükleme (Restore):**
 ```bash
 pg_restore -U postgres -d kachow --clean --if-exists kachow-2026-08-23.dump
 ```
-`--clean --if-exists`: hedef veritabanında zaten nesneler varsa önce
-düşürür -- boş bir veritabanına geri yüklerken bu bayraklar zararsız.
+> **NOT:** `--clean --if-exists` parametresi mevcut (eski) tabloları tamamen ezip yenilerini yazar, boş veritabanlarında zararsızdır. 
+> Ayrıca `langfuse` loglarını barındıran ayrı veritabanının da isteniyorsa benzer şekil de yedeklenmesi gerekir.
 
-**`langfuse` veritabanını unutmayın** -- aynı Postgres instance'ında ayrı
-bir veritabanı (`scripts/init-db.sh`/`postgres.yaml`'ın initdb
-ConfigMap'i tarafından oluşturulur), `kachow` dump'ının parçası değildir.
+---
 
-## Qdrant
+## 2. Qdrant (Vektör Deposu)
 
-Qdrant'ın kendi snapshot API'si:
+Qdrant indeksleri (`mevzuat`, `resmi_yazisma_ornek`, `document_qa`) kaybedilirse metinlerden tekrar oluşturulabilir ancak işlem uzun sürer (Özellikle Q&A Koleksiyonu). Qdrant Native Snapshot API'si kullanılmalıdır.
+
+**Snapshot Alma:**
 ```bash
 curl -X POST http://qdrant:6333/collections/document_qa/snapshots
 curl -X POST http://qdrant:6333/collections/mevzuat/snapshots
-# ... her koleksiyon için (koleksiyon adları: document_qa, mevzuat,
-# resmi_yazisma_ornek -- app/core/config.py'nin *_COLLECTION_NAME
-# alanları)
+# Diğer tüm koleksiyon isimleri için aynısı yapılmalıdır.
 ```
-Snapshot dosyaları container içinde `/qdrant/storage/snapshots/`
-altında oluşur -- `qdrant.yaml`'ın PVC'sinden (ya da compose'un
-`qdrant_data` volume'undan) dışarı kopyalanmalı.
+Snapshot'lar Qdrant içinde `/qdrant/storage/snapshots/` klasörüne (PVC) yazılır, oradan dış ortama kopyalanmalıdır.
 
-**Not:** `mevzuat` ve `resmi_yazisma_ornek` koleksiyonları commit'li
-korpustan (`datasets/`) yeniden indekslenebilir -- yedeklemek bir
-kolaylık, zorunluluk değil. `document_qa` (kullanıcı yüklediği belgeler)
-**kayıp telafisi olmayan** tek koleksiyon; asıl öncelik bu.
+---
 
-## Belge depolama (`storage_data`)
+## 3. Belge Depolama (Storage Data)
 
-- `STORAGE_TYPE=local`: PVC/volume'un kendisini yedekleyin (Velero, CSI
-  snapshot, ya da basitçe `docker run --rm -v backend_storage_data:/data
-  -v $(pwd):/backup alpine tar czf /backup/storage-$(date +%F).tar.gz
-  /data`).
-- `STORAGE_TYPE=s3`: yedekleme sorumluluğu S3-uyumlu depolama
-  sağlayıcınıza (bucket versioning/replication) geçer -- bu repo bir
-  şey yapmaz.
+Ham PDF/Belgeleri ve metadata (Cache) içeriklerini tutar.
 
-## Geri yükleme sırası
+| Depolama Tipi | Yedekleme Yöntemi |
+| :--- | :--- |
+| `STORAGE_TYPE=local` | Yerel Disk veya PVC yedeği (CSI Snapshot, Velero). Veya basit TAR arşivi: `tar czf backup.tar.gz /data` |
+| `STORAGE_TYPE=s3` | Bulut veya On-prem S3 sisteminizin otomatik Snapshot ve Replication (Versiyonlama) özelliklerine bırakılır. |
 
-1. Postgres'i geri yükleyin (`pg_restore`).
-2. Qdrant koleksiyonlarını snapshot'tan geri yükleyin.
-3. `storage_data`'yı geri yükleyin.
-4. `backend`'i başlatın -- `migrate-job`/`migrate` servisini **çalıştırmayın**
-   eğer geri yüklenen Postgres dump'ı zaten hedef şemadaysa (aksi halde
-   `alembic upgrade head` zaten uygulanmış migration'ları tekrar
-   uygulamaya çalışmaz, ama `alembic_version` tablosunun tutarlı olduğunu
-   önce doğrulayın: `SELECT version_num FROM alembic_version;`).
+---
+
+## 4. Tam Geri Yükleme Sırası (Restore Sequence)
+
+Sistemi baştan (Disaster Recovery) ayağa kaldırmak için doğru sıralama:
+
+1. **Postgres** yedeğini `pg_restore` ile yükleyin.
+2. **Qdrant** Snapshot'larını API ile içe aktarın (Import).
+3. **Storage** dosyalarını yerine koyun.
+4. En son `backend` servislerini başlatın.
+
+> **ÖNEMLİ:** `pg_restore` yaptıktan sonra `migrate` servisini/Job'ını **ÇALIŞTIRMAYIN**. Alembic zaten `alembic_version` tablosundan (Restore edilen veritabanı içindeki) Head (Güncel sürüm) numarasına ulaşıp şemanın son sürümde olduğunu görecektir. Hata olmaması için versiyonun tutarlı olduğunu teyit edin: `SELECT version_num FROM alembic_version;`

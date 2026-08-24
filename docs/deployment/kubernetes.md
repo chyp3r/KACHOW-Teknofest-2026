@@ -1,100 +1,99 @@
-# Kubernetes ile Deploy
+# Kubernetes Dağıtımı
 
-`deploy/kubernetes/*.yaml` — düz manifest'ler, Helm değil (`deploy/helm/`
-ayrı, henüz tamamlanmamış bir takip işi). Her dosyanın kendi başında,
-neden o şekilde yazıldığını anlatan yorumlar var; burada yalnızca
-uygulama sırası ve manifest'lerin metinde yazmayan gerçek varsayımları
-özetlenir.
+> KACHOW projesi, Helm Chart yerine düz (Plain) manifest dosyaları ile (`deploy/kubernetes/*.yaml`) Self-Hosted Kubernetes kümelerine dağıtılır. Bu set, `kind` kümesinde API seviyesinde uçtan uca doğrulanmıştır.
 
-Bu manifest seti `kind` ile gerçek bir Kubernetes API server'ına karşı
-uçtan uca doğrulandı — bkz. `CHANGELOG.md`'nin `[3.43.0]` girdisi.
+---
 
-## Uygulama sırası
+## Topoloji ve Uygulama Sırası (Apply Sequence)
+
+Aşağıdaki sıra zorunludur: Network, Config, Secret, Veritabanları, Migration ve son olarak Uygulama.
+
+```mermaid
+flowchart TD
+    A[namespace.yaml] --> B[configmap.yaml]
+    B --> C[secrets.yaml]
+    C --> D[Stateful: postgres, redis, qdrant]
+    D --> E[migrate-job.yaml]
+    E --> F[Stateless: backend, frontend]
+    F --> G[Ingress & PDB]
+```
+
+### Kurulum Komutları
 
 ```bash
+# 1. Namespace
 kubectl apply -f deploy/kubernetes/namespace.yaml
+
+# 2. Config & Secrets
 kubectl apply -f deploy/kubernetes/configmap.yaml
-# secrets.yaml'daki placeholder'ları GERÇEK değerlerle DOLDURMADAN
-# apply etmeyin -- bkz. secrets.md.
-kubectl apply -f deploy/kubernetes/secrets.yaml
+kubectl apply -f deploy/kubernetes/secrets.yaml # DİKKAT: Placeholder'ları mutlaka doldurun!
+
+# 3. Stateful Altyapı
 kubectl apply -f deploy/kubernetes/postgres.yaml
 kubectl apply -f deploy/kubernetes/qdrant.yaml
 kubectl apply -f deploy/kubernetes/redis.yaml
 
+# Pod'ların hazır olmasını bekleyin
 kubectl -n kachow wait --for=condition=Ready pod -l app=kachow-postgres --timeout=180s
 kubectl -n kachow wait --for=condition=Ready pod -l app=kachow-qdrant --timeout=180s
 
-# Şema -- backend'den ÖNCE tamamlanmalı.
+# 4. Veritabanı Şeması (Migration)
 kubectl apply -f deploy/kubernetes/migrate-job.yaml
 kubectl -n kachow wait --for=condition=Complete job/kachow-migrate --timeout=120s
 
+# 5. Uygulama ve Ağ
 kubectl apply -f deploy/kubernetes/backend.yaml
 kubectl apply -f deploy/kubernetes/frontend.yaml
 kubectl apply -f deploy/kubernetes/pdb.yaml
 kubectl apply -f deploy/kubernetes/ingress.yaml
 ```
 
-`backend.yaml`'ın kendi `wait-for-migrations` initContainer'ı, `migrate`
-Job'ı elle beklemeden `apply` edilse bile şemanın `head`'e ulaşmasını
-bekler (`alembic current | grep '(head)'` döngüsü) — yukarıdaki `wait`
-adımları bir güvence, zorunluluk değil.
+> **NOT:** `backend.yaml` içerisindeki `wait-for-migrations` initContainer, şema (Alembic) hedefine ulaşmadan ana Backend pod'unun başlamasını engeller. Yukarıdaki Job `wait` komutu güvenliği garanti eder.
 
-## EDIT etmeniz gereken yerler
+---
 
-Hiçbir yerde "gerçek" bir değer icat edilmedi — placeholder'lar ya
-apply'ı reddeder ya da açıkça yorumla işaretlenmiştir:
+## Değiştirilmesi Zorunlu Değerler (Placeholder'lar)
 
-- `secrets.yaml` — her `stringData` değeri placeholder. Bkz.
-  [secrets.md](secrets.md).
-- `configmap.yaml`'ın `OLLAMA_BASE_URL`'i — `ollama.example.internal`
-  gerçek bir host değil.
-- `namespace.yaml`'ın `allow-backend-ollama-egress` NetworkPolicy'si —
-  varsayılan olarak port 11434'e her yere izin verir (fonksiyonel ama
-  gevşek); gerçek Ollama host'unuza daraltın.
-- `backend.yaml`/`frontend.yaml`/`migrate-job.yaml`'ın `image:` alanları —
-  `ghcr.io/chyp3r/kachow-backend:latest` bir placeholder; kendi
-  registry'nize push ettiğiniz imajla değiştirin.
-- `ingress.yaml`'ın `host`/`tls.hosts`/`cert-manager.io/cluster-issuer`'ı.
+Yaml dosyalarındaki dummy değerler doğrudan kullanılamaz. İlgili dosyaları düzenleyiniz:
 
-## `replicas: 1` neden varsayılan
+| Dosya | Değiştirilecek Kısım | Açıklama |
+| :--- | :--- | :--- |
+| `secrets.yaml` | `stringData` blokları | [secrets.md](secrets.md) belgesindeki tüm şifre ve anahtarlar |
+| `configmap.yaml`| `OLLAMA_BASE_URL` | Ollama model sunucusunun gerçek iç/dış adresi. |
+| `namespace.yaml`| `allow-backend-ollama-egress` | Ollama çıkışını (Egress) güvenli IP/Port (11434) ile sınırlayın. |
+| `*.yaml` (Deployment/Job)| `image:` satırları | Push ettiğiniz private/public imaj etiketleri. |
+| `ingress.yaml` | `host` ve TLS Issuer | Sistemin yayınlanacağı gerçek FQDN. |
 
-`backend.yaml`'ın kendi yorumu tam gerekçeyi anlatıyor: J9 (#254) analiz
-cache'ini `BaseStorage`'ın arkasına aldı, yani `STORAGE_TYPE=s3` artık
-gerçekten "hiçbir yerel disk yazması yok" anlamına geliyor. Ama
-`configmap.yaml`'ın varsayılanı hâlâ `STORAGE_TYPE=local` (gerçek bir
-S3/MinIO endpoint'i bu repo tarafından varsayılamaz), ve yerel depolama
-ile `replicas > 1`, `backend-storage-data` PVC'sinin `ReadWriteMany`
-olmasını gerektirir (çoğu cluster'da yok).
+---
 
-**2+ replikaya çıkmak için:**
-1. Bir S3-uyumlu depolama (MinIO veya bulut S3) kurun.
-2. `configmap.yaml`'da `STORAGE_TYPE: "s3"` ve `S3_BUCKET_NAME`/
-   `S3_ENDPOINT_URL`'i doldurun.
-3. `secrets.yaml`'da `S3_ACCESS_KEY`/`S3_SECRET_KEY`'i doldurun.
-4. `backend.yaml`'da `replicas`'ı yükseltin; `backend-storage-data`
-   PVC/volumeMount'unu tamamen kaldırabilirsiniz (artık kullanılmıyor).
+## Replica (Ölçekleme) Ayarları ve S3 Zorunluluğu
 
-## `NetworkPolicy` gerçek bir varsayım gerektirir
+`backend.yaml` varsayılan olarak `replicas: 1` ile gelir. 
+Eğer yerel (Local) depolama yerine **2+ Replika (Yatay Ölçekleme)** isteniyorsa; yerel PVC yerine nesne depolama (Object Storage - S3) kullanılması zorunludur:
 
-`namespace.yaml`'ın default-deny + istisna politikaları yalnızca
-NetworkPolicy'yi gerçekten uygulayan bir CNI'da işe yarar. Desteklemeyen
-bir CNI'da bu manifest'ler sessizce hiçbir şey yapmaz (apply hata vermez,
-ama izolasyon da olmaz) — cluster'ınızın CNI'ını kontrol edin.
+1. Kurum içi (On-premise) MinIO veya Bulut (AWS) S3 hizmeti kurun.
+2. `configmap.yaml` dosyasında: `STORAGE_TYPE: "s3"`, `S3_BUCKET_NAME` ve `S3_ENDPOINT_URL` tanımlayın.
+3. `secrets.yaml` dosyasında: `S3_ACCESS_KEY` ve `S3_SECRET_KEY` tanımlayın.
+4. `backend.yaml` içinden `backend-storage-data` VolumeMount tanımını **tamamen silin** ve `replicas` değerini artırın.
 
-## Kaynak sınırları
+---
 
-`namespace.yaml`'ın `ResourceQuota`'sı namespace genelinde bir tavan
-koyar — bu quota aktifken **her** container'ın (initContainer'lar dahil)
-kendi `resources.requests`/`limits`'i olmak zorunda, yoksa Pod oluşturma
-tamamen reddedilir (`FailedCreate`). Bu manifest setinin kendi geliştirme
-sürecinde gerçekten yakalanan bir hataydı; yeni bir container eklerken
-unutmayın.
+## Güvenlik Sınırları ve Kotalar (Hardening)
 
-## Doğrulama
+- **NetworkPolicy:** `namespace.yaml` içerisinde tanımlı default-deny (Varsayılan Reddet) politikalarının çalışabilmesi için kümenizin (Cluster) destekleyen bir CNI (Örn: Calico, Cilium) kullanması şarttır. Flannel gibi CNI'lar bu sınırları yok sayar.
+- **Resource Quota (Kaynak Tavanı):** Namespace genelinde kaynak kotası zorlanmaktadır. Eklediğiniz herhangi bir yan pod (Sidecar) veya initContainer, kesinlikle `resources.requests` ve `limits` belirtmelidir; aksi takdirde `FailedCreate` hatası alınır.
+
+---
+
+## Sağlık Doğrulaması (Validation)
 
 ```bash
+# Tüm pod durumlarını inceleyin
 kubectl -n kachow get pods
+
+# Backend loglarını takip edin
 kubectl -n kachow logs -l app=kachow-backend
+
+# Liveness Probe üzerinden sağlık teyidi
 curl -f https://<ingress-host>/api/v1/health
-kubectl apply --dry-run=server -k deploy/kubernetes/
 ```

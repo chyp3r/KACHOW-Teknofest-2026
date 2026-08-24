@@ -1,43 +1,52 @@
-# Deployment Dokümantasyonu
+# Dağıtım (Deployment) Dokümantasyonu
 
-> Bu dizin, KACHOW'u yerel geliştirme dışında (staging/production) çalıştırmak isteyen operatörler içindir. Geliştirme ortamı kurulumu için kök `README.md`'ye bakın.
+> Bu dizin, KACHOW'u yerel geliştirme ortamı dışında (Staging/Production) çalıştırmak isteyen altyapı operatörleri içindir. Geliştirme ortamı kurulumu için kök dizindeki `README.md` dosyasına bakınız.
+
+---
 
 ## İçindekiler
 
-1. [prerequisites.md](prerequisites.md) — deploy etmeden önce ihtiyacınız olanlar.
-2. [docker-compose.md](docker-compose.md) — `compose.prod.yml` ile tek makineye deploy.
-3. [kubernetes.md](kubernetes.md) — `deploy/kubernetes/*.yaml` ile self-hosted bir cluster'a deploy.
-4. [configuration.md](configuration.md) — her ortam değişkeni, hangileri zorunlu, hangi varsayılanlar güvensiz.
-5. [secrets.md](secrets.md) — sırların nasıl yönetileceği (plain Secret / Sealed Secrets / External Secrets Operator).
-6. [migrations.md](migrations.md) — şema migration'ları, iki-rollü DB bağlantısı.
-7. [observability.md](observability.md) — dashboard'lar, alert kuralları, Langfuse.
-8. [runbook.md](runbook.md) — her alert için "ne yapmalıyım" rehberi.
-9. [backup-restore.md](backup-restore.md) — Postgres, Qdrant, belge depolamanın yedeklenmesi.
-10. [upgrade.md](upgrade.md) — yeni bir sürüme geçiş.
-11. [hardening.md](hardening.md) — bu deployment'ın güvenlik varsayımları ve sınırları.
+1. [prerequisites.md](prerequisites.md) — Dağıtım öncesi gereksinimler.
+2. [docker-compose.md](docker-compose.md) — `compose.prod.yml` ile tek makine (Single-Node) dağıtımı.
+3. [kubernetes.md](kubernetes.md) — Self-hosted Kubernetes kümesine (Cluster) dağıtım.
+4. [configuration.md](configuration.md) — Ortam değişkenleri, zorunlu alanlar ve güvensiz varsayılanlar.
+5. [secrets.md](secrets.md) — Sır (Secret) yönetimi (Plain, Sealed Secrets, External Secrets).
+6. [migrations.md](migrations.md) — Veritabanı şema göçleri (Migrations) ve 2 rollü DB bağlantısı.
+7. [observability.md](observability.md) — İzlenebilirlik (Grafana, Prometheus, Langfuse).
+8. [runbook.md](runbook.md) — Olası altyapı alarmları ve müdahale rehberi.
+9. [backup-restore.md](backup-restore.md) — Postgres, Qdrant ve MinIO (Storage) yedekleme/geri yükleme stratejileri.
+10. [upgrade.md](upgrade.md) — Yeni sürüme geçiş ve Rollout.
+11. [hardening.md](hardening.md) — Güvenlik varsayımları, sınırlar ve sıkılaştırma (Hardening).
 
-## İki deploy yolu
+---
 
-Bu proje iki eşdeğer, birbirinden bağımsız deploy yolu sunar — ikisini birden çalıştırmayın:
+## İki Ana Dağıtım Stratejisi
 
-| | Docker Compose | Kubernetes |
-|---|---|---|
-| Dosyalar | `compose.yml` + `compose.prod.yml` | `deploy/kubernetes/*.yaml` |
-| Hedef kitle | Tek makine, küçük/orta ölçek | Self-hosted bir cluster |
-| Ölçeklenebilirlik | `backend` tek replika | `backend` varsayılan 1, `STORAGE_TYPE=s3` ile 2+ |
-| Migration | `migrate` servisi (tek seferlik, `backend`'den önce) | `migrate-job.yaml` (`Job`, `backend`'den önce elle/CI ile uygulanır) |
-| İzleme | `prometheus`/`grafana` (compose.yml'den miras), `alertmanager` (yalnızca prod) | Bu repoda yok — kendi Prometheus operator'ünüzü kurmanız gerekir |
+Sistem birbirine alternatif iki bağımsız dağıtım yolu sunar. Lütfen altyapınıza uygun olan **sadece birini** seçiniz.
 
-Her iki yol da aynı imajları (`deploy/docker/backend.prod.Dockerfile`,
-`deploy/docker/frontend.prod.Dockerfile`) ve aynı Postgres RLS rol
-ayrımını (`DATABASE_URL` / `ALEMBIC_DATABASE_URL`) kullanır — bkz.
-[migrations.md](migrations.md).
+| Özellik | Docker Compose | Kubernetes |
+| :--- | :--- | :--- |
+| **Gerekli Dosyalar** | `compose.yml` + `compose.prod.yml` | `deploy/kubernetes/*.yaml` |
+| **Hedef Kitle** | Tek makine (Single-node), küçük/orta ölçek | Self-hosted k8s kümesi, büyük ölçek |
+| **Ölçeklenebilirlik**| `backend` tek replika (Önerilir) | Varsayılan 1 replika, `STORAGE_TYPE=s3` ile N replika |
+| **Şema (Migration)** | `migrate` servisi (`backend` öncesi çalışır) | `migrate-job.yaml` (Job olarak elle/CI ile çalışır) |
+| **İzleme (Monitoring)**| Compose içinden miras `prometheus`/`grafana` | Repo dışı. Operatör kendi Prometheus Operator'ünü kurmalıdır |
 
-## Hızlı başlangıç (Docker Compose)
+> **NOT:** Her iki yol da aynı imajları (`backend.prod.Dockerfile`, `frontend.prod.Dockerfile`) ve aynı Postgres RLS prensiplerini kullanır.
+
+---
+
+## Hızlı Başlangıç: Docker Compose
 
 ```bash
-cp .env.prod.example .env.prod   # her değeri gerçek bir değerle doldurun
+# 1. Prodüksiyon ortam değişkenlerini hazırlayın
+cp .env.prod.example .env.prod
+
+# 2. Değerleri doldurun (Boş zorunlu alanlar başlatmayı reddeder)
+nano .env.prod
+
+# 3. Yığın (Stack) olarak ayağa kaldırın
 docker compose -f compose.yml -f compose.prod.yml --env-file .env.prod up -d
 ```
 
-Detaylar için [docker-compose.md](docker-compose.md)'ye bakın.
+Detaylar için [docker-compose.md](docker-compose.md) dokümanına bakınız.

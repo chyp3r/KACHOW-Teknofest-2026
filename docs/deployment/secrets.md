@@ -1,22 +1,26 @@
-# Sır Yönetimi
+# Sır (Secret) Yönetimi
+
+> Kimlik bilgileri, API anahtarları ve şifrelerin güvenli yönetimi için rehberdir. Ortama göre sır yönetimi farklılık gösterir.
+
+---
 
 ## Docker Compose
 
-`.env.prod` — `cp .env.prod.example .env.prod`, sonra her satırı gerçek
-bir değerle doldurun. `.env.prod` `.gitignore`'da olmalı (kontrol edin);
-`compose.prod.yml`'in `${VAR:?mesaj}` söz dizimi, boş bırakılan zorunlu
-bir değişkende `up`'ı reddeder — sessiz bir güvensiz varsayılana düşme
-riski yok.
+`.env.prod` dosyası temel sır depolama noktasıdır. 
+Kullanımı: `cp .env.prod.example .env.prod`
+- Dosyadaki her satır gerçek değerlerle doldurulmalıdır.
+- `compose.prod.yml` dosyasındaki `${VAR:?mesaj}` notasyonu sayesinde, boş bırakılan zorunlu değişkenler (Örn: veritabanı şifreleri) konteynerlerin başlatılmasını durdurur (Fail-Fast).
+- `.env.prod` dosyasının versiyon kontrolde (`.gitignore`) hariç tutulduğundan emin olun.
+
+---
 
 ## Kubernetes
 
-`deploy/kubernetes/secrets.yaml`, üç desteklenen yoldan **birini**
-belgelemek için var, kendisi güvenli bir dağıtım mekanizması değil (kendi
-üst yorumunda açıkça yazıyor: placeholder değerlerle commit'li bir
-`Secret` manifesti, gerçek bir değerin sonradan yapıştırılıp alışkanlıkla
-commit'lenmesine davetiye çıkarır).
+`deploy/kubernetes/secrets.yaml` dosyası yalnızca örnek yapıları (Placeholder) gösterir, gerçek şifreleri içine yazıp commit etmek güvenlik ihlalidir. Kubernetes'te 3 farklı strateji desteklenir:
 
-### 1. `kubectl create secret` (en basit, küçük deployment'lar için)
+### 1. `kubectl create secret` (Basit ve Küçük Kurulumlar İçin)
+
+CLI üzerinden şifreleri dinamik üreterek (OpenSSL) kümeye (Cluster) tanımlayabilirsiniz. Git geçmişine girmez.
 
 ```bash
 kubectl create secret generic kachow-secrets -n kachow \
@@ -30,41 +34,31 @@ kubectl create secret generic kachow-secrets -n kachow \
   --from-literal=S3_SECRET_KEY=
 ```
 
-Hiçbir zaman commit edilmez; kim çalıştırdıysa kendi shell geçmişinde/
-password manager'ında saklar.
+### 2. Sealed Secrets (Orta Ölçekli, GitOps)
 
-### 2. Sealed Secrets (bitnami-labs/sealed-secrets)
-
-Cluster'ın public anahtarıyla şifreleyin, **şifreli** `SealedSecret`'ı
-commit edin (`kachow-secrets.yaml` yerine `kachow-sealedsecret.yaml`
-gibi bir isimle, `deploy/kubernetes/secrets.yaml`'ı silin/gitignore'a
-alın):
+Cluster'ın public anahtarıyla şifrelenmiş YAML (SealedSecret) dosyası commit edilebilir.
 
 ```bash
 kubeseal --format yaml < my-real-secret.yaml > sealed-secret.yaml
 ```
 
-### 3. External Secrets Operator (ESO) — büyüyen deployment'lar için
+### 3. External Secrets Operator (Büyük Kurulumlar, Vault/AWS entegre)
 
-`deploy/kubernetes/secrets.yaml`'ın alt kısmındaki (yorumlu)
-`ExternalSecret` örneğini kullanın. ESO kurulu ve bir `ClusterSecretStore`
-(Vault, AWS Secrets Manager, GCP Secret Manager) yapılandırılmış olmalı.
-Bu yol gerçek sırrı hiçbir zaman git geçmişine sokmaz ve rotasyonu
-otomatikleştirir (`refreshInterval`).
+Kurumsal ortamlarda `ClusterSecretStore` (Örn: HashiCorp Vault, AWS Secrets Manager, GCP Secret Manager) kullanılır. 
+Sırlar otomatik olarak çekilir ve rotasyon `refreshInterval` ile sağlanır. `deploy/kubernetes/secrets.yaml` içerisindeki örnek ES konfigürasyonunu inceleyiniz.
 
-## Rotasyon
+---
 
-`SECRET_KEY` rotasyonu her aktif JWT'yi geçersiz kılar (herkes yeniden
-login olur) — planlı bir bakım penceresinde yapın.
-`KACHOW_APP_DB_PASSWORD`/`POSTGRES_PASSWORD` rotasyonu Postgres'te
-`ALTER ROLE ... PASSWORD` + Secret güncellemesi + `backend`/`migrate`
-pod'larının yeniden başlatılmasını gerektirir (env değişkenleri bir pod
-zaten çalışırken değişmez).
+## Rotasyon (Şifre Değişimi)
 
-## Ne asla commit edilmemeli
+- **`SECRET_KEY` Rotasyonu:** Aktif tüm JWT (Kullanıcı oturumları) anahtarlarını geçersiz kılar. Planlı bakım aralığında (Maintenance Window) yapılmalıdır.
+- **Veritabanı Şifre Rotasyonu:** Pod/Deployment tarafındaki Secret güncellemesinin yanı sıra, Postgres içinde de `ALTER ROLE ... PASSWORD` çalıştırılmalıdır. Sonrasında Backend pod'ları yeniden başlatılmalıdır.
 
-- Gerçek değerlerle doldurulmuş `.env.prod` (compose).
-- Gerçek değerlerle doldurulmuş `deploy/kubernetes/secrets.yaml` (k8s,
-  Sealed Secrets'a geçmediyseniz).
-- `SECRET_KEY`, herhangi bir `*_PASSWORD`, `S3_SECRET_KEY`,
-  `LANGFUSE_SECRET_KEY`.
+---
+
+## Kesinlikle Commit Edilmeyecekler!
+
+Aşağıdaki verilerin `git push` ile repoya gitmesi yasaktır:
+- İçi doldurulmuş `.env.prod` dosyası.
+- İçi doldurulmuş k8s `secrets.yaml` dosyası (Sealed Secrets formatında değilse).
+- `SECRET_KEY`, `POSTGRES_PASSWORD`, `S3_SECRET_KEY`, `LANGFUSE_SECRET_KEY` gibi anahtarlar.

@@ -1,70 +1,59 @@
-# Şema Migration'ları
+# Şema Göçleri (Migrations)
 
-## İki-rollü bağlantı ayrımı
+> Veritabanı (PostgreSQL) yapısını güncel tutmak için Alembic kullanılır. KACHOW sisteminde güvenlik gereği veritabanı bağlantıları çift rollü (Dual-Role) yapılandırılmıştır.
 
-Bu proje iki ayrı Postgres bağlantı dizesi tutar, ve ikisi de kasıtlı:
+---
 
-- **`DATABASE_URL`** — kısıtlı `kachow_app` rolü. Çalışan `backend`
-  processinin bağlandığı tek bağlantı. Postgres Row-Level Security
-  (migration `0013_rls`) yalnızca *tablonun sahibi olmayan* bir bağlantı
-  için gerçek bir savunma — bir owner/superuser bağlantısı her zaman
-  `RLS`'i bypass edebilir, `FORCE ROW LEVEL SECURITY` bile.
-- **`ALEMBIC_DATABASE_URL`** — schema-owner rolü (genelde `postgres`).
-  Yalnızca iki yerde kullanılır: Alembic migration'ları (DDL) ve
-  `app.infrastructure.database.session.get_owner_db`'nin pre-tenant
-  identity lookup'ları (login/refresh/registration — bir kullanıcı henüz
-  hangi şirkete ait olduğu bilinmeden, global `username`/`email` ile
-  aranmak zorunda).
+## Çift Rollü Bağlantı (Dual-Role Connection)
 
-`ALEMBIC_DATABASE_URL` boşsa `DATABASE_URL`'e düşer
-(`Settings.effective_alembic_database_url`) — ama bu yalnızca RLS
-öncesi/geliştirme senaryosu içindir; production'da ikisi ayrı olmalı,
-aksi halde migration'lar kısıtlı rolle DDL çalıştırmaya çalışıp başarısız
-olur.
+Row-Level Security (RLS) kalkanının kırılmaması için iki farklı bağlantı zorunludur:
 
-## Docker Compose
+| Değişken (Bağlantı) | Kullanılan Rol | Görevi ve Amacı |
+| :--- | :--- | :--- |
+| `DATABASE_URL` | Kısıtlı `kachow_app` rolü | Çalışan Backend'in tek kullandığı veri yoludur. Tablo sahibi olmadığı için RLS kısıtlamalarını bypass edemez. |
+| `ALEMBIC_DATABASE_URL` | Sahip `postgres` (Owner) rolü | Yalnızca iki noktada kullanılır: 1. Şema güncellemeleri (DDL). 2. Ön-Kimlik sorgusu (Şirketi belli olmayan bir kullanıcının global aranması - Pre-tenant lookup). |
 
-`compose.prod.yml`'in `migrate` servisi `alembic upgrade head`'i tek
-seferlik çalıştırır, `backend` ona `condition:
-service_completed_successfully` ile bağlıdır — `docker compose ... up -d`
-tek komutuyla doğru sırada çalışır, elle bir şey yapmanız gerekmez.
+> **NOT:** Prodüksiyon ortamında bu iki URL birbirinden kesinlikle farklı olmalıdır. Aksi takdirde kısıtlı rol ile DDL (Tablo oluşturma) çalıştırılamaz veya yetki yükseltmesi tehlikesi oluşur.
 
-Migration'ın gerçekten çalıştığını doğrulamak için:
+---
+
+## Docker Compose Migration
+
+`compose.prod.yml` içindeki `migrate` servisi, bir kereye mahsus `alembic upgrade head` çalıştırır. `backend` servisi ise `condition: service_completed_successfully` kuralı sayesinde bu işlem bitmeden ayağa kalkmaz.
+
+**Doğrulama:**
 ```bash
+# Servis logunu izleyin
 docker compose -f compose.yml -f compose.prod.yml --env-file .env.prod logs migrate
+
+# Postgres içinden versiyon numarasını teyit edin
 docker compose -f compose.yml -f compose.prod.yml --env-file .env.prod exec db \
   psql -U "$POSTGRES_USER" -d kachow -c "SELECT version_num FROM alembic_version;"
 ```
 
-## Kubernetes
+---
 
-`deploy/kubernetes/migrate-job.yaml` bir `Job` — bir Deployment
-initContainer'ı **değil**, bilerek: `backend.yaml`'ın `replicas`'ı 1'den
-fazla olduğunda her pod'un kendi initContainer'ı aynı `alembic upgrade
-head`'i eşzamanlı koşturup birbirleriyle yarışırdı. `backend.yaml`'ın
-kendi initContainer'ı (`wait-for-migrations`) yalnızca bu Job'ın ürettiği
-şemayı *bekler*, hiçbir DDL çalıştırmaz.
+## Kubernetes Migration
 
+Kubernetes tarafında migration bir Pod/Deployment InitContainer'ı olarak DEĞİL, tek seferlik bir **Job** (`deploy/kubernetes/migrate-job.yaml`) olarak çalışır. Bunun nedeni çoklu replikalarda (N adet Backend Pod'u) eşzamanlı Alembic çalışmasını (Race Condition) önlemektir.
+
+**Çalıştırma Adımları:**
 ```bash
+# 1. Job'u gönderin
 kubectl apply -f deploy/kubernetes/migrate-job.yaml
+
+# 2. Tamamlanmasını bekleyin
 kubectl -n kachow wait --for=condition=Complete job/kachow-migrate --timeout=120s
+
+# 3. Logları kontrol edin
 kubectl -n kachow logs job/kachow-migrate
 ```
 
-Bir sonraki deploy'da aynı isimle yeni bir `Job` oluşturmak isterseniz
-öncekini silin (`kubectl delete job kachow-migrate -n kachow`) — bir
-`Job`'ın `spec` alanı immutable'dır, `apply` üzerine yazamaz.
+> **NOT:** Aynı isimli Kubernetes Job'ları immutable'dır (Değiştirilemez). Bir sonraki versiyon güncellemesinde (`v1.1 -> v1.2`) önce eski Job silinmeli (`kubectl delete job kachow-migrate -n kachow`), ardından yeni Job Apply edilmelidir.
 
-## Yeni bir migration yazmak
+---
 
-Bu doküman migration yazma sürecini kapsamaz (bkz.
-`docs/development/backend-standards.md` ve `backend/alembic/`'in kendi
-şablon dosyaları) — yalnızca üretime nasıl uygulandığını anlatır.
+## LangGraph (Yapay Zekâ) Tabloları İstisnası
 
-## LangGraph checkpoint tabloları — Alembic'in kapsamı dışında
-
-`checkpoint*` önekli tablolar (`AsyncPostgresSaver`) Alembic'le değil,
-uygulamanın kendi `app.infrastructure.checkpointing.init_checkpointer`'ı
-tarafından `.setup()` ile başlangıçta oluşturulur —
-`backend/alembic/env.py`'nin `include_object`'i bunları autogenerate'den
-bilerek hariç tutar. Bir migration bu tabloları hiç görmez; bu normal.
+`checkpoint*` önekli AI Agent bellek tabloları (`AsyncPostgresSaver`) Alembic tarafından **yönetilmez**.
+Bu tablolar, uygulamanın başlatılması anında `app.infrastructure.checkpointing.init_checkpointer` metodu ile doğrudan (Native) yaratılır. Alembic `env.py` kuralı (include_object) bu tabloları özellikle hariç tutar. Migration geçmişinde görünmemeleri hata değildir, beklenen bir durumdur.

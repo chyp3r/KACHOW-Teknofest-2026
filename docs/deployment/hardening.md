@@ -1,67 +1,40 @@
 # Güvenlik Sertleştirme (Hardening)
 
-Bu doküman, bu deployment yolunun **zaten yaptığı** şeyleri ve
-**yapmadığı, sizin eklemeniz gereken** şeyleri ayırır.
+> Bu belge, mevcut manifest/compose yapılarında **zaten uygulanan** güvenlik önlemleri ile **operatörün manuel olarak sağlaması gereken** eksik parçaları ayırır.
 
-## Zaten yapılıyor (kod/manifest tarafından zorlanıyor)
+---
 
-- **Boot-time guard'lar** — `ENVIRONMENT=production` iken varsayılan
-  `SECRET_KEY` veya `REQUIRE_AUTH=false` ile process **başlamıyor**
-  (`app.lifespan`). Bir log satırı değil, çalışmayan bir process.
-- **Non-root container'lar** — backend `uid=10001 gid=0`, frontend
-  (nginx-unprivileged) `uid=101`. `kubectl exec ... id` ile doğrulanabilir.
-- **`readOnlyRootFilesystem: true`** (k8s) — her iki container da yazma
-  ihtiyacı olan yerleri (`/tmp`, backend'in `storage_data`'sı, frontend'in
-  nginx cache/run dizinleri) açık `emptyDir`/PVC mount'ları olarak alır;
-  kalan her şey salt okunur.
-- **Postgres RLS + rol ayrımı** — `kachow_app` (kısıtlı, çalışan
-  process'in bağlandığı) vs. owner rolü (yalnızca migration + pre-tenant
-  login lookup'ları) -- bkz. [migrations.md](migrations.md).
-- **`NetworkPolicy` default-deny** (k8s, `namespace.yaml`) — DNS,
-  namespace-içi trafik ve Ollama (port 11434) dışında her şey reddedilir.
-  **Yalnızca NetworkPolicy'yi destekleyen bir CNI'da işe yarar** — bkz.
-  [kubernetes.md](kubernetes.md)'nin uyarısı.
-- **`.dockerignore`** — kök `.env`/`.env.prod` build context'ine girmez
-  (imaja gömülmez).
-- **Prod imaj, test suite'i/`evaluation/`'ı içermez** —
-  `backend.prod.Dockerfile` yalnızca `app`/`alembic`/`datasets`'i
-  kopyalar; imajın kendisi testleri çalıştıramaz, saldırı yüzeyini
-  azaltır.
+## Dahili Olarak Uygulanan Önlemler (Built-in)
 
-## Sizin yapmanız gerekiyor
+Mevcut yapılandırmalar tarafından otomatik zorlanan güvenlik kuralları:
 
-- **Gerçek sırlar** — bkz. [secrets.md](secrets.md). Placeholder'larla
-  apply etmeyin.
-- **TLS terminasyonu** — Compose yolunda nginx'in önüne kendi reverse
-  proxy'nizi/sertifikanızı eklemelisiniz (bu repo HTTP-only servis eder).
-  K8s yolunda `ingress.yaml` cert-manager varsayıyor; kurulu ve
-  yapılandırılmış olmalı.
-- **`SEED_DEMO_COMPANY`/`SEED_DEFAULT_USERS`** — varsayılan `true`,
-  kaynak kodda görünür şifrelerle demo hesaplar oluşturur. Production'da
-  `false`'a çekin ya da şifreleri override edin -- bkz.
-  [configuration.md](configuration.md).
-- **`Alertmanager`'ın gerçek bir bildirim kanalı** — `monitoring/
-  alertmanager/alertmanager.yml` placeholder receiver'larla gelir; hiçbir
-  yere bildirim gitmez. Bkz. [observability.md](observability.md).
-- **`GRAFANA_ADMIN_PASSWORD`** — varsayılan `admin`.
-- **İmaj taraması** — bu repoda Trivy/SBOM üretimi henüz yok (Workstream
-  J10'un parçası, yapılmadı). Kendi CI'ınızda bir tarama adımı ekleyin.
-- **Secret rotasyonu** — otomatikleştirilmiş bir rotasyon mekanizması bu
-  repoda yok; ESO + gerçek bir secret store (bkz. secrets.md) kendi
-  rotasyon periyodunu sağlar, plain `Secret`/`.env.prod` yolu manuel
-  rotasyon gerektirir.
-- **`LICENSE`** — kök dizinde şu an boş (Workstream J10). Bir kurumsal/
-  kamu deployment'ı için lisans metnini doldurun.
+- **Önyükleme (Boot-Time) Kalkanları:** Prodüksiyonda (`ENVIRONMENT=production`), zayıf/varsayılan `SECRET_KEY` veya kapalı `REQUIRE_AUTH` ayarı tespit edildiğinde sistem çalışmayı tamamen reddeder (`app.lifespan`).
+- **Yetkisiz Kullanıcı (Non-Root):** Container'lar Root haklarıyla çalışmaz. Backend `uid=10001 gid=0`, Frontend (nginx-unprivileged) `uid=101` haklarıyla koşar.
+- **Salt Okunur Dosya Sistemi (`readOnlyRootFilesystem`):** K8s tarafında container içindeki kök dosya sistemi kilitlidir. Yazma gerektiren yerlere (Örn: `/tmp`, Cache dizinleri) bilinçli `emptyDir` veya PVC bağlanmıştır.
+- **Postgres RLS (Row-Level Security):** Uygulama veritabanına sınırlı (`kachow_app`) bir rol ile bağlanır. Multi-Tenant veri kalkanı bypass edilemez.
+- **Sıfır Güven Ağı (Default-Deny NetworkPolicy):** K8s yapısında, DNS ve Ollama portu dışında podlar arası trafik varsayılan olarak kapalıdır.
+- **Temiz Build Context (`.dockerignore`):** `.env` dosyaları prodüksiyon imajlarına sızmaz. İmaj içine Test Suite klasörleri bilerek kopyalanmaz, saldırı yüzeyi daraltılır.
 
-## Bilinçli olarak yapılmayanlar (ve neden)
+---
 
-- **HPA (Horizontal Pod Autoscaler)** — CPU-tabanlı autoscaling bu iş
-  yükü için yanlış sinyal: bir backend pod'u çoğu zaman Ollama'da bloke
-  bekliyor, CPU düşük kalırken istek hacmi artabilir. Doğru eksen (kuyruk
-  derinliği/uçuştaki istek sayısı) özel bir metrics adapter gerektirir --
-  bkz. `deploy/kubernetes/pdb.yaml`'ın kendi yorumu.
-- **`backend` PodDisruptionBudget'ı** — `replicas: 1` iken bir PDB her
-  voluntary eviction'ı (node drain, autoscaler scale-down) süresiz
-  engellerdi. `replicas`'ı yükselttiğinizde ekleyin.
-- **`deploy/helm/`** — manifest seti bilinçli olarak Helm değil; bkz.
-  [kubernetes.md](kubernetes.md)'nin üst notu.
+## Operatörün Sorumluluğunda Olan Kısımlar (Action Required)
+
+Prodüksiyon ortamında manuel yapılandırılması gerekenler:
+
+| Bileşen | Eylem (Action) |
+| :--- | :--- |
+| **Sırlar (Secrets)** | Güvenli sır yönetimi (Vault, Sealed Secrets) sağlanmalı ve k8s placeholder'ları ezilmelidir. (Bkz: [secrets.md](secrets.md)). |
+| **TLS / SSL** | Sistem sadece HTTP üzerinden haberleşir. Compose yolunda `Reverse Proxy` (Nginx/Traefik) ile, Kubernetes yolunda `cert-manager` destekli Ingress ile şifreleme sağlanmalıdır. |
+| **Demo Hesaplar** | `SEED_DEMO_COMPANY` ve `SEED_DEFAULT_USERS` flag'leri `false` yapılmalı veya açık şifreler ezilmelidir. Aksi takdirde bilinen şifreli yönetici hesapları açık kalır. |
+| **Grafana Yönetici Şifresi** | `GRAFANA_ADMIN_PASSWORD` (Varsayılan `admin`) değiştirilmelidir. |
+| **Alertmanager Kanalları** | Sadece `null` receiver tanımlıdır. Slack/E-posta entegrasyonu kurulmalıdır. |
+| **Görsel/İmaj Taraması (SBOM)**| İmajların zafiyet (Vulnerability) taramalarından geçirilmesi, CI ardışık düzeninize (Pipeline) Trivy vb. eklenmesi önerilir. |
+| **Secret Rotasyonu** | Olası sızıntılara karşı periyodik JWT (`SECRET_KEY`) ve Veritabanı şifre rotasyonu iş akışları kurgulanmalıdır. |
+
+---
+
+## Bilinçli Olarak Kapsam Dışı Bırakılanlar
+
+- **HPA (Yatay Pod Ölçekleyici):** CPU tabanlı HPA kullanılmamıştır. Çünkü LLM istekleri beklerken (Ollama), CPU kullanımı düşük kalabilir ancak kuyruk darboğaz olur. Bunun yerine metrik-tabanlı (Kuyruk uzunluğu vb.) Custom Metrics Adapter önerilir.
+- **PDB (Pod Disruption Budget) Backend:** `replicas: 1` iken PDB kullanılması Node bakımlarını (Drain) süresiz kilitler. Sadece N replikaya geçildiğinde PDB aktifleştirilmelidir.
+- **Helm Chart:** Bakım zorluğu ve kısıtlayıcı şablonlar nedeniyle düz (Plain) YAML manifestleri tercih edilmiştir.
