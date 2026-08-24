@@ -45,6 +45,7 @@ vi.mock("./pages/LoginPage", () => ({ LoginPage: () => <h1>Login screen</h1> }))
 vi.mock("./pages/HomePage", () => ({ HomePage: () => <h1>Home screen</h1> }));
 vi.mock("./pages/DraftsPage", () => ({ DraftsPage: () => <h1>Drafts screen</h1> }));
 vi.mock("./pages/ChatsPage", () => ({ ChatsPage: ({ onSend }: { onSend: (text: string, level: "balanced", useDocument: boolean) => Promise<void> }) => <><h1>Chats screen</h1><button onClick={() => void onSend("Analiz et", "balanced", true)}>Send pending document</button></> }));
+vi.mock("./pages/DocumentsPage", () => ({ DocumentsPage: ({ onCloseDocument }: { onCloseDocument?: () => void }) => <><h1>Documents screen</h1>{onCloseDocument && <button onClick={onCloseDocument}>Liste görünümüne dön</button>}</> }));
 vi.mock("./pages/AdminPage", () => ({ AdminPage: () => <h1>Admin screen</h1> }));
 
 function LocationProbe() {
@@ -96,6 +97,28 @@ describe("application route guards", () => {
 
     expect(await screen.findByText("Drafts screen")).toBeInTheDocument();
     expect(screen.getByText("/drafts")).toBeInTheDocument();
+  });
+
+  it("returns from a document detail route with one close action", async () => {
+    state.user = {
+      id: "employee-1", username: "employee", email: "employee@example.test",
+      role: "employee", clearance_level: "hizmete_ozel", is_active: true, is_deleted: false,
+    };
+    state.selectedDocument = {
+      file_name: "izin.pdf",
+      storage_path: "documents/izin.pdf",
+      upload_time: "2026-08-12T10:00:00Z",
+      document_type: "petition",
+      document_type_label: "Dilekçe",
+      compliance_status: "compliant",
+      summary: "İzin talebi",
+      analyzed: true,
+    };
+
+    render(<MemoryRouter initialEntries={["/documents/documents%2Fizin.pdf"]}><App /><LocationProbe /></MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Liste görünümüne dön" }));
+    await waitFor(() => expect(screen.getByText("/documents")).toBeInTheDocument());
   });
 
   it("analyzes a pending document before sending it to chat", async () => {

@@ -53,7 +53,7 @@ export function DocumentActionsMenu({
         {analyzed && <Link to="/drafts" role="menuitem" onClick={onSelect}><FilePenLine />Taslak hazırla</Link>}
         {onAnalyze && (
           <button type="button" role="menuitem" disabled={analyzing} onClick={onAnalyze}>
-            <RefreshCw />{analyzed ? "Yeniden analiz et" : "Analiz et"}
+            <RefreshCw className={analyzing ? "is-loading-icon" : undefined} />{analyzed ? "Yeniden analiz et" : "Analiz et"}
           </button>
         )}
         {onDelete && <span className="document-menu-divider" aria-hidden="true" />}
@@ -101,11 +101,14 @@ export function DocumentListItem({
         <span className="document-item-icon" aria-hidden="true"><FileText /></span>
         <span className="document-item-copy">
           <strong title={document.file_name}>{document.file_name}</strong>
-          <span title={document.summary || undefined}>{document.summary || (analyzed ? "Özet bulunmuyor." : "Henüz analiz edilmedi.")}</span>
-        </span>
-        <span className="document-item-metadata">
-          <span>{type} · {new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium" }).format(new Date(document.upload_time))}</span>
-          <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+          <small>{type}</small>
+          <span className="document-item-summary" title={document.summary || undefined}>
+            {document.summary || (analyzed ? "Özet bulunmuyor." : "Henüz analiz edilmedi.")}
+          </span>
+          <span className="document-item-metadata">
+            <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+            <small>{new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium" }).format(new Date(document.upload_time))}</small>
+          </span>
         </span>
       </button>
       <DocumentActionsMenu

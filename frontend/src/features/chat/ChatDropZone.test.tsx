@@ -14,7 +14,7 @@ function dragEvent(fileNames: string[] = ["evrak.pdf"]) {
 describe("ChatDropZone", () => {
   it("renders children and shows nothing extra when idle", () => {
     render(
-      <ChatDropZone uploading={false} onUpload={vi.fn()}>
+      <ChatDropZone onUpload={vi.fn()}>
         <p>Sohbet içeriği</p>
       </ChatDropZone>,
     );
@@ -25,7 +25,7 @@ describe("ChatDropZone", () => {
 
   it("shows the drop overlay while a file is dragged over it, and hides it when the drag leaves", () => {
     render(
-      <ChatDropZone uploading={false} onUpload={vi.fn()}>
+      <ChatDropZone onUpload={vi.fn()}>
         <p>Sohbet içeriği</p>
       </ChatDropZone>,
     );
@@ -40,7 +40,7 @@ describe("ChatDropZone", () => {
 
   it("does not open the overlay for a plain text drag (no files)", () => {
     render(
-      <ChatDropZone uploading={false} onUpload={vi.fn()}>
+      <ChatDropZone onUpload={vi.fn()}>
         <p>Sohbet içeriği</p>
       </ChatDropZone>,
     );
@@ -53,7 +53,7 @@ describe("ChatDropZone", () => {
   it("uploads a valid dropped file and starts document analysis", async () => {
     const onUpload = vi.fn().mockResolvedValue(undefined);
     render(
-      <ChatDropZone uploading={false} onUpload={onUpload}>
+      <ChatDropZone onUpload={onUpload}>
         <p>Sohbet içeriği</p>
       </ChatDropZone>,
     );
@@ -68,7 +68,7 @@ describe("ChatDropZone", () => {
   it("rejects an unsupported file type in the overlay without ever calling onUpload", () => {
     const onUpload = vi.fn();
     render(
-      <ChatDropZone uploading={false} onUpload={onUpload}>
+      <ChatDropZone onUpload={onUpload}>
         <p>Sohbet içeriği</p>
       </ChatDropZone>,
     );
@@ -80,13 +80,4 @@ describe("ChatDropZone", () => {
     expect(onUpload).not.toHaveBeenCalled();
   });
 
-  it("shows the analyzing state while uploading is true", () => {
-    render(
-      <ChatDropZone uploading onUpload={vi.fn()}>
-        <p>Sohbet içeriği</p>
-      </ChatDropZone>,
-    );
-
-    expect(screen.getByText("Evrak analiz ediliyor…")).toBeInTheDocument();
-  });
 });
