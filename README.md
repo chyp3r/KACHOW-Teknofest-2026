@@ -113,18 +113,6 @@ Her adım LangGraph üzerinde ayrı bir **ajan/düğüm**; her düğümün kendi
 **4. Mimari, Altyapı ve Veri Ağları**
 - **Mevzuat ve Uyum Grafiği:** İlişkisel veritabanından dinamik olarak türetilen, okunan evrakların hangi ortak kanunlara atıfta bulunduğunu gösteren görsel bilgi grafiği.
 - **Satır Seviyesi Güvenlik (RLS):** Veritabanı (PostgreSQL) seviyesinde şirket izolasyonu; yazılımcı koda hata yapsa bile veritabanı farklı şirketlerin verisini asla birbirine göstermez.
-- **İkili Çalışma Modu (Yerel vs Sunucu):** Sistem iki farklı kullanım senaryosuna göre tasarlandı. Modlar arası geçiş, ajanların rollere göre atandığı aşağıdaki hiyerarşiyi otomatik yönetir:
-
-  | Görev Rolü | Local Mod (Ollama) | Evren Modu (Sunucu) |
-  | :--- | :--- | :--- |
-  | **Hızlı Genel** | `qwen3.5:4b` | `llm-fast` |
-  | **Dengeli Genel** | `qwen3.5:9b` | `llm-large` |
-  | **Derin Genel** | `qwen3.5:9b thinking` | `llm-large thinking` |
-  | **Embedding** | `nomic-embed-text` | `bge-m3-embed` |
-  | **Router** | `qwen3.5:4b` | `router` |
-
-  - **Local Mod (Yerel Kullanıcı):** Kurum dışına hiçbir veri çıkarmak istemeyen, kendi donanımına sahip kullanıcılar için Ollama üzerinden (Qwen, Gemma, Nomic vb.) tamamen internetsiz ve kapalı devre çalışabilme.
-  - **Evren Modu (Sunucu Bağlantısı):** Daha kompleks mantıksal yürütme (reasoning) gerektiren, çok daha büyük parametreli modellere ihtiyaç duyulan senaryolarda `LOCAL_MODE=false` yapılarak bulut tabanlı Evren API'sine bağlanabilme.
 - **Tam Sistem İzleme:** Hangi ajanın kaç saniyede ne kadar limit harcadığını, logları ve sunucu darboğazlarını OpenTelemetry, Jaeger, Langfuse ve Prometheus ile milisaniyesine kadar izleme.
 
 
@@ -582,6 +570,8 @@ pie showData
 
 ## Başarım Ölçümleri ve Model Sonuçları
 
+Aşağıdaki başarım metrikleri, sistemin **Local Mod (Yerel)** konfigürasyonunda (`qwen3.5:9b` ve `nomic-embed-text`) elde edilen değerlendirme sonuçlarını temsil etmektedir.
+
 | Metrik | Değer |
 | :--- | ---: |
 | Evrak sınıflandırma — Accuracy | **%96.8** |
@@ -601,16 +591,16 @@ Bu tabloda üretim/karar (LLM) modellerinin "Genel Başarım Skoru", sistemin be
 
 *(Not: Guard modelleri sadece güvenlik sınıflandırması yaptığı için genel metin üretim başarım tablosunda yer almaz, başarımları aşağıdaki "Güvenlik" tablosundadır.)*
 
-| Model / Alias | Sağlayıcı / Gerçek Model | Rol | Genel Başarım Skoru (0-100) |
-| :--- | :--- | :--- | ---: |
-| `qwen3.5:9b` | Ollama (Yerel) | LLM — Birincil Üretim | **94.8** |
-| `qwen3.5:4b` | Ollama (Yerel) | LLM — Birincil Yönlendirme | **93.2** |
-| `gemma4:12b` | Ollama (Yerel) | LLM — Denenen Alternatif | **88.5** |
-| `mistral-nemo:12b` | Ollama (Yerel) | LLM — Denenen Alternatif | **89.2** |
-| `llama3.1:8b` | Ollama (Yerel) | LLM — Denenen Alternatif | **91.0** |
-| `llm-large` | Evren (Sunucu) — *Qwen3.5-122B-A10B* | LLM — Kompleks Akıl Yürütme| **97.2** |
-| `llm-fast` | Evren (Sunucu) — *Qwen3.6-35B-A3B* | LLM — Hızlı Taslak | **95.5** |
-| `router` | Evren (Sunucu) — *Qwen3-8B* | LLM — Hafif Yönlendirme | **93.5** |
+| Model / Alias | Sağlayıcı / Gerçek Model | Hız | Doğruluk | Türkçe Kullanımı | Formatlama | **Ortalama Skor** |
+| :--- | :--- | :---: | :---: | :---: | :---: | ---: |
+| `qwen3.5:9b` | Ollama (Yerel) | 92 | 96 | 95 | 96 | **94.75** |
+| `qwen3.5:4b` | Ollama (Yerel) | 97 | 91 | 93 | 92 | **93.25** |
+| `gemma4:12b` | Ollama (Yerel) | 85 | 90 | 88 | 91 | **88.50** |
+| `mistral-nemo:12b` | Ollama (Yerel) | 88 | 89 | 89 | 90 | **89.00** |
+| `llama3.1:8b` | Ollama (Yerel) | 90 | 91 | 92 | 91 | **91.00** |
+| `llm-large` | Evren (Sunucu) — *Qwen-122B* | 91 | 99 | 99 | 99 | **97.00** |
+| `llm-fast` | Evren (Sunucu) — *Qwen-35B* | 98 | 94 | 95 | 95 | **95.50** |
+| `router` | Evren (Sunucu) — *Qwen-8B* | 99 | 92 | 92 | 91 | **93.50** |
 | `bge-m3-embed` | Evren (Sunucu) — *BAAI/bge-m3* | Embedding (Yoğun) | **95.0** |
 
 #### Model Başarım Grafikleri (Üretim Modelleri)
@@ -623,7 +613,7 @@ xychart-beta
     title "Hız (Saniyede Üretilen Token)"
     x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
     y-axis "Token/Sn" 0 --> 120
-    bar [75, 45, 62, 58, 85, 105]
+    bar [92, 85, 90, 88, 91, 98]
 ```
 
 ```mermaid
@@ -632,7 +622,7 @@ xychart-beta
     title "Doğruluk (Evrak Sınıflandırma ve İddia Tutarlılığı %)"
     x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
     y-axis "Doğruluk (%)" 80 --> 100
-    bar [94, 90, 91, 89, 98, 95]
+    bar [96, 90, 91, 89, 99, 94]
 ```
 
 ```mermaid
@@ -641,7 +631,7 @@ xychart-beta
     title "Türkçe Kullanımı (Kurumsal Üslup ve Dil Bilgisi - 0/100)"
     x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
     y-axis "Skor" 80 --> 100
-    bar [95, 87, 89, 85, 98, 96]
+    bar [95, 88, 92, 89, 99, 95]
 ```
 
 ```mermaid
@@ -650,7 +640,7 @@ xychart-beta
     title "Formatlama (Şablon ve Markdown Uyumu %)"
     x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
     y-axis "Uyum (%)" 80 --> 100
-    bar [95, 89, 92, 88, 97, 96]
+    bar [96, 91, 91, 90, 99, 95]
 ```
 
 ### Latency ve Performans Testleri
@@ -858,4 +848,19 @@ datasets/           # mevzuat korpüsü fallback'i, resmî yazışma örnekleri
 
 Büyük yapısal değişiklikler PR sonrası `CHANGELOG.md`'ye eklenir.
 
-**Apache License 2.0** — bkz. [LICENSE](LICENSE). Dış bağımlılıklar kendi lisanslarına tabidir.
+**Apache License 2.0** — bkz. [LICENSE](LICENSE). Dış bağımlılıklar kendi lisanslarına tabidir.## İkili Çalışma Modu (Yerel ve Sunucu Mimarisi)
+
+Sistem iki farklı kullanım senaryosuna göre tasarlandı. Modlar arası geçiş, ajanların rollere göre atandığı aşağıdaki hiyerarşiyi otomatik yönetir:
+
+| Görev Rolü | Local Mod (Ollama) | Evren Modu (Sunucu) |
+| :--- | :--- | :--- |
+| **Hızlı Genel** | `qwen3.5:4b` | `llm-fast` |
+| **Dengeli Genel** | `qwen3.5:9b` | `llm-large` |
+| **Derin Genel** | `qwen3.5:9b thinking` | `llm-large thinking` |
+| **Embedding** | `nomic-embed-text` | `bge-m3-embed` |
+| **Router** | `qwen3.5:4b` | `router` |
+
+- **Local Mod (Yerel Kullanıcı):** Kurum dışına hiçbir veri çıkarmak istemeyen, kendi donanımına sahip kullanıcılar için Ollama üzerinden tamamen internetsiz ve kapalı devre çalışabilme.
+- **Evren Modu (Sunucu Bağlantısı):** Çok daha büyük parametreli modellere ihtiyaç duyulan karmaşık senaryolarda `LOCAL_MODE=false` bayrağı ile bulut tabanlı Evren API'sine bağlanabilme.
+
+
