@@ -13,7 +13,7 @@ from app.infrastructure.extractors.base import (
     DocumentExtractionError,
     ExtractedDocument,
 )
-from app.infrastructure.extractors.vision import OllamaVisionExtractor
+from app.infrastructure.extractors.vision import VisionExtractorBase
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         extractors: list[BaseDocumentExtractor],
         min_char_count: int = MIN_EXTRACTED_CHAR_COUNT,
         min_quality_ratio: float = MIN_TEXT_QUALITY_RATIO,
-        header_repair: Optional[OllamaVisionExtractor] = None,
+        header_repair: Optional[VisionExtractorBase] = None,
         header_field_probe: Optional[Callable[[str], int]] = None,
         min_header_field_count: int = MIN_HEADER_FIELD_COUNT,
         scan_text_layer_probe: Optional[Callable[[bytes], bool]] = None,

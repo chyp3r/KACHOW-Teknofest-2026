@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: kachow
+spec:
+  selector:
+    app: kachow-frontend
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: kachow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: kachow-frontend
+  template:
+    metadata:
+      labels:
+        app: kachow-frontend
+    spec:
+      # nginxinc/nginx-unprivileged (deploy/docker/frontend.prod.Dockerfile)
+      # already runs as uid 101 and listens on 8080 by default -- no
+      # runAsUser override needed here the way backend.yaml sets one, just
+      # the non-root assertion.
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: frontend
+          # IfNotPresent, not the default Always a ":latest" tag implies --
+          # a real deployment should pin IMAGE_TAG to a real release tag
+          # (matching compose.prod.yml's own ${IMAGE_TAG:-latest}) rather
+          # than float on "latest" at all; until then, this at least
+          # avoids re-pulling on every pod restart.
+          image: ghcr.io/chyp3r/kachow-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # nginx (even the unprivileged image) writes its pidfile and
+            # temp buffers under /var/cache/nginx and /var/run at start --
+            # readOnlyRootFilesystem: true needs both writable via emptyDir
+            # or the container fails to start.
+            - name: cache
+              mountPath: /var/cache/nginx
+            - name: run
+              mountPath: /var/run
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: cache
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

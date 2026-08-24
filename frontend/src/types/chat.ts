@@ -285,7 +285,12 @@ export type WorkflowEvent =
       workflow_status: string;
       details?: Record<string, unknown>;
     })
-  | (EventBase & { event: "error"; message: string; details?: unknown });
+  | (EventBase & {
+      event: "error";
+      message: string;
+      details?: unknown;
+      error_code?: string;
+    });
 
 export interface ChatRequest {
   message: string;

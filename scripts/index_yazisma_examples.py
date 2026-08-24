@@ -42,28 +42,37 @@ def _parse_args() -> argparse.Namespace:
 
 async def main() -> int:
     args = _parse_args()
+    # Built once, up front, so the banner below reports what get_embeddings_
+    # client()/get_vector_store() actually resolved to (LOCAL_MODE-dependent
+    # -- Ollama or Evren) instead of hardcoding the Ollama/local settings,
+    # which used to print "nomic-embed-text"/local Qdrant even while the
+    # real call underneath was already going to Evren's bge-m3-embed --
+    # confusingly wrong, not just cosmetic, since a reader has no other way
+    # to tell which provider a given run actually used.
+    embeddings_client = get_embeddings_client()
+    vector_store = get_vector_store()
     print("=" * 60)
     print("   Yazışma Örnek Korpusu İndeksleme")
     print("=" * 60)
     print(f"Örnek dosyası  : {args.examples_path}")
     print(f"Koleksiyon     : {args.collection}")
-    print(f"Gömme modeli   : {settings.OLLAMA_EMBEDDING_MODEL}")
-    print(f"Qdrant         : {settings.QDRANT_URL}\n")
+    print(f"Gömme modeli   : {embeddings_client.model_name} ({embeddings_client.base_url})")
+    print(f"Qdrant         : {vector_store.qdrant_url}\n")
 
     try:
         report = await index_yazisma_examples(
             examples_path=args.examples_path,
             collection_name=args.collection,
-            embeddings_client=get_embeddings_client(),
-            vector_store=get_vector_store(),
+            embeddings_client=embeddings_client,
+            vector_store=vector_store,
             recreate=not args.no_recreate,
         )
     except Exception as exc:
         print(f"\nHATA: {exc}")
         print("\nKontrol edin:")
-        print(f"  1. Qdrant çalışıyor mu?  ({settings.QDRANT_URL})")
-        print(f"  2. Ollama çalışıyor mu?  ({settings.OLLAMA_BASE_URL})")
-        print(f"  3. '{settings.OLLAMA_EMBEDDING_MODEL}' modeli indirilmiş mi?")
+        print(f"  1. Qdrant çalışıyor mu?  ({vector_store.qdrant_url})")
+        print(f"  2. Gömme servisi çalışıyor mu?  ({embeddings_client.base_url})")
+        print(f"  3. '{embeddings_client.model_name}' modeli erişilebilir mi?")
         print(f"  4. '{args.examples_path}' dosyası mevcut mu? "
               "(önce scripts/curate_yazisma_examples.py çalıştırın)")
         return 1

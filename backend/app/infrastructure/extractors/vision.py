@@ -4,6 +4,7 @@ import io
 import json
 import logging
 import urllib.request
+from abc import abstractmethod
 from typing import Optional
 
 from app.core.config import settings
@@ -53,7 +54,325 @@ DEFAULT_NUM_CTX = 8192
 REQUEST_TIMEOUT_SECONDS = 300
 
 
-class OllamaVisionExtractor(BaseDocumentExtractor):
+class VisionExtractorBase(BaseDocumentExtractor):
+    """Shared rasterisation/mark-detection machinery for vision-model OCR.
+
+    Everything about turning a PDF/image into model input and packaging the
+    result as an `ExtractedDocument` is provider-independent; only the actual
+    model call (`_transcribe`) differs between `OllamaVisionExtractor`
+    (local, raw HTTP against Ollama's `/api/generate`) and
+    `EvrenVisionExtractor` (Evren's OpenAI-compatible chat completions).
+    """
+
+    def __init__(self, dpi: int = OCR_RENDER_DPI, prompt: str = DEFAULT_PROMPT) -> None:
+        """Initialise the vision extractor.
+
+        Args:
+            dpi: Rasterisation density for PDF pages.
+            prompt: Transcription instruction.
+        """
+        self.dpi = dpi
+        self.prompt = prompt
+
+    @abstractmethod
+    async def _transcribe(self, image: bytes) -> str:
+        """Send one page image to the model and return its transcription.
+
+        Args:
+            image: PNG bytes of a single page.
+
+        Returns:
+            The transcribed text.
+        """
+
+    async def extract(
+        self,
+        content: bytes,
+        *,
+        file_name: Optional[str] = None,
+        mime_type: Optional[str] = None,
+        raster_cache: Optional[dict] = None,
+    ) -> ExtractedDocument:
+        """Transcribe a scanned document with a vision-language model.
+
+        Args:
+            content: Raw PDF or image bytes.
+            file_name: Original file name, used to decide the input kind.
+            mime_type: Declared content type, used to decide the input kind.
+            raster_cache: Optional shared cache of already-rasterised pages,
+                keyed by DPI (see `BaseDocumentExtractor.extract`). This
+                extractor is the usual escalation *after*
+                `TesseractExtractor` rejects a result, so the common case is
+                a cache hit -- reusing pages already rendered at the same
+                DPI instead of rasterising the same PDF a second time.
+
+        Returns:
+            The transcribed text, flagged as OCR output.
+
+        Raises:
+            DocumentExtractionError: If rasterisation or the model call fails.
+        """
+        is_pdf = has_pdf_magic_bytes(content) or mime_type == "application/pdf"
+        if is_pdf and pdfium is None:
+            raise DocumentExtractionError(
+                "pypdfium2 kurulu değil; PDF görüntüye çevrilemedi."
+            )
+
+        try:
+            if not is_pdf:
+                images = [content]
+                # Decoded only for mark detection below (see its own
+                # try/except) -- the transcription call above never needed a
+                # PIL object for this branch, so a decode failure here must
+                # not break transcription, which is why this is not folded
+                # into the same try/except as the rest of this method.
+                pil_pages = []
+                if _PILImage is not None:
+                    try:
+                        pil_pages = [await asyncio.to_thread(_PILImage.open, io.BytesIO(content))]
+                    except Exception:
+                        logger.warning("Could not decode image for mark detection.", exc_info=True)
+            else:
+                if raster_cache is not None and self.dpi in raster_cache:
+                    pil_pages = raster_cache[self.dpi]
+                    logger.info(
+                        "Reusing %d already-rasterised page(s) at %d DPI.",
+                        len(pil_pages),
+                        self.dpi,
+                    )
+                else:
+                    pil_pages = await asyncio.to_thread(self._render_pages, content)
+                    if raster_cache is not None:
+                        raster_cache[self.dpi] = pil_pages
+                images = await asyncio.to_thread(self._encode_png, pil_pages)
+            # Deliberately sequential, unlike TesseractExtractor's page loop.
+            # Tesseract pages parallelise safely because each OCR call is its
+            # own `tesseract` subprocess, competing for CPU cores the OS
+            # already schedules. A vision-model call is a generation request
+            # against one served model; local Ollama serialises generation
+            # against a given model rather than running requests on it
+            # concurrently, so concurrent page requests would queue behind
+            # each other on the server side regardless of client-side
+            # fan-out -- the same shape of cost this project already measured
+            # as a net loss for concurrent classify+extract calls against the
+            # same model. Revisit only with live measurements to weigh
+            # against; guessing wrong here costs latency on this extractor
+            # specifically, which is already the last-resort path for the
+            # hardest-to-read documents.
+            pages = [await self._transcribe(img) for img in images]
+        except DocumentExtractionError:
+            raise
+        except Exception as exc:
+            raise DocumentExtractionError(
+                f"Görsel dil modeli ile OCR başarısız oldu: {exc}"
+            ) from exc
+
+        text = "\n\n".join(pages).strip()
+        logger.info(
+            "%s (%s) transcribed %d page(s), %d characters.",
+            self.name,
+            getattr(self, "model", "?"),
+            len(pages),
+            len(text),
+        )
+        # Best-effort, same rendered pages: detect_marks never raises (see
+        # its own docstring), so a detector bug here must never fail a
+        # transcription that otherwise succeeded.
+        mark_lists = await asyncio.gather(
+            *(
+                asyncio.to_thread(detect_marks, image, page_number)
+                for page_number, image in enumerate(pil_pages, start=1)
+            )
+        )
+        return ExtractedDocument(
+            text=text,
+            pages=pages,
+            page_count=len(pages),
+            extractor=self.name,
+            used_ocr=True,
+            detected_marks=[mark for marks in mark_lists for mark in marks],
+        )
+
+    async def render_first_page(self, content: bytes) -> Optional["_PILImage.Image"]:
+        """Rasterise only page 1 of a PDF, for header-band repair's own use.
+
+        `_render_pages` renders every page and is used when a full OCR pass
+        is already under way; this exists for the opposite situation --
+        header repair needs page 1 of a result whose extractor never
+        rendered anything at all (a text-layer path, e.g. OpenDataLoader or
+        PdfiumExtractor reading a Class-A scanner text layer -- see
+        `FallbackDocumentExtractor.is_scanned_text_layer`). Rendering only
+        page 1 keeps this always-paid cost bounded to roughly one page
+        regardless of document length, since the repair only ever touches
+        the header band of the first page.
+
+        Args:
+            content: Raw PDF bytes.
+
+        Returns:
+            The rendered first page as a PIL image, or None when `content`
+            is not a renderable PDF (corrupt bytes, no pages, or pdfium
+            unavailable) -- callers must degrade to the original,
+            un-repaired text rather than raise.
+        """
+        if pdfium is None:
+            return None
+        try:
+            document = pdfium.PdfDocument(content)
+        except Exception:
+            return None
+
+        try:
+            if len(document) == 0:
+                return None
+            page = document[0]
+            try:
+                scale = self.dpi / PDF_POINTS_PER_INCH
+                bitmap = page.render(scale=scale)
+                return bitmap.to_pil()
+            finally:
+                page.close()
+        except Exception:
+            return None
+        finally:
+            document.close()
+
+    def _render_pages(self, content: bytes) -> list:
+        """Rasterise every page of a PDF to a PIL image, in document order.
+
+        Kept separate from PNG encoding (`_encode_png`) so the raw rendered
+        pages are what goes into `raster_cache` -- the same shape
+        `TesseractExtractor` caches, and reusable for any future consumer
+        that doesn't specifically need PNG bytes.
+
+        Args:
+            content: Raw PDF bytes.
+
+        Returns:
+            One rendered PIL image per page.
+        """
+        scale = self.dpi / PDF_POINTS_PER_INCH
+        document = pdfium.PdfDocument(content)
+        try:
+            images = []
+            for page in document:
+                bitmap = page.render(scale=scale)
+                try:
+                    images.append(bitmap.to_pil())
+                finally:
+                    page.close()
+            return images
+        finally:
+            document.close()
+
+    def _encode_png(self, images: list) -> list[bytes]:
+        """Encode PIL images to PNG bytes.
+
+        Args:
+            images: PIL images, in document order.
+
+        Returns:
+            PNG-encoded bytes per image, same order.
+        """
+        encoded = []
+        for image in images:
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+            encoded.append(buffer.getvalue())
+        return encoded
+
+    def supports(
+        self,
+        content: bytes,
+        *,
+        file_name: Optional[str] = None,
+        mime_type: Optional[str] = None,
+    ) -> bool:
+        """Accept PDFs and raster images; reject anything textual."""
+        if has_pdf_magic_bytes(content) or mime_type == "application/pdf":
+            return True
+        if mime_type and mime_type.startswith("image/"):
+            return True
+        return matches_extension(file_name, IMAGE_EXTENSIONS | PDF_EXTENSIONS)
+
+    async def transcribe_header_band(self, page_image) -> str:
+        """Transcribe just the header band of one already-rasterised page.
+
+        Used by `FallbackDocumentExtractor`'s header-repair step, not by this
+        class's own `extract()`. Crops the top `HEADER_BAND_FRACTION` of the
+        page and sends only that crop through the same model call a full-page
+        transcription uses -- a small crop costs a fraction of the time
+        for specifically the part of a scan this project's OCR chain
+        struggles with (letterhead emblems, handwritten annotations), without
+        paying that cost on the body text Tesseract already reads well.
+
+        Args:
+            page_image: A rasterised PIL page image, e.g. from `raster_cache`
+                (the same shape `TesseractExtractor` and this class's own
+                `extract()` share a cache entry for).
+
+        Returns:
+            The crop's transcription. May be empty on a genuine blank header;
+            callers should treat that the same as any other best-effort
+            failure, not retry.
+
+        Raises:
+            DocumentExtractionError: If the model call itself fails.
+        """
+        width, height = page_image.size
+        crop = page_image.crop((0, 0, width, int(height * HEADER_BAND_FRACTION)))
+        try:
+            encoded = await asyncio.to_thread(self._encode_png, [crop])
+            return await self._transcribe(encoded[0])
+        except Exception as exc:
+            raise DocumentExtractionError(
+                f"Görsel dil modeli ile başlık onarımı başarısız oldu: {exc}"
+            ) from exc
+
+    async def transcribe_page(self, page_image) -> str:
+        """Transcribe one already-rasterised page in full, no crop.
+
+        Sibling to `transcribe_header_band` -- same model call, same
+        `self.prompt`, just the whole page instead of the top
+        `HEADER_BAND_FRACTION` band. Used by `FallbackDocumentExtractor`'s
+        signature-recovery step (see that class's `_repair_signature`) for
+        the failure mode header-band repair cannot reach: wet-signature ink
+        obscuring the printed name below it sits well past the header band,
+        in the lower half of the page. Measured directly on four real
+        documents where OpenDataLoader/Tesseract lost or garbled the
+        signer's name entirely (a missing line, or "İF; BOZDAG ;" for
+        "Bekir BOZDAĞ") -- full-page transcription recovered the correct
+        name on all four.
+
+        Lives on the base class, not a provider-specific subclass: the body
+        only calls `_encode_png`/`_transcribe`, both already provider-
+        agnostic here, so every `VisionExtractorBase` subclass gets full-page
+        recovery for free.
+
+        Args:
+            page_image: A rasterised PIL page image, same shape
+                `transcribe_header_band` and `TesseractExtractor` share a
+                `raster_cache` entry for.
+
+        Returns:
+            The page's full transcription. May be empty on total failure;
+            callers should treat that the same as any other best-effort
+            failure, not retry.
+
+        Raises:
+            DocumentExtractionError: If the model call itself fails.
+        """
+        try:
+            encoded = await asyncio.to_thread(self._encode_png, [page_image])
+            return await self._transcribe(encoded[0])
+        except Exception as exc:
+            raise DocumentExtractionError(
+                f"Görsel dil modeli ile tam sayfa okuma başarısız oldu: {exc}"
+            ) from exc
+
+
+
+class OllamaVisionExtractor(VisionExtractorBase):
     """OCR via a local vision-language model served by Ollama.
 
     Complements `TesseractExtractor` rather than replacing it. Measured on this
@@ -171,208 +490,12 @@ class OllamaVisionExtractor(BaseDocumentExtractor):
             dpi: Rasterisation density for PDF pages.
             prompt: Turkish transcription instruction.
         """
+        super().__init__(dpi=dpi, prompt=prompt)
         self.model = model or settings.OLLAMA_VISION_MODEL
         self.base_url = (base_url or settings.OLLAMA_BASE_URL).rstrip("/")
-        self.dpi = dpi
-        self.prompt = prompt
 
-    async def extract(
-        self,
-        content: bytes,
-        *,
-        file_name: Optional[str] = None,
-        mime_type: Optional[str] = None,
-        raster_cache: Optional[dict] = None,
-    ) -> ExtractedDocument:
-        """Transcribe a scanned document with a vision-language model.
-
-        Args:
-            content: Raw PDF or image bytes.
-            file_name: Original file name, used to decide the input kind.
-            mime_type: Declared content type, used to decide the input kind.
-            raster_cache: Optional shared cache of already-rasterised pages,
-                keyed by DPI (see `BaseDocumentExtractor.extract`). This
-                extractor is the usual escalation *after*
-                `TesseractExtractor` rejects a result, so the common case is
-                a cache hit -- reusing pages already rendered at the same
-                DPI instead of rasterising the same PDF a second time.
-
-        Returns:
-            The transcribed text, flagged as OCR output.
-
-        Raises:
-            DocumentExtractionError: If rasterisation or the model call fails.
-        """
-        is_pdf = has_pdf_magic_bytes(content) or mime_type == "application/pdf"
-        if is_pdf and pdfium is None:
-            raise DocumentExtractionError(
-                "pypdfium2 kurulu değil; PDF görüntüye çevrilemedi."
-            )
-
-        try:
-            if not is_pdf:
-                images = [content]
-                # Decoded only for mark detection below (see its own
-                # try/except) -- the transcription call above never needed a
-                # PIL object for this branch, so a decode failure here must
-                # not break transcription, which is why this is not folded
-                # into the same try/except as the rest of this method.
-                pil_pages = []
-                if _PILImage is not None:
-                    try:
-                        pil_pages = [await asyncio.to_thread(_PILImage.open, io.BytesIO(content))]
-                    except Exception:
-                        logger.warning("Could not decode image for mark detection.", exc_info=True)
-            else:
-                if raster_cache is not None and self.dpi in raster_cache:
-                    pil_pages = raster_cache[self.dpi]
-                    logger.info(
-                        "Reusing %d already-rasterised page(s) at %d DPI.",
-                        len(pil_pages),
-                        self.dpi,
-                    )
-                else:
-                    pil_pages = await asyncio.to_thread(self._render_pages, content)
-                    if raster_cache is not None:
-                        raster_cache[self.dpi] = pil_pages
-                images = await asyncio.to_thread(self._encode_png, pil_pages)
-            # Deliberately sequential, unlike TesseractExtractor's page loop.
-            # Tesseract pages parallelise safely because each OCR call is its
-            # own `tesseract` subprocess, competing for CPU cores the OS
-            # already schedules. A vision-model call is a generation request
-            # against one Ollama-served model; Ollama serialises generation
-            # against a given model rather than running requests on it
-            # concurrently, so concurrent page requests would queue behind
-            # each other on the server side regardless of client-side
-            # fan-out -- the same shape of cost this project already measured
-            # as a net loss for concurrent classify+extract calls against the
-            # same model. Revisit only with a live Ollama instance to measure
-            # against; guessing wrong here costs latency on OllamaVisionExtractor
-            # specifically, which is already the last-resort path for the
-            # hardest-to-read documents.
-            pages = [await asyncio.to_thread(self._transcribe, img) for img in images]
-        except DocumentExtractionError:
-            raise
-        except Exception as exc:
-            raise DocumentExtractionError(
-                f"Görsel dil modeli ile OCR başarısız oldu: {exc}"
-            ) from exc
-
-        text = "\n\n".join(pages).strip()
-        logger.info(
-            "OllamaVisionExtractor (%s) transcribed %d page(s), %d characters.",
-            self.model,
-            len(pages),
-            len(text),
-        )
-        # Best-effort, same rendered pages: detect_marks never raises (see
-        # its own docstring), so a detector bug here must never fail a
-        # transcription that otherwise succeeded.
-        mark_lists = await asyncio.gather(
-            *(
-                asyncio.to_thread(detect_marks, image, page_number)
-                for page_number, image in enumerate(pil_pages, start=1)
-            )
-        )
-        return ExtractedDocument(
-            text=text,
-            pages=pages,
-            page_count=len(pages),
-            extractor=self.name,
-            used_ocr=True,
-            detected_marks=[mark for marks in mark_lists for mark in marks],
-        )
-
-    async def render_first_page(self, content: bytes) -> Optional["_PILImage.Image"]:
-        """Rasterise only page 1 of a PDF, for header-band repair's own use.
-
-        `_render_pages` renders every page and is used when a full OCR pass
-        is already under way; this exists for the opposite situation --
-        header repair needs page 1 of a result whose extractor never
-        rendered anything at all (a text-layer path, e.g. OpenDataLoader or
-        PdfiumExtractor reading a Class-A scanner text layer -- see
-        `FallbackDocumentExtractor.is_scanned_text_layer`). Rendering only
-        page 1 keeps this always-paid cost bounded to roughly one page
-        regardless of document length, since the repair only ever touches
-        the header band of the first page.
-
-        Args:
-            content: Raw PDF bytes.
-
-        Returns:
-            The rendered first page as a PIL image, or None when `content`
-            is not a renderable PDF (corrupt bytes, no pages, or pdfium
-            unavailable) -- callers must degrade to the original,
-            un-repaired text rather than raise.
-        """
-        if pdfium is None:
-            return None
-        try:
-            document = pdfium.PdfDocument(content)
-        except Exception:
-            return None
-
-        try:
-            if len(document) == 0:
-                return None
-            page = document[0]
-            try:
-                scale = self.dpi / PDF_POINTS_PER_INCH
-                bitmap = page.render(scale=scale)
-                return bitmap.to_pil()
-            finally:
-                page.close()
-        except Exception:
-            return None
-        finally:
-            document.close()
-
-    def _render_pages(self, content: bytes) -> list:
-        """Rasterise every page of a PDF to a PIL image, in document order.
-
-        Kept separate from PNG encoding (`_encode_png`) so the raw rendered
-        pages are what goes into `raster_cache` -- the same shape
-        `TesseractExtractor` caches, and reusable for any future consumer
-        that doesn't specifically need PNG bytes.
-
-        Args:
-            content: Raw PDF bytes.
-
-        Returns:
-            One rendered PIL image per page.
-        """
-        scale = self.dpi / PDF_POINTS_PER_INCH
-        document = pdfium.PdfDocument(content)
-        try:
-            images = []
-            for page in document:
-                bitmap = page.render(scale=scale)
-                try:
-                    images.append(bitmap.to_pil())
-                finally:
-                    page.close()
-            return images
-        finally:
-            document.close()
-
-    def _encode_png(self, images: list) -> list[bytes]:
-        """Encode PIL images to PNG bytes, the format Ollama's API expects.
-
-        Args:
-            images: PIL images, in document order.
-
-        Returns:
-            PNG-encoded bytes per image, same order.
-        """
-        encoded = []
-        for image in images:
-            buffer = io.BytesIO()
-            image.save(buffer, format="PNG")
-            encoded.append(buffer.getvalue())
-        return encoded
-
-    def _transcribe(self, image: bytes) -> str:
-        """Send one page image to the model and return its transcription.
+    async def _transcribe(self, image: bytes) -> str:
+        """Send one page image to Ollama's raw `/api/generate` and return its transcription.
 
         Args:
             image: PNG bytes of a single page.
@@ -380,108 +503,94 @@ class OllamaVisionExtractor(BaseDocumentExtractor):
         Returns:
             The transcribed text.
         """
-        payload = {
-            "model": self.model,
-            "prompt": self.prompt,
-            "images": [base64.b64encode(image).decode()],
-            "stream": False,
-            "options": {
-                "temperature": 0,
-                "num_predict": DEFAULT_NUM_PREDICT,
-                "num_ctx": DEFAULT_NUM_CTX,
-            },
-        }
-        request = urllib.request.Request(
-            f"{self.base_url}/api/generate",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(
-            request, timeout=REQUEST_TIMEOUT_SECONDS
-        ) as response:
-            return json.load(response).get("response", "")
 
-    def supports(
+        def _call() -> str:
+            payload = {
+                "model": self.model,
+                "prompt": self.prompt,
+                "images": [base64.b64encode(image).decode()],
+                "stream": False,
+                "options": {
+                    "temperature": 0,
+                    "num_predict": DEFAULT_NUM_PREDICT,
+                    "num_ctx": DEFAULT_NUM_CTX,
+                },
+            }
+            request = urllib.request.Request(
+                f"{self.base_url}/api/generate",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(
+                request, timeout=REQUEST_TIMEOUT_SECONDS
+            ) as response:
+                return json.load(response).get("response", "")
+
+        return await asyncio.to_thread(_call)
+
+
+class EvrenVisionExtractor(VisionExtractorBase):
+    """OCR via Evren's fast tier, sent as a multimodal chat completion.
+
+    Evren's own `vlm` model alias is video-only -- it rejects any request
+    carrying an image with a 400 ("At most 0 image(s) may be provided").
+    Evren's own troubleshooting docs recommend routing OCR/document images to
+    `llm-fast` or `llm-large` instead (up to 2 images per request; this
+    extractor only ever sends one page at a time). Same escalation role as
+    `OllamaVisionExtractor` -- used instead of it when `settings.LOCAL_MODE`
+    is False, see `app.infrastructure.extractors.get_document_extractor` and
+    `app.api.dependency`.
+    """
+
+    name = "evren_vision"
+
+    def __init__(
         self,
-        content: bytes,
-        *,
-        file_name: Optional[str] = None,
-        mime_type: Optional[str] = None,
-    ) -> bool:
-        """Accept PDFs and raster images; reject anything textual."""
-        if has_pdf_magic_bytes(content) or mime_type == "application/pdf":
-            return True
-        if mime_type and mime_type.startswith("image/"):
-            return True
-        return matches_extension(file_name, IMAGE_EXTENSIONS | PDF_EXTENSIONS)
-
-    async def transcribe_header_band(self, page_image) -> str:
-        """Transcribe just the header band of one already-rasterised page.
-
-        Used by `FallbackDocumentExtractor`'s header-repair step, not by this
-        class's own `extract()`. Crops the top `HEADER_BAND_FRACTION` of the
-        page and sends only that crop through the same model call a full-page
-        transcription uses -- a small crop costs a fraction of the time
-        (measured directly: ~12.6s, against ~26s for a full page on the same
-        model) for specifically the part of a scan this project's OCR chain
-        struggles with (letterhead emblems, handwritten annotations), without
-        paying that cost on the body text Tesseract already reads well.
+        model: Optional[str] = None,
+        dpi: int = OCR_RENDER_DPI,
+        prompt: str = DEFAULT_PROMPT,
+    ) -> None:
+        """Initialise the vision extractor.
 
         Args:
-            page_image: A rasterised PIL page image, e.g. from `raster_cache`
-                (the same shape `TesseractExtractor` and this class's own
-                `extract()` share a cache entry for).
-
-        Returns:
-            The crop's transcription. May be empty on a genuine blank header;
-            callers should treat that the same as any other best-effort
-            failure, not retry.
-
-        Raises:
-            DocumentExtractionError: If the model call itself fails.
+            model: Evren model alias; defaults to `settings.EVREN_LLM_FAST_MODEL`.
+            dpi: Rasterisation density for PDF pages.
+            prompt: Transcription instruction.
         """
-        width, height = page_image.size
-        crop = page_image.crop((0, 0, width, int(height * HEADER_BAND_FRACTION)))
-        try:
-            encoded = await asyncio.to_thread(self._encode_png, [crop])
-            return await asyncio.to_thread(self._transcribe, encoded[0])
-        except Exception as exc:
-            raise DocumentExtractionError(
-                f"Görsel dil modeli ile başlık onarımı başarısız oldu: {exc}"
-            ) from exc
+        super().__init__(dpi=dpi, prompt=prompt)
+        self.model = model or settings.EVREN_LLM_FAST_MODEL
 
-    async def transcribe_page(self, page_image) -> str:
-        """Transcribe one already-rasterised page in full, no crop.
-
-        Sibling to `transcribe_header_band` -- same model call, same
-        `self.prompt`, just the whole page instead of the top
-        `HEADER_BAND_FRACTION` band. Used by `FallbackDocumentExtractor`'s
-        signature-recovery step (see that class's `_maybe_repair_signature`)
-        for the failure mode header-band repair cannot reach: wet-signature
-        ink obscuring the printed name below it sits well past the header
-        band, in the lower half of the page. Measured directly on four real
-        documents where OpenDataLoader/Tesseract lost or garbled the
-        signer's name entirely (a missing line, or "İF; BOZDAG ;" for
-        "Bekir BOZDAĞ") -- full-page transcription recovered the correct
-        name on all four.
+    async def _transcribe(self, image: bytes) -> str:
+        """Send one page image to Evren as a multimodal chat message.
 
         Args:
-            page_image: A rasterised PIL page image, same shape
-                `transcribe_header_band` and `TesseractExtractor` share a
-                `raster_cache` entry for.
+            image: PNG bytes of a single page.
 
         Returns:
-            The page's full transcription. May be empty on total failure;
-            callers should treat that the same as any other best-effort
-            failure, not retry.
-
-        Raises:
-            DocumentExtractionError: If the model call itself fails.
+            The transcribed text.
         """
-        try:
-            encoded = await asyncio.to_thread(self._encode_png, [page_image])
-            return await asyncio.to_thread(self._transcribe, encoded[0])
-        except Exception as exc:
-            raise DocumentExtractionError(
-                f"Görsel dil modeli ile tam sayfa okuma başarısız oldu: {exc}"
-            ) from exc
+        from app.ai.llms import get_llm_client
+
+        client = get_llm_client(
+            provider="evren",
+            model=self.model,
+            temperature=0.0,
+            max_tokens=DEFAULT_NUM_PREDICT,
+        )
+        encoded = base64.b64encode(image).decode()
+        return await client.generate(
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": self.prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{encoded}"},
+                        },
+                    ],
+                }
+            ],
+            temperature=0.0,
+            max_tokens=DEFAULT_NUM_PREDICT,
+        )

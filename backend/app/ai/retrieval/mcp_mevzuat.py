@@ -25,6 +25,7 @@ from typing import Optional
 from langchain_core.documents import Document
 
 from app.ai.embeddings.chunking.recursive import RecursiveChunker
+from app.ai.policy import get_policy
 from app.ai.retrieval.bm25 import BM25Retriever
 from app.core.config import settings
 from app.mcp.mevzuat_client import resolve_and_fetch
@@ -32,13 +33,16 @@ from app.mcp.registry import MEVZUAT_SERVER, is_registered
 
 logger = logging.getLogger(__name__)
 
-#: Chunk size/overlap must match scripts/index_mevzuat.py's parameters for the
-#: local corpus -- not because the two indexes are ever compared directly (they
-#: are not; each source is ranked independently), but because a mismatch here
-#: would give the live path passages of a different granularity than the one
-#: suggest_mevzuat's excerpt budget and prompt were tuned against.
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
+#: Sourced from ChunkingPolicy.mevzuat_* rather than a local literal --
+#: must match scripts/index_mevzuat.py's parameters for the local corpus.
+#: Not because the two indexes are ever compared directly (they are not;
+#: each source is ranked independently), but because a mismatch here would
+#: give the live path passages of a different granularity than the one
+#: suggest_mevzuat's excerpt budget and prompt were tuned against. See
+#: ChunkingPolicy's own docstring for why this pair is kept separate from
+#: the Document Q&A pair.
+CHUNK_SIZE = get_policy().chunking.mevzuat_chunk_size
+CHUNK_OVERLAP = get_policy().chunking.mevzuat_chunk_overlap
 
 
 @dataclass(frozen=True)

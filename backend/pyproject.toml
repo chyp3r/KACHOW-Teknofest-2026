@@ -7,9 +7,32 @@ filterwarnings = [
     "error::DeprecationWarning",
     "ignore::DeprecationWarning:langchain.*",
     "ignore::DeprecationWarning:pydantic.*",
+    # pytest_benchmark 4.0.0's own JSON-report writer calls the
+    # now-deprecated datetime.datetime.utcnow() internally
+    # (pytest_benchmark/plugin.py) -- nothing this repo's code does.
+    "ignore::DeprecationWarning:pytest_benchmark.*",
 ]
+addopts = "-m 'not e2e and not performance' --cov=app --cov-report=term-missing:skip-covered"
 markers = [
-    "integration: exercises real infra (Postgres/Redis/Qdrant/Ollama); skipped by default in CI",
+    # Deliberately NOT deselected by addopts above -- this repo has no
+    # separate CI-only lane (see tests/_db_fixtures.py's own module
+    # docstring), so `docker compose run --rm backend pytest -q` runs these
+    # every time, same as any other test. Today this only means real
+    # Postgres (via tests/_db_fixtures.py::pg_test_database); no current
+    # integration test touches Redis/Qdrant/Ollama.
+    "integration: exercises a real, throwaway Postgres database (RLS via a real migration chain, not mocked)",
+    "e2e: real ASGI HTTP client against the full app (RLS, real lifespan, fake LLM/embeddings) -- deselected by addopts above, run explicitly with `pytest -m e2e` or `make test-e2e`",
+    "performance: benchmarks and operation-count regression checks (Workstream E) -- deselected by addopts above, run explicitly with `pytest -m performance`",
+    # Not yet applied to any test: every current test's LLM/embeddings calls
+    # are mocked or faked (see tests/conftest.py's FakeLLMClient/
+    # FakeEmbeddingsClient), including test_prototype_freshness.py, which
+    # only compares committed JSON metadata against the running policy --
+    # no live call. Registered now, ready for whichever future test (a
+    # `make eval-llm`-style live-model check) first needs it, so CI
+    # (Workstream I) can deselect it with `-m "not needs_ollama"` from day
+    # one instead of retrofitting the marker once a GitHub-hosted runner
+    # (which has no Ollama at all) turns red.
+    "needs_ollama: requires a live, reachable Ollama instance",
 ]
 
 [tool.coverage.run]
@@ -18,3 +41,10 @@ omit = ["app/main.py"]
 
 [tool.coverage.report]
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]
+# No `fail_under` here on purpose -- coverage.py/pytest-cov apply it to
+# *any* `pytest` invocation using this config, including a developer
+# running a single narrow test file during development (whose own,
+# tiny slice of `app` is nowhere near the full-suite number below). The
+# ratchet is enforced explicitly instead, only for the full default lane,
+# via `--cov-fail-under=86` on the `test` target in the root Makefile --
+# see that target's own comment for where the 86 came from.

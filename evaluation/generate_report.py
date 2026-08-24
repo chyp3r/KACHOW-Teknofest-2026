@@ -24,7 +24,13 @@ from pathlib import Path
 from typing import Any, Optional
 
 from app.ai.policy import POLICY_VERSION
-from evaluation.harness import draft_suite, evrak_suite, intent_suite
+from evaluation.harness import (
+    draft_suite,
+    evrak_suite,
+    intent_suite,
+    retrieval_suite,
+    trajectory_suite,
+)
 from evaluation.harness.runner import REPO_ROOT, EvalRun
 from evaluation.metrics import (
     Prediction,
@@ -39,7 +45,7 @@ from evaluation.metrics import (
 
 REPORT_DIR = REPO_ROOT / "evaluation" / "reports"
 
-SUITES = ("intents", "drafts", "evrak")
+SUITES = ("intents", "drafts", "retrieval", "trajectories", "evrak")
 
 
 def _intent_summary(run: EvalRun) -> dict[str, Any]:
@@ -155,15 +161,103 @@ def _evrak_summary(run: EvalRun) -> dict[str, Any]:
     }
 
 
-def _run_suite(name: str, *, with_model: bool = False) -> tuple[EvalRun, dict[str, Any]]:
+def _trajectory_summary(run: EvalRun) -> dict[str, Any]:
+    """Score a trajectory run into a serialisable summary."""
+    summary = trajectory_suite.sequence_summary(run)
+
+    categories: dict[str, dict[str, Any]] = {}
+    for category, results in run.by_category().items():
+        subset = trajectory_suite.sequence_summary(
+            EvalRun(suite=run.suite, dataset=run.dataset, results=results)
+        )
+        categories[category] = {
+            "cases": subset["cases"],
+            "exact_match_rate": round(subset["exact_match_rate"], 4),
+            "mean_edit_distance": round(subset["mean_edit_distance"], 4),
+        }
+
+    return {
+        "cases": summary["cases"],
+        "exact_match_rate": round(summary["exact_match_rate"], 4),
+        "mean_edit_distance": round(summary["mean_edit_distance"], 4),
+        "unexpected_node_rate": round(summary["unexpected_node_rate"], 4),
+        "paused_at_mismatches": summary["paused_at_mismatches"],
+        "by_category": categories,
+        "failures": trajectory_suite.failures(run),
+    }
+
+
+def _retrieval_summary(*, k: int = retrieval_suite.DEFAULT_K) -> tuple[EvalRun, dict[str, Any]]:
+    """Run every chunking arm and score them into one comparison summary.
+
+    Unlike the intent/draft suites, "the suite" here is inherently a
+    comparison across configurations -- ``--suite retrieval`` means "run
+    the A/B", not "run one thing". All arms run in one call so that stays
+    true; ``evaluation.harness.retrieval_suite.ARMS`` is the source of
+    truth for which configurations exist.
+
+    Returns:
+        The baseline arm's ``EvalRun`` (for the report header's
+        dataset/timing line -- every arm shares the same gold set and ran
+        in the same invocation, so any one of them is representative) and
+        the combined summary dict.
+    """
+    arms: dict[str, dict[str, Any]] = {}
+    runs: dict[str, EvalRun] = {}
+
+    for arm_name in retrieval_suite.ARMS:
+        run, stats = retrieval_suite.run(arm_name, k=k)
+        runs[arm_name] = run
+        arms[arm_name] = {
+            **retrieval_suite.to_metrics(run, k=k),
+            "chunk_count": stats.chunk_count,
+            "mean_chunk_length": round(stats.mean_chunk_length, 1),
+            "p50_chunk_length": stats.p50_chunk_length,
+            "p95_chunk_length": stats.p95_chunk_length,
+            "page_attribution_rate": round(stats.page_attribution_rate, 4),
+            "answer_span_intactness": round(stats.answer_span_intactness, 4),
+            "by_category": {
+                category: metrics
+                for category, metrics in retrieval_suite.by_category_metrics(run, k=k).items()
+            },
+        }
+        for metric_key in (
+            "precision_at_k", "recall_at_k", "hit_rate_at_k",
+            "mean_reciprocal_rank", "ndcg_at_k", "mean_yok_top1_score",
+        ):
+            arms[arm_name][metric_key] = round(arms[arm_name][metric_key], 4)
+
+    baseline = retrieval_suite.BASELINE_ARM
+    summary = {
+        "k": k,
+        "baseline": baseline,
+        "arms": arms,
+        "delta_vs_baseline": {
+            arm_name: {
+                metric_key: round(arms[arm_name][metric_key] - arms[baseline][metric_key], 4)
+                for metric_key in ("precision_at_k", "ndcg_at_k", "mean_reciprocal_rank")
+            }
+            for arm_name in arms
+            if arm_name != baseline
+        },
+    }
+    return runs[baseline], summary
+
+
+def _run_suite(
+    name: str, *, with_model: bool = False, retrieval_k: int = retrieval_suite.DEFAULT_K
+) -> tuple[EvalRun, dict[str, Any]]:
     """Run one suite and score it.
 
     Args:
-        name: ``"intents"``, ``"drafts"`` or ``"evrak"``.
+        name: ``"intents"``, ``"drafts"``, ``"retrieval"``, ``"trajectories"``
+            or ``"evrak"``.
         with_model: Only meaningful for ``"intents"`` -- wires a real
             fast-tier model into the model band instead of the default fully
             offline run (see ``intent_suite.run_with_model``). Ignored for
-            ``"drafts"``/``"evrak"``, which have no model band to begin with.
+            every other suite, which has no model band to begin with.
+        retrieval_k: Only meaningful for ``"retrieval"`` -- the cut-off
+            rank every arm and every rank-sensitive metric uses.
 
     Returns:
         The run and its summary.
@@ -177,6 +271,11 @@ def _run_suite(name: str, *, with_model: bool = False) -> tuple[EvalRun, dict[st
     if name == "drafts":
         run = draft_suite.run()
         return run, _draft_summary(run)
+    if name == "retrieval":
+        return _retrieval_summary(k=retrieval_k)
+    if name == "trajectories":
+        run = trajectory_suite.run()
+        return run, _trajectory_summary(run)
     if name == "evrak":
         run = evrak_suite.run()
         return run, _evrak_summary(run)
@@ -191,41 +290,33 @@ def _format_intent_markdown(summary: dict[str, Any]) -> list[str]:
         "| Metrik | Değer |",
         "|---|---|",
         f"| Vaka sayısı | {summary['cases']} |",
-        f"| Macro F1 | {summary['macro_f1']:.4f} |",
+        f"| **Macro F1** | **{summary['macro_f1']:.4f}** |",
         f"| Doğruluk (tüm vakalar) | {summary['accuracy_over_all']:.4f} |",
         f"| Doğruluk (karar verilenler) | {summary['accuracy_over_decided']:.4f} |",
-        f"| Eskalasyon (abstention) oranı | {summary['abstention_rate']:.4f} |",
-        f"| **Clarify oranı** (kullanıcıya soru) | **{summary['clarify_rate']:.4f}** |",
-        f"| Kalibrasyon hatası (ECE) | {summary['expected_calibration_error']:.4f} |",
+        f"| Eskalasyon oranı | {summary['abstention_rate']:.4f} |",
+        f"| Clarify oranı | {summary['clarify_rate']:.4f} |",
+        f"| Kalibrasyon hatası | {summary['expected_calibration_error']:.4f} |",
         "",
         "### Kaynak dağılımı",
         "",
-        "| Kaynak | Vaka |",
+        "| Kaynak | Sayı |",
         "|---|---|",
     ]
-    for source, count in summary["source_distribution"].items():
+    for source, count in sorted(summary["source_distribution"].items()):
         lines.append(f"| `{source}` | {count} |")
 
     lines += [
         "",
         "### Kategori kırılımı",
         "",
-        "| Kategori | Vaka | Doğruluk | Eskalasyon |",
-        "|---|---|---|---|",
+        "| Kategori | Vaka | Doğruluk (tüm) | Doğruluk (kararlı) | Eskalasyon |",
+        "|---|---|---|---|---|",
     ]
-
     for category in sorted(summary["by_category"]):
         stats = summary["by_category"][category]
         lines.append(
-            f"| `{category}` | {stats['cases']} | "
-            f"{stats['accuracy_over_all']:.2f} | {stats['abstention_rate']:.2f} |"
-        )
-
-    lines += ["", "### Etiket bazında", "", "| Etiket | P | R | F1 | Destek |", "|---|---|---|---|---|"]
-    for score in summary["per_label"]:
-        lines.append(
-            f"| `{score['label']}` | {score['precision']:.2f} | "
-            f"{score['recall']:.2f} | {score['f1']:.2f} | {score['support']} |"
+            f"| `{category}` | {stats['cases']} | {stats['accuracy_over_all']:.2f} | "
+            f"{stats['accuracy_over_decided']:.2f} | {stats['abstention_rate']:.2f} |"
         )
 
     failures = summary["failures"]
@@ -234,14 +325,13 @@ def _format_intent_markdown(summary: dict[str, Any]) -> list[str]:
         lines.append("Yok.")
     else:
         lines += [
-            "| ID | Kategori | Mesaj | Beklenen | Gözlenen | Kaynak |",
-            "|---|---|---|---|---|---|",
+            "| ID | Kategori | Beklenen | Gözlenen | Kaynak |",
+            "|---|---|---|---|---|",
         ]
         for row in failures:
-            message = row["message"].replace("|", "\\|")
             lines.append(
-                f"| `{row['id']}` | `{row['category']}` | {message} | "
-                f"`{row['expected']}` | `{row['observed']}` | `{row['source']}` |"
+                f"| `{row['id']}` | `{row['category']}` | `{row['expected']}` | "
+                f"`{row['observed']}` | `{row['source']}` |"
             )
     return lines
 
@@ -256,17 +346,16 @@ def _format_draft_markdown(summary: dict[str, Any]) -> list[str]:
         "|---|---|",
         f"| Vaka sayısı | {summary['cases']} |",
         f"| Doğruluk | {summary['accuracy']:.4f} |",
-        f"| **Yanlış pozitif oranı** (gereksiz HITL) | **{summary['false_positive_rate']:.4f}** |",
-        f"| Yanlış negatif oranı (kaçan hata) | {summary['false_negative_rate']:.4f} |",
-        f"| TP / FP / TN / FN | {counts['true_positive']} / {counts['false_positive']} "
-        f"/ {counts['true_negative']} / {counts['false_negative']} |",
+        f"| **Yanlış pozitif oranı** | **{summary['false_positive_rate']:.4f}** |",
+        f"| Yanlış negatif oranı | {summary['false_negative_rate']:.4f} |",
+        f"| TP={counts['true_positive']} FP={counts['false_positive']} "
+        f"TN={counts['true_negative']} FN={counts['false_negative']} | |",
         "",
         "### Kategori kırılımı",
         "",
-        "| Kategori | Vaka | Doğruluk | YP | YN |",
+        "| Kategori | Vaka | Doğruluk | FP | FN |",
         "|---|---|---|---|---|",
     ]
-
     for category in sorted(summary["by_category"]):
         stats = summary["by_category"][category]
         lines.append(
@@ -274,32 +363,27 @@ def _format_draft_markdown(summary: dict[str, Any]) -> list[str]:
             f"{stats['false_positive']} | {stats['false_negative']} |"
         )
 
+    gaps = summary["claim_detection_gaps"]
+    lines += ["", f"### İddia tespiti boşlukları ({len(gaps)})", ""]
+    if not gaps:
+        lines.append("Yok.")
+    else:
+        lines += ["| ID | Kategori | Ayrıntı |", "|---|---|---|"]
+        for row in gaps:
+            lines.append(f"| `{row['id']}` | `{row['category']}` | {row['detail']} |")
+
     failures = summary["failures"]
     lines += ["", f"### Başarısız vakalar ({len(failures)})", ""]
     if not failures:
         lines.append("Yok.")
     else:
-        lines += ["| ID | Kategori | Tür | Skor | Bulunan dayanaksız ifadeler |", "|---|---|---|---|---|"]
+        lines += [
+            "| ID | Kategori | Beklenen | Gözlenen |",
+            "|---|---|---|---|",
+        ]
         for row in failures:
-            claims = ", ".join(
-                f"{claim['kind']}: {claim['value']}"
-                for claim in row["unsupported_claims"]
-            )
             lines.append(
-                f"| `{row['id']}` | `{row['category']}` | `{row['kind']}` | "
-                f"{row['confidence_score']} | {claims or '-'} |"
-            )
-
-    gaps = summary["claim_detection_gaps"]
-    lines += ["", f"### Dayanaksız ifade sayımı sapmaları ({len(gaps)})", ""]
-    if not gaps:
-        lines.append("Yok.")
-    else:
-        lines += ["| ID | Kategori | Beklenen | Gözlenen |", "|---|---|---|---|"]
-        for row in gaps:
-            lines.append(
-                f"| `{row['id']}` | `{row['category']}` | "
-                f"{row['expected_claim_count']} | {row['observed_claim_count']} |"
+                f"| `{row['id']}` | `{row['category']}` | `{row['expected']}` | `{row['observed']}` |"
             )
     return lines
 
@@ -366,15 +450,160 @@ def _format_evrak_markdown(summary: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _format_retrieval_markdown(summary: dict[str, Any]) -> list[str]:
+    """Render the chunking-arm comparison as Markdown lines."""
+    baseline = summary["baseline"]
+    arms = summary["arms"]
+    metric_labels = (
+        ("precision_at_k", "Precision@k"),
+        ("recall_at_k", "Recall@k"),
+        ("hit_rate_at_k", "Hit rate@k"),
+        ("mean_reciprocal_rank", "MRR"),
+        ("ndcg_at_k", "nDCG@k"),
+        ("mean_yok_top1_score", "Yok top-1 skoru (düşük iyi)"),
+    )
+
+    lines = [
+        f"> Qdrant kullanılmaz, yerel RRF ile ölçülür (bkz. `docs/evaluation/retrieval.md`). "
+        f"k={summary['k']}, baseline=`{baseline}` (production ChunkingPolicy varsayılanları).",
+        "",
+        "### Kollar arası karşılaştırma",
+        "",
+        "| Metrik | "
+        + " | ".join(f"`{arm}`" + (" **(baseline)**" if arm == baseline else "") for arm in arms)
+        + " |",
+        "|---|" + "---|" * len(arms),
+    ]
+    for key, label in metric_labels:
+        cells = [f"{arms[arm][key]:.4f}" for arm in arms]
+        lines.append(f"| {label} | " + " | ".join(cells) + " |")
+
+    lines += [
+        "",
+        "### Baseline'a göre Δ (yalnızca cevaplanabilir vakalar)",
+        "",
+        "| Kol | ΔPrecision@k | ΔnDCG@k | ΔMRR |",
+        "|---|---|---|---|",
+    ]
+    for arm, deltas in summary["delta_vs_baseline"].items():
+        lines.append(
+            f"| `{arm}` | {deltas['precision_at_k']:+.4f} | "
+            f"{deltas['ndcg_at_k']:+.4f} | {deltas['mean_reciprocal_rank']:+.4f} |"
+        )
+
+    lines += [
+        "",
+        "### Korpus istatistikleri",
+        "",
+        "| Kol | Chunk sayısı | Ort. uzunluk | p50 | p95 | Sayfa atıf oranı | Span bütünlüğü |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for arm in arms:
+        stats = arms[arm]
+        lines.append(
+            f"| `{arm}` | {stats['chunk_count']} | {stats['mean_chunk_length']:.0f} | "
+            f"{stats['p50_chunk_length']:.0f} | {stats['p95_chunk_length']:.0f} | "
+            f"{stats['page_attribution_rate']:.2f} | {stats['answer_span_intactness']:.2f} |"
+        )
+
+    lines += ["", "### Kategori kırılımı (baseline kolu)", "", "| Kategori | Vaka | P@k | nDCG@k | MRR |", "|---|---|---|---|---|"]
+    for category in sorted(arms[baseline]["by_category"]):
+        cat_metrics = arms[baseline]["by_category"][category]
+        if cat_metrics["answerable_cases"] == 0:
+            # retrieval_suite.UNANSWERABLE_CATEGORY: precision/nDCG/MRR are
+            # undefined here (no gold answer_spans), not zero -- a literal
+            # 0.00 in this row would read as a miss, when the row is
+            # actually the mean_yok_top1_score diagnostic's territory
+            # (see the overall comparison table above).
+            lines.append(f"| `{category}` | {cat_metrics['cases']} | - | - | - |")
+            continue
+        lines.append(
+            f"| `{category}` | {cat_metrics['cases']} | {cat_metrics['precision_at_k']:.2f} | "
+            f"{cat_metrics['ndcg_at_k']:.2f} | {cat_metrics['mean_reciprocal_rank']:.2f} |"
+        )
+
+    return lines
+
+
+def _format_trajectory_markdown(summary: dict[str, Any]) -> list[str]:
+    """Render the trajectory summary as Markdown lines."""
+    lines = [
+        "### Genel",
+        "",
+        "| Metrik | Değer |",
+        "|---|---|",
+        f"| Vaka sayısı | {summary['cases']} |",
+        f"| **Tam eşleşme oranı** | **{summary['exact_match_rate']:.4f}** |",
+        f"| Ortalama edit mesafesi (node-ziyareti) | {summary['mean_edit_distance']:.4f} |",
+        f"| Beklenmeyen node oranı | {summary['unexpected_node_rate']:.4f} |",
+        "",
+        "### Kategori kırılımı",
+        "",
+        "| Kategori | Vaka | Tam eşleşme | Ort. edit mesafesi |",
+        "|---|---|---|---|",
+    ]
+    for category in sorted(summary["by_category"]):
+        stats = summary["by_category"][category]
+        lines.append(
+            f"| `{category}` | {stats['cases']} | {stats['exact_match_rate']:.2f} | "
+            f"{stats['mean_edit_distance']:.2f} |"
+        )
+
+    mismatches = summary["paused_at_mismatches"]
+    lines += ["", f"### Beklenmeyen duraklama noktası ({len(mismatches)})", ""]
+    if not mismatches:
+        lines.append("Yok.")
+    else:
+        lines += ["| ID | Beklenen | Gözlenen |", "|---|---|---|"]
+        for row in mismatches:
+            lines.append(f"| `{row['id']}` | `{row['expected']}` | `{row['observed']}` |")
+
+    failures = summary["failures"]
+    lines += ["", f"### Başarısız vakalar ({len(failures)})", ""]
+    if not failures:
+        lines.append("Yok.")
+    else:
+        lines += [
+            "| ID | Kategori | Mesaj | Beklenen dizi | Gözlenen dizi | Edit mesafesi |",
+            "|---|---|---|---|---|---|",
+        ]
+        for row in failures:
+            message = row["message"].replace("|", "\\|")
+            lines.append(
+                f"| `{row['id']}` | `{row['category']}` | {message} | "
+                f"`{row['expected']}` | `{row['observed']}` | {row['edit_distance']} |"
+            )
+    return lines
+
+
 def _diff_lines(suite: str, current: dict[str, Any], baseline: dict[str, Any]) -> list[str]:
     """Render the headline deltas against a baseline report."""
-    if suite == "intents":
+    if suite == "retrieval":
+        # Nested one level deeper than the other suites: the comparable
+        # numbers live under each report's own baseline arm, and a report's
+        # baseline arm name is itself worth surfacing if it ever changes
+        # between the two runs being compared (a policy default change).
+        current = current.get("arms", {}).get(current.get("baseline", ""), {})
+        baseline = baseline.get("arms", {}).get(baseline.get("baseline", ""), {})
+        tracked = [
+            ("precision_at_k", "Precision@k", True),
+            ("ndcg_at_k", "nDCG@k", True),
+            ("mean_reciprocal_rank", "MRR", True),
+            ("answer_span_intactness", "Span bütünlüğü", True),
+        ]
+    elif suite == "intents":
         tracked = [
             ("macro_f1", "Macro F1", True),
             ("accuracy_over_all", "Doğruluk (tüm vakalar)", True),
             ("abstention_rate", "Eskalasyon oranı", False),
             ("clarify_rate", "Clarify oranı", False),
             ("expected_calibration_error", "Kalibrasyon hatası", False),
+        ]
+    elif suite == "trajectories":
+        tracked = [
+            ("exact_match_rate", "Tam eşleşme oranı", True),
+            ("mean_edit_distance", "Ortalama edit mesafesi", False),
+            ("unexpected_node_rate", "Beklenmeyen node oranı", False),
         ]
     elif suite == "drafts":
         tracked = [
@@ -447,6 +676,10 @@ def build_report(
             lines += _format_intent_markdown(summaries[suite])
         elif suite == "drafts":
             lines += _format_draft_markdown(summaries[suite])
+        elif suite == "trajectories":
+            lines += _format_trajectory_markdown(summaries[suite])
+        elif suite == "retrieval":
+            lines += _format_retrieval_markdown(summaries[suite])
         else:
             lines += _format_evrak_markdown(summaries[suite])
 
@@ -493,6 +726,17 @@ def main(argv: Optional[list[str]] = None) -> int:
             "Ollama calls -- see `make eval-llm`."
         ),
     )
+    parser.add_argument(
+        "--retrieval-k",
+        type=int,
+        default=retrieval_suite.DEFAULT_K,
+        help=(
+            "Retrieval suite only: cut-off rank for every chunking arm and "
+            "every rank-sensitive metric. Defaults to DraftPolicy."
+            "source_chunk_count -- change this to see how sensitive the "
+            "comparison is to the writer's actual retrieval budget."
+        ),
+    )
     args = parser.parse_args(argv)
 
     selected = SUITES if args.suite == "all" else (args.suite,)
@@ -500,7 +744,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     runs: dict[str, EvalRun] = {}
     summaries: dict[str, dict[str, Any]] = {}
     for suite in selected:
-        run, summary = _run_suite(suite, with_model=args.with_model)
+        run, summary = _run_suite(
+            suite, with_model=args.with_model, retrieval_k=args.retrieval_k
+        )
         runs[suite] = run
         summaries[suite] = summary
 
@@ -543,21 +789,36 @@ def main(argv: Optional[list[str]] = None) -> int:
     for suite in selected:
         summary = summaries[suite]
         if suite == "intents":
-            headline = (
+            print(
+                f"[{suite}] {summary['cases']} vaka · "
                 f"macro_f1={summary['macro_f1']:.4f} "
                 f"abstention={summary['abstention_rate']:.4f}"
             )
         elif suite == "drafts":
-            headline = (
+            print(
+                f"[{suite}] {summary['cases']} vaka · "
                 f"accuracy={summary['accuracy']:.4f} "
                 f"false_positive_rate={summary['false_positive_rate']:.4f}"
             )
+        elif suite == "trajectories":
+            print(
+                f"[{suite}] {summary['cases']} vaka · "
+                f"exact_match_rate={summary['exact_match_rate']:.4f} "
+                f"mean_edit_distance={summary['mean_edit_distance']:.4f}"
+            )
+        elif suite == "retrieval":
+            baseline_metrics = summary["arms"][summary["baseline"]]
+            print(
+                f"[{suite}] k={summary['k']} baseline=`{summary['baseline']}` · "
+                f"precision_at_k={baseline_metrics['precision_at_k']:.4f} "
+                f"ndcg_at_k={baseline_metrics['ndcg_at_k']:.4f}"
+            )
         else:
-            headline = (
+            print(
+                f"[{suite}] {summary['cases']} vaka · "
                 f"ocr_routing_accuracy={summary['ocr_routing_accuracy']:.4f} "
                 f"missing_field_false_positive_rate={summary['missing_field_false_positive_rate']:.4f}"
             )
-        print(f"[{suite}] {summary['cases']} vaka · {headline}")
 
     print(f"\nRapor yazıldı:\n  {json_path}\n  {markdown_path}")
     return 0

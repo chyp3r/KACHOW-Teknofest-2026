@@ -121,6 +121,33 @@ def _require_auth_in_production() -> None:
         )
 
 
+#: Settings.SECRET_KEY's own default, kept as a module constant so this
+#: guard and the field declaration cannot silently drift apart.
+_DEFAULT_SECRET_KEY = "supersecretkeychangeinproduction"
+
+
+def _require_secret_key_in_production() -> None:
+    """Refuse to boot a production deployment with the default SECRET_KEY.
+
+    SECRET_KEY signs every access/refresh JWT (see app.core.security); the
+    published default is public (it's in this repository's own source), so
+    leaving it in place in production is equivalent to accepting tokens
+    signed by anyone. Same shape as _require_auth_in_production() above and
+    for the same reason: a wrong default is easy to miss in a log line, but
+    a process that never started is not.
+
+    Raises:
+        RuntimeError: If `ENVIRONMENT == "production"` and `SECRET_KEY` is
+            still the published default.
+    """
+    if settings.ENVIRONMENT == "production" and settings.SECRET_KEY == _DEFAULT_SECRET_KEY:
+        raise RuntimeError(
+            "SECRET_KEY must be changed from its default when "
+            "ENVIRONMENT=production -- set a unique SECRET_KEY or run with "
+            "ENVIRONMENT=development/staging."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage application startup and shutdown.
@@ -134,6 +161,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Starting %s (%s)...", settings.PROJECT_NAME, settings.ENVIRONMENT)
 
     _require_auth_in_production()
+    _require_secret_key_in_production()
 
     # Registers the event bus's listeners as a side effect of import (the
     # @subscribe decorator runs at module load time). Without this import

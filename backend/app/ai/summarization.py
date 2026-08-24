@@ -28,6 +28,12 @@ SUMMARY_MAX_TOKENS = 1024
 #: text fits in one chunk is summarised in a single call; longer documents go
 #: through map-reduce below so the whole document -- not just head+tail --
 #: informs the summary.
+#:
+#: Deliberately NOT sourced from app.ai.policy.schema.ChunkingPolicy: that
+#: policy governs retrieval chunking (Document Q&A, mevzuat corpus), a
+#: different concern with a different tuning goal (answer-span locality,
+#: not map-reduce call count). Keeping this pair local avoids coupling two
+#: unrelated tuning decisions to one shared value.
 SUMMARY_CHUNK_SIZE = 4000
 SUMMARY_CHUNK_OVERLAP = 400
 #: Hard cap on map-stage calls. A 50-page document must not become 50 LLM

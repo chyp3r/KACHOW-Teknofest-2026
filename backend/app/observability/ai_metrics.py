@@ -22,7 +22,7 @@ import logging
 
 from prometheus_client import Counter, Gauge, Histogram, Info
 
-from app.ai.policy import POLICY_VERSION
+from app.ai.policy import POLICY_VERSION, get_policy
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,31 @@ NODE_DURATION = Histogram(
     "kachow_node_duration_seconds",
     "Wall-clock duration of a single workflow node execution.",
     ["graph", "node", "status"],
+    # prometheus_client's own default buckets top out at 10.0s -- far too
+    # coarse for this metric's actual subjects: BudgetPolicy.node_seconds
+    # ranges from 25s to 180s, and workflow_ceiling_seconds is 480s. Every
+    # real observation was silently collapsing into the +Inf bucket,
+    # discovered running evaluation/latency/budget_report.py (Workstream
+    # E3) against a live analyze run -- p50/p95/p99 all read back as the
+    # same floor value (10.0) regardless of the true duration. Spans from
+    # sub-second (the fastest node, retrieve_mevzuat, ~12ms) past the
+    # workflow ceiling, with enough resolution in the 25-180s band the
+    # actual budgets live in to make a p95-vs-budget comparison meaningful.
+    buckets=(0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 20.0, 30.0, 45.0, 60.0, 90.0, 120.0, 180.0, 240.0, 300.0, 480.0),
+)
+
+#: BudgetPolicy.node_seconds, mirrored into Prometheus so it can be
+#: `join`'d against NODE_DURATION's own observations in PromQL (see
+#: monitoring/prometheus/rules/kachow.rules.yml's KachowNodeBudgetExhaustion
+#: rule) -- without this, "is a node's p95 approaching its budget" is a
+#: question only evaluation/latency/budget_report.py (Workstream E3) can
+#: answer, offline, after the fact. A Gauge, not a Counter/Histogram: the
+#: policy's own value, set once at process start (init_ai_metrics), not an
+#: observation that accumulates over the run.
+NODE_BUDGET_SECONDS = Gauge(
+    "kachow_node_budget_seconds",
+    "Configured BudgetPolicy.node_seconds budget for a workflow node.",
+    ["node"],
 )
 
 LLM_DURATION = Histogram(
@@ -255,5 +280,12 @@ def init_ai_metrics() -> None:
     at definition time; this function exists only so ``main.py`` has an
     explicit, greppable call site symmetric with ``init_metrics(app)``,
     rather than relying on an import for its side effect.
+
+    Also sets ``NODE_BUDGET_SECONDS`` from the active policy -- unlike the
+    Counters/Histograms above, a Gauge has no "definition-time" value to
+    register; it has to be set explicitly, once, here.
     """
+    for node, seconds in get_policy().budget.node_seconds.items():
+        NODE_BUDGET_SECONDS.labels(node=node).set(seconds)
+
     logger.debug("AI metrics registered.")

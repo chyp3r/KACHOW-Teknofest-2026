@@ -1,42 +1,31 @@
-# Denetim Kaydı (Audit Log) API
+# Denetim Kaydı API (Audit Log API)
 
-> Hash zincirli, kurcalamaya dayanıklı denetim kaydı. Her satırın
-> `hash`'i bir önceki satırın `hash`'ine bağlıdır (`hash = sha256(prev_hash
-> || canonical_json(satır))`) -- bir satırı sonradan değiştirmek veya
-> silmek, ondan sonraki her satırın zincirini kırar. `GET /audit/verify`
-> bunu doğrular.
->
-> Kapsam **dürüsttür, her istek değil**: yalnızca durum-değiştiren idari
-> eylemler kaydedilir -- yetki ver/geri al, şirket oluştur/güncelle/sil/
-> admin-ata, birim oluştur/güncelle/sil, taslak paylaşım gönder/kabul/
-> reddet/geri-çek, evrak havuzu push. Kayıt, diğer recorder'lar gibi
-> **best-effort** -- bir denetim kaydı yazma hatası, asıl idari eylemi
-> asla engellemez veya geri almaz.
+> Sistemi etkileyen idari eylemlerin hash zinciriyle korunan, kurcalamaya dayanıklı kayıtlarını sunar. Kayıt (Audit) zinciri best-effort çalışır. Her satırın hash değeri, bir önceki satıra bağımlıdır.
 
 ---
 
-# GET /api/v1/audit
+## `GET /api/v1/audit`
 
-Denetim kayıtlarını en yeniden eskiye listeler.
+Denetim kayıtlarını en yeniden eskiye doğru sayfalanmış olarak listeler.
 
-**Root**: `company_id` query parametresiyle herhangi bir şirket, ya da
-boş bırakılırsa **sistem geneli her satır** (her şirket + root'un kendi
-sistem-geneli eylemleri).
-**Admin**: her zaman kendi şirketi -- `company_id` parametresi ne
-gönderilirse gönderilsin yok sayılır (bir admin'in başka bir şirketin
-denetim kaydını sorgulayabileceği tek nokta burası olurdu, bu yüzden hiç
-güvenilmiyor).
+**Güvenlik:** Bearer Token 
+- `Root` herhangi bir şirketin veya sistem geneli kayıtların listesini alabilir.
+- `Admin` her zaman sadece **kendi şirketinin** kayıtlarını görüntüleyebilir (company_id filtresi Admin için yok sayılır).
 
-## Sorgu Parametreleri
+### Parametreler
 
-| Alan | Zorunlu | Açıklama |
-|---|---|---|
-| `company_id` | Hayır | Yalnızca Root için etkili |
-| `actor_user_id` | Hayır | Eylemi yapan kullanıcıya göre filtre |
-| `action` | Hayır | Örn. `"unit:create"`, `"permission:grant"` |
-| `resource_type` | Hayır | Örn. `"unit"`, `"company"`, `"permission_grant"` |
+| Alan | Tür | Konum | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- | :--- |
+| `company_id` | string | Query | Hayır | (Sadece Root kullanabilir) İlgili şirketin kimliği. Belirtilmezse sistemdeki tüm kayıtlar gelir. |
+| `actor_user_id`| string | Query | Hayır | Eylemi gerçekleştiren kullanıcıya göre filtreler. |
+| `action` | string | Query | Hayır | İşlem tipine göre filtreler (`unit:create`, `permission:grant` vb.). |
+| `resource_type`| string | Query | Hayır | Kaynak tipine göre filtreler (`unit`, `company`, `permission_grant`). |
+| `page` | integer| Query | Hayır | Sayfa numarası (Varsayılan: 1). |
+| `size` | integer| Query | Hayır | Sayfa başına sonuç (Varsayılan: 20). |
 
-## Yanıt
+### Yanıtlar (Responses)
+
+#### 200 OK
 
 ```json
 {
@@ -61,36 +50,54 @@ güvenilmiyor).
         "created_at": "2026-08-14T12:00:00Z"
       }
     ],
-    "total": 1, "page": 1, "size": 20, "pages": 1
+    "total": 1,
+    "page": 1,
+    "size": 20,
+    "pages": 1
   },
   "error": null,
   "meta": { "timestamp": "2026-08-14T12:00:00Z" }
 }
 ```
 
+#### 403 Forbidden
+Root veya Admin rolü dışında erişim denemesi.
+
 ---
 
-# GET /api/v1/audit/verify
+## `GET /api/v1/audit/verify`
 
-Bir zinciri baştan sona yürür, her satırın hash'ini kendi alanlarından
-yeniden hesaplar ve bir öncekinin gerçek hash'iyle karşılaştırır.
+Kriptografik denetim zincirini baştan sona (Head to Tail) yürür, her satırın hash değerini yeniden hesaplar ve zincirin doğruluğunu/kopup kopmadığını onaylar.
 
-**Root**: `company_id` verilirse o şirketin zinciri; boş bırakılırsa
-root'un kendi **sistem geneli** (`company_id IS NULL`) zinciri -- `GET
-/audit`'in aksine burada "boş = her şey" anlamına gelmez, çünkü `seq`/
-`prev_hash` sürekliliği yalnızca **tek bir** zincir içinde tanımlıdır.
-**Admin**: her zaman kendi şirketinin zinciri.
+**Güvenlik:** Bearer Token 
+- `Root` belirli bir `company_id` girerek o şirketin veya boş bırakarak Sistem Genel zincirini kontrol eder.
+- `Admin` sadece kendi şirketinin zincirini kontrol eder.
 
-## Yanıt
+### Parametreler
+
+| Alan | Tür | Konum | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- | :--- |
+| `company_id` | string | Query | Hayır | (Sadece Root kullanabilir) Şirket zincirini kontrol etmek için. |
+
+### Yanıtlar (Responses)
+
+#### 200 OK (Zincir Sağlıklı)
 
 ```json
 {
   "success": true,
-  "data": { "valid": true, "rows_checked": 42, "broken_at_seq": null, "reason": null }
+  "data": {
+    "valid": true,
+    "rows_checked": 42,
+    "broken_at_seq": null,
+    "reason": null
+  }
 }
 ```
 
-Zincir bozulmuşsa:
+#### 200 OK (Zincir Bozulmuş)
+
+Veritabanında (DB) sonradan oynama yapılmışsa zincir geçerliliğini yitirir:
 
 ```json
 {
@@ -104,17 +111,8 @@ Zincir bozulmuşsa:
 }
 ```
 
----
+#### 401 Unauthorized
+Geçersiz jeton.
 
-## Hata durumları
-
-| Durum | Kod | Sebep |
-|---|---|---|
-| 401 | `AUTHENTICATION_ERROR` | Geçersiz/eksik jeton |
-| 403 | `AUTHORIZATION_ERROR` | Root/Admin dışında bir rol |
-
-## İlgili
-
-- `docs/architecture/backend.md` -- "Denetim Kaydı, Analitik ve Kotalar
-  (Faz 6)" bölümü, hash formülü ve `seq` hesaplamasının `NULL`-güvenli
-  olma gerekçesi.
+#### 403 Forbidden
+Yetkisiz kullanıcı.

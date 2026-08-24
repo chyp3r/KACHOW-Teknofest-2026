@@ -1,6 +1,7 @@
-.PHONY: setup-db bootstrap up down logs test eval eval-baseline eval-llm \
+.PHONY: setup-db bootstrap up down logs test test-e2e test-all eval eval-baseline eval-llm eval-retrieval \
+	benchmark benchmark-baseline export-budgets perf-smoke perf-chat perf-document latency-report \
 	migrate seed shell psql restart-backend \
-	reset-db reset-checkpoints reset-cache reset-storage reset-document-qa reset
+	reset-db reset-checkpoints reset-cache reset-storage reset-document-qa reset-evren-qdrant reset
 
 setup-db:
 	docker compose exec db psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'langfuse'" | grep -q 1 || docker compose exec db psql -U postgres -c "CREATE DATABASE langfuse"
@@ -71,14 +72,53 @@ psql:
 restart-backend:
 	docker compose restart backend
 
-# Runs with the compose services up. Redis used to be load-bearing here: seven
-# API tests failed without it, because rate_limit() sits in front of the document
-# endpoints and turned a cache outage into a 500. That was the limiter failing
-# closed, not a test-environment requirement -- it now fails open, and the suite
-# passes with Redis reachable or unreachable alike. Postgres and Qdrant are still
-# genuinely needed by the integration tests.
+# Runs with the compose services up, though as of this writing that's a
+# convenience, not a hard requirement: Redis used to be load-bearing here
+# (seven API tests failed without it, because rate_limit() sits in front of
+# the document endpoints and turned a cache outage into a 500), but that was
+# the limiter failing closed, not a test-environment requirement -- it now
+# fails open. Verified by actually stopping both `redis` and `qdrant` and
+# re-running this target: all 2544 non-deselected tests still pass. Only
+# Postgres (real, throwaway, via tests/_db_fixtures.py) is genuinely needed,
+# by the `integration`-marked tests -- `e2e` and `performance` are
+# deselected here by pyproject.toml's `addopts` (see `test-e2e`/`test-all`
+# below), and no other test in this lane touches real infra at all.
+# --cov-fail-under=86 (Workstream J5): the measured value the day this gate
+# was added (`pytest -q --cov=app --cov-report=term-missing:skip-covered`
+# -> TOTAL 86%, 14561/16913 statements = 86.09%), not an aspirational
+# target -- an aspirational number starts the ratchet red and gets it
+# disabled by the first person annoyed by it. Only ever moves up as
+# coverage genuinely improves; a PR that lowers this number is a PR that
+# removed tests, not one that should edit this number down to make CI
+# green again. Deliberately only here, not in pyproject.toml's
+# [tool.coverage.report] -- that file's addopts already turns on `--cov`
+# for every pytest invocation (including a developer running one narrow
+# test file, whose own tiny slice of `app` is nowhere near 86%), and a
+# global `fail_under` there would fail that unrelated case for a reason
+# that has nothing to do with what changed.
 test:
-	docker compose run --rm backend pytest -q
+	docker compose run --rm backend pytest -q --cov-fail-under=86
+
+# Real ASGI HTTP e2e tests (tests/e2e/, Workstream C): RLS through a real
+# Postgres, a real app lifespan (LangGraph checkpointer included), fake LLM/
+# embeddings clients only. Deselected from the default `test` lane by
+# pyproject.toml's `addopts` -- needs db/redis/qdrant up, unlike the fast
+# default lane, which needs no infra at all.
+# --no-cov: pyproject.toml's `addopts` turns coverage measurement on for
+# every pytest invocation by default (Workstream J5); a marker-filtered
+# subset like this one covers a different, much smaller slice of `app` on
+# purpose, so its own coverage percentage is not a meaningful number to
+# print here -- the real gate (`--cov-fail-under=86`) lives on `test`
+# above, against the full default lane.
+test-e2e:
+	docker compose run --rm backend pytest -q -m e2e --no-cov
+
+# Everything: integration (already included in `test` above) plus e2e and
+# performance (both deselected by pyproject.toml's `addopts` otherwise).
+# Needs the full compose stack up, same as `test-e2e`. --no-cov: see
+# test-e2e's own comment.
+test-all:
+	docker compose run --rm backend pytest -q -m "" --no-cov
 
 # Deterministic evaluation of the non-LLM decision layer. Deliberately a
 # separate target rather than a test: the full run is a measurement, not a
@@ -103,6 +143,61 @@ eval-baseline:
 # way the backend service's own OLLAMA_BASE_URL is wired.
 eval-llm:
 	docker compose run --rm --no-deps backend python -m evaluation.generate_report --suite intents --with-model --label with-model
+
+# Chunking-configuration comparison (precision@k/recall@k/MRR/nDCG across
+# evaluation.harness.retrieval_suite.ARMS). Same --no-deps rationale as
+# `eval` above: everything here reads a precommitted embedding cache
+# (evaluation/datasets/retrieval_embeddings.json) and a stubbed in-memory
+# vector store, never live Qdrant/Ollama. Rebuild that cache after editing
+# evaluation/datasets/retrieval.jsonl or evaluation/datasets/
+# retrieval_corpus/ with:
+#   docker compose run --rm --no-deps backend python scripts/build_eval_embeddings.py --target retrieval
+eval-retrieval:
+	docker compose run --rm --no-deps backend python -m evaluation.generate_report --suite retrieval --label retrieval
+
+# Wall-clock micro-benchmarks (Workstream E1, backend/tests/performance/
+# test_benchmarks.py) -- pure-CPU, I/O-free functions only, --no-deps like
+# every other eval/benchmark target. One-time setup: run this to record the
+# numbers this container's own hardware produces today, then commit the
+# result (evaluation/benchmarks/*/*_baseline.json).
+benchmark-baseline:
+	docker compose run --rm --no-deps backend pytest -q tests/performance/test_benchmarks.py -m performance --benchmark-only --benchmark-storage=file://evaluation/benchmarks --benchmark-save=baseline
+
+# Re-runs the benchmarks and fails only on a >3x regression against the
+# committed baseline -- see evaluation/benchmarks/report.py's own docstring
+# for why this isn't pytest-benchmark's built-in --benchmark-compare-fail
+# (its percentage syntax caps at 99%, so ">200%" can't be expressed with it).
+benchmark:
+	rm -f evaluation/benchmarks/*/*_latest.json
+	docker compose run --rm --no-deps backend pytest -q tests/performance/test_benchmarks.py -m performance --benchmark-only --benchmark-storage=file://evaluation/benchmarks --benchmark-save=latest
+	docker compose run --rm --no-deps backend python evaluation/benchmarks/report.py
+
+# Regenerates perf/k6/lib/budgets.json from the live BudgetPolicy -- run
+# after changing any node_seconds/workflow_ceiling_seconds value.
+export-budgets:
+	docker compose run --rm --no-deps backend python scripts/export_budgets.py
+
+# k6 load tests (Workstream E2, perf/k6/ -- see perf/k6/README.md for the
+# full rationale). Needs a real running stack (`make bootstrap`/`make up`)
+# with the default seeded accounts; --network host isn't supported the same
+# way on Docker Desktop (macOS/Windows), so host.docker.internal + an
+# explicit K6_BASE_URL is what's used instead, matching every contributor's
+# environment instead of only Linux's.
+perf-smoke:
+	docker run --rm -i -v "$(CURDIR)/perf/k6:/scripts" -e K6_BASE_URL=http://host.docker.internal:8000 grafana/k6 run /scripts/smoke.js
+
+perf-chat:
+	docker run --rm -i -v "$(CURDIR)/perf/k6:/scripts" -e K6_BASE_URL=http://host.docker.internal:8000 grafana/k6 run /scripts/chat_stream.js
+
+perf-document:
+	docker run --rm -i -v "$(CURDIR)/perf/k6:/scripts" -e K6_BASE_URL=http://host.docker.internal:8000 grafana/k6 run /scripts/document_upload.js
+
+# Observed per-node latency vs. BudgetPolicy.node_seconds (Workstream E3,
+# evaluation/latency/). Needs the `backend` service actually running with
+# real traffic behind it already (a perf-chat/perf-document run, or real
+# usage) -- there is nothing to report against a freshly booted backend.
+latency-report:
+	docker compose run --rm backend python -m evaluation.latency.budget_report
 
 # ---------------------------------------------------------------------------
 # Reset: wipes application data (companies/users/documents/drafts/chat/...)
@@ -154,6 +249,21 @@ reset-storage:
 # document is analyzed (create_collection is already idempotent there).
 reset-document-qa:
 	curl -sf -X DELETE http://localhost:6333/collections/document_qa || true
+
+# Wipes every collection on Evren's remote Qdrant cluster (EVREN_QDRANT_URL),
+# not the local one -- separate from reset-document-qa above and NOT part of
+# the `reset` chain below, since it hits real remote infra rather than this
+# machine's own containers. Team-isolated (see /mimari on the Evren docs
+# site), so this only ever deletes this team's own data, but it is still
+# irreversible -- same CONFIRM=yes gate as `reset`.
+reset-evren-qdrant:
+	@if [ "$(CONFIRM)" != "yes" ]; then \
+		echo "This permanently deletes ALL collections on Evren's remote Qdrant"; \
+		echo "cluster (EVREN_QDRANT_URL) -- mevzuat/örnek-yazışma/document_qa"; \
+		echo "indexes built there are gone. Re-run as: make reset-evren-qdrant CONFIRM=yes"; \
+		exit 1; \
+	fi
+	docker compose run --rm --no-deps backend python scripts/reset_evren_qdrant.py
 
 # The one-command "wipe everything app-level and hand me a fresh system"
 # entry point -- irreversible, so it requires an explicit CONFIRM=yes

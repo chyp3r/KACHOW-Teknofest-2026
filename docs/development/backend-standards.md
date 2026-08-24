@@ -1,429 +1,66 @@
-# Backend Standards
+# Backend Geliştirme Standartları (Backend Standards)
 
-> Bu doküman Backend geliştirme standartlarını tanımlar.
+> **NOT:**
+> Bu doküman Backend geliştirme süreçlerinin standartlarını, mimari katmanları, isimlendirme ve test beklentilerini tanımlar. Bu katmanın asıl amacı **iş kurallarını yönetmek, API isteklerini karşılamak, veri bütünlüğünü korumak ve AI orkestrasyonunu sağlamaktır.**
 
-Backend içerisinde geliştirilen tüm modüller bu kurallara uygun olmalıdır.
+## Mimari Felsefe ve Katmanlar (DDD)
 
-Bu doküman yalnızca Backend katmanını kapsar.
+Backend, **Domain Driven Design (DDD)** prensiplerine göre iş alanlarına (chat, documents, users vb.) bölünmüştür.
+Her iş alanı kendi içinde kesin çizgilerle ayrılmış katmanlardan oluşur:
 
----
+| Katman | Sorumluluk | Yapılmaması Gerekenler |
+| :--- | :--- | :--- |
+| **Router** | HTTP isteklerini (Request) karşılar, doğrular, sonucu (Response) döner. | SQL yazılmaz. İş kuralı veya AI çağrısı yapılmaz. |
+| **Service** | İş kurallarını yürütür, Repository ve AI Core'u koordine eder, Event yayınlar. | HTTP veya Request nesnesi bilinmez. ORM sorgusu yazılmaz. |
+| **Repository** | Veritabanı (CRUD, filtreleme, sayfalama) işlemlerini üstlenir. | Veri mantığı dışında iş kuralı içermez. |
+| **Models** | Veritabanı tablolarının ORM temsilidir. | API doğrulaması, HTTP mantığı bulundurmaz. |
+| **Schemas** | API giriş/çıkışlarını yöneten Pydantic tanımlarıdır. | Database modeli ile aynı amaçta (ikisi bir arada) kullanılamaz. |
 
-# Amaç
-
-Bu dokümanın amacı;
-
-* Backend mimarisini korumak
-* Tutarlı geliştirme sağlamak
-* Domain bağımlılıklarını azaltmak
-* Test edilebilir kod üretmek
-* Ölçeklenebilir Backend oluşturmak
-
----
-
-# Backend Felsefesi
-
-Backend;
-
-* iş kurallarını yönetir,
-* API isteklerini karşılar,
-* AI sistemini orkestre eder,
-* veriye erişir,
-* güvenliği sağlar.
-
-Backend kullanıcı arayüzünü yönetmez.
-
-Backend LLM mantığını içermez.
-
-Backend Prompt içermez.
-
-Backend Tool geliştirmez.
-
----
-
-# Katmanlar
-
-Backend aşağıdaki katmanlardan oluşur.
-
-```text
-Router
-
-↓
-
-Service
-
-↓
-
-Repository
-
-↓
-
-Infrastructure
-
-↓
-
-Database
+```mermaid
+flowchart TD
+    Router["Router (HTTP)"] --> Validation{"Pydantic (Schema)"}
+    Validation --> Service["Service (İş Mantığı)"]
+    Service --> AI["AI Core (Eğer Gerekliyse)"]
+    Service --> Repo["Repository (Data Access)"]
+    Repo --> DB[("Database")]
 ```
 
-Her katman yalnızca kendi sorumluluğunu yerine getirir.
+> **UYARI:**
+> Katmanlar arası bağımlılıklar yalnızca **Dependency Injection** (Bağımlılık Enjeksiyonu) kullanılarak sağlanmalıdır. Hiçbir servis veya router nesnesi, ihtiyaç duyduğu sınıfı doğrudan `new` anahtar kelimesiyle veya manuel instantiate ederek kullanmamalıdır.
 
----
+## Yeni Özellik Geliştirme İş Akışı
 
-# Domain Bazlı Geliştirme
+Yeni bir Backend özelliği veya endpoint eklenirken kodlama süreci "Veriden -> İletişime" (Bottom-Up) şekilde ilerlemelidir:
 
-Her özellik bir domain içerisinde geliştirilmelidir.
-
-Örnek
-
-```text
-domains/
-
-chat/
-
-documents/
-
-auth/
-
-users/
-
-settings/
+```mermaid
+sequenceDiagram
+    participant Domain as İş Alanı (Domain)
+    participant Schema as Pydantic Schema
+    participant Repo as Repository
+    participant Service as Service
+    participant Router as API Router
+    participant Docs as Test & Dokümantasyon
+    
+    Domain->>Schema: Girdi ve Çıktı Modelleri Tanımlanır
+    Schema->>Repo: Veritabanı Erişim Fonksiyonları Yazılır
+    Repo->>Service: İş Mantığı ve Kontroller Eklenir
+    Service->>Router: HTTP Uç Noktası Oluşturulur
+    Router->>Docs: Birim Testleri Yazılır ve Swagger/Docs Güncellenir
 ```
 
-Yeni özellikler mevcut domain içerisine eklenmelidir.
-
-Yeni domain yalnızca gerçekten yeni bir iş alanı oluştuğunda oluşturulmalıdır.
-
----
-
-# Router
-
-Router yalnızca HTTP katmanıdır.
-
-Router;
-
-* endpoint tanımlar,
-* request doğrular,
-* response döndürür,
-* Service çağırır.
-
-Router içerisinde;
-
-* SQL yazılmaz.
-* AI çağrısı yapılmaz.
-* iş kuralı bulunmaz.
-* dosya işlemi yapılmaz.
-
----
-
-# Service
-
-Service uygulamanın iş mantığını içerir.
-
-Service;
-
-* Repository kullanabilir.
-* AI Core çağırabilir.
-* Event yayınlayabilir.
-* Transaction yönetebilir.
-
-Service;
-
-* HTTP yönetmez.
-* ORM sorgusu yazmaz.
-* Response üretmez.
-
----
-
-# Repository
-
-Repository veri erişim katmanıdır.
-
-Repository;
-
-* CRUD
-* filtreleme
-* sıralama
-* sayfalama
-* transaction
-
-işlemlerinden sorumludur.
-
-Repository yalnızca veri erişimi yapar.
-
-İş kuralları burada bulunmaz.
-
----
-
-# Models
-
-ORM modelleri yalnızca veritabanı yapısını temsil eder.
-
-Model içerisinde;
-
-* API doğrulaması
-* HTTP mantığı
-* AI işlemleri
-
-bulunmaz.
-
----
-
-# Schemas
-
-Schema yalnızca API giriş ve çıkışlarını tanımlar.
-
-Database modeli ile Schema aynı amaç için kullanılmaz.
-
-Her API açık şekilde Request ve Response modelleri tanımlamalıdır.
-
----
-
-# Dependency Injection
-
-Bağımlılıklar Dependency Injection ile sağlanmalıdır.
-
-Hiçbir servis bağımlılıklarını doğrudan oluşturmamalıdır.
-
-Bu yaklaşım;
-
-* test yazmayı,
-* mock kullanmayı,
-* bakım yapmayı
-
-kolaylaştırır.
-
----
-
-# AI ile İletişim
-
-Backend AI'nın nasıl çalıştığını bilmez.
-
-Backend yalnızca AI servisini çağırır.
-
-Backend;
-
-* Prompt oluşturmaz.
-* Workflow yönetmez.
-* Tool seçmez.
-* MCP çağırmaz.
-
-Bu sorumluluklar AI katmanına aittir.
-
----
-
-# Veritabanı
-
-Veritabanı işlemleri Repository katmanında gerçekleştirilir.
-
-SQL sorguları farklı katmanlara dağılmamalıdır.
-
-Migration işlemleri versiyon kontrollü olmalıdır.
-
----
-
-# Background İşlemler
-
-Uzun süren işlemler HTTP isteğinden ayrılmalıdır.
-
-Örnekler
-
-* embedding oluşturma
-* belge indeksleme
-* büyük dosya işleme
-* rapor üretme
-
-Bu işlemler arka planda çalıştırılmalıdır.
-
----
-
-# API Tasarımı
-
-API tasarımı tutarlı olmalıdır.
-
-Genel ilkeler
-
-* isimler açık olmalıdır.
-* endpoint'ler kaynak odaklı olmalıdır.
-* HTTP metodları doğru kullanılmalıdır.
-* versiyonlama desteklenmelidir.
-
-Örnek
-
-```text
-/api/v1/chat
-
-/api/v1/documents
-
-/api/v1/users
-```
-
----
-
-# Validation
-
-Tüm kullanıcı girdileri doğrulanmalıdır.
-
-Validation yalnızca Frontend'e bırakılmaz.
-
-Backend her zaman son doğrulamayı yapmalıdır.
-
----
-
-# Exception Yönetimi
-
-Beklenen hatalar kontrollü şekilde yönetilmelidir.
-
-Global Exception Handler kullanılmalıdır.
-
-Ham Exception kullanıcıya gösterilmez.
-
----
-
-# Authentication
-
-Kimlik doğrulama merkezi olarak yönetilmelidir.
-
-Hiçbir endpoint kendi doğrulama mekanizmasını yazmamalıdır.
-
----
-
-# Authorization
-
-Yetkilendirme iş kurallarından bağımsız düşünülmelidir.
-
-Kim hangi işlemi yapabilir sorusu merkezi olarak yönetilir.
-
----
-
-# Logging
-
-Önemli işlemler loglanmalıdır.
-
-Örnekler
-
-* giriş
-* çıkış
-* hata
-* AI çağrısı
-* kritik servisler
-
-Loglar okunabilir olmalıdır.
-
----
-
-# Konfigürasyon
-
-Hiçbir sabit değer kaynak koduna yazılmaz.
-
-Aşağıdakiler yapılandırma dosyalarından okunmalıdır.
-
-* URL
-* Secret
-* API Key
-* Timeout
-* Port
-* Model Adı
-
----
-
-# Performans
-
-Repository gereksiz sorgu üretmemelidir.
-
-Tekrarlayan sorgular azaltılmalıdır.
-
-N+1 problemlerinden kaçınılmalıdır.
-
-Cache uygun yerlerde kullanılmalıdır.
-
----
-
-# Test
-
-Backend aşağıdaki seviyelerde test edilmelidir.
-
-* Unit Test
-* Integration Test
-* API Test
-
-Service katmanı mümkün olduğunca izole test edilmelidir.
-
----
-
-# Kod Organizasyonu
-
-Backend içerisinde;
-
-* utils klasörü büyütülmez.
-* helper dosyaları rastgele oluşturulmaz.
-* ortak kod shared katmanına taşınır.
-
-Geçici çözümler kalıcı hale getirilmez.
-
----
-
-# Dosya Boyutu
-
-Yaklaşık öneriler
-
-* Router ≤ 300 satır
-* Service ≤ 500 satır
-* Repository ≤ 300 satır
-
-Bir dosya büyümeye başladığında bölünmelidir.
-
----
-
-# Yeni Özellik Geliştirme
-
-Yeni bir Backend özelliği eklenirken aşağıdaki sıra izlenmelidir.
-
-```text
-Issue
-
-↓
-
-Domain
-
-↓
-
-Schema
-
-↓
-
-Repository
-
-↓
-
-Service
-
-↓
-
-Router
-
-↓
-
-Test
-
-↓
-
-Documentation
-
-↓
-
-Pull Request
-```
-
----
-
-# Yapılmaması Gerekenler
-
-Backend içerisinde;
-
-* Prompt yazılmaz.
-* HTML üretilmez.
-* React mantığı bulunmaz.
-* MCP Server geliştirilmez.
-* LLM Provider kodu yazılmaz.
-* Embedding algoritması geliştirilmez.
-
-Bu sorumluluklar ilgili katmanlara aittir.
+## AI Katmanı ile İletişim
+Backend sistemi AI algoritmalarının, promptların, LLM yapılandırmalarının veya araçların (tools, MCP) **nasıl çalıştığını bilmez**. Bu işlemlerin hepsi `app/ai` içerisinde tutulur. Backend yalnızca AI servislerini bir kara kutu (black-box) olarak çağırıp sonucunu alır.
+
+## Performans ve Arka Plan (Background) İşlemleri
+* **Asenkronluk:** Embedding oluşturma, RAG için indeksleme, büyük dosya analizleri gibi zaman alan işlemler HTTP yanıt süresini uzatmamak için arka planda (Worker/Background Tasks) yapılmalıdır.
+* **Veritabanı Performansı:** Gereksiz `SELECT N+1` problemlerinden kaçınılmalı, ilişkili veriler verimli Join'ler veya Eager Loading yöntemleriyle çekilmelidir. Caching (Redis) uygun noktalarda kullanılmalıdır.
+
+## Dosya Boyutları ve Kod Organizasyonu
+Bir dosyanın çok büyümesi, "Tek Sorumluluk" (Single Responsibility) kuralının aşıldığının göstergesidir.
+- **Router:** ≤ 300 satır
+- **Service:** ≤ 500 satır
+- **Repository:** ≤ 300 satır
+Bu sınırları aşan dosyalar alt servislere (helpers/sub-services) bölünmelidir. `utils` veya `helpers` gibi klasörler çöp kutusu (dump) olarak kullanılmaz; anlamlı modüllere yerleştirilir.
+
+> **ÖNEMLİ:**
+> Kimlik Doğrulama (Authentication) ve Yetkilendirme (Authorization) mekanizmaları **merkezidir**. Endpoint düzeyinde bağımsız (hardcoded) güvenlik kontrolü yapılamaz; Middleware veya standart Dependency yapıları kullanılmalıdır.

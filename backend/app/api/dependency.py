@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.agents.summarizer import SummarizerAgent
 from app.ai.embeddings.models import get_embeddings_client
 from app.ai.embeddings.service import EmbeddingService
-from app.ai.llms import get_fast_llm_client, get_llm_client
+from app.ai.llms import (
+    get_fast_llm_client,
+    get_guard_llm_client,
+    get_llm_client,
+    get_router_llm_client,
+)
 from app.ai.retrieval.examples import ExampleRetriever
 from app.ai.retrieval.hybrid import HybridRetriever
 from app.ai.retrieval.mcp_mevzuat import FallbackMevzuatRetriever, McpMevzuatRetriever
@@ -22,7 +27,7 @@ from app.core.enums.user_role import UserRole
 from app.core.security import decode_token
 from app.infrastructure.database.session import get_db
 from app.infrastructure.extractors import get_document_extractor
-from app.infrastructure.extractors.vision import OllamaVisionExtractor
+from app.infrastructure.extractors.vision import EvrenVisionExtractor, OllamaVisionExtractor
 from app.infrastructure.storage import get_storage_client
 from app.infrastructure.vectorstore import get_vector_store
 from app.domains.documents.service import DocumentService
@@ -287,6 +292,7 @@ async def get_document_analysis_graph(
             llm_client=get_llm_client(),
             mevzuat_retriever=retriever,
             fast_llm_client=get_fast_llm_client(),
+            guard_llm_client=get_guard_llm_client(),
         )
     return _document_analysis_graph
 
@@ -346,12 +352,15 @@ def get_document_analysis_service(
         # per-agent instances internally.
         summarizer_agent=SummarizerAgent(get_llm_client()),
         # Backs reextract_document_text -- the user's manual "Yeniden OCR"
-        # override, always a full glm-ocr pass bypassing get_document_extractor()'s
-        # chain entirely (see that method's own docstring for why). A fresh
-        # instance per request, same as summarizer_agent above and the
-        # vision extractor get_document_extractor() builds internally --
-        # cheap to construct, no I/O until .extract() is actually called.
-        vision_extractor=OllamaVisionExtractor(),
+        # override, always a full vision-model pass bypassing
+        # get_document_extractor()'s chain entirely (see that method's own
+        # docstring for why). A fresh instance per request, same as
+        # summarizer_agent above and the vision extractor
+        # get_document_extractor() builds internally -- cheap to construct,
+        # no I/O until .extract() is actually called.
+        vision_extractor=(
+            OllamaVisionExtractor() if settings.LOCAL_MODE else EvrenVisionExtractor()
+        ),
     )
 
 # ---------------------------------------------------------------------------
@@ -401,7 +410,7 @@ async def get_routing_graph() -> Any:
         from app.domains.units.provider import get_active_units_for_routing
 
         _routing_graph = create_routing_graph(
-            llm_client=get_fast_llm_client(), units_provider=get_active_units_for_routing
+            llm_client=get_router_llm_client(), units_provider=get_active_units_for_routing
         )
     return _routing_graph
 
@@ -488,6 +497,7 @@ async def get_planning_graph(
             get_company_profile,
             get_company_rules,
         )
+        from app.domains.documents.provider import get_cached_document
         from app.domains.transfers.provider import build_transfer_graph_provider
         from app.domains.units.provider import get_active_units_for_routing
         from app.infrastructure.checkpointing import get_checkpointer
@@ -501,6 +511,7 @@ async def get_planning_graph(
             vector_store=get_vector_store(),
             embeddings_client=get_embeddings_client(),
             fast_llm_client=get_fast_llm_client(),
+            guard_llm_client=get_guard_llm_client(),
             checkpointer=get_checkpointer(),
             mevzuat_retriever=mevzuat_retriever,
             adapter_provider=get_company_adapter,
@@ -515,6 +526,7 @@ async def get_planning_graph(
             # would just be a second place the flag has to be checked
             # correctly.
             transfer_provider=build_transfer_graph_provider(),
+            document_cache_provider=get_cached_document,
         )
     return _planning_graph
 

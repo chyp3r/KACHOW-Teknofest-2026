@@ -1,0 +1,131 @@
+# Namespace + resource ceiling + default-deny network policy for the whole
+# `kachow` deployment. Applied first -- every other manifest in this
+# directory targets `namespace: kachow` and assumes this exists.
+#
+#   kubectl apply -f deploy/kubernetes/namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kachow
+  labels:
+    app.kubernetes.io/part-of: kachow
+---
+# A ceiling, not a per-workload budget -- individual Deployments below set
+# their own requests/limits; this only stops the namespace as a whole from
+# consuming an entire cluster if something is misconfigured (e.g. an
+# accidental `replicas: 50`).
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: kachow-quota
+  namespace: kachow
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.cpu: "16"
+    limits.memory: 32Gi
+    pods: "40"
+---
+# Default-deny: every pod in this namespace starts with zero ingress and
+# zero egress once any NetworkPolicy selects it -- Kubernetes' own
+# behaviour once at least one policy exists for a pod. The three policies
+# below are the exceptions carved back in; a pod matching none of them
+# (there shouldn't be any) is fully isolated.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: kachow
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# DNS is the one egress path every pod needs regardless of role -- without
+# this, default-deny-all above breaks service-name resolution entirely
+# (including for the other NetworkPolicies' own selectors, which resolve
+# nothing but still need the cluster's DNS to be reachable for the pod's
+# own service discovery/health checks to work). kube-dns/CoreDNS lives in
+# kube-system on every mainstream distribution (kubeadm, EKS, GKE, AKS).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: kachow
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Every pod in `kachow` may talk to every other pod in `kachow` -- backend
+# to db/redis/qdrant, frontend to backend. Not scoped tighter
+# (pod-to-pod-specific policies) because this namespace is single-tenant
+# (one deployment of one application) rather than multiple untrusted
+# workloads sharing it; the default-deny-all above is what actually matters
+# for this app's threat model (blocking egress to the internet/other
+# namespaces by default), not further segmentation within it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: kachow
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kachow
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kachow
+---
+# `backend` (only -- the label selector below is the same
+# `app: kachow-backend` backend.yaml's Deployment carries) needs egress to
+# wherever OLLAMA_BASE_URL points, which is host/cluster-specific and
+# cannot be guessed here: a bare-metal Ollama server, a GPU node pool
+# outside this namespace, or (least likely for a real deployment, see
+# compose.yml's own comment on this) a Docker Desktop host.
+#
+# Ships permissive-but-port-scoped (all destinations, TCP 11434 only --
+# `to` deliberately omitted, which NetworkPolicy defines as "all
+# destinations" rather than "none") so a fresh `kubectl apply` doesn't
+# hang every Ollama call waiting for a CIDR nobody filled in. TIGHTEN
+# THIS for a real deployment by adding a `to:` list scoped to the actual
+# Ollama host -- either a `namespaceSelector`+`podSelector` pair (same
+# cluster) or an `ipBlock: {cidr: <ollama-host-ip>/32}` (outside it), the
+# same shape allow-intra-namespace above uses. Port 11434 is Ollama's own
+# default (OLLAMA_BASE_URL's port, not configurable from this file alone
+# -- keep the two in sync).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-ollama-egress
+  namespace: kachow
+spec:
+  podSelector:
+    matchLabels:
+      app: kachow-backend
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 11434

@@ -1,0 +1,28 @@
+# Keeps the build context small and, more importantly, keeps secrets out of
+# it: a root .env is not git-tracked but was landing in every build context
+# anyway with no .dockerignore to stop it (see deploy/docker/backend.prod.
+# Dockerfile / SECRET_KEY guard in app/lifespan.py for the related guard).
+
+.git/
+.github/
+
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+
+.env
+.env.*
+!.env.example
+
+backend/storage_data/
+backend/.venv/
+frontend/node_modules/
+frontend/dist/
+artifacts/
+evaluation/reports/
+monitoring/grafana/data/
+
+*.log
+.DS_Store

@@ -1,6 +1,7 @@
 from typing import Optional
 
 from app.ai.compliance import count_header_fields, has_signature
+from app.core.config import settings
 from app.infrastructure.extractors.base import (
     BaseDocumentExtractor,
     DocumentExtractionError,
@@ -12,7 +13,7 @@ from app.infrastructure.extractors.open_data_loader import OpenDataLoaderExtract
 from app.infrastructure.extractors.pdfium import PdfiumExtractor
 from app.infrastructure.extractors.plain_text import PlainTextExtractor
 from app.infrastructure.extractors.tesseract import TesseractExtractor
-from app.infrastructure.extractors.vision import OllamaVisionExtractor
+from app.infrastructure.extractors.vision import EvrenVisionExtractor, OllamaVisionExtractor
 
 _document_extractor: Optional[BaseDocumentExtractor] = None
 
@@ -31,18 +32,33 @@ def get_document_extractor() -> BaseDocumentExtractor:
     if _document_extractor is None:
         # Shared with `header_repair` below -- the same model/config repairs a
         # scan's header band regardless of whether it was ever tried as a
-        # full-page extractor in its own right in this chain.
-        vision_extractor = OllamaVisionExtractor()
+        # full-page extractor in its own right in this chain. Evren's `vlm`
+        # is video-only, so the online mode routes OCR through EvrenVisionExtractor
+        # (llm-fast, multimodal chat) instead -- see that class's docstring.
+        vision_extractor = (
+            OllamaVisionExtractor() if settings.LOCAL_MODE else EvrenVisionExtractor()
+        )
+        # Online mode swaps only the OCR step: TesseractExtractor (a local
+        # binary) is replaced by the vision model (EvrenVisionExtractor,
+        # llm-fast) as the chain's OCR fallback -- PlainText/OpenDataLoader/
+        # Pdfium stay in the chain unchanged either way, since born-digital
+        # text extraction has nothing to do with which OCR provider is
+        # configured.
+        ocr_step = vision_extractor if not settings.LOCAL_MODE else TesseractExtractor()
+        extractors = [
+            PlainTextExtractor(),
+            OpenDataLoaderExtractor(),
+            PdfiumExtractor(),
+            ocr_step,
+        ]
+        if settings.LOCAL_MODE:
+            # Last resort: far slower than Tesseract but the only thing that
+            # survives a degraded photocopy or phone photo. Online mode has
+            # no separate escalation step here -- the vision model already
+            # ran as ocr_step above.
+            extractors.append(vision_extractor)
         _document_extractor = FallbackDocumentExtractor(
-            extractors=[
-                PlainTextExtractor(),
-                OpenDataLoaderExtractor(),
-                PdfiumExtractor(),
-                TesseractExtractor(),
-                # Last resort: far slower than Tesseract but the only thing that
-                # survives a degraded photocopy or phone photo.
-                vision_extractor,
-            ],
+            extractors=extractors,
             header_repair=vision_extractor,
             # `app.ai.compliance.count_header_fields` -- the only place this
             # infrastructure-layer chain reaches into `app.ai`, and done by
@@ -74,6 +90,7 @@ def get_document_extractor() -> BaseDocumentExtractor:
 __all__ = [
     "BaseDocumentExtractor",
     "DocumentExtractionError",
+    "EvrenVisionExtractor",
     "ExtractedDocument",
     "FallbackDocumentExtractor",
     "OllamaVisionExtractor",

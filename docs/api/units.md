@@ -1,24 +1,22 @@
-# Birim Yönetimi API
+# Birim Yönetimi API (Units API)
 
-> Yönlendirme yapılabilecek birimlerin (departman) yönetimi. Bu birim listesi
-> artık kod içinde sabit değil; şirket yöneticileri (`ADMIN`/`MANAGER`)
-> çalışma zamanında birim ekleyip/düzenleyip/silebilir, ve
-> [`routing_graph`](./routing.md) her yönlendirme kararında aktif birim
-> listesini veritabanından taze olarak okur.
->
-> Birimler **şirket bazlı** kapsanır (bkz. `docs/api/companies.md`): her uç
-> nokta kimliği doğrulanmış çağıranın kendi şirketiyle sınırlıdır, ve `name`
-> benzersizliği global değil `(company_id, name)` bazındadır -- iki farklı
-> şirket aynı anda bir "İnsan Kaynakları" birimi tanımlayabilir.
+> Kurum (Şirket) içindeki departman ve birimlerin dinamik olarak yönetilmesini sağlar. Yapay Zekâ (`routing_graph`) yönlendirme önerilerinde buradaki aktif birim veritabanını kullanır. Birimler kurum içi (şirket bazlı) izole edilmiştir.
 
 ---
 
-# GET /api/v1/units
+## `GET /api/v1/units`
 
-Kimliği doğrulanmış çağıranın kendi şirketindeki tüm birimleri (aktif ve
-pasif) listeler.
+Çağıranın şirketine ait tüm birimleri listeler.
 
-## Yanıt
+**Güvenlik:** Bearer Token
+
+### Parametreler
+
+Yok.
+
+### Yanıtlar (Responses)
+
+#### 200 OK
 
 ```json
 {
@@ -30,41 +28,55 @@ pasif) listeler.
       "description": "Ödemeler, bütçe, faturalar, maaşlar ve finansal işlemler.",
       "is_active": true
     }
-  ],
-  "error": null,
-  "meta": { "timestamp": "2026-08-12T12:00:00Z" }
+  ]
 }
 ```
 
 ---
 
-# POST /api/v1/units
+## `POST /api/v1/units`
 
-Yeni bir birim oluşturur. **Admin/Manager yetkisi gerektirir.**
+Yeni bir birim oluşturur.
 
-## İstek
+**Güvenlik:** Bearer Token (`Admin` veya `Manager` yetkisi)
+
+### İstek Gövdesi (Request Body)
+
+`application/json`
+
+| Alan | Tür | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- |
+| `name` | string | Evet | Şirket içinde benzersiz isim (1-200 karakter). |
+| `description` | string | Evet | AI'nin kararı için birimin işlev açıklaması (1-2000 karakter). |
+
+**Örnek İstek:**
 
 ```json
 {
   "name": "Mali İşler",
-  "description": "Ödemeler, bütçe, faturalar, maaşlar ve finansal işlemler."
+  "description": "Ödemeler, bütçe, faturalar..."
 }
 ```
 
-| Alan | Tür | Zorunlu | Açıklama |
-|---|---|---|---|
-| `name` | string | Evet | Şirket içinde benzersiz birim adı (1-200 karakter) |
-| `description` | string | Evet | AI'nin yönlendirme kararında kullandığı açıklama (1-2000 karakter) |
+### Yanıtlar (Responses)
 
-`name` bu şirkette zaten mevcutsa `409 RESOURCE_CONFLICT` döner.
+#### 201 Created
+Birim oluşturuldu.
+
+#### 409 Conflict
+Aynı isimde (`name`) bir birim bu şirkette zaten var.
 
 ---
 
-# PATCH /api/v1/units/{unit_id}
+## `PATCH /api/v1/units/{unit_id}`
 
-Bir birimin adını, açıklamasını veya aktiflik durumunu günceller. **Admin/Manager
-yetkisi gerektirir.** Tüm alanlar opsiyoneldir (yalnızca gönderilenler
-güncellenir).
+Birimi günceller veya devre dışı bırakır (`is_active: false`).
+
+**Güvenlik:** Bearer Token (`Admin` veya `Manager` yetkisi)
+
+### İstek Gövdesi (Request Body)
+
+Tüm alanlar opsiyoneldir.
 
 ```json
 {
@@ -73,93 +85,74 @@ güncellenir).
 }
 ```
 
-`is_active: false` yapılan bir birim, yönlendirme önerilerinden hariç tutulur
-(bkz. `routing.md`) ama silinmez -- geçmişte o birime yönlendirilmiş taslaklar
-etkilenmez (`drafts.destination` serbest metindir, birime referans vermez).
-
-Birim bulunamazsa `404 NOT_FOUND`, isim çakışırsa `409 RESOURCE_CONFLICT` döner.
+#### 200 OK
+Güncelleme başarılı. Devre dışı bırakılan birim AI yönlendirme önerilerinden çıkarılır.
 
 ---
 
-# DELETE /api/v1/units/{unit_id}
+## `DELETE /api/v1/units/{unit_id}`
 
-Bir birimi kalıcı olarak siler. **Admin/Manager yetkisi gerektirir.** Birim
-bulunamazsa `404 NOT_FOUND` döner. Bir birimi silmek yerine `is_active: false`
-ile devre dışı bırakmak genellikle tercih edilir.
+Birimi kalıcı olarak siler. Genellikle silmek yerine `is_active: false` (PATCH) tercih edilmelidir.
+
+**Güvenlik:** Bearer Token (`Admin` veya `Manager` yetkisi)
+
+#### 204 No Content
+Silme başarılı.
 
 ---
 
-# POST /api/v1/units/{unit_id}/members
+## `POST /api/v1/units/{unit_id}/members`
 
-Bir kullanıcıyı birime ekler. **Admin/Manager yetkisi gerektirir.**
+Birimi yeni bir kullanıcı ekler.
 
-## İstek
+**Güvenlik:** Bearer Token (`Admin` veya `Manager` yetkisi)
 
-```json
-{
-  "user_id": "u1...",
-  "is_primary": true,
-  "role_in_unit": "lead"
-}
-```
+### İstek Gövdesi (Request Body)
 
 | Alan | Tür | Zorunlu | Açıklama |
-|---|---|---|---|
-| `user_id` | string | Evet | Eklenecek kullanıcının ID'si (çağıranın kendi şirketinde olmalı) |
-| `is_primary` | bool | Hayır | Bu kullanıcının birincil/ana birimi (varsayılan `false`) -- bir kullanıcının en fazla bir birincil birimi olabilir, `true` verilirse önceki birincil üyelik otomatik geri alınır |
-| `role_in_unit` | string | Hayır | Serbest metin, örn. `"lead"` |
+| :--- | :--- | :--- | :--- |
+| `user_id` | string | Evet | Şirket içi kullanıcının ID'si. |
+| `is_primary` | boolean| Hayır | Ana (birincil) birimi mi? (Önceki ana üyeliği siler). |
+| `role_in_unit`| string | Hayır | Birim içi rol (Örn: `lead`, `manager`). |
 
-Kullanıcı veya birim bulunamazsa `404 NOT_FOUND`, kullanıcı zaten üyeyse
-`409 RESOURCE_CONFLICT` döner.
+#### 200 OK
+Kullanıcı birime eklendi.
 
----
-
-# DELETE /api/v1/units/{unit_id}/members/{user_id}
-
-Bir kullanıcıyı birimden çıkarır. **Admin/Manager yetkisi gerektirir.**
-Üyelik bulunamazsa `404 NOT_FOUND` döner.
+#### 409 Conflict
+Kullanıcı bu birime zaten üye.
 
 ---
 
-# GET /api/v1/units/{unit_id}/members
+## `DELETE /api/v1/units/{unit_id}/members/{user_id}`
 
-Bir birimin üyelerini, önerilen sırayla (önce birincil üye, sonra
-`role_in_unit="lead"`, sonra alfabetik) listeler.
+Kullanıcıyı birimden çıkarır.
 
-## Yanıt
+**Güvenlik:** Bearer Token (`Admin` veya `Manager` yetkisi)
+
+#### 204 No Content
+Çıkarma başarılı.
+
+---
+
+## `GET /api/v1/units/{unit_id}/members`
+
+Birimin üyelerini (Önce birincil, sonra lead, sonra alfabetik) listeler.
+
+### Yanıtlar (Responses)
+
+#### 200 OK
 
 ```json
 {
   "success": true,
   "data": [
-    { "user_id": "u1...", "username": "aylin", "email": "aylin@kurum.example", "is_primary": true, "role_in_unit": "lead" }
-  ],
-  "error": null,
-  "meta": { "timestamp": "2026-08-14T12:00:00Z" }
+    { "user_id": "u1...", "username": "aylin", "email": "a@kurum.com", "is_primary": true, "role_in_unit": "lead" }
+  ]
 }
 ```
 
 ---
 
-# GET /api/v1/units/{unit_id}/suggested-recipients
+## `GET /api/v1/units/{unit_id}/suggested-recipients`
 
-AI'nin taslak yönlendirme kararında önerdiği birimin üyelerini döner --
-taslak alıcısı seçimi için önerilen kişiler. Yeni bir AI çağrısı yapmaz;
-`GET /units/{unit_id}/members` ile aynı sıralanmış üye listesini döner.
-Çağıran, taslağın yönlendirildiği birimin ID'sini `POST /documents/draft`
-yanıtındaki (veya `POST /routing/suggest`'in) `destination` birim adını
-`GET /units` listesiyle eşleştirerek bulur.
-
-Yanıt şekli `GET /units/{unit_id}/members` ile birebir aynıdır.
-
----
-
-## Hata durumları
-
-| Durum | Kod | Sebep |
-|---|---|---|
-| 401 | `AUTHENTICATION_ERROR` | Geçersiz/eksik jeton (mutasyon uçları) |
-| 403 | `AUTHORIZATION_ERROR` | Kullanıcı ADMIN/MANAGER değil (mutasyon uçları) |
-| 404 | `NOT_FOUND` | Belirtilen `unit_id` bulunamadı |
-| 409 | `RESOURCE_CONFLICT` | `name` zaten kullanılıyor |
-| 422 | `VALIDATION_ERROR` | `name`/`description` boş veya çok uzun |
+AI'nin taslak yönlendirme kararında önerdiği hedef birimin tüm üyelerini (potansiyel alıcılar) döner. Sonuç şeması `/members` ucu ile aynıdır.

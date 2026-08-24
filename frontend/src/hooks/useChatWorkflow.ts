@@ -391,6 +391,39 @@ export function useChatWorkflow(
     [queryClient],
   );
 
+  // A turn can reach a genuine human-in-the-loop pause on the backend after
+  // the client has already stopped watching it -- e.g. "Durdur" aborted the
+  // stream a moment before the interrupt event was queued, or a page
+  // reload landed mid-turn. The next message sent on that thread then hits
+  // `_invoke`'s "already paused" guard (see chat_service.py's own
+  // docstring) instead of a normal reply. Rather than surface that
+  // backend-internal rejection verbatim, re-fetch the thread's state and
+  // restore the same interrupt UI the stateQuery effect above renders on
+  // load -- same recovery, just triggered eagerly instead of waiting on a
+  // query subscription. Returns whether an interrupt was actually found and
+  // restored, so the caller can fall back to a plain error message when the
+  // session turns out not to be paused after all.
+  const recoverPausedSession = useCallback(
+    async (resolvedThreadId: string) => {
+      try {
+        const state = await chatService.state(resolvedThreadId);
+        if (state.status !== "interrupted" || !state.interrupt) return false;
+        const { kind: recoveredKind, ...payload } = state.interrupt;
+        setPendingInterrupt({
+          kind: recoveredKind ?? "missing_information",
+          interruptId: `recovered:${resolvedThreadId}`,
+          payload,
+        });
+        setNodeStatus((previous) => ({ ...previous, human_gate: "running" }));
+        noteNode("human_gate", "Eksik Bilgiler");
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [noteNode],
+  );
+
   const handleEvent = useCallback(
     (event: WorkflowEvent) => {
       switch (event.event) {
@@ -533,13 +566,27 @@ export function useChatWorkflow(
           if (threadIdRef.current) refreshServerState(threadIdRef.current);
           break;
         }
-        case "error":
+        case "error": {
+          const resolvedThreadId = threadIdRef.current;
+          if (event.error_code === "SESSION_PAUSED" && resolvedThreadId) {
+            appendLog("Önceki adım hâlâ yanıt bekliyor; soru yeniden gösteriliyor.");
+            void recoverPausedSession(resolvedThreadId).then((recovered) => {
+              if (!recovered) {
+                setMessages((previous) => [
+                  ...previous,
+                  { sender: "assistant", text: `İşlem tamamlanamadı: ${event.message}`, status: "FAILED", logs: logsRef.current },
+                ]);
+              }
+            });
+            break;
+          }
           appendLog(`Hata: ${event.message}`);
           setMessages((previous) => [...previous, { sender: "assistant", text: `İşlem tamamlanamadı: ${event.message}`, status: "FAILED", logs: logsRef.current }]);
           break;
+        }
       }
     },
-    [appendLog, noteNode, onSessionResolved, refreshServerState],
+    [appendLog, noteNode, onSessionResolved, recoverPausedSession, refreshServerState],
   );
 
   const send = useCallback(async (text: string, reasoningLevel: ReasoningLevel, useDocument: boolean, documentIdOverride?: string, draftId?: string | null) => {

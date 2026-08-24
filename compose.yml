@@ -19,6 +19,10 @@ services:
       # baked into the image so `make eval` picks up dataset edits without a
       # rebuild -- the gold sets are edited far more often than the code.
       - ./evaluation:/workspace/evaluation
+      # k6 load-test scripts and scripts/export_budgets.py's own output
+      # (perf/k6/lib/budgets.json) -- mounted so that script's write lands
+      # on the host to be committed, not lost with the container on --rm.
+      - ./perf:/workspace/perf
       # Uploaded documents and their analysis cache (settings.LOCAL_STORAGE_DIR,
       # "./storage_data" relative to /workspace). Without this mount it lives
       # only in the container's writable layer: every document's DB row
@@ -33,6 +37,10 @@ services:
       - ENVIRONMENT=development
       # Local demo mode only. Production refuses to start while auth is off.
       - REQUIRE_AUTH=${REQUIRE_AUTH:-true}
+      # True -> Ollama + local Qdrant (below). False -> Evren (hosted
+      # inference, https://evren-teknofest.ssyz.org.tr) + Evren's own Qdrant
+      # cluster. See app.core.config.Settings.LOCAL_MODE.
+      - LOCAL_MODE=${LOCAL_MODE:-true}
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3.5:9b}
       - OLLAMA_TEMPERATURE=${OLLAMA_TEMPERATURE:-0.7}
@@ -42,6 +50,18 @@ services:
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
       - OLLAMA_FAST_MODEL=${OLLAMA_FAST_MODEL:-}
       - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text:latest}
+      # Evren (only used when LOCAL_MODE=false). API key/Qdrant key come from
+      # the team's own .env, never committed.
+      - EVREN_BASE_URL=${EVREN_BASE_URL:-https://evren-llmapi.ssyz.org.tr/v1}
+      - EVREN_API_KEY=${EVREN_API_KEY:-}
+      - EVREN_LLM_LARGE_MODEL=${EVREN_LLM_LARGE_MODEL:-llm-large}
+      - EVREN_LLM_FAST_MODEL=${EVREN_LLM_FAST_MODEL:-llm-fast}
+      - EVREN_GUARD_MODEL=${EVREN_GUARD_MODEL:-guard}
+      - EVREN_ROUTER_MODEL=${EVREN_ROUTER_MODEL:-router}
+      - EVREN_EMBED_MODEL=${EVREN_EMBED_MODEL:-bge-m3-embed}
+      - EVREN_REQUEST_TIMEOUT_SECONDS=${EVREN_REQUEST_TIMEOUT_SECONDS:-1800}
+      - EVREN_QDRANT_URL=${EVREN_QDRANT_URL:-}
+      - EVREN_QDRANT_API_KEY=${EVREN_QDRANT_API_KEY:-}
       # AI workflow timeouts (seconds). Raise these to test long-running
       # "deep" reasoning runs locally without them being cut off early.
       - AI_WORKFLOW_TIMEOUT_SECONDS=${AI_WORKFLOW_TIMEOUT_SECONDS:-480}
@@ -67,6 +87,10 @@ services:
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-1234567890}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-1234567890}
       - LANGFUSE_HOST=http://langfuse:3000
+      # Infrastructure spans (HTTP/DB/Redis/outbound httpx) -- separate from
+      # Langfuse above, which only sees LLM calls. Empty this to verify the
+      # no-op degrade in app/observability/otel.py.
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
       # mevzuat-mcp is baked into the image (backend.Dockerfile) at this
       # exact path -- without pointing this at it, MEVZUAT_MCP_COMMAND falls
       # back to the bare "mevzuat-mcp", which is not on PATH, and every
@@ -82,6 +106,7 @@ services:
       - db
       - redis
       - qdrant
+      - jaeger
 
   # LoRA/PEFT training worker (Faz C3 Aşama 3, #191). Deliberately under a
   # profile, not a plain service: `docker compose up`/`up -d` never starts
@@ -209,6 +234,20 @@ services:
       - TELEMETRY_ENABLED=false
     depends_on:
       - db
+
+  # OTLP collector + UI for the infrastructure spans app/observability/otel.py
+  # emits (HTTP/DB/Redis/outbound httpx) -- deliberately separate from
+  # Langfuse, which only ever sees LLM calls. All-in-one exposes an OTLP/gRPC
+  # receiver on 4317 out of the box, no extra collector config needed for a
+  # single-service dev setup.
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    container_name: kachow_jaeger_dev
+    ports:
+      - "16686:16686"  # UI
+      - "4317:4317"    # OTLP gRPC receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
 
   frontend:
     build:

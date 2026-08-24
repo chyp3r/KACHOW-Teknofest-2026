@@ -1,266 +1,45 @@
-# Documentation Standards
+# Dokümantasyon Standartları (Documentation)
 
-> Bu doküman proje genelindeki dokümantasyon standartlarını tanımlar.
+> **NOT:**
+> Bu doküman proje genelindeki bilgi paylaşımını ve dokümantasyon kültürünü tanımlar. Dokümantasyon kodun yerine geçmez, sadece kodun arkasındaki nedeni (neden tasarlandı) ve çalışma modelini (nasıl kullanılır) açıklar.
 
-Bu kurallar Backend, Frontend, AI ve tüm proje dokümantasyonu için geçerlidir.
+## Doküman Hiyerarşisi ve Okuma Sırası
 
----
+Sistemi tanımak isteyen bir geliştirici (veya AI aracı), dokümanları aşağıdaki yukarıdan aşağıya (top-down) hiyerarşide incelemelidir:
 
-# Amaç
-
-Dokümantasyonun amacı;
-
-* Projeyi anlaşılır hale getirmek
-* Bilgi kaybını önlemek
-* Yeni geliştiricilerin adaptasyonunu hızlandırmak
-* AI ajanlarının projeyi doğru anlamasını sağlamaktır.
-
-Dokümantasyon kodun yerine geçmez, kodu açıklar.
-
----
-
-# Dokümantasyon İlkeleri
-
-Her doküman;
-
-* tek bir konuya odaklanmalıdır,
-* güncel olmalıdır,
-* açık bir amacı olmalıdır,
-* gereksiz tekrar içermemelidir.
-
----
-
-# Doküman Hiyerarşisi
-
-```text
-README.md
-
-↓
-
-AGENTS.md
-
-↓
-
-docs/architecture/
-
-↓
-
-docs/development/
-
-↓
-
-Modül dokümanları
+```mermaid
+flowchart TD
+    README["1. README.md\n(Proje Amacı, Kurulum, Giriş)"] --> AGENTS["2. AGENTS.md\n(Kurallar & Yönergeler)"]
+    AGENTS --> Arch["3. docs/architecture/\n(Mimari Tasarım & Nedenler)"]
+    Arch --> Dev["4. docs/development/\n(Kod Standartları & Nasıl)"]
+    Dev --> Mod["5. Modül Bazlı Dokümanlar\n(Spesifik Detaylar)"]
 ```
 
-Üst seviyedeki dokümanlar alt seviyedekilere referans verir.
+## Klasörlerin Dokümantasyon Rolleri
 
----
+| Dizin / Dosya | İçerik ve Amaç |
+| :--- | :--- |
+| **README.md** | Projenin vitrinidir. Sadece proje amacı, kurulum komutları ve doküman indeksini barındırır. Teknik derinliğe inilmez. |
+| **architecture/** | Sistemin "neden" böyle tasarlandığını açıklar (Örn: RAG mimarisi, MCP, Backend katmanları). Diyagramlarla zenginleştirilmelidir. |
+| **development/** | Geliştirme sürecinin "nasıl" işleyeceğini tanımlar (Örn: Naming, Testing, Git Workflow). |
 
-# README
+## Kod İçi Dokümantasyon (Yorum Satırları)
 
-README yalnızca giriş noktasıdır.
+- Kod mümkün olduğunca **kendi kendini açıklayıcı** olmalıdır (Doğru isimlendirmelerle).
+- Yorum satırları kodu tekrar etmek için (ör. `// sayacı bir artır`) değil, kompleks bir iş mantığının "neden" yazıldığını açıklamak için kullanılmalıdır.
 
-README içerisinde;
+## Güncelleme ve Sürdürülebilirlik Kuralı
 
-* proje amacı,
-* kurulum,
-* mimari özeti,
-* doküman bağlantıları
+> **ÖNEMLİ:**
+> Mimariyi etkileyen yeni bir özellik, yeni bir API, yeni bir AI workflow veya klasör eklendiğinde ilgili dokümantasyon dosyası **mutlaka güncellenmelidir**. Açıklaması olmayan "ölü kod" veya sistemle çelişen "bayat" (stale) doküman bırakılmasına müsaade edilmez.
 
-bulunmalıdır.
+**Pull Request Açma Şartı:**
+Her geliştirici (veya AI ajanı) PR açmadan önce şu soruyu sormak zorundadır:
+*"Yapılan bu değişiklik herhangi bir dokümanı etkiliyor mu?"*
+Yanıt evet ise, kod ve doküman aynı PR içerisinde güncellenmiş olmalıdır.
 
-README teknik detay içermez.
+## Yapılmaması Gerekenler
 
----
-
-# Architecture
-
-Architecture klasörü sistemin nasıl tasarlandığını açıklar.
-
-Örnekler
-
-* Backend
-* Frontend
-* AI
-* RAG
-* MCP
-* Deployment
-
-Bu dokümanlar neden sorusunu cevaplar.
-
----
-
-# Development
-
-Development klasörü geliştirme standartlarını açıklar.
-
-Örnekler
-
-* Naming
-* Testing
-* Git Workflow
-* Code Review
-
-Bu dokümanlar nasıl sorusunu cevaplar.
-
----
-
-# Kod İçi Dokümantasyon
-
-Kod mümkün olduğunca kendi kendini açıklamalıdır.
-
-Yorum satırları yalnızca gerekli durumlarda kullanılmalıdır.
-
-Yorumlar kodu tekrar etmemelidir.
-
----
-
-# Yeni Özellik
-
-Yeni bir özellik geliştirildiğinde aşağıdaki kontrol yapılmalıdır.
-
-* README etkileniyor mu?
-* Mimari değişiyor mu?
-* Yeni standart gerekiyor mu?
-* API değişiyor mu?
-* AI davranışı değişiyor mu?
-
-Evet ise ilgili doküman güncellenmelidir.
-
----
-
-# Yeni Klasör
-
-Yeni üst seviye klasör oluşturulursa;
-
-* amacı açıklanmalı,
-* ilgili mimari doküman güncellenmelidir.
-
----
-
-# Yeni API
-
-Yeni endpoint eklendiğinde;
-
-* API dokümanı güncellenmelidir.
-* Gerekirse örnek istek ve cevap eklenmelidir.
-
----
-
-# Backend Değişiklikleri
-
-Backend mimarisini etkileyen değişikliklerde;
-
-* architecture/backend.md
-* ilgili standart dokümanları
-
-kontrol edilmelidir.
-
----
-
-# Frontend Değişiklikleri
-
-Frontend mimarisini etkileyen değişikliklerde;
-
-* architecture/frontend.md
-
-güncellenmelidir.
-
----
-
-# AI Değişiklikleri
-
-Yeni Agent
-
-Yeni Workflow
-
-Yeni Tool
-
-Yeni MCP
-
-Yeni Memory
-
-eklendiğinde ilgili AI mimari dokümanları güncellenmelidir.
-
----
-
-# Diyagramlar
-
-Mimari değişikliklerinde diyagramlar da güncellenmelidir.
-
-Kod ile diyagramlar tutarlı olmalıdır.
-
----
-
-# Örnekler
-
-Örnek kodlar mümkün olduğunca güncel tutulmalıdır.
-
-Çalışmayan örnekler dokümanda bırakılmamalıdır.
-
----
-
-# Sürüm Uyumluluğu
-
-Dokümantasyon mevcut kod tabanını temsil etmelidir.
-
-Eski davranışlar "yakında güncellenecek" şeklinde bırakılmamalıdır.
-
----
-
-# AI Destekli Güncelleme
-
-AI ajanları yalnızca kod üretmekle kalmamalıdır.
-
-Aşağıdaki durumlarda ilgili dokümanları da güncellemelidir.
-
-* Yeni modül
-* Yeni klasör
-* Yeni API
-* Yeni Agent
-* Yeni Workflow
-* Yeni Tool
-* Yeni Feature
-
----
-
-# Pull Request Kontrolü
-
-PR açılmadan önce aşağıdaki soru sorulmalıdır.
-
-> Yapılan değişiklik herhangi bir dokümanı etkiliyor mu?
-
-Evet ise ilgili doküman güncellenmeden PR açılmamalıdır.
-
----
-
-# Dokümantasyon Kalitesi
-
-İyi bir doküman;
-
-* kısa,
-* güncel,
-* örnek içeren,
-* kolay okunabilir,
-* tek sorumluluklu
-
-olmalıdır.
-
----
-
-# Yapılmaması Gerekenler
-
-* Güncel olmayan doküman bırakmak
-* Kod ile çelişen açıklamalar yazmak
-* Aynı bilgiyi birden fazla dosyada tekrar etmek
-* Mimari değiştiği halde dokümanları güncellememek
-
----
-
-# İlgili Dokümanlar
-
-* README.md
-* AGENTS.md
-* project-rules.md
-* architecture/
-* development/
+- Çalışmayan veya eski API örneklerini doküman içinde bırakmak.
+- Aynı bilgiyi birden fazla belgede kopyalayarak tekrarlamak (Tek doğru kaynak kuralına aykırıdır).
+- AI tarafından üretilen dokümanları insan onayı/okuması olmadan doğrudan birleştirmek (merge).

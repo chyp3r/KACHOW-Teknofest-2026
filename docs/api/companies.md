@@ -1,18 +1,26 @@
-# Şirket (Kiracı) Yönetimi API
+# Şirket (Kiracı) Yönetimi API (Companies API)
 
-> Çok kiracılı sistemin kök kaynağı. Her şirket (`company`) kendi
-> kullanıcılarını, birimlerini, evraklarını ve taslaklarını taşır (bkz.
-> `docs/architecture/backend.md` -- "Kiracı sınırı"). Bu uç noktalar yalnızca
-> **Root** ve, kendi şirketleriyle sınırlı olarak, **Şirket Admini**
-> tarafından kullanılabilir; Yönetici ve Çalışan rolleri buraya erişemez.
+> Çok kiracılı (Multi-tenant) sistemin merkezi API'sidir. Şirketler (`company`); kullanıcıları, birimleri, taslakları ve ayarları izole bir biçimde barındırır. Yeni şirket oluşturma işlemleri yalnızca `Root` tarafından yapılır.
 
 ---
 
-# POST /api/v1/companies
+## `POST /api/v1/companies`
 
-Yeni bir şirket oluşturur. **Yalnızca Root.**
+Yeni bir şirket oluşturur.
 
-## İstek
+**Güvenlik:** Bearer Token (Sadece `Root` rolü)
+
+### İstek Gövdesi (Request Body)
+
+`application/json`
+
+| Alan | Tür | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- |
+| `name` | string | Evet | Şirket adı (1-200 karakter). |
+| `slug` | string | Evet | Benzersiz, URL güvenli kısa ad (Örn: `acme-holding`). |
+| `tax_number` | string | Hayır | Vergi numarası. |
+
+**Örnek İstek:**
 
 ```json
 {
@@ -22,60 +30,97 @@ Yeni bir şirket oluşturur. **Yalnızca Root.**
 }
 ```
 
-| Alan | Tür | Zorunlu | Açıklama |
-|---|---|---|---|
-| `name` | string | Evet | Şirket adı (1-200 karakter) |
-| `slug` | string | Evet | Benzersiz, URL/depolama güvenli kısa ad (küçük harf, rakam, tire) |
-| `tax_number` | string | Hayır | Vergi numarası |
+### Yanıtlar (Responses)
 
-`slug` zaten mevcutsa `409 RESOURCE_CONFLICT` döner.
+#### 201 Created
+Şirket başarıyla oluşturuldu.
+
+#### 409 Conflict
+Aynı `slug` isminde bir şirket zaten mevcut.
 
 ---
 
-# GET /api/v1/companies
+## `GET /api/v1/companies`
 
-Tüm şirketleri sayfalı listeler. **Yalnızca Root.**
+Tüm şirketleri sayfalanmış biçimde listeler.
 
-## Sorgu Parametreleri
+**Güvenlik:** Bearer Token (Sadece `Root` rolü)
 
-| Parametre | Varsayılan | Açıklama |
-|---|---|---|
-| `page` | 1 | Sayfa numarası |
-| `size` | 20 | Sayfa başına kayıt (azami 100) |
+### Parametreler
 
-## Yanıt
+| Alan | Tür | Konum | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- | :--- |
+| `page` | integer | Query | Hayır | Sayfa numarası (Varsayılan: 1). |
+| `size` | integer | Query | Hayır | Sayfa başı kayıt (Varsayılan: 20, Maksimum: 100). |
+
+### Yanıtlar (Responses)
+
+#### 200 OK
 
 ```json
 {
   "success": true,
   "data": {
     "items": [
-      { "id": "c1...", "name": "Acme Holding", "slug": "acme-holding", "tax_number": null, "is_active": true, "settings": {} }
+      {
+        "id": "c1...",
+        "name": "Acme Holding",
+        "slug": "acme-holding",
+        "tax_number": null,
+        "is_active": true,
+        "settings": {}
+      }
     ],
     "total": 1,
     "page": 1,
     "size": 20,
     "pages": 1
-  },
-  "error": null,
-  "meta": { "timestamp": "2026-08-13T12:00:00Z" }
+  }
 }
 ```
 
 ---
 
-# GET /api/v1/companies/{company_id}
+## `GET /api/v1/companies/{company_id}`
 
-Tek bir şirketin detayını döner. **Root, veya o şirketin kendi Admini.**
-Başka bir şirketin Admini erişmeye çalışırsa `403 PERMISSION_DENIED` döner
-(kaynağın var olup olmadığını bile sızdırmaz).
+Tek bir şirketin detaylarını getirir.
+
+**Güvenlik:** Bearer Token (`Root` veya o şirketin `Admin`'i)
+
+### Parametreler
+
+| Alan | Tür | Konum | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- | :--- |
+| `company_id` | string | Path | Evet | Şirket kimliği. |
+
+### Yanıtlar (Responses)
+
+#### 200 OK
+Şirket detay objesi döner.
+
+#### 403 Forbidden
+Başka bir şirketin Admin'i, yetkisi olmayan şirketi sorgularsa bu hata döner (Şirketin var olup olmadığı gizlenir).
 
 ---
 
-# PATCH /api/v1/companies/{company_id}
+## `PATCH /api/v1/companies/{company_id}`
 
-Şirket adını, vergi numarasını, aktiflik durumunu veya `settings` alanını
-günceller. **Root, veya o şirketin kendi Admini.** Tüm alanlar opsiyoneldir.
+Şirket bilgilerini veya aktiflik durumunu (`is_active`) günceller. Pasife (`is_active: false`) alınan bir şirketin kullanıcıları sisteme giriş yapamaz.
+
+**Güvenlik:** Bearer Token (`Root` veya o şirketin `Admin`'i)
+
+### İstek Gövdesi (Request Body)
+
+`application/json` (Tüm alanlar opsiyoneldir)
+
+| Alan | Tür | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- |
+| `name` | string | Hayır | Yeni şirket adı. |
+| `tax_number` | string | Hayır | Vergi numarası. |
+| `is_active` | boolean| Hayır | Şirket aktif/pasif durumu. |
+| `settings` | object | Hayır | Özel konfigürasyon (Kotalar vb.). |
+
+**Örnek İstek:**
 
 ```json
 {
@@ -83,45 +128,42 @@ günceller. **Root, veya o şirketin kendi Admini.** Tüm alanlar opsiyoneldir.
 }
 ```
 
-`is_active: false` yapılan bir şirketin tüm kullanıcıları giriş yapamaz hale
-gelir (bkz. `app.core.permissions.role_checker`).
+#### 200 OK
+Şirket başarıyla güncellendi.
 
 ---
 
-# POST /api/v1/companies/{company_id}/admins
+## `POST /api/v1/companies/{company_id}/admins`
 
-Şirketin **zaten üyesi olan** bir kullanıcıyı Admin rolüne yükseltir.
-**Yalnızca Root.**
+Şirketin **zaten mevcut üyesi olan** bir kullanıcıyı `Admin` rolüne yükseltir.
 
-## İstek
+**Güvenlik:** Bearer Token (Sadece `Root` rolü)
 
-```json
-{ "user_id": "u1..." }
-```
+### İstek Gövdesi (Request Body)
 
-Kullanıcı bu şirkete ait değilse (`user.company_id != company_id`)
-`422 VALIDATION_ERROR` döner -- Root, başka bir şirketten bir yabancıyı
-doğrudan bu şirkete admin olarak taşıyamaz; kullanıcı önce bu şirkete davet
-edilmiş/kaydolmuş olmalıdır (bkz. `docs/api/users.md`'deki davet akışı).
+`application/json`
 
----
+| Alan | Tür | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- |
+| `user_id` | string | Evet | Admin yapılacak kullanıcının kimliği. |
 
-# DELETE /api/v1/companies/{company_id}
+### Yanıtlar (Responses)
 
-Şirketi **yumuşak siler** (`is_deleted=true`, `is_active=false`).
-**Yalnızca Root.** Şirkete bağlı kullanıcı/evrak/birim satırları
-silinmez -- referans bütünlüğü ve denetim geçmişi korunur; kalıcı temizlik
-kapsam dışıdır (bkz. `app/domains/companies/repository.py::soft_delete`
-docstring'i).
+#### 200 OK
+Rol ataması başarılı.
+
+#### 422 Unprocessable Entity
+`VALIDATION_ERROR`: Kullanıcı henüz bu şirkete dahil değil veya yabancı bir şirketin üyesi. (Önce davet mekanizması işletilmelidir).
 
 ---
 
-## İlgili
+## `DELETE /api/v1/companies/{company_id}`
 
-- `docs/api/units.md` -- birimler artık `(company_id, name)` bazında
-  benzersizdir, bir şirketin birim listesi yalnızca o şirketin kullanıcılarına
-  görünür.
-- `docs/api/users.md` -- kullanıcı davet/kayıt akışı, `company_id`'nin
-  davetten geldiği self-escalation koruması.
-- `docs/architecture/backend.md` -- kiracı izolasyonunun repository
-  katmanındaki uygulanışı ve Postgres RLS'in (sonraki faz) bu API ile ilişkisi.
+Şirketi **yumuşak siler** (Soft Delete). Şirkete bağlı diğer referans satırları (Kullanıcı, Evrak, Birim) silinmez, bütünlük korunur. Kalıcı veri temizliği kapsam dışıdır.
+
+**Güvenlik:** Bearer Token (Sadece `Root` rolü)
+
+### Yanıtlar (Responses)
+
+#### 204 No Content
+Şirket başarıyla silindi (`is_deleted=true`).

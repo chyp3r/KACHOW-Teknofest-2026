@@ -838,7 +838,10 @@
 .composer-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-2); }
 .composer-input .field-control { display: grid; }
 .composer-input textarea { min-height: var(--control-lg); background: var(--surface-input); }
-.send-button { align-self: end; width: var(--touch-target); min-width: var(--touch-target); height: var(--touch-target); min-height: var(--touch-target); }
+.composer-actions { display: flex; align-self: end; gap: var(--space-1); }
+.send-button,
+.mic-button { width: var(--touch-target); min-width: var(--touch-target); height: var(--touch-target); min-height: var(--touch-target); }
+.mic-button.is-listening { color: var(--status-failed); border-color: var(--status-failed); animation: pulse 1.4s ease-in-out infinite; }
 
 .document-list-toolbar {
   display: grid;
@@ -975,7 +978,7 @@
   .chat-empty-state { min-height: 19rem; padding-block: var(--space-6); }
   .composer-controls { display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
   .composer-mode { margin-left: auto; }
-  .composer-input { grid-template-columns: minmax(0, 1fr) var(--touch-target); }
+  .composer-input { grid-template-columns: minmax(0, 1fr) auto; }
   .document-list-toolbar { grid-template-columns: 1fr; }
   .document-list-item-shell { grid-template-columns: minmax(0, 1fr) var(--touch-target); }
   .document-list-item { grid-column: 1 / -1; grid-row: 1; grid-template-columns: var(--icon-container-sm) minmax(0, 1fr) var(--touch-target); gap: var(--space-3); padding: var(--space-3) var(--space-4); }

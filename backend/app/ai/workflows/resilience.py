@@ -9,12 +9,14 @@ needs one import path fixed instead of a grep-and-replace across every graph.
 import asyncio
 import functools
 import logging
+import time
 from typing import Any, Awaitable, Callable, Optional, TypeVar
 
 import httpx
 
 from app.ai.policy import get_policy
 from app.ai.policy.budget import node_budget
+from app.observability.ai_metrics import NODE_DURATION
 
 try:
     from langgraph.types import RetryPolicy
@@ -114,15 +116,39 @@ def node_timeout(
         @functools.wraps(func)
         async def _wrapped(*args: Any, **kwargs: Any) -> T:
             budget = node_budget(node, _reasoning_level_of(args))
+            started = time.perf_counter()
+            # "node_budget", not this node's own subgraph name -- this
+            # decorator has no way to know which graph it's wrapping (it's
+            # shared across document_analysis_graph/routing_graph), and the
+            # `node` label alone already disambiguates. Deliberately a
+            # separate label value from planning_graph.py's own
+            # NODE_DURATION.observe() call (graph="planning"), which
+            # measures a whole plan *step* (classification/brief/draft/
+            # routing) -- this measures the individual node inside one, the
+            # same granularity evaluation/latency/budget_report.py (E3)
+            # reports against BudgetPolicy.node_seconds.
             try:
-                return await asyncio.wait_for(func(*args, **kwargs), timeout=budget)
+                result = await asyncio.wait_for(func(*args, **kwargs), timeout=budget)
             except (asyncio.TimeoutError, TimeoutError) as exc:
+                NODE_DURATION.labels(
+                    graph="node_budget", node=node, status="failed"
+                ).observe(time.perf_counter() - started)
                 # Re-raised as a distinct type so the retry policy leaves it
                 # alone. A node that overran its budget will overrun it again;
                 # the caller's own degradation path is the useful response.
                 raise NodeBudgetExceeded(
                     f"Node '{node}' exceeded its {budget:.0f}s budget."
                 ) from exc
+            except Exception:
+                NODE_DURATION.labels(
+                    graph="node_budget", node=node, status="failed"
+                ).observe(time.perf_counter() - started)
+                raise
+            else:
+                NODE_DURATION.labels(
+                    graph="node_budget", node=node, status="completed"
+                ).observe(time.perf_counter() - started)
+                return result
 
         return _wrapped
 

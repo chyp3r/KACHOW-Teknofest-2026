@@ -1,0 +1,155 @@
+# StatefulSet, not a Deployment -- Postgres needs a stable identity and its
+# own persistent volume, and self-hosting it at all is itself a choice for
+# a self-hosted/air-gapped deployment (a plausible scenario for a Turkish
+# kamu deployment of this project). A real managed-Postgres or
+# CloudNativePG-operator deployment should replace this file entirely
+# rather than tune it -- this is the "no managed Postgres available"
+# fallback, not the recommended path.
+#
+# DUPLICATED CONTENT WARNING: the ConfigMap below embeds scripts/init-db.
+# sh's exact contents (Kubernetes has no equivalent of compose.yml's bind
+# mount for docker-entrypoint-initdb.d -- the script has to live somewhere
+# the container can read it, and a ConfigMap is that somewhere). The two
+# copies are NOT mechanically kept in sync; if scripts/init-db.sh changes,
+# this ConfigMap must be updated by hand in the same PR, or a fresh
+# cluster's kachow_app role setup silently drifts from what `docker
+# compose up` produces.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-initdb
+  namespace: kachow
+data:
+  init-db.sh: |
+    #!/bin/bash
+    set -e
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        SELECT 'CREATE DATABASE langfuse' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'langfuse')\gexec
+
+        DO \$\$
+        BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'kachow_app') THEN
+                CREATE ROLE kachow_app LOGIN PASSWORD '${KACHOW_APP_DB_PASSWORD:-kachow_app_dev_only}'
+                    NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+            END IF;
+        END
+        \$\$;
+
+        GRANT USAGE ON SCHEMA public TO kachow_app;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO kachow_app;
+        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO kachow_app;
+        ALTER DEFAULT PRIVILEGES FOR ROLE "$POSTGRES_USER" IN SCHEMA public
+            GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO kachow_app;
+        ALTER DEFAULT PRIVILEGES FOR ROLE "$POSTGRES_USER" IN SCHEMA public
+            GRANT USAGE, SELECT ON SEQUENCES TO kachow_app;
+    EOSQL
+---
+# Headless (clusterIP: None) -- a StatefulSet's own stable per-pod DNS
+# (postgres-0.postgres.kachow.svc.cluster.local) is what matters here, not
+# a load-balanced ClusterIP; there is exactly one writable Postgres primary
+# and nothing about routing between replicas to load-balance. `db` is not
+# used as the Service name (unlike compose.yml) because `postgres` reads
+# better next to `postgres-0`/`postgres-initdb` in this file -- `DATABASE_
+# URL`/`ALEMBIC_DATABASE_URL` in backend.yaml point at this Service's name,
+# so the two must stay in sync if this is ever renamed.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: kachow
+spec:
+  clusterIP: None
+  selector:
+    app: kachow-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: kachow
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kachow-postgres
+  template:
+    metadata:
+      labels:
+        app: kachow-postgres
+    spec:
+      containers:
+        - name: postgres
+          # Same image compose.yml uses -- pgvector's own extension is not
+          # actually required by this project's own migrations today, but
+          # matching the dev image avoids a second, divergent Postgres
+          # build existing only for production.
+          image: pgvector/pgvector:pg16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: POSTGRES_PASSWORD
+            - name: KACHOW_APP_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: KACHOW_APP_DB_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: kachow-config
+                  key: POSTGRES_DB
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+          # No -U/-d: Kubernetes' $(VAR) command substitution only applies
+          # to a container's own command/args, not to probe exec commands
+          # -- passing "$(POSTGRES_USER)" here would reach pg_isready as
+          # that literal, unexpanded string. Bare `pg_isready` only checks
+          # that the server accepts connections at all, which is exactly
+          # what a liveness/readiness probe needs; it does not need to
+          # authenticate as a specific role.
+          readinessProbe:
+            exec:
+              command: ["pg_isready"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+      volumes:
+        - name: initdb
+          configMap:
+            name: postgres-initdb
+            defaultMode: 0o755
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi

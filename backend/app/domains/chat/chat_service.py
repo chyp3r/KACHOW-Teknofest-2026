@@ -229,7 +229,12 @@ class ChatService:
                 raise
             except AIException as exc:
                 await queue.put(
-                    {"event": "error", "message": exc.message, "details": exc.details}
+                    {
+                        "event": "error",
+                        "message": exc.message,
+                        "details": exc.details,
+                        "error_code": exc.error_code,
+                    }
                 )
             except Exception as exc:
                 logger.exception("Streaming workflow failed")
@@ -525,9 +530,9 @@ class ChatService:
             raise AIException(
                 message=(
                     "Bu oturumda yanıt bekleyen tamamlanmamış bir adım var (eksik bilgi "
-                    "talebi ya da bir onay adımı). Devam etmek için /chat/resume uç "
-                    "noktasını kullanın."
+                    "talebi ya da bir onay adımı)."
                 ),
+                error_code="SESSION_PAUSED",
                 details={"session_id": thread_id},
             )
 

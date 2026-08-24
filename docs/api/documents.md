@@ -1,59 +1,34 @@
-# Evrak Analizi API
+# Evrak Analizi API (Documents API)
 
-> Görev 1 — Evrak Sınıflandırma ve İçerik Analizi
-
----
-
-# POST /api/v1/documents/analyze
-
-Kuruma ulaşan bir evrakın ilk inceleme (ön inceleme) aşamasını yürütür.
-
-Şartnamede istenen altı yeteneği tek çağrıda karşılar:
-
-1. Evrakı OCR veya doğrudan metin olarak okur
-2. Evrakın türünü belirler
-3. Önemli bilgi unsurlarını çıkarır
-4. Bulunması gereken ancak eksik olan bilgileri tespit eder
-5. İlgili mevzuat hükümlerini önerir
-6. Kısa ve öz bir özet üretir
+> Kuruma ulaşan bir evrakın ilk inceleme (ön inceleme) aşamasını yürütür. OCR/Metin Okuma, Sınıflandırma, Veri Çıkarımı, Eksik Bilgi Tespiti, Mevzuat Eşleştirme ve Özetleme işlemlerini gerçekleştirir. Ayrıca evrak tabanlı Bilgi Grafiği (Knowledge Graph) yetenekleri sunar.
 
 ---
 
-## İstek
+## `POST /api/v1/documents/analyze`
+
+Bir evrakın analizini gerçekleştirir.
+
+**Güvenlik:** Bearer Token (Kimlik doğrulama ayarı açıksa). Dakikada 10 istek kotası (Rate Limit) uygulanır.
+
+### İstek Gövdesi (Request Body)
 
 `multipart/form-data`
 
 | Alan | Tür | Zorunlu | Açıklama |
-|---|---|---|---|
-| `file` | dosya | Evet | Analiz edilecek evrak |
+| :--- | :--- | :--- | :--- |
+| `file` | file | Evet | Desteklenen dosya türleri: `application/pdf`, `text/plain`, `application/msword`, `image/png`, `image/jpeg`, `image/tiff`. Azami boyut 50 MB. |
 
-Desteklenen türler: `application/pdf`, `text/plain`, `application/msword`,
-`image/png`, `image/jpeg`, `image/tiff`. Azami boyut 50 MB
-(`MAX_FILE_SIZE_BYTES`).
+### Yanıtlar (Responses)
 
-Dosya türü hem uzantı hem de `content-type` üzerinden denetlenir; ikisinden biri
-uygunsa istek kabul edilir.
-
-### Örnek
-
-```bash
-curl -X POST http://localhost:8000/api/v1/documents/analyze \
-  -F "file=@datasets/sample/evrak_02.pdf"
-```
-
----
-
-## Yanıt
-
-Tüm uç noktalarda olduğu gibi birleşik `APIResponse` zarfı kullanılır.
+#### 200 OK
 
 ```json
 {
   "success": true,
   "data": {
     "file_name": "evrak_02.pdf",
-    "storage_path": "uploads/9f1c....pdf",
-    "analysis_id": "uploads/9f1c....pdf",
+    "storage_path": "uploads/9f1c.pdf",
+    "analysis_id": "uploads/9f1c.pdf",
     "extraction": {
       "extractor": "opendataloader",
       "page_count": 1,
@@ -86,7 +61,7 @@ Tüm uç noktalarda olduğu gibi birleşik `APIResponse` zarfı kullanılır.
         "label": "Sayı",
         "severity": "zorunlu",
         "mevzuat": "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik m.11",
-        "reason": "Belgelerde sayı bulunması zorunludur; belge takibi ve atıf sayı üzerinden yapılır."
+        "reason": "Belgelerde sayı bulunması zorunludur."
       }
     ],
     "compliance_status": "incomplete",
@@ -102,22 +77,15 @@ Tüm uç noktalarda olduğu gibi birleşik `APIResponse` zarfı kullanılır.
 }
 ```
 
-### Alan açıklamaları
+> **Açıklama:** 
+> - `compliance_status`: `compliant` (tam uyumlu), `partially_compliant` (önerilen alanlar eksik), `incomplete` (zorunlu alanlar eksik).
+> - Analiz işlemi henüz veritabanına kaydedilmez. Sonuçlar `storage_path` id'si ile önbellekte (JSON) tutulur.
 
-| Alan | Açıklama |
-|---|---|
-| `analysis_id` | Bu analiz sonucunun kimliği; `storage_path` ile aynıdır ve `GET /documents/{storage_path}` ile tam analizi tekrar çekmek için kullanılır |
-| `extraction.extractor` | Metni çıkaran bileşen: `plain_text`, `opendataloader`, `pdfium` veya `tesseract` |
-| `extraction.used_ocr` | `true` ise metin OCR ile okunmuştur ve alan değerleri kullanıcıya doğrulatılmalıdır |
-| `extraction.scrubbed_markers` | Metinden temizlenen olası talimat-enjeksiyonu işaretçileri (bkz. Güvenlik notu) — boşsa hiçbir şey temizlenmemiştir |
-| `document_type` | `DocumentType` enum değeri (gelen evrak türü) |
-| `compliance_status` | `compliant`, `partially_compliant` veya `incomplete` |
-| `missing_fields[].severity` | `zorunlu` veya `onerilen` |
-| `missing_fields[].mevzuat` | Alanı gerektiren mevzuat ve madde atfı |
+#### 422 Unprocessable Entity
+Desteklenmeyen dosya türü, boş dosya veya 50 MB sınır aşımı.
 
-`compliance_status` şu şekilde belirlenir: eksik `zorunlu` alan varsa
-`incomplete`, yalnızca `onerilen` alan eksikse `partially_compliant`, hiçbiri
-eksik değilse `compliant`.
+#### 502 Bad Gateway
+Yapay Zekâ iş akışı hata verdi.
 
 **`mevzuat_references` doğrulanmıştır.** Her önerinin atfı (`mevzuat`),
 `retrieve_mevzuat` düğümünün getirdiği alıntılara karşı denetlenir
@@ -132,134 +100,72 @@ alıntı için zaten yapı gereği doğrulanmış ham bir atıf listesine düş�
 
 ---
 
-## Hata durumları
+## `GET /api/v1/documents`
 
-| Durum | Kod | Sebep |
-|---|---|---|
-| 422 | `VALIDATION_ERROR` | Dosya yok, boş, çok büyük, desteklenmeyen tür veya metin çıkarılamadı |
-| 502 | `AI_EXECUTION_ERROR` | Analiz iş akışı hata verdi veya zaman aşımına uğradı |
+Yüklenen evrakları sayfalanmış özet metadata ile listeler. 
 
-```json
-{
-  "success": false,
-  "data": null,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Desteklenmeyen dosya türü.",
-    "details": { "file_name": "evrak.exe", "content_type": "application/octet-stream" }
-  },
-  "meta": { "timestamp": "2026-07-30T12:00:00Z" }
-}
-```
+**Güvenlik:** Bearer Token
+
+### Parametreler
+
+| Alan | Tür | Konum | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- | :--- |
+| `page` | integer | Query | Hayır | Sayfa numarası. |
+| `size` | integer | Query | Hayır | Sayfa boyutu. |
+
+### Yanıtlar (Responses)
+#### 200 OK
+Sayfalanmış liste (`items`, `total`, `page`, `size`, `pages`) döner.
 
 ---
 
-## Davranış notları
+## `GET /api/v1/documents/{storage_path}`
 
-**Eksik bilgi tespiti deterministiktir.** Eksik alan denetimi dil modeli ile
-değil, evrak türüne göre anahtarlanmış Python kural tablosu ile yapılır
-(`app/ai/compliance/field_rule.py`). Aynı girdi için sonuç her çalıştırmada
-birebir aynıdır ve madde numaraları sabit metinden gelir; model tarafından
-üretilmez.
+Belirtilen evrakın önbelleğe alınmış **tam** analiz sonucunu döndürür (`missing_fields` ve `mevzuat_references` dahil).
 
-**Mevzuat önerileri korpusa bağlıdır.** Öneriler `datasets/mevzuat/` altındaki
-metinlerden getirilen alıntılara dayanır. Dense (Qdrant) arama için korpusun
-önceden indekslenmesi gerekir:
+**Güvenlik:** Bearer Token
 
-```bash
-python scripts/index_mevzuat.py
-```
+### Parametreler
 
-Qdrant çalışmıyorsa hibrit arama sessizce yalnızca BM25'e düşer; bu durumda
-öneriler üretilmeye devam eder ancak isabet kalitesi düşer.
+| Alan | Tür | Konum | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- | :--- |
+| `storage_path`| string | Path | Evet | Analiz kimliği (`uploads/<uuid>.pdf`). |
 
-**OCR yolu.** Born-digital PDF'ler `opendataloader-pdf` ile okunur (Java 11+
-gerektirir). Java yoksa `pypdfium2` yedeği devreye girer. Taranmış PDF veya
-fotoğraflanmış evrak, 300 DPI'a rasterize edilip Tesseract Türkçe dil paketi
-(`tur`) ile okunur.
+### Yanıtlar (Responses)
+#### 200 OK
+`/documents/analyze` ucuyla aynı json şemasını döner.
 
-**Kimlik doğrulama.** `settings.REQUIRE_AUTH` varsayılan olarak `False`
-olduğu için bu uç nokta şu aşamada kimlik doğrulaması istemez;
-`require_auth_if_enabled` bağımlılığı `REQUIRE_AUTH=True` yapıldığı an, kod
-değişikliği gerekmeden devreye girer. `/documents/analyze` ayrıca IP başına
-dakikada 10 istekle sınırlıdır (`rate_limit`) — yerel modeli onlarca saniye
-meşgul eden bu uç nokta kimliksiz tek bir çağıranla kolayca tıkanabilir.
-
-**Kalıcılık.** Bu aşamada veritabanı kaydı tutulmaz; ham evrak `BaseStorage`
-üzerinde, analiz sonucu ise yerel `uploads_metadata.json` içinde saklanır ve
-`storage_path` ile döndürülür.
-
-**Güvenlik.** Çıkarılan metin, ajan promptlarına girmeden hemen önce
-`scrub_extracted_text()` ile temizlenir: sıfır-genişlikli/bidi kontrol
-karakterleri ve Türkçe/İngilizce talimat-geçersizleştirme satırları
-kaldırılır. Bu, `char_count` eşiği çalışmadan **önce** uygulanır, böylece
-temizlenmiş metin ölçülen metindir. Ne temizlendiği `extraction.scrubbed_markers`
-alanında dürüstçe raporlanır.
+#### 404 Not Found
+Evrak analizi önbellekte yok.
 
 ---
 
-## GET /api/v1/documents
+## `GET /api/v1/documents/correspondence-types`
 
-Yüklenen evrakları en yeniden eskiye özet metadata ile (7 alanlık kütüphane
-projeksiyonu) sayfalayarak listeler. `page`/`size` sorgu parametrelerini
-kabul eder ve `PaginatedResponse` zarfı (`items`, `total`, `page`, `size`,
-`pages`) döndürür.
+Desteklenen çıktı yazışma türlerini (`cover_letter`, `response_letter`, `information_notice`, `other_official`) ve Türkçe etiketlerini listeler.
 
-## GET /api/v1/documents/{storage_path}
-
-Önbelleğe alınmış **tam** analiz sonucunu döndürür — `POST /documents/analyze`
-ile birebir aynı şema (`missing_fields`, `mevzuat_references` dahil). Kütüphane
-listesinden bir evrağı yeniden seçerken bu uç nokta olmadan bu iki alan
-tamamen kayboluyordu. `storage_path` biçimsizse 400, önbellekte analiz yoksa
-404 döner.
-
-## GET /api/v1/documents/correspondence-types
-
-Desteklenen çıktı yazışma türlerini (`cover_letter`, `response_letter`,
-`information_notice`, `other_official`) ve Türkçe etiketlerini listeler.
-Frontend'in tür seçici bileşeni bu listeyi kullanır; etiketler
-`CorrespondenceType`/`CORRESPONDENCE_TYPE_LABELS` tek doğruluk kaynağından
-gelir, TypeScript tarafında tekrar yazılmaz.
-
-## POST /api/v1/documents/draft
-
-Görev 2 — resmî yazı taslaklama ve birim yönlendirme uç noktası. Ayrıntılı
-istek/yanıt şeması ve HITL akışı için bkz. **`docs/api/drafts.md`**.
+### Yanıtlar (Responses)
+#### 200 OK
+Tip-Etiket sözlüğü döner.
 
 ---
 
-## GET /api/v1/documents/graph
+## `POST /api/v1/documents/draft`
 
-Mevzuat Haritası — çağıranın görebildiği tüm evraklar üzerinden hesaplanan
-birleşik bilgi grafiği: evraklar, kurum/kişi varlıkları, mevzuat maddeleri
-ve kanunlar arasındaki her ilişki. Node/kenar üretimi tamamen saf ve
-deterministiktir (`app/domains/documents/knowledge_graph.py`); grafik her
-istekte önbellekteki analizlerden **türetilir**, ayrı bir depolama katmanı
-yoktur.
+Resmî Yazı Taslaklama (Drafting). Lütfen detaylar için `docs/api/drafts.md` dosyasına bakınız.
 
-**Kurum/kişi (Entity) node'ları nasıl üretilir.** `fields.muhatap`,
-`fields.gonderen_kurum` ve `fields.entities[]` içindeki serbest metinler,
-`app/domains/documents/entity_resolution.py`'deki saf çözümleyiciden
-geçirilir: markdown/liste artıkları ve sızmış belge numaraları temizlenir,
-Türkçe büyük/küçük harf katlaması uygulanır, aciliyet ekleri (`GÜNLÜDÜR` vb.)
-ve datif hâl ekleri (`...BAŞKANLIĞINA` → `...BAŞKANLIĞI`) ayıklanır, son
-olarak kalan OCR gürültüsü (`Ğ`→`Ç` gibi tek karakter yanlış okumaları)
-deterministik bir bulanık eşleştirmeyle birleştirilir. Üç alan **aynı
-canonical isim uzayını** paylaşır — bir evrağın `muhatap`ı ile başka bir
-evrağın `entities[]` listesinde geçen aynı kurum tek node'da buluşur.
-Birleşen her ham yazım biçimi `surface_forms` alanında dürüstçe saklanır;
-hiçbir node id'si doğrudan ham metinden türemez.
+---
 
-En fazla `MAX_GRAPH_DOCUMENTS = 200` evrak işlenir (`list_for_owner`'a bu
-limit açıkça geçilir — repository'nin kendi varsayılanı 100'dür ve buna
-güvenmek payda'yı sessizce küçültürdü). 200'ü aşan kurumlarda yanıt
-`truncated: true` döner. Sonuç 60 saniye Redis'te önbelleklenir; önbellek
-anahtarı `clearance` seviyesini de içerir — aksi hâlde düşük yetkili bir
-kullanıcı yüksek yetkili birinin önbelleğe düşürdüğü grafiği görebilirdi.
+## `GET /api/v1/documents/graph`
 
-IP başına dakikada 30 istekle sınırlıdır (`rate_limit`).
+Mevzuat Haritası (Knowledge Graph). Çağıranın görebildiği evraklar üzerinden (Maks 200 evrak) hesaplanan evrak, kurum, mevzuat ve kanun ilişkilerini döner.
+Hesaplama `GET` isteği atıldıkça yapılır. Redis önbelleği 60 saniye boyunca (Kullanıcı yetkisine -Clearance- bağlı olarak) saklanır.
 
-### Yanıt
+**Güvenlik:** Bearer Token. Dakikada 30 istek kotası uygulanır.
+
+### Yanıtlar (Responses)
+
+#### 200 OK
 
 ```json
 {
@@ -267,81 +173,31 @@ IP başına dakikada 30 istekle sınırlıdır (`rate_limit`).
   "data": {
     "nodes": [
       {
-        "id": "doc:uploads/9f1c....pdf",
+        "id": "doc:uploads/9f1c.pdf",
         "node_type": "document",
         "label": "evrak_02.pdf",
-        "storage_path": "uploads/9f1c....pdf",
-        "file_name": "evrak_02.pdf",
-        "document_type_label": "Resmî Yazı",
-        "compliance_status": "incomplete",
-        "has_analysis": true,
-        "kanun": null,
-        "madde": null,
-        "field_labels": [],
-        "document_count": null
+        "compliance_status": "incomplete"
       },
       {
         "id": "madde:2646:17",
         "node_type": "madde",
         "label": "m.17",
-        "storage_path": null,
-        "file_name": null,
-        "document_type_label": null,
-        "compliance_status": null,
-        "has_analysis": null,
         "kanun": "2646",
-        "madde": "17",
-        "field_labels": ["İmza sahibi", "İmza sahibinin unvanı"],
-        "document_count": 7,
-        "entity_kind": null,
-        "surface_forms": [],
-        "attributes": {}
+        "madde": "17"
       },
       {
         "id": "entity:turkiye buyuk millet meclisi baskanligi",
         "node_type": "entity",
         "label": "TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA",
-        "storage_path": null,
-        "file_name": null,
-        "document_type_label": null,
-        "compliance_status": null,
-        "has_analysis": null,
-        "kanun": null,
-        "madde": null,
-        "field_labels": [],
-        "document_count": 11,
-        "entity_kind": "kurum",
-        "surface_forms": [
-          "TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA",
-          "TÜRKIYE BÜYÜK MILLET MECLISI BASKANLIÇINA"
-        ],
-        "attributes": {}
+        "entity_kind": "kurum"
       }
     ],
     "edges": [
       {
-        "source": "doc:uploads/9f1c....pdf",
+        "source": "doc:uploads/9f1c.pdf",
         "target": "madde:2646:17",
         "edge_type": "ihlal",
-        "source_kind": "rule",
-        "field_key": "imza_sahibi",
-        "field_label": "İmza sahibi",
-        "severity": "zorunlu",
-        "reason": "Belge, yetkili amir tarafından ad ve soyad belirtilerek imzalanmalıdır.",
-        "aciklama": null,
-        "raw": null
-      },
-      {
-        "source": "doc:uploads/9f1c....pdf",
-        "target": "entity:turkiye buyuk millet meclisi baskanligi",
-        "edge_type": "muhatap",
-        "source_kind": "rule",
-        "field_key": null,
-        "field_label": null,
-        "severity": null,
-        "reason": null,
-        "aciklama": null,
-        "raw": null
+        "source_kind": "rule"
       }
     ],
     "insights": {
@@ -349,66 +205,35 @@ IP başına dakikada 30 istekle sınırlıdır (`rate_limit`).
       "madde_count": 6,
       "kanun_count": 1,
       "entity_count": 38,
-      "konu_count": 6,
       "rule_edge_count": 122,
-      "llm_edge_count": 163,
-      "unresolved_reference_count": 0,
-      "top_breached_madde": {
-        "madde_id": "madde:2646:17",
-        "kanun": "2646",
-        "madde": "17",
-        "field_labels": ["İmza sahibi", "İmza sahibinin unvanı"],
-        "document_count": 7
-      }
+      "llm_edge_count": 163
     },
     "truncated": false,
     "total_document_count": 9,
     "hidden_document_count": 0
-  },
-  "error": null,
-  "meta": { "timestamp": "2026-08-18T12:00:00Z", "response_time_ms": 42.1 }
+  }
 }
 ```
 
-### Alan açıklamaları
-
-| Alan | Açıklama |
-|---|---|
-| `nodes[].node_type` | `document`, `madde`, `kanun`, `entity` veya `konu` |
-| `nodes[].id` | `madde` id'leri `madde:{kanun}:{n}` biçiminde kanun ile birleşik — aynı madde numarası birden çok kanunda geçebilir (ör. `madde:4` hem 2646 hem 3071 sayılı kanunlarda vardır), bileşik id olmadan bu iki farklı madde tek node'da birleşirdi. `entity`/`konu` id'leri, ham metinden değil `entity_resolution`'ın canonical anahtarından türer |
-| `nodes[].has_analysis` | `false` ise evrağın önbellekte analizi yok; yine de izole bir node olarak grafiğe dahildir (payda'dan asla düşürülmez) |
-| `nodes[].entity_kind` | Yalnızca `entity` node'larında dolu — `kurum`, `kisi` veya `diger`. Sezgisel bir sınıflandırmadır, otoriter değil |
-| `nodes[].surface_forms` | Yalnızca `entity`/`konu` node'larında dolu — bu node'a birleşen her ham yazım biçimi, dürüstçe listelenir (OCR varyantları dahil) |
-| `nodes[].attributes` | Şu an yalnızca `document` node'larında dolu: `sayi`, `tarih`, `konu`, `muhatap`, `gonderen_kurum`, `ivedilik`, `summary`, `missing_field_count` — arayüzün "düğüme tıkla, alanlarını gör" panelinin okuduğu serbest biçimli alan |
-| `edges[].edge_type` | `ihlal` (Evrak→Madde, eksik alan), `atif` (Evrak→Madde/Kanun, model önerisi), `muhatap`/`gonderen` (Evrak→Entity, `muhatap`/`gonderen_kurum` alanından), `bahseder` (Evrak→Entity, `entities[]`'ten) veya `konu` (Evrak→Konu) |
-| `edges[].source_kind` | `rule` — `missing_fields[].mevzuat`, `muhatap`, `gonderen_kurum` veya `konu` alanından, tamamen deterministik; `llm` — `mevzuat_references[]` veya `entities[]`'ten, modelin ürettiği metin. Görselde birinci düz çizgi, ikincisi kesikli çizgi ile ayrılır |
-| `insights.rule_edge_count` / `llm_edge_count` | **Grafikteki her kenar türü** üzerinden toplam sayı — yalnızca `ihlal`/`atif` değil. Uyum başlığının kendi "X kural, Y model önerisi" cümlesi bu toplamı değil, yalnızca ilgili alt kümeyi okur (bkz. frontend `filterToComplianceOnly`) |
-| `insights.top_breached_madde` | Yalnızca `ihlal` kenarlerinden, **farklı evrak sayısına** göre hesaplanır (aynı evrak iki alan yüzünden aynı maddeyi iki kez ihlal edebilir — kenar sayısı değil, evrak sayısı sayılır) |
-| `insights.unresolved_reference_count` | `mevzuat_references[]` içinde ne kanun ne madde eşleşen atıf sayısı — `LAW_ALIASES` tablosu korpus büyüdükçe geride kalırsa bu sayı sıfırdan pozitife döner |
-| `truncated` | `true` ise evrak sayısı `MAX_GRAPH_DOCUMENTS`'ı aştı ve yalnızca ilk 200'ü işlendi |
-| `hidden_document_count` | Çağıranın yetki seviyesinin üzerinde olduğu için grafikten çıkarılan evrak sayısı — hangi evraklar olduğu asla belirtilmez |
-
-**`imza_sahibi` bilinçli olarak bir Entity kaynağı değildir.** Gerçek 14
-evrakın hiçbirinde bu alan dolu değil — taranmış evraklardaki el yazısı
-imza blokları OCR ile kurtarılamıyor. Kurum/kişi node'ları bunun yerine
-`entities[]`/`muhatap`/`gonderen_kurum`'dan üretilir; bu alanlar dolu ve
-kişi/kurum node'ları için gerçek sinyal taşıyor (bkz. proje planındaki
-ölçüm tablosu).
-
-**Boş kütüphane 404 değil, boş grafiktir** — sıfır evrak olan bir kurum için
-yanıt `200` ve `nodes: []`/`edges: []` döner.
+> **NOT:** Kurum (Entity) düğümleri, `muhatap`, `gonderen_kurum` ve `entities[]` alanlarından alınan verilerin OCR gürültüleri ayıklanıp, Türkçe eklerinden arındırılarak bulanık eşleştirmeyle birleştirilmesi sonucu üretilir. 
 
 ---
 
-## GET /api/v1/documents/{storage_path}/graph
+## `GET /api/v1/documents/{storage_path}/graph`
 
-Tek bir evrağın komşuluğu: o evrak ile dokunduğu her madde/kanun. Şema,
-yukarıdaki `GET /documents/graph` ile birebir aynıdır (`truncated`/
-`total_document_count`/`hidden_document_count` hariç — bunlar yalnızca
-korpus görünümüne özgüdür), yalnızca `nodes`/`edges` tek bir evrak ile
-sınırlıdır. Önbellek kullanılmaz; `GET /documents/{storage_path}` ile aynı
-önbellekteki analizden anlık türetilir.
+Tek bir evrakın (ve komşularının) bilgi grafiğini döner. Önbellek kullanılmaz, o an analizden türetilir. Veri şeması `/graph` ile tamamen aynıdır, ancak `insights` bölümündeki `truncated` veya `hidden_document_count` alanlarını barındırmaz.
 
-`storage_path` biçimsizse `400`, evrak bulunamazsa veya çağıranın erişim
-yetkisi yoksa `403`/`404` mevcut evrak uç noktalarıyla aynı kurallarla
-uygulanır, önbellekte analiz yoksa `404` döner.
+**Güvenlik:** Bearer Token
+
+### Parametreler
+
+| Alan | Tür | Konum | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- | :--- |
+| `storage_path`| string | Path | Evet | Analiz kimliği (`uploads/<uuid>.pdf`). |
+
+### Yanıtlar (Responses)
+#### 200 OK
+Tekil evrak grafiği döner.
+
+#### 404 Not Found
+Evrak analizi önbellekte yok veya erişim izni (Clearance) yok.

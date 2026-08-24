@@ -1,0 +1,32 @@
+# Minimal, working default: every alert routes to a `null` receiver (no
+# actual notification channel configured) except `severity: critical`,
+# which routes to `critical` -- also a no-op receiver as shipped. Neither
+# receiver has real webhook/email/Slack config filled in because there is
+# no default notification channel this project can assume every deployment
+# has; see docs/deployment/observability.md for wiring a real one
+# (Slack webhook_configs, email_configs, or a PagerDuty/Opsgenie
+# integration are the common choices).
+#
+# EDIT the `critical` receiver before relying on this in production --
+# as shipped, a firing KachowGuardrailJudgeDegraded/KachowBackendDown
+# alert is visible in Prometheus/Alertmanager's own UI but pages no one.
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: "null"
+  group_by: ["alertname", "node"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - match:
+        severity: critical
+      receiver: critical
+      repeat_interval: 1h
+
+receivers:
+  - name: "null"
+  - name: critical
+    # webhook_configs:
+    #   - url: https://hooks.slack.com/services/REPLACE/ME/NOW

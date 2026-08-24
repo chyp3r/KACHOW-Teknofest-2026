@@ -252,6 +252,11 @@ class ErrorEvent(BaseModel):
     event: Literal["error"] = "error"
     message: str
     details: Any = None
+    #: Machine-readable discriminator (e.g. ``"SESSION_PAUSED"``) mirroring
+    #: ``AIException.error_code`` -- lets the frontend react to a specific
+    #: failure (recover the interrupt panel) instead of pattern-matching the
+    #: localized ``message`` text. ``None`` for the catch-all/generic path.
+    error_code: Optional[str] = None
     seq: Optional[int] = None
 
 

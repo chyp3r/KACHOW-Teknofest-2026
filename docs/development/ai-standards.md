@@ -1,495 +1,54 @@
-# AI Standards
+# AI Geliştirme Standartları (AI Standards)
 
-> Bu doküman AI katmanının geliştirme standartlarını tanımlar.
+> **NOT:**
+> Bu doküman AI katmanının geliştirme standartlarını tanımlar. AI Core, sistemin karar verme, planlama ve mantık yürütme merkezidir. Sisteme eklenecek yeni ajanlar ve iş akışları bu kurallara uygun tasarlanmalıdır.
 
-AI katmanında geliştirilen tüm modüller bu kurallara uygun olmalıdır.
+## Mimari Felsefe ve Kapsam
 
-Bu doküman yalnızca AI Core katmanını kapsar.
+AI Core, gelen görevleri planlar, araç (Tool) seçer, bilgi toplar (RAG) ve cevap üretir.
 
----
+| Yapması Gerekenler | Yapmaması Gerekenler |
+| :--- | :--- |
+| LangGraph ile Workflow yönetir. | HTTP isteği (Request/Response) işlemez. |
+| Memory'yi (Kayan Pencere) okur/yazar. | Veritabanına (PostgreSQL) doğrudan erişmez. |
+| Tool ve MCP kullanarak işlem yapar. | Kullanıcı arayüzü (React) oluşturmaz veya framework bağımlı kod içermez. |
 
-# Amaç
+## AI İstek ve Karar Akışı
 
-Bu dokümanın amacı;
+AI katmanının istekleri karşılama hiyerarşisi (Top-Down):
 
-* AI mimarisini tutarlı tutmak
-* Agent geliştirme standartlarını belirlemek
-* Workflow yönetimini standartlaştırmak
-* Tool kullanımını güvenli hale getirmek
-* Yeni AI bileşenlerinin sisteme kolayca eklenmesini sağlamaktır.
-
----
-
-# AI Felsefesi
-
-AI Core sistemin karar verme katmanıdır.
-
-AI;
-
-* görevleri planlar,
-* araçları seçer,
-* bilgi toplar,
-* muhakeme yürütür,
-* cevap üretir,
-* workflow yönetir.
-
-AI;
-
-* HTTP isteği yönetmez,
-* kullanıcı arayüzü oluşturmaz,
-* veritabanına doğrudan erişmez,
-* framework bağımlı iş mantığı içermez.
-
----
-
-# Mimari
-
-AI Core katmanları aşağıdaki yapıyı takip eder.
-
-```text
-Request
-
-↓
-
-Workflow
-
-↓
-
-Planner
-
-↓
-
-Agent
-
-↓
-
-Tool Selection
-
-↓
-
-Tool Execution
-
-↓
-
-Memory
-
-↓
-
-Response
+```mermaid
+flowchart TD
+    Request["İstek (Backend'den)"] --> Workflow["Workflow (Orkestrasyon)"]
+    Workflow --> Planner["Planner (Yönlendirme & Karar)"]
+    Planner --> Agent["Uzman Ajan (Agent)"]
+    Agent --> Tool["Araç Seçimi (Tool Selection)"]
+    Tool --> MCP["Çalıştırma (Tool / MCP / RAG)"]
+    MCP -.-> Memory["Hafıza (Memory) Güncellemesi"]
+    Memory -.-> Response["Nihai Çıktı"]
 ```
 
-Her katman yalnızca kendi sorumluluğunu yerine getirir.
+## Modüller ve Sorumluluklar
 
----
+| Modül | Açıklama | Kurallar |
+| :--- | :--- | :--- |
+| **Workflow** | Görevi planlar, Ajan seçer ve hata yönetir. | Workflow içinde Prompt yazılmaz. Sadece orkestrasyon yapar. |
+| **Agent** | Tek bir uzmanlık alanına (Örn: `RAGAgent`) sahiptir. | Birden fazla görevi üstlenemez. ("Super Agent" yapılmaz). |
+| **Planner** | Hangi ajanların ve araçların kullanılacağına karar verir. | Doğrudan Tool çalıştırmaz, sadece plan çıkarır. |
+| **Tool / MCP** | Dosya okuma, arama gibi spesifik yetenekler sunar. | Tool'lar birbirini doğrudan çağıramaz (AI üzerinden tetiklenir). |
+| **RAG** | İlgili belgeleri bulur ve sıralar (Reciprocal Rank Fusion). | Karar vermez veya nihai cevap metni üretmez (Sadece kaynak sunar). |
+| **Memory** | Konuşma geçmişini `HISTORY_WINDOW` limitiyle tutar. | Frontend (UI) ile ilgilenmez, sadece LangGraph checkpointer'da yaşar. |
 
-# AI Modülleri
+## Prompt Yönetimi ve Model Bağımsızlığı
 
-AI Core aşağıdaki temel modüllerden oluşur.
+- **Merkezi Promptlar:** Sistem promptları kod içine gömülmez. Tüm promptlar versiyonlanabilir ve tekrar kullanılabilir biçimde `app/ai/prompts/templates/` altında saklanır.
+- **Sağlayıcı Soyutlaması:** AI sistemi OpenAI, Ollama, Anthropic gibi tek bir modele kilitlenmez. Model değişikliği Workflow kodunda değişikliğe neden olmamalıdır.
+- **Kademeli Karar (Reasoning):** Kullanıcının hız ve kalite tercihlerine göre (`fast`, `balanced`, `deep`) modeller dinamik olarak yönetilir. Workflow düğümleri (nodes) donanım preset'ine göre karmaşıklığını ayarlar.
 
-```text
-llm_clients/
+## Token Yönetimi ve Guardrails
 
-workflows/
+- **Bağlam (Context) Sınırı:** Token taşmasını ve yavaşlamayı engellemek için sadece en gerekli bilgi modele iletilir. Geçmiş konuşmalar özetlenerek (SummaryMemory) dahil edilir.
+- **Güvenlik Çiti (Guardrails):** LLM çıktısına koşulsuz güvenilmez. Üretilen JSON veya yapılandırılmış formatlar Pydantic şemaları ile anında doğrulanır (Validation).
 
-agents/
-
-tools/
-
-memory/
-
-prompts/
-
-embeddings/
-
-rag/
-
-mcp/
-
-evaluation/
-```
-
-Her modül bağımsız geliştirilebilir olmalıdır.
-
----
-
-# Workflow
-
-Workflow sistemin orkestrasyon katmanıdır.
-
-Workflow;
-
-* görevi planlar,
-* Agent seçer,
-* Tool çağırır,
-* Memory kullanır,
-* hata yönetir,
-* sonucu döndürür.
-
-Workflow;
-
-* Prompt yazmaz,
-* HTTP işlemez,
-* kullanıcı arayüzü yönetmez.
-
----
-
-# Agent
-
-Her Agent tek bir uzmanlık alanına sahip olmalıdır.
-
-Örnekler
-
-```text
-ChatAgent
-
-RAGAgent
-
-PlanningAgent
-
-SystemAgent
-
-CodingAgent
-
-DocumentAgent
-```
-
-Bir Agent birden fazla görevi üstlenmemelidir.
-
----
-
-# Planner
-
-Planner görevin nasıl çözüleceğine karar verir.
-
-Planner;
-
-* adımları oluşturur,
-* gerekli Agent'ları belirler,
-* Tool ihtiyacını değerlendirir,
-* yürütme sırasını oluşturur.
-
-Planner doğrudan Tool çalıştırmaz.
-
----
-
-# Tool
-
-Her Tool yalnızca tek bir yetenek sunmalıdır.
-
-Örnekler
-
-* Dosya okuma
-* Dosya yazma
-* Web arama
-* Terminal çalıştırma
-* Hesaplama
-* Kod çalıştırma
-
-Tool'lar birbirini çağırmamalıdır.
-
-Tool içerisinde AI çağrısı yapılmamalıdır.
-
----
-
-# MCP
-
-Harici sistemlerle iletişim mümkün olduğunca MCP üzerinden gerçekleştirilmelidir.
-
-MCP;
-
-* Tool erişimini standartlaştırır,
-* entegrasyonları sadeleştirir,
-* AI ile sistem arasındaki bağı azaltır.
-
-MCP katmanı iş kuralları içermez.
-
----
-
-# RAG
-
-RAG yalnızca bilgi erişiminden sorumludur.
-
-RAG;
-
-* belge bulur,
-* sıralama yapar,
-* ilgili içerikleri döndürür.
-
-RAG cevap üretmez.
-
-RAG karar vermez.
-
----
-
-# Embeddings
-
-Embedding üretimi merkezi olarak yönetilmelidir.
-
-Embedding modeli farklı modüller tarafından tekrar oluşturulmamalıdır.
-
-Chunking ve embedding stratejileri standartlaştırılmalıdır.
-
----
-
-# Memory
-
-Memory sistemin geçmiş bilgisini yönetir.
-
-Bu projede memory tek bir kaynakta yaşar: LangGraph checkpointer'ının kalıcılaştırdığı graf state'i (bkz. `docs/architecture/ai.md` → Memory). İki katman vardır, ikisi de aynı state'in alanlarıdır — ayrı bir depo veya sınıf hiyerarşisi değil:
-
-* kayan pencere (`history`, son `HISTORY_WINDOW` turu verbatim tutar),
-* kayan özet (`history_summary`, pencerenin dışına çıkan turların hafif LLM özetidir).
-
-Memory katmanı kullanıcı arayüzünü bilmez.
-
----
-
-# Prompt Yönetimi
-
-Prompt'lar merkezi olarak yönetilmelidir.
-
-Prompt metinleri kod içerisine gömülmemelidir.
-
-Her Prompt;
-
-* isimlendirilmeli,
-* sürümlenmeli,
-* tekrar kullanılabilir olmalıdır.
-
----
-
-# LLM Clients
-
-LLM sağlayıcıları ortak bir arayüz üzerinden kullanılmalıdır.
-
-AI katmanı belirli bir sağlayıcıya bağımlı olmamalıdır.
-
-Sağlayıcı değişikliği diğer modülleri etkilememelidir.
-
----
-
-# Model Bağımsızlığı
-
-AI sistemi;
-
-* OpenAI
-* Ollama
-* Anthropic
-* Gemini
-* Azure OpenAI
-
-gibi farklı sağlayıcılarla çalışabilecek şekilde tasarlanmalıdır.
-
-Model değişimi Workflow değişikliği gerektirmemelidir.
-
-Kullanıcının hız/kalite tercihi (`ReasoningLevel`: `fast`/`balanced`/`deep`, bkz. `app/ai/reasoning_levels.py`) da aynı prensiple ele alınır: bir seviye yeni bir model eklemek yerine mevcut iki katmanı (kalite/hızlı) ve `BaseLLMClient` üzerindeki mevcut parametreleri (`reasoning`, `max_tokens`, `temperature`) farklı şekilde birleştirir. Yeni bir seviye eklemek workflow düğümlerinde dallanma gerektirmemeli, yalnızca preset tablosuna bir satır eklemekle sınırlı kalmalıdır.
-
----
-
-# Tool Çağrıları
-
-Tool çağrıları deterministik olmalıdır.
-
-Aynı giriş mümkün olduğunca aynı davranışı üretmelidir.
-
-Tool çağrıları kayıt altına alınmalıdır.
-
----
-
-# Context Yönetimi
-
-Workflow yalnızca gerekli bağlamı modele göndermelidir.
-
-Gereksiz bilgi modele aktarılmamalıdır.
-
-Context mümkün olduğunca küçük tutulmalıdır.
-
----
-
-# Token Yönetimi
-
-Token kullanımı optimize edilmelidir.
-
-Dikkat edilmesi gerekenler
-
-* Gereksiz Prompt büyümesi
-* Tekrarlayan bilgiler
-* Kullanılmayan belge parçaları
-* Gereksiz geçmiş konuşmalar
-
----
-
-# Guardrails
-
-AI çıktıları gerekli durumlarda doğrulanmalıdır.
-
-Örnekler
-
-* JSON doğrulama
-* Şema doğrulama
-* Format doğrulama
-* Güvenlik kontrolü
-
-Model çıktısına koşulsuz güvenilmez.
-
----
-
-# Hata Yönetimi
-
-Model hataları kontrollü şekilde yönetilmelidir.
-
-Beklenen durumlar
-
-* Timeout
-* Rate Limit
-* Tool Error
-* MCP Error
-* Context Overflow
-* Invalid Response
-
-Workflow mümkün olduğunca kurtarma stratejisi uygulamalıdır.
-
----
-
-# Retry Politikası
-
-Retry yalnızca güvenli işlemlerde uygulanmalıdır.
-
-Sonsuz tekrar yapılmamalıdır.
-
-Retry sayısı yapılandırılabilir olmalıdır.
-
----
-
-# Gözlemlenebilirlik
-
-AI işlemleri izlenebilir olmalıdır.
-
-Takip edilmesi önerilen bilgiler
-
-* Workflow
-* Agent
-* Tool
-* Prompt
-* Model
-* Süre
-* Token
-* Hata
-
----
-
-# Güvenlik
-
-AI;
-
-* gizli bilgilere doğrudan erişmemelidir,
-* yetkisiz Tool çalıştırmamalıdır,
-* kullanıcı girdilerine koşulsuz güvenmemelidir.
-
-Her Tool gerekli yetki kontrolünü yapmalıdır.
-
----
-
-# Performans
-
-Performans artırılırken doğruluk korunmalıdır.
-
-Dikkat edilmesi gerekenler
-
-* Context küçültme
-* Cache kullanımı
-* Embedding yeniden kullanımı
-* Gereksiz LLM çağrılarından kaçınma
-* Paralel bağımsız işlemler
-
----
-
-# Değerlendirme
-
-Yeni Agent veya Workflow aşağıdaki kriterlerle değerlendirilmelidir.
-
-* Doğruluk
-* Tutarlılık
-* Tekrarlanabilirlik
-* Gecikme süresi
-* Token tüketimi
-* Tool başarısı
-
-Değerlendirme sonuçları kayıt altına alınmalıdır.
-
----
-
-# Test
-
-AI katmanı aşağıdaki seviyelerde test edilmelidir.
-
-* Unit Test
-* Workflow Test
-* Tool Test
-* Prompt Test
-* Evaluation Test
-
-Mümkün olduğunca deterministik senaryolar tercih edilmelidir.
-
----
-
-# Yeni AI Özelliği Geliştirme
-
-Yeni bir AI özelliği geliştirilirken aşağıdaki süreç takip edilmelidir.
-
-```text
-Issue
-
-↓
-
-Workflow Tasarımı
-
-↓
-
-Agent Tasarımı
-
-↓
-
-Prompt
-
-↓
-
-Tool
-
-↓
-
-Memory
-
-↓
-
-Evaluation
-
-↓
-
-Test
-
-↓
-
-Documentation
-
-↓
-
-Pull Request
-```
-
----
-
-# Yapılmaması Gerekenler
-
-AI katmanında;
-
-* HTTP endpoint yazılmaz.
-* React bileşeni geliştirilmez.
-* SQL sorgusu yazılmaz.
-* ORM kullanılmaz.
-* Veritabanı erişimi doğrudan yapılmaz.
-* HTML oluşturulmaz.
-* API yönlendirmesi yapılmaz.
-
-Bu sorumluluklar ilgili katmanlara aittir.
-
+> **ÖNEMLİ:**
+> Yeni bir AI özelliği (Agent/Workflow) geliştirildiğinde; deterministik testleri (Evaluation) çalıştırılmalı ve başarı, token tüketimi, gecikme süresi (latency) ölçümlenerek raporlanmalıdır. (Ayrıntılar `testing.md` dokümanındadır).

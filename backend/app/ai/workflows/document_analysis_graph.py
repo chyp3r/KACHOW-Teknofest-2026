@@ -350,6 +350,7 @@ def create_document_analysis_graph(
     mevzuat_retriever: Optional[Any] = None,
     reasoning_llm_client: Optional[BaseLLMClient] = None,
     fast_llm_client: Optional[BaseLLMClient] = None,
+    guard_llm_client: Optional[BaseLLMClient] = None,
 ):
     """Create and compile the incoming-document analysis workflow.
 
@@ -394,6 +395,10 @@ def create_document_analysis_graph(
             attempt runs on the fast tier before dropping to
             ``DocumentType.OTHER`` -- a third, cheap rung under the existing
             two-tier degradation ladder, only paid on the failure path.
+        guard_llm_client: Optional client for the guardrail judge. Defaults to
+            ``fast_llm_client or llm_client`` -- pass
+            ``app.ai.llms.get_guard_llm_client()`` to route to Evren's
+            dedicated ``guard`` model instead of the general fast-tier model.
 
     Returns:
         The compiled LangGraph workflow.
@@ -401,9 +406,7 @@ def create_document_analysis_graph(
     classifier_agent = ClassifierAgent(llm_client)
     compliance_agent = ComplianceAgent(reasoning_llm_client or llm_client)
     fallback_classifier_agent = ClassifierAgent(fast_llm_client) if fast_llm_client else None
-    # Fast tier, same reasoning as fallback_classifier_agent -- a label-sized
-    # verdict, not document text, so the quality tier buys nothing here.
-    guardrail_judge_agent = GuardrailJudgeAgent(fast_llm_client or llm_client)
+    guardrail_judge_agent = GuardrailJudgeAgent(guard_llm_client or fast_llm_client or llm_client)
 
     @node_timeout("analyze")
     async def analyze_node(

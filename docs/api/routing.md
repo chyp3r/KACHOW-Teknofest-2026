@@ -1,18 +1,28 @@
-# Birim Yönlendirme API
+# Birim Yönlendirme API (Routing API)
 
-> Görev 2 — Birim Yönlendirme (bağımsız kullanım)
+> Yalnızca bir taslak metni ve güven skorunu analiz edip doğru birimi öneren bağımsız bir uç noktadır. İnsan düzenlemesi sonrası yönlendirmeyi "yeniden hesaplatmak" için kullanılır.
 
 ---
 
-# POST /api/v1/routing/suggest
+## `POST /api/v1/routing/suggest`
 
-`POST /documents/draft`'tan **bağımsız**, yalnızca bir taslak metni ve güven
-skoru okuyan tek başına birim-yönlendirme uç noktası. İnsan bir taslağı elle
-düzenledikten sonra, yeni bir üretim ödemeden yönlendirme kararını
-tazelemek için vardır — `routing_graph` yalnızca taslak metnini ve güven
-skorunu okur, hızlı katmanda çalışır.
+Taslak metnini baz alarak AI (Hızlı katman) aracılığıyla kurum içi birim yönlendirme önerisi çıkarır.
 
-## İstek
+**Güvenlik:** Bearer Token
+
+### İstek Gövdesi (Request Body)
+
+`application/json`
+
+| Alan | Tür | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- |
+| `draft` | string | Evet | Yönlendirilecek taslak (1-20000 karakter). |
+| `confidence_score`| float | Hayır | `100.0` üzerinden skor. (Varsayılan `100.0`). |
+| `document_type` | string | Hayır | Bağlam (Context) vermek amaçlı evrak türü. |
+
+> **NOT:** `confidence_score` değeri, eşik (`HUMAN_APPROVAL_SCORE_THRESHOLD`=50.0) değerinin altında gelirse, sistem taslağı otomatik olarak İnsan Onayına (`requires_human_approval: true`) düşürür.
+
+**Örnek İstek:**
 
 ```json
 {
@@ -22,13 +32,9 @@ skorunu okur, hızlı katmanda çalışır.
 }
 ```
 
-| Alan | Tür | Zorunlu | Açıklama |
-|---|---|---|---|
-| `draft` | string | Evet | Yönlendirilecek taslak veya evrak metni (1-20000 karakter) |
-| `confidence_score` | float | Hayır (varsayılan `100.0`) | 0-100 arası; `HUMAN_APPROVAL_SCORE_THRESHOLD` (50.0) altındaki skorlar doğrudan insan onayına yönlendirir |
-| `document_type` | string | Hayır | Bağlam için evrak türü |
+### Yanıtlar (Responses)
 
-## Yanıt
+#### 200 OK
 
 ```json
 {
@@ -39,27 +45,14 @@ skorunu okur, hızlı katmanda çalışır.
     "reasoning": "Personel izin talebiyle ilgili.",
     "justification": "Personel izin talebiyle ilgili.",
     "requires_human_approval": false
-  },
-  "error": null,
-  "meta": { "timestamp": "2026-08-01T12:00:00Z" }
+  }
 }
 ```
 
-Birimler artık statik değil: `GET /units` ile listelenen, yöneticilerin
-(`POST`/`PATCH`/`DELETE /units`, bkz. [`units.md`](./units.md)) tanımladığı
-aktif birimler arasından seçilir -- `routed_unit`, o an aktif olan birimlerden
-biridir.
+> **Açıklama:** `routed_unit`, veritabanındaki aktif birimler listesinden seçilir. Eğer boş bir taslak girilir, eşik altı skor gönderilir veya birim bulunamazsa `routed_unit` null döner.
 
-`routed_unit`, boş taslak, düşük güven skoru (`HUMAN_APPROVAL_SCORE_THRESHOLD`
-altı, 50.0), tanımlı hiçbir aktif birim yokken, ya da bir model hatası/geçersiz
-yanıtı durumunda `null` olur -- bu artık ayrı bir "İnsan Onayı Gerekli" birimi
-**değil**; bunun yerine `requires_human_approval` alanı `true` olur (taslak
-kalite kapısının kullandığı bayrakla aynı alan). `priority`,
-`requires_human_approval` true olduğunda `"Yüksek"`, aksi halde `"Normal"`dir.
+#### 422 Unprocessable Entity
+`VALIDATION_ERROR`: `draft` alanı boş veya kısıtlamalara (Maks 20000) uymuyor.
 
-## Hata durumları
-
-| Durum | Kod | Sebep |
-|---|---|---|
-| 422 | `VALIDATION_ERROR` | `draft` boş veya eksik |
-| 502 | `AI_EXECUTION_ERROR` | Yönlendirme iş akışı zaman aşımına uğradı ya da hata verdi |
+#### 502 Bad Gateway
+`AI_EXECUTION_ERROR`: Yönlendirme (Routing) iş akışı LLM katmanında hata aldı veya zaman aşımına uğradı.

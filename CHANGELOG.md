@@ -2,7 +2,7 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
-## [3.32.0] - 2026-08-24
+## [3.54.0] - 2026-08-24
 İki kullanıcı bildirimi: gerçek taranmış belgelerde `İmza sahibi`/`İmza
 sahibinin unvanı` neredeyse hep boş kalıyor ("imza isim üzerine geldiyse
 OpenDataLoader/Tesseract bulamıyor"), ve "Mevzuat ve Dayanaklar" listesinde
@@ -102,8 +102,8 @@ birebir doğru 22/23**.
   (footer, ek, kırpma) yapısal olarak taşımıyor. Gerçek kanıt yukarıdaki
   23/23 canlı ölçüm.
 
-## [3.31.1] - 2026-08-24
-[3.31.0]'daki parser/merge düzeltmesinin canlı doğrulaması: aynı 4 gerçek
+## [3.53.1] - 2026-08-24
+[3.53.0]'daki parser/merge düzeltmesinin canlı doğrulaması: aynı 4 gerçek
 belge (CY-009/CY-003/CY-010/CY-033) tam ardışık düzenden (`qwen3.5:9b`,
 üretim sıcaklığı 0.7) geçirildi. Düzeltmeler öncesi **0/4**'ü altın
 etiketle tam eşleşiyordu, sonrası **4/4**.
@@ -141,7 +141,7 @@ etiketle tam eşleşiyordu, sonrası **4/4**.
   (kasıtlı olarak yalnız parser'ı ölçüyor, LLM/merge hiç çağrılmıyor) --
   sayı hâlâ **0.1148**.
 
-## [3.31.0] - 2026-08-23
+## [3.53.0] - 2026-08-23
 Zorunlu alan doldurmanın kök nedeni "OCR yetersizliği" sanılıyordu; ölçüm
 farklı bir yer gösterdi. 23 elle etiketlenmiş gerçek belgenin *mükemmel*
 metni (`clean_text`, OCR hatası tanım gereği imkânsız) `parse_labelled_fields`'tan
@@ -208,7 +208,7 @@ büyük kısmı OCR'dan önce, ayrıştırıcıda oluşuyordu.
   bozmadı). `intents` (macro F1 0.9520) ve `drafts` (doğruluk 1.0000)
   bu çalışmadan etkilenmeyen dosyalarda tıpatıp aynı.
 
-## [3.30.0] - 2026-08-23
+## [3.52.0] - 2026-08-23
 Görev 1'in altı şartname maddesini denetleyen bir geçiş: madde 5 (ilgili
 mevzuat önerme) daha önce hiç doğrulanmıyordu -- `suggest_mevzuat_node`'un
 istemi modele "alıntılarda bulunmayan madde numarası veya kanun adı üretme"
@@ -306,6 +306,727 @@ gerçek tarama yalnızca OCR/imza etiketleri taşıyordu.
 - `make eval`: `intents` (macro F1 0.9520) ve `drafts` (doğruluk 1.0000,
   yanlış pozitif 0.0000) bu çalışmadan etkilenmeyen dosyalarda değişmedi;
   `evrak` yukarıdaki sayıları üretiyor.
+
+## [3.51.0] - 2026-08-24
+#272'nin ("feat(ai): cross-encoder reranker (J7) + embedding model ->
+harrier-oss-v1-0.6b") tam geri alınması (revert).
+
+- `CrossEncoderReranker`/`RerankPolicy`, `HybridRetriever`'ın opsiyonel
+  reranker collaborator'ı, `OLLAMA_EMBEDDING_MODEL`'in `leoipulsar/
+  harrier-0.6b`'ye geçişi ve bu geçişin tetiklediği tüm yeniden-üretilmiş
+  artefaktlar (semantik prototipler, router füzyon ağırlıkları, eval
+  embedding cache'leri, stil örnekleri koleksiyonu) `nomic-embed-text` +
+  reranker'sız duruma döndü. `POLICY_VERSION` `3.1.0` -> `3.0.0`'a düşer.
+- `git revert -m 1` ile tek commit, `81f11cf`'in tersi. Gerekçe kod
+  incelemesinden değil, ürün kararından geliyor -- bu PR'ın kendisi neden
+  geri alındığını açıklamıyor, yalnızca hangi durumun eski hale
+  döndürüldüğünü kaydediyor.
+
+## [3.50.0] - 2026-08-23
+Workstream J6: OpenAPI şema snapshot testi (#269).
+
+- Yeni `backend/tests/unit/api/test_openapi_snapshot.py` — `app.openapi()`
+  çıktısını commit'li `openapi.snapshot.json`'a karşı karşılaştırır.
+  `KACHOW_UPDATE_OPENAPI_SNAPSHOT=1` ile kasıtlı yenileme (frontend'in
+  `api:types:check`'i yalnızca *kendi* generated types'ının şemayla senkron
+  kaldığını doğruluyordu; şemanın kaynağında hiçbir kontrat testi yoktu).
+- **Canlı doğrulandı:** `/health` endpoint'ine geçici bir sanity-check query
+  parametresi eklendi, snapshot testi kırıldı (99 path'in diff'i doğru
+  raporlandı), değişiklik geri alındı, test tekrar yeşil.
+- `docker compose exec backend pytest -q` → 2588 passed (2587'den +1).
+
+## [3.49.0] - 2026-08-23
+Workstream J5: coverage ratchet -- backend pytest-cov + frontend vitest v8
+(#267).
+
+- `backend/pyproject.toml` — `addopts`'a `--cov=app --cov-report=term-
+  missing:skip-covered` (her `pytest` çağrısında ölçüm+rapor, hiçbir zaman
+  başarısızlık değil). `Makefile`'ın `test:` hedefine `--cov-fail-under=86`
+  (ölçülen değer: 14561/16913 = 86.09%) — bilinçli olarak `pyproject.toml`
+  değil: global bir `fail_under` bir geliştiricinin tek dosyalık dar bir
+  koşusunu da etkiler ve o dilim asla %86'ya yaklaşmaz. `test-e2e`/
+  `test-all` hedeflerine `--no-cov` (marker-filtrelenmiş bir alt kümenin
+  kendi coverage'ı anlamsız bir sayı).
+- `frontend/vitest.config.ts` — `coverage: { provider: 'v8', thresholds:
+  {...} }` (ölçülen değer: Statements/Lines 79.82%, Branches 77.99%,
+  Functions 55.37%), opt-in (`npm run test:coverage`, `--coverage` bayrağı
+  olmadan Vitest zaten coverage toplamıyor) — `npm test` değişmeden kalır.
+- **Canlı doğrulandı:** `make test` → "Required test coverage of 86%
+  reached"; dar bir dosya koşusu (`pytest -q tests/unit/ai/
+  test_prompt_golden.py`) coverage gate'ine takılmadı (yalnızca bilgilendirici
+  rapor); `make test-e2e`/`make test-all` `--no-cov` ile sorunsuz geçti;
+  `npm run test:coverage` eşiklerle geçti, `npm test` (332 test) değişmeden
+  çalıştı.
+- Bir bind-mount tuhaflığı canlı yakalandı ve not edildi (kod değişikliği
+  gerektirmedi): uzun süredir çalışan `kachow_backend_dev` container'ı tek
+  dosyalık `pyproject.toml` bind mount'unun host'taki bir düzenlemeden sonra
+  bayatladığını gösterdi (`docker compose exec` 2275 byte okurken host 2811
+  byte'tı) -- `docker compose restart backend` ile çözüldü; `docker compose
+  run --rm` (yani `make test`'in kendisi) her zaman taze bir mount kullandığı
+  için bundan hiç etkilenmedi.
+
+## [3.48.0] - 2026-08-23
+Workstream J4: prompt çıktı regresyonu -- golden file testi (#265).
+
+- **Doğrulandı, tekrar yazılmadı:** prompt kontrat testleri
+  (`TEMPLATE_CONTRACTS`, `test_prompt_templates.py`'nin 7 testi) zaten
+  kapsamlı; eksik olan tek şey render edilmiş *çıktı* üstünde bir
+  regresyon testiydi.
+- Yeni `backend/tests/unit/ai/golden/*.txt` (11 dosya) — her şablonun,
+  `test_prompt_templates.py`'nin zaten kullandığı sabit placeholder
+  değerleriyle (`f"<{placeholder}>"`) render edilmiş hali, komitli.
+- Yeni `backend/tests/unit/ai/test_prompt_golden.py` — render → golden
+  karşılaştırma; `KACHOW_UPDATE_GOLDEN=1` ile kasıtlı yenileme.
+- **Canlı doğrulandı:** `writer.md`'nin gövdesi placeholder setini
+  değiştirmeden düzenlenip test suite'i koşuldu — `test_prompt_golden.py`
+  kırıldı, `test_prompt_templates.py`'nin 7 testi (doğru şekilde)
+  kırılmadı; değişiklik geri alındıktan sonra tüm 59 test tekrar yeşil.
+- `docker compose exec backend pytest -q` → 2587 passed (2575'ten +12).
+
+## [3.47.0] - 2026-08-23
+Workstream J3: chaos/failure-injection testi (#263).
+
+- **Doğrulandı, ekleme gerekmedi:** plandaki 5 degrade iddiasından 4'ü
+  (`retrieve_source_chunks`, `retrieve_examples`, `PrototypeMatcher`, rate
+  limiter fail-open) zaten kendi unit test dosyalarında ayrı ayrı test
+  ediliyor — kod okunarak doğrulandı, tekrar test edilmedi.
+- Yeni `backend/tests/e2e/test_degradation_e2e.py` — eksik olan tek gerçek
+  boşluk: `QdrantStore.delete_by_filter`/`create_collection`/
+  `upsert_documents` gerçek bir kesintiyi simüleyecek şekilde raise
+  ettirilir, `POST /api/v1/documents/analyze`'ın gerçek HTTP+RLS+Qdrant
+  yığını üzerinde yine de 200 döndüğü ve belgenin sonrasında tam
+  kullanılabilir kaldığı doğrulanır (`DocumentService._index_for_qa`'nın
+  kendi `except Exception: logger.exception(...)` swallow'ının bu güne
+  kadar hiç uçtan uca test edilmemiş olması).
+- `docker compose exec backend pytest -q -m e2e` → 25 passed (24'ten +1).
+- `docker compose exec backend pytest -q` (varsayılan lane) → 2575 passed,
+  değişmedi.
+
+## [3.46.0] - 2026-08-23
+Workstream J2: agent trajectory eval -- planlama grafiğinin node dizisini
+ölçme (#261).
+
+- Yeni `evaluation/datasets/trajectories.jsonl` (6 vaka, 3 kategori:
+  `sohbet`, `taslak_yuksek_guven`, `taslak_dusuk_guven_onay`) -- sabit
+  girdi -> beklenen top-level graph node dizisi.
+- Yeni `evaluation/harness/trajectory_suite.py` -- gerçek derlenmiş
+  `create_planning_graph`'ı `astream(..., stream_mode="updates")` ile
+  çalıştırıp gözlenen node dizisini toplar (alt-graph'lar case başına
+  yapılandırılabilir `AsyncMock`, `run_recorder`'ın üç girişi no-op'a
+  patch'lenir — tamamen offline). Metrikler: tam eşleşme oranı,
+  node-token'ları üzerinde Levenshtein dizi mesafesi, beklenmeyen node
+  oranı, beklenmeyen duraklama noktası sapmaları.
+- **Canlı doğrulandı:** dört adet düşük-güven taslak vakası gerçekten
+  `human_gate`'te duruyor (LangGraph `stream_mode="updates"`'in bunu
+  `human_gate` güncellemesi olarak değil `__interrupt__` işareti olarak
+  yayınladığı ampirik olarak doğrulandı — node kendi güncellemesini hiç
+  döndürmüyor), yüksek-güven vakaları hiçbir gate'e uğramadan
+  `consolidate_memory`'ye kadar tamamlanıyor.
+- `evaluation/generate_report.py` — `SUITES`'e `"trajectories"` eklendi;
+  `--suite trajectories` ve `--suite all` ikisi de çalışır.
+- `backend/tests/unit/evaluation/test_trajectory_suite.py` (10 test) —
+  metrik hesaplama (edit mesafesi, beklenmeyen node oranı) + gerçek
+  planlama grafiğine karşı iki uçtan uca doğrulama (sohbet ve
+  human_gate duraklaması) + komitli gold set'in tamamının gerçekten
+  koştuğu ve tam eşleştiği kontratı.
+- `docker compose exec backend pytest -q` → 2575 passed (2565'ten +10).
+
+## [3.45.0] - 2026-08-23
+Workstream J1: OpenTelemetry ile altyapı seviyesi izleme (#259).
+
+- Yeni `backend/app/observability/otel.py::init_tracing` — HTTP
+  (FastAPI/ASGI), Postgres (SQLAlchemy, her iki motor: `kachow_app` ve
+  owner), Redis ve dışa giden `httpx` (Qdrant, Ollama) span'lerini OTLP/gRPC
+  üzerinden yayınlar. `OTEL_EXPORTER_OTLP_ENDPOINT` boşsa SDK hiç import
+  edilmeden no-op'a düşer — Langfuse'un (`app.observability.tracer`)
+  anahtar-yokken-degrade idiom'unun aynısı; eksik bir collector backend'in
+  açılmasını engellemez (doğrulandı: `OTEL_EXPORTER_OTLP_ENDPOINT=` ile
+  `python -c "from app.main import app"` sorunsuz döner).
+- `backend/app/core/config.py` — `OTEL_EXPORTER_OTLP_ENDPOINT: str | None`.
+- `compose.yml`/`compose.prod.yml` — `jaeger` servisi
+  (`jaegertracing/all-in-one`, OTLP/gRPC alıcı `4317`, UI `16686`),
+  `backend`'in `OTEL_EXPORTER_OTLP_ENDPOINT` varsayılanı ona işaret eder.
+- **Canlı doğrulandı, gerçek bir sürüm uyumsuzluğu bulundu ve düzeltildi:**
+  `opentelemetry-instrumentation-fastapi==0.54b1`,
+  `fastapi==0.141.1`'in taşıdığı yeniden yazılmış `starlette==1.6.0`'ın
+  router nesnelerini okuyamıyor (`'_IncludedRouter' object has no attribute
+  'path'`), her isteği 500'e düşürüyordu — `0.62b1`'e (ve eşlik eden
+  `opentelemetry-api/sdk==1.41.1`) yükseltilerek çözüldü.
+- **Canlı doğrulandı, ikinci bir gerçek bug bulundu ve düzeltildi:**
+  `SQLAlchemyInstrumentor().instrument(engine=...)` iki ayrı motor için iki
+  kez çağrılınca (bu instrumentor singleton, ikinci çağrı sessizce no-op
+  oluyor — "Attempting to instrument while already instrumented") yalnızca
+  ilk motor izleniyordu; tek çağrıda `engines=[...]` listesi verilerek
+  düzeltildi.
+- `docs/deployment/observability.md` — Langfuse vs OTel ayrımı: "hangi
+  soruyu hangisine sorarsınız" bölümü.
+- Jaeger UI'da (`http://localhost:16686`) `/api/v1/health?deep=true`
+  isteğinin `PING` (Redis), `SELECT` (Postgres) ve `GET`/`connect` (httpx)
+  span'lerini tek bir trace altında gösterdiği canlı doğrulandı.
+
+## [3.44.0] - 2026-08-23
+Workstream H: alerting (node budget gauge + Prometheus kuralları +
+Alertmanager) ve deploy dokümantasyonu (#257).
+
+- `backend/app/observability/ai_metrics.py::NODE_BUDGET_SECONDS` (H1) —
+  `BudgetPolicy.node_seconds`'ı `init_ai_metrics()`'te Prometheus'a set
+  eder, `kachow_node_duration_seconds` ile PromQL'de `join` edilebilir.
+- `monitoring/prometheus/rules/kachow.rules.yml` (H2, yeni) — 12 alert
+  kuralı, 4 grup (`availability`, `ai_workflow`, `guardrail`,
+  `llm_latency`).
+- `monitoring/prometheus/prometheus.yml` — `rule_files`, `alerting:`
+  bloğu, `qdrant` scrape config'i (native `/metrics`, doğrulandı).
+- `monitoring/alertmanager/alertmanager.yml` (yeni, placeholder
+  receiver'lı) + `compose.prod.yml`'e `alertmanager` servisi.
+- `docs/deployment/` (H3) — 12 dosya: README, prerequisites,
+  docker-compose, kubernetes, configuration, secrets, migrations,
+  observability, runbook, backup-restore, upgrade, hardening.
+- `backend/tests/e2e/test_health_and_metrics_e2e.py`'nin metrik-adı
+  kontrat listesi genişletildi (`kachow_node_budget_seconds`,
+  `kachow_judge_failures_total`, `kachow_draft_confidence_score`).
+- `backend/tests/unit/observability/test_ai_metrics.py` (yeni).
+
+### Düzeltildi
+- **`.env.prod` `.gitignore`'da değildi** — yalnızca `.env` pattern'i
+  vardı, farklı bir dosya adı olduğu için `.env.prod` eşleşmiyordu
+  (`git check-ignore -v .env.prod` boş dönüyordu). `docs/deployment/
+  secrets.md` yazılırken fark edildi, doğrulanıp düzeltildi.
+- `KachowNodeBudgetExhaustion` kuralının ilk hali Prometheus tarafından
+  canlı reddedildi: `histogram_quantile(...) > 0.8 * on(node)
+  group_left() kachow_node_budget_seconds` — skaler (`0.8`) ile vector
+  matching birlikte kullanılamıyor (`vector matching only allowed
+  between instant vectors`). `> on (node) (0.8 *
+  kachow_node_budget_seconds)` ile düzeltildi.
+- `KachowHITLBacklog` farklı label setlerine sahip iki Counter'ı
+  (`kachow_hitl_interrupts_total{kind}` vs `kachow_hitl_resume_
+  total{action}`) doğrudan çıkarıyordu; `sum()` ile önce label'lar
+  temizlendi.
+
+### Doğrulama
+`NODE_BUDGET_SECONDS`: çalışan dev backend'in `/metrics`'inde 9 node'un
+tümü için gerçek bütçe değerleri görüldü. Alert kuralları: `promtool
+check rules/config` ile syntax doğrulandı; **canlı bir alert'in tüm
+yaşam döngüsü** test edildi — `qdrant` durdurulup `KachowQdrantDown`'ın
+gerçekten `pending` → `firing` → (qdrant geri açılınca) `inactive`
+olduğu izlendi. `alertmanager.yml`: gerçek `prom/alertmanager` imajıyla
+`amtool check-config` + gerçek server boot (`/-/ready` → 200) ile
+doğrulandı. `docker compose exec backend pytest -q` → 2563 passed;
+`pytest -q -m e2e` → 24 passed.
+
+## [3.43.0] - 2026-08-23
+Workstream G: Kubernetes manifest'leri, self-hosted production deployment için (#255).
+
+Karar: manifest, Helm değil — dokuz yarı-şablonlanmış dosya yerine tek
+dürüst manifest seti; `deploy/helm/` ayrı bir takip PR'ına ertelendi.
+
+- `deploy/kubernetes/namespace.yaml` — ns `kachow`, `ResourceQuota`,
+  default-deny `NetworkPolicy` + DNS/intra-namespace/Ollama egress
+  istisnaları.
+- `configmap.yaml`, `secrets.yaml` (placeholder'lı + ExternalSecret
+  örneği).
+- `postgres.yaml`, `qdrant.yaml` — StatefulSet + headless Service + PVC.
+- `redis.yaml` — Deployment + PVC + `appendonly yes`.
+- `backend.yaml` — Deployment + Service + PVC, `replicas: 1` varsayılan
+  (J9/#254 `STORAGE_TYPE=s3` ile 2'ye çıkarmayı güvenli kılıyor, ama
+  gerçek bir S3/MinIO endpoint'i olmadan varsayılan `STORAGE_TYPE=local`
+  ile 2 kırılırdı — manifestte gerekçe yazılı), `migrate-job.yaml`'ın
+  ürettiği şemayı bekleyen bir initContainer (DDL çalıştırmaz).
+- `migrate-job.yaml` (yeni) — tek seferlik `alembic upgrade head`.
+- `frontend.yaml`, `ingress.yaml` (SSE için `proxy-buffering: off` vb.),
+  `pdb.yaml` (yalnızca `frontend` — `backend` tek replika'da anlamsız,
+  gerekçe yazılı; HPA bilinçli olarak eklenmedi).
+
+### Doğrulama
+Tüm set gerçek bir Kubernetes cluster'ına (`kind`) karşı uçtan uca
+uygulandı: postgres/qdrant/redis Running, initdb ConfigMap'i gerçekten
+`kachow_app` rolünü ve `langfuse` DB'sini oluşturdu, `migrate-job` gerçek
+Alembic zincirini (0001→0028) sıfırdan uyguladı ve Complete oldu,
+`backend` 1/1 Running (kısıtlı `kachow_app` rolüyle bağlandı, `?deep=true`
+health check'i gerçek DB+Qdrant kontrolleriyle 200, `uid=10001 gid=0`),
+`frontend` 2/2 Running (`readOnlyRootFilesystem: true`), `pdb`
+`ALLOWED DISRUPTIONS: 1` doğru hesaplandı, `ingress` şeması
+`--dry-run=server` ile doğrulandı.
+
+### Düzeltildi
+- `backend.yaml`'ın `wait-for-migrations` initContainer'ında `resources`
+  bloğu yoktu — `ResourceQuota` bunu zorunlu kılıyor, Pod oluşturma
+  tamamen reddediliyordu (`FailedCreate`). Canlı `kubectl apply` ile
+  yakalandı.
+- `:latest` etiketiyle varsayılan `imagePullPolicy: Always`, `kind`'e
+  yüklenen local imajı görmezden gelip gerçek registry'den çekmeye
+  çalışıyordu. `IfNotPresent` eklendi (backend/frontend/migrate-job).
+- Postgres probe'larında `pg_isready -U $(POSTGRES_USER)` — Kubernetes'in
+  `$(VAR)` ikamesi yalnızca container'ın kendi `command`/`args`'ına
+  uygulanıyor, probe `exec.command`'a değil; argümansız `pg_isready`'e
+  düzeltildi.
+
+### Notlar
+`SECRET_KEY` guard'ının (#250) gerçek cluster'da da çalıştığı doğrulandı:
+placeholder secret'la backend `CrashLoopBackOff`'a girdi, gerçek değerle
+düzgün başladı. `ingress-nginx` controller'ının bizzat kurulup uçtan uca
+test edilmesi bu PR'ın kapsamı dışında.
+
+## [3.42.0] - 2026-08-23
+Workstream J9: belge analiz cache'ini `BaseStorage`'ın arkasına al (#253).
+
+- `backend/app/domains/documents/cache_keys.py` (yeni) —
+  `analysis_cache_key(storage_path)` tek kaynağı.
+- `backend/app/domains/documents/service.py` — `_save_document_analysis_
+  cache`, `_read_analysis_cache`, `delete_document`, `_copy_analysis_cache`
+  artık `os.path.join(settings.LOCAL_STORAGE_DIR, ...)` + `open()`/
+  `os.remove` yerine `self.storage.put_file/get_file/delete_file`
+  kullanıyor — belgenin kendi baytlarıyla aynı backend.
+- `backend/app/domains/documents/provider.py` (yeni) —
+  `get_cached_document(document_id)`, planlama grafiğine enjekte edilen
+  callable.
+- `backend/app/ai/workflows/planning_graph.py` — `_load_cached_document`
+  artık enjekte edilmiş bir `document_cache_provider` callable'a
+  delege ediyor (`app.ai.*`'nin `app.domains.*`'ı doğrudan import
+  etmemesi kuralına uyarak — `test_ai_never_imports_domains.py`).
+- `backend/app/api/dependency.py::get_planning_graph` —
+  `document_cache_provider=get_cached_document` enjekte edildi.
+
+### Düzeltildi
+- Analiz cache'i `STORAGE_TYPE=s3` ayarlansa bile her zaman yerel diske
+  yazılıyordu — `S3Storage` tam bağlı olmasına rağmen. Bu,
+  Workstream G'nin backend Deployment'ını `replicas: 1`'e sabitlemesinin
+  doğrulanmış gerçek sebebiydi: bir replica'nın yazdığı cache dosyasını
+  diğer replica göremiyordu. Gerçek bir MinIO'ya karşı doğrulandı (put/
+  get/delete round-trip, silme sonrası `FileNotFoundError`).
+- **İkinci, bağımsız bir kopyası bulundu:** `planning_graph.py::
+  _load_cached_document` — sohbet/taslak akışının yüklü bir belgeye
+  referans verdiğinde önbelleklenmiş analizi okuyan fonksiyon — aynı hatayı
+  `service.py`'den tamamen ayrı taşıyordu. `STORAGE_TYPE=s3` ile bu
+  fonksiyon her zaman boş cache döndürüyordu, yani bir belgeyi analiz edip
+  sonra ona referans veren her sohbet/taslak turu belgenin içeriğini
+  sessizce kaybediyordu. Gerçek çalışan backend'e karşı canlı doğrulandı
+  (`get_cached_document` gerçek storage client'ın yazdığını okuyor).
+
+### Notlar
+`compose.prod.yml`'ye MinIO servisi eklemek ve `STORAGE_TYPE=s3` ile tam bir
+e2e koşusu bu PR'ın kapsamı dışında bırakıldı (ayrı bir takip işi) —
+abstraksiyonun kendisi gerçek bir MinIO'ya karşı doğrudan doğrulandı,
+ancak `compose.prod.yml`'in kalıcı MinIO kablolaması yapılmadı. Bu inince
+G'deki (henüz yazılmamış) `replicas: 1` notu kalkabilir.
+
+Doğrulama: `docker compose exec backend pytest -q` → 2561 passed, 34
+deselected (57+14 yeni test dahil); `docker compose exec backend pytest -q
+-m e2e` → 24 passed (regresyon yok); `test_ai_never_imports_domains.py`
+geçiyor (mimari sınır ihlal edilmedi).
+
+## [3.41.0] - 2026-08-23
+Workstream F3/F4: production frontend Dockerfile + nginx.conf + `compose.prod.yml` (#251).
+
+- `deploy/docker/frontend.prod.Dockerfile` — `node:20-alpine` ile `vite build`
+  (mevcut arch-tespitli Rollup düzeltmesi aynen korundu), ardından
+  `nginxinc/nginx-unprivileged:1.27-alpine` ile statik servis (8080,
+  non-root varsayılan). `VITE_API_BASE_URL` build ARG'ı **eklenmedi** —
+  `frontend/src/services/apiClient.ts` yalnızca göreli `/api/v1/...`
+  yolları kullanıyor, hiçbir yerde `VITE_API_*` env'i okunmuyor
+  (doğrulandı); ihtiyaç yok.
+- `deploy/docker/nginx.conf` — daha önce yetim bir dosyaydı, artık
+  `frontend.prod.Dockerfile`'a bağlı: `listen 8080`, `gzip`, `/healthz`,
+  SSE için mevcut `proxy_buffering off`/600s zaman aşımı korundu.
+- `compose.prod.yml` — `compose.yml` üstüne override: kaynak bind mount
+  yok, `db`/`redis`/`qdrant` portları kapalı, healthcheck'ler
+  (`pg_isready`, `redis-cli ping`, `/readyz`), tek seferlik `migrate`
+  servisi (`alembic upgrade head`), `backend` ona
+  `condition: service_completed_successfully` ile bağlı, kaynak
+  limitleri, log rotasyonu, `${VAR:?...}` ile zorunlu sırlar (`up`
+  eksik sırla hemen reddediyor).
+- `.env.prod.example` — `compose.prod.yml`'in gerektirdiği değişkenlerin
+  listesi.
+
+### Düzeltildi
+- nginx, `backend` hostname'i DNS'te henüz kayıtlı değilken (frontend
+  container'ı backend'den önce ayağa kalkarsa) **boot'ta çöküyordu**
+  (`host not found in upstream`) — canlı imaj backend'siz bir ağda
+  koşturularak keşfedildi. `proxy_pass` bir literal yerine bir
+  `resolver 127.0.0.11` + değişken (`$backend_upstream`) üzerinden
+  çözülecek şekilde değiştirildi; artık nginx her koşulda açılıyor ve
+  backend henüz erişilemezken istek yalnızca 502 dönüyor (doğrulandı:
+  standalone imaj, backend'siz ağda `/` → 200, `/healthz` → 200,
+  `/api/...` → 502, container asla crash-loop'a girmedi).
+- `compose.prod.yml`'in ilk taslağında `frontend.ports`, `compose.yml`'in
+  dev `5173` portuyla **birleşiyordu** (Compose'un liste alanları
+  varsayılan olarak concat eder) — `docker compose config` çıktısında
+  hem `5173` hem `80:8080`'in aynı anda yayınlandığı görülerek
+  yakalandı; `ports: !override [...]` ile düzeltildi.
+
+### Notlar
+Tüm zincir gerçek, izole bir Compose projesinde (`-p
+kachow-prod-verify`, kullanıcının asıl dev volume'larına dokunmadan)
+uçtan uca doğrulandı: `migrate` gerçek Alembic migration'larını (0001→
+son) sıfırdan uyguladı (exit 0), `backend` `healthy` oldu ve kısıtlı
+`kachow_app` rolüyle bağlandı, `frontend` üzerinden `curl
+http://localhost/api/v1/health` → 200 (nginx proxy'si üzerinden), her
+iki container da non-root (`uid=10001 gid=0` / `uid=101`). Doğrulama
+sonunda izole proje tamamen silindi; kullanıcının gerçek dev ortamı
+(`docker compose up -d`) sağlıklı halde geri getirildi.
+
+## [3.40.0] - 2026-08-23
+Workstream F1/F2: production backend Dockerfile + `.dockerignore` + `SECRET_KEY` guard'ı (#249).
+
+- `deploy/docker/backend.prod.Dockerfile` — üç aşamalı build (`builder` →
+  yalnızca `requirements.txt`; `mcp` → `mevzuat-mcp`+Chromium, `ARG
+  WITH_MEVZUAT_MCP=0` arkasında varsayılan kapalı; `runtime` → yalnızca
+  runtime apt paketleri, test suite'i/`evaluation/` yok, non-root
+  `10001:0`, curl'süz Python healthcheck). Doğrulandı: imaj **1.36GB**
+  (dev imajı 4.16GB), `docker exec ... id` → `uid=10001(kachow) gid=0`,
+  healthcheck `healthy`, `/api/v1/health` → 200.
+- Kök `.dockerignore` — daha önce yoktu; `.git`, `__pycache__`,
+  `node_modules`, `storage_data`, ve en önemlisi git'te takipsiz kök
+  `.env` artık build context'ine girmiyor.
+- `backend/app/lifespan.py::_require_secret_key_in_production` —
+  `_require_auth_in_production` ile aynı desen: `ENVIRONMENT=production`
+  + varsayılan `SECRET_KEY` ile boot reddedilir. Gerçek prod imajına
+  karşı koşturularak doğrulandı (`RuntimeError: SECRET_KEY must be
+  changed...` ile başlatma reddi).
+
+### Notlar
+`MEVZUAT_SOURCE`'u açıkça `local`'a çekmeden `WITH_MEVZUAT_MCP=0` ile
+koşan bir imaj, canlı mevzuat.gov.tr çağrısını dener ve başarısız olur —
+ama bu bir çökme değil: `FallbackMevzuatRetriever` beklendiği gibi
+commit'li korpusa düşüyor (canlı imajda doğrulandı, log: "MCP-first
+legislation warm-up fetched nothing (7/7 laws failed); staying on the
+local corpus"). Operatörler `MEVZUAT_SOURCE=local` ile bu denemeyi
+tamamen atlayabilir; `docs/deployment/configuration.md` (Workstream H3)
+bunu belgeleyecek.
+
+## [3.39.0] - 2026-08-23
+Workstream E3: gözlenen node gecikmesi bütçe raporu (#247).
+
+- `evaluation/latency/budget_report.py` — çalışan backend'in gerçek
+  `/metrics`'inden okuyup `BudgetPolicy.node_seconds`'a karşı p50/p95/p99
+  raporluyor; p95 bütçenin %80'ini aşan node'u işaretliyor.
+- `backend/tests/performance/test_node_budget_coverage.py` — `node_seconds`
+  içindeki her anahtarın gerçekten bir `node_timeout`/`node_budget`
+  çağrısında kullanıldığını statik kaynak taramasıyla doğruluyor.
+- `Makefile`: `latency-report` hedefi.
+
+### Düzeltildi
+- `NODE_DURATION` Prometheus histogram'ının bucket sınırları 10.0s'de
+  tıkanıyordu (`prometheus_client`'ın varsayılanı) — `node_seconds`
+  bütçeleri 25-180s aralığındayken. Gerçek her gözlem sessizce `+Inf`
+  bucket'ına düşüyor, p50/p95/p99 tahmini gerçek süreden bağımsız hep aynı
+  "taban" değerini (10.0) okuyordu — canlı bir belge analizi koşturularak
+  keşfedildi. 480s'e kadar uzanan açık bucket sınırları eklendi.
+- `kachow_node_duration_seconds` yalnızca "plan step" (classification/
+  brief/draft/routing) granülaritesinde kaydediliyordu, `node_seconds`'ın 9
+  daha ince anahtarında hiç değil — rapor scriptinin okuyacağı veri yoktu.
+  `app/ai/workflows/resilience.py`'nin `node_timeout` decorator'ına (5
+  anahtar) ve `draft_graph.py`'nin iki inline retrieval node'una (2 anahtar)
+  `NODE_DURATION.observe(...)` eklendi — 9 anahtardan 7'si artık enstrümante.
+
+### Notlar
+`writer` ve `assist` bilinçli olarak enstrümante edilmedi — ikisi de bu
+PR'da riskli bulunan çok-yollu exception handling'e sahip. `evaluation/
+latency/README.md` bunu açıkça "no observations yet" olarak raporluyor.
+
+Doğrulama: canlı backend'e karşı gerçek bir belge yükleyip iki kez
+koşturuldu — bucket düzeltmesinden önce tüm p50/p95/p99'lar anlamsız
+"10.00" okuyordu, düzeltmeden sonra gerçek sayılar ortaya çıktı (`suggest_
+mevzuat` p95=59.25s, bütçe 70s → doğru "BÜTÇE TÜKENMEK ÜZERE"). `docker
+compose run --rm --no-deps backend pytest -q`: 2551 passed, 34 deselected.
+
+## [3.38.0] - 2026-08-23
+Workstream E2: k6 yük testleri + `node_seconds` bütçe export'u (#245).
+
+- `scripts/export_budgets.py` — `BudgetPolicy`'yi `perf/k6/lib/budgets.json`'a
+  yazar (commit'li); `backend/tests/unit/ai/test_budget_export_freshness.py`
+  taze kalmasını garanti eder (Ollama gerektirmez).
+- `perf/k6/` — `smoke.js`, `chat_stream.js`, `document_upload.js`,
+  `lib/thresholds.js`, `fixtures/sample.pdf`. Üçü de gerçek çalışan stack'e
+  (gerçek Ollama, gerçek Qdrant, seed'li `employee` hesabı) karşı bizzat
+  koşturularak doğrulandı.
+- `Makefile`: `export-budgets`/`perf-smoke`/`perf-chat`/`perf-document`.
+  `compose.yml`: `./perf:/workspace/perf` mount'u.
+
+### Düzeltildi
+- k6'nın varsayılan istek timeout'u (60s) belge analizi gibi çok adımlı LLM
+  çağrıları içeren endpoint'lerin gerçek maliyetinin altında kalıyordu —
+  gerçek bir koşuda "request timeout" ile ortaya çıktı. Her iki LLM-bağımlı
+  script'e (`chat_stream.js`, `document_upload.js`)
+  `BudgetPolicy.workflow_ceiling_seconds`'a eşit açık bir istek timeout'u
+  eklendi.
+- `.gitignore`'daki genel Python-paketleme `lib/` kuralı (`lib64/`,
+  `eggs/` ile aynı standart blok) her derinlikte eşleşiyor ve
+  `perf/k6/lib/`'i (bir Python build artifact'ı değil, k6 yardımcı
+  dosyaları) sessizce yutuyordu -- ilk commit denemesinde fark edildi.
+  `!perf/k6/lib/` istisnası eklendi.
+
+### Notlar
+`perf/k6/README.md`: locust'un neden seçilmediği (Workstream E4'ün kararı)
+ve k6'nın SSE disconnect senaryosunu neden kapsayamadığı (backend/tests/
+e2e/'nin `ASGITransport`'la aynı kapsayamadığı boşluk) belgelendi.
+
+## [3.37.0] - 2026-08-23
+Workstream E1: performans testleri (#243). `backend/tests/performance/`
+artık boş değil -- iki katman eklendi:
+
+- **`test_operation_counts.py`** (donanımdan bağımsız, varsayılan `make
+  test` lane'inde de koşuyor): temiz bir taslak koşusunun LLM'i tam bir kez
+  çağırdığı, Qdrant'a tam iki gidiş-dönüş yaptığı (`retrieve_examples` +
+  `retrieve_source_chunks`), bir belgenin chunk'larının tek bir batch
+  `embed_documents` çağrısında embed edildiği, ve sabit 50KB girdi için
+  `RecursiveChunker`'ın chunk sayısının (qa: 42, mevzuat: 62) pinlendiği 4
+  test.
+- **`test_benchmarks.py`** (`pytest-benchmark`, `performance` marker'lı,
+  `-m performance` ile opt-in): `SparseBM25Encoder`, `reciprocal_rank_
+  fusion`, `build_page_map`, `RecursiveChunker.split_text`, `verify_draft`,
+  `confidence_rules.score_findings`, `PrototypeMatcher.match`, `find_pii`,
+  `make_serializable` için 10 wall-clock benchmark.
+
+`evaluation/benchmarks/report.py` + `make benchmark-baseline`/`make
+benchmark` -- committed baseline'a karşı yalnızca >3x regresyonda kırılan
+karşılaştırma.
+
+### Notlar
+Planın önerdiği `pytest-benchmark --benchmark-compare-fail=mean:200%`
+mekanizması kullanılamadı -- `pytest_benchmark.utils.parse_compare_fail`'in
+kendi regex'i yüzde değerini ≤99 ile sınırlıyor, ">200%" ifade edilemiyor.
+Bunun yerine `evaluation/benchmarks/report.py` aynı JSON şemasını okuyup
+oranı doğrudan hesaplıyor (`evaluation/generate_report.py`'nin baseline-diff
+idiomunun aynısı). `pytest_benchmark`'ın kendi `datetime.utcnow()` (deprecated)
+kullanımı için `filterwarnings`'e bir istisna eklendi.
+
+Doğrulama: sahte bir regresyon enjekte edilip `report.py`'nin `exit 1` ile
+kırıldığı doğrulandı; `docker compose run --rm backend pytest -q` 2548
+passed/34 deselected (önceki 2544'e +4 operation-count testi).
+
+## [3.36.0] - 2026-08-23
+Workstream C4: marker stratejisi (#241). `backend/pyproject.toml`'a
+`performance` (Workstream E'nin henüz yazılmamış testleri için) ve
+`needs_ollama` (Workstream I'nin CI'ı açacağı gün deselect edebilmesi için)
+marker'ları eklendi; `addopts` artık `-m 'not e2e and not performance'`.
+`Makefile`'a `test-all:` (`pytest -q -m ""`, her şey) eklendi.
+
+### Düzeltildi
+- `integration` marker'ının açıklaması "CI'da varsayılan olarak atlanır"
+  diyordu -- bu repoda CI yok, hiçbir mekanizma bunu yapmıyor. Gerçek
+  davranışı (hiçbir zaman deselect edilmiyor) ve gerçek bağımlılığı
+  (yalnızca Postgres) anlatacak şekilde düzeltildi.
+- `Makefile`'ın `test:` hedefindeki "Postgres ve Qdrant integration testleri
+  için gerekli" yorumu da yanlıştı -- `redis`+`qdrant` durdurulup tam suite
+  koşturularak (2544 test, hepsi geçti) doğrulandı: yalnızca Postgres
+  gerekiyor.
+
+### Notlar
+`needs_ollama` bugün hiçbir teste uygulanmadı: mevcut suite'te gerçek bir
+Ollama çağrısı yapan test yok, `test_prototype_freshness.py` dahil (yalnızca
+commit'li JSON metadata'sını karşılaştırıyor) -- planın bu testin canlı
+çağrı yaptığı varsayımı yanlıştı.
+
+Doğrulama: `test`/`test-e2e`/`test-all` ayrı ayrı koşturuldu --
+2544 + 24 = 2568, çakışma veya kayıp yok.
+
+## [3.35.0] - 2026-08-23
+Workstream C3: gerçek e2e testleri (#239) -- `backend/tests/e2e/`'e C2'nin
+(#238) kurduğu fixture altyapısını tüketen 6 test dosyası ve 19 yeni test
+eklendi: `test_auth_and_tenancy_e2e.py` (refresh, logout+blacklist, şirketler
+arası belge erişimi 403), `test_document_upload_analysis_e2e.py` (gerçek
+`reportlab` PDF'i → analiz → Qdrant'ta `page`/`sensitivity_rank` payload'lı
+chunk'lar, yeniden indeksleme idempotency'si), `test_chat_stream_sse_e2e.py`
+(SSE kontratı: `session` ilk, `[DONE]` son), `test_chat_hitl_resume_e2e.py`
+(chat üzerinden taslak isteği `writing_brief` ve `missing_information`
+gate'lerinde duraklayıp gerçek Postgres checkpointer üzerinden resume ile
+tamamlanıyor), `test_draft_lifecycle_e2e.py` (doğrudan `POST /documents/draft`),
+`test_health_and_metrics_e2e.py` (`deep=true` probe'ları, `/metrics` kontratı).
+
+### Düzeltildi
+- `app.infrastructure.vectorstore.get_vector_store()`'un process-wide
+  singleton'ı artık `e2e_client` fixture'ında her testte sıfırlanıyor --
+  `AsyncQdrantClient`'ın event-loop'a bağlı transport'u, C2'nin LLM-client
+  singleton reset'inin kapsamadığı aynı sınıf bir hataya (bir testte
+  kurulan client'ın sonraki testin farklı event loop'unda kullanılmaya
+  çalışılması) yol açıyordu -- `test_deep_health_check_probes_postgres_
+  and_redis_and_qdrant`'ı başka bir e2e testiyle birlikte koşturunca ortaya
+  çıktı, izole çalıştırıldığında görünmüyordu.
+
+### Notlar
+HITL akışında deneysel olarak keşfedilen bir davranış: `interrupt()` resume
+sırasında kendinden önceki her şeyi yeniden çalıştırdığı için (bkz.
+`brief_gate_node`'un kendi yorumu), başarılı bir resume'un SSE akışı bile az
+önce cevaplanan duraklamanın "yankısı" olan bir `interrupt` event'i
+içerebiliyor. `test_chat_hitl_resume_e2e.py`'nin duraklama tespiti bunu
+hesaba katıyor: bir turdaki **son** `interrupt` event'i asıl durumu
+yansıtır, öncekiler yankı olabilir.
+
+Doğrulama: `docker compose run --rm backend pytest -q -m e2e` (24 passed,
+iki kez tekrar koşuldu, flake yok) ve `docker compose run --rm backend
+pytest -q` (2544 passed, 24 deselected -- varsayılan lane etkilenmedi).
+Qdrant'ta test sonrası sızıntı kontrolü yapıldı.
+
+## [3.34.0] - 2026-08-22
+Workstream C2: gerçek HTTP e2e testleri için ASGI app fixture'ı (#237).
+`backend/tests/e2e/conftest.py`, `httpx.AsyncClient(transport=
+ASGITransport(app=app))` ile uygulamanın tamamına (middleware, auth, RLS,
+gerçek `lifespan()`) karşı in-process test yazılabilmesini sağlıyor --
+mevcut 13 "end-to-end" testin `MemorySaver` ile graph seviyesinde
+kaldığı, HTTP'ye/RLS'e/gerçek Qdrant'a hiç dokunmadığı boşluğu kapatıyor.
+
+### Eklendi
+- `e2e_client` fixture'ı: sahte LLM/embeddings client'ları her import
+  yerinde (`app.api.dependency`, `app.ai.llms`,
+  `app.domains.training.router`) monkeypatch'liyor, önceki testlerin
+  derlediği graph/retriever singleton'larını sıfırlıyor, gerçek Qdrant'a
+  karşı test-başına izole `document_qa` koleksiyonu kullanıyor, ve
+  `app.infrastructure.database.session.AsyncSessionLocal`/
+  `OwnerAsyncSessionLocal` module-level sessionmaker'larını test'in kendi
+  throwaway Postgres'ine yönlendiriyor -- `app.dependency_overrides`
+  yerine bu yöntem seçildi çünkü `AuditService.record` ve her
+  "out-of-request writer" (chat/draft/run/guardrail recorder'lar)
+  `tenant_session()`'ı `Depends()` zincirinin dışından çağırıyor.
+- `e2e_register_user` fixture'ı: gerçek bcrypt-hash'li şifreyle şirket +
+  kullanıcı oluşturuyor, `POST /api/v1/auth/login` ile gerçek giriş
+  testine izin veriyor.
+- `tests/e2e/test_e2e_fixture_smoke.py`: 5 test (health, login, yanlış
+  şifre, RLS ile şirket-scoped belge listesi, token'sız erişim reddi).
+- `e2e` pytest marker'ı + `addopts = "-m 'not e2e'"` (varsayılan `pytest`
+  lane'i hızlı kalsın diye), `make test-e2e` hedefi.
+
+### Düzeltildi
+- **Gerçek bir production bug'ı**: `app/domains/companies/seeder.py`,
+  `app.infrastructure.database.session.AsyncSessionLocal`'ı isimle import
+  ediyordu (`from ... import AsyncSessionLocal`) -- `seed_demo_company()`
+  her lifespan başlangıcında (seed flag'i kapalı olsa bile, önce "zaten
+  var mı" kontrolü yaptığı için) bu sessionmaker'ı kullanıyor. e2e
+  fixture'ı bunu ayrıca monkeypatch'lemek zorunda kaldı; aksi halde her
+  test process'in gerçek dev veritabanına bir bağlantı açıyor ve sonraki
+  bir testin event loop'unda `pool_pre_ping`'in o bağlantıyı doğrulamaya
+  çalışması "attached to a different loop" hatasıyla patlıyordu.
+
+## [3.33.0] - 2026-08-22
+Workstream C'nin (Backend HTTP e2e testleri) ilk adımı: paylaşılan RLS DB
+fixture'ları taşındı (#235). `backend/tests/e2e/` şu ana kadar tamamen
+boştu; planlanan HTTP e2e suite'i `backend/tests/integration/conftest.py`'deki
+gerçek Postgres + RLS fixture'larına (`pg_test_database`, `owner_engine`,
+`app_engine`, `app_session`, `two_companies`) ihtiyaç duyacak. Kopyalamak
+yerine (~380 satır ağır gerekçelendirilmiş docstring) ve `pytest_plugins`
+kullanamadan (pytest 8 kök olmayan conftest'lerde yasaklıyor), paylaşılan bir
+üst modüle taşındı.
+
+### Değiştirildi
+- `backend/tests/integration/conftest.py` → `backend/tests/_db_fixtures.py`
+  taşındı (saf taşıma, davranış değişikliği yok); `integration/conftest.py`
+  artık yalnızca `from tests._db_fixtures import *` re-export'u. Taşıma
+  sırasında `_BACKEND_DIR`'ın `Path(__file__).resolve().parents[2]` hesabı
+  (bir dizin seviyesi kaybolduğu için) `parents[1]`'e düzeltildi -- bu
+  düzeltme olmadan `alembic upgrade head` yanlış `cwd` (`/`) ile çalışıp
+  100 integration testin tamamını fixture kurulumunda patlatıyordu.
+- `backend/tests/e2e/conftest.py` bir sonraki C-workstream PR'ında aynı
+  import'u yapacak.
+
+Doğrulama: `docker compose run --rm backend pytest -q -m integration`
+(100 passed) ve `docker compose run --rm backend pytest -q` (2544 passed) --
+mevcut 24 integration test dosyası değişmeden geçti.
+
+## [3.32.0] - 2026-08-22
+`retrieval_suite.BASELINE_ARM` production varsayılanıyla tutarsızdı (#233).
+`ChunkingPolicy.qa_chunk_size`/`qa_chunk_overlap` varsayılanı `1500/300`'e
+çekildi (#231), ama `evaluation/harness/retrieval_suite.py` ayrı bir dalda
+(#230) `main`'e merge olduğu için bu değişikliği görmedi -- `BASELINE_ARM`
+hâlâ eski `"recursive-1000-200"` değerini işaret ediyordu. Eval'in
+doğruluğunu etkilemiyordu (her kol doğru parametrelerle ölçülüyordu),
+yalnızca rapor etiketlemesi/docstring'ler yanlış kolu "baseline" diye
+gösteriyordu.
+
+### Düzeltildi
+- `BASELINE_ARM` artık `"recursive-1500-300"`; ilgili docstring'ler ve
+  `docs/evaluation/retrieval.md` güncellendi; commit'li
+  `evaluation/reports/retrieval-baseline.{json,md}` yeniden üretildi.
+
+`ChunkingPolicy.qa_chunk_size`/`qa_chunk_overlap` varsayılanı 1500/300'e
+çekildi (#231). Retrieval eval suite'i (#229) gerçek Ollama embedding'leriyle
+`1000/200` (o zamanki varsayılan) ile `1500/300`'ü resmi yazışma korpusu
+üzerinde karşılaştırdı: `1500/300` her metrikte kazandı (precision@6
+0.84→1.00, MRR 0.92→1.00, nDCG@6 0.94→1.00) -- daha büyük chunk'lar
+cevabın chunk sınırında kesilme riskini azaltıyor.
+
+### Değiştirildi
+- **`ChunkingPolicy.qa_chunk_size`**: 1000 → 1500, **`qa_chunk_overlap`**:
+  200 → 300. Yalnızca Document Q&A parametreleri; `mevzuat_chunk_size`/
+  `mevzuat_chunk_overlap` kapsam dışı bırakıldı (değiştirmek commit'li
+  mevzuat Qdrant koleksiyonunun yeniden indekslenmesini gerektiriyor, ayrı
+  bir iş). Zaten yüklenmiş belgelerin `document_qa` chunk'ları otomatik
+  yeniden indekslenmiyor -- `make reset-document-qa` ile temizlenip bir
+  sonraki analizde yeni değerle yeniden oluşturulabilir.
+
+## [3.31.0] - 2026-08-22
+Chunk boyutu/overlap parametreleri (#227). `chunk_size=1000, chunk_overlap=200`
+çifti `service.py`, `mcp_mevzuat.py` ve `scripts/index_mevzuat.py`'de ayrı ayrı
+literal olarak duruyordu; üçünde de "must stay in sync" yorumu vardı ama
+senkronu koruyan hiçbir mekanizma yoktu -- `corpus_loader.py`'nin docstring'i
+bunların byte-identical chunk üretmek zorunda olduğunu, aksi halde
+`reciprocal_rank_fusion`'ın exact-`page_content` dedup'ının çift saydığını
+söylüyor. Ayrıca `SemanticChunker` repoda duruyor ve export ediliyordu ama
+`start_index` metadata'sı üretmiyor -- onu `_index_for_qa`'ya bağlayan bir
+sonraki geliştirici `[s. N]` sayfa atıflarını sessizce kaybederdi.
+
+### Eklendi
+- **`ChunkingPolicy`** (`app.ai.policy.schema`): Q&A ve mevzuat chunk
+  boyutu/overlap'i için tek kaynak. İki ayrı çift taşıyor (`qa_*`,
+  `mevzuat_*`) çünkü ikisinin re-index maliyeti farklı. `check_invariants()`
+  artık `0 < overlap < size`'ı doğruluyor. Bilinçli olarak bir `strategy`
+  alanı taşımıyor -- tek production chunker'ı `RecursiveChunker`.
+
+### Değiştirildi
+- `service.py`, `mcp_mevzuat.py` ve `scripts/index_mevzuat.py`'deki chunk
+  boyutu/overlap literalleri artık `get_policy().chunking`'den okunuyor.
+- `SemanticChunker`'ın docstring'i, onu üretime bağlamadan önce çözülmesi
+  gereken üç somut sorunu (start_index yok, Türkçe cümle ayırıcı regex
+  sınırlaması, üst boyut sınırı/overlap yok) açıkça anlatacak şekilde
+  yeniden yazıldı; `docs/architecture/ai.md`'deki yanıltıcı "4 kullanılabilir
+  strateji" anlatımı düzeltildi.
+
+LLM'siz retrieval eval suite'i (#229). `evaluation/metrics.py` içinde
+`precision_at_k`/`recall_at_k` yazılmış ve unit-test edilmişti ama hiçbir
+suite onları çağırmıyordu -- sistemin çekirdek özelliği olan RAG retrieval
+kalitesi tamamen ölçüsüzdü. `evaluation/README.md`'nin LLM-as-judge/RAGAS'ı
+reddeden gerekçesi (yerel Ollama ~28 tok/s'de ölçüm aletinin kendisi en
+gürültülü terim olur) burada da geçerli, bu yüzden etiketleme LLM'siz bir
+şemayla çözüldü: bir chunk, gold `answer_spans` listesindeki en az bir
+span'i birebir içeriyorsa alakalı sayılıyor -- etiket chunker'dan bağımsız,
+farklı chunk yapılandırmaları farklı sınırlar üretse de aynı şema geçerli
+kalıyor.
+
+### Eklendi
+- `evaluation/metrics.py`: `mean_reciprocal_rank`, `hit_rate_at_k`,
+  `ndcg_at_k`.
+- `evaluation/datasets/retrieval_corpus/` (6 belge) ve
+  `evaluation/datasets/retrieval.jsonl` (23 gold vaka, 6 kategori).
+- `evaluation/harness/in_memory_store.py`: Qdrant'a bağımlı olmayan,
+  gerçek `HybridRetriever`/`SparseBM25Encoder`/`reciprocal_rank_fusion`
+  kodunu çalıştıran stand-in vector store -- `make eval`'in `--no-deps`
+  ilkesi korunuyor.
+- `evaluation/harness/retrieval_suite.py`: dört chunk kolu (üç
+  `RecursiveChunker` parametre kombinasyonu + `SemanticChunker` keşif
+  kolu) karşılaştırıyor. Gerçek Ollama ile uçtan uca doğrulandı --
+  `semantic-p85` kolunun `page_attribution_rate`'i beklendiği gibi 0.0
+  okuyor (`SemanticChunker`'ın `start_index` üretmediğinin sayısal
+  kanıtı).
+- `evaluation/generate_report.py --suite retrieval`, `make eval-retrieval`.
+- `docs/evaluation/retrieval.md`.
+
+## [3.30.0] - 2026-08-22
+`document_qa` Qdrant koleksiyonu, bir belge yeniden indekslendiğinde chunk'ları
+çoğaltabiliyordu (#225). Kök neden: `_index_for_qa`, `upsert_documents` ile her
+chunk için rastgele bir UUID üretiyor ve yalnızca ekliyor, hiç silmiyordu.
+Üç çağırandan ikisi (`_save_rederived_analysis`, `delete_document`) bu riski
+kendi taraflarında `delete_by_filter` çağırarak kapatmıştı, ama birincil
+yükleme yolu (`analyze_document`) hiç silme yapmıyordu -- aynı `storage_path`
+ikinci kez indekslendiğinde eski ve yeni chunk'lar koleksiyonda yan yana
+kalıyordu. Bu, `reciprocal_rank_fusion`'ın exact-`page_content` dedup'ını çift
+saymaya zorluyor ve RRF sıralamasını sessizce bozuyordu -- ölçülebilir bir
+retrieval eval'i kurmadan önce kapatılması gereken bir önkoşuldu.
+
+### Düzeltildi
+- **`_index_for_qa` artık idempotent**: Chunk'lamadan önce kendi
+  `storage_path`'ine ait mevcut point'leri koşulsuz siler, böylece metodun
+  herhangi bir sayıda çağrısı koleksiyonda birikme değil güncel durumu
+  bırakır. Garanti çağıranlardan metodun kendisine taşındı;
+  `_save_rederived_analysis`'teki artık gereksiz kalan silme çağrısı
+  kaldırıldı.
 
 ## [3.29.0] - 2026-08-21
 Eksik-bilgi kapısından geçen taslaklarda puan/kusur listesi metinle tutarsızdı
