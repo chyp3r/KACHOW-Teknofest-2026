@@ -6,28 +6,29 @@
 
 TEKNOFEST 2026 · Türkçe kamu yazışma otomasyonu için LangGraph üzerine kurulmuş, çok katmanlı doğrulama ve insan onaylı bir çok-ajan mimarisi.
 
-[![TEKNOFEST 2026](https://img.shields.io/badge/TEKNOFEST-2026-E30A17)](#)
-[![Evren API](https://img.shields.io/badge/Evren-API%20%7C%20Cloud-0052CC)](#)
-[![Qwen](https://img.shields.io/badge/Qwen-3.5%20%7C%20Yerel%20LLM-4D4D4D)](#)
-[![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-white?logo=ollama&logoColor=black)](compose.yml)
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](backend/requirements.txt)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi&logoColor=white)](backend/requirements.txt)
-[![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C)](backend/requirements.txt)
-[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](frontend/package.json)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.2-3178C6?logo=typescript&logoColor=white)](frontend/package.json)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-RLS-4169E1?logo=postgresql&logoColor=white)](compose.yml)
-[![Qdrant](https://img.shields.io/badge/Qdrant-vector%20search-DC244C)](backend/app/ai/retrieval)
-[![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)](compose.yml)
-[![Docker](https://img.shields.io/badge/Docker-2CA5E0?logo=docker&logoColor=white)](compose.yml)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-prod%20ready-326CE5?logo=kubernetes&logoColor=white)](deploy/kubernetes)
-[![Nginx](https://img.shields.io/badge/Nginx-009639?logo=nginx&logoColor=white)](deploy/docker)
-[![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)](compose.yml)
-[![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white)](compose.yml)
-[![Jaeger](https://img.shields.io/badge/Jaeger-60C0A4?logo=jaeger&logoColor=white)](compose.yml)
+[[![TEKNOFEST 2026](https://img.shields.io/badge/TEKNOFEST-2026-E30A17)](#)
+[![Evren API](https://img.shields.io/badge/Evren-API%20%7C%20Cloud-E30A17)](#)
+[![Qwen](https://img.shields.io/badge/Qwen-3.5%20%7C%20Yerel%20LLM-E30A17)](#)
+[![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-E30A17?logo=ollama&logoColor=white)](compose.yml)
+[![Python](https://img.shields.io/badge/Python-3.12-3178C6?logo=python&logoColor=white)](backend/requirements.txt)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.141-3178C6?logo=fastapi&logoColor=white)](backend/requirements.txt)
+[![LangGraph](https://img.shields.io/badge/LangGraph-1.2-3178C6)](backend/requirements.txt)
+[![React](https://img.shields.io/badge/React-18-06B6D4?logo=react&logoColor=white)](frontend/package.json)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.2-06B6D4?logo=typescript&logoColor=white)](frontend/package.json)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-RLS-8B5CF6?logo=postgresql&logoColor=white)](compose.yml)
+[![Qdrant](https://img.shields.io/badge/Qdrant-vector%20search-8B5CF6)](backend/app/ai/retrieval)
+[![Redis](https://img.shields.io/badge/Redis-8B5CF6?logo=redis&logoColor=white)](compose.yml)
+[![Docker](https://img.shields.io/badge/Docker-0F766E?logo=docker&logoColor=white)](compose.yml)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-prod%20ready-0F766E?logo=kubernetes&logoColor=white)](deploy/kubernetes)
+[![Nginx](https://img.shields.io/badge/Nginx-0F766E?logo=nginx&logoColor=white)](deploy/docker)
+[![Prometheus](https://img.shields.io/badge/Prometheus-0F766E?logo=prometheus&logoColor=white)](compose.yml)
+[![Grafana](https://img.shields.io/badge/Grafana-0F766E?logo=grafana&logoColor=white)](compose.yml)
+[![Jaeger](https://img.shields.io/badge/Jaeger-0F766E?logo=jaeger&logoColor=white)](compose.yml)
 [![CI](https://github.com/chyp3r/KACHOW-Teknofest-2026/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Backend tests](https://img.shields.io/badge/backend%20tests-2588%2F2588%20passing-2E7D32)](backend/tests)
-[![Frontend tests](https://img.shields.io/badge/frontend%20tests-332%2F332%20passing-2E7D32)](frontend/src)
-[![License](https://img.shields.io/badge/license-Apache%202.0-D22128)](LICENSE)
+[![Backend tests](https://img.shields.io/badge/backend%20tests-2588%2F2588%20passing-22C55E)](backend/tests)
+[![Frontend tests](https://img.shields.io/badge/frontend%20tests-332%2F332%20passing-22C55E)](frontend/src)
+[![License](https://img.shields.io/badge/license-Apache%202.0-64748B)](LICENSE)
+
 
 **Multi-Agent Orchestration** · **RAG** · **Hybrid Search (BM25+Dense** · **Compliance Knowledge Graph** · **Human-in-the-Loop** · **RBAC/ABAC** · **Multi-Tenant SaaS** · **Row-Level Security** · **LoRA/DPO Fine-Tuning** · **Adaptive Learning** · **Groundedness Verification** · **LLM-as-a-Judge** · **Prompt-Injection Defense** · **PII Redaction** · **OpenTelemetry Observability**
 
@@ -92,31 +93,32 @@ Sistemin kalbinde yer alan, hiçbir işlemi kullanıcıdan gizlemeyen ve "kara k
 Bir memur elinize bir dilekçe, üst yazı ya da şikâyet evrakı tutuşturduğunda önündeki iş şu: evrakı oku, türünü anla, eksik ne var bak, hangi mevzuata dayanıyor öğren, resmî üslupta bir cevap yaz, imzaya çıkmadan önce her şeyi kontrol et, doğru birime havale et. KACHOW bu zincirin tamamını — insanı devre dışı bırakmadan — otomatikleştiriyor:
 
 ```mermaid
-graph TD
+flowchart TD
     classDef step fill:#1e3a8a,stroke:#3b82f6,stroke-width:2px,color:#fff;
     classDef decision fill:#0f766e,stroke:#14b8a6,stroke-width:2px,color:#fff;
     classDef human fill:#b45309,stroke:#f59e0b,stroke-width:2px,color:#fff;
     classDef guard fill:#991b1b,stroke:#ef4444,stroke-width:2px,color:#fff;
 
-    START((Kullanıcı İsteği)) --> IN[Input Guardrail<br/>Saldırı/Zehirleme Kontrolü]:::guard
-    IN --> A[Evrakı Oku]:::step
-    A --> B[Sınıflandır]:::step
-    B --> C[Alanları Çıkar]:::step
-    C --> D[Eksikleri Bul]:::step
-    D --> E[Mevzuatı Öner]:::step
-    E --> F[Özetle]:::step
-    F --> G[Yazışma Türünü Belirle]:::step
-    G --> H[Resmî Taslak Üret]:::step
-    H --> I[Doğrula]:::step
+    subgraph Asama1 [Aşama 1: Analiz ve Hazırlık]
+        direction LR
+        START((Kullanıcı İsteği)) --> IN[Input Guardrail<br/>Saldırı Kontrolü]:::guard --> A[Evrakı Oku]:::step --> B[Sınıflandır]:::step --> C[Alanları Çıkar]:::step
+    end
     
-    I --> OUT[Output Guardrail<br/>PII/Hassas Veri Kontrolü]:::guard
-    OUT --> J{Bilgi Eksik mi?}:::decision
-    J -- Evet --> K[Kullanıcıdan Bilgi İste]:::human
-    K --> L[Birim Öner]:::step
-    J -- Hayır --> L
-    
-    L --> M[Onay / Revizyon]:::human
-    M --> N[Sisteme Kaydet]:::step
+    subgraph Asama2 [Aşama 2: Zenginleştirme ve Taslak]
+        direction LR
+        D[Eksikleri Bul]:::step --> E[Mevzuatı Öner]:::step --> F[Özetle]:::step --> G[Tür Belirle]:::step --> H[Taslak Üret]:::step
+    end
+
+    subgraph Asama3 [Aşama 3: Doğrulama ve Karar]
+        direction LR
+        I[Doğrula]:::step --> OUT[Output Guardrail<br/>PII Kontrolü]:::guard --> J{Bilgi Eksik mi?}:::decision
+        J -- Evet --> K[Kullanıcıdan İste]:::human --> L[Birim Öner]:::step
+        J -- Hayır --> L
+        L --> M[Onay/Revizyon]:::human --> N[Kaydet]:::step
+    end
+
+    C --> D
+    H --> I
 ```
 
 Her adım LangGraph üzerinde ayrı bir **ajan/düğüm**; her düğümün kendi başarısızlık modu, zaman aşımı ve geri dönüş yolu var. Sistem hiçbir zaman "LLM ne dediyse odur" demiyor — **dış kaynak destekli üretim** ile üretilen her iddia (tarih, tutar, kişi, kurum, mevzuat atfı) **kaynak doğrulama** katmanında kaynak evrakla satır satır karşılaştırılıyor, ve kritik bir tutarsızlık bulunduğunda bu bulgu bir ortalama skorun içinde kaybolmuyor: taslak otomatik olarak **kullanıcı onayı** onayına düşüyor.
@@ -190,19 +192,41 @@ graph TD
 ### 2. Yapay Zeka Orkestrasyonu (LangGraph)
 
 ```mermaid
-graph TD
+flowchart TD
     classDef api fill:#1c2833,stroke:#e67e22,stroke-width:2px,color:#fff;
     classDef orch fill:#0b5345,stroke:#2ecc71,stroke-width:2px,color:#fff;
+    classDef subnode fill:#117a65,stroke:#a3e4d7,stroke-width:1px,color:#fff;
     classDef obs fill:#1b2631,stroke:#5dade2,stroke-width:1.5px,color:#fff;
 
     C{JWT Auth + ABAC}:::api --> P
 
-    subgraph "Orkestrasyon — LangGraph"
+    subgraph Orkestrasyon["Orkestrasyon — LangGraph"]
         P(Planning Graph<br/>retry/timeout/döngü limiti):::orch
-        DA(Document Analysis Graph<br/>extract → classify → fields → missing → mevzuat → özet):::orch
-        DR(Draft Graph<br/>writer → verify → repair):::orch
-        RV(Revise Graph<br/>hedefli revizyon → changelog):::orch
-        RT(Routing Graph<br/>birim önerisi + gerekçe):::orch
+        
+        subgraph DA ["Document Analysis Graph"]
+            direction TB
+            da1[Extract]:::subnode --> da2[Classify]:::subnode
+            da2 --> da3[Fields]:::subnode
+            da3 --> da4[Missing]:::subnode
+            da4 --> da5[Mevzuat]:::subnode
+            da5 --> da6[Özet]:::subnode
+        end
+
+        subgraph DR ["Draft Graph"]
+            direction TB
+            dr1[Writer]:::subnode --> dr2[Verify]:::subnode
+            dr2 --> dr3[Repair]:::subnode
+        end
+
+        subgraph RV ["Revise Graph"]
+            direction TB
+            rv1[Hedefli Revizyon]:::subnode --> rv2[Changelog]:::subnode
+        end
+
+        subgraph RT ["Routing Graph"]
+            direction TB
+            rt1[Birim Önerisi]:::subnode --> rt2[Gerekçe]:::subnode
+        end
         
         P --> DA
         P --> DR
