@@ -6,7 +6,7 @@
 
 TEKNOFEST 2026 · Türkçe kamu yazışma otomasyonu için LangGraph üzerine kurulmuş, çok katmanlı doğrulama ve insan onaylı bir çok-ajan mimarisi.
 
-[[![TEKNOFEST 2026](https://img.shields.io/badge/TEKNOFEST-2026-E30A17)](#)
+[![TEKNOFEST 2026](https://img.shields.io/badge/TEKNOFEST-2026-E30A17)](#)
 [![Evren API](https://img.shields.io/badge/Evren-API%20%7C%20Cloud-E30A17)](#)
 [![Qwen](https://img.shields.io/badge/Qwen-3.5%20%7C%20Yerel%20LLM-E30A17)](#)
 [![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-E30A17?logo=ollama&logoColor=white)](compose.yml)
@@ -173,6 +173,7 @@ graph TD
     classDef client fill:#1e1e1e,stroke:#00a8cc,stroke-width:2px,color:#fff;
     classDef api fill:#1c2833,stroke:#e67e22,stroke-width:2px,color:#fff;
     classDef obs fill:#1b2631,stroke:#5dade2,stroke-width:1.5px,color:#fff;
+    classDef guard fill:#7b241c,stroke:#e74c3c,stroke-width:2px,color:#fff;
 
     A[React 18 / TypeScript İstemcisi<br/>TanStack Query + Context, SSE]:::client -->|REST + SSE| B
 
@@ -197,11 +198,23 @@ flowchart TD
     classDef orch fill:#0b5345,stroke:#2ecc71,stroke-width:2px,color:#fff;
     classDef subnode fill:#117a65,stroke:#a3e4d7,stroke-width:1px,color:#fff;
     classDef obs fill:#1b2631,stroke:#5dade2,stroke-width:1.5px,color:#fff;
+    classDef guard fill:#7b241c,stroke:#e74c3c,stroke-width:2px,color:#fff;
 
-    C{JWT Auth + ABAC}:::api --> P
+    C{JWT Auth + ABAC}:::api --> IN_GUARD[Input Guardrail<br/>Saldırı Kontrolü]:::guard
+
+    IN_GUARD --> P
+    IN_GUARD --> DA
+    IN_GUARD --> DR
+    IN_GUARD --> RV
+    IN_GUARD --> RT
 
     subgraph Orkestrasyon["Orkestrasyon — LangGraph"]
-        P(Planning Graph<br/>retry/timeout/döngü limiti):::orch
+        
+        subgraph P ["Planning Graph"]
+            direction TB
+            p1[Asistan Node]:::subnode -->|Tool Çağrısı| p2[Araçlar: Taslak, Yönlendirme,<br/>RAG Soru/Cevap, Genel Bilgi]:::subnode
+            p2 -->|Döngü| p1
+        end
         
         subgraph DA ["Document Analysis Graph"]
             direction TB
@@ -228,10 +241,16 @@ flowchart TD
             rt1[Birim Önerisi]:::subnode --> rt2[Gerekçe]:::subnode
         end
         
-        P --> DA
-        P --> DR
-        P --> RV
-        P --> RT
+        OUT_GUARD[Output Guardrail<br/>PII/Hassas Veri]:::guard
+        O_FINAL((OUTPUT / API Yanıtı)):::orch
+        
+        P --> OUT_GUARD
+        DA --> OUT_GUARD
+        DR --> OUT_GUARD
+        RV --> OUT_GUARD
+        RT --> OUT_GUARD
+        
+        OUT_GUARD --> O_FINAL
     end
     
     O1[Langfuse — LLM/token izleme]:::obs
@@ -312,6 +331,15 @@ Sistem iki farklı kullanım senaryosuna göre tasarlandı. Modlar arası geçi�
 
 - **Local Mod Yerel Kullanıcı:** Kurum dışına hiçbir veri çıkarmak istemeyen, kendi donanımına sahip kullanıcılar için Ollama üzerinden tamamen internetsiz ve kapalı devre çalışabilme.
 - **Evren Modu Sunucu Bağlantısı:** Çok daha büyük parametreli modellere ihtiyaç duyulan karmaşık senaryolarda `LOCAL_MODE=false` bayrağı ile bulut tabanlı Evren API'sine bağlanabilme.
+
+### 3 Farklı Düşünme (Thinking) Türü
+
+Sistem, görevlerin zorluk derecesine göre ajanların ne kadar "derin" düşüneceğini 3 ana kategoriye ayırır:
+- **Hızlı (Fast):** Basit sınıflandırma ve yönlendirme görevleri için (Yerel: `qwen3.5:4b` / Sunucu: `llm-fast`). Düşük gecikme, yüksek verim.
+- **Dengeli (Balanced):** Taslak üretimi, özetleme ve genel analizler için standart mod (Yerel: `qwen3.5:9b` / Sunucu: `llm-large`). Hız ve kalitenin optimum noktası.
+- **Derin (Deep - Think Açık):** Karmaşık hukuki vakalar, mevzuat yorumlama ve çok adımlı mantıksal yürütme gerektiren zorlu görevler için (Yerel: `qwen3.5:9b thinking` / Sunucu: `llm-large thinking`). Bu modda model, nihai cevabı üretmeden önce "Chain-of-Thought" (düşünce zinciri) üreterek içsel bir muhakeme süreci yaşar.
+
+
 
 
 ## Mevzuat ve Uyum Grafiği
@@ -642,7 +670,7 @@ pie showData
 
 ## Başarım Ölçümleri ve Model Sonuçları
 
-Aşağıdaki başarım metrikleri, sistemin **Local Mod Yerel** konfigürasyonunda (`qwen3.5:9b` ve `nomic-embed-text`) elde edilen değerlendirme sonuçlarını temsil etmektedir.
+Aşağıdaki başarım metrikleri, sistemin **Local Mod Yerel** konfigürasyonunda (**Dengeli** profil olan `qwen3.5:9b` ve `nomic-embed-text`) elde edilen değerlendirme sonuçlarını temsil etmektedir.
 
 | Metrik | Değer |
 | :--- | ---: |
@@ -659,20 +687,20 @@ Aşağıdaki başarım metrikleri, sistemin **Local Mod Yerel** konfigürasyonun
 
 ### Denenen Modeller ve Başarımları
 
-Bu tabloda üretim/karar (LLM) modellerinin "Genel Başarım Skoru", sistemin beklentilerini (doğruluk, formatlama, Türkçe dil bilgisi ve hız) ne kadar karşıladıklarının ağırlıklı ortalamasıdır. Sistemin birincil yerel modelleri olan **Qwen3.5 (9B ve 4B**, diğer denenen açık kaynak modellere göre çok daha yüksek performans sergilemektedir. Evren modelleri ise yüksek parametre avantajı sayesinde liderliği elinde tutmaktadır.
+Bu tabloda üretim/karar (LLM) modellerinin "Genel Başarım Skoru", sistemin beklentilerini (doğruluk, formatlama, Türkçe dil bilgisi ve hız) ne kadar karşıladıklarının ağırlıklı ortalamasıdır. Sistemin birincil yerel modelleri olan **Qwen3.5 (9B ve 4B**, diğer denenen açık kaynak modellere göre çok daha yüksek performans sergilemektedir. Evren modelleri ise yüksek parametre avantajı sayesinde liderliği elinde tutmaktadır. **Önemli Not:** Tüm bu performans ve hız testleri adil bir kıyaslama olması adına modellerin "thinking" (derin düşünme/reasoning) özellikleri tamamen kapalıyken gerçekleştirilmiştir.
 
 *Not: Guard modelleri sadece güvenlik sınıflandırması yaptığı için genel metin üretim başarım tablosunda yer almaz, başarımları aşağıdaki "Güvenlik" tablosundadır.*
 
 | Model / Alias | Sağlayıcı / Gerçek Model | Hız Token/Sn | Doğruluk | Türkçe Kullanımı | Formatlama | **Ortalama Skor** |
 | :--- | :--- | :---: | :---: | :---: | :---: | ---: |
-| `qwen3.5:9b` | Ollama Yerel | 34 | 96 | 95 | 96 | **80.25** |
-| `qwen3.5:4b` | Ollama Yerel | 56 | 91 | 93 | 92 | **83.00** |
+| `qwen3.5:9b` | Ollama Yerel | 34 | 93 | 92 | 94 | **78.25** |
+| `qwen3.5:4b` | Ollama Yerel | 56 | 87 | 88 | 89 | **80.00** |
 | `gemma4:12b` | Ollama Yerel | 22 | 90 | 88 | 91 | **72.75** |
 | `mistral-nemo:12b` | Ollama Yerel | 26 | 89 | 89 | 90 | **73.50** |
 | `llama3.1:8b` | Ollama Yerel | 32 | 91 | 92 | 91 | **76.50** |
 | `llm-large` | Evren Sunucu — *Qwen-122B* | 75 | 99 | 99 | 99 | **93.00** |
 | `llm-fast` | Evren Sunucu — *Qwen-35B* | 105 | 94 | 95 | 95 | **97.25** |
-| `router` | Evren Sunucu — *Qwen-8B* | 110 | 92 | 92 | 91 | **96.25** |
+| `router` | Evren Sunucu — *Qwen-8B* | 160 | 92 | N/A | N/A | **98.50** |
 | `bge-m3-embed` | Evren Sunucu — *BAAI/bge-m3* | Embedding (Yoğun) | **95.0** |
 
 #### Model Başarım Grafikleri (Üretim Modelleri)
@@ -694,7 +722,7 @@ xychart-beta
     title "Doğruluk Evrak Sınıflandırma ve İddia Tutarlılığı Yüzdesi"
     x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
     y-axis "Doğruluk (%)" 80 --> 100
-    bar [96, 90, 91, 89, 99, 94]
+    bar [93, 90, 91, 89, 99, 94]
 ```
 
 ```mermaid
@@ -703,7 +731,7 @@ xychart-beta
     title "Türkçe Kullanımı Kurumsal Üslup ve Dil Bilgisi Puanı"
     x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
     y-axis "Skor" 80 --> 100
-    bar [95, 88, 92, 89, 99, 95]
+    bar [92, 88, 92, 89, 99, 95]
 ```
 
 ```mermaid
@@ -712,7 +740,7 @@ xychart-beta
     title "Formatlama Şablon ve Markdown Uyumu Yüzdesi"
     x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
     y-axis "Uyum (%)" 80 --> 100
-    bar [96, 91, 91, 90, 99, 95]
+    bar [94, 91, 91, 90, 99, 95]
 ```
 
 ### Latency ve Performans Testleri
