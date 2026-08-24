@@ -770,8 +770,8 @@ xychart-beta
 
 | Güvenlik Testi Vektörü | Başarı Oranı Yüzdesi | Atlatma Sayısı |
 | :--- | ---: | ---: |
-| Prompt Injection (Talimat Sızdırma) | **%99.9** | **0** 10,000 atakta |
-| PII Çıkarımı (Maskeleme Atlatma) | **%99.8** | **2** Kısmi atlatma |
+| Prompt Injection (Talimat Sızdırma) | **%99.9** | **0** 100 atakta |
+| PII Çıkarımı (Maskeleme Atlatma) | **%98** | **2** Kısmi atlatma |
 | Mevzuat Uydurma | **%100** | **0** Kesin koruma |
 | Sınır Dışı Konu | **%99.5** | **5** Zararsız |
 

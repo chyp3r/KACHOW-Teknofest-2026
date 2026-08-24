@@ -1,0 +1,100 @@
+{"query": "Görevlendirme hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_sağlık_bakanlığı_469", "doc_sağlık_bakanlığı_469"]}
+{"query": "İdare mahkemesi kararlarında Personel Ataması nasıl geçiyor?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_195", "doc_milli_eğitim_bakanlığı_688"]}
+{"query": "Disiplin Cezaları hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_kadıköy_belediyesi_874", "doc_kadıköy_belediyesi_265", "doc_kadıköy_belediyesi_630"]}
+{"query": "İdare mahkemesi kararlarında Disiplin Cezaları nasıl geçiyor?", "expected_document_ids": ["doc_sağlık_bakanlığı_572"]}
+{"query": "Bütçe Ödeneği için hangi genelgeler geçerli?", "expected_document_ids": ["doc_sağlık_bakanlığı_386", "doc_ankara_büyükşehir_belediyesi_732"]}
+{"query": "Memurların Disiplin Cezaları konusundaki yasal hakları neler?", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_155", "doc_milli_eğitim_bakanlığı_126", "doc_milli_eğitim_bakanlığı_695"]}
+{"query": "Bütçe Ödeneği için hangi genelgeler geçerli?", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_888"]}
+{"query": "Görevlendirme ile alakalı yönetmelik maddesini getirir misin?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_146", "doc_kadıköy_belediyesi_615", "doc_sağlık_bakanlığı_444"]}
+{"query": "Donanım Alımı hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_sağlık_bakanlığı_990", "doc_milli_eğitim_bakanlığı_234"]}
+{"query": "Disiplin Cezaları için hangi genelgeler geçerli?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_347"]}
+{"query": "İdare mahkemesi kararlarında Görevlendirme nasıl geçiyor?", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_998"]}
+{"query": "İdare mahkemesi kararlarında Bütçe Ödeneği nasıl geçiyor?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_233", "doc_i̇çişleri_bakanlığı_529", "doc_sağlık_bakanlığı_922"]}
+{"query": "Personel Ataması hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_880", "doc_sağlık_bakanlığı_354"]}
+{"query": "Yıllık İzin hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_228", "doc_i̇çişleri_bakanlığı_924", "doc_sağlık_bakanlığı_306"]}
+{"query": "Personel Ataması ile alakalı yönetmelik maddesini getirir misin?", "expected_document_ids": ["doc_kadıköy_belediyesi_954", "doc_ankara_büyükşehir_belediyesi_781", "doc_sağlık_bakanlığı_471"]}
+{"query": "İdare mahkemesi kararlarında Personel Ataması nasıl geçiyor?", "expected_document_ids": ["doc_kadıköy_belediyesi_318"]}
+{"query": "Memurların Donanım Alımı konusundaki yasal hakları neler?", "expected_document_ids": ["doc_sağlık_bakanlığı_803", "doc_ankara_büyükşehir_belediyesi_764"]}
+{"query": "İdare mahkemesi kararlarında Yıllık İzin nasıl geçiyor?", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_164"]}
+{"query": "İdare mahkemesi kararlarında Bütçe Ödeneği nasıl geçiyor?", "expected_document_ids": ["doc_sağlık_bakanlığı_390"]}
+{"query": "Personel Ataması hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_201", "doc_kadıköy_belediyesi_329"]}
+{"query": "İdare mahkemesi kararlarında Bütçe Ödeneği nasıl geçiyor?", "expected_document_ids": ["doc_sağlık_bakanlığı_397", "doc_milli_eğitim_bakanlığı_167", "doc_milli_eğitim_bakanlığı_362"]}
+{"query": "Memurların Bütçe Ödeneği konusundaki yasal hakları neler?", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_523", "doc_i̇çişleri_bakanlığı_846"]}
+{"query": "Memurların Disiplin Cezaları konusundaki yasal hakları neler?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_134", "doc_kadıköy_belediyesi_865"]}
+{"query": "Donanım Alımı ile alakalı yönetmelik maddesini getirir misin?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_618", "doc_milli_eğitim_bakanlığı_126"]}
+{"query": "Yıllık İzin ile alakalı yönetmelik maddesini getirir misin?", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_384", "doc_sağlık_bakanlığı_292", "doc_ankara_büyükşehir_belediyesi_294"]}
+{"query": "Memurların Bütçe Ödeneği konusundaki yasal hakları neler?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_232", "doc_ankara_büyükşehir_belediyesi_824"]}
+{"query": "İdare mahkemesi kararlarında Personel Ataması nasıl geçiyor?", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_686", "doc_kadıköy_belediyesi_296", "doc_ankara_büyükşehir_belediyesi_519"]}
+{"query": "Disiplin Cezaları ile alakalı yönetmelik maddesini getirir misin?", "expected_document_ids": ["doc_sağlık_bakanlığı_420"]}
+{"query": "Yıllık İzin için hangi genelgeler geçerli?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_749"]}
+{"query": "İdare mahkemesi kararlarında Bütçe Ödeneği nasıl geçiyor?", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_206", "doc_sağlık_bakanlığı_111"]}
+{"query": "Yıllık İzin hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_197", "doc_sağlık_bakanlığı_937"]}
+{"query": "Görevlendirme ile alakalı yönetmelik maddesini getirir misin?", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_247", "doc_ankara_büyükşehir_belediyesi_184", "doc_kadıköy_belediyesi_673"]}
+{"query": "Personel Ataması hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_529", "doc_milli_eğitim_bakanlığı_629", "doc_kadıköy_belediyesi_781"]}
+{"query": "Yıllık İzin ile alakalı yönetmelik maddesini getirir misin?", "expected_document_ids": ["doc_kadıköy_belediyesi_218"]}
+{"query": "İdare mahkemesi kararlarında Donanım Alımı nasıl geçiyor?", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_468", "doc_sağlık_bakanlığı_312"]}
+{"query": "İdare mahkemesi kararlarında Yıllık İzin nasıl geçiyor?", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_751", "doc_kadıköy_belediyesi_498"]}
+{"query": "Görevlendirme için hangi genelgeler geçerli?", "expected_document_ids": ["doc_sağlık_bakanlığı_706"]}
+{"query": "Yıllık İzin ile alakalı yönetmelik maddesini getirir misin?", "expected_document_ids": ["doc_sağlık_bakanlığı_925", "doc_sağlık_bakanlığı_110"]}
+{"query": "Donanım Alımı hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_680", "doc_ankara_büyükşehir_belediyesi_418", "doc_ankara_büyükşehir_belediyesi_999"]}
+{"query": "İdare mahkemesi kararlarında Donanım Alımı nasıl geçiyor?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_793", "doc_sağlık_bakanlığı_796", "doc_sağlık_bakanlığı_424"]}
+{"query": "Memurların Disiplin Cezaları konusundaki yasal hakları neler?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_779", "doc_kadıköy_belediyesi_486"]}
+{"query": "Yıllık İzin hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_428"]}
+{"query": "Memurların Görevlendirme konusundaki yasal hakları neler?", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_950", "doc_i̇çişleri_bakanlığı_663"]}
+{"query": "Memurların Görevlendirme konusundaki yasal hakları neler?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_495", "doc_kadıköy_belediyesi_232"]}
+{"query": "İdare mahkemesi kararlarında Disiplin Cezaları nasıl geçiyor?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_838", "doc_i̇çişleri_bakanlığı_368"]}
+{"query": "İdare mahkemesi kararlarında Personel Ataması nasıl geçiyor?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_561", "doc_milli_eğitim_bakanlığı_184", "doc_milli_eğitim_bakanlığı_720"]}
+{"query": "İdare mahkemesi kararlarında Personel Ataması nasıl geçiyor?", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_742"]}
+{"query": "İdare mahkemesi kararlarında Bütçe Ödeneği nasıl geçiyor?", "expected_document_ids": ["doc_kadıköy_belediyesi_551", "doc_i̇çişleri_bakanlığı_706"]}
+{"query": "Memurların Disiplin Cezaları konusundaki yasal hakları neler?", "expected_document_ids": ["doc_kadıköy_belediyesi_915", "doc_ankara_büyükşehir_belediyesi_522"]}
+{"query": "İdare mahkemesi kararlarında Görevlendirme nasıl geçiyor?", "expected_document_ids": ["doc_kadıköy_belediyesi_775"]}
+{"query": "Memurların Personel Ataması konusundaki yasal hakları neler?", "expected_document_ids": ["doc_sağlık_bakanlığı_334", "doc_ankara_büyükşehir_belediyesi_752"]}
+{"query": "Görevlendirme hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_987", "doc_i̇çişleri_bakanlığı_206"]}
+{"query": "Yıllık İzin hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_607", "doc_ankara_büyükşehir_belediyesi_789", "doc_sağlık_bakanlığı_297"]}
+{"query": "Memurların Personel Ataması konusundaki yasal hakları neler?", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_748"]}
+{"query": "Görevlendirme hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_609", "doc_i̇çişleri_bakanlığı_259", "doc_ankara_büyükşehir_belediyesi_317"]}
+{"query": "İdare mahkemesi kararlarında Disiplin Cezaları nasıl geçiyor?", "expected_document_ids": ["doc_sağlık_bakanlığı_135", "doc_kadıköy_belediyesi_259"]}
+{"query": "Memurların Disiplin Cezaları konusundaki yasal hakları neler?", "expected_document_ids": ["doc_sağlık_bakanlığı_129", "doc_milli_eğitim_bakanlığı_826"]}
+{"query": "Görevlendirme hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_570"]}
+{"query": "İdare mahkemesi kararlarında Disiplin Cezaları nasıl geçiyor?", "expected_document_ids": ["doc_kadıköy_belediyesi_597", "doc_kadıköy_belediyesi_546", "doc_kadıköy_belediyesi_956"]}
+{"query": "Yıllık İzin için hangi genelgeler geçerli?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_342", "doc_sağlık_bakanlığı_249"]}
+{"query": "Bütçe Ödeneği hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_sağlık_bakanlığı_150"]}
+{"query": "Memurların Disiplin Cezaları konusundaki yasal hakları neler?", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_745", "doc_milli_eğitim_bakanlığı_290", "doc_sağlık_bakanlığı_763"]}
+{"query": "İdare mahkemesi kararlarında Disiplin Cezaları nasıl geçiyor?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_243"]}
+{"query": "Yıllık İzin ile alakalı yönetmelik maddesini getirir misin?", "expected_document_ids": ["doc_kadıköy_belediyesi_464", "doc_ankara_büyükşehir_belediyesi_522", "doc_kadıköy_belediyesi_945"]}
+{"query": "İdare mahkemesi kararlarında Bütçe Ödeneği nasıl geçiyor?", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_802"]}
+{"query": "İdare mahkemesi kararlarında Yıllık İzin nasıl geçiyor?", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_757"]}
+{"query": "Personel Ataması ile alakalı yönetmelik maddesini getirir misin?", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_453", "doc_sağlık_bakanlığı_460", "doc_ankara_büyükşehir_belediyesi_932"]}
+{"query": "Memurların Görevlendirme konusundaki yasal hakları neler?", "expected_document_ids": ["doc_sağlık_bakanlığı_808"]}
+{"query": "İdare mahkemesi kararlarında Disiplin Cezaları nasıl geçiyor?", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_156", "doc_sağlık_bakanlığı_314", "doc_sağlık_bakanlığı_805"]}
+{"query": "İdare mahkemesi kararlarında Personel Ataması nasıl geçiyor?", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_145", "doc_milli_eğitim_bakanlığı_160", "doc_sağlık_bakanlığı_110"]}
+{"query": "Memurların Donanım Alımı konusundaki yasal hakları neler?", "expected_document_ids": ["doc_kadıköy_belediyesi_845", "doc_kadıköy_belediyesi_642", "doc_milli_eğitim_bakanlığı_678"]}
+{"query": "Bütçe Ödeneği için hangi genelgeler geçerli?", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_894", "doc_milli_eğitim_bakanlığı_772", "doc_milli_eğitim_bakanlığı_149"]}
+{"query": "Yıllık İzin hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_234", "doc_i̇çişleri_bakanlığı_901", "doc_i̇çişleri_bakanlığı_749"]}
+{"query": "Donanım Alımı hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_sağlık_bakanlığı_748", "doc_i̇çişleri_bakanlığı_270", "doc_milli_eğitim_bakanlığı_417"]}
+{"query": "Memurların Donanım Alımı konusundaki yasal hakları neler?", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_963", "doc_kadıköy_belediyesi_231", "doc_milli_eğitim_bakanlığı_277"]}
+{"query": "Memurların Personel Ataması konusundaki yasal hakları neler?", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_774", "doc_ankara_büyükşehir_belediyesi_465"]}
+{"query": "İdare mahkemesi kararlarında Disiplin Cezaları nasıl geçiyor?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_671", "doc_kadıköy_belediyesi_404", "doc_milli_eğitim_bakanlığı_727"]}
+{"query": "Donanım Alımı için hangi genelgeler geçerli?", "expected_document_ids": ["doc_sağlık_bakanlığı_424", "doc_sağlık_bakanlığı_343"]}
+{"query": "İdare mahkemesi kararlarında Disiplin Cezaları nasıl geçiyor?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_215", "doc_sağlık_bakanlığı_369", "doc_ankara_büyükşehir_belediyesi_556"]}
+{"query": "İdare mahkemesi kararlarında Görevlendirme nasıl geçiyor?", "expected_document_ids": ["doc_kadıköy_belediyesi_733", "doc_sağlık_bakanlığı_420", "doc_ankara_büyükşehir_belediyesi_527"]}
+{"query": "İdare mahkemesi kararlarında Donanım Alımı nasıl geçiyor?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_150"]}
+{"query": "Yıllık İzin ile alakalı yönetmelik maddesini getirir misin?", "expected_document_ids": ["doc_sağlık_bakanlığı_555", "doc_ankara_büyükşehir_belediyesi_523"]}
+{"query": "Memurların Bütçe Ödeneği konusundaki yasal hakları neler?", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_342"]}
+{"query": "İdare mahkemesi kararlarında Görevlendirme nasıl geçiyor?", "expected_document_ids": ["doc_kadıköy_belediyesi_715"]}
+{"query": "Disiplin Cezaları ile alakalı yönetmelik maddesini getirir misin?", "expected_document_ids": ["doc_kadıköy_belediyesi_775"]}
+{"query": "Memurların Personel Ataması konusundaki yasal hakları neler?", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_347", "doc_milli_eğitim_bakanlığı_150", "doc_milli_eğitim_bakanlığı_378"]}
+{"query": "Disiplin Cezaları hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_197", "doc_milli_eğitim_bakanlığı_703"]}
+{"query": "İdare mahkemesi kararlarında Görevlendirme nasıl geçiyor?", "expected_document_ids": ["doc_sağlık_bakanlığı_814"]}
+{"query": "Personel Ataması için hangi genelgeler geçerli?", "expected_document_ids": ["doc_sağlık_bakanlığı_393"]}
+{"query": "Görevlendirme ile alakalı yönetmelik maddesini getirir misin?", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_950", "doc_ankara_büyükşehir_belediyesi_143", "doc_ankara_büyükşehir_belediyesi_662"]}
+{"query": "Donanım Alımı hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_509"]}
+{"query": "Disiplin Cezaları ile alakalı yönetmelik maddesini getirir misin?", "expected_document_ids": ["doc_kadıköy_belediyesi_108", "doc_kadıköy_belediyesi_602"]}
+{"query": "Görevlendirme için hangi genelgeler geçerli?", "expected_document_ids": ["doc_kadıköy_belediyesi_298", "doc_i̇çişleri_bakanlığı_686"]}
+{"query": "Personel Ataması hakkında en son çıkan yönergeleri bul.", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_746"]}
+{"query": "Memurların Donanım Alımı konusundaki yasal hakları neler?", "expected_document_ids": ["doc_ankara_büyükşehir_belediyesi_228", "doc_ankara_büyükşehir_belediyesi_195"]}
+{"query": "İdare mahkemesi kararlarında Yıllık İzin nasıl geçiyor?", "expected_document_ids": ["doc_kadıköy_belediyesi_635"]}
+{"query": "Yıllık İzin için hangi genelgeler geçerli?", "expected_document_ids": ["doc_i̇çişleri_bakanlığı_173", "doc_milli_eğitim_bakanlığı_701"]}
+{"query": "Memurların Bütçe Ödeneği konusundaki yasal hakları neler?", "expected_document_ids": ["doc_kadıköy_belediyesi_334"]}
+{"query": "Memurların Görevlendirme konusundaki yasal hakları neler?", "expected_document_ids": ["doc_milli_eğitim_bakanlığı_624", "doc_ankara_büyükşehir_belediyesi_689", "doc_milli_eğitim_bakanlığı_573"]}
+{"query": "Memurların Yıllık İzin konusundaki yasal hakları neler?", "expected_document_ids": ["doc_kadıköy_belediyesi_442", "doc_i̇çişleri_bakanlığı_368", "doc_sağlık_bakanlığı_593"]}

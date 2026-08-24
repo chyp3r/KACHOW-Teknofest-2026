@@ -1,0 +1,100 @@
+{"message": "Belgede Disiplin Cezaları hakkında ne denmiş kontrol et.", "expected_tool_call": "search_document"}
+{"message": "İnsan operatöre geçiş yap.", "expected_tool_call": "request_handoff"}
+{"message": "Canlı desteğe bağlanmak istiyorum.", "expected_tool_call": "request_handoff"}
+{"message": "Şu anki evrakta Personel Ataması kelimesi nerede geçiyor?", "expected_tool_call": "search_document"}
+{"message": "Tamamdır, iyi çalışmalar.", "expected_tool_call": "none"}
+{"message": "Teşekkür ederim, verdiğin bilgiler çok faydalı oldu.", "expected_tool_call": "none"}
+{"message": "Resmi gazetede yayımlanan Disiplin Cezaları genelgesini bul.", "expected_tool_call": "search_legislation"}
+{"message": "Bu kadarı yeterli, görüşmek üzere.", "expected_tool_call": "none"}
+{"message": "Resmi gazetede yayımlanan Disiplin Cezaları genelgesini bul.", "expected_tool_call": "search_legislation"}
+{"message": "Lütfen bu görüşmeyi canlı bir temsilciye aktar.", "expected_tool_call": "request_handoff"}
+{"message": "Hazırladığın bu taslağı Zeynep Bey'e gönderir misin?", "expected_tool_call": "propose_transfer"}
+{"message": "Açık olan taslağı Ahmet Demir ile paylaş.", "expected_tool_call": "propose_transfer"}
+{"message": "Açık olan taslağı Ali Demir ile paylaş.", "expected_tool_call": "propose_transfer"}
+{"message": "Doküman içinde Yıllık İzin ile ilgili bölümü bul.", "expected_tool_call": "search_document"}
+{"message": "Botla anlaşamıyorum, beni müşteri temsilcisine bağla.", "expected_tool_call": "request_handoff"}
+{"message": "Kanunda Personel Ataması ile ilgili sınırlamalar nelerdir, bana bulabilir misin?", "expected_tool_call": "search_legislation"}
+{"message": "Teşekkür ederim, verdiğin bilgiler çok faydalı oldu.", "expected_tool_call": "none"}
+{"message": "Teşekkür ederim, verdiğin bilgiler çok faydalı oldu.", "expected_tool_call": "none"}
+{"message": "Resmi gazetede yayımlanan Donanım Alımı genelgesini bul.", "expected_tool_call": "search_legislation"}
+{"message": "Bu kadarı yeterli, görüşmek üzere.", "expected_tool_call": "none"}
+{"message": "Belgede Disiplin Cezaları hakkında ne denmiş kontrol et.", "expected_tool_call": "search_document"}
+{"message": "Hazırladığın bu taslağı Ahmet Bey'e gönderir misin?", "expected_tool_call": "propose_transfer"}
+{"message": "Personel Ataması sürecinde 657 sayılı kanunun hangi maddeleri dikkate alınmalıdır?", "expected_tool_call": "search_legislation"}
+{"message": "Belgede Görevlendirme hakkında ne denmiş kontrol et.", "expected_tool_call": "search_document"}
+{"message": "Artık bir insanla görüşmek istiyorum.", "expected_tool_call": "request_handoff"}
+{"message": "Yüklediğim belgenin içinde Bütçe Ödeneği geçiyor mu ara.", "expected_tool_call": "search_document"}
+{"message": "İnsan operatöre geçiş yap.", "expected_tool_call": "request_handoff"}
+{"message": "Hazırladığın bu taslağı Mehmet Bey'e gönderir misin?", "expected_tool_call": "propose_transfer"}
+{"message": "Yüklediğim belgenin içinde Görevlendirme geçiyor mu ara.", "expected_tool_call": "search_document"}
+{"message": "Açık olan taslağı Ali Çelik ile paylaş.", "expected_tool_call": "propose_transfer"}
+{"message": "Lütfen bu görüşmeyi canlı bir temsilciye aktar.", "expected_tool_call": "request_handoff"}
+{"message": "Anladım, teşekkürler.", "expected_tool_call": "none"}
+{"message": "İnsan operatöre geçiş yap.", "expected_tool_call": "request_handoff"}
+{"message": "Anladım, teşekkürler.", "expected_tool_call": "none"}
+{"message": "Tamamdır, iyi çalışmalar.", "expected_tool_call": "none"}
+{"message": "Şu anki evrakı lütfen Bilgi İşlem şubesine havale et.", "expected_tool_call": "propose_transfer"}
+{"message": "Bu evrakı incelenmesi için Destek Hizmetleri yetkilisi Ayşe'e yolla.", "expected_tool_call": "propose_transfer"}
+{"message": "Artık bir insanla görüşmek istiyorum.", "expected_tool_call": "request_handoff"}
+{"message": "Hazırladığın bu taslağı Ahmet Bey'e gönderir misin?", "expected_tool_call": "propose_transfer"}
+{"message": "Yüklediğim belgenin içinde Personel Ataması geçiyor mu ara.", "expected_tool_call": "search_document"}
+{"message": "Bütçe Ödeneği sürecinde 657 sayılı kanunun hangi maddeleri dikkate alınmalıdır?", "expected_tool_call": "search_legislation"}
+{"message": "Kanunda Donanım Alımı ile ilgili sınırlamalar nelerdir, bana bulabilir misin?", "expected_tool_call": "search_legislation"}
+{"message": "Şu anki evrakı lütfen Özel Kalem şubesine havale et.", "expected_tool_call": "propose_transfer"}
+{"message": "Canlı desteğe bağlanmak istiyorum.", "expected_tool_call": "request_handoff"}
+{"message": "Canlı desteğe bağlanmak istiyorum.", "expected_tool_call": "request_handoff"}
+{"message": "İnsan operatöre geçiş yap.", "expected_tool_call": "request_handoff"}
+{"message": "Kanunda Donanım Alımı ile ilgili sınırlamalar nelerdir, bana bulabilir misin?", "expected_tool_call": "search_legislation"}
+{"message": "Tamamdır, iyi çalışmalar.", "expected_tool_call": "none"}
+{"message": "Lütfen arama yapıp Görevlendirme hakkındaki son yönetmeliği söyle.", "expected_tool_call": "search_legislation"}
+{"message": "Bu metni onaylaması için Ayşe Hanım'a ilet.", "expected_tool_call": "propose_transfer"}
+{"message": "Canlı desteğe bağlanmak istiyorum.", "expected_tool_call": "request_handoff"}
+{"message": "Doküman içinde Personel Ataması ile ilgili bölümü bul.", "expected_tool_call": "search_document"}
+{"message": "Donanım Alımı sürecinde 657 sayılı kanunun hangi maddeleri dikkate alınmalıdır?", "expected_tool_call": "search_legislation"}
+{"message": "Doküman içinde Yıllık İzin ile ilgili bölümü bul.", "expected_tool_call": "search_document"}
+{"message": "Canlı desteğe bağlanmak istiyorum.", "expected_tool_call": "request_handoff"}
+{"message": "İnsan operatöre geçiş yap.", "expected_tool_call": "request_handoff"}
+{"message": "Teşekkür ederim, verdiğin bilgiler çok faydalı oldu.", "expected_tool_call": "none"}
+{"message": "Kanunda Donanım Alımı ile ilgili sınırlamalar nelerdir, bana bulabilir misin?", "expected_tool_call": "search_legislation"}
+{"message": "Bu evrakı incelenmesi için Destek Hizmetleri yetkilisi Fatma'e yolla.", "expected_tool_call": "propose_transfer"}
+{"message": "Teşekkür ederim, verdiğin bilgiler çok faydalı oldu.", "expected_tool_call": "none"}
+{"message": "Bu kadarı yeterli, görüşmek üzere.", "expected_tool_call": "none"}
+{"message": "Anladım, teşekkürler.", "expected_tool_call": "none"}
+{"message": "Doküman içinde Bütçe Ödeneği ile ilgili bölümü bul.", "expected_tool_call": "search_document"}
+{"message": "Şimdilik başka sorum yok, sağ ol.", "expected_tool_call": "none"}
+{"message": "İnsan operatöre geçiş yap.", "expected_tool_call": "request_handoff"}
+{"message": "Görevlendirme sürecinde 657 sayılı kanunun hangi maddeleri dikkate alınmalıdır?", "expected_tool_call": "search_legislation"}
+{"message": "Anladım, teşekkürler.", "expected_tool_call": "none"}
+{"message": "Şu anki evrakı lütfen Destek Hizmetleri şubesine havale et.", "expected_tool_call": "propose_transfer"}
+{"message": "Açık olan taslağı Mehmet Şahin ile paylaş.", "expected_tool_call": "propose_transfer"}
+{"message": "Açık olan taslağı Ahmet Şahin ile paylaş.", "expected_tool_call": "propose_transfer"}
+{"message": "Belgede Donanım Alımı hakkında ne denmiş kontrol et.", "expected_tool_call": "search_document"}
+{"message": "Lütfen bu görüşmeyi canlı bir temsilciye aktar.", "expected_tool_call": "request_handoff"}
+{"message": "Bu kadarı yeterli, görüşmek üzere.", "expected_tool_call": "none"}
+{"message": "Lütfen bu görüşmeyi canlı bir temsilciye aktar.", "expected_tool_call": "request_handoff"}
+{"message": "Teşekkür ederim, verdiğin bilgiler çok faydalı oldu.", "expected_tool_call": "none"}
+{"message": "Botla anlaşamıyorum, beni müşteri temsilcisine bağla.", "expected_tool_call": "request_handoff"}
+{"message": "Bu metni onaylaması için Mehmet Hanım'a ilet.", "expected_tool_call": "propose_transfer"}
+{"message": "Açık olan taslağı Fatma Demir ile paylaş.", "expected_tool_call": "propose_transfer"}
+{"message": "Canlı desteğe bağlanmak istiyorum.", "expected_tool_call": "request_handoff"}
+{"message": "Canlı desteğe bağlanmak istiyorum.", "expected_tool_call": "request_handoff"}
+{"message": "Şu anki evrakta Disiplin Cezaları kelimesi nerede geçiyor?", "expected_tool_call": "search_document"}
+{"message": "Kanunda Personel Ataması ile ilgili sınırlamalar nelerdir, bana bulabilir misin?", "expected_tool_call": "search_legislation"}
+{"message": "Belgede Görevlendirme hakkında ne denmiş kontrol et.", "expected_tool_call": "search_document"}
+{"message": "Anladım, teşekkürler.", "expected_tool_call": "none"}
+{"message": "Şu anki evrakı lütfen Bilgi İşlem şubesine havale et.", "expected_tool_call": "propose_transfer"}
+{"message": "Lütfen arama yapıp Donanım Alımı hakkındaki son yönetmeliği söyle.", "expected_tool_call": "search_legislation"}
+{"message": "Şu anki evrakta Bütçe Ödeneği kelimesi nerede geçiyor?", "expected_tool_call": "search_document"}
+{"message": "Bu kadarı yeterli, görüşmek üzere.", "expected_tool_call": "none"}
+{"message": "Teşekkür ederim, verdiğin bilgiler çok faydalı oldu.", "expected_tool_call": "none"}
+{"message": "Artık bir insanla görüşmek istiyorum.", "expected_tool_call": "request_handoff"}
+{"message": "Şu anki evrakı lütfen Hukuk Müşavirliği şubesine havale et.", "expected_tool_call": "propose_transfer"}
+{"message": "Teşekkür ederim, verdiğin bilgiler çok faydalı oldu.", "expected_tool_call": "none"}
+{"message": "Doküman içinde Görevlendirme ile ilgili bölümü bul.", "expected_tool_call": "search_document"}
+{"message": "Yüklediğim belgenin içinde Disiplin Cezaları geçiyor mu ara.", "expected_tool_call": "search_document"}
+{"message": "Şu anki evrakta Yıllık İzin kelimesi nerede geçiyor?", "expected_tool_call": "search_document"}
+{"message": "Doküman içinde Personel Ataması ile ilgili bölümü bul.", "expected_tool_call": "search_document"}
+{"message": "Artık bir insanla görüşmek istiyorum.", "expected_tool_call": "request_handoff"}
+{"message": "Açık olan taslağı Ali Şahin ile paylaş.", "expected_tool_call": "propose_transfer"}
+{"message": "Anladım, teşekkürler.", "expected_tool_call": "none"}
+{"message": "Kanunda Personel Ataması ile ilgili sınırlamalar nelerdir, bana bulabilir misin?", "expected_tool_call": "search_legislation"}
