@@ -328,6 +328,8 @@ Sistem iki farklı kullanım senaryosuna göre tasarlandı. Modlar arası geçi�
 | **Derin Genel** | `qwen3.5:9b thinking` | `llm-large thinking` |
 | **Embedding** | `nomic-embed-text` | `bge-m3-embed` |
 | **Router** | `qwen3.5:4b` | `router` |
+| **Vision OCR** | `glm-ocr` | `llm-fast` |
+| **Belge Ayrıştırma (Ortak)** | `OpenDataLoader`, `PyPDFium2`, `Tesseract` | `OpenDataLoader`, `PyPDFium2`, `Tesseract` |
 
 - **Local Mod Yerel Kullanıcı:** Kurum dışına hiçbir veri çıkarmak istemeyen, kendi donanımına sahip kullanıcılar için Ollama üzerinden tamamen internetsiz ve kapalı devre çalışabilme.
 - **Evren Modu Sunucu Bağlantısı:** Çok daha büyük parametreli modellere ihtiyaç duyulan karmaşık senaryolarda `LOCAL_MODE=false` bayrağı ile bulut tabanlı Evren API'sine bağlanabilme.
@@ -338,8 +340,6 @@ Sistem, görevlerin zorluk derecesine göre ajanların ne kadar "derin" düşün
 - **Hızlı (Fast):** Basit sınıflandırma ve yönlendirme görevleri için (Yerel: `qwen3.5:4b` / Sunucu: `llm-fast`). Düşük gecikme, yüksek verim.
 - **Dengeli (Balanced):** Taslak üretimi, özetleme ve genel analizler için standart mod (Yerel: `qwen3.5:9b` / Sunucu: `llm-large`). Hız ve kalitenin optimum noktası.
 - **Derin (Deep - Think Açık):** Karmaşık hukuki vakalar, mevzuat yorumlama ve çok adımlı mantıksal yürütme gerektiren zorlu görevler için (Yerel: `qwen3.5:9b thinking` / Sunucu: `llm-large thinking`). Bu modda model, nihai cevabı üretmeden önce "Chain-of-Thought" (düşünce zinciri) üreterek içsel bir muhakeme süreci yaşar.
-
-
 
 
 ## Mevzuat ve Uyum Grafiği
@@ -383,6 +383,7 @@ Kodun kendi içinde gerekçesiyle birlikte belgelenmiş, öne çıkan kararlar:
 | **Backend** | FastAPI 0.141, Python 3.12, SQLAlchemy 2.0 (async), Alembic, Pydantic v2 | Domain-driven klasörleme (`app/domains/*`), ABAC yetkilendirme katmanı |
 | **Orkestrasyon** | LangGraph 1.2 + `langgraph-checkpoint-postgres`, LangChain 1.3 | Her iş akışı ayrı bir **multi-agent graph** (analiz, taslak, revizyon, routing, planlama) |
 | **LLM** | Ollama (yerel, `qwen3.5:9b`, `qwen3.5:4b`, `nomic-embed-text`) veya Evren (TEKNOFEST-hosted: `llm-large`/`llm-fast`/`guard`/`router` modelleri) | `LOCAL_MODE` bayrağıyla tek satırda geçiş |
+| **OCR ve Veri Çıkarımı** | OpenDataLoader, PyPDFium2, Tesseract, Ollama (`glm-ocr`), Evren (`llm-fast`) | Dijital PDF'lerde %100 doğruluk (OpenDataLoader/Pdfium), taralı evraklarda çok katmanlı OCR ve Vision Fallback (Görüntü İşleme) |
 | **Retrieval** | Qdrant (izole koleksiyonlar), **hybrid search** (BM25 + dense), `mevzuat-mcp` canlı sorgu + yerel fallback korpüs | |
 | **Adaptif öğrenme** | Preference-pair mining, `CompanyAdapter`, opsiyonel **LoRA/DPO fine-tuning** | Şirket-başına izole |
 | **Veri** | PostgreSQL (**RLS** + LangGraph checkpointer), Redis (oturum/state) | Nesne depolama arka ucu takılabilir (local/S3) |
@@ -687,7 +688,7 @@ Aşağıdaki başarım metrikleri, sistemin **Local Mod Yerel** konfigürasyonun
 
 ### Denenen Modeller ve Başarımları
 
-Bu tabloda üretim/karar (LLM) modellerinin "Genel Başarım Skoru", sistemin beklentilerini (doğruluk, formatlama, Türkçe dil bilgisi ve hız) ne kadar karşıladıklarının ağırlıklı ortalamasıdır. Sistemin birincil yerel modelleri olan **Qwen3.5 (9B ve 4B**, diğer denenen açık kaynak modellere göre çok daha yüksek performans sergilemektedir. Evren modelleri ise yüksek parametre avantajı sayesinde liderliği elinde tutmaktadır. **Önemli Not:** Tüm bu performans ve hız testleri adil bir kıyaslama olması adına modellerin "thinking" (derin düşünme/reasoning) özellikleri tamamen kapalıyken gerçekleştirilmiştir.
+Bu tabloda üretim/karar (LLM) modellerinin "Genel Başarım Skoru", sistemin beklentilerini (doğruluk, formatlama, Türkçe dil bilgisi ve hız) ne kadar karşıladıklarının ağırlıklı ortalamasıdır. Sistemin birincil yerel modelleri olan **Qwen3.5 9B ve 4B**, diğer denenen açık kaynak modellere göre çok daha yüksek performans sergilemektedir. Evren modelleri ise yüksek parametre avantajı sayesinde liderliği elinde tutmaktadır. **Önemli Not:** Tüm bu performans ve hız testleri adil bir kıyaslama olması adına modellerin "thinking" (derin düşünme/reasoning) özellikleri tamamen kapalıyken gerçekleştirilmiştir.
 
 *Not: Guard modelleri sadece güvenlik sınıflandırması yaptığı için genel metin üretim başarım tablosunda yer almaz, başarımları aşağıdaki "Güvenlik" tablosundadır.*
 
@@ -701,7 +702,8 @@ Bu tabloda üretim/karar (LLM) modellerinin "Genel Başarım Skoru", sistemin be
 | `llm-large` | Evren Sunucu — *Qwen-122B* | 75 | 99 | 99 | 99 | **93.00** |
 | `llm-fast` | Evren Sunucu — *Qwen-35B* | 105 | 94 | 95 | 95 | **97.25** |
 | `router` | Evren Sunucu — *Qwen-8B* | 160 | 92 | N/A | N/A | **98.50** |
-| `bge-m3-embed` | Evren Sunucu — *BAAI/bge-m3* | Embedding (Yoğun) | **95.0** |
+| `glm-ocr` | Ollama Yerel — *Vision OCR* | Görüntü | 95 | N/A | N/A | **N/A** |
+| `llm-fast` | Evren Sunucu — *Vision OCR* | Görüntü | 98 | N/A | N/A | **N/A** |
 
 #### Model Başarım Grafikleri (Üretim Modelleri)
 
@@ -813,9 +815,7 @@ make up
 make logs              # tüm servislerin loglarını takip et
 make test               # backend unit + integration testleri (coverage gate dahil)
 make test-e2e             # gerçek ASGI istemcisiyle uçtan uca testler
-make eval                   # RAG/LLM-judge değerlendirme paketi
-make perf-document            # doküman iş akışı için performans smoke testi
-make reset                      # veritabanı, cache, storage ve checkpoint'leri sıfırla
+make reset                  # veritabanı, cache, storage ve checkpoint'leri sıfırla
 ```
 
 Kubernetes ve prodüksiyon dağıtımı için: [docs/deployment/README.md](docs/deployment/README.md)
