@@ -13,7 +13,6 @@ Every node publishes through this module rather than reaching into
    makes the correct call shape hard to get wrong.
 """
 
-import asyncio
 import logging
 import weakref
 from typing import Any, Mapping, Optional
@@ -169,27 +168,14 @@ async def emit_token(config: Optional[RunnableConfig], node: str, text: str) -> 
     await emit(config, {"event": "token", "node": node, "text": text})
 
 
-#: Characters per chunk in :func:`emit_reply_stream`. This is intentionally
-#: smaller than a transport-oriented batch: the browser should visibly paint
-#: the answer as it arrives instead of receiving the whole validated reply in
-#: one render pass.
-_REPLY_STREAM_CHUNK_SIZE = 24
-
-#: Brief pacing between chunks. ``asyncio.Queue.put`` on an unbounded queue
-#: completes synchronously, so without an explicit yield the producer queues
-#: every token event plus ``final_result`` before the SSE consumer gets a turn.
-#: Apart from defeating the typing animation, React then batches all updates
-#: into a single render.
-_REPLY_STREAM_CHUNK_DELAY_SECONDS = 0.025
+#: Characters per chunk in :func:`emit_reply_stream`. Small enough to still
+#: read as a live stream, large enough that a long draft doesn't spend
+#: hundreds of queue round-trips on it.
+_REPLY_STREAM_CHUNK_SIZE = 48
 
 
 async def emit_reply_stream(
-    queue: Any,
-    text: str,
-    *,
-    node: str = "reply",
-    chunk_size: int = _REPLY_STREAM_CHUNK_SIZE,
-    chunk_delay_seconds: float = _REPLY_STREAM_CHUNK_DELAY_SECONDS,
+    queue: Any, text: str, *, node: str = "reply", chunk_size: int = _REPLY_STREAM_CHUNK_SIZE
 ) -> None:
     """Stream a validated final reply to the client, chunk by chunk.
 
@@ -217,9 +203,6 @@ async def emit_reply_stream(
             no node clears a live preview on its own ``node_start`` anymore
             (there is nothing left upstream that would stream one).
         chunk_size: Characters per emitted chunk.
-        chunk_delay_seconds: Delay between chunks. This yields to the SSE
-            consumer and gives the frontend a visible typing cadence. Tests
-            can set it to zero without changing production pacing.
     """
     if queue is None or not text:
         return
@@ -233,8 +216,6 @@ async def emit_reply_stream(
                     "seq": _next_seq(queue),
                 }
             )
-            if start + chunk_size < len(text) and chunk_delay_seconds > 0:
-                await asyncio.sleep(chunk_delay_seconds)
     except Exception:
         logger.warning("Could not stream final reply")
 
