@@ -1,22 +1,24 @@
-# Şirket Analitikleri API
+# Şirket Analitikleri API (Analytics API)
 
-> Yeni bir veri pipeline'ı değil -- mevcut `documents`/`drafts`/`runs`/
-> `guardrail_events` tabloları üzerine düz SQLAlchemy toplu sorgular,
-> `(company_id, metric, aralık)` başına 60 saniyelik Redis önbellek.
-> Materialized view veya rollup tablosu yok (bkz.
-> `docs/architecture/backend.md`).
-
-Tüm uçlar **Root** (herhangi bir şirket), **Admin/Manager** (yalnızca
-kendi şirketi) erişimine açık.
+> Şirketin mevcut `documents`, `drafts`, `runs`, ve `guardrail_events` tabloları üzerinden analitik verilerini (Örn: evrak hacmi, engellenen işlemler) hesaplar. Her sorgu 60 saniyelik Redis önbelleği kullanır.
 
 ---
 
-# GET /api/v1/companies/{company_id}/analytics/summary
+## `GET /api/v1/companies/{company_id}/analytics/summary`
 
-Şirketin genel özeti: evrak/taslak hacmi, run durumu dağılımı, son 7
-günde aktif kullanıcı sayısı, guardrail engelleme toplamı, kota kullanımı.
+Şirketin genel özetini; evrak/taslak hacmini, çalışma (run) durumlarını, aktif kullanıcılarını ve kota durumunu döndürür.
 
-## Yanıt
+**Güvenlik:** Bearer Token (Root veya Şirketin kendi Admin/Manager rolü)
+
+### Parametreler
+
+| Alan | Tür | Konum | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- | :--- |
+| `company_id` | string | Path | Evet | İlgili şirketin kimliği. |
+
+### Yanıtlar (Responses)
+
+#### 200 OK
 
 ```json
 {
@@ -24,8 +26,16 @@ günde aktif kullanıcı sayısı, guardrail engelleme toplamı, kota kullanım�
   "data": {
     "company_id": "c1...",
     "document_count": 42,
-    "draft_stats": { "total": 30, "avg_confidence_score": 87.5, "requires_human_approval": 4 },
-    "run_status": { "completed": 74, "running": 3, "failed": 1 },
+    "draft_stats": {
+      "total": 30,
+      "avg_confidence_score": 87.5,
+      "requires_human_approval": 4
+    },
+    "run_status": {
+      "completed": 74,
+      "running": 3,
+      "failed": 1
+    },
     "active_users_7d": 5,
     "guardrail_blocked_total": 2,
     "usage": {
@@ -36,31 +46,32 @@ günde aktif kullanıcı sayısı, guardrail engelleme toplamı, kota kullanım�
 }
 ```
 
-`active_users_7d`: son 7 günde en az bir `runs` satırı (bir sohbet turu)
-üreten farklı kullanıcı sayısı -- bu kod tabanında henüz izlenen bir giriş
-zaman damgası (`last_login_at`) olmadığından, dürüst ve mevcut olan vekil
-sinyal budur.
+> **NOT:** `usage.limit` `null` ise o metrik sınırsızdır. Token kotaları bu sürümde desteklenmemektedir.
 
-`usage.<metrik>.limit`: `null` ise o metrik için kota tanımlı değil
-(sınırsız). Yalnızca `documents`/`drafts` -- token bazlı kota bilinçli
-olarak kapsam dışı (bkz. mimari doküman).
+#### 403 Forbidden
+Erişim engeli (Başka bir şirketin yetkilisi sorguladığında).
 
 ---
 
-# GET /api/v1/companies/{company_id}/analytics/timeseries
+## `GET /api/v1/companies/{company_id}/analytics/timeseries`
 
-Bir metriğin zaman içindeki hacmi, gün/hafta bazlı gruplanmış.
+Bir metriğin zaman içindeki hacmini (zaman serisi) gün veya hafta bazlı gruplanmış olarak döner.
 
-## Sorgu Parametreleri
+**Güvenlik:** Bearer Token (Root veya Şirketin kendi Admin/Manager rolü)
 
-| Alan | Zorunlu | Açıklama |
-|---|---|---|
-| `metric` | Evet | `"documents"` \| `"drafts"` \| `"runs"` \| `"guardrail_blocks"` |
-| `date_from` | Hayır | Varsayılan: `date_to - 30 gün` |
-| `date_to` | Hayır | Varsayılan: şimdi |
-| `bucket` | Hayır | `"day"` (varsayılan) \| `"week"` |
+### Parametreler
 
-## Yanıt
+| Alan | Tür | Konum | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- | :--- |
+| `company_id`| string | Path | Evet | Şirket kimliği. |
+| `metric` | string | Query | Evet | `documents`, `drafts`, `runs`, `guardrail_blocks` |
+| `date_from` | string | Query | Hayır | ISO8601 Tarih (Varsayılan: `date_to - 30 gün`) |
+| `date_to` | string | Query | Hayır | ISO8601 Tarih (Varsayılan: `Şimdi`) |
+| `bucket` | string | Query | Hayır | `day` (varsayılan) veya `week` |
+
+### Yanıtlar (Responses)
+
+#### 200 OK
 
 ```json
 {
@@ -72,14 +83,26 @@ Bir metriğin zaman içindeki hacmi, gün/hafta bazlı gruplanmış.
 }
 ```
 
+#### 422 Unprocessable Entity
+Geçersiz `metric` veya `bucket` parametresi.
+
 ---
 
-# GET /api/v1/companies/{company_id}/analytics/units
+## `GET /api/v1/companies/{company_id}/analytics/units`
 
-Taslak hacmi, AI'ın yönlendirdiği birime (`drafts.destination`) göre
-gruplanmış -- birim isimlerini gerçek `units` satırlarıyla eşlemek
-istemcinin işi (`GET /units` ile aynı yaklaşım,
-`docs/api/units.md`'deki `suggested-recipients` ucunun izlediği desen).
+Taslak hacmini, AI'ın yönlendirdiği hedef birime (`destination`) göre gruplayıp döner.
+
+**Güvenlik:** Bearer Token (Root veya Şirketin kendi Admin/Manager rolü)
+
+### Parametreler
+
+| Alan | Tür | Konum | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- | :--- |
+| `company_id`| string | Path | Evet | Şirket kimliği. |
+
+### Yanıtlar (Responses)
+
+#### 200 OK
 
 ```json
 {
@@ -93,9 +116,15 @@ istemcinin işi (`GET /units` ile aynı yaklaşım,
 
 ---
 
-# GET /api/v1/companies/{company_id}/analytics/guardrails
+## `GET /api/v1/companies/{company_id}/analytics/guardrails`
 
-Guardrail kararlarının `stage`/`kind`/`decision` kırılımı.
+Sistem (Guardrail) engellemelerinin ve kararlarının (`stage`/`kind`/`decision`) kırılımını döner.
+
+**Güvenlik:** Bearer Token (Root veya Şirketin kendi Admin/Manager rolü)
+
+### Yanıtlar (Responses)
+
+#### 200 OK
 
 ```json
 {
@@ -109,9 +138,15 @@ Guardrail kararlarının `stage`/`kind`/`decision` kırılımı.
 
 ---
 
-# GET /api/v1/companies/{company_id}/analytics/links
+## `GET /api/v1/companies/{company_id}/analytics/links`
 
-Grafana/Langfuse'a şirket önfiltreli derin linkler.
+Grafana ve Langfuse gibi dış izleme sistemlerine doğrudan derin bağlantılar (Deep Link) oluşturur.
+
+**Güvenlik:** Bearer Token (Root veya Şirketin kendi Admin/Manager rolü)
+
+### Yanıtlar (Responses)
+
+#### 200 OK
 
 ```json
 {
@@ -123,24 +158,5 @@ Grafana/Langfuse'a şirket önfiltreli derin linkler.
 }
 ```
 
-**Dürüst uyarı**: `langfuse_url`'in gerçekten bir şeyi filtrelemesi,
-`compose.yml`'in çalıştırdığı `langfuse/langfuse:2` sunucusunun `langfuse`
-Python bağımlılığının v4 SDK'sıyla uyumlu olmasına bağlı -- bu ikisinin
-uyuşmadığı önceki fazlardan beri biliniyor (bkz. mimari doküman). Grafana
-linki koşulsuz çalışır.
-
----
-
-## Hata durumları
-
-| Durum | Kod | Sebep |
-|---|---|---|
-| 401 | `AUTHENTICATION_ERROR` | Geçersiz/eksik jeton |
-| 403 | `AUTHORIZATION_ERROR` | Rol yetersiz, ya da başka bir şirket (Admin/Manager için) |
-| 404 | `NOT_FOUND` | `company_id` bulunamadı (`/links`) |
-| 422 | `VALIDATION_ERROR` | Bilinmeyen `metric`/`bucket` (`/timeseries`) |
-
-## İlgili
-
-- `docs/api/root.md` -- aynı verinin şirketler arası toplamı.
-- `docs/architecture/backend.md` -- "Denetim Kaydı, Analitik ve Kotalar (Faz 6)".
+#### 404 Not Found
+`company_id` sistemde mevcut değilse.

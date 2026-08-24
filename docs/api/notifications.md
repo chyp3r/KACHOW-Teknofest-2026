@@ -1,25 +1,26 @@
-# Bildirimler (Notifications) API
+# Bildirimler API (Notifications API)
 
-> Şartnamedeki "gerçek zamanlı bildirim" maddesinin karşılığı. Kişisel:
-> her bildirim yalnızca kendi `user_id`'sine ait -- diğer havuz/taslak
-> uçlarının aksine Admin/Manager/Root için şirket geneli bir görünüm yok.
->
-> Bildirimler **şirket bazlı** kapsanır ve Postgres Row-Level Security ile
-> korunur (bkz. `docs/architecture/backend.md`).
+> Gerçek zamanlı ve kalıcı bildirim işlemlerini yönetir. Her bildirim yalnızca ait olduğu kullanıcıya özeldir (Row-Level Security ile korunur). Yönetici dahil şirket geneli bildirimleri görme yetkisi yoktur.
 
 ---
 
-# GET /api/v1/notifications
+## `GET /api/v1/notifications`
 
-Çağıranın kendi bildirimlerini, en yeniden eskiye sıralı listeler.
+Kullanıcının kendi bildirimlerini en yeniden eskiye sıralı şekilde listeler.
 
-## Sorgu parametreleri
+**Güvenlik:** Bearer Token
 
-| Alan | Tür | Açıklama |
-|---|---|---|
-| `unread_only` | bool | `true` ise yalnızca `read_at IS NULL` olanlar (varsayılan `false`) |
+### Parametreler
 
-## Yanıt
+| Alan | Tür | Konum | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- | :--- |
+| `unread_only` | boolean | Query | Hayır | `true` ise yalnızca okunmamış bildirimler döner (Varsayılan: `false`). |
+| `page` | integer | Query | Hayır | Sayfa numarası. |
+| `size` | integer | Query | Hayır | Sayfa boyutu. |
+
+### Yanıtlar (Responses)
+
+#### 200 OK
 
 ```json
 {
@@ -37,82 +38,76 @@
         "created_at": "2026-08-14T12:00:00Z"
       }
     ],
-    "total": 1, "page": 1, "size": 20, "pages": 1
-  },
-  "error": null,
-  "meta": { "timestamp": "2026-08-14T12:00:00Z" }
+    "total": 1,
+    "page": 1,
+    "size": 20,
+    "pages": 1
+  }
 }
 ```
 
-`type`: bugün `"draft_shared"` (birisi size bir taslak gönderdi) |
-`"draft_share_responded"` (gönderdiğiniz bir taslak kabul/red edildi) --
-serbest metin, kapalı bir küme olarak zorlanmıyor, yeni bir bildirim türü
-migration gerektirmez.
+---
+
+## `POST /api/v1/notifications/{notification_id}/read`
+
+Belirtilen bildirimi okundu olarak işaretler (`read_at` atanır).
+
+**Güvenlik:** Bearer Token (Sadece bildirimin sahibi)
+
+### Parametreler
+
+| Alan | Tür | Konum | Zorunlu | Açıklama |
+| :--- | :--- | :--- | :--- | :--- |
+| `notification_id`| string | Path | Evet | Bildirim kimliği. |
+
+### Yanıtlar (Responses)
+
+#### 200 OK
+Başarıyla işaretlendi.
+
+#### 403 Forbidden
+Başka bir kullanıcının bildirimine erişim denemesi.
 
 ---
 
-# POST /api/v1/notifications/{notification_id}/read
+## `POST /api/v1/notifications/read-all`
 
-Tek bir bildirimi okundu olarak işaretler. Yalnızca kendi bildirimi --
-başka bir kullanıcının bildirim ID'sini vermek `403` döner.
+Kullanıcının tüm okunmamış bildirimlerini tek seferde okundu olarak işaretler.
 
----
+**Güvenlik:** Bearer Token
 
-# POST /api/v1/notifications/read-all
+### Yanıtlar (Responses)
 
-Çağıranın **tüm** okunmamış bildirimlerini okundu işaretler.
-
-## Yanıt
+#### 200 OK
 
 ```json
-{ "success": true, "data": { "marked_read": 3 }, "error": null, "meta": {...} }
+{
+  "success": true,
+  "data": {
+    "marked_read": 3
+  }
+}
 ```
 
 ---
 
-# GET /api/v1/notifications/stream
+## `GET /api/v1/notifications/stream`
 
-Gerçek zamanlı bildirim akışı, Server-Sent Events (SSE) üzerinden.
+Gerçek zamanlı bildirim akışı. Server-Sent Events (SSE) teknolojisi kullanılarak anlık düşen bildirimler gönderilir. (Redis Pub/Sub entegrelidir).
 
-Bağlantı açıldığında `{"event": "connected"}` gönderilir, ardından her yeni
-bildirim aynı JSON şeklinde (`GET /notifications`'ın tek bir öğesi) anlık
-düşer. Bağlantı boşta kaldığında periyodik `: keep-alive` yorum satırları
-gelir (proxy zaman aşımını önlemek için) -- istemci tarafında yok sayılır.
+**İçerik Türü (Content-Type):** `text/event-stream`
 
-```
+### SSE Olayları (Events)
+
+- **`connected`**: Bağlantı kurulduğunda gönderilen ilk doğrulama.
+- **`keep-alive`**: Boşta kalma süresinde bağlantıyı açık tutmak için atılan boş yorum satırları.
+- **`[json-payload]`**: `GET /notifications` öğesiyle aynı yapıdaki yeni bildirim JSON'ı.
+
+**Örnek Veri Akışı:**
+```text
 data: {"event": "connected"}
 
 : keep-alive
 
-data: {"id":"n1...","type":"draft_shared","title":"...", ...}
-
+data: {"id":"n1...", "type":"draft_shared", "title":"...", "body":"..."}
 ```
-
-### Neden Redis pub/sub, süreç-içi olay veriyolu değil
-
-Sistemin süreç-içi `EventBus`'ı (`app/events/event_bus.py`) tek bir uvicorn
-worker'ına özeldir. Bir worker'da yayınlanan bir olay, başka bir worker'daki
-bu akışa asla ulaşamaz -- çok worker'lı bir dağıtımda bildirimler sessizce
-kaybolur. Bu yüzden bildirim yazımı (`NotificationService.create`) hem
-`notifications` tablosuna satır yazar **hem de** Redis'e publish eder;
-bu uç yalnızca o Redis kanalına abone olur. Kanal bağlantı kesilirse/kaçarsa
-veri kaybı yok: satır zaten publish'ten önce yazıldı, bir sonraki
-`GET /notifications` çağrısı bildirimi görür -- SSE yalnızca gecikmeyi
-azaltır, doğruluğu değil.
-
----
-
-## Hata durumları
-
-| Durum | Kod | Sebep |
-|---|---|---|
-| 401 | `AUTHENTICATION_ERROR` | Geçersiz/eksik jeton |
-| 403 | `AUTHORIZATION_ERROR` | Bildirim başka bir kullanıcıya ait |
-| 404 | `NOT_FOUND` | `notification_id` bulunamadı |
-
-## İlgili
-
-- `docs/api/draft-shares.md` -- bildirimleri üreten iki olay
-  (`draft.shared`/`draft.share_responded`).
-- `docs/architecture/backend.md` -- "Taslak Dağıtımı ve Bildirimler" bölümü,
-  Redis pub/sub tasarımının tam gerekçesi.
