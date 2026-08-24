@@ -28,29 +28,31 @@ TEKNOFEST 2026 · Türkçe kamu yazışma otomasyonu için LangGraph üzerine ku
 
 ## İçindekiler
 
-1. [Bu ne yapıyor](#bu-ne-yapıyor)
-2. [Mimari stil](#mimari-stil)
-3. [Sistem mimarisi](#sistem-mimarisi)
-4. [Router'dan başlayan istek akışı](#routerdan-başlayan-i̇stek-akışı)
-5. [Uçtan uca iş akışı](#uçtan-uca-i̇ş-akışı)
-6. [Taslak doğrulama karar ağacı](#taslak-doğrulama-karar-ağacı)
-7. [HITL — insan onayı durum makinesi](#hitl--i̇nsan-onayı-durum-makinesi)
-8. [Dağıtım topolojisi](#dağıtım-topolojisi-docker-compose-dev-vs-kubernetes-prod)
-9. [Neler var — özellik envanteri](#neler-var--özellik-envanteri)
-10. [Çok kiracılı roller ve yetkilendirme](#çok-kiracılı-roller-ve-yetkilendirme)
-11. [Uyum bilgi grafiği (knowledge graph)](#uyum-bilgi-grafiği-knowledge-graph)
-12. [Adaptif öğrenme](#adaptif-öğrenme)
-13. [Dikkat çeken tasarım kararları](#dikkat-çeken-tasarım-kararları)
-14. [Teknoloji yığını](#teknoloji-yığını)
-15. [Test, kalite kapıları ve CI](#test-kalite-kapıları-ve-ci)
-16. [Veri setleri](#veri-setleri)
-17. [Değerlendirme metrikleri ve model karşılaştırması](#değerlendirme-metrikleri-ve-model-karşılaştırması)
-18. [Gözlemlenebilirlik ve metrikler](#gözlemlenebilirlik-ve-metrikler)
-19. [Hızlı başlangıç](#hızlı-başlangıç)
-20. [Ortam değişkenleri ve gerekli dosyalar](#ortam-değişkenleri-ve-gerekli-dosyalar)
-21. [Kubernetes prodüksiyon ortamı](#kubernetes-prodüksiyon-ortamı)
-22. [Depo yapısı](#depo-yapısı)
-23. [Katkı, güvenlik, lisans](#katkı-güvenlik-lisans)
+
+1. [Bu ne yapıyor](#bu-ne-yapiyor)
+2. [Neler var — özellik envanteri](#neler-var-ozellik-envanteri)
+3. [Demo ve Uygulama Akışı](#demo-ve-uygulama-akisi)
+4. [Mimari Stil](#mimari-stil)
+5. [Sistem Mimarisi](#sistem-mimarisi)
+6. [Çok Kiracılı Roller ve Yetkilendirme](#cok-kiracili-roller-ve-yetkilendirme)
+7. [Uyum Bilgi Grafiği (Knowledge Graph)](#uyum-bilgi-grafigi-knowledge-graph)
+8. [Adaptif Öğrenme](#adaptif-ogrenme)
+9. [Dikkat Çeken Tasarım Kararları](#dikkat-ceken-tasarim-kararlari)
+10. [Teknoloji Yığını](#teknoloji-yigini)
+11. [Uçtan Uca İş Akışı](#uctan-uca-is-akisi)
+12. [Router'dan Başlayan İstek Akışı](#routerdan-baslayan-istek-akisi)
+13. [Taslak Doğrulama Karar Ağacı](#taslak-dogrulama-karar-agaci)
+14. [HITL — İnsan Onayı Durum Makinesi](#hitl-insan-onayi-durum-makinesi)
+15. [Test, Kalite Kapıları ve CI](#test-kalite-kapilari-ve-ci)
+16. [Veri Setleri](#veri-setleri)
+17. [Değerlendirme Metrikleri ve Model Karşılaştırması](#degerlendirme-metrikleri-ve-model-karsilastirmasi)
+18. [Gözlemlenebilirlik ve Metrikler](#gozlemlenebilirlik-ve-metrikler)
+19. [Hızlı Başlangıç](#hizli-baslangic)
+20. [Ortam Değişkenleri ve Gerekli Dosyalar](#ortam-degiskenleri-ve-gerekli-dosyalar)
+21. [Dağıtım Topolojisi: Docker Compose (dev) vs Kubernetes (prod)](#dagitim-topolojisi-docker-compose-dev-vs-kubernetes-prod)
+22. [Kubernetes Prodüksiyon Ortamı](#kubernetes-produksiyon-ortami)
+23. [Depo Yapısı](#depo-yapisi)
+24. [Katkı, Güvenlik, Lisans](#katki-guvenlik-lisans)
 
 ---
 
@@ -65,6 +67,57 @@ Evrakı oku  →  sınıflandır  →  alanları çıkar  →  eksikleri bul  �
 ```
 
 Her adım LangGraph üzerinde ayrı bir **ajan/düğüm**; her düğümün kendi başarısızlık modu, zaman aşımı ve geri dönüş yolu var. Sistem hiçbir zaman "LLM ne dediyse odur" demiyor — **retrieval-augmented generation (RAG)** ile üretilen her iddia (tarih, tutar, kişi, kurum, mevzuat atfı) **groundedness verification** katmanında kaynak evrakla satır satır karşılaştırılıyor, ve kritik bir tutarsızlık bulunduğunda bu bulgu bir ortalama skorun içinde kaybolmuyor: taslak otomatik olarak **human-in-the-loop (HITL)** onayına düşüyor.
+
+## Neler var — özellik envanteri
+
+<table>
+<tr><td width="50%" valign="top">
+
+**Evrak analizi**
+- Metin katmanlı PDF + taranmış PDF/görsel OCR, otomatik geçiş zinciri
+- 10 evrak türü sınıflandırması (dilekçe, üst yazı, şikâyet, sirküler, yönerge, rapor, tutanak, izin talebi…)
+- Yapılandırılmış alan çıkarımı (sayı, tarih, konu, muhatap, gönderen kurum, imza…)
+- Evrak türüne göre zorunlu/önerilen alan kontrolü, eksik alan listesi
+- **RAG** ile mevzuat önerisi — kanun/madde adı + alıntı + kaynak, retrieval ile üretim ayrışık
+- 3 cümlelik kısa özet + isteğe bağlı ayrıntılı özet (map-reduce)
+
+</td><td width="50%" valign="top">
+
+**Taslak üretimi ve doğrulama**
+- 4 resmî yazışma türü (üst yazı, cevap yazısı, bilgilendirme, diğer + serbest alt-tür)
+- Kaynağa bağlı üretim — çapraz evrak sızıntısı ve uydurma bilgi engelleme
+- Çok katmanlı doğrulama: yapı, üslup, **claim-check**, **LLM-as-a-Judge**
+- Kritik bulgular skor ortalamasında kaybolmuyor, otomatik insan onayına düşüyor
+- Hedefli revizyon, değişiklik günlüğü, tam sürüm zinciri
+- Talimat–mevzuat çelişki tespiti
+
+</td></tr>
+<tr><td width="50%" valign="top">
+
+**Birim yönlendirme**
+- İçerik tabanlı hedef birim önerisi + gerekçe + güven durumu
+- Alternatif birimler ve bağımsız `/routing/suggest` uç noktası
+- Öneri hiçbir zaman kesin idari karar olarak sunulmuyor
+
+</td><td width="50%" valign="top">
+
+**İnsan-döngüde (HITL)**
+- Kritik eksik bilgide workflow duruyor, gerekçeli form ile soruyor
+- `resume` ile kaldığı yerden devam, çift gönderim ve bayat onay koruması
+- Sayfa yenilenince bekleyen onay + mesaj geçmişi geri yükleniyor
+
+</td></tr>
+</table>
+
+## Demo ve Uygulama Akışı
+
+> [!NOTE] 
+> **Demo Video & Ekran Görüntüleri:** [Buraya uygulamanın arayüzünden örnek ekran görüntüleri veya YouTube/Loom video linki eklenecek]
+
+Sistemin kalbinde yer alan, hiçbir işlemi kullanıcıdan gizlemeyen ve "kara kutu" (black box) yapısını reddeden şeffaf ekranı:
+1. Evrak yükleme arayüzü
+2. Ajanların adım adım ilerleme ekranı (SSE ile canlı yayın)
+3. İnsan Onayı (Human-in-the-Loop) - Eksik/hatalı bilgide sistemin kullanıcıyı beklemesi
 
 ## Mimari Stil
 
@@ -124,8 +177,8 @@ graph TD
         RV -.-> GV
     end
 
-    M{{Ollama (yerel) ⇄ Evren (Teknofest-hosted)<br/>LOCAL_MODE anahtarı}}:::external
-    N{{mevzuat-mcp<br/>canlı mevzuat + yerel fallback korpüs}}:::external
+    M{{"Ollama (yerel) ⇄ Evren (Teknofest-hosted)<br/>LOCAL_MODE anahtarı"}}:::external
+    N{{"mevzuat-mcp<br/>canlı mevzuat + yerel fallback korpüs"}}:::external
     GV <--> M
     DA <--> N
 
@@ -148,238 +201,6 @@ graph TD
     B -.-> O2
     B -.-> O3
 ```
-
-## Router'dan Başlayan İstek Akışı
-
-`backend/app/api/router.py`, 20 domain router'ını tek bir `api_router` altında topluyor. Bir isteğin FastAPI uygulamasına girişten domain servisine ulaşana kadar geçtiği gerçek sıra:
-
-```mermaid
-flowchart TD
-    REQ["İstemci isteği<br/>HTTP / SSE"] --> MW1["CorrelationIdMiddleware<br/>X-Request-ID üretir/echo eder"]
-    MW1 --> MW2["TenantMiddleware<br/>şirket bağlamını çözer"]
-    MW2 --> MW3["StructuredLoggingMiddleware<br/>method/path/status/süre"]
-    MW3 --> MW4["ResponseTimeMiddleware + RateLimit"]
-    MW4 --> AUTH{"get_current_user<br/>JWT + Redis blacklist"}
-    AUTH -- "geçersiz/expired" --> ERR401["401 — AuthenticationException"]
-    AUTH -- "geçerli" --> ABAC{"require_roles / require_permission<br/>+ ownership + clearance"}
-    ABAC -- "yetkisiz" --> ERR403["403 — AuthorizationException"]
-    ABAC -- "yetkili" --> DISPATCH["api_router dispatch"]
-
-    DISPATCH --> R1["/documents/*<br/>upload, analyze, fields, text, graph"]
-    DISPATCH --> R2["/chat/*<br/>message, stream (SSE), resume, sessions"]
-    DISPATCH --> R3["/drafts/*<br/>inbox, outbox, versions, send, shares"]
-    DISPATCH --> R4["/routing/suggest"]
-    DISPATCH --> R5["/auth · /users · /companies · /units"]
-    DISPATCH --> R6["/pools · /transfers · /messaging · /notifications"]
-    DISPATCH --> R7["/audit · /analytics · /training · /feedback · /system"]
-
-    R1 --> SVC1["DocumentService<br/>_validate_upload → extractor fallback → guardrails"]
-    R2 --> SVC2["ChatService<br/>PlanningGraph.astream / Command(resume=)"]
-    R3 --> SVC3["DraftService<br/>DraftGraph / ReviseGraph"]
-    R4 --> SVC4["RoutingService<br/>RoutingGraph"]
-
-    SVC1 --> AI["AI Core (LangGraph)"]
-    SVC2 --> AI
-    SVC3 --> AI
-    SVC4 --> AI
-
-    AI --> DB[("PostgreSQL")]
-    AI --> QD[("Qdrant")]
-
-    classDef mw fill:#1c2833,stroke:#e67e22,color:#fff;
-    classDef gate fill:#7b241c,stroke:#e74c3c,color:#fff;
-    classDef route fill:#0b5345,stroke:#2ecc71,color:#fff;
-    classDef svc fill:#1c2833,stroke:#5dade2,color:#fff;
-    class MW1,MW2,MW3,MW4 mw;
-    class AUTH,ABAC gate;
-    class R1,R2,R3,R4,R5,R6,R7 route;
-    class SVC1,SVC2,SVC3,SVC4 svc;
-```
-
-## Uçtan Uca İş Akışı
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant U as Kullanıcı
-    participant F as Frontend
-    participant A as API (Auth+ABAC)
-    participant DA as Document Analysis Graph
-    participant G as Guardrails
-    participant D as Draft Graph
-    participant H as Human Gate
-
-    U->>F: Evrak yükle
-    F->>A: POST /documents/analyze
-    A->>A: Sahiplik + gizlilik derecesi kontrolü
-    A->>DA: Analizi başlat
-    DA->>DA: Extract (metin katmanı → OCR fallback)
-    DA->>G: Enjeksiyon temizliği, PII/hassasiyet taraması
-    DA->>DA: Sınıflandır → alanları çıkar → eksikleri bul
-    DA->>DA: Mevzuat ara (MCP → yerel fallback) → özetle
-    DA-->>F: Tür, özet, eksikler, mevzuat, PII uyarıları
-
-    U->>F: Yazışma türünü onayla/seç, taslak iste
-    F->>D: Taslak üret
-    D->>D: Writer — yalnızca kaynak evraka/talimata dayan
-    D->>G: Claim-check (tarih/tutar/kişi/kurum/mevzuat) + LLM Judge
-    alt Kritik bulgu (skor ne olursa olsun)
-        G-->>H: forces_approval = true
-        H-->>F: Eksik bilgi formu / onay bekleniyor (interrupt)
-        U->>F: Yanıt / onay / revizyon talimatı
-        F->>D: Resume (thread state korunur)
-    else Bulgu yok / düzeltilebilir
-        D->>D: Otomatik onarım (limitli tur)
-    end
-    D-->>F: Doğrulanmış taslak + versiyon zinciri + changelog
-
-    F->>A: POST /routing/suggest
-    A-->>F: Önerilen birim + gerekçe + alternatifler
-    U->>F: Onayla / revize et / reddet (gerekçeli)
-    F-->>U: Kalıcı kayıt — sürüm geçmişinden geri dönülebilir
-```
-
-## Taslak Doğrulama Karar Ağacı
-
-Bir taslağın "otomatik geç", "otomatik onar" ya da "insana düşür" arasında nasıl ayrıldığı — `draft_verifier.py` + `confidence_rules.py`'nin gerçek karar mantığı:
-
-```mermaid
-flowchart TD
-    START["Üretilen taslak metni"] --> CC["Claim-check<br/>tarih · sayı/tutar · kişi · kurum · mevzuat atfı"]
-    CC --> MATCH{"Her iddia kaynak evrakta<br/>bulunuyor mu?"}
-    MATCH -- "hayır (uydurma)" --> CRIT1["Kritik bulgu:<br/>halüsinasyon"]
-    MATCH -- "evet" --> STRUCT["Yapı/üslup kontrolü<br/>konu·sayı·tarih·kapanış·imza"]
-
-    STRUCT --> LEAK{"Örnek belge / karşı taraf<br/>kimliği sızmış mı?"}
-    LEAK -- "evet" --> CRIT2["Kritik bulgu:<br/>ornek_sizintisi (koşulsuz)"]
-    LEAK -- "hayır" --> PH{"Doldurulmamış<br/>yer tutucu var mı?"}
-
-    PH -- "evet" --> CRIT3["Kritik bulgu:<br/>doldurulmamis_yer_tutucu"]
-    PH -- "hayır" --> JUDGE["LLM Judge<br/>talebi karşılıyor mu? üslup uygun mu?"]
-
-    JUDGE --> SCORE["score_findings()<br/>ağırlıklı skor (bilgilendirici)"]
-    CRIT1 --> FORCE["forces_approval = true<br/>(skordan bağımsız, ikinci kanal)"]
-    CRIT2 --> FORCE
-    CRIT3 --> FORCE
-    JUDGE -- "kritik yargıç bulgusu" --> FORCE
-
-    SCORE --> DECIDE{"forces_approval?"}
-    FORCE --> DECIDE
-    DECIDE -- "hayır ve skor yüksek" --> AUTO["Otomatik onay"]
-    DECIDE -- "hayır ve düzeltilebilir" --> REPAIR["repair_node → rewrite_node<br/>(max_draft_attempts ile sınırlı)"]
-    DECIDE -- "evet" --> HUMAN["Human Gate — interrupt<br/>kullanıcı onayı zorunlu"]
-    REPAIR --> CC
-
-    classDef crit fill:#7b241c,stroke:#e74c3c,color:#fff;
-    classDef ok fill:#0b5345,stroke:#2ecc71,color:#fff;
-    classDef neutral fill:#1c2833,stroke:#5dade2,color:#fff;
-    class CRIT1,CRIT2,CRIT3,HUMAN crit;
-    class AUTO ok;
-    class SCORE,JUDGE,REPAIR neutral;
-```
-
-## HITL — İnsan Onayı Durum Makinesi
-
-```mermaid
-stateDiagram-v2
-    [*] --> Calisiyor: Kullanıcı isteği başlatır
-    Calisiyor --> Calisiyor: node_start / node_end (SSE)
-    Calisiyor --> Kesildi: human_gate_node<br/>kritik eksik bilgi / forces_approval
-    Kesildi --> BeklemedeForm: PromptQuestionCard gösterilir
-    BeklemedeForm --> Devam_ediyor: Kullanıcı yanıtlar/onaylar/reddeder
-    Devam_ediyor --> Calisiyor: Command(resume=...)<br/>yalnızca human_gate_node tekrarlanır
-    Calisiyor --> Tamamlandi: Tüm düğümler bitti
-    Tamamlandi --> [*]
-
-    BeklemedeForm --> SayfaYenilendi: Kullanıcı sayfayı yeniler
-    SayfaYenilendi --> BeklemedeForm: GET /chat/sessions/{id}/state<br/>interrupt + mesaj geçmişi geri yüklenir
-
-    BeklemedeForm --> Reddedildi: Bayat/eski interrupt üzerinden<br/>işlem denemesi
-    Reddedildi --> BeklemedeForm: "Bekleyen onay artık geçerli değil"<br/>state yeniden çekilir
-```
-
-## Dağıtım Topolojisi: Docker Compose (dev) vs Kubernetes (prod)
-
-**Geliştirme — `compose.yml` (15 servis):**
-
-```mermaid
-graph LR
-    classDef svc fill:#1c2833,stroke:#5dade2,color:#fff;
-    classDef store fill:#4a235a,stroke:#9b59b6,color:#fff;
-    classDef obs fill:#1b2631,stroke:#5dade2,color:#fff;
-
-    FE[frontend<br/>Vite dev server]:::svc --> BE[backend<br/>uvicorn --reload]:::svc
-    BE --> WK[worker<br/>arka plan kuyruğu]:::svc
-    BE --> DB[(db — Postgres)]:::store
-    BE --> RD[(redis)]:::store
-    BE --> QD[(qdrant)]:::store
-    BE --> LF[langfuse]:::obs
-    BE --> JG[jaeger]:::obs
-    PM[prometheus]:::obs --> BE
-    GF[grafana]:::obs --> PM
-```
-
-**Prodüksiyon — `deploy/kubernetes/` (11 manifest, `kachow` namespace):**
-
-```mermaid
-graph TD
-    classDef ing fill:#1c2833,stroke:#e67e22,color:#fff;
-    classDef app fill:#0b5345,stroke:#2ecc71,color:#fff;
-    classDef store fill:#4a235a,stroke:#9b59b6,color:#fff;
-    classDef job fill:#7b241c,stroke:#e74c3c,color:#fff;
-
-    ING["Ingress (nginx)<br/>SSE buffering kapalı, 600s timeout, 50m body"]:::ing --> FESVC["frontend Service<br/>PDB minAvailable:1"]:::app
-    ING --> BESVC["backend Service"]:::app
-    MIG["migrate-job<br/>Job, alembic upgrade head<br/>ttlSecondsAfterFinished:3600"]:::job -. önce çalışır .-> BESVC
-    BESVC --> BEPOD["backend Deployment<br/>replicas:1 (STORAGE_TYPE=local)<br/>requests 500m/1Gi · limits 2/4Gi"]:::app
-    FESVC --> FEPOD["frontend Deployment<br/>Nginx statik + proxy"]:::app
-    BEPOD --> SEC["Secrets<br/>POSTGRES_*, EVREN_API_KEY..."]:::store
-    BEPOD --> CM["ConfigMap<br/>POSTGRES_DB, model adları..."]:::store
-    BEPOD --> PG[("Postgres<br/>StatefulSet")]:::store
-    BEPOD --> QD[("Qdrant<br/>StatefulSet")]:::store
-    BEPOD --> RD[("Redis<br/>Deployment")]:::store
-```
-
-## Neler var — özellik envanteri
-
-<table>
-<tr><td width="50%" valign="top">
-
-**Evrak analizi**
-- Metin katmanlı PDF + taranmış PDF/görsel OCR, otomatik geçiş zinciri
-- 10 evrak türü sınıflandırması (dilekçe, üst yazı, şikâyet, sirküler, yönerge, rapor, tutanak, izin talebi…)
-- Yapılandırılmış alan çıkarımı (sayı, tarih, konu, muhatap, gönderen kurum, imza…)
-- Evrak türüne göre zorunlu/önerilen alan kontrolü, eksik alan listesi
-- **RAG** ile mevzuat önerisi — kanun/madde adı + alıntı + kaynak, retrieval ile üretim ayrışık
-- 3 cümlelik kısa özet + isteğe bağlı ayrıntılı özet (map-reduce)
-
-</td><td width="50%" valign="top">
-
-**Taslak üretimi ve doğrulama**
-- 4 resmî yazışma türü (üst yazı, cevap yazısı, bilgilendirme, diğer + serbest alt-tür)
-- Kaynağa bağlı üretim — çapraz evrak sızıntısı ve uydurma bilgi engelleme
-- Çok katmanlı doğrulama: yapı, üslup, **claim-check**, **LLM-as-a-Judge**
-- Kritik bulgular skor ortalamasında kaybolmuyor, otomatik insan onayına düşüyor
-- Hedefli revizyon, değişiklik günlüğü, tam sürüm zinciri
-- Talimat–mevzuat çelişki tespiti
-
-</td></tr>
-<tr><td width="50%" valign="top">
-
-**Birim yönlendirme**
-- İçerik tabanlı hedef birim önerisi + gerekçe + güven durumu
-- Alternatif birimler ve bağımsız `/routing/suggest` uç noktası
-- Öneri hiçbir zaman kesin idari karar olarak sunulmuyor
-
-</td><td width="50%" valign="top">
-
-**İnsan-döngüde (HITL)**
-- Kritik eksik bilgide workflow duruyor, gerekçeli form ile soruyor
-- `resume` ile kaldığı yerden devam, çift gönderim ve bayat onay koruması
-- Sayfa yenilenince bekleyen onay + mesaj geçmişi geri yükleniyor
-
-</td></tr>
-</table>
 
 ## Çok Kiracılı Roller ve Yetkilendirme
 
@@ -442,6 +263,155 @@ Kodun kendi içinde gerekçesiyle birlikte belgelenmiş, öne çıkan kararlar:
 | **CI/CD** | GitHub Actions (`.github/workflows/ci.yml`) | Backend (`pytest` + coverage gate) ve frontend (`eslint`, `tsc`, `vitest` + coverage) ayrı job'larda, gerçek `docker compose` servisleriyle; manuel tetiklenir (`workflow_dispatch`) |
 | **Dağıtım** | Docker Compose (dev/prod ayrı dosya), Kubernetes (11 manifest) | Prod imajları `ghcr.io/chyp3r/kachow-*` |
 
+## Uçtan Uca İş Akışı
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Kullanıcı
+    participant F as Frontend
+    participant A as API (Auth+ABAC)
+    participant DA as Document Analysis Graph
+    participant G as Guardrails
+    participant D as Draft Graph
+    participant H as Human Gate
+
+    U->>F: Evrak yükle
+    F->>A: POST /documents/analyze
+    A->>A: Sahiplik + gizlilik derecesi kontrolü
+    A->>DA: Analizi başlat
+    DA->>DA: Extract (metin katmanı → OCR fallback)
+    DA->>G: Enjeksiyon temizliği, PII/hassasiyet taraması
+    DA->>DA: Sınıflandır → alanları çıkar → eksikleri bul
+    DA->>DA: Mevzuat ara (MCP → yerel fallback) → özetle
+    DA-->>F: Tür, özet, eksikler, mevzuat, PII uyarıları
+
+    U->>F: Yazışma türünü onayla/seç, taslak iste
+    F->>D: Taslak üret
+    D->>D: Writer — yalnızca kaynak evraka/talimata dayan
+    D->>G: Claim-check (tarih/tutar/kişi/kurum/mevzuat) + LLM Judge
+    alt Kritik bulgu (skor ne olursa olsun)
+        G-->>H: forces_approval = true
+        H-->>F: Eksik bilgi formu / onay bekleniyor (interrupt)
+        U->>F: Yanıt / onay / revizyon talimatı
+        F->>D: Resume (thread state korunur)
+    else Bulgu yok / düzeltilebilir
+        D->>D: Otomatik onarım (limitli tur)
+    end
+    D-->>F: Doğrulanmış taslak + versiyon zinciri + changelog
+
+    F->>A: POST /routing/suggest
+    A-->>F: Önerilen birim + gerekçe + alternatifler
+    U->>F: Onayla / revize et / reddet (gerekçeli)
+    F-->>U: Kalıcı kayıt — sürüm geçmişinden geri dönülebilir
+```
+
+## Router'dan Başlayan İstek Akışı
+
+`backend/app/api/router.py`, 20 domain router'ını tek bir `api_router` altında topluyor. Bir isteğin FastAPI uygulamasına girişten domain servisine ulaşana kadar geçtiği gerçek sıra:
+
+```mermaid
+flowchart TD
+    REQ["İstemci isteği<br/>HTTP / SSE"] --> MW1["CorrelationIdMiddleware<br/>X-Request-ID üretir/echo eder"]
+    MW1 --> MW2["TenantMiddleware<br/>şirket bağlamını çözer"]
+    MW2 --> MW3["StructuredLoggingMiddleware<br/>method/path/status/süre"]
+    MW3 --> MW4["ResponseTimeMiddleware + RateLimit"]
+    MW4 --> AUTH{"get_current_user<br/>JWT + Redis blacklist"}
+    AUTH -- "geçersiz/expired" --> ERR401["401 — AuthenticationException"]
+    AUTH -- "geçerli" --> ABAC{"require_roles / require_permission<br/>+ ownership + clearance"}
+    ABAC -- "yetkisiz" --> ERR403["403 — AuthorizationException"]
+    ABAC -- "yetkili" --> DISPATCH["api_router dispatch"]
+
+    DISPATCH --> R1["/documents/*<br/>upload, analyze, fields, text, graph"]
+    DISPATCH --> R2["/chat/*<br/>message, stream (SSE), resume, sessions"]
+    DISPATCH --> R3["/drafts/*<br/>inbox, outbox, versions, send, shares"]
+    DISPATCH --> R4["/routing/suggest"]
+    DISPATCH --> R5["/auth · /users · /companies · /units"]
+    DISPATCH --> R6["/pools · /transfers · /messaging · /notifications"]
+    DISPATCH --> R7["/audit · /analytics · /training · /feedback · /system"]
+
+    R1 --> SVC1["DocumentService<br/>_validate_upload → extractor fallback → guardrails"]
+    R2 --> SVC2["ChatService<br/>PlanningGraph.astream / Command(resume=)"]
+    R3 --> SVC3["DraftService<br/>DraftGraph / ReviseGraph"]
+    R4 --> SVC4["RoutingService<br/>RoutingGraph"]
+
+    SVC1 --> AI["AI Core (LangGraph)"]
+    SVC2 --> AI
+    SVC3 --> AI
+    SVC4 --> AI
+
+    AI --> DB[("PostgreSQL")]
+    AI --> QD[("Qdrant")]
+
+    classDef mw fill:#1c2833,stroke:#e67e22,color:#fff;
+    classDef gate fill:#7b241c,stroke:#e74c3c,color:#fff;
+    classDef route fill:#0b5345,stroke:#2ecc71,color:#fff;
+    classDef svc fill:#1c2833,stroke:#5dade2,color:#fff;
+    class MW1,MW2,MW3,MW4 mw;
+    class AUTH,ABAC gate;
+    class R1,R2,R3,R4,R5,R6,R7 route;
+    class SVC1,SVC2,SVC3,SVC4 svc;
+```
+
+## Taslak Doğrulama Karar Ağacı
+
+Bir taslağın "otomatik geç", "otomatik onar" ya da "insana düşür" arasında nasıl ayrıldığı — `draft_verifier.py` + `confidence_rules.py`'nin gerçek karar mantığı:
+
+```mermaid
+flowchart TD
+    START["Üretilen taslak metni"] --> CC["Claim-check<br/>tarih · sayı/tutar · kişi · kurum · mevzuat atfı"]
+    CC --> MATCH{"Her iddia kaynak evrakta<br/>bulunuyor mu?"}
+    MATCH -- "hayır (uydurma)" --> CRIT1["Kritik bulgu:<br/>halüsinasyon"]
+    MATCH -- "evet" --> STRUCT["Yapı/üslup kontrolü<br/>konu·sayı·tarih·kapanış·imza"]
+
+    STRUCT --> LEAK{"Örnek belge / karşı taraf<br/>kimliği sızmış mı?"}
+    LEAK -- "evet" --> CRIT2["Kritik bulgu:<br/>ornek_sizintisi (koşulsuz)"]
+    LEAK -- "hayır" --> PH{"Doldurulmamış<br/>yer tutucu var mı?"}
+
+    PH -- "evet" --> CRIT3["Kritik bulgu:<br/>doldurulmamis_yer_tutucu"]
+    PH -- "hayır" --> JUDGE["LLM Judge<br/>talebi karşılıyor mu? üslup uygun mu?"]
+
+    JUDGE --> SCORE["score_findings()<br/>ağırlıklı skor (bilgilendirici)"]
+    CRIT1 --> FORCE["forces_approval = true<br/>(skordan bağımsız, ikinci kanal)"]
+    CRIT2 --> FORCE
+    CRIT3 --> FORCE
+    JUDGE -- "kritik yargıç bulgusu" --> FORCE
+
+    SCORE --> DECIDE{"forces_approval?"}
+    FORCE --> DECIDE
+    DECIDE -- "hayır ve skor yüksek" --> AUTO["Otomatik onay"]
+    DECIDE -- "hayır ve düzeltilebilir" --> REPAIR["repair_node → rewrite_node<br/>(max_draft_attempts ile sınırlı)"]
+    DECIDE -- "evet" --> HUMAN["Human Gate — interrupt<br/>kullanıcı onayı zorunlu"]
+    REPAIR --> CC
+
+    classDef crit fill:#7b241c,stroke:#e74c3c,color:#fff;
+    classDef ok fill:#0b5345,stroke:#2ecc71,color:#fff;
+    classDef neutral fill:#1c2833,stroke:#5dade2,color:#fff;
+    class CRIT1,CRIT2,CRIT3,HUMAN crit;
+    class AUTO ok;
+    class SCORE,JUDGE,REPAIR neutral;
+```
+
+## HITL — İnsan Onayı Durum Makinesi
+
+```mermaid
+stateDiagram-v2
+    [*] --> Calisiyor: Kullanıcı isteği başlatır
+    Calisiyor --> Calisiyor: node_start / node_end (SSE)
+    Calisiyor --> Kesildi: human_gate_node<br/>kritik eksik bilgi / forces_approval
+    Kesildi --> BeklemedeForm: PromptQuestionCard gösterilir
+    BeklemedeForm --> Devam_ediyor: Kullanıcı yanıtlar/onaylar/reddeder
+    Devam_ediyor --> Calisiyor: Command(resume=...)<br/>yalnızca human_gate_node tekrarlanır
+    Calisiyor --> Tamamlandi: Tüm düğümler bitti
+    Tamamlandi --> [*]
+
+    BeklemedeForm --> SayfaYenilendi: Kullanıcı sayfayı yeniler
+    SayfaYenilendi --> BeklemedeForm: GET /chat/sessions/{id}/state<br/>interrupt + mesaj geçmişi geri yüklenir
+
+    BeklemedeForm --> Reddedildi: Bayat/eski interrupt üzerinden<br/>işlem denemesi
+    Reddedildi --> BeklemedeForm: "Bekleyen onay artık geçerli değil"<br/>state yeniden çekilir
+```
+
 ## Test, Kalite Kapıları ve CI
 
 Bu bölümdeki sayılar iddia değil — bu dokümantasyon hazırlanırken (**2026-08-24**) `docker compose run --rm backend pytest` ve `docker compose run --rm frontend npm test` ile gerçekten çalıştırılıp doğrulanmıştır.
@@ -457,6 +427,7 @@ Bu bölümdeki sayılar iddia değil — bu dokümantasyon hazırlanırken (**20
 | **Toplam** | **227** | **2328** | |
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'pie1': '#3b82f6', 'pie2': '#10b981', 'pie3': '#f59e0b', 'pie4': '#ef4444'}}}%%
 pie showData
     title Backend Test Fonksiyonu Dağılımı (2328)
     "unit" : 2185
@@ -466,6 +437,8 @@ pie showData
 ```
 
 Canlı çalıştırma sonucu (`pytest -q --cov-fail-under=86`, varsayılan olarak e2e+performance hariç):
+
+*(Not: `pytest.mark.parametrize` kullanılarak aynı fonksiyonlar farklı veri setleriyle defalarca test edildiği için, test runner'ın raporladığı "geçen" test sayısı (2588), tablodaki benzersiz test fonksiyonu sayısından (2328) daha yüksektir.)*
 
 ```
 2588 passed, 35 deselected in 24.71s
@@ -515,12 +488,12 @@ Testlerin ötesinde, `evaluation/` altında ayrı bir LLM/RAG kalite ölçüm ha
 | `evaluation/datasets/retrieval_corpus/` | Retrieval değerlendirmesi için ayrı korpüs | 6 dosya |
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'pie1': '#8b5cf6', 'pie2': '#ec4899', 'pie3': '#06b6d4', 'pie4': '#f97316', 'pie5': '#84cc16', 'pie6': '#64748b'}}}%%
 pie showData
-    title datasets/resmi_yazisma Dağılımı (2459 dosya)
-    "Gelen kaynaklar (ham)" : 1927
+    title Üretilen Resmî Yazışma Dağılımı (İşlenmiş 532 dosya)
     "Cevap yazısı" : 163
-    "Üst yazı" : 113
     "Diğer resmî yazışma" : 129
+    "Üst yazı" : 113
     "Bilgilendirme metni" : 83
     "Reddedilenler (negatif set)" : 41
     "Yönetmelik ve kurallar" : 3
@@ -553,6 +526,34 @@ pie showData
 | `guard` | Evren | Guardrail/judge modeli | — |
 | `nomic-embed-text` | Ollama (yerel) | Embedding | — |
 | `bge-m3-embed` | Evren | Embedding | — |
+
+### Latency ve Performans Testleri
+
+| Metrik (Endpoint / Graph) | P50 (ms) | P95 (ms) | P99 (ms) | İstek/Sn (RPS) |
+| :--- | ---: | ---: | ---: | ---: |
+| `POST /api/v1/documents` (OCR hariç) | — | — | — | — |
+| `POST /api/v1/documents` (Tesseract OCR dahil) | — | — | — | — |
+| `Document Analysis Graph` (Uçtan Uca) | — | — | — | — |
+| `Draft Graph` (Üst Yazı Üretimi) | — | — | — | — |
+| `Routing Graph` (Birim Tahmini) | — | — | — | — |
+
+### LLM Judge - İnsan Değerlendirmesi Karşılaştırması
+
+| Kriter (1-5 Puan Aralığı) | LLM Judge Ortalama | Uzman İnsan Ortalama | Korelasyon (Pearson) |
+| :--- | ---: | ---: | ---: |
+| Kurumsal üslup uygunluğu | — | — | — |
+| İddia (Claim) tutarlılığı | — | — | — |
+| Eksik bilgi hassasiyeti | — | — | — |
+| Format ve şablon uyumu | — | — | — |
+
+### Güvenlik ve Guardrail Başarımı (Red Team)
+
+| Güvenlik Testi Vektörü | Başarı Oranı (%) | Atlatma Sayısı (Bypass) |
+| :--- | ---: | ---: |
+| Prompt Injection (Talimat Sızdırma) | — | — |
+| PII Çıkarımı (Maskeleme Atlatma) | — | — |
+| Mevzuat Uydurma (Hallucination) | — | — |
+| Sınır Dışı Konu (Off-topic) | — | — |
 
 ```mermaid
 xychart-beta
@@ -633,6 +634,48 @@ deploy/docker/frontend.Dockerfile       # dev frontend (Vite)
 deploy/docker/frontend.prod.Dockerfile  # prod frontend (build + Nginx)
 deploy/docker/nginx.conf                # prod Nginx yapılandırması (SSE dahil)
 .env                                    # cp .env.example .env sonrası doldurulur
+```
+
+## Dağıtım Topolojisi: Docker Compose (dev) vs Kubernetes (prod)
+
+**Geliştirme — `compose.yml` (15 servis):**
+
+```mermaid
+graph LR
+    classDef svc fill:#1c2833,stroke:#5dade2,color:#fff;
+    classDef store fill:#4a235a,stroke:#9b59b6,color:#fff;
+    classDef obs fill:#1b2631,stroke:#5dade2,color:#fff;
+
+    FE[frontend<br/>Vite dev server]:::svc --> BE[backend<br/>uvicorn --reload]:::svc
+    BE --> WK[worker<br/>arka plan kuyruğu]:::svc
+    BE --> DB[(db — Postgres)]:::store
+    BE --> RD[(redis)]:::store
+    BE --> QD[(qdrant)]:::store
+    BE --> LF[langfuse]:::obs
+    BE --> JG[jaeger]:::obs
+    PM[prometheus]:::obs --> BE
+    GF[grafana]:::obs --> PM
+```
+
+**Prodüksiyon — `deploy/kubernetes/` (11 manifest, `kachow` namespace):**
+
+```mermaid
+graph TD
+    classDef ing fill:#1c2833,stroke:#e67e22,color:#fff;
+    classDef app fill:#0b5345,stroke:#2ecc71,color:#fff;
+    classDef store fill:#4a235a,stroke:#9b59b6,color:#fff;
+    classDef job fill:#7b241c,stroke:#e74c3c,color:#fff;
+
+    ING["Ingress (nginx)<br/>SSE buffering kapalı, 600s timeout, 50m body"]:::ing --> FESVC["frontend Service<br/>PDB minAvailable:1"]:::app
+    ING --> BESVC["backend Service"]:::app
+    MIG["migrate-job<br/>Job, alembic upgrade head<br/>ttlSecondsAfterFinished:3600"]:::job -. önce çalışır .-> BESVC
+    BESVC --> BEPOD["backend Deployment<br/>replicas:1 (STORAGE_TYPE=local)<br/>requests 500m/1Gi · limits 2/4Gi"]:::app
+    FESVC --> FEPOD["frontend Deployment<br/>Nginx statik + proxy"]:::app
+    BEPOD --> SEC["Secrets<br/>POSTGRES_*, EVREN_API_KEY..."]:::store
+    BEPOD --> CM["ConfigMap<br/>POSTGRES_DB, model adları..."]:::store
+    BEPOD --> PG[("Postgres<br/>StatefulSet")]:::store
+    BEPOD --> QD[("Qdrant<br/>StatefulSet")]:::store
+    BEPOD --> RD[("Redis<br/>Deployment")]:::store
 ```
 
 ## Kubernetes Prodüksiyon Ortamı
