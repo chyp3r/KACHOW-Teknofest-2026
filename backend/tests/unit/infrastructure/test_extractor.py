@@ -1181,6 +1181,121 @@ async def test_header_repair_degrades_to_the_original_text_on_an_empty_transcrip
     assert repaired.text == "orijinal metin"
 
 
+# ==========================================
+# Signature-recovery escalation (`_maybe_repair_page_one` /
+# `_repair_signature`) -- header-band repair only ever touches the top
+# HEADER_BAND_FRACTION of the page, but a signature block sits well below
+# it. `signature_probe` decides whether a document instead gets a
+# full-page transcription, which replaces page 1 wholesale (and so also
+# covers the header -- never both per document, see
+# `_maybe_repair_page_one`'s own docstring).
+# ==========================================
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.vision.urllib.request.urlopen")
+async def test_unparseable_signature_triggers_full_page_transcription(mock_urlopen):
+    mock_urlopen.return_value = _fake_ollama_response("T.C.\nÖRNEK BAKANLIĞI\n\nBekir BOZDAĞ\nBaşkan")
+    vision = OllamaVisionExtractor()
+    chain = FallbackDocumentExtractor(
+        [], header_repair=vision, signature_probe=lambda text: "İMZA_VAR" in text
+    )
+    result = ExtractedDocument(
+        text="orijinal (imza yok)", pages=["orijinal (imza yok)"], page_count=1,
+        extractor="tesseract", used_ocr=True,
+    )
+    raster_cache = {vision.dpi: [Image.new("L", (100, 400), color=255)]}
+
+    repaired = await chain._maybe_repair_page_one(result, raster_cache, PDF_BYTES, {})
+
+    assert repaired.pages[0] == "T.C.\nÖRNEK BAKANLIĞI\n\nBekir BOZDAĞ\nBaşkan"
+    assert repaired.text == repaired.pages[0]
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.vision.urllib.request.urlopen")
+async def test_parseable_signature_gets_header_band_repair_only(mock_urlopen):
+    """Cost regression guard: a document whose signature already parses
+    from the original text must never pay the full-page vision cost --
+    only the cheap header-band crop."""
+    mock_urlopen.return_value = _fake_ollama_response("T.C. (onarıldı)")
+    vision = OllamaVisionExtractor()
+    original_lines = [f"satır {i}" for i in range(20)]
+    original_lines[-1] = "İMZA_VAR sonuncu satır"
+    chain = FallbackDocumentExtractor(
+        [], header_repair=vision, signature_probe=lambda text: "İMZA_VAR" in text
+    )
+    result = ExtractedDocument(
+        text="\n".join(original_lines), pages=["\n".join(original_lines)], page_count=1,
+        extractor="tesseract", used_ocr=True,
+    )
+    raster_cache = {vision.dpi: [Image.new("L", (100, 400), color=255)]}
+
+    repaired = await chain._maybe_repair_page_one(result, raster_cache, PDF_BYTES, {})
+
+    # Header band only: the body past HEADER_REPAIR_LINE_COUNT survives,
+    # including the signature line -- a full-page replacement would have
+    # produced the mocked response's text verbatim instead.
+    assert repaired.pages[0].startswith("T.C. (onarıldı)\n")
+    assert "İMZA_VAR sonuncu satır" in repaired.pages[0]
+    assert repaired.pages[0] != "T.C. (onarıldı)"
+    assert mock_urlopen.call_count == 1  # the header-band crop, nothing more
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.vision.urllib.request.urlopen")
+async def test_header_band_splice_eating_the_signature_escalates_to_full_page(mock_urlopen):
+    """Real regression: a short document's signature can sit inside the
+    leading HEADER_REPAIR_LINE_COUNT lines the header-band splice
+    replaces -- the signature parsed fine before repair, but the splice
+    silently discards it. Detected after the fact and escalated to a
+    full-page transcription instead (measured on CY-003/023/028)."""
+    responses = iter([
+        _fake_ollama_response("T.C.\nÖRNEK BAKANLIĞI (kırpma -- imzayı yuttu)"),
+        _fake_ollama_response("T.C.\nÖRNEK BAKANLIĞI\n\nİMZA_VAR Bekir BOZDAĞ\nBaşkan"),
+    ])
+    mock_urlopen.side_effect = lambda *a, **k: next(responses)
+    vision = OllamaVisionExtractor()
+    # Short document: the signature (line 5) sits well inside the first
+    # HEADER_REPAIR_LINE_COUNT (14) lines, so the crop-splice discards it.
+    short_lines = [f"satır {i}" for i in range(5)] + ["İMZA_VAR Bekir BOZDAĞ", "Başkan"]
+    chain = FallbackDocumentExtractor(
+        [], header_repair=vision, signature_probe=lambda text: "İMZA_VAR" in text
+    )
+    result = ExtractedDocument(
+        text="\n".join(short_lines), pages=["\n".join(short_lines)], page_count=1,
+        extractor="tesseract", used_ocr=True,
+    )
+    raster_cache = {vision.dpi: [Image.new("L", (100, 400), color=255)]}
+
+    repaired = await chain._maybe_repair_page_one(result, raster_cache, PDF_BYTES, {})
+
+    # The second (full-page) transcription wins, not the first (header-band
+    # crop that ate the signature).
+    assert repaired.pages[0] == "T.C.\nÖRNEK BAKANLIĞI\n\nİMZA_VAR Bekir BOZDAĞ\nBaşkan"
+    assert mock_urlopen.call_count == 2  # both vision costs paid, deliberately
+
+
+@pytest.mark.asyncio
+async def test_no_signature_probe_configured_keeps_header_band_only_behaviour():
+    """None disables the escalation entirely -- a caller that doesn't
+    inject `signature_probe` (today's default) gets exactly the
+    pre-existing header-band-only repair, unconditionally."""
+    with patch("app.infrastructure.extractors.vision.urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.return_value = _fake_ollama_response("T.C. (onarıldı)")
+        vision = OllamaVisionExtractor()
+        chain = FallbackDocumentExtractor([], header_repair=vision)  # no signature_probe
+        original_lines = [f"satır {i}" for i in range(20)]
+        result = ExtractedDocument(
+            text="\n".join(original_lines), pages=["\n".join(original_lines)], page_count=1,
+            extractor="tesseract", used_ocr=True,
+        )
+        raster_cache = {vision.dpi: [Image.new("L", (100, 400), color=255)]}
+
+        repaired = await chain._maybe_repair_page_one(result, raster_cache, PDF_BYTES, {})
+
+        assert repaired.pages[0].startswith("T.C. (onarıldı)\n")
+        assert mock_urlopen.call_count == 1
+
+
 # ------------------------------------------------------------------------
 # Field-triggered escalation, combined with header repair inside the chain
 # loop -- these exercise the two traps repairing a candidate mid-loop

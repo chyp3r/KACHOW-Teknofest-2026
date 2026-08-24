@@ -2,6 +2,311 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [3.54.0] - 2026-08-24
+İki kullanıcı bildirimi: gerçek taranmış belgelerde `İmza sahibi`/`İmza
+sahibinin unvanı` neredeyse hep boş kalıyor ("imza isim üzerine geldiyse
+OpenDataLoader/Tesseract bulamıyor"), ve "Mevzuat ve Dayanaklar" listesinde
+aynı hüküm iki kez görünüyor. Ölçüm ikincisini doğrudan doğruladı; birincisi
+için tek bir nedenin yeterli açıklama olmadığı, **üç ayrı hata modunun**
+üst üste bindiği ortaya çıktı -- üretim yolunun (23 belgenin tamamı, gerçek
+`get_document_extractor()` zinciri) canlı ölçümü: **imza bulma 0/23 → 23/23,
+birebir doğru 22/23**.
+
+### Düzeltildi
+- **İmza arama yönü ters çevrildi (mod A).** `_parse_signature`
+  ([field_parser.py](backend/app/ai/compliance/field_parser.py)) imzayı
+  kapanış formülünden sonraki **son 4 satırda** arıyordu; gerçek
+  letterhead'lerde o satırlar antet footer'ı (adres/santral/web), imza
+  bloğu onun üstünde. Kapanış formülü bulunduğunda arama artık **ileri**
+  yapılıyor (`SIGNATURE_WINDOW_LINES=6`, yeni sabit,
+  [system.py](backend/app/core/constants/system.py)); formül yoksa (tutanak)
+  eski geriye-dönük davranış korunuyor. Tek başına: mükemmel metinde
+  imza kaybı 17/23 → 0/23.
+- **Kurum adı reddi tamamlandı.** Önceki turda eklenen `INSTITUTION_PATTERN`
+  reddi "Meclisi" son-ekini kapsamıyordu, o yüzden "Türkiye Büyük Millet
+  Meclisi" hâlâ kişi adı sanılıyordu (4 TBMM-şablonu belge). Yerel bir
+  tamamlayıcı desen eklendi (`Meclisi`/`Kurulu`/`Komisyonu`) --
+  `draft_verifier`'ın kendi deseni bilerek değiştirilmedi, `drafts`
+  suite'ini etkilememesi için.
+- **İmza okunamadığında tam sayfa vision'a yükseliyor (mod B).** Bazı
+  belgelerde imza mürekkebi basılı ismi tamamen yok ediyor veya bozuyor
+  (`OpenDataLoader`/`Tesseract`: satır kayboluyor ya da `"İF; BOZDAG ;"`
+  gibi bozuluyor) -- bu durumda ayrıştırıcı hiçbir pencereyle
+  kurtaramaz, çünkü metnin kendisi yok. `FallbackDocumentExtractor`'a
+  yeni `signature_probe` parametresi (`app.ai.compliance.has_signature`,
+  `header_field_probe` ile aynı enjeksiyon deseniyle) eklendi:
+  imza ayrıştırılamıyorsa sayfa 1, başlık-bandı kırpması yerine **tam
+  sayfa** `OllamaVisionExtractor.transcribe_page` (yeni metot) ile
+  yeniden okunuyor -- bu aynı zamanda başlığı da onardığı için iki
+  vision maliyeti üst üste ödenmiyor. Ölçüm: dört belgede
+  (CY-002/010/011/034/050) diğer motorların kaybettiği/bozduğu isim
+  4/4 kurtarıldı.
+  - **Bulunmuş, düzeltilmiş bir yan etki**: başlık-bandı kırpması
+    (`HEADER_REPAIR_LINE_COUNT=14`) kısa belgelerde (CY-003/023/028,
+    tek paragraflık kısa cevaplar) imza bloğunu de facto siliyordu --
+    imza kırpılan ilk 14 satırın içinde kalıyordu. `_maybe_repair_page_one`
+    artık başlık-bandı onarımından **sonra** da `signature_probe`'u tekrar
+    kontrol ediyor; kırpma imzayı yuttuysa tam sayfaya kaçıyor (bu üç
+    belgede iki vision maliyeti de ödeniyor, kasıtlı: yanlış "eksik bilgi"
+    raporlamaktan iyi).
+- **Kapanış formülü araması artık ilk eşleşmeyi alıyor, sonuncuyu değil
+  (mod C, en ince olanı).** Üretim `parse_labelled_fields`'ı **tüm belge
+  metnine** (sayfalar birleşik) uyguluyor, sayfa 1'e değil. Bir "Ek:"
+  ekinin kendi kapanış formülü olduğunda, "son eşleşmeyi al" mantığı
+  o ek sayfasına çapalanıp gerçek imzayı tamamen kaçırıyordu -- ölçülen
+  iki gerçek belgede (CY-002, CY-034). Tek sayfalı `clean_text`'in
+  hiçbirinde birden fazla eşleşme olmadığı doğrulandı, yani bu değişiklik
+  hiçbir tek-sayfalık davranışı bozmuyor.
+- **Mevzuat önerileri atfa göre tekilleştiriliyor.**
+  `suggest_mevzuat_node`'da hiçbir yerde yinelenen öneri elenmiyordu;
+  `_raw_citation_suggestions` de her getirilen alıntı için bir kayıt
+  üretiyordu -- `MEVZUAT_RESULT_LIMIT=3` ve parçalı bir korpusla aynı
+  kanundan birden fazla parça geldiğinde aynı satır iki-üç kez
+  görünüyordu. Yeni `_dedupe_suggestions`, katlanmış `mevzuat` değerine
+  göre ilk eşleşmeyi tutup sonrakileri düşürüyor; hem model çıktısına hem
+  `_raw_citation_suggestions`'a (dolayısıyla her iki degradasyon yoluna
+  da) uygulanıyor.
+
+### Eklendi
+- `app.ai.compliance.has_signature`: `imza_sahibi`'nin bir metinden
+  ayrıştırılıp ayrıştırılamadığını raporlayan küçük fonksiyon --
+  `count_header_fields`'ın deseniyle aynı, `signature_probe` olarak
+  enjekte ediliyor.
+- `OllamaVisionExtractor.transcribe_page`: `transcribe_header_band`'in
+  kırpmasız kardeşi.
+- 10 yeni birim testi: gerçek footer'lı imza bloğu, tutanak (kapanış
+  formülsüz) yolunun bozulmadığı, footer'daki ikincil ad/unvan çiftinin
+  imza sanılmadığı, bir ekin kendi kapanış formülünün gerçek imzayı
+  ele geçirmediği (`test_field_parser.py`); imza okunamadığında tam
+  sayfaya yükselme, imza okunabiliyorsa yalnızca başlık-bandı (maliyet
+  regresyon koruması), kırpmanın imzayı yuttuğu kısa-belge durumunun
+  tam sayfaya kaçtığı, `signature_probe` verilmediğinde eski davranışın
+  korunduğu (`test_extractor.py`); model çıktısında ve ham-atıf
+  fallback'inde aynı maddenin tekilleştiği (`test_document_analysis.py`).
+
+### Doğrulama
+- `docker compose exec backend pytest -q` 2555 test geçiyor (2 bilinen
+  önceden var olan MCP testi hariç), 10 yeni test dahil.
+- **Kararı taşıyan ölçüm**: 23 gerçek belge, tam üretim zinciri
+  (`get_document_extractor()`, vision dahil), üretimin gerçekte kullandığı
+  tam-metin yoluyla (`extracted.text`, sayfa 1 değil): `imza_sahibi`
+  bulunan **0/23 → 23/23**, birebir doğru (Türkçe karakter toleranslı)
+  **22/23** (tek fark bir OCR karakter kaybı, kozmetik).
+- `make eval`: `intents` (macro F1 **0.9520**, birebir aynı) ve `drafts`
+  (doğruluk **1.0000**, yanlış pozitif **0.0000**, birebir aynı) bu
+  çalışmadan etkilenmedi -- `INSTITUTION_PATTERN`'e dokunmama kararının
+  doğrulaması. `evrak`'ın `missing_field_false_positive_rate`'i
+  **0.1148**'de sabit kaldı -- **beklenen**, körlük değil: o suite'in
+  gerçek-belge altın kümesi `clean_text` (tek sayfa, footer'sız, eksiz)
+  kullanıyor, tam olarak bu turun düzelttiği üç hata modunun hiçbirini
+  (footer, ek, kırpma) yapısal olarak taşımıyor. Gerçek kanıt yukarıdaki
+  23/23 canlı ölçüm.
+
+## [3.53.1] - 2026-08-24
+[3.53.0]'daki parser/merge düzeltmesinin canlı doğrulaması: aynı 4 gerçek
+belge (CY-009/CY-003/CY-010/CY-033) tam ardışık düzenden (`qwen3.5:9b`,
+üretim sıcaklığı 0.7) geçirildi. Düzeltmeler öncesi **0/4**'ü altın
+etiketle tam eşleşiyordu, sonrası **4/4**.
+
+### Düzeltildi
+- **`merge_parsed_over_model`'e sıralama-toleranslı kanıt kontrolü
+  eklendi, ama yalnızca iki alana.** Canlı ölçüm CY-033'te ikinci bir
+  boşluk açığa çıkardı: model `muhatap`'ı doğru buldu ama sırasını
+  değiştirdi ("Ankara Milletvekili İdris ŞAHİN", belge "Sayın İdris
+  ŞAHİN\nAnkara Milletvekili" yazıyorken) -- katlanmış alt-dize kontrolü
+  aynı bilgiyi farklı sırada tanımadığı için reddetti.
+  `draft_verifier`'ın kendi `_token_overlap`/`TOKEN_OVERLAP_THRESHOLD`
+  mantığı yeniden kullanılarak bir tolerans kademesi eklendi. **İlk
+  sürüm tüm `_EVIDENCE_RESCUABLE_FIELD` alanlarına açıktı ve bu, ikinci
+  ve daha ciddi bir boşluğu ortaya çıkardı**: CY-010'da (hiç "Konu:"
+  satırı olmayan bir belge) model gövde kelimelerinden kendi **özetini**
+  üretti ve bu, 0.857 kelime örtüşmesiyle yanlışlıkla kurtarıldı -- bir
+  sıralama farkı değil, gerçek bir sentezdi.
+  Kademe yalnızca `muhatap`/`gonderen_kurum`'a daraltıldı: ikisi de adlandırılmış
+  kişi/kurum, model gerçekçi olarak yeniden sıralar ama uydurmaz;
+  `konu`/`tarih`/`sayi` modelin doğal olarak özetlemeye/yeniden ifade
+  etmeye eğilimli olduğu alanlar, o yüzden yalnız katı alt-dize kontrolünde
+  kaldılar.
+
+### Eklendi
+- İki kalıcı regresyon testi (`backend/tests/unit/ai/test_field_parser.py`):
+  sıralaması değişmiş `muhatap`'ın kurtarıldığını, ve CY-010'un özet-tarzı
+  `konu`'sunun kurtarılmadığını kilitliyor.
+
+### Doğrulama
+- `docker compose exec backend pytest -q` 2545 test geçiyor (2 bilinen
+  önceden var olan MCP testi hariç), 2 yeni test dahil.
+- Canlı doğrulama: aynı 4 gerçek belge üzerinde 0/4 → 4/4 (yukarıya
+  bakınız). `make eval`'in `evrak` suite'i bu değişiklikten etkilenmedi
+  (kasıtlı olarak yalnız parser'ı ölçüyor, LLM/merge hiç çağrılmıyor) --
+  sayı hâlâ **0.1148**.
+
+## [3.53.0] - 2026-08-23
+Zorunlu alan doldurmanın kök nedeni "OCR yetersizliği" sanılıyordu; ölçüm
+farklı bir yer gösterdi. 23 elle etiketlenmiş gerçek belgenin *mükemmel*
+metni (`clean_text`, OCR hatası tanım gereği imkânsız) `parse_labelled_fields`'tan
+geçirildiğinde bile alanların **%37.9'u** kayboluyordu -- yani kayıpların
+büyük kısmı OCR'dan önce, ayrıştırıcıda oluşuyordu.
+
+### Düzeltildi
+- **`_PERSON_NAME_LINE` artık BÜYÜK HARF soyadını tanıyor**
+  ([field_parser.py](backend/app/ai/compliance/field_parser.py)). Kök
+  neden tek bir regex satırıydı: imza bloğunun ad/unvan satırını tanıyan
+  desen yalnızca Titlecase kelimeleri kabul ediyordu ("Ahmet Yılmaz"), ama
+  Türk resmî yazışmasında soyadı BÜYÜK yazılır ("Yaşar GÜLER", "Cevdet
+  YILMAZ"). `datasets/sample/`'ın 12 sentetik belgesinin tamamı
+  Titlecase-soyadı üslubunda olduğu için hata görünmüyordu; ölçülen kayıp
+  gerçek korpusta `imza_sahibi`/`imza_unvani`'de **17/23 (%74)**, düzeltme
+  sonrası **0/23**. Aynı düzeltme kurum adını ("Türkiye Büyük Millet
+  Meclisi") kişi adı sayan ikinci bir hatayı da giderdi --
+  `draft_verifier.py`'nin `INSTITUTION_PATTERN`'i imza adayı reddi olarak
+  yeniden kullanıldı. Toplam alan-belge kaybı mükemmel metinde **%37.9 →
+  %16.8**.
+- **`merge_parsed_over_model` artık kanıta dayalı kurtarma yapıyor**
+  (yeni `document_text` argümanı). Eskiden kural mutlaktı: "parser
+  bulamadıysa modelin değerini at" -- gerekçesi gerçek ve belgelenmişti
+  (model olmayan bir muhatap için "İLGİLİ MAKAMA" uyduruyor, gövdeden izin
+  başlangıç tarihini `tarih`'e çekiyor), ama tedavi artık hastalıktan
+  pahalıydı: canlı `qwen3.5:9b` ile 4 belge üzerinde ölçüldü, parser'ın
+  kaybettiği **her** alanda model doğru değere sahipti (CY-010'un adı geçen
+  milletvekili muhatabı gibi, dative ekli kurum olmayan durumlar), ve
+  merge hepsini siliyordu. Yeni davranış: `sayi`/`tarih`/`konu`/`muhatap`/
+  `gonderen_kurum` için parser boş, model dolu ve değer **belgede gerçekten
+  geçiyorsa** kabul edilir (`normalize_value` ile katlanmış alt-dize
+  karşılaştırması); geçmiyorsa hâlâ atılır. `tarih` için ek konum kısıtı --
+  yalnızca başlık bölgesinde (ilk muhatap/kapanış satırından önce) geçen
+  değer kabul edilir, gövde tarihi sızıntısı korunmaya devam ediyor.
+  `imza_sahibi`/`imza_unvani` bu kurtarmanın **kapsamı dışında** tutuldu:
+  `_parse_signature`'ın imzasız-dilekçe koruması (bir isim satırının tek
+  başına imza sayılmaması) kasıtlı bir karar, kapsam boşluğu değil -- ismi
+  belgede aramak bu korumayı doğrudan bozardı, kilitleyen bir birim testi
+  eklendi.
+
+### Eklendi
+- `backend/tests/unit/ai/test_field_parser.py`: 9 yeni test -- BÜYÜK HARF
+  soyadı tanıma, `Prof. Dr.` önekli ad, kurum-adı-imza-değil negatifi,
+  kanıta dayalı kurtarma (isimli muhatap), uydurma reddi ("İLGİLİ MAKAMA"),
+  gövde-tarih sızıntısı reddi, başlık-bölgesi tarih kurtarma, ve kritik
+  regresyon testi: imzasız dilekçenin uygulanan adı, `document_text`
+  verilse bile hâlâ diriltilmiyor.
+
+### İncelendi, uygulanmadı
+- Başlık onarımını (`_maybe_repair_header`) her belgenin ilk sayfasında
+  koşulsuz çalıştırmak (vision modeli her yüklemede sayfa 1'e). Gerçek
+  23-belgelik korpusun tamamı zaten taranmış olduğu için bu hipotezi
+  ölçemiyor, ve mimari gerekçe düşük fayda gösteriyor: born-digital bir PDF
+  hiçbir zaman rasterize edilmiyor, dolayısıyla vision-onarımın düzelttiği
+  bozukluk sınıfı orada oluşamaz. Ayrıntı: `docs/evaluation/gorev1-scorecard.md`'nin
+  Madde 1 bölümü.
+
+### Doğrulama
+- `docker compose exec backend pytest -q` 2542 test geçiyor (2 bilinen
+  önceden var olan MCP testi hariç), 9 yeni test dahil, hiç regresyon yok.
+- `make eval`: `evrak`'ın `missing_field_false_positive_rate`'i **0.2775 →
+  0.1148** (gerçek taramada 0.34 → 0.1184); kaçırma oranı 0.0000'da sabit
+  kaldı (düzeltme yanlış alarmı azaltırken gerçek eksiklik yakalamayı
+  bozmadı). `intents` (macro F1 0.9520) ve `drafts` (doğruluk 1.0000)
+  bu çalışmadan etkilenmeyen dosyalarda tıpatıp aynı.
+
+## [3.52.0] - 2026-08-23
+Görev 1'in altı şartname maddesini denetleyen bir geçiş: madde 5 (ilgili
+mevzuat önerme) daha önce hiç doğrulanmıyordu -- `suggest_mevzuat_node`'un
+istemi modele "alıntılarda bulunmayan madde numarası veya kanun adı üretme"
+diyordu ve buna güveniliyordu, çıktısını kontrol eden hiçbir şey yoktu.
+Madde 1-4 ve 6'nın hepsi ya tamamen deterministik ya da başka bir yerde
+doğrulanıyordu (`app.ai.verification.draft_verifier`); madde 5 tek
+korumasız model çıktısıydı. Ayrıca Görev 1'in altı yeteneğinin hiçbiri
+`make eval`'e bağlı değildi -- sınıflandırma/çıkarım sayıları 12 sentetik
+belge üzerinde duruyordu, `datasets/resmi_yazisma/`'daki 23 elle etiketli
+gerçek tarama yalnızca OCR/imza etiketleri taşıyordu.
+
+### Eklendi
+- **`citation_support` -- mevzuat atfı doğrulaması**
+  ([mevzuat_citation.py](backend/app/ai/compliance/mevzuat_citation.py)):
+  bir önerinin atfını (`"RYUEHY m.11"` gibi) getirilen alıntılara karşı
+  denetler. Atfın kanunu hiçbir alıntıda yoksa ya da atıf hiç çözümlenemiyorsa
+  (`resolve_citation`'ın zaten döndürdüğü hem `kanun` hem `madde` `None`)
+  `grounded=False`; bir madde numarası belirtilmişse o maddenin, kanunu
+  destekleyen alıntılardan **en az birinin gövdesinde** geçmesi de gerekir
+  -- doğru kanunu yanlış madde numarasıyla eşleyen bir uydurmayı da yakalar,
+  yalnızca tamamen yabancı bir kanunu değil. `suggest_mevzuat_node` artık
+  her öneriyi bu denetimden geçiriyor: atfı doğrulanamayan öneri düşürülür,
+  yalnızca açıklaması doğrulanamayan öneri (`check_groundedness`,
+  `output_gate.py`'nin zaten kullandığı aynı iddia-eşleştirme boru hattı)
+  atfını koruyup açıklamasını nötr metinle değiştirir. Model hiç öneri
+  üretmezse ya da tamamı düşerse, getirilen her alıntı için zaten yapı
+  gereği doğrulanmış ham atıf listesine düşülür (var olan başarısızlık
+  yolunun aynısı, artık `_raw_citation_suggestions` olarak paylaşılıyor).
+  API yanıt şeması (`MevzuatReferenceSchema`) değişmedi.
+  - **Canlı doğrulama**: 12 sentetik belgenin tamamı gerçek `qwen3.5:9b` ve
+    gerçek yerel mevzuat getiriminden geçirildi. 23 önerinin **1'i**
+    düşürüldü -- `evrak_04`'te model getirilen alıntılar yalnızca Madde
+    4'ü içerdiği hâlde "Dilekçe Hakkının Kullanılmasına Dair Kanun -
+    Madde 3" atfı üretti: gerçek bir uydurma, doğru yakalandı. Diğer 22
+    öneriye hiç dokunulmadı. Bu vaka artık `evrak_suite.py`'nin sabit
+    örneğine kalıcı bir regresyon testi olarak eklendi.
+- **`evaluation/harness/evrak_suite.py`** -- Görev 1'in deterministik
+  yarısını `make eval`'e bağlıyor: OCR/doğrudan-metin yönlendirmesi
+  (madde 1), alan çıkarımı (madde 3, yalnız `sentetik` kategori --
+  gerçek korpus için bağımsız elle-yazılmış değer kümesi bu geçişin
+  kapsamı dışında, aksi hâlde ölçüm kendi çıktısına karşı totoloji
+  olurdu), eksik-bilgi tespiti (madde 4, **baş metrik: yanlış alarm
+  oranı**) ve mevzuat atfı doğrulaması (madde 5, sabit uydurma-atıf
+  örneği). 35 vakalık ortak altın küme
+  (`evaluation/datasets/evrak.jsonl`, `scripts/build_evrak_eval_set.py`
+  ile üretilir): 12 sentetik + `datasets/resmi_yazisma/ocr_ground_truth.json`'daki
+  23 gerçek tarama, `document_type` ve `expected_missing_fields` ile
+  genişletildi (`clean_text`'ten elle etiketlendi, hiçbir zaman
+  `check_required_fields` çalıştırılarak türetilmedi -- aksi hâlde kapıyı
+  kendi çıktısına karşı sınamış olurdu). Altı belge (TBMM Kanunlar ve
+  Kararlar Başkanlığı antetli, adı geçen bir milletvekiline hitap eden,
+  "T.C." satırı taşımayan şablon) `muhatap`/`gonderen_kurum`'u belgede
+  gerçekten mevcut sayıyor -- korpusun kendi `_meta` notunun zaten
+  belirttiği gibi, bu bir ayrıştırıcı-mimarisi boşluğu, belgenin kendisinin
+  eksikliği değil; bu boşluk madde 4'te değil, madde 3'ün çıkarım
+  sayısında görünür.
+  - **Ölçülen sonuç**: OCR yönlendirmesi 35/35 (1.0000); çıkarım 53/70 alan
+    doğru (0.7571, yalnız sentetik); eksik-bilgi yanlış alarm oranı
+    **0.2775** (58/209 alan-belge çifti, kaçırma oranı 0.0000); atıf
+    doğrulaması 3/3 (1.0000). Kategori kırılımı ve başarısız vaka listesi
+    `make eval`'in ürettiği rapora düşüyor.
+- **`scripts/evaluate_mevzuat_retrieval.py`**: CHANGELOG'un [1.35.0]
+  girdisinde düzyazıya gömülü kalan "6/6" ölçümünü regresyon-korumalı bir
+  sayıya çeviriyor. On `DocumentType` değerinin her biri için beklenen
+  kanunun top-3 getirilen alıntı içinde olup olmadığını denetler.
+  **10/10 isabet** (10 türün tamamı, 7 kanunun 4'ü).
+- **`docs/evaluation/gorev1-scorecard.md`**: şartnamenin altı maddesinin
+  her birini metriğine, korpusuna ve onu yeniden üreten komuta eşleyen tek
+  tablo.
+- `scripts/evaluate_classification.py` artık `--corpus {sample,real,both}`
+  ile 23 gerçek taramayı da (madde 2, `clean_text` üzerinden) koşabiliyor
+  ve `--report <isim>` ile `evaluation/reports/<isim>.json`'a yazabiliyor;
+  önceden yalnızca 12 sentetik belgeyi ölçüyordu.
+  - **Canlı koşum sonucu** (`qwen3.5:9b`): tür doğruluğu gerçek taramada
+    **23/23**, sentetikte **11/12** (tek hata: `evrak_06`,
+    `information_request` → `petition`). Aynı koşumun eksik-bilgi tarafını
+    elle incelemek gerçek bir bulgu çıkardı: `imza_sahibi`/`imza_unvani`
+    model kendi çıkardığı `entities` listesinde adı doğru tespit ettiği
+    hâlde ilgili alana yazmıyor (CY-009, CY-001) -- tutarsız, çünkü aynı
+    şekle sahip bir imza bloğu başka bir belgede (CY-010) doğru
+    çıkarılıyor. Bkz. `docs/evaluation/gorev1-scorecard.md`'nin Madde 2
+    bölümü.
+
+### Değiştirildi
+- `datasets/resmi_yazisma/ocr_ground_truth.json`'daki 23 gerçek taramanın
+  her biri `document_type` ve `expected_missing_fields` kazandı (yukarıya
+  bakınız); `_meta.gorev1_labelling` etiketleme yöntemini ve TBMM-şablonu
+  istisnasını kaydediyor.
+
+### Doğrulama
+- `docker compose exec backend pytest -q` 2533 test geçiyor (2 bilinen
+  önceden var olan MCP testi hariç, bu çalışmadan etkilenmedi), 9 yeni
+  `citation_support` birim testi ve 3 yeni düğüm-seviyesi doğrulama-filtresi
+  testi dahil.
+- `make eval`: `intents` (macro F1 0.9520) ve `drafts` (doğruluk 1.0000,
+  yanlış pozitif 0.0000) bu çalışmadan etkilenmeyen dosyalarda değişmedi;
+  `evrak` yukarıdaki sayıları üretiyor.
+
 ## [3.51.0] - 2026-08-24
 #272'nin ("feat(ai): cross-encoder reranker (J7) + embedding model ->
 harrier-oss-v1-0.6b") tam geri alınması (revert).

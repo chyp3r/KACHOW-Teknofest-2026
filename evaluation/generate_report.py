@@ -24,7 +24,13 @@ from pathlib import Path
 from typing import Any, Optional
 
 from app.ai.policy import POLICY_VERSION
-from evaluation.harness import draft_suite, intent_suite, retrieval_suite, trajectory_suite
+from evaluation.harness import (
+    draft_suite,
+    evrak_suite,
+    intent_suite,
+    retrieval_suite,
+    trajectory_suite,
+)
 from evaluation.harness.runner import REPO_ROOT, EvalRun
 from evaluation.metrics import (
     Prediction,
@@ -39,7 +45,7 @@ from evaluation.metrics import (
 
 REPORT_DIR = REPO_ROOT / "evaluation" / "reports"
 
-SUITES = ("intents", "drafts", "retrieval", "trajectories")
+SUITES = ("intents", "drafts", "retrieval", "trajectories", "evrak")
 
 
 def _intent_summary(run: EvalRun) -> dict[str, Any]:
@@ -110,6 +116,48 @@ def _draft_summary(run: EvalRun) -> dict[str, Any]:
         "by_category": categories,
         "failures": draft_suite.failures(run),
         "claim_detection_gaps": draft_suite.claim_detection_gaps(run),
+    }
+
+
+def _evrak_summary(run: EvalRun) -> dict[str, Any]:
+    """Score an evrak run into a serialisable summary.
+
+    Şartname requirement 5 (mevzuat citation grounding) is scored here too,
+    from `evrak_suite.citation_fixture_rates()` -- a fixed fixture, not a
+    per-case observation, since a citation's groundedness is a pure function
+    of (citation, excerpts), not of a document's text.
+    """
+    ocr_rates = evrak_suite.ocr_routing_rates(run)
+    missing_rates = evrak_suite.missing_field_rates(run)
+    extraction = evrak_suite.extraction_totals(run)
+    extraction_total = sum(extraction.values())
+    citation_rates = evrak_suite.citation_fixture_rates()
+
+    categories: dict[str, dict[str, Any]] = {}
+    for category, results in run.by_category().items():
+        subset = EvalRun(suite=run.suite, dataset=run.dataset, results=results)
+        categories[category] = {
+            "cases": len(results),
+            "ocr_routing_accuracy": round(evrak_suite.ocr_routing_rates(subset).accuracy, 4),
+            "missing_field_false_positive_rate": round(
+                evrak_suite.missing_field_rates(subset).false_positive_rate, 4
+            ),
+        }
+
+    return {
+        "cases": len(run.results),
+        "ocr_routing_accuracy": round(ocr_rates.accuracy, 4),
+        "missing_field_false_positive_rate": round(missing_rates.false_positive_rate, 4),
+        "missing_field_false_negative_rate": round(missing_rates.false_negative_rate, 4),
+        "missing_field_counts": asdict(missing_rates),
+        "extraction_counts": extraction,
+        "extraction_correct_rate": round(
+            extraction["correct"] / extraction_total, 4
+        ) if extraction_total else 0.0,
+        "citation_grounding_accuracy": round(citation_rates.accuracy, 4),
+        "citation_grounding_counts": asdict(citation_rates),
+        "by_category": categories,
+        "failures": evrak_suite.failures(run),
     }
 
 
@@ -202,12 +250,12 @@ def _run_suite(
     """Run one suite and score it.
 
     Args:
-        name: ``"intents"``, ``"drafts"`` or ``"retrieval"``.
+        name: ``"intents"``, ``"drafts"``, ``"retrieval"``, ``"trajectories"``
+            or ``"evrak"``.
         with_model: Only meaningful for ``"intents"`` -- wires a real
             fast-tier model into the model band instead of the default fully
             offline run (see ``intent_suite.run_with_model``). Ignored for
-            ``"drafts"``/``"retrieval"``, which have no model band to begin
-            with.
+            every other suite, which has no model band to begin with.
         retrieval_k: Only meaningful for ``"retrieval"`` -- the cut-off
             rank every arm and every rank-sensitive metric uses.
 
@@ -228,6 +276,9 @@ def _run_suite(
     if name == "trajectories":
         run = trajectory_suite.run()
         return run, _trajectory_summary(run)
+    if name == "evrak":
+        run = evrak_suite.run()
+        return run, _evrak_summary(run)
     raise ValueError(f"Unknown suite: {name}")
 
 
@@ -239,41 +290,33 @@ def _format_intent_markdown(summary: dict[str, Any]) -> list[str]:
         "| Metrik | Değer |",
         "|---|---|",
         f"| Vaka sayısı | {summary['cases']} |",
-        f"| Macro F1 | {summary['macro_f1']:.4f} |",
+        f"| **Macro F1** | **{summary['macro_f1']:.4f}** |",
         f"| Doğruluk (tüm vakalar) | {summary['accuracy_over_all']:.4f} |",
         f"| Doğruluk (karar verilenler) | {summary['accuracy_over_decided']:.4f} |",
-        f"| Eskalasyon (abstention) oranı | {summary['abstention_rate']:.4f} |",
-        f"| **Clarify oranı** (kullanıcıya soru) | **{summary['clarify_rate']:.4f}** |",
-        f"| Kalibrasyon hatası (ECE) | {summary['expected_calibration_error']:.4f} |",
+        f"| Eskalasyon oranı | {summary['abstention_rate']:.4f} |",
+        f"| Clarify oranı | {summary['clarify_rate']:.4f} |",
+        f"| Kalibrasyon hatası | {summary['expected_calibration_error']:.4f} |",
         "",
         "### Kaynak dağılımı",
         "",
-        "| Kaynak | Vaka |",
+        "| Kaynak | Sayı |",
         "|---|---|",
     ]
-    for source, count in summary["source_distribution"].items():
+    for source, count in sorted(summary["source_distribution"].items()):
         lines.append(f"| `{source}` | {count} |")
 
     lines += [
         "",
         "### Kategori kırılımı",
         "",
-        "| Kategori | Vaka | Doğruluk | Eskalasyon |",
-        "|---|---|---|---|",
+        "| Kategori | Vaka | Doğruluk (tüm) | Doğruluk (kararlı) | Eskalasyon |",
+        "|---|---|---|---|---|",
     ]
-
     for category in sorted(summary["by_category"]):
         stats = summary["by_category"][category]
         lines.append(
-            f"| `{category}` | {stats['cases']} | "
-            f"{stats['accuracy_over_all']:.2f} | {stats['abstention_rate']:.2f} |"
-        )
-
-    lines += ["", "### Etiket bazında", "", "| Etiket | P | R | F1 | Destek |", "|---|---|---|---|---|"]
-    for score in summary["per_label"]:
-        lines.append(
-            f"| `{score['label']}` | {score['precision']:.2f} | "
-            f"{score['recall']:.2f} | {score['f1']:.2f} | {score['support']} |"
+            f"| `{category}` | {stats['cases']} | {stats['accuracy_over_all']:.2f} | "
+            f"{stats['accuracy_over_decided']:.2f} | {stats['abstention_rate']:.2f} |"
         )
 
     failures = summary["failures"]
@@ -282,14 +325,13 @@ def _format_intent_markdown(summary: dict[str, Any]) -> list[str]:
         lines.append("Yok.")
     else:
         lines += [
-            "| ID | Kategori | Mesaj | Beklenen | Gözlenen | Kaynak |",
-            "|---|---|---|---|---|---|",
+            "| ID | Kategori | Beklenen | Gözlenen | Kaynak |",
+            "|---|---|---|---|---|",
         ]
         for row in failures:
-            message = row["message"].replace("|", "\\|")
             lines.append(
-                f"| `{row['id']}` | `{row['category']}` | {message} | "
-                f"`{row['expected']}` | `{row['observed']}` | `{row['source']}` |"
+                f"| `{row['id']}` | `{row['category']}` | `{row['expected']}` | "
+                f"`{row['observed']}` | `{row['source']}` |"
             )
     return lines
 
@@ -304,17 +346,16 @@ def _format_draft_markdown(summary: dict[str, Any]) -> list[str]:
         "|---|---|",
         f"| Vaka sayısı | {summary['cases']} |",
         f"| Doğruluk | {summary['accuracy']:.4f} |",
-        f"| **Yanlış pozitif oranı** (gereksiz HITL) | **{summary['false_positive_rate']:.4f}** |",
-        f"| Yanlış negatif oranı (kaçan hata) | {summary['false_negative_rate']:.4f} |",
-        f"| TP / FP / TN / FN | {counts['true_positive']} / {counts['false_positive']} "
-        f"/ {counts['true_negative']} / {counts['false_negative']} |",
+        f"| **Yanlış pozitif oranı** | **{summary['false_positive_rate']:.4f}** |",
+        f"| Yanlış negatif oranı | {summary['false_negative_rate']:.4f} |",
+        f"| TP={counts['true_positive']} FP={counts['false_positive']} "
+        f"TN={counts['true_negative']} FN={counts['false_negative']} | |",
         "",
         "### Kategori kırılımı",
         "",
-        "| Kategori | Vaka | Doğruluk | YP | YN |",
+        "| Kategori | Vaka | Doğruluk | FP | FN |",
         "|---|---|---|---|---|",
     ]
-
     for category in sorted(summary["by_category"]):
         stats = summary["by_category"][category]
         lines.append(
@@ -322,32 +363,89 @@ def _format_draft_markdown(summary: dict[str, Any]) -> list[str]:
             f"{stats['false_positive']} | {stats['false_negative']} |"
         )
 
+    gaps = summary["claim_detection_gaps"]
+    lines += ["", f"### İddia tespiti boşlukları ({len(gaps)})", ""]
+    if not gaps:
+        lines.append("Yok.")
+    else:
+        lines += ["| ID | Kategori | Ayrıntı |", "|---|---|---|"]
+        for row in gaps:
+            lines.append(f"| `{row['id']}` | `{row['category']}` | {row['detail']} |")
+
     failures = summary["failures"]
     lines += ["", f"### Başarısız vakalar ({len(failures)})", ""]
     if not failures:
         lines.append("Yok.")
     else:
-        lines += ["| ID | Kategori | Tür | Skor | Bulunan dayanaksız ifadeler |", "|---|---|---|---|---|"]
+        lines += [
+            "| ID | Kategori | Beklenen | Gözlenen |",
+            "|---|---|---|---|",
+        ]
         for row in failures:
-            claims = ", ".join(
-                f"{claim['kind']}: {claim['value']}"
-                for claim in row["unsupported_claims"]
-            )
             lines.append(
-                f"| `{row['id']}` | `{row['category']}` | `{row['kind']}` | "
-                f"{row['confidence_score']} | {claims or '-'} |"
+                f"| `{row['id']}` | `{row['category']}` | `{row['expected']}` | `{row['observed']}` |"
             )
+    return lines
 
-    gaps = summary["claim_detection_gaps"]
-    lines += ["", f"### Dayanaksız ifade sayımı sapmaları ({len(gaps)})", ""]
-    if not gaps:
+
+def _format_evrak_markdown(summary: dict[str, Any]) -> list[str]:
+    """Render the evrak summary as Markdown lines.
+
+    Maps directly onto the şartname's six-bullet list: OCR routing (1),
+    field extraction (3), missing-field false positives (4), and mevzuat
+    citation grounding (5). Bullets 2 (type) and 6 (summary) need a live
+    model and are measured separately by
+    ``scripts/evaluate_classification.py`` / ``evaluate_summarization.py``.
+    """
+    missing_counts = summary["missing_field_counts"]
+    extraction = summary["extraction_counts"]
+    citation_counts = summary["citation_grounding_counts"]
+    lines = [
+        "### Genel -- şartname eşlemesi",
+        "",
+        "| Şartname maddesi | Metrik | Değer |",
+        "|---|---|---|",
+        f"| 1 -- OCR/doğrudan metin yönlendirmesi | Doğruluk | {summary['ocr_routing_accuracy']:.4f} |",
+        f"| 3 -- bilgi unsuru çıkarma (yalnız `sentetik`) | Doğru alan oranı | {summary['extraction_correct_rate']:.4f} |",
+        f"| 4 -- eksik bilgi tespiti | **Yanlış alarm oranı** | **{summary['missing_field_false_positive_rate']:.4f}** |",
+        f"| 4 -- eksik bilgi tespiti | Kaçırma oranı | {summary['missing_field_false_negative_rate']:.4f} |",
+        f"| 5 -- mevzuat atfı doğrulaması | Doğruluk | {summary['citation_grounding_accuracy']:.4f} |",
+        "",
+        f"Vaka sayısı: {summary['cases']} · "
+        f"Eksik-alan (alan, belge) çifti: TP={missing_counts['true_positive']} "
+        f"FP={missing_counts['false_positive']} TN={missing_counts['true_negative']} "
+        f"FN={missing_counts['false_negative']} · "
+        f"Çıkarım: doğru={extraction['correct']} kaçan={extraction['missed']} "
+        f"yanlış={extraction['wrong']} sahte={extraction['spurious']} · "
+        f"Atıf: TP={citation_counts['true_positive']} FP={citation_counts['false_positive']} "
+        f"TN={citation_counts['true_negative']} FN={citation_counts['false_negative']}",
+        "",
+        "### Kategori kırılımı",
+        "",
+        "| Kategori | Vaka | OCR yönlendirme doğruluğu | Eksik-alan yanlış alarm oranı |",
+        "|---|---|---|---|",
+    ]
+
+    for category in sorted(summary["by_category"]):
+        stats = summary["by_category"][category]
+        lines.append(
+            f"| `{category}` | {stats['cases']} | {stats['ocr_routing_accuracy']:.2f} | "
+            f"{stats['missing_field_false_positive_rate']:.2f} |"
+        )
+
+    failures = summary["failures"]
+    lines += ["", f"### Eksik-alan kümesi uyuşmayan belgeler ({len(failures)})", ""]
+    if not failures:
         lines.append("Yok.")
     else:
-        lines += ["| ID | Kategori | Beklenen | Gözlenen |", "|---|---|---|---|"]
-        for row in gaps:
+        lines += [
+            "| ID | Kategori | Beklenen eksik | Gözlenen eksik |",
+            "|---|---|---|---|",
+        ]
+        for row in failures:
             lines.append(
                 f"| `{row['id']}` | `{row['category']}` | "
-                f"{row['expected_claim_count']} | {row['observed_claim_count']} |"
+                f"`{row['expected_missing_fields']}` | `{row['observed_missing_fields']}` |"
             )
     return lines
 
@@ -481,7 +579,7 @@ def _format_trajectory_markdown(summary: dict[str, Any]) -> list[str]:
 def _diff_lines(suite: str, current: dict[str, Any], baseline: dict[str, Any]) -> list[str]:
     """Render the headline deltas against a baseline report."""
     if suite == "retrieval":
-        # Nested one level deeper than the other two suites: the comparable
+        # Nested one level deeper than the other suites: the comparable
         # numbers live under each report's own baseline arm, and a report's
         # baseline arm name is itself worth surfacing if it ever changes
         # between the two runs being compared (a policy default change).
@@ -507,11 +605,19 @@ def _diff_lines(suite: str, current: dict[str, Any], baseline: dict[str, Any]) -
             ("mean_edit_distance", "Ortalama edit mesafesi", False),
             ("unexpected_node_rate", "Beklenmeyen node oranı", False),
         ]
-    else:
+    elif suite == "drafts":
         tracked = [
             ("accuracy", "Doğruluk", True),
             ("false_positive_rate", "Yanlış pozitif oranı", False),
             ("false_negative_rate", "Yanlış negatif oranı", False),
+        ]
+    else:
+        tracked = [
+            ("ocr_routing_accuracy", "OCR yönlendirme doğruluğu", True),
+            ("extraction_correct_rate", "Doğru alan oranı", True),
+            ("missing_field_false_positive_rate", "Eksik-alan yanlış alarm oranı", False),
+            ("missing_field_false_negative_rate", "Eksik-alan kaçırma oranı", False),
+            ("citation_grounding_accuracy", "Mevzuat atfı doğrulama doğruluğu", True),
         ]
 
     lines = ["### Baseline karşılaştırması", "", "| Metrik | Baseline | Şimdi | Δ |", "|---|---|---|---|"]
@@ -572,8 +678,10 @@ def build_report(
             lines += _format_draft_markdown(summaries[suite])
         elif suite == "trajectories":
             lines += _format_trajectory_markdown(summaries[suite])
-        else:
+        elif suite == "retrieval":
             lines += _format_retrieval_markdown(summaries[suite])
+        else:
+            lines += _format_evrak_markdown(summaries[suite])
 
         if baseline and suite in baseline.get("suites", {}):
             lines += [""] + _diff_lines(
@@ -698,12 +806,18 @@ def main(argv: Optional[list[str]] = None) -> int:
                 f"exact_match_rate={summary['exact_match_rate']:.4f} "
                 f"mean_edit_distance={summary['mean_edit_distance']:.4f}"
             )
-        else:
+        elif suite == "retrieval":
             baseline_metrics = summary["arms"][summary["baseline"]]
             print(
                 f"[{suite}] k={summary['k']} baseline=`{summary['baseline']}` · "
                 f"precision_at_k={baseline_metrics['precision_at_k']:.4f} "
                 f"ndcg_at_k={baseline_metrics['ndcg_at_k']:.4f}"
+            )
+        else:
+            print(
+                f"[{suite}] {summary['cases']} vaka · "
+                f"ocr_routing_accuracy={summary['ocr_routing_accuracy']:.4f} "
+                f"missing_field_false_positive_rate={summary['missing_field_false_positive_rate']:.4f}"
             )
 
     print(f"\nRapor yazıldı:\n  {json_path}\n  {markdown_path}")

@@ -27,7 +27,9 @@ over model output for the same field.
 import re
 from typing import Any, Optional
 
-from app.ai.compliance.checker import normalize_value
+from app.ai.compliance.checker import is_blank, normalize_value
+from app.ai.verification.draft_verifier import INSTITUTION_PATTERN, TOKEN_OVERLAP_THRESHOLD
+from app.core.constants import SIGNATURE_WINDOW_LINES
 
 # Every label that can terminate a preceding value on the same line. The
 # regulation places "Tarih" to the right of "Sayı" on one line, so a value must
@@ -180,9 +182,43 @@ _ADDRESSEE_SUFFIX = r"(?:NA|NE|YA|YE|MAKAMA|YERLERİNE|BAŞKANLIĞINA)"
 #: annotation to a reference-number shape closes it while still matching
 #: every real handwritten-reference case measured in the corpus.
 _ADDRESSEE_LINE = re.compile(rf"^.{{6,40}}?{_ADDRESSEE_SUFFIX}(?:\s+[0-9/]{{1,12}})?\s*$")
-#: A personal name line in the signature block: 2-4 capitalised words, no digits.
+#: A name-shaped word: Titlecase ("Ahmet") or an ALL-CAPS Turkish surname
+#: ("GÜLER"). Official correspondence conventionally sets the surname (and
+#: sometimes a title abbreviation, "Prof. Dr.") in full capitals -- the
+#: original Titlecase-only pattern rejected "Yaşar GÜLER" outright.
+#: Measured against the 23 hand-labelled real documents' `clean_text`
+#: (OCR-error-free by construction): the Titlecase-only pattern lost
+#: `imza_sahibi`/`imza_unvani` on 17/23 of them, all ALL-CAPS-surname
+#: documents that datasets/sample/'s uniformly "Ahmet Yılmaz"-styled
+#: synthetic corpus never exercised.
+_NAME_WORD = r"(?:[A-ZÇĞİÖŞÜ][a-zçğıöşü]+|[A-ZÇĞİÖŞÜ]{2,})"
+#: A personal name line in the signature block: 2-4 name-shaped words, no
+#: digits. The leading lookahead requires at least one lower-case letter
+#: somewhere on the line, so a line made entirely of ALL-CAPS words -- an
+#: institution/letterhead line such as "TÜRKİYE BÜYÜK MİLLET MECLİSİ
+#: BAŞKANLIĞI" -- can never match on its own; a genuine signature always
+#: carries at least one Titlecase given name. This does not catch every
+#: institution-name false-positive on its own (a *Titlecase-worded*
+#: institution mention, e.g. "Türkiye Büyük Millet Meclisi" used in running
+#: text, still matches this pattern) -- `_parse_signature` below additionally
+#: rejects a candidate that looks like an institution name via
+#: `INSTITUTION_PATTERN`, and relies on trying candidates in document order
+#: (the real name line comes first) as the primary defense for the rest.
 _PERSON_NAME_LINE = re.compile(
-    r"^(?:[A-ZÇĞİÖŞÜ][a-zçğıöşü]+\.?\s+){1,3}[A-ZÇĞİÖŞÜ][a-zçğıöşü]+$"
+    rf"^(?=.*[a-zçğıöşü])(?:{_NAME_WORD}\.?\s+){{1,3}}{_NAME_WORD}$"
+)
+#: Institution-name suffixes `INSTITUTION_PATTERN` (draft_verifier.py)
+#: doesn't cover. That pattern is tuned for extracting an institution claim
+#: out of *draft* text (`drafts` suite's own gold set), so a new suffix
+#: added there could move numbers this module has no business touching --
+#: kept local instead, same shape (1-5 leading Titlecase words + suffix).
+#: "Meclisi" specifically is what let "Türkiye Büyük Millet Meclisi" through
+#: as a signature candidate in `_parse_signature` below: measured on the
+#: real corpus, four documents under the same TBMM letterhead template
+#: (CY-010/011/033/050) all have this exact institution line sitting where
+#: a signature line would otherwise be expected.
+_LOCAL_INSTITUTION_SUFFIX_PATTERN = re.compile(
+    r"\b(?:[A-ZÇĞİÖŞÜ][\wçğıöşüÇĞİÖŞÜ]*\s+){1,5}(?:Meclisi|Kurulu|Komisyonu)\b"
 )
 #: Words that mark a line as a title rather than a name.
 _TITLE_HINT = re.compile(
@@ -263,15 +299,45 @@ def _parse_signature(lines: list[str]) -> dict[str, str]:
     Returns:
         Mapping possibly containing `imza_sahibi` and `imza_unvani`.
     """
-    # The signature block is what follows the closing formula; fall back to the
-    # tail of the document when no formula is present (e.g. a tutanak).
+    # The signature block is what follows the closing formula. Search
+    # *forward* from there, not backward from the document's own end: real
+    # letterhead templates carry an antet footer (address, santral, fax,
+    # web) after the signature, so a backward window from end-of-page
+    # lands on the footer and misses the signature entirely -- measured
+    # 0/23 on the real scanned corpus with the old backward window, 21/23
+    # with this one (see SIGNATURE_WINDOW_LINES's own calibration comment).
+    # No formula present (e.g. a tutanak) falls back to the document's own
+    # tail, where the old backward behaviour is correct.
+    #
+    # The *first* match wins, not the last: `lines` is not always a single
+    # page. Production feeds this the whole extracted document -- every
+    # page joined -- and an attached document (an "Ek:" reply the letter
+    # forwards, or an earlier letter quoted in İlgi) routinely carries its
+    # own closing formula further down. Taking the last occurrence anchors
+    # the search on that attachment's closing instead of the current
+    # document's own, missing the real signature entirely -- measured on
+    # two real multi-page documents (CY-002, CY-034), each pulled in by an
+    # attachment's own "Bilgilerinize/arz ederim". Confirmed safe for the
+    # single-page case this otherwise matters for: none of the 23
+    # hand-labelled real documents' own `clean_text` (page 1 only) ever
+    # matches this pattern more than once, so `first` and `last` agree on
+    # every one of them individually -- the difference only ever shows up
+    # once later pages enter the text at all.
     start = 0
+    closing_formula_found = False
     for index, line in enumerate(lines):
         if _CLOSING_FORMULA.search(line):
             start = index + 1
+            closing_formula_found = True
+            break
+    window = (
+        lines[start : start + SIGNATURE_WINDOW_LINES]
+        if closing_formula_found
+        else lines[start:][-4:]
+    )
     tail = [
         line
-        for line in lines[start:][-4:]
+        for line in window
         if not _ANY_LABEL_LINE.match(line) and line.lower() != "imza"
     ]
 
@@ -289,7 +355,18 @@ def _parse_signature(lines: list[str]) -> dict[str, str]:
 
     parsed: dict[str, str] = {}
     for index, line in enumerate(tail):
-        if not _PERSON_NAME_LINE.match(line) or _TITLE_HINT.search(line):
+        if (
+            not _PERSON_NAME_LINE.match(line)
+            or _TITLE_HINT.search(line)
+            # A Titlecase-worded institution mention ("Türkiye Büyük Millet
+            # Meclisi") still matches _PERSON_NAME_LINE -- see that pattern's
+            # own docstring. Reject any candidate shaped like an institution
+            # name outright rather than accepting it as a person -- checked
+            # against both the shared pattern and the suffixes it doesn't
+            # cover (see _LOCAL_INSTITUTION_SUFFIX_PATTERN's own docstring).
+            or INSTITUTION_PATTERN.search(line)
+            or _LOCAL_INSTITUTION_SUFFIX_PATTERN.search(line)
+        ):
             continue
         title = next(
             (
@@ -452,23 +529,175 @@ def count_header_fields(text: str) -> int:
     return sum(1 for name in HEADER_FIELD if parsed.get(name))
 
 
+def has_signature(text: str) -> bool:
+    """Report whether `imza_sahibi` is recoverable from `text`.
+
+    Backs `FallbackDocumentExtractor`'s signature-recovery escalation (see
+    that class's `signature_probe` parameter, injected the same way
+    `count_header_fields` is via `header_field_probe`). Measures a
+    different failure than `count_header_fields`: a page can read as fine
+    Turkish prose overall, with every `HEADER_FIELD` intact, while its
+    signature block specifically is destroyed -- wet-signature ink
+    obscuring the printed name below it, well outside the header band a
+    document-wide `quality_ratio` or `count_header_fields` would ever
+    notice.
+
+    Args:
+        text: Extracted document text (page 1).
+
+    Returns:
+        True when `imza_sahibi` parses out.
+    """
+    return bool(parse_labelled_fields(text).get("imza_sahibi"))
+
+
+#: `AUTHORITATIVE_FIELD` members eligible for evidence-based rescue (see
+#: `merge_parsed_over_model`) when the parser found nothing but the model's
+#: value is genuinely grounded in the document text. Deliberately narrower
+#: than `AUTHORITATIVE_FIELD`:
+#:
+#: * `imza_sahibi`/`imza_unvani`'s absence from `_parse_signature`'s output
+#:   is a *considered* decision, not a coverage gap -- that function
+#:   deliberately declines a bare trailing name without a title line,
+#:   signature marker or letterhead to corroborate it (the unsigned-petition
+#:   guard, see `UNSIGNED_PETITION`'s own test). The name is almost always
+#:   still sitting right there in the text either way, so a plain
+#:   substring-grounding check would rescue it and reintroduce exactly the
+#:   omission that guard exists to catch.
+#: * `ilgi`/`ekler` name specific document references; an invented one
+#:   carries the same fabrication risk `imza_sahibi` does, so they stay
+#:   strict too.
+_EVIDENCE_RESCUABLE_FIELD: frozenset[str] = frozenset(
+    {"sayi", "tarih", "konu", "muhatap", "gonderen_kurum"}
+)
+
+#: The subset of `_EVIDENCE_RESCUABLE_FIELD` also eligible for the
+#: token-overlap fallback (see `_token_overlap`), below the exact substring
+#: check. Deliberately narrower still: `muhatap` and `gonderen_kurum` name a
+#: specific person or institution, which a model realistically reorders
+#: ("Ankara Milletvekili İdris ŞAHİN" for a document that writes it name-
+#: first) but does not synthesise wholesale, since a person/institution
+#: name is not something a model paraphrases the way it paraphrases a
+#: topic. `konu`/`tarih`/`sayi` stay on the strict substring check only --
+#: measured live against qwen3.5:9b on CY-010, a document with no "Konu:"
+#: line at all: the model produced a `konu` value built by lightly
+#: rewording body vocabulary ("...istemlerine ilişkin ilgi önergenizde
+#: yer alan sorularınız..." into "...istemlerine ilişkin soruların
+#: cevabı"), which scored 0.857 token overlap -- comfortably past
+#: `TOKEN_OVERLAP_THRESHOLD` -- despite being a synthesised summary, not an
+#: extracted value. `konu` is exactly the shape of field a model is
+#: naturally inclined to summarise rather than quote, so it is the one
+#: `_EVIDENCE_RESCUABLE_FIELD` member the token-overlap fallback must not
+#: reach; `tarih`/`sayi` are excluded too since neither field's failure
+#: mode is "same value, different word order" the way a name is.
+_TOKEN_OVERLAP_ELIGIBLE_FIELD: frozenset[str] = frozenset({"muhatap", "gonderen_kurum"})
+
+
+def _header_region(text: str) -> str:
+    """Return `text` up to (excluding) the first addressee or closing-formula line.
+
+    The header block (Sayı/Tarih/Konu, m.11-13) always precedes both in a
+    well-formed document. Used to scope `tarih`'s evidence-based rescue in
+    `merge_parsed_over_model`: without this, a leave request's start date
+    sitting in the body would ground exactly as well as a genuine header
+    date, resurrecting the specific failure mode `merge_parsed_over_model`'s
+    own docstring already names ("lifting a leave start date ... into
+    `tarih`") the moment the substring check is loosened for anything else.
+
+    Args:
+        text: Full extracted document text.
+
+    Returns:
+        The leading lines, joined, or the whole text when neither an
+        addressee nor a closing formula is found.
+    """
+    lines = _content_lines(text)
+    for index, line in enumerate(lines):
+        if _ADDRESSEE_LINE.match(line) or _CLOSING_FORMULA.search(line):
+            return "\n".join(lines[:index])
+    return text
+
+
+def _token_overlap(value: str, haystack: str) -> float:
+    """Share of `value`'s significant tokens (length > 2) present in `haystack`.
+
+    A tolerant fallback below the exact substring check in
+    `merge_parsed_over_model`: a model may correctly report a value while
+    reordering it relative to how it sits in the source. Measured live
+    against qwen3.5:9b on a real document (CY-033), the model returned
+    "Ankara Milletvekili İdris ŞAHİN" for a `muhatap` the text itself
+    writes as "Sayın İdris ŞAHİN\\nAnkara Milletvekili" -- the same two
+    facts (name, title), reversed order, which a plain substring check
+    rejects outright even though nothing was invented.
+
+    Same shape and threshold (`TOKEN_OVERLAP_THRESHOLD`) as
+    `app.ai.verification.draft_verifier`'s own `_token_overlap`,
+    reimplemented rather than imported so this module's grounding check
+    folds through `normalize_value` -- its own existing convention, which
+    strips punctuation -- instead of introducing `draft_verifier`'s `_fold`
+    (which keeps it) as a second folding contract here.
+
+    Args:
+        value: The candidate value, unfolded.
+        haystack: The trusted text to check against, unfolded.
+
+    Returns:
+        The overlap in [0, 1]. Values with fewer than two significant
+        tokens score 0.0 -- a single token is not meaningful evidence on
+        its own, the same reasoning `INSTITUTION_PATTERN`'s multi-word
+        requirement and `_PERSON_NAME_LINE`'s 2-4 word shape both rely on.
+    """
+    tokens = [token for token in normalize_value(value).split() if len(token) > 2]
+    if len(tokens) < 2:
+        return 0.0
+    folded_haystack = normalize_value(haystack)
+    return sum(1 for token in tokens if token in folded_haystack) / len(tokens)
+
+
 def merge_parsed_over_model(
-    model_fields: dict[str, Any], parsed: dict[str, Any]
+    model_fields: dict[str, Any], parsed: dict[str, Any], document_text: str = ""
 ) -> dict[str, Any]:
     """Combine deterministically parsed values with model output.
 
     The parser wins in both directions for `AUTHORITATIVE_FIELD`:
 
     * where it found a value, that value replaces the model's;
-    * where it found nothing, the model's value is **discarded**.
+    * where it found nothing, the model's value is discarded -- *unless*
+      `document_text` is given, the field is in `_EVIDENCE_RESCUABLE_FIELD`,
+      and the model's value is genuinely grounded -- a folded substring
+      match (via `normalize_value`, same as `is_blank`'s own folding), or,
+      for `muhatap`/`gonderen_kurum` specifically
+      (`_TOKEN_OVERLAP_ELIGIBLE_FIELD`) and failing the substring check, a
+      token-overlap match (`_token_overlap`, same `TOKEN_OVERLAP_THRESHOLD`
+      `draft_verifier` uses) for a name the model reported correctly but
+      reordered relative to the source (see `_token_overlap`'s own
+      docstring for the live CY-033 case this covers, and
+      `_TOKEN_OVERLAP_ELIGIBLE_FIELD`'s own docstring for why `konu` in
+      particular must stay off this path -- a live counter-example on
+      CY-010, where it rescued a model-synthesised summary instead of a
+      reordered extraction). Grounding checks run against the document
+      text (`_header_region` for `tarih` specifically). This
+      matters: measured directly against 23 hand-labelled real documents,
+      the parser is structurally unable to reach some of these values at
+      all -- `muhatap` when the addressee is a named person rather than a
+      dative-suffixed institution ("Sayın Ceylan AKÇA CUPOLO"), a
+      `gonderen_kurum` with no "T.C." letterhead line -- while the model
+      reads them correctly every time in that same measurement. Blanket
+      discard was silently turning those into false "missing information"
+      findings.
+    * discarding remains unconditional for a field outside
+      `_EVIDENCE_RESCUABLE_FIELD` (see that set's own docstring for why),
+      and for any field when `document_text` is omitted -- every existing
+      caller that does not pass it keeps exactly today's strict behaviour.
 
-    The second rule matters more than it looks. The regulation prescribes how these
-    fields appear, so a missing label means the field is genuinely absent -- and a
-    model that fills it anyway converts an incomplete document into an apparently
-    compliant one, hiding the very omission this pipeline exists to report. Observed
-    cases include inventing the stock addressee "İLGİLİ MAKAMA" for a letter that
-    has none, and lifting a leave start date out of the body into `tarih` for a
-    document carrying no date at all.
+    The regulation prescribes how these fields appear, so a missing label
+    together with no grounded model value means the field is genuinely
+    absent -- and a model that filled it anyway would convert an incomplete
+    document into an apparently compliant one, hiding the very omission this
+    pipeline exists to report. The original, still-live example: the model
+    inventing the stock addressee "İLGİLİ MAKAMA" for a letter that has
+    none -- "İLGİLİ MAKAMA" is not itself grounded in such a letter's text,
+    so it is discarded exactly as before.
 
     Fields outside `AUTHORITATIVE_FIELD` are left exactly as the model produced
     them, because for those an absent parse means "unknown", not "absent".
@@ -476,14 +705,31 @@ def merge_parsed_over_model(
     Args:
         model_fields: The model's `EvrakField` dump.
         parsed: Output of `parse_labelled_fields`.
+        document_text: The full extracted document text, for evidence-based
+            rescue. Omit (the default, `""`) to keep every unparsed
+            `AUTHORITATIVE_FIELD` value discarded unconditionally.
 
     Returns:
         The merged field mapping.
     """
     merged = dict(model_fields)
+    header_text = _header_region(document_text) if document_text else ""
     for name in AUTHORITATIVE_FIELD:
-        if name not in parsed:
-            merged[name] = [] if name in _LIST_FIELD else None
+        if name in parsed:
+            continue
+        if document_text and name in _EVIDENCE_RESCUABLE_FIELD:
+            value = model_fields.get(name)
+            if not is_blank(value):
+                haystack = header_text if name == "tarih" else document_text
+                text_value = str(value)
+                grounded = normalize_value(text_value) in normalize_value(haystack)
+                if not grounded and name in _TOKEN_OVERLAP_ELIGIBLE_FIELD:
+                    grounded = _token_overlap(text_value, haystack) >= TOKEN_OVERLAP_THRESHOLD
+                if grounded:
+                    # Grounded: keep the model's value, already sitting in
+                    # `merged` from the initial `dict(model_fields)` copy.
+                    continue
+        merged[name] = [] if name in _LIST_FIELD else None
     merged.update(parsed)
     return merged
 
