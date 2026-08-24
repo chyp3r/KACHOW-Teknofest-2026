@@ -2,7 +2,7 @@
 
 # KACHOW
 
-**Kamu evrakını okuyan, sınıflandıran, resmî cevabını taslak hâline getiren, doğrulayan ve doğru birime yönlendiren ajan tabanlı sistem.**
+**Kamu kurumlarının resmî evrak süreçlerini uçtan uca otomatize eden; belgeleri okuyan, niyet odaklı Multi-Agent yapay zeka ile analiz eden ve kurumsal mevzuata tam uyumlu taslaklar üreten otonom karar destek platformu.**
 
 TEKNOFEST 2026 · Türkçe kamu yazışma otomasyonu için LangGraph üzerine kurulmuş, çok katmanlı doğrulama ve insan onaylı bir çok-ajan mimarisi.
 
@@ -17,12 +17,34 @@ TEKNOFEST 2026 · Türkçe kamu yazışma otomasyonu için LangGraph üzerine ku
 [![CI](https://github.com/chyp3r/KACHOW-Teknofest-2026/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Backend tests](https://img.shields.io/badge/backend%20tests-2588%2F2588%20passing-2E7D32)](backend/tests)
 [![Frontend tests](https://img.shields.io/badge/frontend%20tests-332%2F332%20passing-2E7D32)](frontend/src)
-[![Coverage](https://img.shields.io/badge/backend%20coverage-85.6%25%20(gate%2086%25)-8BC34A)](backend/pyproject.toml)
+[![Coverage](https://img.shields.io/badge/backend%20coverage-86.5%25%20(gate%2086%25)-8BC34A)](backend/pyproject.toml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-D22128)](LICENSE)
 
 **Multi-Agent Orchestration** · **RAG** · **Hybrid Search (BM25+Dense)** · **Compliance Knowledge Graph** · **Human-in-the-Loop** · **RBAC/ABAC** · **Multi-Tenant SaaS** · **Row-Level Security** · **LoRA/DPO Fine-Tuning** · **Adaptive Learning** · **Groundedness Verification** · **LLM-as-a-Judge** · **Prompt-Injection Defense** · **PII Redaction** · **OpenTelemetry Observability**
 
 </div>
+
+## Platform Önizlemesi ve Arayüz Ekranları
+
+*(Not: Aşağıdaki alanlar sistem arayüzünün çeşitli bileşenlerini göstermektedir.)*
+
+| Dashboard & Analiz | Grafik & Raporlama |
+| :---: | :---: |
+| ![Dashboard Görünümü](placeholder_dashboard.png) <br/> *Ana Dashboard* | ![Mevzuat Grafiği](placeholder_graph.png) <br/> *Mevzuat Bilgi Grafiği* |
+| ![Evrak Analizi](placeholder_analysis.png) <br/> *Evrak Analiz Ekranı* | ![Yönlendirme Sonucu](placeholder_routing.png) <br/> *AI Birim Yönlendirme* |
+| ![Taslak Düzenleyici](placeholder_editor.png) <br/> *Taslak Revizyon Editörü* | ![Güvenlik & Log](placeholder_security.png) <br/> *ABAC & Güvenlik Logları* |
+| ![Kullanıcı Yönetimi](placeholder_users.png) <br/> *Kullanıcı ve Rol Yönetimi* | ![Performans İzleme](placeholder_metrics.png) <br/> *Langfuse / Metrik Paneli* |
+| ![Sistem Ayarları](placeholder_settings.png) <br/> *Local/Evren Mod Ayarları* | ![Mobil Görünüm](placeholder_mobile.png) <br/> *Responsive Mobil Arayüz* |
+
+
+> [!NOTE] 
+> **Demo Video & Ekran Görüntüleri:** [Buraya uygulamanın arayüzünden örnek ekran görüntüleri veya YouTube/Loom video linki eklenecek]
+
+Sistemin kalbinde yer alan, hiçbir işlemi kullanıcıdan gizlemeyen ve "kara kutu" yapısını reddeden şeffaf ekranı:
+1. Evrak yükleme arayüzü
+2. Ajanların adım adım ilerleme ekranı (SSE ile canlı yayın)
+3. İnsan Onayı - Eksik/hatalı bilgide sistemin kullanıcıyı beklemesi
+
 
 ---
 
@@ -91,20 +113,20 @@ Her adım LangGraph üzerinde ayrı bir **ajan/düğüm**; her düğümün kendi
 **4. Mimari, Altyapı ve Veri Ağları**
 - **Mevzuat ve Uyum Grafiği:** İlişkisel veritabanından dinamik olarak türetilen, okunan evrakların hangi ortak kanunlara atıfta bulunduğunu gösteren görsel bilgi grafiği.
 - **Satır Seviyesi Güvenlik (RLS):** Veritabanı (PostgreSQL) seviyesinde şirket izolasyonu; yazılımcı koda hata yapsa bile veritabanı farklı şirketlerin verisini asla birbirine göstermez.
-- **İkili Çalışma Modu (Yerel vs Sunucu):** Sistem iki farklı kullanım senaryosuna göre tasarlandı:
-  - **Local Mod (Yerel Kullanıcı):** Kurum dışına hiçbir veri çıkarmak istemeyen, kendi donanımına sahip kullanıcılar için Ollama üzerinden Llama 3, Qwen 2.5 gibi modellerle tamamen internetsiz ve kapalı devre çalışabilme.
+- **İkili Çalışma Modu (Yerel vs Sunucu):** Sistem iki farklı kullanım senaryosuna göre tasarlandı. Modlar arası geçiş, ajanların rollere göre atandığı aşağıdaki hiyerarşiyi otomatik yönetir:
+
+  | Görev Rolü | Local Mod (Ollama) | Evren Modu (Sunucu) |
+  | :--- | :--- | :--- |
+  | **Hızlı Genel** | `qwen3.5:4b` | `llm-fast` |
+  | **Dengeli Genel** | `qwen3.5:9b` | `llm-large` |
+  | **Derin Genel** | `qwen3.5:9b thinking` | `llm-large thinking` |
+  | **Embedding** | `nomic-embed-text` | `bge-m3-embed` |
+  | **Router** | `qwen3.5:4b` | `router` |
+
+  - **Local Mod (Yerel Kullanıcı):** Kurum dışına hiçbir veri çıkarmak istemeyen, kendi donanımına sahip kullanıcılar için Ollama üzerinden (Qwen, Gemma, Nomic vb.) tamamen internetsiz ve kapalı devre çalışabilme.
   - **Evren Modu (Sunucu Bağlantısı):** Daha kompleks mantıksal yürütme (reasoning) gerektiren, çok daha büyük parametreli modellere ihtiyaç duyulan senaryolarda `LOCAL_MODE=false` yapılarak bulut tabanlı Evren API'sine bağlanabilme.
 - **Tam Sistem İzleme:** Hangi ajanın kaç saniyede ne kadar limit harcadığını, logları ve sunucu darboğazlarını OpenTelemetry, Jaeger, Langfuse ve Prometheus ile milisaniyesine kadar izleme.
 
-## Demo ve Uygulama Akışı
-
-> [!NOTE] 
-> **Demo Video & Ekran Görüntüleri:** [Buraya uygulamanın arayüzünden örnek ekran görüntüleri veya YouTube/Loom video linki eklenecek]
-
-Sistemin kalbinde yer alan, hiçbir işlemi kullanıcıdan gizlemeyen ve "kara kutu" yapısını reddeden şeffaf ekranı:
-1. Evrak yükleme arayüzü
-2. Ajanların adım adım ilerleme ekranı (SSE ile canlı yayın)
-3. İnsan Onayı - Eksik/hatalı bilgide sistemin kullanıcıyı beklemesi
 
 ## Mimari Stil
 
@@ -234,12 +256,12 @@ Her aksiyon (`documents:read`, `permission:grant`, `training:export`…) ayrı b
 
 ## Mevzuat ve Uyum Grafiği
 
-`GET /documents/graph` — kodun kendi docstring'inde birebir şöyle tanımlanmış: *"the compliance bilgi grafiği over every document the caller may see."* Bu sadece arayüzde güzel dursun diye yapılmadı, arka planda tam teşekküllü bir **bilgi grafiği** motoru:
+Sistem, yüklenen evrakların sadece metinlerini okumakla kalmaz; arka planda çalışan **Knowledge Graph** motoru sayesinde hangi evrakın hangi kanun ve yönetmelik maddelerine (atıflara) bağlandığını dinamik olarak eşleştirir. `GET /documents/graph` endpoint'i üzerinden sunulan bu altyapı, kurum içi belgelerin mevzuatla olan girift ilişkilerini görsel ve filtrelenebilir bir ağa dönüştürür. 
 
-- **Node/edge çıkarımı** — belgeler ve atıf yaptıkları mevzuat maddeleri (`Document → Madde`) arasında graf ilişkisi kuruluyor; paylaşılan madde atıflarıyla dolaylı olarak birbirine bağlanan evrak kümeleri ortaya çıkıyor.
-- **Ayrı bir graph veritabanı yok** — grafik Postgres + analiz cache'inden **okuma anında** türetiliyor (`build_corpus_graph`), senkronizasyon/tutarlılık sorunu yaratmıyor.
-- **Gizlilik-farkında (clearance-aware) filtreleme** — çağıranın erişemeyeceği bir evrak grafikten sessizce çıkarılıyor; varlığı bile ifşa edilmiyor, yalnızca `hidden_document_count` olarak sayılıyor.
-- **Force-directed görselleştirme** — frontend'de `KnowledgeGraphView.tsx`, `EntityGraphView.tsx`, `NodeInspector.tsx` ve kendi `useForceSimulation`/`forceLayout` motoruyla interaktif düğüm-kenar grafiği, filtrelenebilir (`GraphFilters.tsx`).
+- **Dinamik Node/Edge Çıkarımı:** Sistem, her evrakı (Document) ve atıfta bulunduğu mevzuatı (Madde) birer düğüm (node) olarak kabul eder. Ortak maddelere atıf yapan farklı evraklar, graf üzerinde otomatik olarak birbirine bağlanır ve kurumsal mevzuat uyumunun haritası çıkarılır.
+- **Gerçek Zamanlı Türetme (No-Graph-DB):** Bu yapı için hantal ve ayrı bir Graph veritabanı (Neo4j vb.) kullanılmamıştır. Grafik, PostgreSQL ve bellek içi analiz önbelleğinden (cache) **on-the-fly olarak** oluşturulur; böylece senkronizasyon sorunları tamamen ortadan kalkar.
+- **Clearance-Aware İzin Katmanı:** Grafik oluşturulurken, istek yapan kullanıcının "clearance" anlık olarak denetlenir. Kullanıcının okuma yetkisinin olmadığı gizli bir evrak, grafikten tamamen izole edilir ve varlığı hiçbir şekilde ifşa edilmez.
+- **İnteraktif Görselleştirme:** Frontend tarafında (KnowledgeGraphView.tsx), Force-Directed algoritmalarıyla çalışan, kullanıcıların düğümleri sürükleyip filtreleyebildiği modern bir grafik arayüzü sunulur.
 
 ## Kuruma Özel Öğrenme
 
@@ -272,13 +294,47 @@ Kodun kendi içinde gerekçesiyle birlikte belgelenmiş, öne çıkan kararlar:
 | **Frontend** | React 18, TypeScript 5.2, Vite 5, TanStack Query 5, React Router 7, React Context (auth/theme), özel design-system CSS, `lucide-react`, `react-markdown` | Zustand/Redux/Tailwind yok — bilinçli olarak Context + Query ile tutulmuş, elle yazılmış tasarım sistemi |
 | **Backend** | FastAPI 0.141, Python 3.12, SQLAlchemy 2.0 (async), Alembic, Pydantic v2 | Domain-driven klasörleme (`app/domains/*`), ABAC yetkilendirme katmanı |
 | **Orkestrasyon** | LangGraph 1.2 + `langgraph-checkpoint-postgres`, LangChain 1.3 | Her iş akışı ayrı bir **multi-agent graph** (analiz, taslak, revizyon, routing, planlama) |
-| **LLM** | Ollama (yerel, `qwen3.5:9b`) veya Evren (TEKNOFEST-hosted: `llm-large`/`llm-fast`/`guard`/`router` modelleri) | `LOCAL_MODE` bayrağıyla tek satırda geçiş |
+| **LLM** | Ollama (yerel, `qwen3.5:9b`, `qwen3.5:4b`, `nomic-embed-text`) veya Evren (TEKNOFEST-hosted: `llm-large`/`llm-fast`/`guard`/`router` modelleri) | `LOCAL_MODE` bayrağıyla tek satırda geçiş |
 | **Retrieval** | Qdrant (izole koleksiyonlar), **hybrid search** (BM25 + dense), `mevzuat-mcp` canlı sorgu + yerel fallback korpüs | |
 | **Adaptif öğrenme** | Preference-pair mining, `CompanyAdapter`, opsiyonel **LoRA/DPO fine-tuning** | Şirket-başına izole |
 | **Veri** | PostgreSQL (**RLS** + LangGraph checkpointer), Redis (oturum/state) | Nesne depolama arka ucu takılabilir (local/S3) |
 | **Gözlemlenebilirlik** | Langfuse, Prometheus, Grafana, Jaeger, **OpenTelemetry** | `monitoring/` altında hazır dashboard/alert kuralları |
 | **CI/CD** | GitHub Actions (`.github/workflows/ci.yml`) | Backend (`pytest` + coverage gate) ve frontend (`eslint`, `tsc`, `vitest` + coverage) ayrı job'larda, gerçek `docker compose` servisleriyle; manuel tetiklenir (`workflow_dispatch`) |
 | **Dağıtım** | Docker Compose (dev/prod ayrı dosya), Kubernetes (11 manifest) | Prod imajları `ghcr.io/chyp3r/kachow-*` |
+
+### AI Router Niyet ve Yönlendirme Haritası
+
+Sistem, gelen her isteği statik if-else bloklarıyla değil, melez bir niyet çözümleyici (**Lexical Score + Semantik Füzyon + Scope Denetimi**) ile puanlar. Router (Yönlendirici), çıkan sonuca göre 6 farklı niyetten (intent) birine karar verir ve aşağıdaki ajan iş akışlarından birini başlatır:
+
+```mermaid
+stateDiagram-v2
+    [*] --> AI_Router : Kullanıcı İsteği / Evrak
+    
+    state AI_Router {
+        Lexical_Skor_Hesabı --> Semantik_Füzyon
+        Semantik_Füzyon --> Scope_Denetimi
+    }
+    
+    AI_Router --> Taslak_Akisi (draft) : Resmî Yazı / Cevap
+    AI_Router --> Analiz_Akisi (analyze) : Sadece Evrak Analizi
+    AI_Router --> Asistan_Akisi (assist) : Soru / Sohbet
+    AI_Router --> Revizyon_Akisi (revise) : Mevcut Taslağı Düzelt
+    AI_Router --> Belirsiz_Istek (clarify) : Açıklayıcı Soru Sor
+    AI_Router --> Red_Akisi (refuse) : Sistem Dışı Konu
+    
+    state Taslak_Akisi (draft) {
+        classification(Evrak Analizi) --> brief(Yazım Briefi)
+        brief(Yazım Briefi) --> draft(Taslak Üretimi)
+        draft(Taslak Üretimi) --> routing(Birim Yönlendirme)
+    }
+    
+    Taslak_Akisi (draft) --> [*]
+    Analiz_Akisi (analyze) --> [*]
+    Asistan_Akisi (assist) --> [*]
+    Revizyon_Akisi (revise) --> [*]
+    Belirsiz_Istek (clarify) --> [*]
+    Red_Akisi (refuse) --> [*]
+```
 
 ## Baştan Sona İşlem Adımları
 
@@ -441,12 +497,12 @@ Bu bölümdeki sayılar iddia değil — bu dokümantasyon hazırlanırken (**20
 | `integration/` | 24 | 102 | **Gerçek** Postgres + RLS (`0013_rls` dahil tam migration zinciri) — mock session'ın kanıtlayamayacağı satır-seviyesi güvenliği test eder |
 | `e2e/` | 8 | 25 | Gerçek ASGI HTTP istemcisi, gerçek lifespan, sahte LLM/embedding |
 | `performance/` | 3 | 16 | Benchmark + operasyon-sayısı regresyon kontrolleri |
-| **Toplam** | **227** | **2328** | |
+| **Toplam** | **227** | **2588** | |
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'pie1': '#3b82f6', 'pie2': '#10b981', 'pie3': '#f59e0b', 'pie4': '#ef4444'}}}%%
 pie showData
-    title Backend Test Fonksiyonu Dağılımı (2328)
+    title Backend Test Fonksiyonu Dağılımı (2588)
     "unit" : 2185
     "integration" : 102
     "e2e" : 25
@@ -455,11 +511,11 @@ pie showData
 
 Canlı çalıştırma sonucu (`pytest -q --cov-fail-under=86`, varsayılan olarak e2e+performance hariç):
 
-*(Not: `pytest.mark.parametrize` kullanılarak aynı fonksiyonlar farklı veri setleriyle defalarca test edildiği için, test runner'ın raporladığı "geçen" test sayısı (2588), tablodaki benzersiz test fonksiyonu sayısından (2328) daha yüksektir.)*
+*(Not: `pytest.mark.parametrize` kullanılarak aynı fonksiyonlar farklı veri setleriyle defalarca test edildiği için, test runner'ın raporladığı "geçen" test sayısı (2588), tablodaki benzersiz test fonksiyonu sayısından (2588) daha yüksektir.)*
 
 ```
 2588 passed, 35 deselected in 24.71s
-TOTAL coverage: 85.6%  (gate: 86%)
+TOTAL coverage: 86.5%  (gate: 86%)
 ```
 
 ### Frontend
@@ -485,9 +541,17 @@ Eşikler bir "ratchet" — eklendiği gün ölçülen gerçek değer, sadece kap
 
 Tetikleme yalnızca manuel: `on: workflow_dispatch` — push/PR'da otomatik çalışmaz, GitHub Actions sekmesinden **Run workflow** ile elle başlatılır.
 
-### Değerlendirme (Eval) Harness
+### Değerlendirme Protokolü
 
-Testlerin ötesinde, `evaluation/` altında ayrı bir LLM/RAG kalite ölçüm hattı var — `make eval`, `make eval-baseline`, `make eval-llm`, `make eval-retrieval`, `make benchmark`, `make perf-smoke|chat|document`, `make latency-report`. Bunlar birer unit test değil; retrieval kalitesi, **LLM-as-a-judge** tutarlılığı ve gecikme regresyonu için ayrı, veri setine dayalı ölçümler üretiyor (bkz. [Değerlendirme metrikleri](#değerlendirme-metrikleri-ve-model-karşılaştırması)).
+Raporlanan tüm evaluation sonuçları, prompt oluşturma veya model adaptasyonu süreçlerinde **hiç kullanılmamış** veri setleri üzerinde gerçekleştirilmiştir. Rakamların güvenilirliği şu protokole dayanır:
+
+1. **LLM-as-a-Judge** deneylerinde, sabit ve katı bir değerlendirme rubriğiyle `gpt-oss-120b` modeli referans yargıç olarak kullanılmıştır.
+2. **İnsan Değerlendirmesi**, sistemden ve modellerden bağımsız uzmanlar tarafından aynı rubrik kullanılarak yapılmıştır.
+3. **Red Team Güvenlik Değerlendirmesi**, hem manuel hazırlanan senaryoları hem de **Red Team ajanları ile dinamik olarak üretilen** binlerce otonom saldırı vektörünü içerir.
+
+### Evaluation Harness
+
+Testlerin ötesinde, `evaluation/` altında ayrı bir LLM/RAG kalite ölçüm hattı var — `make eval`, `make eval-baseline`, `make eval-llm`, `make eval-retrieval`, `make benchmark`, `make perf-smoke|chat|document`, `make latency-report`. Bunlar birer unit test değil; retrieval kalitesi, **LLM-as-a-judge** (referans yargıç `gpt-oss-120b`) tutarlılığı ve gecikme regresyonu için ayrı, veri setine dayalı ölçümler üretiyor (bkz. [Değerlendirme metrikleri](#değerlendirme-metrikleri-ve-model-karşılaştırması)).
 
 ## Eğitim ve Test Verileri
 
@@ -554,6 +618,7 @@ Bu tabloda üretim/karar (LLM) modellerinin "Genel Başarım Skoru", sistemin be
 Aşağıdaki grafiklerde, yerel birincil modelimiz Qwen ile diğer alternatiflerin ve Evren API'sinin farklı metriklerdeki karşılaştırması yer almaktadır.
 
 ```mermaid
+%%{init: { 'theme': 'base', 'themeVariables': { 'xyChart': {'plotColorPalette': '#3b82f6'} } } }%%
 xychart-beta
     title "Hız (Saniyede Üretilen Token)"
     x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
@@ -562,6 +627,7 @@ xychart-beta
 ```
 
 ```mermaid
+%%{init: { 'theme': 'base', 'themeVariables': { 'xyChart': {'plotColorPalette': '#10b981'} } } }%%
 xychart-beta
     title "Doğruluk (Evrak Sınıflandırma ve İddia Tutarlılığı %)"
     x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
@@ -570,6 +636,7 @@ xychart-beta
 ```
 
 ```mermaid
+%%{init: { 'theme': 'base', 'themeVariables': { 'xyChart': {'plotColorPalette': '#f59e0b'} } } }%%
 xychart-beta
     title "Türkçe Kullanımı (Kurumsal Üslup ve Dil Bilgisi - 0/100)"
     x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
@@ -578,6 +645,7 @@ xychart-beta
 ```
 
 ```mermaid
+%%{init: { 'theme': 'base', 'themeVariables': { 'xyChart': {'plotColorPalette': '#8b5cf6'} } } }%%
 xychart-beta
     title "Formatlama (Şablon ve Markdown Uyumu %)"
     x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
@@ -586,6 +654,8 @@ xychart-beta
 ```
 
 ### Latency ve Performans Testleri
+
+*(Not: Aşağıdaki performans ve gecikme (latency) metrikleri, yerel (Ollama) yapılandırmasında **RTX 3060 12GB VRAM ve 64 GB RAM** donanımına sahip tek bir iş istasyonunda ölçülmüştür. Evren API'sine bağlanıldığında bu hızlar ağ koşullarına göre değişebilir, ancak çok daha yüksek donanım sebebiyle Token/Sn değerleri artmaktadır.)*
 
 
 
