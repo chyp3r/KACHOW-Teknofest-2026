@@ -17,6 +17,7 @@ export function UserSearchDrawer({
       open={open}
       id="user-search-drawer"
       className="user-search-drawer"
+      bodyClassName="people-drawer-body"
       title="Kişiler"
       closeLabel="Kişiler panelini kapat"
       onClose={onClose}

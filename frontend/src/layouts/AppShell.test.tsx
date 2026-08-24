@@ -82,7 +82,7 @@ describe("AppShell compact navigation", () => {
     expect(screen.getAllByRole("button", { name: "Menüyü kapat" })).not.toHaveLength(0);
   });
 
-  it("does not render a duplicate standalone theme control while expanded", () => {
+  it("places notification and a single cycling theme button above the workspace navigation", () => {
     render(
       withQueryClient(
         <MemoryRouter initialEntries={["/chats"]}>
@@ -91,8 +91,13 @@ describe("AppShell compact navigation", () => {
       ),
     );
 
-    expect(screen.getByRole("combobox", { name: "Tema seçimi" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Tema: system/ })).not.toBeInTheDocument();
+    const themeButton = screen.getByRole("button", { name: "Tema: Sistem. Temayı değiştir" });
+    const tools = screen.getByLabelText("Bildirim ve tema araçları");
+    const navigation = screen.getByRole("navigation");
+    expect(screen.queryByRole("combobox", { name: "Tema seçimi" })).not.toBeInTheDocument();
+    expect(tools.compareDocumentPosition(navigation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(themeButton);
+    expect(setMode).toHaveBeenCalledWith("light");
   });
 
   it("exposes the colorful dashboard as the first workspace destination", () => {

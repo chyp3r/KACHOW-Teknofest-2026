@@ -8,6 +8,31 @@ const referenceCss = readFileSync("src/styles/reference-ui.css", "utf8");
 const messagingCss = readFileSync("src/styles/messaging.css", "utf8");
 
 describe("design-system tokens", () => {
+  it("keeps drawers out of page flow with stable padded person results", () => {
+    expect(css).toContain("position: fixed");
+    expect(css).toContain("height: 100dvh");
+    expect(css).toContain(".overlay-backdrop");
+    expect(messagingCss).toContain(".people-drawer-body");
+    expect(messagingCss).toContain("scrollbar-gutter: stable");
+  });
+
+  it("keeps the document picker above its blur backdrop", () => {
+    expect(integrationCss).toMatch(
+      /\.document-picker-layer \.document-picker-backdrop\s*{[^}]*z-index: 0;/,
+    );
+    expect(integrationCss).toMatch(
+      /\.document-picker-layer \.document-picker\s*{[\s\S]*?z-index: 1;/,
+    );
+  });
+
+  it("preserves the dashboard title hierarchy and the draft-style document rows", () => {
+    expect(referenceCss).toContain("line-height: 1.05");
+    expect(referenceCss).toContain(".home-activity-panel > header > .select { width: 10rem; flex: 0 0 10rem; }");
+    expect(referenceCss).toMatch(/\.draft-master li > button \{[\s\S]*?min-height: 7rem;[\s\S]*?padding: 0\.875rem;/);
+    expect(referenceCss).toMatch(/\.document-master-list \.document-list-item \{[\s\S]*?height: 7rem;[\s\S]*?min-height: 7rem;/);
+    expect(referenceCss).toMatch(/\.document-master-list \.document-list-item \{[\s\S]*?align-items: start;[\s\S]*?gap: 0\.75rem;[\s\S]*?padding: 0\.875rem 0\.5rem 0\.875rem 0\.875rem;/);
+  });
+
   it.each([
     ["--space-1", "0.25rem"],
     ["--space-16", "4rem"],

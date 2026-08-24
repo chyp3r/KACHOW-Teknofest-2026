@@ -26,7 +26,6 @@ import { useMessagingStream } from "../hooks/useMessagingStream";
 import { useTheme } from "../hooks/useTheme";
 import type { ThemeMode } from "../contexts/ThemeContext";
 import { Button, IconButton } from "../components/Button";
-import { Select } from "../components/FormControls";
 import { NotificationBell } from "../components/NotificationBell";
 import { OverlayBackdrop } from "../components/Surface";
 import { BrandLockup } from "../components/BrandLockup";
@@ -60,6 +59,12 @@ const THEME_ICONS: Record<ThemeMode, typeof Sun> = {
   light: Sun,
   dark: Moon,
   system: Monitor,
+};
+
+const THEME_LABELS: Record<ThemeMode, string> = {
+  system: "Sistem",
+  light: "Açık",
+  dark: "Koyu",
 };
 
 export function AppShell({
@@ -146,6 +151,18 @@ export function AppShell({
             onClick={() => setMobileOpen(false)}
           />
         </div>
+        {user?.role !== "root" && (
+          <div className="sidebar-utility-row" aria-label="Bildirim ve tema araçları">
+            <NotificationBell />
+            <IconButton
+              className="theme-cycle-button"
+              icon={<ThemeIcon />}
+              aria-label={`Tema: ${THEME_LABELS[mode]}. Temayı değiştir`}
+              title={`Tema: ${THEME_LABELS[mode]}`}
+              onClick={cycleTheme}
+            />
+          </div>
+        )}
         <nav className="sidebar-nav">
           <span className="nav-caption">Çalışma Alanı</span>
           {NAV_ITEMS.filter((item) => {
@@ -168,40 +185,6 @@ export function AppShell({
           ))}
         </nav>
         <div className="sidebar-footer">
-          {!compact && (
-            <div className="sidebar-notification-row">
-              <NotificationBell />
-            </div>
-          )}
-          {compact && (
-            <div className="sidebar-notification-row compact-notification-row">
-              <NotificationBell />
-            </div>
-          )}
-          <label className="theme-control">
-            <span>
-              <ThemeIcon size={17} />
-              Tema
-            </span>
-            <Select
-              aria-label="Tema seçimi"
-              value={mode}
-              onChange={(event) => setMode(event.target.value as ThemeMode)}
-            >
-              <option value="system">Sistem</option>
-              <option value="light">Açık</option>
-              <option value="dark">Koyu</option>
-            </Select>
-          </label>
-          {compact && (
-            <IconButton
-              className="compact-theme-button"
-              icon={<ThemeIcon />}
-              aria-label={`Tema: ${mode}. Temayı değiştir`}
-              title={`Tema: ${mode}`}
-              onClick={cycleTheme}
-            />
-          )}
           {user ? (
             <div className="user-card">
               <span className="avatar">

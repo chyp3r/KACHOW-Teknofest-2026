@@ -6,7 +6,7 @@ import { useChatWorkflow } from "./hooks/useChatWorkflow";
 import { useDocuments } from "./hooks/useDocuments";
 import { AppShell } from "./layouts/AppShell";
 import type { DocumentMetadata } from "./types/documents";
-import { OverlayBackdrop } from "./components/Surface";
+import { OverlayBackdrop, Spinner } from "./components/Surface";
 
 const LoginPage = lazy(() => import("./pages/LoginPage").then((module) => ({ default: module.LoginPage })));
 const HomePage = lazy(() => import("./pages/HomePage").then((module) => ({ default: module.HomePage })));
@@ -21,7 +21,7 @@ const StatusPage = lazy(() => import("./pages/StatusPage").then((module) => ({ d
 const PlatformPage = lazy(() => import("./pages/PlatformPage").then((module) => ({ default: module.PlatformPage })));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage").then((module) => ({ default: module.NotFoundPage })));
 
-const PageFallback = () => <div className="centered-state app-loading">Sayfa yükleniyor…</div>;
+const PageFallback = () => <div className="centered-state app-loading"><Spinner size="lg" label="Sayfa yükleniyor" />Sayfa yükleniyor…</div>;
 
 function RootAuthenticatedApp() {
   return <AppShell><Suspense fallback={<PageFallback />}><Routes><Route path="/platform" element={<PlatformPage />} /><Route path="/account" element={<AccountPage />} /><Route path="*" element={<Navigate to="/platform" replace />} /></Routes></Suspense></AppShell>;
@@ -208,7 +208,7 @@ function AuthenticatedApp({ userId }: { userId: string }) {
 export default function App() {
   const { user, loading } = useAuth();
   const location = useLocation();
-  if (loading) return <div className="centered-state app-loading">Oturum doğrulanıyor…</div>;
+  if (loading) return <div className="centered-state app-loading"><Spinner size="lg" label="Oturum doğrulanıyor" />Oturum doğrulanıyor…</div>;
   return (
     <Suspense fallback={<PageFallback />}>
       <Routes>
