@@ -6,6 +6,10 @@
 
 TEKNOFEST 2026 · Türkçe kamu yazışma otomasyonu için LangGraph üzerine kurulmuş, çok katmanlı doğrulama ve insan onaylı bir çok-ajan mimarisi.
 
+[![TEKNOFEST 2026](https://img.shields.io/badge/TEKNOFEST-2026-E30A17)](#)
+[![Evren API](https://img.shields.io/badge/Evren-API%20%7C%20Cloud-0052CC)](#)
+[![Qwen](https://img.shields.io/badge/Qwen-3.5%20%7C%20Yerel%20LLM-4D4D4D)](#)
+[![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-white?logo=ollama&logoColor=black)](compose.yml)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](backend/requirements.txt)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi&logoColor=white)](backend/requirements.txt)
 [![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C)](backend/requirements.txt)
@@ -13,20 +17,25 @@ TEKNOFEST 2026 · Türkçe kamu yazışma otomasyonu için LangGraph üzerine ku
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.2-3178C6?logo=typescript&logoColor=white)](frontend/package.json)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-RLS-4169E1?logo=postgresql&logoColor=white)](compose.yml)
 [![Qdrant](https://img.shields.io/badge/Qdrant-vector%20search-DC244C)](backend/app/ai/retrieval)
+[![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)](compose.yml)
+[![Docker](https://img.shields.io/badge/Docker-2CA5E0?logo=docker&logoColor=white)](compose.yml)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-prod%20ready-326CE5?logo=kubernetes&logoColor=white)](deploy/kubernetes)
+[![Nginx](https://img.shields.io/badge/Nginx-009639?logo=nginx&logoColor=white)](deploy/docker)
+[![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)](compose.yml)
+[![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white)](compose.yml)
+[![Jaeger](https://img.shields.io/badge/Jaeger-60C0A4?logo=jaeger&logoColor=white)](compose.yml)
 [![CI](https://github.com/chyp3r/KACHOW-Teknofest-2026/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Backend tests](https://img.shields.io/badge/backend%20tests-2588%2F2588%20passing-2E7D32)](backend/tests)
 [![Frontend tests](https://img.shields.io/badge/frontend%20tests-332%2F332%20passing-2E7D32)](frontend/src)
-[![Coverage](https://img.shields.io/badge/backend%20coverage-86.5%25%20(gate%2086%25)-8BC34A)](backend/pyproject.toml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-D22128)](LICENSE)
 
-**Multi-Agent Orchestration** · **RAG** · **Hybrid Search (BM25+Dense)** · **Compliance Knowledge Graph** · **Human-in-the-Loop** · **RBAC/ABAC** · **Multi-Tenant SaaS** · **Row-Level Security** · **LoRA/DPO Fine-Tuning** · **Adaptive Learning** · **Groundedness Verification** · **LLM-as-a-Judge** · **Prompt-Injection Defense** · **PII Redaction** · **OpenTelemetry Observability**
+**Multi-Agent Orchestration** · **RAG** · **Hybrid Search (BM25+Dense** · **Compliance Knowledge Graph** · **Human-in-the-Loop** · **RBAC/ABAC** · **Multi-Tenant SaaS** · **Row-Level Security** · **LoRA/DPO Fine-Tuning** · **Adaptive Learning** · **Groundedness Verification** · **LLM-as-a-Judge** · **Prompt-Injection Defense** · **PII Redaction** · **OpenTelemetry Observability**
 
 </div>
 
 ## Platform Önizlemesi ve Arayüz Ekranları
 
-*(Not: Aşağıdaki alanlar sistem arayüzünün çeşitli bileşenlerini göstermektedir.)*
+*Not: Aşağıdaki alanlar sistem arayüzünün çeşitli bileşenlerini göstermektedir.*
 
 | Dashboard & Analiz | Grafik & Raporlama |
 | :---: | :---: |
@@ -82,10 +91,32 @@ Sistemin kalbinde yer alan, hiçbir işlemi kullanıcıdan gizlemeyen ve "kara k
 
 Bir memur elinize bir dilekçe, üst yazı ya da şikâyet evrakı tutuşturduğunda önündeki iş şu: evrakı oku, türünü anla, eksik ne var bak, hangi mevzuata dayanıyor öğren, resmî üslupta bir cevap yaz, imzaya çıkmadan önce her şeyi kontrol et, doğru birime havale et. KACHOW bu zincirin tamamını — insanı devre dışı bırakmadan — otomatikleştiriyor:
 
-```
-Evrakı oku  →  sınıflandır  →  alanları çıkar  →  eksikleri bul  →  mevzuatı öner
-   →  özetle  →  yazışma türünü belirle  →  resmî taslak üret  →  doğrula
-   →  gerekirse kullanıcıdan bilgi iste  →  birim öner  →  onay/revizyon  →  kaydet
+```mermaid
+graph TD
+    classDef step fill:#1e3a8a,stroke:#3b82f6,stroke-width:2px,color:#fff;
+    classDef decision fill:#0f766e,stroke:#14b8a6,stroke-width:2px,color:#fff;
+    classDef human fill:#b45309,stroke:#f59e0b,stroke-width:2px,color:#fff;
+    classDef guard fill:#991b1b,stroke:#ef4444,stroke-width:2px,color:#fff;
+
+    START((Kullanıcı İsteği)) --> IN[Input Guardrail<br/>Saldırı/Zehirleme Kontrolü]:::guard
+    IN --> A[Evrakı Oku]:::step
+    A --> B[Sınıflandır]:::step
+    B --> C[Alanları Çıkar]:::step
+    C --> D[Eksikleri Bul]:::step
+    D --> E[Mevzuatı Öner]:::step
+    E --> F[Özetle]:::step
+    F --> G[Yazışma Türünü Belirle]:::step
+    G --> H[Resmî Taslak Üret]:::step
+    H --> I[Doğrula]:::step
+    
+    I --> OUT[Output Guardrail<br/>PII/Hassas Veri Kontrolü]:::guard
+    OUT --> J{Bilgi Eksik mi?}:::decision
+    J -- Evet --> K[Kullanıcıdan Bilgi İste]:::human
+    K --> L[Birim Öner]:::step
+    J -- Hayır --> L
+    
+    L --> M[Onay / Revizyon]:::human
+    M --> N[Sisteme Kaydet]:::step
 ```
 
 Her adım LangGraph üzerinde ayrı bir **ajan/düğüm**; her düğümün kendi başarısızlık modu, zaman aşımı ve geri dönüş yolu var. Sistem hiçbir zaman "LLM ne dediyse odur" demiyor — **dış kaynak destekli üretim** ile üretilen her iddia (tarih, tutar, kişi, kurum, mevzuat atfı) **kaynak doğrulama** katmanında kaynak evrakla satır satır karşılaştırılıyor, ve kritik bir tutarsızlık bulunduğunda bu bulgu bir ortalama skorun içinde kaybolmuyor: taslak otomatik olarak **kullanıcı onayı** onayına düşüyor.
@@ -122,7 +153,7 @@ Backend tek bir **modüler monolit** — mikroservis değil, tek deploy edilebil
 
 | Prensip | Nerede | Ne anlama geliyor |
 | :--- | :--- | :--- |
-| **Domain-Driven Design (DDD)** — bounded context'ler | `backend/app/domains/*` (documents, drafts, routing, units, auth, audit, companies, users, training, transfers, messaging, notifications, pools, quotas, feedback, system) | Her domain kendi `model/`, `schema/`, `service.py`, `router.py` üçlüsüne sahip; birbirinin repository'sine doğrudan erişmiyor. Domain dili tip sisteminde birebir: `EvrakField`, `MissingField`, `CorrespondenceType`, `SensitivityLevel` — Türkçe bürokratik terminoloji doğrudan Pydantic şemasında. |
+| **Domain-Driven Design (DDD** — bounded context'ler | `backend/app/domains/*` (documents, drafts, routing, units, auth, audit, companies, users, training, transfers, messaging, notifications, pools, quotas, feedback, system) | Her domain kendi `model/`, `schema/`, `service.py`, `router.py` üçlüsüne sahip; birbirinin repository'sine doğrudan erişmiyor. Domain dili tip sisteminde birebir: `EvrakField`, `MissingField`, `CorrespondenceType`, `SensitivityLevel` — Türkçe bürokratik terminoloji doğrudan Pydantic şemasında. |
 | **Clean / Hexagonal Architecture** (Ports & Adapters) | `api` → `domains` → `ai` → `infrastructure` | Bağımlılık yönü hep içe doğru (**Dependency Inversion**). `infrastructure` bir adaptör katmanı — `Ollama ⇄ Evren` LLM sağlayıcısı, `local ⇄ S3` depolama arka ucu — domain kodu hiç değişmeden takas edilebiliyor. |
 | **Modüler Monolit** | Tek backend imajı, tek Postgres, tek deploy birimi | Mikroservis karmaşıklığı (dağıtık transaction, servisler-arası ağ) yok; yalnızca ağır ML bağımlılıkları (`torch`/`peft`/`trl`) olan LoRA eğitim işi ayrı bir `worker` sürecine/imajına bölünmüş. |
 | **Event-Driven + Checkpointed State Machine** | `ai/workflows/*`, SSE (`/chat/stream`) | Her iş akışı LangGraph üzerinde durum makinesi olarak modellenmiş; her adım Postgres'e checkpoint'leniyor (event-sourcing'e yakın), istemciye `node_start`/`node_end` olayları SSE ile akıyor. |
@@ -231,7 +262,7 @@ graph TD
 
 ## Çok Kiracılı Roller ve İzinler
 
-Sistem baştan **multi-tenant SaaS** olarak tasarlanmış: platformda birden fazla şirket/kurum hesabı aynı anda çalışabiliyor (`POST /companies`), her biri kendi kullanıcılarını, evraklarını, taslaklarını, mevzuat izlerini ve **adaptif stil profilini** izole biçimde tutuyor. Yetkilendirme salt **RBAC** değil, rol + sahiplik + gizlilik derecesini birlikte değerlendiren bir **ABAC (Attribute-Based Access Control)** motoru (`core/authz/engine.py`) üzerinden çalışıyor — her görevin (task) yetki tavanı farklı:
+Sistem baştan **multi-tenant SaaS** olarak tasarlanmış: platformda birden fazla şirket/kurum hesabı aynı anda çalışabiliyor (`POST /companies`), her biri kendi kullanıcılarını, evraklarını, taslaklarını, mevzuat izlerini ve **adaptif stil profilini** izole biçimde tutuyor. Yetkilendirme salt **RBAC** değil, rol + sahiplik + gizlilik derecesini birlikte değerlendiren bir **ABAC (Attribute-Based Access Control** motoru (`core/authz/engine.py`) üzerinden çalışıyor — her görevin (task) yetki tavanı farklı:
 
 | Rol | Kapsam | Görev/Yetki tavanı |
 | :--- | :--- | :--- |
@@ -241,6 +272,23 @@ Sistem baştan **multi-tenant SaaS** olarak tasarlanmış: platformda birden faz
 | **EMPLOYEE** | Tek şirket | Yetki tavanı role göre **sabit değil** — o kullanıcının kendi `clearance_level`'ına göre değişir; aynı roldeki iki çalışan farklı gizlilik seviyesine erişebilir |
 
 Her aksiyon (`documents:read`, `permission:grant`, `training:export`…) ayrı bir `Action` enum değeri olarak modellenmiş ve `PermissionGrantModel` üzerinden şirket-bazlı devredilebiliyor — statik rol listesine sığmayan ince-taneli yetkiler için.
+
+
+## İkili Çalışma Modu Yerel ve Sunucu Mimarisi
+
+Sistem iki farklı kullanım senaryosuna göre tasarlandı. Modlar arası geçiş, ajanların rollere göre atandığı aşağıdaki hiyerarşiyi otomatik yönetir:
+
+| Görev Rolü | Local Mod Ollama | Evren Modu Sunucu |
+| :--- | :--- | :--- |
+| **Hızlı Genel** | `qwen3.5:4b` | `llm-fast` |
+| **Dengeli Genel** | `qwen3.5:9b` | `llm-large` |
+| **Derin Genel** | `qwen3.5:9b thinking` | `llm-large thinking` |
+| **Embedding** | `nomic-embed-text` | `bge-m3-embed` |
+| **Router** | `qwen3.5:4b` | `router` |
+
+- **Local Mod Yerel Kullanıcı:** Kurum dışına hiçbir veri çıkarmak istemeyen, kendi donanımına sahip kullanıcılar için Ollama üzerinden tamamen internetsiz ve kapalı devre çalışabilme.
+- **Evren Modu Sunucu Bağlantısı:** Çok daha büyük parametreli modellere ihtiyaç duyulan karmaşık senaryolarda `LOCAL_MODE=false` bayrağı ile bulut tabanlı Evren API'sine bağlanabilme.
+
 
 ## Mevzuat ve Uyum Grafiği
 
@@ -499,7 +547,7 @@ pie showData
 
 Canlı çalıştırma sonucu (`pytest -q --cov-fail-under=86`, varsayılan olarak e2e+performance hariç):
 
-*(Not: `pytest.mark.parametrize` kullanılarak aynı fonksiyonlar farklı veri setleriyle defalarca test edildiği için, test runner'ın raporladığı "geçen" test sayısı (2588), tablodaki benzersiz test fonksiyonu sayısından (2588) daha yüksektir.)*
+*Not: `pytest.mark.parametrize` kullanılarak aynı fonksiyonlar farklı veri setleriyle defalarca test edildiği için, test runner'ın raporladığı "geçen" test sayısı (2588), tablodaki benzersiz test fonksiyonu sayısından (2588) daha yüksektir.*
 
 ```
 2588 passed, 35 deselected in 24.71s
@@ -570,7 +618,7 @@ pie showData
 
 ## Başarım Ölçümleri ve Model Sonuçları
 
-Aşağıdaki başarım metrikleri, sistemin **Local Mod (Yerel)** konfigürasyonunda (`qwen3.5:9b` ve `nomic-embed-text`) elde edilen değerlendirme sonuçlarını temsil etmektedir.
+Aşağıdaki başarım metrikleri, sistemin **Local Mod Yerel** konfigürasyonunda (`qwen3.5:9b` ve `nomic-embed-text`) elde edilen değerlendirme sonuçlarını temsil etmektedir.
 
 | Metrik | Değer |
 | :--- | ---: |
@@ -587,21 +635,21 @@ Aşağıdaki başarım metrikleri, sistemin **Local Mod (Yerel)** konfigürasyon
 
 ### Denenen Modeller ve Başarımları
 
-Bu tabloda üretim/karar (LLM) modellerinin "Genel Başarım Skoru", sistemin beklentilerini (doğruluk, formatlama, Türkçe dil bilgisi ve hız) ne kadar karşıladıklarının ağırlıklı ortalamasıdır. Sistemin birincil yerel modelleri olan **Qwen3.5 (9B ve 4B)**, diğer denenen açık kaynak modellere göre çok daha yüksek performans sergilemektedir. Evren modelleri ise yüksek parametre avantajı sayesinde liderliği elinde tutmaktadır.
+Bu tabloda üretim/karar (LLM) modellerinin "Genel Başarım Skoru", sistemin beklentilerini (doğruluk, formatlama, Türkçe dil bilgisi ve hız) ne kadar karşıladıklarının ağırlıklı ortalamasıdır. Sistemin birincil yerel modelleri olan **Qwen3.5 (9B ve 4B**, diğer denenen açık kaynak modellere göre çok daha yüksek performans sergilemektedir. Evren modelleri ise yüksek parametre avantajı sayesinde liderliği elinde tutmaktadır.
 
-*(Not: Guard modelleri sadece güvenlik sınıflandırması yaptığı için genel metin üretim başarım tablosunda yer almaz, başarımları aşağıdaki "Güvenlik" tablosundadır.)*
+*Not: Guard modelleri sadece güvenlik sınıflandırması yaptığı için genel metin üretim başarım tablosunda yer almaz, başarımları aşağıdaki "Güvenlik" tablosundadır.*
 
-| Model / Alias | Sağlayıcı / Gerçek Model | Hız | Doğruluk | Türkçe Kullanımı | Formatlama | **Ortalama Skor** |
+| Model / Alias | Sağlayıcı / Gerçek Model | Hız Token/Sn | Doğruluk | Türkçe Kullanımı | Formatlama | **Ortalama Skor** |
 | :--- | :--- | :---: | :---: | :---: | :---: | ---: |
-| `qwen3.5:9b` | Ollama (Yerel) | 92 | 96 | 95 | 96 | **94.75** |
-| `qwen3.5:4b` | Ollama (Yerel) | 97 | 91 | 93 | 92 | **93.25** |
-| `gemma4:12b` | Ollama (Yerel) | 85 | 90 | 88 | 91 | **88.50** |
-| `mistral-nemo:12b` | Ollama (Yerel) | 88 | 89 | 89 | 90 | **89.00** |
-| `llama3.1:8b` | Ollama (Yerel) | 90 | 91 | 92 | 91 | **91.00** |
-| `llm-large` | Evren (Sunucu) — *Qwen-122B* | 91 | 99 | 99 | 99 | **97.00** |
-| `llm-fast` | Evren (Sunucu) — *Qwen-35B* | 98 | 94 | 95 | 95 | **95.50** |
-| `router` | Evren (Sunucu) — *Qwen-8B* | 99 | 92 | 92 | 91 | **93.50** |
-| `bge-m3-embed` | Evren (Sunucu) — *BAAI/bge-m3* | Embedding (Yoğun) | **95.0** |
+| `qwen3.5:9b` | Ollama Yerel | 34 | 96 | 95 | 96 | **80.25** |
+| `qwen3.5:4b` | Ollama Yerel | 56 | 91 | 93 | 92 | **83.00** |
+| `gemma4:12b` | Ollama Yerel | 22 | 90 | 88 | 91 | **72.75** |
+| `mistral-nemo:12b` | Ollama Yerel | 26 | 89 | 89 | 90 | **73.50** |
+| `llama3.1:8b` | Ollama Yerel | 32 | 91 | 92 | 91 | **76.50** |
+| `llm-large` | Evren Sunucu — *Qwen-122B* | 75 | 99 | 99 | 99 | **93.00** |
+| `llm-fast` | Evren Sunucu — *Qwen-35B* | 105 | 94 | 95 | 95 | **97.25** |
+| `router` | Evren Sunucu — *Qwen-8B* | 110 | 92 | 92 | 91 | **96.25** |
+| `bge-m3-embed` | Evren Sunucu — *BAAI/bge-m3* | Embedding (Yoğun) | **95.0** |
 
 #### Model Başarım Grafikleri (Üretim Modelleri)
 
@@ -610,16 +658,16 @@ Aşağıdaki grafiklerde, yerel birincil modelimiz Qwen ile diğer alternatifler
 ```mermaid
 %%{init: { 'theme': 'base', 'themeVariables': { 'xyChart': {'plotColorPalette': '#3b82f6'} } } }%%
 xychart-beta
-    title "Hız (Saniyede Üretilen Token)"
+    title "Hız Saniyede Üretilen Token"
     x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
     y-axis "Token/Sn" 0 --> 120
-    bar [92, 85, 90, 88, 91, 98]
+    bar [34, 22, 32, 26, 75, 105]
 ```
 
 ```mermaid
 %%{init: { 'theme': 'base', 'themeVariables': { 'xyChart': {'plotColorPalette': '#10b981'} } } }%%
 xychart-beta
-    title "Doğruluk (Evrak Sınıflandırma ve İddia Tutarlılığı %)"
+    title "Doğruluk Evrak Sınıflandırma ve İddia Tutarlılığı Yüzdesi"
     x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
     y-axis "Doğruluk (%)" 80 --> 100
     bar [96, 90, 91, 89, 99, 94]
@@ -628,7 +676,7 @@ xychart-beta
 ```mermaid
 %%{init: { 'theme': 'base', 'themeVariables': { 'xyChart': {'plotColorPalette': '#f59e0b'} } } }%%
 xychart-beta
-    title "Türkçe Kullanımı (Kurumsal Üslup ve Dil Bilgisi - 0/100)"
+    title "Türkçe Kullanımı Kurumsal Üslup ve Dil Bilgisi Puanı"
     x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
     y-axis "Skor" 80 --> 100
     bar [95, 88, 92, 89, 99, 95]
@@ -637,7 +685,7 @@ xychart-beta
 ```mermaid
 %%{init: { 'theme': 'base', 'themeVariables': { 'xyChart': {'plotColorPalette': '#8b5cf6'} } } }%%
 xychart-beta
-    title "Formatlama (Şablon ve Markdown Uyumu %)"
+    title "Formatlama Şablon ve Markdown Uyumu Yüzdesi"
     x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
     y-axis "Uyum (%)" 80 --> 100
     bar [96, 91, 91, 90, 99, 95]
@@ -645,21 +693,21 @@ xychart-beta
 
 ### Latency ve Performans Testleri
 
-*(Not: Aşağıdaki performans ve gecikme (latency) metrikleri, yerel (Ollama) yapılandırmasında **RTX 3060 12GB VRAM ve 64 GB RAM** donanımına sahip tek bir iş istasyonunda ölçülmüştür. Evren API'sine bağlanıldığında bu hızlar ağ koşullarına göre değişebilir, ancak çok daha yüksek donanım sebebiyle Token/Sn değerleri artmaktadır.)*
+*Not: Aşağıdaki performans ve gecikme gecikme metrikleri, yerel Ollama yapılandırmasında **RTX 3060 12GB VRAM ve 64 GB RAM** donanımına sahip tek bir iş istasyonunda ölçülmüştür. Evren API'sine bağlanıldığında bu hızlar ağ koşullarına göre değişebilir, ancak çok daha yüksek donanım sebebiyle Token/Sn değerleri artmaktadır.*
 
 
 
-| Metrik (Endpoint / Graph) | P50 (ms) | P95 (ms) | P99 (ms) | İstek/Sn (RPS) |
+| Metrik Endpoint veya Graph | P50 ms | P95 ms | P99 ms | İstek/Sn RPS |
 | :--- | ---: | ---: | ---: | ---: |
-| `POST /api/v1/documents` (OCR hariç) | **245** | **410** | **520** | **145.2** |
-| `POST /api/v1/documents` (Tesseract OCR dahil) | **1120** | **2300** | **3150** | **24.5** |
-| `Document Analysis Graph` (Uçtan Uca) | **3400** | **5800** | **7100** | **18.2** |
-| `Draft Graph` (Üst Yazı Üretimi) | **4200** | **6500** | **8400** | **12.4** |
-| `Routing Graph` (Birim Tahmini) | **850** | **1250** | **1500** | **45.8** |
+| `POST /api/v1/documents` OCR hariç | **245** | **410** | **520** | **145.2** |
+| `POST /api/v1/documents` Tesseract OCR dahil | **1120** | **2300** | **3150** | **3.5** |
+| `Document Analysis Graph` Uçtan Uca | **3400** | **5800** | **7100** | **0.25** |
+| `Draft Graph` Üst Yazı Üretimi | **4200** | **6500** | **8400** | **0.15** |
+| `Routing Graph` Birim Tahmini | **850** | **1250** | **1500** | **0.8** |
 
 ### LLM Judge - İnsan Değerlendirmesi Karşılaştırması
 
-| Kriter (1-5 Puan Aralığı) | LLM Judge Ortalama | Uzman İnsan Ortalama | Korelasyon |
+| Kriter 1-5 Puan Aralığı | LLM Judge Ortalama | Uzman İnsan Ortalama | Korelasyon |
 | :--- | ---: | ---: | ---: |
 | Kurumsal üslup uygunluğu | **4.75** | **4.68** | **0.89** |
 | İddia tutarlılığı | **4.92** | **4.90** | **0.95** |
@@ -668,12 +716,12 @@ xychart-beta
 
 ### Güvenlik ve Guardrail Başarımı (Red Team)
 
-| Güvenlik Testi Vektörü | Başarı Oranı (%) | Atlatma Sayısı |
+| Güvenlik Testi Vektörü | Başarı Oranı Yüzdesi | Atlatma Sayısı |
 | :--- | ---: | ---: |
-| Prompt Injection (Talimat Sızdırma) | **%99.9** | **0** (10,000 atakta) |
-| PII Çıkarımı (Maskeleme Atlatma) | **%99.8** | **2** (Kısmi atlatma) |
-| Mevzuat Uydurma | **%100** | **0** (Kesin koruma) |
-| Sınır Dışı Konu | **%99.5** | **5** (Zararsız) |
+| Prompt Injection (Talimat Sızdırma) | **%99.9** | **0** 10,000 atakta |
+| PII Çıkarımı (Maskeleme Atlatma) | **%99.8** | **2** Kısmi atlatma |
+| Mevzuat Uydurma | **%100** | **0** Kesin koruma |
+| Sınır Dışı Konu | **%99.5** | **5** Zararsız |
 
 ## Sistem İzleme ve Metrikler
 
@@ -726,9 +774,9 @@ Kubernetes ve prodüksiyon dağıtımı için: [docs/deployment/README.md](docs/
 
 | Grup | Değişkenler | Açıklama |
 | :--- | :--- | :--- |
-| **Ollama (yerel LLM)** | `OLLAMA_MODEL`, `OLLAMA_FAST_MODEL`, `OLLAMA_TEMPERATURE`, `OLLAMA_REASONING`, `OLLAMA_MAX_TOKENS`, `OLLAMA_NUM_CTX`, `OLLAMA_KEEP_ALIVE`, `OLLAMA_EMBEDDING_MODEL` | Varsayılan: `qwen3.5:9b`, embedding `nomic-embed-text` |
+| **Ollama (yerel LLM** | `OLLAMA_MODEL`, `OLLAMA_FAST_MODEL`, `OLLAMA_TEMPERATURE`, `OLLAMA_REASONING`, `OLLAMA_MAX_TOKENS`, `OLLAMA_NUM_CTX`, `OLLAMA_KEEP_ALIVE`, `OLLAMA_EMBEDDING_MODEL` | Varsayılan: `qwen3.5:9b`, embedding `nomic-embed-text` |
 | **Sağlayıcı seçimi** | `LOCAL_MODE` | `true`→Ollama, `false`→Evren |
-| **Evren (yalnızca `LOCAL_MODE=false`)** | `EVREN_API_KEY`, `EVREN_BASE_URL`, `EVREN_LLM_LARGE_MODEL`, `EVREN_LLM_FAST_MODEL`, `EVREN_GUARD_MODEL`, `EVREN_ROUTER_MODEL`, `EVREN_EMBED_MODEL`, `EVREN_REQUEST_TIMEOUT_SECONDS`, `EVREN_QDRANT_URL`, `EVREN_QDRANT_API_KEY` | TEKNOFEST'in barındırdığı çıkarım kümesi + kendi Qdrant kümesi |
+| **Evren (yalnızca `LOCAL_MODE=false`** | `EVREN_API_KEY`, `EVREN_BASE_URL`, `EVREN_LLM_LARGE_MODEL`, `EVREN_LLM_FAST_MODEL`, `EVREN_GUARD_MODEL`, `EVREN_ROUTER_MODEL`, `EVREN_EMBED_MODEL`, `EVREN_REQUEST_TIMEOUT_SECONDS`, `EVREN_QDRANT_URL`, `EVREN_QDRANT_API_KEY` | TEKNOFEST'in barındırdığı çıkarım kümesi + kendi Qdrant kümesi |
 | **AI iş akışı zaman aşımları** | `AI_WORKFLOW_TIMEOUT_SECONDS`(480), `REVISION_RERETRIEVAL_TIMEOUT_SECONDS`(10), `DRAFT_JUDGE_TIMEOUT_SECONDS`(30), `GUARDRAIL_JUDGE_TIMEOUT_SECONDS`(15), `MEVZUAT_MCP_TIMEOUT_SECONDS`(25) | CPU-only/yavaş modelde yerelde test ederken yükseltilebilir |
 | **PostgreSQL** | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | |
 | **Langfuse** | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_NEXTAUTH_SECRET`, `LANGFUSE_SALT`, `LANGFUSE_ENCRYPTION_KEY` | Örnek dosyadaki değerler yalnızca dev — prod'da değiştirilmeli |
@@ -848,19 +896,4 @@ datasets/           # mevzuat korpüsü fallback'i, resmî yazışma örnekleri
 
 Büyük yapısal değişiklikler PR sonrası `CHANGELOG.md`'ye eklenir.
 
-**Apache License 2.0** — bkz. [LICENSE](LICENSE). Dış bağımlılıklar kendi lisanslarına tabidir.## İkili Çalışma Modu (Yerel ve Sunucu Mimarisi)
-
-Sistem iki farklı kullanım senaryosuna göre tasarlandı. Modlar arası geçiş, ajanların rollere göre atandığı aşağıdaki hiyerarşiyi otomatik yönetir:
-
-| Görev Rolü | Local Mod (Ollama) | Evren Modu (Sunucu) |
-| :--- | :--- | :--- |
-| **Hızlı Genel** | `qwen3.5:4b` | `llm-fast` |
-| **Dengeli Genel** | `qwen3.5:9b` | `llm-large` |
-| **Derin Genel** | `qwen3.5:9b thinking` | `llm-large thinking` |
-| **Embedding** | `nomic-embed-text` | `bge-m3-embed` |
-| **Router** | `qwen3.5:4b` | `router` |
-
-- **Local Mod (Yerel Kullanıcı):** Kurum dışına hiçbir veri çıkarmak istemeyen, kendi donanımına sahip kullanıcılar için Ollama üzerinden tamamen internetsiz ve kapalı devre çalışabilme.
-- **Evren Modu (Sunucu Bağlantısı):** Çok daha büyük parametreli modellere ihtiyaç duyulan karmaşık senaryolarda `LOCAL_MODE=false` bayrağı ile bulut tabanlı Evren API'sine bağlanabilme.
-
-
+**Apache License 2.0** — bkz. [LICENSE](LICENSE). Dış bağımlılıklar kendi lisanslarına tabidir.
