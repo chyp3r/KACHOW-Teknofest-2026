@@ -63,24 +63,17 @@ sequenceDiagram
     
     User->>UI: Soru Sor
     UI->>API: POST /chat/message
-    API-->>UI: Chunk 1 (Stream)
-    UI-->>User: Metin Güncellemesi
-    API-->>UI: Chunk 2 (Stream)
-    UI-->>User: Metin Güncellemesi
-    API-->>UI: Tamamlandı [Event]
+    API-->>UI: İlerleme olayları
+    API-->>UI: final_result
+    UI-->>UI: Mesajı sıraya tek seferde ekle
+    UI-->>User: Yerel yazma animasyonu
 ```
 
-Sohbet iş akışı uygulama kabuğu seviyesinde yaşar; sayfa rotaları arasında
-geçiş yapmak aktif SSE isteğini sonlandırmaz. Son çözümlenen oturum kimliği
-korunur ve kullanıcı Sohbetler'e döndüğünde aynı konuşma durumuna yeniden
-bağlanır. Canlı olaylar `seq` alanıyla tekilleştirilip backend sırasına göre,
-kalıcı mesajlar ise `created_at` ve eşit zaman damgasında API konuşma sırasına
-göre düzenlenir.
-
-İnsan-onayı resume kayıtları normal kullanıcı metni olarak gösterilmez.
-`interaction_response` bulunan kayıtlar önceki interrupt geçmişte bulunmasa
-bile tamamlanan cevap kartına çevrilir; araya giren asistan bildirimleri bekleyen
-soru bağlamını düşürmez.
+Backend `token` parçalarını yapay bekleme olmadan taşıyabilir; bunlar UI yazma
+hızının kaynağı değildir. Frontend doğrulanmış `final_result` cevabını konuşma
+state'ine bir kez ekler ve yalnız canlı gelen bu mesajı `AnimatedMessageText`
+ile görsel olarak açar. Kalıcı geçmiş mesajları anında gösterilir; işletim
+sisteminde azaltılmış hareket tercihi açıksa animasyon uygulanmaz.
 
 ## Performans ve Optimizasyon
 

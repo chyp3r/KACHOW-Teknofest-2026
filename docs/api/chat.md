@@ -82,10 +82,10 @@ IP başına dakikada 20 istekle sınırlıdır.
 | `final_result`| Akış normal bittiğinde. | `reply`, `workflow_status` |
 
 `token` olayları yalnız guardrail ve doğrulama adımlarından geçmiş nihai
-cevaptan üretilir; ham taslak veya ajan çıktısı kullanıcıya akıtılmaz. Nihai
-cevap küçük parçalara ayrılıp kısa aralıklarla yayınlanır. Böylece SSE tüketicisi
-her parçayı ayrı iletir ve istemci yanıtı kademeli gösterirken hemen ardından
-gelen `final_result` tek render içinde canlı akışı ezmez.
+cevaptan üretilir; ham taslak veya ajan çıktısı kullanıcıya akıtılmaz. Parçalar
+taşıma amaçlıdır ve aralarına yapay sunucu gecikmesi eklenmez. Web istemcisi
+mesaj sırasını yalnız `final_result` ile günceller; yazma efekti tamamlanmış
+cevabın frontend'de yerel olarak gösterilmesidir.
 
 ---
 

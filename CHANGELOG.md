@@ -16,16 +16,18 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - Yönetici Mevzuat Haritası toplu uçta sunucu hatası aldığında mevcut evrak
   listesi ve tekil evrak grafik uçlarından güvenli bir kısmi görünüm oluşturuyor;
   erişilemeyen evrak sayısı kullanıcıya açıkça bildiriliyor.
-- Sohbet insan-onayı cevapları ham kullanıcı mesajı olarak bırakılmadan sorunun
-  bulunduğu asistan balonunda tamamlanan cevap kartına dönüştürülüyor. Araya
-  başka asistan kaydı girmesi, önceki soru kaydının eksik olması ve cevapta
-  noktalama bulunması gibi geçmiş edge case'leri de aynı biçime normalize
-  ediliyor; geçmiş ve canlı iş akışı olayları kalıcı zaman/sıra bilgisine göre düzenleniyor.
-  Aynı zaman damgasını paylaşan sohbet kayıtlarında API konuşma sırası korunarak
-  rastgele UUID sıralamasının kullanıcı mesajını asistan yanıtından sonraya
-  taşıması engelleniyor.
-  Aktif AI isteği başka sayfaya geçildiğinde iptal edilmiyor ve sohbete dönüşte
-  aynı oturum üzerinden devam ediyor.
+- Sohbet yazma efekti backend kuyruk gecikmesinden ayrıldı. Backend cevap
+  parçaları yeniden gecikmesiz `main` davranışını kullanıyor; frontend sıra ve
+  oturum mantığı da `main` tabanına döndürüldü. Doğrulanmış `final_result`
+  konuşmaya tek seferde ekleniyor ve yalnız yeni asistan cevabı frontend'de
+  uyarlanabilir yazma animasyonuyla gösteriliyor.
+- Sohbette “İşlemi durdur” sonrasında geç ulaşan insan-onayı artık durdurulmuş
+  turu yeniden açmıyor; akış ve bekleme yüzeyleri temizlenip tek bir “İşlem
+  durduruldu” bildirimi gösteriliyor. Bu sırada sunucuda zaten kapanmış bir
+  onay formu gönderilirse eski kart ve hata mesajı tekrar oluşturulmuyor.
+- Kullanıcının son aktif sohbet oturumu sohbet dışındaki sayfalara geçildiğinde
+  ve sekme yenilendiğinde korunuyor; Sohbet menüsüne dönüş son oturumu yeniden
+  açıyor, “Yeni sohbet” eylemi ise saklanan oturumu açıkça temizliyor.
 - Yönetim Analitik ve Denetim alanlarına mevcut endpointlerden AI/güvenlik zaman
   grafikleri, karar dağılımları ve okunabilir Türkçe işlem etiketleri eklendi.
   Kurum kuralları ortak temalı akordiyon ve segmentli önem kontrollerine taşındı;
