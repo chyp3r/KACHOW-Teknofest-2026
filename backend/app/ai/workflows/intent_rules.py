@@ -332,6 +332,39 @@ ASSIST_RULES: tuple[EvidenceRule, ...] = (
         ),
         requires_document=True,
     ),
+    #: "Taslağı ilet"/"evrakı gönder" ask to forward an artifact to someone
+    #: -- `assist` is the only intent whose step ever offers the model the
+    #: `propose_transfer` tool (see app.ai.tools.transfer_tools and
+    #: `_run_assist`'s own `AI_TRANSFER_ENABLED` gate), so a forwarding
+    #: request has to resolve here rather than to `revise`. Left unhandled,
+    #: a bare "taslağı ilet" fires no rule at all -- REVISE_RULES has no
+    #: "ilet"/"gönder" surface, `assist.short_message` is deliberately
+    #: withheld once a draft is open (see its own comment) -- so the message
+    #: reached the semantic/model fallback with zero lexical evidence, and
+    #: those layers kept resolving it to `revise` off the shared word
+    #: "taslak" alone, silently opening a revision round instead of the
+    #: transfer confirmation the user actually asked for.
+    #:
+    #: Deliberately anchored on the artifact noun ("taslağı"/"evrakı"/
+    #: "belgeyi") rather than the recipient ("birime", "kuruma", "makama"):
+    #: `_compile_surface` only checks a left boundary, so a recipient-anchored
+    #: surface like "birime ilet" would also match inside "birime iletilecek"
+    #: -- the passive/future participle `pdraft_06`'s own drafting request
+    #: uses ("İlgili birime iletilecek bir tezkere düzenlemeni istiyorum")
+    #: to describe a *new* document's addressee, not a forwarding command.
+    #: No drafting phrasing in this codebase puts the artifact noun directly
+    #: before that participle, so anchoring there instead avoids the collision.
+    EvidenceRule(
+        id="assist.transfer_request",
+        intent="assist",
+        weight=WEIGHT_EXPLICIT,
+        surfaces=(
+            "taslagi ilet", "taslagi gonder", "taslagi yolla", "taslagi paylas",
+            "evraki ilet", "evraki gonder", "evraki yolla", "evraki paylas",
+            "belgeyi ilet", "belgeyi gonder", "belgeyi yolla", "belgeyi paylas",
+            "kime iletebilirim", "kime gonderebilirim", "kime iletirim", "kime gonderirim",
+        ),
+    ),
 )
 
 #: Phrases that make a message about *this conversation's own history*. Kept as

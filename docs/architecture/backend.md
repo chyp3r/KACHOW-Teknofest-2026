@@ -1,827 +1,111 @@
 # Backend Mimarisi
 
-## Amaç
+> **NOT:**
+> Bu doküman backend uygulamasının mimarisini, katmanlarını, veri akışını ve güvenlik konseptlerini (Çok Kiracılık, ABAC, RLS vb.) açıklar. Backend'in amacı API isteklerini yönetmek, iş kurallarını uygulamak, yapay zekâ sistemini koordine etmek ve veri bütünlüğünü sağlamaktır.
 
-Bu doküman backend uygulamasının mimarisini, katmanlarını ve veri akışını açıklar.
+## Mimari Yaklaşım
 
-Backend'in amacı;
+Backend aşağıdaki prensipler etrafında şekillenmiştir:
 
-* API isteklerini yönetmek
-* İş kurallarını uygulamak
-* Yapay zekâ sistemini yönetmek
-* Veritabanı işlemlerini gerçekleştirmek
-* Harici servislerle iletişim kurmak
+- **Modular Monolith:** Tek parça ancak domain bazında kesin sınırlarla ayrılmış yapı.
+- **Domain Driven Design (DDD):** İş kurallarının domaine göre tasarlanması.
+- **Clean Architecture & SOLID:** Katmanlar arası bağımlılıkların sıkı kontrolü.
+- **Repository Pattern & Dependency Injection:** Veri erişiminin soyutlanması ve bağımlılıkların enjekte edilmesi.
 
-Backend, kullanıcı arayüzünden tamamen bağımsız olarak geliştirilmektedir.
+## Genel Yapı ve Dizin Dizilimi
 
----
+Projedeki Backend ana klasörleri ve sorumlulukları:
 
-# Mimari Yaklaşım
+| Dizin | Sorumluluk |
+| --- | --- |
+| `app/api/` | HTTP uç noktalarının ve global middleware/router tanımlarının bulunduğu yer. |
+| `app/core/` | Tüm sistemi ilgilendiren config, güvenlik, exception yönetimi bileşenleri. |
+| `app/domains/` | (DDD) Her bir iş biriminin (ör. chat, documents) bağımsız klasörü. |
+| `app/ai/` | Yapay zekâ iş akışları, modeller, promptlar ve araçlar. |
+| `app/infrastructure/` | Veritabanı, önbellek, dış servis ve depolama bağlantıları. |
+| `app/shared/` | Ortak DTO'lar, sabitler ve utility araçları. |
+| `app/workers/` | Arka planda çalışan asenkron görevler. |
 
-Backend aşağıdaki mimari prensiplere göre tasarlanmıştır.
+## İstek Yaşam Döngüsü
 
-* Modular Monolith
-* Domain Driven Design (DDD)
-* SOLID
-* Clean Architecture
-* Repository Pattern
-* Dependency Injection
+Kullanıcıdan gelen bir HTTP isteğinin Backend içindeki yolculuğu aşağıdaki gibidir:
 
-Her bileşen yalnızca kendi sorumluluk alanından sorumludur.
-
----
-
-# Genel Yapı
-
-Backend uygulaması aşağıdaki ana bileşenlerden oluşmaktadır.
-
-```text
-backend/
-│
-├── app/
-│   ├── api/
-│   ├── core/
-│   ├── domains/
-│   ├── ai/
-│   ├── mcp/
-│   ├── infrastructure/
-│   ├── observability/
-│   ├── shared/
-│   ├── workers/
-│   └── events/
-│
-├── tests/
-├── scripts/
-└── migrations/
+```mermaid
+flowchart TD
+    Request([HTTP Request]) --> Router[API Router]
+    Router --> Validation[Pydantic Validation]
+    Validation --> Service[Domain Service]
+    Service -->|İhtiyaç Halinde| AI[AI Core]
+    Service --> Repo[Repository]
+    Repo --> Infra[(Infrastructure / Database)]
+    Infra -.-> Repo
+    Repo -.-> Service
+    Service -.-> Router
+    Router -.-> Response([HTTP Response])
 ```
 
-Her klasör belirli bir sorumluluğa sahiptir.
+## Domain Katmanları
 
----
+Her iş alanı (`domains/chat`, `domains/documents` vb.) aşağıdaki yapıya sahiptir:
 
-# İstek Yaşam Döngüsü
+| Dosya | Görev | İş Kuralı Barındırır mı? |
+| --- | --- | :---: |
+| `router.py` | HTTP metotlarını yönetir, Service'i çağırır. | Hayır |
+| `service.py` | Uygulamanın temel iş kurallarını işletir. | Evet |
+| `repository.py` | Veritabanı ile CRUD işlemlerini yürütür. | Hayır |
+| `models.py` | ORM modellerini (veritabanı tabloları) tanımlar. | Hayır |
+| `schemas.py` | Pydantic giriş/çıkış şemalarını tutar. | Hayır |
 
-Backend'e gelen bir istek aşağıdaki adımlardan geçer.
+> **UYARI:**
+> Katman ihlali yapılmamalıdır. Router'da SQL yazılmaz, Service'te HTTP objesi yönetilmez ve Repository'de iş mantığı bulunmaz.
 
-```text
-HTTP Request
-      │
-      ▼
-API Router
-      │
-      ▼
-Validation
-      │
-      ▼
-Service
-      │
-      ▼
-Repository
-      │
-      ▼
-Infrastructure
-      │
-      ▼
-Database
+## Çok Kiracılık (Multi-Tenancy) ve Güvenlik
+
+Sistem şirket bazlı (`company_id`), dört farklı rol hiyerarşisi (`root`, `admin`, `manager`, `employee`) barındıran çok kiracılı bir mimaridedir.
+
+### Güvenlik Katmanları (Savunma Hattı)
+
+```mermaid
+flowchart LR
+    A[İstek] --> B{1. Kiracı Kapsamı}
+    B -->|Şirket Uygun| C{2. ABAC Motoru}
+    C -->|İzin Verildi| D{3. Gizlilik Seviyesi}
+    D -->|Seviye Yeterli| E{4. Guardrails (AI)}
+    E -->|Temiz| F((Erişim Başarılı))
+    B -.->|Geçersiz| X[Red]
+    C -.->|Yetkisiz| X
+    D -.->|Seviye Yetersiz| X
+    E -.->|Red Edildi| X
 ```
 
-AI gerektiren işlemlerde Service katmanı AI Core ile iletişim kurar.
+### Row-Level Security (RLS)
 
----
+- Tüm kiracı verileri (`users`, `documents`, `drafts`, `chat_sessions` vb.) Postgres düzeyinde RLS (Satır Seviyesinde Güvenlik) ile izole edilmiştir.
+- İstek başladığında Middleware üzerinden `current_company_id` GUC'si (Grand Unified Configuration) ayarlanarak Postgres'e iletilir.
+- GUC ayarlanmazsa sistem varsayılan olarak **fail-secure** modda çalışır (hiçbir satır görünmez).
 
-# API Katmanı
+### ABAC (Attribute-Based Access Control) Motoru
 
-API katmanı kullanıcıdan gelen HTTP isteklerini karşılar.
+Yetkilendirme kontrolleri `app.core.authz` altındaki özel bir motor ile çalıştırılır:
+- Roller, eylemler ve kaynaklar birleştirilerek değerlendirilir.
+- Çoğu sorgu bellek üzerinde (DB ihtiyacı olmadan) hızlıca değerlendirilir.
+- Root rolü sınırsız erişime sahipken, çalışanlar (Employee) yalnızca kendi sahip olduğu kaynaklarda işlem yapabilir.
 
-Görevleri;
+## Bildirimler ve SSE (Server-Sent Events)
 
-* Request doğrulama
-* Authentication
-* Authorization
-* Response oluşturma
-* Service çağırma
+Sistem içi bildirimler (`draft_shares` gibi özelliklerde) gerçek zamanlı olarak gönderilir:
 
-API katmanında;
+1. İşlemin gerçekleştiği yerde bir *Event* fırlatılır.
+2. Dinleyiciler (Subscribers) veritabanına bildirim kaydı ekler.
+3. Eşzamanlı olarak bildirim, `RedisCache.publish` üzerinden ilgili kanala (`notifications:{company_id}:{user_id}`) basılır.
+4. İstemci, bir SSE uç noktası üzerinden bu güncellemeleri anında arayüzde görür.
 
-* SQL yazılmaz.
-* AI çağrısı yapılmaz.
-* İş mantığı bulunmaz.
+## Observability & Denetim Kaydı (Audit Log)
 
-API yalnızca giriş ve çıkış noktasıdır.
+Sistemdeki idari ve kritik eylemler, değiştirilmesi veya silinmesi durumunda fark edilecek şekilde **kriptografik zincir (hash-chain)** mimarisiyle kaydedilir (`app.domains.audit`).
 
----
+- **Metrikler (Prometheus/Grafana):** Şirket bazında istek sayısı, doküman, taslak istatistikleri ve aktif kullanıcı sayıları tutulur.
+- **AI İzleme (Langfuse):** Yapay zeka modeline giden girdiler ve çıktılar, kullanıcı bazlı izleme ile kaydedilir.
 
-# Core
-
-Core klasörü sistem genelinde kullanılan ortak bileşenleri içerir.
-
-Örnekler;
-
-* Config
-* Security
-* Middleware
-* Exception Handler
-* Dependency Injection
-* Settings
-
-Core herhangi bir domain'e bağlı değildir.
-
----
-
-# Domains
-
-Backend'in en önemli katmanıdır.
-
-Her iş alanı bağımsız bir domain olarak geliştirilir.
-
-Örnek yapı
-
-```text
-domains/
-
-chat/
-
-documents/
-
-routing/
-
-units/
-
-users/
-
-system/
-```
-
-Her domain kendi içerisinde izole çalışır. Boş, sıfır-route'lu iskelet domain'ler (eskiden `evaluation/`, `feedback/`, `settings/`) kaldırılmıştır — bir domain yalnızca gerçek bir uç nokta bağlandığında eklenir.
-
----
-
-# Domain Yapısı
-
-Her domain aşağıdaki yapıyı takip eder.
-
-```text
-chat/
-
-router.py
-
-service.py
-
-repository.py
-
-schemas.py
-
-models.py
-```
-
-İhtiyaç halinde aşağıdaki dosyalar eklenebilir.
-
-```text
-validators.py
-
-permissions.py
-
-events.py
-
-tasks.py
-
-exceptions.py
-```
-
----
-
-# Router
-
-Router yalnızca HTTP katmanıdır.
-
-Görevleri
-
-* Endpoint tanımlamak
-* Request almak
-* Validation yapmak
-* Service çağırmak
-* Response döndürmek
-
-Router iş mantığı içermez.
-
----
-
-# Service
-
-Service katmanı uygulamanın iş kurallarını içerir.
-
-Service;
-
-* Repository kullanabilir.
-* AI sistemini çağırabilir.
-* Event yayınlayabilir.
-* Transaction yönetebilir.
-
-Service;
-
-* SQL yazmaz.
-* HTTP yönetmez.
-* ORM modeli oluşturmaz.
-
----
-
-# Repository
-
-Repository veri erişim katmanıdır.
-
-Görevleri
-
-* CRUD işlemleri
-* Filtreleme
-* Sayfalama
-* Transaction
-* ORM yönetimi
-
-Repository yalnızca veri erişiminden sorumludur.
-
-İş kuralları burada bulunmaz.
-
----
-
-# Models
-
-Models klasörü veritabanı modellerini içerir.
-
-Her model tek bir tabloyu temsil eder.
-
-ORM dışında iş mantığı içermez.
-
----
-
-# Schemas
-
-Schemas klasörü API giriş ve çıkış modellerini içerir.
-
-Tüm Request ve Response modelleri burada bulunur.
-
-Veritabanı modelleri ile karıştırılmamalıdır.
-
----
-
-# AI Katmanı
-
-Backend içerisindeki AI işlemleri ayrı bir katmanda bulunmaktadır.
-
-Backend yalnızca AI Core'u çağırır.
-
-AI'nın nasıl çalıştığı
-
-```text
-docs/architecture/ai.md
-```
-
-dokümanında açıklanmaktadır.
-
----
-
-# MCP
-
-Backend, sistem araçlarına doğrudan erişmez.
-
-Tüm sistem araçları MCP üzerinden kullanılmaktadır.
-
-Örnekler
-
-* Terminal
-* Dosya sistemi
-* Web Browser
-* Git
-* Harici servisler
-
-Bu yapı AI katmanını güvenli ve genişletilebilir hale getirir.
-
----
-
-# Infrastructure
-
-Infrastructure katmanı, harici servisler ve veri saklama/erişim katmanlarıyla olan bağlantıları ve istemcileri yönetir. Projede bu katman tamamen asenkron (async) ve modüler olarak tasarlanmıştır.
-
-### 1. Database (PostgreSQL)
-`app/infrastructure/database/` dizininde konumlanmıştır:
-* **Async Engine & Session**: SQLAlchemy `create_async_engine` ve `async_sessionmaker` kullanılarak asenkron PostgreSQL bağlantı havuzu kurulmuştur.
-* **get_db**: FastAPI endpoint'lerinde veritabanı oturumlarını güvenli şekilde yöneten asenkron dependency fonksiyonu.
-* **verify_db_connection**: Uygulama ayağa kalkarken PostgreSQL veritabanı bağlantısını kontrol eden asenkron doğrulama fonksiyonu.
-* **TimestampMixin**: ORM modellerine `created_at` ve `updated_at` alanlarını otomatik ekleyen zaman damgası mixin sınıfı.
-
-### 2. Cache (Redis)
-`app/infrastructure/cache/` dizininde konumlanmıştır:
-* **RedisCache**: `redis.asyncio` kütüphanesini sarmalayarak asenkron get, set, delete, exists ve clear operasyonlarını sunan cache istemcisi.
-* **get_cache**: Global RedisCache tekil (singleton) örneğine erişim sağlayan fonksiyon.
-
-### 3. Vectorstore (Qdrant)
-`app/infrastructure/vectorstore/` dizininde konumlanmıştır:
-* **BaseVectorStore**: Vektör veritabanları için soyut taban sınıfı.
-* **QdrantStore**: `AsyncQdrantClient` aracılığıyla asenkron koleksiyon oluşturma (`create_collection`), vektör ve metin kaydetme (`upsert_documents`) ve anlamsal benzerlik araması (`similarity_search`) yeteneklerini sağlayan istemci.
-* **get_vector_store**: Global QdrantStore tekil örneğini döndüren fabrika fonksiyonu.
-
-### 4. Storage (Local / S3)
-`app/infrastructure/storage/` dizininde konumlanmıştır:
-* **BaseStorage**: Dosya yükleme, indirme ve silme için soyut arayüz.
-* **LocalStorage**: Yerel disk üzerinde çalışır. Dizin dışı dosya erişimini (Directory Traversal) engelleyen güvenlik kontrolleri barındırır.
-* **S3Storage**: AWS S3 ve MinIO ile uyumlu, asenkron `boto3` thread havuzu kullanan nesne depolama istemcisi.
-* **get_storage_client**: Konfigürasyona göre doğru depolama istemcisini dönen fabrika fonksiyonu.
-
-### 5. LLM Providers
-`app/infrastructure/providers/` dizininde konumlanmıştır:
-* **OllamaClient** (`ollama.py`): Yerel Ollama servisiyle entegrasyonu sağlar; `num_ctx`/`keep_alive` her çağrıda ayarlanır ve `ChatOllama` örnekleri parametre setine göre önbelleğe alınır. (Kullanılmayan `vllm.py` sağlayıcısı kaldırılmıştır — hiçbir yerde kurulmuyordu ve `OllamaClient`'ın aldığı sertleştirmelerin (client cache, `num_ctx`) hiçbirine sahip değildi.)
-
-### 6. Checkpointing (Postgres)
-`app/infrastructure/checkpointing/` dizininde konumlanmıştır:
-* **`init_checkpointer` / `close_checkpointer` / `get_checkpointer`**: `AsyncPostgresSaver.from_conn_string()`'in kendisi bir async context manager olduğu için (doğrudan `await` edilip bir kenara bırakılamaz), bir `AsyncExitStack` etrafında en-iyi-çaba (best-effort) açılıp kapatılır. Postgres erişilemezse yalnızca HITL kesintileri devre dışı kalır; uygulama boot'u engellenmez.
-* Yalnızca `planning_graph` bir checkpointer alır (bkz. `docs/architecture/ai.md` — HITL bölümü).
-
-Bu katman yalnızca istemci bağlantılarından ve temel I/O işlemlerinden sorumludur.
-
----
-
-# Shared
-
-Shared klasörü proje genelinde ortak kullanılan yapıları içerir.
-
-Örnekler
-
-* DTO
-* Base Classes
-* Constants
-* Enums
-* Utility Types
-
-İş mantığı Shared içerisine eklenmez.
-
----
-
-# Events
-
-Sistem bileşenleri arasında gevşek bağlı iletişim sağlamak amacıyla Event yapısı kullanılabilir.
-
-Örnek olaylar
-
-* UserCreated
-* ChatCompleted
-* DocumentIndexed
-* EmbeddingGenerated
-
-Event yapısı domain bağımlılığını azaltır.
-
----
-
-# Workers
-
-Uzun süren işlemler arka planda çalıştırılır.
-
-Örnekler
-
-* Embedding üretimi
-* Büyük belge indeksleme
-* Dosya dönüştürme
-* Bildirim gönderme
-
-Workers HTTP isteğinden bağımsız çalışır.
-
----
-
-# Observability
-
-Backend tüm önemli işlemleri izlenebilir hale getirir.
-
-İzlenen bilgiler
-
-* API istekleri
-* Hata kayıtları
-* AI çağrıları
-* Tool kullanımı
-* Performans metrikleri
-
-Bu yapı hata ayıklamayı kolaylaştırır.
-
----
-
-# Güvenlik
-
-Backend aşağıdaki güvenlik prensiplerini uygular.
-
-* Authentication
-* Authorization
-* Input Validation
-* Rate Limiting
-* Secret Management
-* Audit Logging
-
-Hiçbir gizli bilgi kaynak kodunda tutulmaz.
-
-## Çok kiracılılık (Multi-Tenancy)
-
-Sistem `root` / `admin` / `manager` / `employee` olmak üzere dört rollü,
-şirket (`company`) bazlı çok kiracılı bir mimari kullanır (bkz.
-`docs/api/companies.md`). Kimlik doğrulama zorunludur (`settings.
-REQUIRE_AUTH`); açık/kimliksiz erişim modu yoktur.
-
-Dört sabit denetim katmanı, bu sırayla:
-
-1. **Kiracı kapsamı** -- her repository metodu açık bir `company_id`
-   parametresi alır ve ona göre filtreler (bkz. `app.domains.documents.
-   repository.DocumentRepository`'nin kendi docstring'i). Faz 3'ten itibaren
-   Postgres Row-Level Security bunun **gerçek** bir ikinci savunma hattı --
-   bkz. aşağıdaki "Postgres Row-Level Security (RLS)" bölümü.
-2. **ABAC kararı** -- `app.core.authz.engine.authorize` (bkz. aşağıdaki "ABAC
-   Yetkilendirme Motoru" bölümü). `role_checker.bypasses_ownership` hâlâ
-   var ve list/filtre kararlarında (`GET /documents` gibi) kullanılıyor, ama
-   tekil kaynak erişim kontrolleri artık bu motora taşındı: ADMIN/MANAGER/
-   ROOT bir kaynağı sahibi olmasalar bile görebilir, ama yalnızca **kendi
-   şirketleri içinde** (kiracı kapsamı asla atlanmaz).
-3. **Gizlilik derecesi** -- `role_checker.clearance_for`/`assert_clearance`,
-   şirket sınırından bağımsız, ortogonal bir merdiven (`SensitivityLevel`).
-4. **Guardrail'ler** -- `app.ai.guardrails.output_gate`,
-   `app.ai.tools.document_tools`'un retrieval-anında red mekanizması.
-
-`users.company_id` yalnızca `role='root'` için NULL'dur (bir CHECK
-constraint ile zorlanır) -- root herhangi bir şirkete bağlı değildir ve
-şirket verisine yalnızca açık bir scope-switch akışıyla erişir (bkz.
-`docs/api/companies.md`).
-
-`chat_sessions`/`chat_messages`/`drafts`/`runs`/`run_steps`/
-`guardrail_events`'in `company_id`'si de Faz 4'ten (migration `0016_
-recorder_tables_rls`) itibaren `NOT NULL` ve RLS kapsamında -- `PlanningState.
-company_id`, `ChatService._invoke`'dan planlama grafiğinin durumuna
-`user_id` ile aynı şekilde ekleniyor ve dört recorder'ın (`draft_recorder`,
-`run_recorder`, `guardrail_recorder`, `chat_recorder`) hepsi artık `tenant_
-session(company_id)` kullanıyor (bkz. aşağıdaki RLS bölümü).
-
-## Postgres Row-Level Security (RLS)
-
-**Önce şunu oku**: RLS, bir tablonun **sahibi** için tamamen no-op'tur --
-`ENABLE ROW LEVEL SECURITY` fark etmez. Backend ilk migration'dan beri
-Postgres'e `postgres` (bu veritabanının sahibi, superuser) olarak
-bağlanıyordu; bağlantı rolünü ayırmadan yalnızca policy eklemek hiçbir şeyi
-korumayan saf tiyatro olurdu. Migration `0013_rls` bu yüzden ikisini birden
-yapar:
-
-1. **`kachow_app` rolü** -- `NOSUPERUSER`, tablo sahipliği yok, yalnızca
-   `SELECT`/`INSERT`/`UPDATE`/`DELETE` yetkisi (+ `ALTER DEFAULT PRIVILEGES`,
-   böylece sonraki her migration'ın yarattığı tablo da otomatik yetki alır).
-   `settings.DATABASE_URL` artık bu role bağlanıyor (`compose.yml`).
-   İdempotent (`DO $$ ... IF NOT EXISTS ...`) -- mevcut bir Postgres
-   volume'ü `scripts/init-db.sh`'ı yeniden çalıştırmaz, o yüzden rol
-   yaratımı hem orada (taze volume'ler için) hem migration'da (mevcut
-   volume'ler için) tekrarlanır.
-2. **`ENABLE`+`FORCE ROW LEVEL SECURITY`** ve tek bir `tenant_isolation`
-   policy'si, her kiracı-şekilli tabloda: `users`/`units`/`documents`/
-   `invited_emails` (Faz 1), `permission_grants` (Faz 2), `unit_memberships`/
-   `document_pools`/`document_pool_items` (Faz 4, `0014_units_and_pools` --
-   yeni tablolar olduğu için backfill'e gerek kalmadan doğrudan `NOT NULL`
-   ile doğuyorlar), `drafts`/`chat_sessions`/`chat_messages`/`runs`/
-   `run_steps`/`guardrail_events` (Faz 4, `0015_backfill_recorder_company_id`
-   + `0016_recorder_tables_rls` -- Faz 1'den beri nullable kalan altılı,
-   LangGraph state threading tamamlanınca aynı üç-aşamalı desenle
-   kapatıldı), `draft_shares`/`notifications` (Faz 5, `0017_draft_shares_
-   notifications`), ve `usage_counters`/`company_quotas` (Faz 6,
-   `0019_usage_counters_and_quotas` -- yine baştan `NOT NULL` doğan yeni
-   tablolar). `company_id`'si olmayan tablolar: `companies`'in kendisi --
-   kiracının kökü, kapsanacak bir kiracısı yok -- ve **`audit_log`**
-   (Faz 6, `0018_audit_log`), tek kasıtlı istisna: bir ROOT'un sistem geneli
-   eylemleri (örn. `POST /companies`) tek bir şirkete ait değildir, ve
-   `company_id IS NULL` bir satırda `tenant_isolation` policy'sinin
-   `company_id = current_setting(...)` yarısı üçlü mantıkta NULL'a
-   düşüp yalnızca `OR is_root` yarısından görünür kalmasını sağlar --
-   policy'nin kendisi değişmeden aynı davranışı verir (bkz. `AuditLogModel`'in
-   kendi docstring'i). `FORCE` şart -- onsuz RLS tablo sahibi için zaten
-   atlanıyor *ve* `BYPASSRLS` yetkili herhangi bir rol için de atlanır;
-   `kachow_app` ikisi de değil, ama `FORCE` bunu gelecekte de öyle kalmaya
-   zorluyor.
-
-Policy: `company_id = current_setting('app.current_company_id', true) OR
-current_setting('app.is_root', true) = 'on'`. `current_setting(key, true)`
-GUC set edilmemişse hata fırlatmak yerine NULL döner -- `company_id = NULL`
-SQL'in üçlü mantığında NULL'dır, TRUE değil, yani GUC'u hiç set etmemiş bir
-oturum (unutulmuş bir middleware, başıboş bir ham SQL bağlantısı) her RLS'li
-tabloda sıfır satır görür: `role_checker.clearance_for`'ın "bilinmeyen
-gizlilik hiçbir şeyi açmaz" ile aynı fail-secure varsayılan.
-
-### GUC mekaniği
-
-`SET LOCAL` transaction kapsamlıdır ve bağlantılar havuzdan geldiği için her
-transaction'da yeniden set edilmesi gerekir:
-
-```python
-await session.execute(
-    text("SELECT set_config('app.current_company_id', :cid, true)"),
-    {"cid": company_id or ""},
-)
-```
-
-Üç çağrı yeri:
-
-1. **İstek kapsamı** -- `app.api.middleware.tenant.TenantContextMiddleware`
-   JWT'yi (zaten `company_id`/`role` claim'lerini taşıyor) request'e hiçbir
-   dependency çalışmadan **önce** decode edip `app.core.context.
-   current_tenant_var`'a yazıyor; `app.infrastructure.database.session.
-   get_db` oturumu açar açmaz, ilk statement olarak bu değerleri GUC'a
-   basıyor. "İlk statement" önemli: `AsyncSession` transaction'ı tembel
-   başlatıyor, `SET LOCAL` de yalnızca kendi transaction'ında yaşıyor --
-   GUC'u geç basmak, ondan önce başka bir statement'ın kendi transaction'ını
-   başlatıp (request'in geri kalanında) GUC'suz bitirmesi riski taşırdı.
-2. **Kiracısı bilinen istek-dışı yazıcılar** -- `app.domains.units.provider.
-   get_active_units_for_routing`, `app.domains.users.seeder`, `app.domains.
-   units.seeder`. Yeni `app.infrastructure.database.session.tenant_session
-   (company_id, is_root)` context manager'ı, aynı GUC mantığını
-   `current_tenant_var` yerine açık argümanlardan uyguluyor.
-3. **Kiracı-öncesi kimlik çözümleme** -- `POST /auth/login`, `POST
-   /auth/refresh`, `POST /users` (davet-kapılı kayıt). `username`/`email`
-   sistem genelinde benzersiz (şirket bazında değil), yani bu üç uç nokta
-   "hangi şirket" sorusu cevaplanmadan **önce** çalışmak zorunda -- RLS'in
-   scope'layacağı bir kiracı henüz yok. Bu üçü `app.infrastructure.database.
-   session.get_owner_db`'yi kullanıyor: şema sahibi bağlantısı, RLS'i
-   tanım gereği atlıyor. Alembic de aynı bağlantıyı (`ALEMBIC_DATABASE_URL`,
-   boşsa `DATABASE_URL`'e düşer) kullanıyor -- DDL zaten sahip gerektirir.
-
-**Canlı doğrulama sırasında bulunan iki gerçek hata** (ikisi de bu değişiklik
-öncesinde zaten vardı, RLS onları *ortaya çıkardı*, yaratmadı):
-`app.domains.users.seeder._seed_one`'ın var-olma kontrolü başta
-`tenant_session` (şirket-scope'lu) kullanıyordu -- `username`/`email` global
-benzersiz olduğu için iki farklı şirkete aynı "admin" kullanıcı adıyla
-seed atmaya çalışmak, kontrolü değil global unique constraint'i tetikliyordu.
-Kontrol artık `get_owner_db` ile aynı gerekçeyle şema-sahibi bağlantısında
-çalışıyor. Ayrı olarak, `AuthService.refresh_access_token`'ın ürettiği yeni
-access token `company_id` claim'ini hiç taşımıyordu (yalnızca `authenticate_
-user`'ınki taşıyordu) -- RLS öncesi zararsızdı, RLS sonrası bu token'la
-yapılan her sonraki istek "User not found" ile patlıyordu (GUC boş kalıyor).
-İkisi de düzeltildi ve gerçek, çalışan Docker yığınına karşı doğrulandı.
-
-### Dürüst uyarı
-
-RLS **ikinci** savunma hattıdır, birincisi değil: (a) diskteki analiz
-blob'u ve Qdrant hiç RLS kapsamında değil, (b) LangGraph checkpointer'ın
-kendi tabloları (`checkpoint*`) da değil -- kasıtlı olarak
-şema-sahibi bağlantısında kalıyorlar (bkz. `settings.checkpointer_dsn`'in
-docstring'i), (c) alembic ve `scripts/` şema-sahibi tarafında çalışıyor,
-RLS'ten etkilenmiyor. Asıl doğru olması gereken şey hâlâ repository
-katmanındaki zorunlu `company_id` filtresi -- `tests/integration/
-test_tenant_repository_scoping.py` bunu RLS tamamen kapalıyken (şema-sahibi
-bağlantısıyla) doğruluyor, `tests/integration/test_rls_isolation.py` de
-RLS'in kendisini `kachow_app` üzerinden.
-
-## ABAC Yetkilendirme Motoru (`app.core.authz`)
-
-Kendi PDP'imiz -- OPA/Casbin gibi harici bir policy engine değil.
-`app.ai.policy.schema.Policy`'nin frozen/import-time-doğrulanan dataclass
-deseniyle aynı: kurallar `app.core.authz.rules.BUILTIN_RULES` içinde
-donmuş bir Python tuple'ı, saf fonksiyon değerlendirici `app.core.authz.
-engine.authorize`. Neden harici bir motor değil: repo'nun test altyapısı
-neredeyse tamamen mock tabanlı -- DB/ağ bağımlılığı olmayan saf bir
-fonksiyon, gerçek Postgres/Redis'e ihtiyaç duymadan tamamen unit-test
-edilebiliyor (bkz. `tests/unit/core/authz/test_engine.py`).
-
-**Katmanlar**:
-
-* `attributes.py` -- `Subject`/`Resource`/`Environment` dataclass'ları ve
-  `Action` sabitleri (`"document:read"`, `"draft:send"`, ...).
-* `rules.py` -- yerleşik rol/eylem kuralları. ROOT sınırsız (`"*"`);
-  ADMIN/MANAGER her `Action` için şirket geneli (`scope="any"`); EMPLOYEE
-  yalnızca kendi sahip olduğu kaynaklarda (`scope="own"`).
-* `engine.py::authorize(subject, action, resource, env, grants)` -- karar
-  algoritması: (0) kiracı kapısı, (1) açık `deny` yetkisi kazanır, (2) en
-  yüksek `priority`'li `permit` yetkisi, (3) yerleşik kurallar, (4) örtük
-  red. `grants` boş bırakılırsa (çoğu router çağrısı böyle yapar) yalnızca
-  0/3/4 adımları çalışır -- DB'ye hiç gidilmez.
-* `permission_grants` tablosu (`model/permission_grant_model.py` +
-  `repository.py`) -- PAP (Policy Administration Point) deposu. Bir yönetici
-  bir çalışana rol dışı bir yetki devrettiğinde (örn. `document:delete`,
-  yalnızca kendi yüklediği evraklar üzerinde) burada bir satır oluşur.
-  `valid_from`/`valid_until` aynı şema üzerinden süreli
-  yetki/delegasyon/break-glass'i verir -- ayrı bir tablo yok.
-* `cache.py::AuthzDecisionCache` -- Redis epoch-tabanlı karar önbelleği.
-  Geçersizleştirme `INCR authz:epoch:{company_id}` ile -- asla `SCAN`/`DEL`
-  değil (bkz. modülün kendi docstring'i). Zaman sınırlı (time-boxed) bir
-  yetkiye dayanan kararlar hiç önbelleğe alınmaz.
-* `service.py::AuthzService` -- önbellek + DB `permission_grants` + saf
-  motoru saran async orkestrasyon katmanı. Yalnızca gerçekten
-  `permission_grants`'a ihtiyaç duyan tüketiciler bunu kullanır (bugün:
-  yetki yönetimi uçları) -- `documents`/`drafts` router'larındaki sahiplik
-  kontrolleri saf `engine.authorize`'ı DB'siz çağırır (bkz. aşağıda).
-* `dependency.py::require_permission` -- PEP #1, FastAPI dependency
-  factory'si. `api/dependency.py::require_roles` artık bu paketin
-  `engine.role_permitted`'ine ince bir shim -- davranış değişmedi, tek
-  kaynak burada.
-
-**İki tüketim şekli, kasıtlı olarak**:
-
-1. **DB'siz (hot path)** -- `documents/router.py::_authorize_document`,
-   `drafts/router.py::_assert_owns_draft`: `engine.authorize`'ı `grants=()`
-   ile çağırır. `bypasses_ownership`'in eski davranışını birebir üretir,
-   sıfır ek DB/Redis round-trip'i ile. Beş ayrı yerde tekrarlanan
-   `if resource.owner_id != current_user.id and not bypasses_ownership(...)`
-   deseni tek bir çağrıya indi.
-2. **DB destekli** -- `AuthzService` üzerinden, yetki yönetimi uçlarında
-   (`POST/GET /users/{id}/permissions`, `DELETE /users/permissions/{id}`).
-   Yetki devri sırasında **ayrıcalık yükseltmesi önlenir**: devreden
-   (granter) `authz.authorize()` ile kendi kimliğiyle aynı kontrolden
-   geçirilir -- sahip olmadığı bir yetkiyi kimseye devredemez.
-
-Gizlilik derecesi (`role_checker.clearance_for`/`assert_clearance`) bu
-motora **katılmaz** -- yukarıdaki dört katman listesinin 3. maddesi olarak
-ayrı, sıralı bir kapı olarak kalır. Sebep: `app.ai.tools.document_tools`
-clearance'ı doğrudan karşılaştırıp modele bir red string'i döndürüyor
-(exception fırlatmıyor) ve derlenmiş bir LangGraph node'unun içinden
-çağrılıyor -- `app.ai.*`'nin `app.domains.*` import edemeyeceği katman
-kuralı gereği oraya DB destekli bir PDP enjekte etmek bu kuralı ihlal
-ederdi (bkz. `app.core.authz`'in kendi paket docstring'i).
-
-## Taslak Dağıtımı ve Bildirimler (Faz 5)
-
-Çalışanlar arası taslak gönder/al akışı (`draft_shares`) ve buna bağlı
-gerçek zamanlı bildirim sistemi (`notifications`) -- şartnamedeki "taslak
-paylaşımı" ve "bildirim" maddelerinin karşılığı. İkisi de RLS kapsamında
-(bkz. yukarıdaki tablo listesi), migration `0017_draft_shares_notifications`.
-
-**`draft_shares`** -- `drafts` tablosunun belirli bir versiyonunun belirli
-alıcı(lar)a gönderimi. Ayrı bir inbox/outbox tablosu yok: gelen kutusu
-`recipient_id = ben`, giden kutusu `sender_id = ben`, ikisi de bu tek
-tablonun farklı filtreli sorguları (`DraftShareRepository.list_inbox`/
-`list_outbox`). Gönderim `Action.DRAFT_SEND` ile gerçek ABAC motorundan
-geçer (Faz 2'de tanımlanmış ama o zamana kadar kullanılmamış bir sabit) --
-`PoolService`'in kasıtlı olarak basitleştirilmiş `bypasses_ownership`
-kısayolunun aksine, bir taslağın tek sahibi olduğu için `engine.authorize`'ın
-`Resource` şekline birebir oturuyor.
-
-Zaten oluşmuş bir paylaşımı görüntülemek/yanıtlamak ise bir ABAC kararı
-**değil**: `draft_shares` satırının `sender_id`/`recipient_id`'si kendisi
-yetkilendirmedir (yalnızca iki taraf, ya da `bypasses_ownership` ile
-ADMIN/MANAGER/ROOT şirket geneli). Bunun nedeni, taslağın kendi sahipliğine
-göre `draft:read` kontrolü yapılsaydı, taslağı sahiplenmeyen bir alıcının
-kendisine gönderilen şeyi bile okuyamayacak olması -- bkz.
-`DraftShareService`'in kendi modül docstring'i. Her yanıt (`DraftShareResponse`)
-bu yüzden `drafts` ile join'lenmiş içeriği taşır, ayrı bir `GET /drafts/{id}`
-çağrısına gerek kalmadan.
-
-`suggested_unit_id`, gönderim anında taslağın `destination` alanından
-(AI'ın routing kararı, serbest metin) `UnitRepository.get_by_name` ile
-**anlık kopyalanır** -- yeni bir AI çağrısı yok, `docs/api/units.md`'deki
-`GET /units/{id}/suggested-recipients`'la aynı "tekrar kullan, yeniden
-üretme" ilkesi. Eşleşme yoksa (birim o zamandan beri yeniden adlandırılmış/
-silinmiş) `suggested_unit_id` sessizce `NULL` kalır -- dürüst bir kaçırma,
-hata değil.
-
-**Kabul etmek bir versiyon fork'lar**: `accept`, `DraftRepository.
-create_version`'ın zaten var olan `parent_draft_id` zincirleme mekanizmasını
-kullanarak, **alıcının sahip olduğu** yeni bir taslak versiyonu yaratır
-(`session_id=NULL`, doğrudan `POST /documents/draft` çağrısıyla aynı
-şekilde). Bunun anlamı: "kabul etmek" yalnızca bir durum değişikliği değil,
-taslağı gerçekten devralmak -- alıcı artık `GET /drafts/{yeni_id}` ile
-kendi kopyasına erişebiliyor. `reject` hiçbir şey fork'lamaz.
-
-**`notifications`** -- kişisel, `bypasses_ownership`'siz (bir bildirim
-yalnızca `user_id`'sine ait, şirket geneli görünüm yok). İki event
-(`app/events/event.py`): `draft.shared` (alıcıya) ve `draft.share_responded`
-(yalnızca `accepted`/`rejected` -- `read`/`withdrawn` bildirim üretmez,
-ilki zaten gönderenin ilgi alanı değil, ikincisi gönderenin kendi eylemi).
-`app/events/subscribers.py`'deki dinleyiciler `tenant_session(company_id)`
-açar (istek-dışı kod, GUC okuyacak bir request yok -- bkz. yukarıdaki GUC
-mekaniği bölümü), `notifications` satırını yazar, sonra Redis'e publish eder.
-
-**Gerçek zamanlı akış (`GET /notifications/stream`, SSE) neden Redis
-pub/sub üzerinden, süreç-içi `EventBus` üzerinden değil**: `EventBus`
-tamamen bellek-içi ve tek sürece özel -- çok worker'lı bir uvicorn
-dağıtımında, bir bildirim worker A'da publish edilirse worker B'deki bir
-SSE bağlantısı bunu asla görmez. `RedisCache.publish`/`pubsub()` bu sınırı
-aşıyor. Kanal adı `notifications:{company_id}:{user_id}` (`app.domains.
-notifications.service.channel_for`) -- kullanıcı bazında zaten benzersiz
-olsa da `company_id` eklemek çapraz-şirket bir kanal çakışmasını olası
-değil, **yapısal olarak imkânsız** kılıyor. Canlı push kaybolsa bile veri
-kaybı yok: `notifications` satırı publish'ten **önce** yazılıyor (bkz.
-`NotificationService.create`), yani bağlı olmayan/kopan bir SSE istemcisi
-bir sonraki `GET /notifications` çağrısında bildirimi zaten görüyor --
-Redis burada yalnızca gecikmeyi azaltıyor, doğruluğu değil.
-
-## Denetim Kaydı, Analitik ve Kotalar (Faz 6)
-
-Planın son fazı: hash zincirli denetim kaydı, mevcut tablolar üzerine
-düz SQL analitik, root konsolu, şirket bazlı Prometheus/Grafana/Langfuse
-ve dürüst kapsamlı kullanım kotaları.
-
-**`audit_log`** (`app.domains.audit`) -- kurcalamaya dayanıklı zincir:
-`hash = sha256(prev_hash || canonical_json(satır))`, `seq` zincir-bazlı
-monoton (`company_id IS NOT DISTINCT FROM` ile hesaplanır -- Faz 5'te
-`DraftRepository.list_drafts`'ta bulunan NULL-gruplama hatasıyla aynı
-sınıfa karşı baştan korumalı, bkz. `AuditLogRepository._next_seq_and_
-prev_hash`'in docstring'i). `AuditService.record()` diğer recorder'lar
-gibi **best-effort** -- kendi `tenant_session`'ını açar, asıl eylemi asla
-engellemez, hata yalnızca loglanır. Her `GET` değil: `permission:grant/
-revoke`, şirket oluştur/güncelle/sil/admin-ata, birim oluştur/güncelle/sil,
-taslak paylaşım gönder/kabul/reddet/geri-çek, havuz push gibi
-durum-değiştiren idari eylemlere bağlanır -- dürüst, orantılı kapsam.
-`GET /audit/verify` zinciri `seq` sırasıyla yürür, her satırın hem kendi
-`hash`'ini kendi alanlarından yeniden hesaplayıp doğrular hem
-`prev_hash`'in bir önceki satırın gerçek `hash`'iyle eştiğini kontrol
-eder (ikincisi, zincirin ortasından bir satır silinmiş/yeniden
-sıralanmışsa, birincisi tek başına yakalayamaz).
-
-**Canlı doğrulama sırasında bulunan iki gerçek hata** (yine RLS/Faz 3-5
-paternine sadık: bulundu, düzeltildi, otomatik testle sabitlendi):
-`GET /root/health`'in `SuccessResponse`'un döndürdüğü `JSONResponse`'tan
-`.data` okumaya çalışması (`SuccessResponse` bir Pydantic modeli değil,
-zaten render edilmiş bir `JSONResponse` döndüren bir fabrika fonksiyonu --
-bkz. `app.api.responses.success.SuccessResponse`) -- düzeltme,
-`app.domains.system.router.health_check`'in gövdesini `build_health_
-payload`'a çıkarıp hem route hem `root_health`'in ham dict üzerinde
-çalışmasını sağladı. Ve `AuditLogRepository.append`'in kendi içindeki
-`hashable_fields` çağrısı -- bir yeniden adlandırma sırasında tanım
-satırı güncellenmiş ama tek çağrı yeri unutulmuştu (`_hashable_fields`
-kalmıştı), `tests/unit/domains/test_audit_service.py`'nin mock'lu
-testlerinin **hiçbiri** gerçek `append()`'i hiç çağırmadığı için
-görünmezdi -- `tests/integration/test_audit_repository.py` (yeni, gerçek
-Postgres'e karşı) tam olarak bu sınıf hatayı yakalamak için var, ve
-düzeltme öncesi koda karşı gerçekten başarısız olduğu doğrulandı.
-
-**Analitik** (`app.domains.analytics`) -- yeni bir pipeline yok, mevcut
-`documents`/`drafts`/`runs`/`guardrail_events` üzerine düz SQLAlchemy
-toplu sorgular, `(company_id, metric, range)` başına 60 saniyelik Redis
-önbellek. `GET /companies/{id}/analytics/summary` ayrıca `kachow_company_
-active_users` gauge'unu **fırsatçı** olarak tazeler -- bu kod tabanında
-periyodik görev çalıştıran bir altyapı yok (celery/cron yok), yani bu
-gauge sürekli değil, yalnızca bir analitik özet çağrısı yapıldığında
-güncel.
-
-**Root konsolu** (`app.domains.companies.root_router` +
-`root_repository.py`) -- kasıtlı olarak ayrı bir repository:
-`AnalyticsRepository`'nin her sorgusu `company_id` filtreli, `RootRepository`'
-ninki hiçbiri değil. Aynı dosyaya `company_id=None` opsiyonel parametresi
-eklemek yerine ayrı bir modül olarak tutulması, unutulmuş bir filtrenin
-şirketler arası veri sızdırmasını yapısal olarak imkânsız kılıyor.
-
-**Kullanım kotaları** (`app.domains.quotas`) -- yalnızca `documents` ve
-`drafts` sayımı üzerinden **dürüst** zorlama; token bazlı kota **kasıtlı
-olarak kapsam dışı** -- `app.observability.ai_metrics.LLM_TOKENS`'ın kendi
-docstring'i zaten `BaseLLMClient.generate()`'in bugün token sayısı
-döndürmediğini itiraf ediyor, sahte bir sayı üretip ona göre kota
-zorlamak gerçek zorlamadan daha kötü olurdu. Zorlama şu üç noktada:
-`DocumentService.analyze_document` (pahalı analiz işlem hattından **önce**),
-`DraftService.generate_draft_and_route` (doğrudan `POST /documents/draft`),
-ve `DraftShareService.respond`'un `accept` fork'u (alıcının kendi
-kotasından düşer). **Sohbet akışından üretilen taslaklar kotalanmıyor** --
-`planning_graph`'ın hangi turun taslak ürettiğine dinamik karar vermesi,
-ve `app.ai.*`'nin `app.domains.*` import edememesi (bkz. ABAC bölümünün
-clearance'ı motora katmama gerekçesiyle aynı kural) bu yolu DB destekli bir
-kota kontrolünden mimari olarak ayırıyor -- dürüstçe belgelenen bir kapsam
-sınırı, sessizce atlanmış bir özellik değil.
-
-**Prometheus/Grafana** (`app.observability.company_metrics`) -- kasıtlı
-küçük bir set: `kachow_company_requests_total`, `_documents_total`,
-`_drafts_total`, `_guardrail_blocks_total`, `_active_users` (gauge),
-etiket değeri her zaman `slug` (uuid değil). `company_id -> slug`
-eşlemesi süreç-içi kalıcı bir sözlükte önbelleklenir (`get_current_user`
-içinde, yalnızca ilk görülüşte bir sorgu) -- her isteğe bir DB
-sorgusu eklemeden `TenantContextMiddleware`'in kendisine (istekten
-DB'ye erişimi olmayan, kasıtlı olarak) dokunmadan. `monitoring/dashboards/
-company_dashboard.json` (yeni) bir `company` template değişkeniyle
-gelir.
-
-**Langfuse etiketleme** -- `build_trace_config`'e `langfuse_user_id`/
-`langfuse_session_id`/`langfuse_tags=[company:slug, role:...]` eklendi.
-**Dürüst uyarı**: `compose.yml` hâlâ `langfuse/langfuse:2` çalıştırıyor,
-`langfuse` Python bağımlılığı ise v4 SDK -- bu iki sürümün uyuşmadığı
-önceki fazlardan beri biliniyor, yani bu etiketleme bugün muhtemelen
-hiçbir yere ulaşmıyor (no-op). Eklemenin maliyeti sıfıra yakın ve
-tracing'in kendisi çalışır hale geldiği gün otomatik işlemeye başlar;
-birinci parti, her zaman açık gözlemlenebilirlik hikayesi hâlâ
-`runs`/`run_steps`/`guardrail_events` (ve şimdi `audit_log`).
-
-**Performans**: `DraftRepository.count_drafts` artık `list_drafts(...,
-limit=10_000)` + `len()` değil, aynı COALESCE-gruplu filtrelenmiş
-sorgunun `SELECT count()` sarmalı (`DocumentRepository.count_for_owner`
-zaten önceki bir fazda düzeltilmiş bulundu). Aynı denetim sırasında
-`ChatSessionRepository.count_for_user`/`ChatMessageRepository.
-count_for_session`'da da aynı anti-desen bulundu ve düzeltildi.
-
----
-
-# Test Yapısı
-
-Backend testleri aşağıdaki seviyelerde yazılır.
-
-* Unit Test
-* Integration Test
-* API Test
-
-Kritik iş kuralları mutlaka test edilmelidir.
-
----
-
-# Ölçeklenebilirlik
-
-Backend modüler olarak tasarlanmıştır.
-
-Yeni bir özellik eklenirken mevcut domain yapısı korunur.
-
-Yeni iş alanları yeni domain olarak eklenebilir.
-
-Yeni altyapı servisleri Infrastructure katmanına eklenir.
-
-Yeni AI yetenekleri AI Core içerisinde geliştirilir.
-
-Bu yapı mevcut kodu etkilemeden sistemin büyümesini sağlar.
-
+> **ÖNEMLİ:**
+> Sistem performansı için sorgular `list_drafts(..., limit=10_000)` gibi yaklaşımlar yerine, spesifik `count()` SQL metodlarıyla ele alınmalıdır. Pagination her liste yapısında desteklenir.

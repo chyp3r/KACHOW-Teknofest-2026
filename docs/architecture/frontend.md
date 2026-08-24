@@ -1,615 +1,88 @@
 # Frontend Mimarisi
 
-## Amaç
+> **NOT:**
+> Bu doküman frontend uygulamasının mimarisini, katmanlarını, bileşen organizasyonunu ve sunum stratejisini açıklamaktadır. Frontend, yalnızca kullanıcı deneyiminden ve arayüz yönetiminden sorumludur; iş kuralları kesinlikle barındırmaz.
 
-Bu doküman frontend uygulamasının mimarisini, katmanlarını ve bileşen organizasyonunu açıklamaktadır.
+## Mimari Yaklaşım
 
-Frontend'in amacı;
+Frontend aşağıdaki SOTA (State-of-the-Art) prensiplere göre geliştirilmektedir:
 
-* Kullanıcı ile sistem arasındaki etkileşimi sağlamak
-* Modern ve tutarlı bir kullanıcı deneyimi sunmak
-* Backend API ile güvenli iletişim kurmak
-* Gerçek zamanlı AI etkileşimlerini yönetmek
-* İş mantığını değil sunum katmanını yönetmektir.
+- **Feature Based Architecture:** Kod tabanı teknik bileşenlere (component, hook) göre değil, iş özelliklerine (chat, document vb.) göre klasörlenir.
+- **Component Based & Atomic Design:** Küçük, bağımsız ve yeniden kullanılabilir UI birimleri.
+- **Separation of Concerns (SoC):** İş mantığı (Hooks/Services) ve görsel katmanın (Components) net ayrımı.
+- **Single Responsibility Principle:** Her bileşen tek bir sorumluluğa sahiptir.
 
-Frontend yalnızca kullanıcı deneyiminden sorumludur.
+## Genel Yapı ve Dizin Dizilimi
 
-İş kuralları Backend tarafından yürütülmektedir.
+Frontend ana klasör yapısı ve sorumlulukları şu şekildedir:
 
----
+| Dizin | Sorumluluk |
+| --- | --- |
+| `src/app/` | Routing, Provider'lar, Global hata yönetimi ve uygulama başlatma noktası. |
+| `src/pages/` | Kullanıcı tarafından erişilen tam ekran görünümler (Chat, Documents). |
+| `src/features/` | İş alanına özel bağımsız modüller (chat logic, document logic vb.). |
+| `src/components/` | Uygulama geneli paylaşılan buton, modal, input gibi saf (dumb) UI elemanları. |
+| `src/hooks/` | Yeniden kullanılabilir veri yönetimi ve UI harici logic parçaları. |
+| `src/services/` | Sadece Backend API ile iletişim kuran istek (fetch/axios) metotları. |
+| `src/store/` | Uygulama geneli paylaşılan (Global) durum yönetimi. |
 
-# Mimari Yaklaşım
+## Kullanıcı Akışı ve Katmanlar Arası İletişim
 
-Frontend aşağıdaki prensiplere göre geliştirilmektedir.
+Frontend mimarisinde bir özelliğin kullanım akışı aşağıdan yukarıya doğru şu şekildedir:
 
-* Feature Based Architecture
-* Component Based Design
-* Atomic UI Yaklaşımı
-* Separation of Concerns
-* Single Responsibility Principle
-
-Her bileşen yalnızca kendi sorumluluğunu yerine getirir.
-
----
-
-# Genel Yapı
-
-Frontend aşağıdaki ana klasörlerden oluşmaktadır.
-
-```text
-frontend/
-│
-├── src/
-│   ├── app/
-│   ├── pages/
-│   ├── layouts/
-│   ├── features/
-│   ├── components/
-│   ├── hooks/
-│   ├── services/
-│   ├── store/
-│   ├── lib/
-│   ├── providers/
-│   ├── assets/
-│   ├── styles/
-│   ├── types/
-│   └── utils/
-│
-├── public/
-└── tests/
+```mermaid
+flowchart TD
+    User([Kullanıcı Etkileşimi]) --> Page[Page Katmanı]
+    Page --> Feature[Feature Katmanı]
+    Feature --> Component[UI Component]
+    Component --> Hook[Custom Hook]
+    Hook --> API[API Service]
+    API -.->|HTTP İstek| Backend[(Backend)]
 ```
 
-Her klasör belirli bir sorumluluğa sahiptir.
+> **UYARI:**
+> Frontend doğrudan veritabanı, Qdrant veya LLM ile **iletişim kurmaz**. Tüm akış Backend üzerinden sağlanır.
 
----
+## State (Durum) Yönetimi Stratejisi
 
-# Kullanıcı Akışı
+State karmaşasını önlemek için durumlar 3 katmanda ele alınır:
 
-Bir kullanıcı isteği frontend içerisinde aşağıdaki şekilde ilerler.
+1. **Local State:** Sadece ilgili Component içinde yaşar (Örn: Input içeriği, açık/kapalı modal durumu).
+2. **Feature State:** Bir iş alanı içindeki (Örn: Chat) Component'ler arasında paylaşılır (Örn: Aktif seçili mesaj).
+3. **Global State & Server State:** Uygulamanın tamamını ilgilendiren oturum, tema ve kullanıcı bilgileri. **TanStack Query** ile sunucu verileri cache'lenerek (Server State) yönetilir. Gereksiz API isteklerinin önüne geçilir.
 
-```text
-Kullanıcı
-      │
-      ▼
-Page
-      │
-      ▼
-Feature
-      │
-      ▼
-Component
-      │
-      ▼
-Hook
-      │
-      ▼
-API Service
-      │
-      ▼
-Backend
+## Gerçek Zamanlı İşlemler (SSE & Streaming)
+
+AI'ın uzun süren süreçleri (Streaming response, taslak hazırlama, analiz) istemcide akıcı bir deneyim için **Server-Sent Events (SSE)** üzerinden dinlenir:
+
+```mermaid
+sequenceDiagram
+    participant User as Kullanıcı
+    participant UI as Frontend (Chat)
+    participant API as Backend (SSE)
+    
+    User->>UI: Soru Sor
+    UI->>API: POST /chat/message
+    API-->>UI: Chunk 1 (Stream)
+    UI-->>User: Metin Güncellemesi
+    API-->>UI: Chunk 2 (Stream)
+    UI-->>User: Metin Güncellemesi
+    API-->>UI: Tamamlandı [Event]
 ```
 
-Frontend doğrudan veritabanı veya AI sistemine erişmez.
+## Performans ve Optimizasyon
 
----
+Modern web standartlarına uygunluk için frontend uygulamasında aşağıdaki teknikler aktiftir:
+- **Lazy Loading & Code Splitting:** Sadece ziyaret edilen sayfanın kodları (chunk) indirilir.
+- **Memoization:** Gereksiz React render'larını engellemek için `useMemo` ve `useCallback` kullanımı.
+- **Virtualization:** Çok uzun evrak listeleri veya sohbet geçmişinde sadece ekranda görünen öğelerin render edilmesi.
 
-# App
+## Typography ve Design System
 
-App klasörü uygulamanın başlangıç noktasıdır.
+Proje, görsel bütünlüğü sağlamak adına `design-system.css` ve `typography.css` üzerinden beslenen merkezi bir tasarım dili kullanır.
 
-Başlıca görevleri;
+- **Renk Paleti & Yüzeyler:** Açık ve koyu tema (Dark Mode) uyumlu semantik renkler kullanılır.
+- **Tipografi:** Ana arayüz için `Inter`, başlık ve marka vurguları için `Outfit` tercih edilir. Tasarım SOTA standartlarında okunabilirlik (satır yüksekliği ve maksimum karakter genişliği) gözetilerek ayarlanmıştır.
 
-* Routing
-* Global Provider'lar
-* Tema
-* Yetkilendirme
-* Global Error Boundary
-* Uygulama başlatma
-
-Tüm uygulama burada oluşturulur.
-
----
-
-# Pages
-
-Pages kullanıcı tarafından erişilen ekranlardır.
-
-Örnekler
-
-* Chat
-* Login
-* Dashboard
-* Documents
-* Settings
-
-Page yalnızca ekranın iskeletini oluşturur.
-
-İş mantığı içermez.
-
----
-
-# Layouts
-
-Layouts ortak ekran düzenlerini içerir.
-
-Örnekler
-
-* Main Layout
-* Dashboard Layout
-* Authentication Layout
-
-Sayfalar aynı layout'u paylaşabilir.
-
----
-
-# Features
-
-Feature klasörü uygulamanın iş özelliklerini içerir.
-
-Örnek yapı
-
-```text
-features/
-
-chat/
-
-documents/
-
-authentication/
-
-settings/
-```
-
-Her feature bağımsız geliştirilir.
-
-Feature'lar birbirinden mümkün olduğunca bağımsız olmalıdır.
-
----
-
-# Feature Yapısı
-
-Örnek
-
-```text
-chat/
-
-components/
-
-hooks/
-
-services/
-
-types/
-
-index.ts
-```
-
-Feature yalnızca kendi bileşenlerini kullanmalıdır.
-
----
-
-# Components
-
-Components tekrar kullanılabilir kullanıcı arayüzü elemanlarıdır.
-
-Örnekler
-
-* Button
-* Modal
-* Card
-* Input
-* Avatar
-* Sidebar
-
-Component yalnızca görünümden sorumludur.
-
-İş mantığı minimum seviyede tutulmalıdır.
-
----
-
-# Hooks
-
-Hooks yeniden kullanılabilir davranışları içerir.
-
-Örnekler
-
-* useChat
-* useAuth
-* useDocuments
-* useTheme
-
-Hook veri yönetimini gerçekleştirir.
-
-UI üretmez.
-
----
-
-# Services
-
-Services Backend API ile iletişim kurar.
-
-Örnekler
-
-* Chat API
-* User API
-* Document API
-* Authentication API
-
-HTTP istekleri yalnızca burada bulunmalıdır.
-
-Component içerisinde fetch veya axios kullanılmaz.
-
----
-
-# Store
-
-Store uygulamanın global durumunu yönetir.
-
-Örnekler
-
-* Authentication
-* Theme
-* User
-* Chat Session
-
-Yalnızca gerçekten paylaşılması gereken veriler global tutulmalıdır.
-
-Yerel durum mümkün olduğunca Component seviyesinde yönetilir.
-
----
-
-# Providers
-
-Providers uygulamanın ortak servislerini sağlar.
-
-Örnekler
-
-* Theme Provider
-* Query Provider
-* Authentication Provider
-* Notification Provider
-
----
-
-# Types
-
-Frontend içerisinde kullanılan ortak TypeScript tipleri burada bulunur.
-
-Örnekler
-
-* User
-* ChatMessage
-* Document
-* ApiResponse
-
-Tip tanımları Backend modellerinden bağımsızdır.
-
----
-
-# Assets
-
-Statik dosyalar burada bulunur.
-
-Örnekler
-
-* Logo
-* İkon
-* Font
-* Görseller
-
----
-
-# Styles
-
-Global stiller bu klasörde tutulur.
-
-Tema sistemi de burada yönetilir.
-
-Component bazlı stiller ilgili component içerisinde bulunmalıdır.
-
----
-
-# Lib
-
-Lib klasörü uygulama genelinde kullanılan yardımcı kütüphaneleri içerir.
-
-Örnekler
-
-* Axios Client
-* Markdown Renderer
-* Date Formatter
-* Syntax Highlighter
-
-Buraya iş mantığı eklenmez.
-
----
-
-# API İletişimi
-
-Frontend yalnızca Backend API ile haberleşir.
-
-```text
-Frontend
-
-↓
-
-API Service
-
-↓
-
-Backend
-
-↓
-
-Response
-
-↓
-
-UI
-```
-
-Frontend doğrudan
-
-* PostgreSQL
-* Redis
-* Qdrant
-* LLM
-
-ile iletişim kurmaz.
-
----
-
-# State Yönetimi
-
-State aşağıdaki seviyelerde yönetilir.
-
-## Local State
-
-Yalnızca ilgili Component tarafından kullanılır.
-
-Örnek
-
-* Input değeri
-* Modal durumu
-* Açılır menü
-
----
-
-## Feature State
-
-Bir Feature içerisindeki Component'ler tarafından paylaşılır.
-
-Örnek
-
-* Aktif sohbet
-* Belge listesi
-* Filtreler
-
----
-
-## Global State
-
-Uygulamanın tamamı tarafından kullanılan verilerdir.
-
-Örnek
-
-* Kullanıcı bilgisi
-* Tema
-* Kimlik doğrulama
-* Dil ayarları
-
----
-
-# Veri Yönetimi
-
-Sunucu verileri istemci durumundan ayrıdır.
-
-Backend'den gelen veriler cache mekanizması üzerinden yönetilir.
-
-Frontend aynı veriyi gereksiz yere tekrar istemez.
-
----
-
-# Gerçek Zamanlı İşlemler
-
-Uzun süren AI işlemleri kullanıcıya anlık olarak gösterilir.
-
-Örnekler
-
-* Streaming cevaplar
-* Tool çalıştırma durumu
-* Belge indeksleme
-* Workflow ilerleme durumu
-
-Frontend bu süreçleri kullanıcıya kesintisiz şekilde sunmalıdır.
-
----
-
-# Hata Yönetimi
-
-Hatalar kullanıcı dostu şekilde gösterilir.
-
-Teknik hata mesajları doğrudan kullanıcıya gösterilmez.
-
-Beklenen hata türleri
-
-* Ağ hatası
-* Yetkilendirme hatası
-* Doğrulama hatası
-* Sunucu hatası
-
-Her hata uygun kullanıcı mesajına dönüştürülmelidir.
-
----
-
-# Performans
-
-Frontend aşağıdaki teknikleri kullanmalıdır.
-
-* Lazy Loading
-* Code Splitting
-* Route Based Loading
-* Memoization
-* Virtualization
-* Image Optimization
-
-Gereksiz yeniden render işlemlerinden kaçınılmalıdır.
-
----
-
-# Güvenlik
-
-Frontend aşağıdaki prensipleri uygular.
-
-* Token güvenli saklanmalıdır.
-* Hassas bilgiler istemcide tutulmamalıdır.
-* Input doğrulaması Backend tarafından tekrar yapılmalıdır.
-* XSS ve CSRF riskleri dikkate alınmalıdır.
-
-Frontend güvenlik açısından tek başına yeterli değildir.
-
----
-
-# Test Yapısı
-
-Frontend testleri aşağıdaki seviyelerde yazılır.
-
-* Unit Test
-* Component Test
-* Integration Test
-* End-to-End Test
-
-Kritik kullanıcı akışları test edilmelidir.
-
----
-
-# Ölçeklenebilirlik
-
-Yeni özellikler mevcut feature yapısı korunarak geliştirilir.
-
-Yeni ekranlar yeni page olarak eklenir.
-
-Yeni iş alanları yeni feature altında geliştirilir.
-
-Yeni ortak bileşenler components klasörüne eklenir.
-
-Bu yapı frontend'in büyümesini kolaylaştırır.
-
----
-
-# Uygulanan Entegrasyon Kararları
-
-## Routing ve Erişim
-
-Uygulama rotaları React Router ile yönetilir ve sayfa bazında lazy loading uygulanır. Kimliği doğrulanmamış kullanıcılar login rotasına, başarılı oturumlar ve kök rota ise `/home` Ana Sayfa'ya yönlendirilir. Rolü yetersiz kullanıcılar da güvenli Ana Sayfa rotasına döner. Eski `/routing` bağlantıları bağımsız ekran oluşturmak yerine `/drafts` rotasına yönlendirilir. Admin/manager görünürlük kontrolleri yalnızca arayüz kolaylığıdır; backend yetkilendirmesinin yerine geçmez.
-
-## Sunucu Durumu
-
-TanStack Query; belge listesi ve analizleri, sohbet oturumları ve mesajları, interrupt state, taslaklar, yönlendirme önerileri ve sistem sağlığı için sunucu cache'ini yönetir. Anahtarlar `frontend/src/query/queryKeys.ts` içinde merkezidir. Mutation başarıları yalnızca ilgili cache alanlarını invalidate eder. Kalıcı domain verisi için backend tek doğruluk kaynağıdır; localStorage cache'i kullanılmaz.
-
-Evraklar sayfasında seçilen ancak henüz analiz edilmeyen dosyalar bu kuralın bilinçli, geçici istisnasıdır: `File` nesnesi frontend state'inde `pending:` kimliğiyle tutulur ve sunucuya gönderilmez. Kullanıcı satırdaki **Analiz Et** eylemini kullandığında veya evrakı sohbete gönderdiğinde mevcut `POST /api/v1/documents/analyze` çağrısı yapılır; dönen kalıcı `storage_path` geçici kaydın yerini alır. Bekleyen kayıtlar localStorage'a yazılmadığı için sayfa yenilendiğinde kaybolur.
-
-## API Sözleşmesi
-
-Backend OpenAPI çıktısı `openapi-typescript` ile `frontend/src/api/generated.ts` dosyasına üretilir. Üretim ve drift kontrol komutları frontend package script'lerinde bulunur. OpenAPI dışındaki SSE olay aileleri backend event şemalarına göre ayrı discriminated union olarak tutulur.
-
-## Kimlik Doğrulama
-
-Access ve refresh token'ları `sessionStorage` içinde saklanır. API istemcisi eşzamanlı 401 cevaplarını tek refresh isteğinde birleştirir, isteği en fazla bir kez tekrarlar ve refresh başarısızsa token'ları temizleyip merkezi oturum-sonlandı olayını yayınlar. Token veya hassas içerik loglanmaz.
-
-## Streaming
-
-Chat akışı parçalanmış SSE chunk'larını bir buffer içinde birleştirir. Bilinen olay aileleri çalışma zamanında doğrulanır; bozuk veya ileri sürüm bilinmeyen frame'ler sonraki geçerli olayı düşürmeden atlanır. `seq` tekrarları idempotent biçimde yok sayılır. AbortController kullanıcı iptali ve route/oturum değişimi sırasında bağlantıyı kapatır.
-
-İlk `session` SSE olayı backend thread kimliğini çözüp URL'yi `/chats/:sessionId` biçimine taşır. Bu iç route güncellemesi kullanıcı tarafından başka bir oturum seçilmesinden ayrı değerlendirilir; aktif stream iptal edilmez ve iyimser kullanıcı mesajı korunur. Stream sürerken kalıcı mesaj/state sorguları bekletilir; böylece yeni oturum henüz yazılırken dönebilecek boş veya eksik geçmiş canlı konuşma durumunun üzerine yazılmaz. Kullanıcının gerçekten başka bir oturuma geçmesi ise aktif isteği iptal edip seçilen oturumu backend'den yüklemeye devam eder.
-
-Taslak onay interrupt'ının isteğe bağlı revizyon alanları runtime'da daraltılır. İlk taslakta backend'in gönderdiği boş `changelog` nesnesi geçerli kabul edilir; değişiklik günlüğü yalnızca gerçek bir `entries` listesi bulunduğunda gösterilir.
-
-## Sağlık ve Gözlemlenebilirlik
-
-Normal health kontrolü otomatik ve hafiftir. Postgres, Redis, Qdrant, Ollama, checkpointer ve semantik router kontrollerini çalıştıran deep health yalnızca admin/manager ekranındaki açık kullanıcı eylemiyle çağrılır.
-
-## Konuşma Odaklı Bilgi Mimarisi
-
-Varsayılan masaüstü kabuğu yalnızca birincil navigasyon ve ana çalışma alanından oluşur. Navigasyon; Ana Sayfa, Sohbetler, Evraklar, Taslaklar, Hesabım ve yetkili kullanıcılar için Yönetim girişlerini taşır. Evrak yükleme, arama ve ayrıntı kontrolleri kalıcı navigasyonda değil, Evraklar sayfasında bulunur. Yönlendirme de ayrı bir ana navigasyon hedefi değildir; seçili taslağın devam adımıdır. Masaüstü navigasyonu 248 piksel genişliğinde açılır; 76 piksellik dar tercih `localStorage` içinde yalnızca sunum tercihi olarak saklanır. Dar durumda üstte her zaman görünür 44×44 genişletme kontrolü, ortalanmış 44×44 navigasyon hedefleri ve taşmayan tema/oturum kontrolleri kullanılır. Mobilde masaüstü dar tercihi görsel düzeni etkilemez; navigasyon tam içerikli çekmeceye dönüşür ve çekmece açıkken hamburger tetikleyicisi marka alanının üzerine binmez.
-
-Son yüklenen referans stil katmanı 760 piksel ve altında uygulama kabuğunun tek
-sütun, ana içeriğin yüzde 100 genişlik ve sayfa üst boşluğunun hamburger ile
-güvenli alanı birlikte hesaba kattığı kanonik mobil kuralları taşır. Bu katman,
-masaüstünde saklanmış kompakt navigasyon sınıfının mobil grid ve marka içeriğini
-daraltmasını engeller; hesap görünümü, yönetim metrikleri ve taslak özetleri gibi
-ikincil gridleri de dar ekranda tek veya akışkan sütuna indirir.
-
-Ana Sayfa ayrı bir kalıcı veri kaynağı oluşturmaz. Evrak listesi, taslak kutuları ve konuşma özetleri mevcut TanStack Query hook'ları üzerinden birleştirilerek toplam evrak, tamamlanan analiz, hazır taslak ve bekleyen iş göstergeleri üretilir. Haftalık hareket, durum dağılımı, evrak türleri ve son evraklar aynı cache verisinden türetilir; grafikler yeni bir API çağrısı veya localStorage kopyası oluşturmaz.
-
-Ana Sayfa banner'ı masaüstünde metin ve eylemleri iki sütunlu gridde ayırır;
-dekoratif yörünge eylem alanıyla çakışmaz. Orta genişliklerde iki sütun korunup
-eylemler sıkılaştırılır; 640 piksel altında banner tek sütuna, eylemler tam
-genişlikli butonlara dönüşür ve dekorasyon kaldırılır. Ana Sayfa'nın örtük grid
-satırları `max-content` kullandığı için kısa viewport yüksekliği banner'ı veya
-eylemlerini daraltmaz; sayfa kendi kaydırma alanında akmaya devam eder. Metrik,
-grafik, durum ve hızlı işlem kartları 1200/1024/760/480 piksel kırılımlarında
-sırasıyla iki, tek ve sıkılaştırılmış tek sütun düzenlerini kullanır.
-
-Mesajlaşma mobilde aynı anda yalnız konuşma listesini veya aktif konuşmayı
-gösterir. Konuşma seçildiğinde ayrıntı tam genişliğe geçer ve başlıktaki geri
-eylemi liste rotasına döner; ekli evrak/taslak kartları mesaj balonu genişliğini
-aşmaz.
-
-Sohbet geçmişi varsayılan düzende sütun ayırmaz; kullanıcının Geçmiş eylemiyle viewport'un sol kenarından açılan ve birincil navigasyonu örten bir modal çekmecedir. Masaüstünde 380 piksel, dar mobil ekranlarda tam genişlik kullanır. Çekmece açıldığında sayfa kaydırması kilitlenir, klavye odağı içeride tutulur; Escape, backdrop veya kapatma düğmesiyle kapanınca odak Geçmiş tetikleyicisine döner. İlk yükleme, hata, boş, başarı ve arka plan yenileme durumları birbirini dışlar; hata varken boş durum gösterilmez. Başarılı liste Bugün, Dün ve Daha eski gruplarına ayrılır; arama yalnızca en az on oturum olduğunda görünür. Sohbet içindeki evrak erişimi, seçilen evrakı kaldırılabilir bir çip olarak gösteren kompakt seçiciyle sağlanır. Evrak arama ve seçim arayüzü modal, mobilde tam ekran katman olarak açılır; yeni yükleme ve kapsamlı yönetim Evraklar sayfasına yönlendirilir.
-
-Ana konuşma ve mesaj oluşturucu aynı, en fazla 860 piksel okunabilir genişlikte hizalanır. Boş durum yalnızca backend'in desteklediği taslak ve yönlendirme başlangıçlarını gösterir; evrak analizi eylemi ancak bir evrak seçildiğinde görünür. Yerel sohbet/geçmiş hataları konuşma bağlamında kompakt ve yeniden denenebilir biçimde sunulur.
-
-Taslaklar sayfası tek sütunlu ve liste odaklıdır. Yeni taslak formu varsayılan olarak kapalıdır; sayfa başlığındaki birincil eylemle açılan tam genişlikte, kompakt bir panel kullanır. Kalıcı taslak satırları `document_id` ile aynı değeri taşıyan evrak `storage_path` alanından kaynak dosya adını çözer. Satır seçimi mevcut `/drafts/:draftId` rotasını koruyarak ayrıntıyı satırın altında açar. Taslak, Kontrol, Yönlendirme, Sürümler ve Ayrıntılar sekmeleri aynı seçili kayıt bağlamını paylaşır. Yönlendirme sekmesi taslak metni, güven göstergesi ve yazışma türüyle mevcut stateless öneri servisini çalıştırır; önerilen hedef kullanıcı onayıyla taslağa kaydedilir veya şirket birimleri arasından elle değiştirilebilir. Böylece metin başka bir sayfaya kopyalanmaz ve nihai karar kullanıcıda kalır.
-
-Sohbet oluşturucusundaki bağlam seçici “Evraklar / Taslaklar” sekmelerini
-tek bir erişilebilir diyalogda sunar ve bu iki bağlamı birbirini dışlayacak
-şekilde yönetir. Taslak ayrıntısındaki **Revize et** eylemi sohbet rotasına
-`draft` sorgu parametresiyle gider; sohbet seçili taslağı görünür bir çip olarak
-gösterir ve mesajı `ChatMessageRequest.draft_id` üzerinden revizyon bağlamında
-gönderir. Böylece `session_id` taşımayan doğrudan üretilmiş taslaklar da aynı
-arayüzden revize edilebilir.
-
-Evrak Kütüphanesi aynı tek sütunlu progressive-disclosure desenini kullanır. Sayfa başlığında açıklama metni bulunmaz; sağ üstteki “Evrak yükle” eylemi kompakt tam genişlikte dosya seçme alanını açar. Dosya seçimi analizi otomatik başlatmaz; bekleyen satır kendi **Analiz Et** eylemini taşır. Arama, tür filtresi ve tarih sıralaması kalıcı evrak listesinin üzerinde korunur. Evrak satırlarının tür, tarih, durum ve aksiyon sütunları içerik uzunluğuna göre büyüyüp küçülmez; masaüstünde sabit ölçüler kullanır, dar ekranlarda responsive yerleşime geçer. Analiz edilmiş evrak satırı seçildiğinde mevcut `/documents/:storagePath` rotası üzerinden analiz ayrıntısı aynı satırın altında açılır; satıra yeniden basılması seçimi ve derin rotayı kapatır.
-
-## Yönetim ve Operasyon Entegrasyonları
-
-Şirket admini ve manager rolleri Ana Sayfa'da şirket analytics özeti, evrak ve
-taslak zaman serileri ile birim dağılımını görür. Ayrıntılı guardrail ve bağlantı
-metrikleri Yönetim > Analitik alanında tutulur. Yönetim ekranı Kullanıcılar,
-Birimler, Kurum, AI ve Eğitim, Analitik ve Denetim sekmelerine ayrılır; kullanıcı
-detayı ve izinleri, birim CRUD ve üyelikleri, şirket profili/kuralları, geri
-bildirim istatistikleri, eğitim JSONL dışa aktarımı, şirket adaptörü ve audit
-zinciri bu alanlarda yönetilir.
-
-Root rolü normal tenant çalışma alanından ayrılır ve `/platform` rotasında
-Platform Yönetimi kabuğunu kullanır. Bu kabuk kurum liste/detay/oluşturma/
-güncelleme/silme, kurum yöneticisi atama, platform genel bakış, şirket ve
-kullanıcı istatistikleri, bağımlılık sağlığı ve tenantlar arası audit görünümünü
-barındırır. Root oturumunda tenant sohbet, evrak ve bildirim sorguları otomatik
-başlatılmaz.
-
-Evrak Kütüphanesi'ndeki Gelen Evraklar sekmesi kişisel havuz ve öğelerini
-gösterir; okundu işaretleme, sahiplenme ve kaldırma eylemleri aynı sunucu
-cache'ini hedefli biçimde yeniler. Yetkili kullanıcı seçili evrakı kişi veya
-birim havuzuna gönderebilir. Taslak gelen kutusu açılan paylaşımı okundu
-işaretler, giden paylaşımı geri çekebilir; gönderim penceresi backend alıcı
-önerilerini sunar. Mesajlar ekranındaki grup konuşmasına evrak/taslak eklemek
-tekil aktarımlar yerine grup aktarım endpoint'ini kullanır.
-
-İş akışı varsayılan olarak kapalıdır. Kullanıcı açtığında 1500 pikselin altındaki ekranlarda 400 piksellik bir örtü/çekmece, mobilde tam ekran katman kullanılır; geniş ekranlarda isteğe bağlı üçüncü bölge olabilir. İlk görünüm Evrak analizi, Taslak oluşturma, Doğrulama, İnsan onayı ve Yönlendirme adımlarından oluşan durum listesidir. Tam düğüm grafiği, araç çağrıları, guardrail olayları ve teknik meta veriler açık bir “Teknik grafiği görüntüle” ayrıntısının arkasında korunur. Teknik grafik %60–%300 aralığında buton, tekerlek veya pinch ile ölçeklenebilir; boş tuval sürüklenerek ya da odaklıyken ok tuşlarıyla kaydırılabilir ve tek eylemle başlangıç görünümüne döndürülebilir. Zoom ve pan CSS compositing yerine SVG `viewBox` koordinatlarında uygulanır; böylece yüksek yakınlaştırmada vektör keskinliği korunur. Edge'ler `non-scaling-stroke` ile ekranda sabit kalınlık taşır; bekleyen bağlantılar nötr yüksek kontrastla, çalışan/tamamlanan/hatalı bağlantılar durum rengi ve hafif vurguyla ayrıştırılır. Düğüm tıklama ve klavye seçimi bu viewport hareketlerinden ayrı tutulur.
-
-Yüzey sistemi açık ve koyu temada okunabilir ana yüzeyleri ve ince sınırları korur. Mavi, indigo, mor, yeşil, amber ve mercan semantik tonları Ana Sayfa metrikleri, hızlı eylemler, navigasyon ikonları, seçim ve anlamlı durumlarda yumuşak yüzeyler olarak kullanılır; uzun okuma alanları renkli bloklara dönüştürülmez. 760 piksel ve altında uygulama tek sütuna iner; navigasyon, geçmiş, evrak seçimi ve iş akışı birbirinden bağımsız katmanlar olarak açılır.
-
-## Typography Sistemi
-
-Frontend typography ölçeğinin tek kaynağı `frontend/src/styles/typography.css` dosyasıdır. Boyut, satır yüksekliği, ağırlık ve harf aralığı tokenları `rem` tabanlıdır; kök yazı boyutu tarayıcı varsayılanı olan yüzde 100'de korunur. Sayfa başlığı, bölüm başlığı, birincil içerik, arayüz gövdesi, kontrol etiketi, ikincil metin, caption ve overline rolleri bütün sayfalarda aynı token eşlemesini kullanır. `App.css` ve `integration.css` yalnızca yüzey, yerleşim ve bileşen geometrisini yönetir.
-
-Inter temel arayüz ailesidir; Outfit yalnızca marka ve başlık hiyerarşisinde kullanılır. Yalnız kullanılan 400–700 ağırlıkları yüklenir ve sistem fontu fallback zinciri web fontu yüklenirken metni görünür tutar. Açık/koyu/sistem temaları okunabilir semantik metin renklerini paylaşır. Mobilde yalnız büyük sayfa ve boş-durum başlıkları küçülür; gövde, form, navigasyon ve kontrol metinleri masaüstü rollerini korur. Uzun sohbet, taslak, analiz ve resmi metin içerikleri 75 karakterlik okunabilir genişlikle sınırlanır ve Türkçe dizeler kırpılmak yerine sarılır.
-
-## Design System Temeli
-
-Spacing, kontrol yüksekliği, ikon, radius, border, focus ve elevation değerlerinin tek kaynağı `frontend/src/styles/design-system.css` dosyasıdır. Ortak primitive, composite ve layout bileşenleri `frontend/src/components/` altında tutulur; sayfalar kendi button/input/select/textarea implementasyonlarını oluşturmaz. Uygulama kabuğu, sohbet/composer, evraklar, taslaklar, yönlendirme, hesap, yönetim, workflow, drawer ve dialog alanları bu ortak katmanı compose eder.
-
-Desktop/tablet/mobile sayfa gutterları sırasıyla 32/24/16 pikseldir. Varsayılan control 40 piksel, mobil ve öne çıkan eylemler 44 piksel, kompakt ikincil arayüzler 32 pikseldir. Ortak overlay bileşenleri focus trap, Escape, scroll lock ve focus dönüş davranışının tek sahibidir. Ayrıntılı token, component API, denetim envanteri ve belgelenmiş istisnalar `docs/development/frontend-design-system.md` içindedir.
-
+> **ÖNEMLİ:**
+> Arayüz geliştirirken doğrudan px değerleri yerine, Design System içerisindeki `rem` tabanlı tasarım token'ları (spacing, border-radius) kullanılmalıdır. Sayfalar kendi içlerinde bağımsız buton veya input bileşenleri tanımlamamalıdır; her zaman `src/components/` dizinindeki ana bileşenler çağrılmalıdır.

@@ -1,10 +1,11 @@
-import { Send } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { Mic, MicOff, Send } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { DocumentSelector } from "../documents/DocumentSelector";
 import type { DocumentMetadata, ReasoningLevel } from "../../types/documents";
 import type { PersistedDraft } from "../../types/drafts";
 import { IconButton } from "../../components/Button";
 import { Select, Textarea } from "../../components/FormControls";
+import { useSpeechToText } from "../../hooks/useSpeechToText";
 
 export function ChatComposer({
   documents,
@@ -40,6 +41,28 @@ export function ChatComposer({
   const [text, setText] = useState("");
   const [level, setLevel] = useState<ReasoningLevel>("balanced");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const dictationBaseRef = useRef("");
+  const handleTranscript = useCallback((transcript: string, isFinal: boolean) => {
+    setText(() => {
+      const base = dictationBaseRef.current;
+      const needsSpace = base.length > 0 && !/[\s\n]$/.test(base);
+      const next = `${base}${needsSpace ? " " : ""}${transcript}`;
+      if (isFinal) dictationBaseRef.current = next;
+      return next;
+    });
+  }, []);
+  const {
+    supported: speechSupported,
+    listening: speechListening,
+    error: speechError,
+    toggle: toggleSpeech,
+  } = useSpeechToText({ lang: "tr-TR", onTranscript: handleTranscript });
+  const handleMicClick = () => {
+    if (!speechListening) {
+      dictationBaseRef.current = text;
+    }
+    toggleSpeech();
+  };
   useEffect(() => {
     if (!promptTemplate) return;
     setText(promptTemplate);
@@ -51,6 +74,7 @@ export function ChatComposer({
     if (!text.trim() || loading) return;
     const value = text;
     setText("");
+    dictationBaseRef.current = "";
     await onSend(value, level, Boolean(selectedDocument));
   };
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -104,17 +128,37 @@ export function ChatComposer({
           aria-label="Sohbet mesajı"
           aria-describedby="composer-keyboard-help"
         />
-        <IconButton
-          className="send-button"
-          type="submit"
-          variant="primary"
-          icon={<Send />}
-          loading={loading}
-          disabled={loading || !text.trim()}
-          aria-label={loading ? "Mesaj gönderiliyor" : "Mesajı gönder"}
-        />
+        <div className="composer-actions">
+          {speechSupported ? (
+            <IconButton
+              className={`mic-button${speechListening ? " is-listening" : ""}`}
+              type="button"
+              variant={speechListening ? "primary" : "outline"}
+              icon={speechListening ? <MicOff /> : <Mic />}
+              disabled={loading}
+              onClick={handleMicClick}
+              tooltip={speechListening ? "Dikteyi durdur" : "Sesle yazdır"}
+              aria-label={speechListening ? "Dikteyi durdur" : "Sesle yazdır"}
+            />
+          ) : null}
+          <IconButton
+            className="send-button"
+            type="submit"
+            variant="primary"
+            icon={<Send />}
+            loading={loading}
+            disabled={loading || !text.trim()}
+            aria-label={loading ? "Mesaj gönderiliyor" : "Mesajı gönder"}
+          />
+        </div>
       </div>
-      <small className="composer-keyboard-help" id="composer-keyboard-help">Göndermek için Enter, yeni satır için Shift + Enter</small>
+      <small className="composer-keyboard-help" id="composer-keyboard-help">
+        {speechError
+          ? speechError
+          : speechListening
+            ? "Dinleniyor… durdurmak için mikrofon simgesine tekrar basın."
+            : "Göndermek için Enter, yeni satır için Shift + Enter"}
+      </small>
     </form>
   );
 }
