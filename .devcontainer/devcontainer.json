@@ -1,0 +1,34 @@
+{
+    "name": "KACHOW Dev Container",
+    "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bullseye",
+    
+    "features": {
+        "ghcr.io/devcontainers/features/node:1": {
+            "version": "20"
+        },
+        "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+    },
+
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "python.defaultInterpreterPath": "/usr/local/bin/python",
+                "python.formatting.provider": "none",
+                "editor.formatOnSave": true,
+                "editor.defaultFormatter": "charliermarsh.ruff",
+                "[typescriptreact]": {
+                    "editor.defaultFormatter": "esbenp.prettier-vscode"
+                }
+            },
+            "extensions": [
+                "charliermarsh.ruff",
+                "dbaeumer.vscode-eslint",
+                "esbenp.prettier-vscode",
+                "ms-azuretools.vscode-docker"
+            ]
+        }
+    },
+
+    "postCreateCommand": "npm ci --prefix frontend && pip install -r backend/requirements.txt && pre-commit install",
+    "forwardPorts": [8000, 5173]
+}
