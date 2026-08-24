@@ -91,6 +91,23 @@ describe("consumeSseStream", () => {
     ]);
   });
 
+  it("keeps distinct events that arrive out of sequence while still deduplicating", async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"event":"token","seq":8,"node":"reply","text":"son"}\n\n'));
+        controller.enqueue(encoder.encode('data: {"event":"token","seq":7,"node":"reply","text":"önce"}\n\n'));
+        controller.enqueue(encoder.encode('data: {"event":"token","seq":8,"node":"reply","text":"tekrar"}\n\n'));
+        controller.close();
+      },
+    });
+    const events: WorkflowEvent[] = [];
+
+    await consumeSseStream(new Response(stream, { status: 200 }), (event) => events.push(event));
+
+    expect(events.map((event) => event.seq)).toEqual([8, 7]);
+  });
+
   it("passes through question events instead of dropping them", async () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({

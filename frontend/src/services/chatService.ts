@@ -66,7 +66,7 @@ export async function consumeSseStream(
 
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
-  let lastSequence = Number.NEGATIVE_INFINITY;
+  const seenSequences = new Set<number>();
 
   const consumeBlock = (block: string) => {
     const raw = block
@@ -85,8 +85,8 @@ export async function consumeSseStream(
     if (!isWorkflowEvent(candidate)) return;
     const event = candidate;
     if (event.seq !== undefined) {
-      if (event.seq <= lastSequence) return;
-      lastSequence = event.seq;
+      if (seenSequences.has(event.seq)) return;
+      seenSequences.add(event.seq);
     }
     onEvent(event);
   };

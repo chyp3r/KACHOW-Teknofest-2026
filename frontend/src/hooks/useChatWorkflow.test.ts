@@ -164,6 +164,43 @@ describe("useChatWorkflow", () => {
     expect(mocks.state).toHaveBeenCalledWith("user-1:web:client");
   });
 
+  it("preserves the server conversation order when messages share a timestamp", async () => {
+    mocks.messages.mockResolvedValue({
+      items: [
+        {
+          id: "z-user-message",
+          role: "user",
+          content: "Seçili evrakı incele ve önemli noktaları özetle.",
+          workflow_status: null,
+          details: null,
+          created_at: "2026-08-23T09:17:11Z",
+        },
+        {
+          id: "a-assistant-message",
+          role: "assistant",
+          content: "Evrak analizi tamamlandı.",
+          workflow_status: "COMPLETED",
+          details: null,
+          created_at: "2026-08-23T09:17:11Z",
+        },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 50,
+    });
+
+    const { result } = renderHook(
+      () => useChatWorkflow(null, "user-1", "user-1:web:client"),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(2));
+    expect(result.current.messages.map((message) => message.text)).toEqual([
+      "Seçili evrakı incele ve önemli noktaları özetle.",
+      "Evrak analizi tamamlandı.",
+    ]);
+  });
+
   it("rehydrates a structured resume as a completed question card instead of raw keys", async () => {
     const questions = [{
       key: "yazisma_turu",
@@ -391,6 +428,93 @@ describe("useChatWorkflow", () => {
     });
   });
 
+  it("formats a structured resume even when the matching interrupt is missing from history", async () => {
+    mocks.messages.mockResolvedValue({
+      items: [{
+        id: "orphaned-answer",
+        role: "user",
+        content: "sender_name: KACHOW",
+        workflow_status: null,
+        details: { interaction_response: { action: "answer", answers: { sender_name: "KACHOW" } } },
+        created_at: "2026-08-19T10:01:00Z",
+      }],
+      total: 1,
+      page: 1,
+      page_size: 50,
+    });
+
+    const { result } = renderHook(
+      () => useChatWorkflow(null, "user-1", "user-1:web:orphaned"),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    expect(result.current.messages[0]).toMatchObject({
+      sender: "assistant",
+      text: "",
+      resolvedPrompt: {
+        title: "Yanıtlanan bilgiler",
+        answers: { sender_name: "KACHOW" },
+        questions: [expect.objectContaining({ key: "sender_name", question: "Sender Name" })],
+      },
+    });
+  });
+
+  it("keeps the pending question across an intervening assistant record and preserves punctuation in legacy answers", async () => {
+    const questions = [
+      { key: "aciklama", question: "Açıklama nedir?", header: "Açıklama", options: [], multi_select: false, allow_free_text: true, required: true },
+      { key: "sender_name", question: "Gönderen kim?", header: "Gönderen", options: [], multi_select: false, allow_free_text: true, required: true },
+    ];
+    mocks.messages.mockResolvedValue({
+      items: [
+        {
+          id: "edge-interrupt",
+          role: "assistant",
+          content: "Ek bilgi gerekiyor.",
+          workflow_status: "INTERRUPTED",
+          details: { interrupt: { kind: "missing_information", questions } },
+          created_at: "2026-08-19T10:00:00Z",
+        },
+        {
+          id: "edge-notice",
+          role: "assistant",
+          content: "İşlem notu kaydedildi.",
+          workflow_status: null,
+          details: null,
+          created_at: "2026-08-19T10:00:30Z",
+        },
+        {
+          id: "edge-answer",
+          role: "user",
+          content: "aciklama: İlk bölüm; ikinci: açıklama; sender_name: KACHOW",
+          workflow_status: null,
+          details: null,
+          created_at: "2026-08-19T10:01:00Z",
+        },
+      ],
+      total: 3,
+      page: 1,
+      page_size: 50,
+    });
+
+    const { result } = renderHook(
+      () => useChatWorkflow(null, "user-1", "user-1:web:edge"),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(2));
+    expect(result.current.messages.some((message) => message.text.includes("aciklama:"))).toBe(false);
+    expect(result.current.messages[1]).toMatchObject({
+      sender: "assistant",
+      resolvedPrompt: {
+        answers: {
+          aciklama: "İlk bölüm; ikinci: açıklama",
+          sender_name: "KACHOW",
+        },
+      },
+    });
+  });
+
   it("records each node's backend label and first-seen order, then clears both on the next send", async () => {
     mocks.send.mockImplementationOnce(async (_request, onEvent) => {
       onEvent({ event: "session", thread_id: "user-1:web:thread" });
@@ -413,6 +537,22 @@ describe("useChatWorkflow", () => {
     await act(() => result.current.send("ikinci istek", "balanced", true));
     expect(result.current.nodeOrder).toEqual([]);
     expect(result.current.nodeLabels).toEqual({});
+  });
+
+  it("orders workflow nodes by backend sequence even when events arrive late", async () => {
+    mocks.send.mockImplementationOnce(async (_request, onEvent) => {
+      onEvent({ event: "node_start", seq: 20, node: "draft", label: "Taslak", message: "" });
+      onEvent({ event: "node_start", seq: 10, node: "classification", label: "Analiz", message: "" });
+      onEvent({ event: "node_end", seq: 21, node: "draft", label: "Taslak", message: "" });
+      onEvent({ event: "node_start", seq: 19, node: "draft", label: "Taslak", message: "" });
+      onEvent({ event: "final_result", seq: 22, reply: "tamam", workflow_status: "COMPLETED" });
+    });
+    const { result } = renderHook(() => useChatWorkflow(null, "user-1"), { wrapper });
+
+    await act(() => result.current.send("sırayı koru", "balanced", false));
+
+    expect(result.current.nodeOrder).toEqual(["classification", "draft"]);
+    expect(result.current.nodeStatus.draft).toBe("completed");
   });
 
   it("rehydrates plan_steps/intent from the last persisted message's final_output details", async () => {

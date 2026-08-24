@@ -35,7 +35,8 @@ function AuthenticatedApp({ userId }: { userId: string }) {
   const draftMatch = useMatch("/drafts/:draftId");
   const documentMatch = useMatch("/documents/:storagePath");
   const messagesMatch = useMatch("/messages/:conversationId");
-  const activeSessionId = chatMatch?.params.sessionId ?? null;
+  const routeSessionId = chatMatch?.params.sessionId ?? null;
+  const [retainedSessionId, setRetainedSessionId] = useState<string | null>(routeSessionId);
   const activeDraftId = draftMatch?.params.draftId;
   const activeConversationId = messagesMatch?.params.conversationId;
   const documents = useDocuments(userId);
@@ -44,11 +45,14 @@ function AuthenticatedApp({ userId }: { userId: string }) {
   const setSelectedDocument = documents.setSelectedDocument;
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
+  useEffect(() => {
+    if (routeSessionId) setRetainedSessionId(routeSessionId);
+  }, [routeSessionId]);
   const onSessionResolved = useCallback((sessionId: string) => {
+    setRetainedSessionId(sessionId);
     navigate(`/chats/${encodeURIComponent(sessionId)}`, { replace: true });
   }, [navigate]);
-  const chat = useChatWorkflow(documents.selectedDocument, userId, activeSessionId, onSessionResolved);
-  const cancelChat = chat.cancel;
+  const chat = useChatWorkflow(documents.selectedDocument, userId, retainedSessionId, onSessionResolved);
 
   useEffect(() => {
     const storagePath = documentMatch?.params.storagePath;
@@ -61,11 +65,10 @@ function AuthenticatedApp({ userId }: { userId: string }) {
 
   useEffect(() => {
     if (!location.pathname.startsWith("/chats")) {
-      cancelChat();
       setChatHistoryOpen(false);
       setWorkflowOpen(false);
     }
-  }, [cancelChat, location.pathname]);
+  }, [location.pathname]);
 
   const selectDocument = (document: DocumentMetadata) => {
     documents.setSelectedDocument(document);
@@ -102,7 +105,7 @@ function AuthenticatedApp({ userId }: { userId: string }) {
     <ChatsPage
       documents={documents.documents}
       sessions={chat.sessions}
-      activeSessionId={activeSessionId}
+      activeSessionId={retainedSessionId}
       sessionsLoading={chat.sessionsLoading}
       sessionsRefreshing={chat.sessionsRefreshing}
       sessionsError={chat.sessionsError}
@@ -130,9 +133,10 @@ function AuthenticatedApp({ userId }: { userId: string }) {
       onClearDocument={() => documents.setSelectedDocument(null)}
       onSend={sendChatMessage}
       onResume={chat.resume}
-      onNewChat={() => { setChatHistoryOpen(false); chat.newChat(); navigate("/chats"); }}
+      onNewChat={() => { setChatHistoryOpen(false); setRetainedSessionId(null); chat.newChat(); navigate("/chats"); }}
       onOpenSession={(sessionId) => {
         setChatHistoryOpen(false);
+        setRetainedSessionId(sessionId);
         navigate(`/chats/${encodeURIComponent(sessionId)}`);
       }}
       onCloseHistory={() => setChatHistoryOpen(false)}

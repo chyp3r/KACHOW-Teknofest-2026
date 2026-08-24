@@ -183,7 +183,7 @@ async def test_emit_reply_stream_chunks_the_text_and_reassembles_exactly():
     queue: asyncio.Queue = asyncio.Queue()
     text = "Sayın Makam, " * 10 + "Arz ederim."
 
-    await emit_reply_stream(queue, text, chunk_size=8)
+    await emit_reply_stream(queue, text, chunk_size=8, chunk_delay_seconds=0)
 
     chunks = []
     while not queue.empty():
@@ -194,6 +194,27 @@ async def test_emit_reply_stream_chunks_the_text_and_reassembles_exactly():
 
     assert "".join(chunks) == text
     assert len(chunks) > 1
+
+
+@pytest.mark.asyncio
+async def test_emit_reply_stream_paces_chunks_for_visible_sse_updates(monkeypatch):
+    queue: asyncio.Queue = asyncio.Queue()
+    delays = []
+
+    async def record_delay(seconds: float) -> None:
+        delays.append(seconds)
+
+    monkeypatch.setattr("app.ai.workflows.events.asyncio.sleep", record_delay)
+
+    await emit_reply_stream(
+        queue,
+        "abcdefghijkl",
+        chunk_size=5,
+        chunk_delay_seconds=0.025,
+    )
+
+    assert delays == [0.025, 0.025]
+    assert [queue.get_nowait()["text"] for _ in range(3)] == ["abcde", "fghij", "kl"]
 
 
 @pytest.mark.asyncio
