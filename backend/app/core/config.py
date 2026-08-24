@@ -225,6 +225,15 @@ class Settings(BaseSettings):
     #: route to until an admin creates one through `POST /units`.
     SEED_DEFAULT_UNITS: bool = True
 
+    #: Single switch selecting the AI provider stack for the whole system:
+    #: True -> local Ollama + local Qdrant (default, no external dependency).
+    #: False -> Evren (the TEKNOFEST-provided hosted inference API) + Evren's
+    #: dedicated Qdrant cluster. Read by `get_llm_client`/`get_fast_llm_client`
+    #: (app.ai.llms), `get_embeddings_client` (app.ai.embeddings.models), and
+    #: `get_vector_store` (app.infrastructure.vectorstore) to pick their
+    #: default provider -- no call site needs to pass `provider=` explicitly.
+    LOCAL_MODE: bool = True
+
     # Ollama Configuration
     # Note: When running inside Docker, set OLLAMA_BASE_URL to http://host.docker.internal:11434
     OLLAMA_BASE_URL: str = "http://localhost:11434"
@@ -288,13 +297,53 @@ class Settings(BaseSettings):
     GUARDRAIL_JUDGE_TIMEOUT_SECONDS: float = 15.0
 
     # Embedding Configuration
-    EMBEDDING_PROVIDER: str = "ollama"
     OLLAMA_EMBEDDING_MODEL: str = "nomic-embed-text:latest"
+
+    # --- Evren (TEKNOFEST hosted inference) Configuration ------------------
+    # OpenAI-compatible API on shared H200s, selected instead of Ollama when
+    # LOCAL_MODE=False. Model aliases below are Evren's own, documented at
+    # https://evren-teknofest.ssyz.org.tr/model-kartlari -- not arbitrary
+    # names, they must match exactly what Evren serves.
+    EVREN_BASE_URL: str = "https://evren-llmapi.ssyz.org.tr/v1"
+    #: Team-specific bearer token, provided by Evren via email. Required
+    #: whenever LOCAL_MODE=False.
+    EVREN_API_KEY: str | None = None
+    #: Quality tier (Qwen3.5-122B-A10B) -- Evren's counterpart to OLLAMA_MODEL.
+    EVREN_LLM_LARGE_MODEL: str = "llm-large"
+    #: Fast tier (Qwen3.6-35B-A3B, ~0.91s median latency) -- Evren's
+    #: counterpart to OLLAMA_FAST_MODEL, always available (unlike the Ollama
+    #: fast tier, never falls back to the large model when unset).
+    EVREN_LLM_FAST_MODEL: str = "llm-fast"
+    #: Dedicated safety-classification model (Qwen3Guard-Gen-4B) for the
+    #: guardrail judge (see app.ai.guardrails.llm_nuance). Local mode keeps
+    #: reusing the fast-tier chat client for this instead -- see
+    #: get_guard_llm_client.
+    EVREN_GUARD_MODEL: str = "guard"
+    #: Dedicated lightweight routing model (Qwen3-8B) for RouterAgent. Local
+    #: mode keeps reusing the fast-tier chat client instead -- see
+    #: get_router_llm_client.
+    EVREN_ROUTER_MODEL: str = "router"
+    #: Dense embedding model (BAAI/bge-m3, 1024 dims) -- NOT interchangeable
+    #: with OLLAMA_EMBEDDING_MODEL's nomic-embed-text (768 dims). Vectors
+    #: from one provider are meaningless in a collection built with the
+    #: other; this is safe only because Evren's Qdrant (EVREN_QDRANT_URL) is
+    #: a wholly separate server from the local one, so each mode's
+    #: collections never mix.
+    EVREN_EMBED_MODEL: str = "bge-m3-embed"
+    #: Evren's own documented client-timeout recommendation -- long-running
+    #: generations on shared hardware can take up to 1800s.
+    EVREN_REQUEST_TIMEOUT_SECONDS: float = 1800.0
+
+    #: Evren's dedicated Qdrant cluster (evren-vektor.ssyz.org.tr), isolated
+    #: per team. Used instead of QDRANT_URL when LOCAL_MODE=False.
+    EVREN_QDRANT_URL: str | None = None
+    #: Team-specific Qdrant API key ("qdr-teamNN-..."), provided by Evren.
+    EVREN_QDRANT_API_KEY: str | None = None
 
     # Redis Configuration
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # Qdrant Vector DB Configuration
+    # Qdrant Vector DB Configuration (local mode only -- see EVREN_QDRANT_URL)
     QDRANT_URL: str = "http://localhost:6333"
 
     # Storage Configuration

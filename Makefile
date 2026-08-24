@@ -1,7 +1,7 @@
 .PHONY: setup-db bootstrap up down logs test test-e2e test-all eval eval-baseline eval-llm eval-retrieval \
 	benchmark benchmark-baseline export-budgets perf-smoke perf-chat perf-document latency-report \
 	migrate seed shell psql restart-backend \
-	reset-db reset-checkpoints reset-cache reset-storage reset-document-qa reset
+	reset-db reset-checkpoints reset-cache reset-storage reset-document-qa reset-evren-qdrant reset
 
 setup-db:
 	docker compose exec db psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'langfuse'" | grep -q 1 || docker compose exec db psql -U postgres -c "CREATE DATABASE langfuse"
@@ -249,6 +249,21 @@ reset-storage:
 # document is analyzed (create_collection is already idempotent there).
 reset-document-qa:
 	curl -sf -X DELETE http://localhost:6333/collections/document_qa || true
+
+# Wipes every collection on Evren's remote Qdrant cluster (EVREN_QDRANT_URL),
+# not the local one -- separate from reset-document-qa above and NOT part of
+# the `reset` chain below, since it hits real remote infra rather than this
+# machine's own containers. Team-isolated (see /mimari on the Evren docs
+# site), so this only ever deletes this team's own data, but it is still
+# irreversible -- same CONFIRM=yes gate as `reset`.
+reset-evren-qdrant:
+	@if [ "$(CONFIRM)" != "yes" ]; then \
+		echo "This permanently deletes ALL collections on Evren's remote Qdrant"; \
+		echo "cluster (EVREN_QDRANT_URL) -- mevzuat/örnek-yazışma/document_qa"; \
+		echo "indexes built there are gone. Re-run as: make reset-evren-qdrant CONFIRM=yes"; \
+		exit 1; \
+	fi
+	docker compose run --rm --no-deps backend python scripts/reset_evren_qdrant.py
 
 # The one-command "wipe everything app-level and hand me a fresh system"
 # entry point -- irreversible, so it requires an explicit CONFIRM=yes

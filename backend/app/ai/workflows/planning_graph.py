@@ -660,6 +660,7 @@ def create_planning_graph(
     vector_store: BaseVectorStore | None = None,
     embeddings_client: BaseEmbeddingsClient | None = None,
     fast_llm_client: Optional[BaseLLMClient] = None,
+    guard_llm_client: Optional[BaseLLMClient] = None,
     checkpointer: Any = None,
     mevzuat_retriever: Any = None,
     adapter_provider: Any = None,
@@ -688,6 +689,10 @@ def create_planning_graph(
             document search.
         fast_llm_client: Small model for intent classification on ambiguous
             messages. Falls back to ``llm_client``.
+        guard_llm_client: Optional client for the guardrail judge. Defaults to
+            ``fast_llm_client or llm_client`` -- pass
+            ``app.ai.llms.get_guard_llm_client()`` to route to Evren's
+            dedicated ``guard`` model instead of the general fast-tier model.
         mevzuat_retriever: Optional retriever handed to the revise
             sub-graph for conditional legislation re-retrieval (see
             ``app.ai.revision.retrieval``). None always skips it.
@@ -764,9 +769,7 @@ def create_planning_graph(
     # Reuses the fast tier already resolved for intent classification -- a
     # short consolidation pass doesn't warrant a third model in the mix.
     memory_summarizer_agent = MemorySummarizerAgent(intent_client)
-    # Fast tier, same as the draft path's JudgeAgent: emits a label-sized
-    # verdict, not reply text, so the quality tier buys nothing here.
-    guardrail_judge_agent = GuardrailJudgeAgent(intent_client)
+    guardrail_judge_agent = GuardrailJudgeAgent(guard_llm_client or intent_client)
     # Unfit on purpose, same as the indexing side (documents/service.py):
     # its sparse indices are corpus-independent CRC32 hashes, and query-side
     # IDF weights default to a uniform 1.0 without a fitted vocabulary, which

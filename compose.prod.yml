@@ -41,6 +41,10 @@ services:
       - ENVIRONMENT=production
       - REQUIRE_AUTH=true
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set in .env.prod -- see app.lifespan._require_secret_key_in_production}
+      # True -> Ollama + local Qdrant (below). False -> Evren (hosted
+      # inference) + Evren's own Qdrant cluster. See
+      # app.core.config.Settings.LOCAL_MODE.
+      - LOCAL_MODE=${LOCAL_MODE:-true}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:?OLLAMA_BASE_URL must be set in .env.prod (e.g. http://host.docker.internal:11434 or a dedicated Ollama host)}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3.5:9b}
       - OLLAMA_TEMPERATURE=${OLLAMA_TEMPERATURE:-0.7}
@@ -50,6 +54,18 @@ services:
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
       - OLLAMA_FAST_MODEL=${OLLAMA_FAST_MODEL:-}
       - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text:latest}
+      # Evren (only used when LOCAL_MODE=false). API key/Qdrant key come from
+      # .env.prod, never committed.
+      - EVREN_BASE_URL=${EVREN_BASE_URL:-https://evren-llmapi.ssyz.org.tr/v1}
+      - EVREN_API_KEY=${EVREN_API_KEY:-}
+      - EVREN_LLM_LARGE_MODEL=${EVREN_LLM_LARGE_MODEL:-llm-large}
+      - EVREN_LLM_FAST_MODEL=${EVREN_LLM_FAST_MODEL:-llm-fast}
+      - EVREN_GUARD_MODEL=${EVREN_GUARD_MODEL:-guard}
+      - EVREN_ROUTER_MODEL=${EVREN_ROUTER_MODEL:-router}
+      - EVREN_EMBED_MODEL=${EVREN_EMBED_MODEL:-bge-m3-embed}
+      - EVREN_REQUEST_TIMEOUT_SECONDS=${EVREN_REQUEST_TIMEOUT_SECONDS:-1800}
+      - EVREN_QDRANT_URL=${EVREN_QDRANT_URL:-}
+      - EVREN_QDRANT_API_KEY=${EVREN_QDRANT_API_KEY:-}
       - AI_WORKFLOW_TIMEOUT_SECONDS=${AI_WORKFLOW_TIMEOUT_SECONDS:-480}
       - REVISION_RERETRIEVAL_TIMEOUT_SECONDS=${REVISION_RERETRIEVAL_TIMEOUT_SECONDS:-10}
       - DRAFT_JUDGE_TIMEOUT_SECONDS=${DRAFT_JUDGE_TIMEOUT_SECONDS:-30}

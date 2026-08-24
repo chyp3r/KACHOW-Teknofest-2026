@@ -15,6 +15,15 @@ logger = logging.getLogger(__name__)
 #: names a vector the collection lacks.
 SPARSE_VECTOR_NAME = "text-sparse"
 
+#: Points per upsert() call. A single unbatched call was fine against the
+#: local, same-host Docker Qdrant (sub-second regardless of size), but
+#: verified live to genuinely time out against a remote cluster (Evren):
+#: indexing 429 dense(1024)+sparse points in one call took over 120s and
+#: still didn't finish. Chunking bounds each request's size independent of
+#: corpus size, which also means one failed batch doesn't invalidate an
+#: otherwise-successful large upsert.
+_UPSERT_BATCH_SIZE = 64
+
 #: Range-condition operator keys a ``filter_dict`` value may use instead of a
 #: plain scalar (exact match) -- e.g. ``{"sensitivity_rank": {"lte": 3}}``
 #: restricts a search to chunks whose payload field is at or below 3. Named
@@ -60,14 +69,39 @@ def _build_qdrant_filter(filter_dict: Optional[Dict[str, Any]]) -> Optional[mode
 class QdrantStore(BaseVectorStore):
     """Qdrant client implementation of BaseVectorStore for vector storage and search."""
 
-    def __init__(self, qdrant_url: str):
+    def __init__(self, qdrant_url: str, api_key: Optional[str] = None):
         """Initialize Qdrant Store client.
 
         Args:
-            qdrant_url: Endpoint URL of Qdrant DB (e.g. "http://localhost:6333").
+            qdrant_url: Endpoint URL of Qdrant DB (e.g. "http://localhost:6333",
+                or Evren's dedicated cluster when LOCAL_MODE=False).
+            api_key: Team API key, required for Evren's cluster; unused (and
+                unnecessary) against the local Docker-Compose Qdrant.
         """
         self.qdrant_url = qdrant_url
-        self.client = AsyncQdrantClient(url=qdrant_url)
+        # port=None (qdrant-client's own default is 6333, always) so a URL
+        # with no explicit port falls through to the scheme's own default
+        # (443 for https) instead of being forced onto 6333 regardless of
+        # what the URL says. Harmless for the local Docker Qdrant URL, which
+        # always spells out ":6333" explicitly -- that still wins, since
+        # qdrant-client only falls back to this `port` kwarg when the URL
+        # itself carries none. Needed for Evren's cluster, which sits behind
+        # a plain HTTPS reverse proxy on 443 with a team-specific path
+        # prefix (e.g. "https://evren-vektor.ssyz.org.tr/team07") rather
+        # than exposing 6333 directly -- verified live: with the qdrant-client
+        # default (port=6333) every request timed out; with port=None the
+        # same URL resolves to 443 and succeeds.
+        # qdrant-client defaults to a 5s timeout (DEFAULT_GRPC_TIMEOUT,
+        # reused for REST too) when none is given -- fine against the local
+        # Docker Qdrant on the same host, but a single unbatched
+        # upsert_documents() call of a few hundred embedded chunks
+        # genuinely needs longer than that over the internet against
+        # Evren's cluster. Verified live: indexing the 429-example
+        # yazışma corpus against Evren timed out with WriteTimeout at the
+        # 5s default.
+        self.client = AsyncQdrantClient(
+            url=qdrant_url, api_key=api_key, port=None, timeout=120
+        )
         # Cache of collection_name -> "does it have a sparse vector". Probed once
         # per process so a stale collection costs one extra call, not one failed
         # query (and one stack trace) per retrieval.
@@ -253,9 +287,9 @@ class QdrantStore(BaseVectorStore):
             )
 
         try:
-            await self.client.upsert(
-                collection_name=collection_name, points=points
-            )
+            for start in range(0, len(points), _UPSERT_BATCH_SIZE):
+                batch = points[start : start + _UPSERT_BATCH_SIZE]
+                await self.client.upsert(collection_name=collection_name, points=batch)
             logger.debug(
                 f"Upserted {len(chunks)} chunks to collection '{collection_name}'."
             )

@@ -8,20 +8,36 @@ no accuracy gain.
 
 ``get_llm_client()``      -- the drafting/analysis model (quality tier).
 ``get_fast_llm_client()`` -- small model for short, structured decisions.
+``get_guard_llm_client()``  -- the guardrail judge's model.
+``get_router_llm_client()`` -- RouterAgent's model.
 
-Both are cached per process: building a client is cheap but the underlying
+Two providers exist: local Ollama and Evren (the TEKNOFEST-hosted API,
+OpenAI-compatible). ``settings.LOCAL_MODE`` picks the default provider for
+every factory below -- no call site needs to pass ``provider=`` explicitly
+(and none in this codebase does). The guard/router factories additionally
+route to Evren's own dedicated small models (``guard``, ``router``) instead
+of reusing the fast tier, since Evren serves those as separate model aliases;
+local mode keeps reusing the fast-tier client for both, unchanged.
+
+All are cached per process: building a client is cheap but the underlying
 connection pool is not, and the graphs are compiled once and reused.
 """
 
 from app.ai.llms.base import BaseLLMClient
 from app.core.config import settings
+from app.infrastructure.providers.evren import EvrenClient
 from app.infrastructure.providers.ollama import OllamaClient
 
 _client_cache: dict[tuple, BaseLLMClient] = {}
 
 
+def _default_provider() -> str:
+    """Resolve the provider a caller didn't specify, from ``settings.LOCAL_MODE``."""
+    return "ollama" if settings.LOCAL_MODE else "evren"
+
+
 def get_llm_client(
-    provider: str = "ollama",
+    provider: str | None = None,
     base_url: str | None = None,
     model: str | None = None,
     temperature: float | None = None,
@@ -30,7 +46,8 @@ def get_llm_client(
     """Instantiate (or reuse) the configured LLM client.
 
     Args:
-        provider: The name of the LLM provider (currently only "ollama").
+        provider: The name of the LLM provider ("ollama" or "evren").
+            Defaults to ``settings.LOCAL_MODE``'s resolved provider.
         base_url: Optional override for the provider's API URL.
         model: Optional override for the model name.
         temperature: Optional override for the temperature.
@@ -42,7 +59,7 @@ def get_llm_client(
     Raises:
         ValueError: If the provider is not supported.
     """
-    provider_lower = provider.lower()
+    provider_lower = (provider or _default_provider()).lower()
     cache_key = (provider_lower, base_url, model, temperature, max_tokens)
     cached = _client_cache.get(cache_key)
     if cached is not None:
@@ -60,6 +77,19 @@ def get_llm_client(
                 max_tokens if max_tokens is not None else settings.OLLAMA_MAX_TOKENS
             ),
         )
+    elif provider_lower == "evren":
+        client = EvrenClient(
+            base_url=base_url or settings.EVREN_BASE_URL,
+            api_key=settings.EVREN_API_KEY,
+            model=model or settings.EVREN_LLM_LARGE_MODEL,
+            temperature=(
+                temperature if temperature is not None else settings.OLLAMA_TEMPERATURE
+            ),
+            reasoning=settings.OLLAMA_REASONING,
+            max_tokens=(
+                max_tokens if max_tokens is not None else settings.OLLAMA_MAX_TOKENS
+            ),
+        )
     else:
         raise ValueError(f"Unsupported LLM provider: {provider}")
 
@@ -67,24 +97,72 @@ def get_llm_client(
     return client
 
 
-def get_fast_llm_client(provider: str = "ollama") -> BaseLLMClient:
+def get_fast_llm_client(provider: str | None = None) -> BaseLLMClient:
     """Return the small-model client used for short, structured decisions.
 
-    Falls back to the main model when ``OLLAMA_FAST_MODEL`` is unset, so an
-    environment that has only pulled one model keeps working unchanged.
+    On Ollama, falls back to the main model when ``OLLAMA_FAST_MODEL`` is
+    unset, so an environment that has only pulled one model keeps working
+    unchanged. On Evren, always uses ``EVREN_LLM_FAST_MODEL`` -- that alias is
+    always served, there is no equivalent fallback to make.
 
     Args:
-        provider: The name of the LLM provider.
+        provider: The name of the LLM provider. Defaults to
+            ``settings.LOCAL_MODE``'s resolved provider.
 
     Returns:
         An instance of BaseLLMClient.
     """
-    if provider.lower() != "ollama" or not settings.OLLAMA_FAST_MODEL:
-        return get_llm_client(provider=provider)
+    provider_lower = (provider or _default_provider()).lower()
+
+    if provider_lower == "evren":
+        return get_llm_client(
+            provider=provider_lower,
+            model=settings.EVREN_LLM_FAST_MODEL,
+            temperature=0.0,
+            max_tokens=settings.OLLAMA_FAST_MAX_TOKENS,
+        )
+
+    if provider_lower != "ollama" or not settings.OLLAMA_FAST_MODEL:
+        return get_llm_client(provider=provider_lower)
 
     return get_llm_client(
-        provider=provider,
+        provider=provider_lower,
         model=settings.OLLAMA_FAST_MODEL,
+        temperature=0.0,
+        max_tokens=settings.OLLAMA_FAST_MAX_TOKENS,
+    )
+
+
+def get_guard_llm_client() -> BaseLLMClient:
+    """Return the client backing the guardrail judge (input/output nuance layer).
+
+    Local mode reuses the fast-tier chat client, unchanged from before this
+    provider existed. Evren mode routes to its dedicated safety-classification
+    model (``guard``, Qwen3Guard-Gen-4B) instead of the general fast-tier chat
+    model.
+    """
+    if settings.LOCAL_MODE:
+        return get_fast_llm_client()
+    return get_llm_client(
+        provider="evren",
+        model=settings.EVREN_GUARD_MODEL,
+        temperature=0.0,
+        max_tokens=settings.OLLAMA_FAST_MAX_TOKENS,
+    )
+
+
+def get_router_llm_client() -> BaseLLMClient:
+    """Return the client backing ``RouterAgent`` (draft-to-unit routing).
+
+    Local mode reuses the fast-tier chat client, unchanged from before this
+    provider existed. Evren mode routes to its dedicated lightweight routing
+    model (``router``, Qwen3-8B) instead of the general fast-tier chat model.
+    """
+    if settings.LOCAL_MODE:
+        return get_fast_llm_client()
+    return get_llm_client(
+        provider="evren",
+        model=settings.EVREN_ROUTER_MODEL,
         temperature=0.0,
         max_tokens=settings.OLLAMA_FAST_MAX_TOKENS,
     )
@@ -97,8 +175,11 @@ def iter_cached_clients() -> list[BaseLLMClient]:
 
 __all__ = [
     "BaseLLMClient",
+    "EvrenClient",
     "OllamaClient",
     "get_fast_llm_client",
+    "get_guard_llm_client",
     "get_llm_client",
+    "get_router_llm_client",
     "iter_cached_clients",
 ]

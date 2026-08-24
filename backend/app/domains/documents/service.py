@@ -59,7 +59,7 @@ from app.infrastructure.extractors.base import (
     DocumentExtractionError,
 )
 from app.infrastructure.cache.redis import RedisCache
-from app.infrastructure.extractors.vision import OllamaVisionExtractor
+from app.infrastructure.extractors.vision import VisionExtractorBase
 from app.infrastructure.storage.base import BaseStorage
 from app.ai.embeddings.service import EmbeddingService
 from app.ai.embeddings.chunking.recursive import RecursiveChunker
@@ -135,7 +135,7 @@ class DocumentService:
         quota_service: Optional[QuotaService] = None,
         summarizer_agent: Optional[SummarizerAgent] = None,
         cache: Optional[RedisCache] = None,
-        vision_extractor: Optional[OllamaVisionExtractor] = None,
+        vision_extractor: Optional[VisionExtractorBase] = None,
     ) -> None:
         """Initialise the service with injected collaborators.
 
