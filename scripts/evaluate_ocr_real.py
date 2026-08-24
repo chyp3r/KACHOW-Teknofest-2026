@@ -38,6 +38,20 @@ Two things are scored per engine, per document:
     since header repair -- not raw full-page transcription -- is where any
     winner actually gets used.
 
+Scored fields are split into two groups, and reported apart, never blended
+into one number: the HEADER block (sayi/tarih/konu/muhatap/gonderen_kurum)
+and the SIGNATURE block (imza_sahibi/imza_unvani). The split is the whole
+point of the comparison. `header_repair` re-transcribes the top
+HEADER_BAND_FRACTION of every scanned page for every engine, so header
+recovery converges and a blended total reads as "all vision models are
+interchangeable". The signature block sits well below that band, and is
+where engines genuinely diverge -- measured on this corpus, a wet signature
+over the printed name leaves OpenDataLoader/Tesseract with a mangled
+"İF; BOZDAG ;" (or no line at all) where a full-page vision pass recovers
+"Bekir BOZDAĞ". Before this split existed the script scored HEADER_FIELD
+alone and was structurally blind to exactly the difference it was being
+used to measure.
+
 Scoring is reported both raw-exact and whitespace/case-normalised, because a
 correct value that merely differs in a trailing handwritten-annotation token
 or in capitalisation should not read as a total loss (see the addressee-line
@@ -76,6 +90,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", "backend"))
 from app.ai.compliance import (  # noqa: E402
     HEADER_FIELD,
     count_header_fields,
+    has_signature,
     parse_labelled_fields,
 )
 from app.infrastructure.extractors import (  # noqa: E402
@@ -110,7 +125,19 @@ DEFAULT_RESULTS_FILE = os.path.join(
 #: against in production -- imported, not redeclared, so this benchmark can
 #: never silently drift from what the extraction-acceptance gate actually
 #: checks.
-FIELD_KEYS = HEADER_FIELD
+HEADER_KEYS = HEADER_FIELD
+#: Scored separately from the header block, and the reason this benchmark
+#: was extended at all: the header band is exactly where `header_repair`
+#: already levels every engine, so scoring it alone makes distinct vision
+#: models look interchangeable. The signature block is where they actually
+#: diverge -- measured on this same corpus, a wet signature over the printed
+#: name destroys it for OpenDataLoader/Tesseract ("İF; BOZDAG ;" for "Bekir
+#: BOZDAĞ", or the line missing entirely) while a full-page vision pass
+#: recovers it. Folding the two groups into one total would re-hide exactly
+#: the difference this measurement exists to show, so `_score` counts them
+#: apart and `_print_summary` reports them apart.
+SIGNATURE_KEYS = ("imza_sahibi", "imza_unvani")
+FIELD_KEYS = (*HEADER_KEYS, *SIGNATURE_KEYS)
 #: Collapses whitespace and case so a near-miss (an extra handwritten-
 #: annotation token, a stray space) doesn't score identically to a total
 #: loss -- see the module docstring.
@@ -199,6 +226,7 @@ def _build_chain(engine) -> FallbackDocumentExtractor:
             header_repair=None,
             header_field_probe=count_header_fields,
             scan_text_layer_probe=is_scanned_text_layer,
+            signature_probe=has_signature,
         )
     return FallbackDocumentExtractor(
         extractors=[
@@ -211,26 +239,55 @@ def _build_chain(engine) -> FallbackDocumentExtractor:
         header_repair=engine,
         header_field_probe=count_header_fields,
         scan_text_layer_probe=is_scanned_text_layer,
+        signature_probe=has_signature,
     )
 
 
 def _score(expected: dict, got: dict) -> dict:
-    found = raw_exact = norm_exact = 0
+    """Count recovery, split into the header block and the signature block.
+
+    The split is the point: `header_repair` already re-transcribes the top
+    `HEADER_BAND_FRACTION` of every scanned page, so header-field recovery
+    converges across engines and a combined total would read as "every model
+    is the same". The signature block sits well below that band and is where
+    engines genuinely differ. Totals are still reported, but never on their
+    own.
+    """
+    counters = {
+        group: {"found": 0, "raw_exact": 0, "norm_exact": 0, "expected": 0}
+        for group in ("header", "signature")
+    }
     for key, value in expected.items():
+        group = "signature" if key in SIGNATURE_KEYS else "header"
+        bucket = counters[group]
+        bucket["expected"] += 1
         candidate = got.get(key)
         if candidate:
-            found += 1
+            bucket["found"] += 1
         if str(candidate or "").strip() == str(value).strip():
-            raw_exact += 1
+            bucket["raw_exact"] += 1
         elif candidate and _normalise(candidate) == _normalise(value):
-            norm_exact += 1
-    return {"found": found, "raw_exact": raw_exact, "norm_exact": norm_exact}
+            bucket["norm_exact"] += 1
+
+    total = {
+        metric: counters["header"][metric] + counters["signature"][metric]
+        for metric in ("found", "raw_exact", "norm_exact", "expected")
+    }
+    return {**total, "header": counters["header"], "signature": counters["signature"]}
 
 
 async def _run_engine(name: str, engine, documents: list) -> dict:
     chain = _build_chain(engine)
     per_doc = {}
-    totals = {"found": 0, "raw_exact": 0, "norm_exact": 0, "raw_found": 0, "raw_raw_exact": 0, "raw_norm_exact": 0}
+    # "chain"/"raw" are the two passes; each carries the header/signature
+    # split `_score` produces, so the summary can report them apart.
+    totals = {
+        pass_name: {
+            group: {"found": 0, "raw_exact": 0, "norm_exact": 0, "expected": 0}
+            for group in ("header", "signature")
+        }
+        for pass_name in ("chain", "raw")
+    }
     total_fields = sum(len(expected) for _, _, expected in documents)
     started_all = time.time()
 
@@ -255,20 +312,19 @@ async def _run_engine(name: str, engine, documents: list) -> dict:
         elapsed = time.time() - doc_started
 
         per_doc[doc_name] = {"raw": raw_score, "chain": chain_score, "seconds": elapsed}
-        totals["found"] += chain_score["found"]
-        totals["raw_exact"] += chain_score["raw_exact"]
-        totals["norm_exact"] += chain_score["norm_exact"]
-        totals["raw_found"] += raw_score["found"]
-        totals["raw_raw_exact"] += raw_score["raw_exact"]
-        totals["raw_norm_exact"] += raw_score["norm_exact"]
+        for pass_name, score in (("chain", chain_score), ("raw", raw_score)):
+            for group in ("header", "signature"):
+                for metric in ("found", "raw_exact", "norm_exact", "expected"):
+                    totals[pass_name][group][metric] += score[group][metric]
 
-        print(
-            f"{line} raw {raw_score['found']}/{len(expected)} "
-            f"(tam {raw_score['raw_exact']}+yakın {raw_score['norm_exact']})  |  "
-            f"zincir {chain_score['found']}/{len(expected)} "
-            f"(tam {chain_score['raw_exact']}+yakın {chain_score['norm_exact']})  "
-            f"{elapsed:.1f}s"
-        )
+        def _cell(score: dict) -> str:
+            h, s = score["header"], score["signature"]
+            return (
+                f"bşl {h['found']}/{h['expected']}(t{h['raw_exact']}) "
+                f"imz {s['found']}/{s['expected']}(t{s['raw_exact']})"
+            )
+
+        print(f"{line} ham {_cell(raw_score)}  |  zincir {_cell(chain_score)}  {elapsed:.1f}s")
 
     return {
         "per_doc": per_doc,
@@ -279,23 +335,51 @@ async def _run_engine(name: str, engine, documents: list) -> dict:
 
 
 def _print_summary(all_results: dict) -> None:
-    total_fields = None
-    print("\n" + "=" * 100)
-    print(f"{'motor':30s} {'ham bulunan':>14s} {'zincir bulunan':>16s} {'zincir tam':>12s} {'zincir yakın':>13s} {'süre':>9s}")
+    """Print the engine comparison, header and signature blocks apart.
+
+    Reported separately on purpose -- see `_score`. A single blended total
+    would let the header block (which `header_repair` already equalises
+    across engines) mask the signature block, which is the column that
+    actually separates one vision model from another.
+    """
+    print("\n" + "=" * 108)
+    print(
+        f"{'motor':28s} | {'ZİNCİR (üretim yolu)':^37s} | {'HAM (tek motor)':^25s} | {'süre':>8s}"
+    )
+    print(
+        f"{'':28s} | {'başlık bul':>11s} {'imza bul':>10s} {'imza tam':>13s} | "
+        f"{'başlık bul':>11s} {'imza bul':>12s} | {'':>8s}"
+    )
+    print("-" * 108)
+
     for name, result in all_results.items():
         t = result["totals"]
-        total_fields = result["total_fields"]
+        # Back-compat: a results file written before the header/signature
+        # split has flat totals and no per-group keys. Skipped loudly
+        # rather than crashing or silently printing zeros -- a stale row
+        # next to fresh ones would be the most misleading output possible.
+        if "chain" not in t:
+            print(f"{name:28s} | (eski biçim sonuç -- bu motoru yeniden koşun)")
+            continue
+        ch, rw = t["chain"], t["raw"]
         print(
-            f"{name:30s} {t['raw_found']:6d}/{total_fields:<6d} "
-            f"{t['found']:8d}/{total_fields:<6d} {t['raw_exact']:5d}/{total_fields:<5d} "
-            f"{t['norm_exact']:6d}/{total_fields:<5d} {result['wall_clock']:8.1f}s"
+            f"{name:28s} | "
+            f"{ch['header']['found']:5d}/{ch['header']['expected']:<5d} "
+            f"{ch['signature']['found']:4d}/{ch['signature']['expected']:<5d} "
+            f"{ch['signature']['raw_exact']:6d}/{ch['signature']['expected']:<6d} | "
+            f"{rw['header']['found']:5d}/{rw['header']['expected']:<5d} "
+            f"{rw['signature']['found']:5d}/{rw['signature']['expected']:<6d} | "
+            f"{result['wall_clock']:7.1f}s"
         )
-    print("-" * 100)
+
+    print("-" * 108)
     print(
-        "'ham bulunan': tek motorun (zincirsiz) tam sayfa çıktısından alan kurtarma. "
-        "'zincir': tam üretim zinciri (Tesseract + bu motorun başlık onarımı). "
-        "'tam': değer birebir kaynakla aynı. 'yakın': yalnızca boşluk/büyük-küçük harf farkı var "
-        "(örn. el yazısı ek not aynı satırda kaldıysa) -- toplam kayıp değil, kısmi başarı."
+        "ZİNCİR = tam üretim yolu (Tesseract + bu motorun başlık onarımı + imza\n"
+        "  okunamazsa tam-sayfa yükseltmesi) -- üretimde gerçekten olan şey.\n"
+        "HAM = motorun tek başına, zincirsiz, tüm sayfaları okuması -- motorun\n"
+        "  kendi tavan performansı; süreyi domine eden de budur.\n"
+        "'imza tam' sütunu belirleyici olan: başlık bölgesinde header_repair zaten\n"
+        "  her motoru eşitliyor, motorlar asıl imza bloğunda ayrışıyor."
     )
 
 
