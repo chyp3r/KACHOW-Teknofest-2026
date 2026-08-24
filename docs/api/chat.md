@@ -77,9 +77,15 @@ IP başına dakikada 20 istekle sınırlıdır.
 | `session` | Akışın ilk olayı. | `thread_id` |
 | `node_start` | Düğüm başladığında. | `node`, `label`, `message` |
 | `node_end` | Düğüm bittiğinde. | `node`, `result` |
-| `token` | Taslak/Cevap üretilirken. | `node`, `text` (parça) |
+| `token` | Doğrulanmış nihai cevap kullanıcıya aktarılırken. | `node`, `text` (cevabın bir parçası) |
 | `interrupt` | HITL kapısında durduğunda. | `kind`, `interrupt_id`, `payload` |
 | `final_result`| Akış normal bittiğinde. | `reply`, `workflow_status` |
+
+`token` olayları yalnız guardrail ve doğrulama adımlarından geçmiş nihai
+cevaptan üretilir; ham taslak veya ajan çıktısı kullanıcıya akıtılmaz. Nihai
+cevap küçük parçalara ayrılıp kısa aralıklarla yayınlanır. Böylece SSE tüketicisi
+her parçayı ayrı iletir ve istemci yanıtı kademeli gösterirken hemen ardından
+gelen `final_result` tek render içinde canlı akışı ezmez.
 
 ---
 

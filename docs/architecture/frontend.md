@@ -70,12 +70,37 @@ sequenceDiagram
     API-->>UI: Tamamlandı [Event]
 ```
 
+Sohbet iş akışı uygulama kabuğu seviyesinde yaşar; sayfa rotaları arasında
+geçiş yapmak aktif SSE isteğini sonlandırmaz. Son çözümlenen oturum kimliği
+korunur ve kullanıcı Sohbetler'e döndüğünde aynı konuşma durumuna yeniden
+bağlanır. Canlı olaylar `seq` alanıyla tekilleştirilip backend sırasına göre,
+kalıcı mesajlar ise `created_at` ve eşit zaman damgasında API konuşma sırasına
+göre düzenlenir.
+
+İnsan-onayı resume kayıtları normal kullanıcı metni olarak gösterilmez.
+`interaction_response` bulunan kayıtlar önceki interrupt geçmişte bulunmasa
+bile tamamlanan cevap kartına çevrilir; araya giren asistan bildirimleri bekleyen
+soru bağlamını düşürmez.
+
 ## Performans ve Optimizasyon
 
 Modern web standartlarına uygunluk için frontend uygulamasında aşağıdaki teknikler aktiftir:
 - **Lazy Loading & Code Splitting:** Sadece ziyaret edilen sayfanın kodları (chunk) indirilir.
 - **Memoization:** Gereksiz React render'larını engellemek için `useMemo` ve `useCallback` kullanımı.
 - **Virtualization:** Çok uzun evrak listeleri veya sohbet geçmişinde sadece ekranda görünen öğelerin render edilmesi.
+
+## Çalışma Alanı Desenleri
+
+Evrak Kütüphanesi seçimden bağımsız olarak aynı master-detail yapısını ve
+`DocumentListItem` listesini korur. Ayrıntı kapatıldığında rota `/documents`
+olarak güncellenir ve seçili kayıt bu rotadan türetilir. Mevzuat Haritası toplu
+grafik ucu 5xx döndürdüğünde mevcut evrak listesi ile tekil grafik uçlarından
+kimliğe göre birleştirilmiş, eksik evrak sayısını bildiren kısmi görünüm üretir.
+
+Yönetim analitiği yalnız backend servislerinin sunduğu ölçüleri görselleştirir;
+frontend eksik metrikleri tahmin etmez. Açılır yönetim içerikleri ortak
+`Accordion`, dialoglar ise sabit başlık/eylem ve kaydırılabilir gövde kullanan
+tasarım sistemi bileşenlerini kullanır.
 
 ## Typography ve Design System
 

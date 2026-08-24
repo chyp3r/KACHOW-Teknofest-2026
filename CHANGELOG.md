@@ -2,6 +2,45 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [Unreleased]
+### Düzeltildi
+- Ana Sayfa hareketlilik grafiği tüm rollerde aynı yedi günlük kişisel evrak /
+  taslak ritmine geçirildi; hızlı işlemler banner altına taşındı. Kenar çubuğu
+  bildirim ve tek düğmeli sistem/açık/koyu tema geçişi çalışma alanının üstünde
+  yan yana konumlandırıldı.
+- Taslak ve evrak master-detail çalışma alanlarının yüksekliği, satır ölçüleri
+  ve iç kaydırması sabitlendi; taslak kontrol bulguları Evraklar ile aynı
+  “konu incelenmeli / İnceleme başlıkları” desenini kullanıyor. Hesap profil
+  başlığındaki avatar/metin çakışması ve uzun içerikli dialog kapatma/eylem
+  konumları düzeltildi.
+- Yönetici Mevzuat Haritası toplu uçta sunucu hatası aldığında mevcut evrak
+  listesi ve tekil evrak grafik uçlarından güvenli bir kısmi görünüm oluşturuyor;
+  erişilemeyen evrak sayısı kullanıcıya açıkça bildiriliyor.
+- Sohbet insan-onayı cevapları ham kullanıcı mesajı olarak bırakılmadan sorunun
+  bulunduğu asistan balonunda tamamlanan cevap kartına dönüştürülüyor. Araya
+  başka asistan kaydı girmesi, önceki soru kaydının eksik olması ve cevapta
+  noktalama bulunması gibi geçmiş edge case'leri de aynı biçime normalize
+  ediliyor; geçmiş ve canlı iş akışı olayları kalıcı zaman/sıra bilgisine göre düzenleniyor.
+  Aynı zaman damgasını paylaşan sohbet kayıtlarında API konuşma sırası korunarak
+  rastgele UUID sıralamasının kullanıcı mesajını asistan yanıtından sonraya
+  taşıması engelleniyor.
+  Aktif AI isteği başka sayfaya geçildiğinde iptal edilmiyor ve sohbete dönüşte
+  aynı oturum üzerinden devam ediyor.
+- Yönetim Analitik ve Denetim alanlarına mevcut endpointlerden AI/güvenlik zaman
+  grafikleri, karar dağılımları ve okunabilir Türkçe işlem etiketleri eklendi.
+  Kurum kuralları ortak temalı akordiyon ve segmentli önem kontrollerine taşındı;
+  yükleme durumlarında animasyonlu ikon kullanımı yaygınlaştırıldı.
+- Evrak Kütüphanesi seçim yokken ayrı tabloya geçmek yerine Taslaklar gibi her
+  zaman aynı master-detail düzenini kullanıyor. Kapalı ve açık durumda aynı
+  `DocumentListItem`, 7 rem satır yüksekliği ve başlık/tür/özet/durum/tarih
+  tipografi hiyerarşisi korunduğu için seçim sırasında görsel sıçrama oluşmuyor.
+- Sohbet bağlamındaki **Evraklar / Taslaklar** seçicisinin genel overlay katmanı
+  altında kalıp yalnız bulanık ekran göstermesine neden olan z-index çakışması
+  giderildi.
+- Sohbete evrak yüklenirken tüm ekranı kaplayan analiz görünümü kaldırıldı;
+  yükleme ve analiz ilerlemesi artık konuşma içinde kompakt bir durum mesajı
+  olarak gösteriliyor.
+
 ## [3.54.0] - 2026-08-24
 İki kullanıcı bildirimi: gerçek taranmış belgelerde `İmza sahibi`/`İmza
 sahibinin unvanı` neredeyse hep boş kalıyor ("imza isim üzerine geldiyse

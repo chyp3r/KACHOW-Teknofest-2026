@@ -44,7 +44,7 @@ Primitive katman: `Button`, `IconButton`, `Input`, `Select`, `Textarea`, `FormFi
 
 Composite katman: `BrandLockup`, `Tabs`, `PageHeader`, `SectionHeader`, `EmptyState`, `ErrorState`, `ApiErrorNotice`, `ListRow`, `Drawer`, `Dialog`, `ConfirmationDialog`, `FormActions`.
 
-Feature composite katmanı: `WorkflowStepper`, `DocumentListItem` ve `DraftTable`. Bu üç bileşen aynı primitive ve tokenları kullanır; ancak bilgi mimarileri farklı olduğu için genel `ListRow` içine zorlanmaz. Workflow marker rail ve durum akışını; evrak kütüphanesi seçim yokken filtreli tabloyu, seçim varken Özet/Metadata/Analiz/Belge Metni sekmeli master-detail ilişkisini; taslak tablosu ise kolon, belge inceleme yüzeyi ve responsive alan etiketlerini kendi feature sınırında sahiplenir.
+Feature composite katmanı: `WorkflowStepper`, `DocumentListItem` ve `DraftTable`. Bu üç bileşen aynı primitive ve tokenları kullanır; ancak bilgi mimarileri farklı olduğu için genel `ListRow` içine zorlanmaz. Workflow marker rail ve durum akışını; evrak kütüphanesi seçimden bağımsız olarak aynı sol listeyi ve Özet/Metadata/Analiz/Belge Metni sekmeli sağ çalışma alanını; taslak tablosu ise kolon, belge inceleme yüzeyi ve responsive alan etiketlerini kendi feature sınırında sahiplenir. Evrak ve taslak master listeleri aynı satır yüksekliği ve tipografi hiyerarşisini kullanır.
 
 Layout katmanı: `Stack`, `Inline`, `Cluster`, `Grid`. Gap prop'ları yalnız token anahtarlarını kabul eder; raw piksel prop'u yoktur.
 
