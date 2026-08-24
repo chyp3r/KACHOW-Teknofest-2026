@@ -39,10 +39,10 @@ Aşağıdaki diyagramda bir isteğin (request) sistem içindeki yaşam döngüs�
 
 ```mermaid
 flowchart TD
-    User([Kullanıcı]) -->|Web Arayüzü| Frontend[Frontend]
-    Frontend -->|REST API İstekleri| Backend[Backend]
-    Backend -->|Görev Dağıtımı| AICore[AI Core]
-    AICore -->|Bilgi & Araç Kullanımı| Infra[(Infrastructure / LLM / RAG)]
+    User(["Kullanıcı"]) -->|Web Arayüzü| Frontend["Frontend"]
+    Frontend -->|REST API İstekleri| Backend["Backend"]
+    Backend -->|Görev Dağıtımı| AICore["AI Core"]
+    AICore -->|Bilgi & Araç Kullanımı| Infra[("Infrastructure / LLM / RAG")]
     Infra -.->|Veri Yanıtı| AICore
     AICore -.->|İşlem Sonucu| Backend
     Backend -.->|API Yanıtı| Frontend

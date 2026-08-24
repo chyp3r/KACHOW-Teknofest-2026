@@ -67,12 +67,12 @@ Sistem şirket bazlı (`company_id`), dört farklı rol hiyerarşisi (`root`, `a
 
 ```mermaid
 flowchart LR
-    A[İstek] --> B{1. Kiracı Kapsamı}
-    B -->|Şirket Uygun| C{2. ABAC Motoru}
-    C -->|İzin Verildi| D{3. Gizlilik Seviyesi}
-    D -->|Seviye Yeterli| E{4. Guardrails (AI)}
-    E -->|Temiz| F((Erişim Başarılı))
-    B -.->|Geçersiz| X[Red]
+    A["İstek"] --> B{"1. Kiracı Kapsamı"}
+    B -->|Şirket Uygun| C{"2. ABAC Motoru"}
+    C -->|İzin Verildi| D{"3. Gizlilik Seviyesi"}
+    D -->|Seviye Yeterli| E{"4. Guardrails (AI)"}
+    E -->|Temiz| F(("Erişim Başarılı"))
+    B -.->|Geçersiz| X["Red"]
     C -.->|Yetkisiz| X
     D -.->|Seviye Yetersiz| X
     E -.->|Red Edildi| X

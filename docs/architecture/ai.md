@@ -32,12 +32,12 @@ Sisteme düşen bir talep, AI katmanında şu şemayı izleyerek çözülür:
 
 ```mermaid
 flowchart TD
-    Backend([Backend İstek]) --> Workflow[Workflow Yöneticisi]
-    Workflow --> Planner{Planner (Karar)}
-    Planner -->|Analiz| Graph1[Document Analysis Graph]
-    Planner -->|Taslak| Graph2[Draft Graph]
-    Planner -->|Soru Cevap| Graph3[RAG Graph]
-    Planner -->|Sohbet| Graph4[Chat Graph]
+    Backend(["Backend İstek"]) --> Workflow["Workflow Yöneticisi"]
+    Workflow --> Planner{"Planner (Karar)"}
+    Planner -->|Analiz| Graph1["Document Analysis Graph"]
+    Planner -->|Taslak| Graph2["Draft Graph"]
+    Planner -->|Soru Cevap| Graph3["RAG Graph"]
+    Planner -->|Sohbet| Graph4["Chat Graph"]
     Graph1 --> Response
     Graph2 --> Response
     Graph3 --> Response

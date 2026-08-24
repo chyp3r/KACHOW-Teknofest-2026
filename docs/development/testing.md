@@ -1,343 +1,58 @@
-# Testing Standards
+# Test Standartları (Testing Standards)
 
-> Bu doküman proje genelindeki test stratejisini tanımlar.
+> **NOT:**
+> Bu doküman proje genelindeki (Backend, Frontend ve AI) test stratejilerini tanımlar. Testlerin amacı hataları erken yakalamak, güvenli refactoring yapabilmek ve üretim ortamındaki riskleri minimuma indirmektir.
 
-Bu kurallar Backend, Frontend ve AI katmanlarının tamamı için geçerlidir.
+## Test Piramidi (Test Pyramid)
 
----
+Proje, SOTA standartlarında kabul gören test piramidi yaklaşımını benimser:
 
-# Amaç
-
-Test stratejisinin amacı;
-
-* Hataları erken yakalamak
-* Güvenli refactoring yapmak
-* Yeni özelliklerin mevcut sistemi bozmamasını sağlamak
-* Üretim ortamındaki riskleri azaltmaktır.
-
----
-
-# Test Piramidi
-
-Projede aşağıdaki yaklaşım benimsenmektedir.
-
-```text
-            E2E
-
-      Integration
-
-         Unit
+```mermaid
+flowchart BT
+    Unit["Unit Test (Birim Testleri)\nEn Fazla, En Hızlı, İzole"]
+    Integration["Integration Test (Entegrasyon)\nOrta Seviye, Gerçek Bileşenler"]
+    E2E["E2E Test (Uçtan Uca)\nEn Az, En Yavaş, Tam Senaryo"]
+    Unit --> Integration
+    Integration --> E2E
 ```
 
-En fazla test Unit seviyesinde olmalıdır.
+## Backend Test Seviyeleri
 
----
+| Seviye | Test Edilenler | Yöntem & Kurallar |
+| :--- | :--- | :--- |
+| **Unit Test** | Service, Repository, Validation kuralları. | Dış bağımlılıklar (Veritabanı, AI) tamamen Mock'lanmalıdır. İzole çalışır. |
+| **Integration** | DB sorguları, Cache, Background Tasks. | Gerçek veritabanı veya Redis bileşenleriyle (test container vb.) koşulur. |
+| **API Test** | HTTP Route, Schema doğrulama, Auth. | Girdi/Çıktı sözleşmelerine (Contract) uygunluk denetlenir. |
 
-# Backend
+## Frontend Test Seviyeleri
 
-Backend aşağıdaki seviyelerde test edilir.
+| Seviye | Test Edilenler | Yöntem & Kurallar |
+| :--- | :--- | :--- |
+| **Component** | Button, Form, Modal, Table gibi UI elemanları. | Render durumu ve kullanıcı etkileşimleri (click, input) kontrol edilir. |
+| **Hook Test** | Custom Hook'ların state ve mantığı. | Bağımsız olarak test edilir. |
+| **Page / E2E** | Kullanıcı akışları (Login, Evrak Yükleme vb.). | Doğru yönlendirme ve arayüz tepkileri (Loading, Error, Success) doğrulanır. |
 
-## Unit Test
+## AI Katmanı Test Seviyeleri
 
-Test edilen yapılar
+Yapay zekâ katmanı, standart bir yazılımdan farklı ve olasılıksal davrandığı için çok seviyeli test edilir:
 
-* Service
-* Repository
-* Utility
-* Validation
-* Business Rules
+| Odak Noktası | Kontrol Edilen Kriterler |
+| :--- | :--- |
+| **Tool / MCP** | Araçların doğru yetkiyle çalışması, hata (timeout) yönetimi. |
+| **Workflow** | Düğümlerin (Node) doğru sırada çalışması, karar dallanmaları. |
+| **Prompt** | Beklenen formatın ve şemanın (Pydantic) hatasız üretilmesi. |
+| **RAG** | Doğru dokümanların bulunması, Chunk sıralamasının doğruluğu (RRF). |
+| **Evaluation** | Token kullanımı, gecikme (latency), modelin tutarlılığı ve halüsinasyon oranı. |
 
-Bağımlılıklar Mock kullanılarak izole edilir.
+> **ÖNEMLİ:**
+> LLM çağrısı yapmayan karar fonksiyonları (Örn: lexical füzyon) doğrudan deterministik değerlendirme `make eval` üzerinden ölçülür. LLM kararlarının eşik ayarları (Thresholds) manuel `eval` raporlarıyla belgelenmelidir (Ayrıntı: `evaluation/README.md`).
 
----
+## Test İsimlendirme ve Organizasyonu
 
-## Integration Test
+Test adları teknik fonksiyon isminden ziyade **davranışı** net açıklamalıdır.
 
-Test edilen yapılar
+- **Doğru:** `test_upload_document_fails_when_file_is_too_large`
+- **Yanlış:** `test_upload`, `doc_test_1`
 
-* Database
-* API
-* Cache
-* Background Tasks
-
-Gerçek sistem bileşenleri kullanılarak test edilir.
-
----
-
-## API Test
-
-Test edilen konular
-
-* HTTP Status
-* Request Validation
-* Response Schema
-* Authentication
-* Authorization
-
----
-
-# Frontend
-
-## Component Test
-
-Test edilen yapılar
-
-* Button
-* Form
-* Modal
-* Table
-* Card
-
-Component davranışı doğrulanmalıdır.
-
----
-
-## Hook Test
-
-Custom Hook'lar bağımsız test edilmelidir.
-
----
-
-## Page Test
-
-Kullanıcı akışları doğrulanmalıdır.
-
-Örnekler
-
-* giriş
-* belge yükleme
-* sohbet oluşturma
-* ayarlar
-
----
-
-## UI Test
-
-Kontrol edilmesi gerekenler
-
-* Loading
-* Error
-* Empty State
-* Success State
-
----
-
-# AI
-
-AI katmanı klasik yazılımdan farklı olarak çok seviyeli test edilir.
-
----
-
-## Tool Test
-
-Her Tool bağımsız test edilmelidir.
-
-Örnekler
-
-* Dosya okuma
-* Arama
-* Terminal
-* Hesaplama
-
----
-
-## Workflow Test
-
-Workflow'un doğru sırada çalıştığı doğrulanmalıdır.
-
----
-
-## Agent Test
-
-Her Agent kendi uzmanlık alanında test edilmelidir.
-
----
-
-## Prompt Test
-
-Prompt;
-
-* doğru format üretmeli,
-* beklenen şemaya uymalı,
-* hatalı girişleri yönetebilmelidir.
-
----
-
-## RAG Test
-
-Kontrol edilmesi gerekenler
-
-* Retrieval doğruluğu
-* Chunk seçimi
-* Ranking
-* Context oluşturma
-
----
-
-## MCP Test
-
-Test edilen konular
-
-* Tool erişimi
-* Yetkilendirme
-* Hata yönetimi
-* Timeout
-
----
-
-## Evaluation Test
-
-Yeni Agent veya Workflow aşağıdaki metriklerle değerlendirilmelidir.
-
-* Doğruluk
-* Tutarlılık
-* Başarı oranı
-* Ortalama gecikme
-* Token kullanımı
-* Tool başarı oranı
-
-### Deterministik Karar Katmanı Koşumu
-
-LLM çağrısı yapmayan karar fonksiyonları (`resolve_plan` -- lexical + semantik füzyon,
-model hariç -- `verify_draft`) `evaluation/` altındaki koşumla ölçülür.
-Ayrıntı: `evaluation/README.md`.
-
-```bash
-make eval           # tüm suite'ler -> evaluation/reports/all-latest.{json,md}
-make eval-baseline  # değişiklik öncesi referans noktası
-```
-
-Bu koşum **test değildir, ölçümdür** ve bilinçle `make test`ten ayrıdır:
-
-* Başarısız bir altın küme vakası, katmanın nerede zayıf olduğu bilgisidir; kırmızı
-  build'e çevrilmesi, kodu değil altın kümeyi zayıflatma baskısı yaratır.
-* Tam koşum pytest'in 60 sn'lik test başına zaman aşımına sığmaz.
-
-Regresyon kilidi `tests/unit/` altında kalır. Bir eşik veya karar kuralı
-değiştiren PR'lar `make eval` çıktısını `--baseline` ile karşılaştırıp raporu
-`evaluation/reports/` altına eklemelidir.
-
-> **LLM-as-judge kullanılmaz.** Yerel modelde yüzlerce yargı çağrısı saatler
-> sürer ve ölçüm aracının kendisi ölçümdeki en gürültülü terim olur; eşik
-> kalibrasyonu için elle yazılmış deterministik altın küme kullanılır.
-
----
-
-# Mock Kullanımı
-
-Dış bağımlılıklar mümkün olduğunca Mock kullanılmalıdır.
-
-Örnekler
-
-* LLM
-* API
-* Redis
-* PostgreSQL
-* Qdrant
-* MCP Server
-
----
-
-# Test Verisi
-
-Test verileri;
-
-* tekrar üretilebilir,
-* bağımsız,
-* küçük,
-* deterministik
-
-olmalıdır.
-
-Gerçek kullanıcı verisi kullanılmamalıdır.
-
----
-
-# Test İsimleri
-
-İsimler davranışı açıklamalıdır.
-
-Doğru
-
-```text
-test_create_chat_session
-
-test_upload_document
-
-test_search_documents
-
-test_stream_response
-```
-
-Yanlış
-
-```text
-test1
-
-test_api
-
-chat_test
-```
-
----
-
-# Test Organizasyonu
-
-Her modül kendi testine sahip olmalıdır.
-
-Örnek
-
-```text
-tests/
-
-backend/
-
-frontend/
-
-ai/
-
-integration/
-
-e2e/
-```
-
-Testler üretim kodunun yapısını mümkün olduğunca takip etmelidir.
-
----
-
-# Başarı Kriteri
-
-Bir geliştirme tamamlanmış sayılabilmesi için;
-
-* ilgili testler yazılmış olmalıdır,
-* mevcut testler başarılı olmalıdır,
-* yeni testler başarısız olmamalıdır.
-
----
-
-# Yapılmaması Gerekenler
-
-* Testsiz kritik özellik geliştirmek
-* Gerçek API anahtarları kullanmak
-* Ağ bağlantısına bağımlı test yazmak
-* Rastgele sonuç üreten testler yazmak
-* Birbirine bağımlı test senaryoları oluşturmak
-
----
-
-# Sürekli Entegrasyon
-
-Her Pull Request otomatik test sürecinden geçmelidir.
-
-Başarısız test bulunan Pull Request birleştirilmez.
-
----
-
-# İlgili Dokümanlar
-
-Bu doküman aşağıdaki dosyalarla birlikte değerlendirilmelidir.
-
-* project-rules.md
-* backend-standards.md
-* frontend-standards.md
-* ai-standards.md
+**Mock Kullanımı:**
+Ağlantıya ve dış sisteme bağlı test yazılmaz. LLM sağlayıcıları, PostgreSQL, Qdrant, Redis ve MCP sunucuları mutlaka sahte nesnelerle (Mock) izole edilerek testlerin **tekrarlanabilir ve hızlı** olması sağlanmalıdır.

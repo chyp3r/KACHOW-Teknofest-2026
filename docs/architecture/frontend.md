@@ -32,12 +32,12 @@ Frontend mimarisinde bir özelliğin kullanım akışı aşağıdan yukarıya do
 
 ```mermaid
 flowchart TD
-    User([Kullanıcı Etkileşimi]) --> Page[Page Katmanı]
-    Page --> Feature[Feature Katmanı]
-    Feature --> Component[UI Component]
-    Component --> Hook[Custom Hook]
-    Hook --> API[API Service]
-    API -.->|HTTP İstek| Backend[(Backend)]
+    User(["Kullanıcı Etkileşimi"]) --> Page["Page Katmanı"]
+    Page --> Feature["Feature Katmanı"]
+    Feature --> Component["UI Component"]
+    Component --> Hook["Custom Hook"]
+    Hook --> API["API Service"]
+    API -.->|HTTP İstek| Backend[("Backend")]
 ```
 
 > **UYARI:**
