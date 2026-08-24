@@ -197,4 +197,16 @@ describe("MessageList", () => {
 
     expect(screen.queryByRole("button", { name: "Beğendim" })).not.toBeInTheDocument();
   });
+
+  it("shows document analysis as a compact message in the conversation", () => {
+    const { container } = renderWithQueryClient(
+      <MessageList {...baseProps} uploadingDocumentName="Başvuru.pdf" />,
+    );
+
+    const uploadMessage = container.querySelector(".document-upload-message");
+    expect(uploadMessage?.closest(".messages-area")).not.toBeNull();
+    expect(screen.getByText("Evrak yükleniyor")).toBeInTheDocument();
+    expect(screen.getByText("Başvuru.pdf")).toBeInTheDocument();
+    expect(screen.queryByText("Nasıl yardımcı olabilirim?")).not.toBeInTheDocument();
+  });
 });

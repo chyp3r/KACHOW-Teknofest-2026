@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, MessageCircle, Paperclip, Settings } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiErrorNotice } from "../components/ApiErrorNotice";
 import { IconButton } from "../components/Button";
 import { EmptyState } from "../components/EmptyState";
@@ -29,6 +29,9 @@ export function MessagesPage({
   const queryClient = useQueryClient();
   const conversations = useConversations();
   const thread = useMessageThread(activeConversationId ?? null);
+  const markReadRequest = thread.markRead;
+  const threadLoading = thread.loading;
+  const threadErrorObject = thread.errorObject;
   const [newConversationOpen, setNewConversationOpen] = useState(false);
   const [peopleDrawerOpen, setPeopleDrawerOpen] = useState(false);
   const [participantsPanelOpen, setParticipantsPanelOpen] = useState(false);
@@ -36,6 +39,7 @@ export function MessagesPage({
   const [openingDmUserId, setOpeningDmUserId] = useState<string | null>(null);
   const [removingParticipantId, setRemovingParticipantId] = useState<string | null>(null);
   const peopleButtonRef = useRef<HTMLButtonElement>(null);
+  const lastMarkedActivityRef = useRef<string | null>(null);
 
   const activeConversation = conversations.conversations.find(
     (item) => item.id === activeConversationId,
@@ -61,8 +65,23 @@ export function MessagesPage({
   };
 
   const markThreadRead = () => {
-    if (activeConversation && activeConversation.unread_count > 0) void thread.markRead();
+    if (activeConversation && activeConversation.unread_count > 0) void markReadRequest();
   };
+
+  useEffect(() => {
+    if (
+      !activeConversation
+      || activeConversation.unread_count <= 0
+      || threadLoading
+      || threadErrorObject
+    ) return;
+    const activityKey = `${activeConversation.id}:${activeConversation.last_message_at ?? ""}`;
+    if (lastMarkedActivityRef.current === activityKey) return;
+    lastMarkedActivityRef.current = activityKey;
+    void markReadRequest().catch(() => {
+      if (lastMarkedActivityRef.current === activityKey) lastMarkedActivityRef.current = null;
+    });
+  }, [activeConversation, markReadRequest, threadErrorObject, threadLoading]);
 
   return (
     <div className="page messages-page">

@@ -150,7 +150,6 @@
 .sidebar-compact .brand > div,
 .sidebar-compact .nav-caption,
 .sidebar-compact .nav-item span,
-.sidebar-compact .theme-control,
 .sidebar-compact .user-card > .avatar,
 .sidebar-compact .user-card > div { display: none; }
 .sidebar-compact .sidebar-nav { align-items: center; width: 100%; padding-right: 0; }
@@ -181,8 +180,6 @@
 }
 
 .sidebar-compact-toggle { width: var(--icon-container-sm); height: var(--icon-container-sm); margin-left: auto; }
-.compact-theme-button { display: none; }
-.sidebar-compact .compact-theme-button { display: inline-grid; width: var(--touch-target); height: var(--touch-target); }
 .sidebar-compact .sidebar-compact-toggle {
   display: inline-grid;
   width: var(--touch-target);
@@ -535,11 +532,12 @@
 .chat-history-no-results { padding: var(--space-8) var(--space-3); color: var(--text-secondary); text-align: center; }
 
 .document-picker-layer { position: fixed; inset: 0; z-index: 80; }
+.document-picker-layer .document-picker-backdrop { z-index: 0; }
+.document-picker-layer .document-picker { z-index: 1; }
 .document-picker {
   position: fixed;
   top: 50%;
   left: 50%;
-  z-index: 81;
   display: flex;
   flex-direction: column;
   width: min(520px, calc(100vw - 32px));
@@ -716,7 +714,6 @@
   .sidebar-compact .brand > div,
   .sidebar-compact .nav-item span,
   .sidebar-compact .user-card > div { display: block; }
-  .sidebar-compact .theme-control { display: flex; }
   .sidebar-compact .nav-caption { display: block; }
   .sidebar-compact .nav-item,
   .sidebar-compact .login-link { justify-content: flex-start; width: 100%; height: auto; min-height: 42px; padding: var(--space-2) var(--space-3); }
@@ -725,7 +722,6 @@
   .sidebar-compact .user-card .avatar { display: inline-grid; }
   .sidebar-compact .user-card > .icon-button { width: auto; height: auto; }
   .sidebar-compact .sidebar-footer { display: grid; align-items: stretch; width: auto; padding-top: var(--space-4); }
-  .sidebar-compact .compact-theme-button,
   .sidebar-compact .sidebar-compact-toggle { display: none; }
   .chat-page { padding: var(--space-16) var(--space-3) 0; }
   .page-header { gap: var(--space-3); margin-bottom: var(--space-3); }
@@ -1030,6 +1026,9 @@
 .chat-dropzone-overlay-icon { display: inline-grid; place-items: center; width: var(--icon-container-md); height: var(--icon-container-md); border-radius: var(--radius-lg); color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 12%, transparent); }
 .chat-dropzone-overlay-content span { color: var(--text-secondary); }
 .chat-dropzone-dismiss { border: 0; background: transparent; color: var(--accent-blue); cursor: pointer; text-decoration: underline; }
+.document-upload-message-copy { display: flex; align-items: center; gap: var(--space-2); }
+.document-upload-message-copy .spinner { flex: 0 0 auto; }
+.document-upload-message-copy p { margin: 0; overflow-wrap: anywhere; }
 
 /* Backend capability surfaces: tenant management, pools and root console. */
 .management-stack { display: grid; gap: var(--space-4); min-width: 0; }
@@ -1168,6 +1167,21 @@
 .profile-avatar { display: inline-grid; place-items: center; width: var(--icon-container-lg); height: var(--icon-container-lg); border-radius: var(--radius-full); color: var(--accent-blue); background: var(--surface-selected); }
 .profile-avatar svg { width: var(--icon-lg); height: var(--icon-lg); }
 .profile-summary-heading p { overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.analytics-mini-bars { display: flex; align-items: end; gap: var(--space-2); min-height: 11rem; padding: var(--space-4) 0 var(--space-2); }
+.analytics-mini-bars > div { display: grid; flex: 1 1 0; grid-template-rows: 8rem auto; align-items: end; gap: var(--space-2); min-width: 0; text-align: center; }
+.analytics-mini-bars span { display: block; width: min(1.5rem, 70%); min-height: 0.375rem; margin-inline: auto; border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: linear-gradient(180deg, var(--accent-purple), var(--accent-blue)); }
+.analytics-mini-bars small { overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; }
+.analytics-status-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.guardrail-breakdown li > div { flex: 1 1 auto; min-width: 0; }
+.analytics-distribution { display: block; width: 100%; height: 0.35rem; margin-top: var(--space-2); overflow: hidden; border-radius: var(--radius-full); background: var(--surface-subtle); }
+.analytics-distribution i { display: block; height: 100%; border-radius: inherit; background: var(--accent-blue); }
+.audit-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.management-rule-list { display: grid; gap: var(--space-3); }
+.management-rule-editor { display: grid; gap: var(--space-3); padding-top: var(--space-4); }
+.management-rule-options { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
+.management-rule-options > span { color: var(--text-secondary); }
+.management-rule-options > div { display: flex; gap: var(--space-2); }
+.management-rule-options > .button:last-child { margin-left: auto; }
 .appearance-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
 .appearance-options .button { min-width: 0; padding-inline: var(--space-2); }
 .password-card { align-self: start; }

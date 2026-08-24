@@ -232,6 +232,7 @@ export function ChatsPage({
           messages={messages}
           streamingText={streamingText}
           loading={loading}
+          uploadingDocumentName={documentUploading ? selectedDocument?.file_name ?? "Evrak" : null}
           hasSelectedDocument={Boolean(selectedDocument || selectedDraft)}
           interrupt={interrupt}
           onResume={onResume}
@@ -296,7 +297,7 @@ export function ChatsPage({
 
   if (!onUploadDocument) return page;
   return (
-    <ChatDropZone uploading={documentUploading} onUpload={onUploadDocument}>
+    <ChatDropZone onUpload={onUploadDocument}>
       {page}
     </ChatDropZone>
   );

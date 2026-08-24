@@ -77,9 +77,15 @@ IP başına dakikada 20 istekle sınırlıdır.
 | `session` | Akışın ilk olayı. | `thread_id` |
 | `node_start` | Düğüm başladığında. | `node`, `label`, `message` |
 | `node_end` | Düğüm bittiğinde. | `node`, `result` |
-| `token` | Taslak/Cevap üretilirken. | `node`, `text` (parça) |
+| `token` | Doğrulanmış nihai cevap kullanıcıya aktarılırken. | `node`, `text` (cevabın bir parçası) |
 | `interrupt` | HITL kapısında durduğunda. | `kind`, `interrupt_id`, `payload` |
 | `final_result`| Akış normal bittiğinde. | `reply`, `workflow_status` |
+
+`token` olayları yalnız guardrail ve doğrulama adımlarından geçmiş nihai
+cevaptan üretilir; ham taslak veya ajan çıktısı kullanıcıya akıtılmaz. Parçalar
+taşıma amaçlıdır ve aralarına yapay sunucu gecikmesi eklenmez. Web istemcisi
+mesaj sırasını yalnız `final_result` ile günceller; yazma efekti tamamlanmış
+cevabın frontend'de yerel olarak gösterilmesidir.
 
 ---
 

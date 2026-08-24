@@ -14,7 +14,6 @@ import {
   Upload,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useState } from "react";
 import { ApiErrorNotice } from "../components/ApiErrorNotice";
 import { StatusBadge } from "../components/StatusBadge";
 import {
@@ -28,7 +27,6 @@ import { useAuth } from "../hooks/useAuth";
 import { useConversations } from "../hooks/useConversations";
 import { useDrafts } from "../hooks/useDrafts";
 import { useCompanyAnalytics } from "../hooks/useCompanyAnalytics";
-import { Select } from "../components/FormControls";
 import type { DocumentMetadata } from "../types/documents";
 
 const DAY_FORMAT = new Intl.DateTimeFormat("tr-TR", { weekday: "short" });
@@ -60,9 +58,8 @@ export function HomePage({
   loading: boolean;
 }) {
   const { user } = useAuth();
-  const [analyticsDays, setAnalyticsDays] = useState(7);
   const canViewAnalytics = user?.role === "admin" || user?.role === "manager";
-  const analytics = useCompanyAnalytics(user?.company_id ?? undefined, analyticsDays, canViewAnalytics);
+  const analytics = useCompanyAnalytics(user?.company_id ?? undefined, 7, canViewAnalytics);
   const drafts = useDrafts(undefined, true);
   const conversations = useConversations();
   const isReady = (item: DocumentMetadata) =>
@@ -82,13 +79,7 @@ export function HomePage({
   ).length;
   const pendingWork = pendingDocuments + reviewDocuments + drafts.inboxTotal + conversations.unreadTotal;
   const localActivity = buildActivity(documents, drafts.drafts.map((item) => item.updated_at));
-  const activity = canViewAnalytics && analytics.documentTimeseries.length
-    ? analytics.documentTimeseries.map((point) => ({
-        label: new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "short" }).format(new Date(point.bucket)),
-        documents: point.count,
-        drafts: analytics.draftTimeseries.find((draft) => draft.bucket === point.bucket)?.count ?? 0,
-      }))
-    : localActivity;
+  const activity = localActivity;
   const recentDocuments = [...documents]
     .sort(
       (left, right) =>
@@ -146,6 +137,24 @@ export function HomePage({
         </div>
       </section>
 
+      <section className="home-quick-section">
+        <header><div><h2>Hızlı işlemler</h2><p>Sık kullanılan çalışma adımlarına doğrudan geçin.</p></div></header>
+        <div className="home-quick-grid">
+          <Link className="is-blue" to="/documents">
+            <FileSearch /><span><strong>Evrak analiz et</strong><small>Yeni evrak ekleyin ve inceleyin.</small></span><ArrowUpRight />
+          </Link>
+          <Link className="is-violet" to="/drafts">
+            <FilePenLine /><span><strong>Taslak hazırla</strong><small>Resmî yazışma sürecini başlatın.</small></span><ArrowUpRight />
+          </Link>
+          <Link className="is-emerald" to="/drafts">
+            <Route /><span><strong>Birim yönlendirme</strong><small>Hedef birim önerilerini inceleyin.</small></span><ArrowUpRight />
+          </Link>
+          <Link className="is-amber" to="/messages">
+            <MessageSquare /><span><strong>Mesajları görüntüle</strong><small>Ekip iletişimini takip edin.</small></span><ArrowUpRight />
+          </Link>
+        </div>
+      </section>
+
       <section className="home-metric-grid" aria-label="Genel istatistikler">
         {metrics.map(({ label, value, note, icon: Icon, tone, route }) => (
           <Link key={label} to={route} className={`home-metric-card is-${tone}`}>
@@ -167,7 +176,7 @@ export function HomePage({
               <span className="home-panel-icon is-blue"><BarChart3 /></span>
               <div><h2>Haftalık hareketlilik</h2><p>Evrak ve taslak üretim ritmi</p></div>
             </div>
-            {canViewAnalytics ? <Select aria-label="Analitik tarih aralığı" value={analyticsDays} onChange={(event) => setAnalyticsDays(Number(event.target.value))}><option value={7}>Son 7 gün</option><option value={30}>Son 30 gün</option><option value={90}>Son 3 ay</option></Select> : <StatusBadge tone="info">Son 7 gün</StatusBadge>}
+            <StatusBadge tone="info">Son 7 gün</StatusBadge>
           </header>
           <WeeklyActivityChart points={activity} />
         </section>
@@ -183,6 +192,7 @@ export function HomePage({
             review={reviewDocuments}
             pending={pendingDocuments}
           />
+          <p className="home-status-note">Bekliyor → analiz edilmedi · İncelenecek → eksik veya uyumsuz alan var · Hazır → kontroller tamamlandı</p>
         </section>
 
         <section className="home-panel home-recent-panel">
@@ -231,23 +241,6 @@ export function HomePage({
         </section>
       </div>
 
-      <section className="home-quick-section">
-        <header><div><h2>Hızlı işlemler</h2><p>Sık kullanılan çalışma adımlarına doğrudan geçin.</p></div></header>
-        <div className="home-quick-grid">
-          <Link className="is-blue" to="/documents">
-            <FileSearch /><span><strong>Evrak analiz et</strong><small>Yeni evrak ekleyin ve inceleyin.</small></span><ArrowUpRight />
-          </Link>
-          <Link className="is-violet" to="/drafts">
-            <FilePenLine /><span><strong>Taslak hazırla</strong><small>Resmî yazışma sürecini başlatın.</small></span><ArrowUpRight />
-          </Link>
-          <Link className="is-emerald" to="/drafts">
-            <Route /><span><strong>Birim yönlendirme</strong><small>Hedef birim önerilerini inceleyin.</small></span><ArrowUpRight />
-          </Link>
-          <Link className="is-amber" to="/messages">
-            <MessageSquare /><span><strong>Mesajları görüntüle</strong><small>Ekip iletişimini takip edin.</small></span><ArrowUpRight />
-          </Link>
-        </div>
-      </section>
     </div>
   );
 }

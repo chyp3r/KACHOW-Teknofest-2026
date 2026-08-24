@@ -6,7 +6,7 @@ import { useChatWorkflow } from "./hooks/useChatWorkflow";
 import { useDocuments } from "./hooks/useDocuments";
 import { AppShell } from "./layouts/AppShell";
 import type { DocumentMetadata } from "./types/documents";
-import { OverlayBackdrop } from "./components/Surface";
+import { OverlayBackdrop, Spinner } from "./components/Surface";
 
 const LoginPage = lazy(() => import("./pages/LoginPage").then((module) => ({ default: module.LoginPage })));
 const HomePage = lazy(() => import("./pages/HomePage").then((module) => ({ default: module.HomePage })));
@@ -21,7 +21,9 @@ const StatusPage = lazy(() => import("./pages/StatusPage").then((module) => ({ d
 const PlatformPage = lazy(() => import("./pages/PlatformPage").then((module) => ({ default: module.PlatformPage })));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage").then((module) => ({ default: module.NotFoundPage })));
 
-const PageFallback = () => <div className="centered-state app-loading">Sayfa yükleniyor…</div>;
+const PageFallback = () => <div className="centered-state app-loading"><Spinner size="lg" label="Sayfa yükleniyor" />Sayfa yükleniyor…</div>;
+
+const lastChatSessionKey = (userId: string) => `kachow.chat.last-session.${userId}`;
 
 function RootAuthenticatedApp() {
   return <AppShell><Suspense fallback={<PageFallback />}><Routes><Route path="/platform" element={<PlatformPage />} /><Route path="/account" element={<AccountPage />} /><Route path="*" element={<Navigate to="/platform" replace />} /></Routes></Suspense></AppShell>;
@@ -35,7 +37,11 @@ function AuthenticatedApp({ userId }: { userId: string }) {
   const draftMatch = useMatch("/drafts/:draftId");
   const documentMatch = useMatch("/documents/:storagePath");
   const messagesMatch = useMatch("/messages/:conversationId");
-  const activeSessionId = chatMatch?.params.sessionId ?? null;
+  const routeSessionId = chatMatch?.params.sessionId ?? null;
+  const [retainedSessionId, setRetainedSessionId] = useState<string | null>(() =>
+    routeSessionId ?? sessionStorage.getItem(lastChatSessionKey(userId)),
+  );
+  const activeSessionId = routeSessionId ?? retainedSessionId;
   const activeDraftId = draftMatch?.params.draftId;
   const activeConversationId = messagesMatch?.params.conversationId;
   const documents = useDocuments(userId);
@@ -45,19 +51,37 @@ function AuthenticatedApp({ userId }: { userId: string }) {
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
   const onSessionResolved = useCallback((sessionId: string) => {
+    setRetainedSessionId(sessionId);
+    sessionStorage.setItem(lastChatSessionKey(userId), sessionId);
     navigate(`/chats/${encodeURIComponent(sessionId)}`, { replace: true });
-  }, [navigate]);
+  }, [navigate, userId]);
   const chat = useChatWorkflow(documents.selectedDocument, userId, activeSessionId, onSessionResolved);
   const cancelChat = chat.cancel;
 
   useEffect(() => {
+    if (!routeSessionId) return;
+    setRetainedSessionId(routeSessionId);
+    sessionStorage.setItem(lastChatSessionKey(userId), routeSessionId);
+  }, [routeSessionId, userId]);
+
+  useEffect(() => {
+    if (location.pathname !== "/chats" || !retainedSessionId) return;
+    navigate(`/chats/${encodeURIComponent(retainedSessionId)}`, { replace: true });
+  }, [location.pathname, navigate, retainedSessionId]);
+
+  useEffect(() => {
     const storagePath = documentMatch?.params.storagePath;
-    if (!storagePath || documentItems.length === 0) return;
+    if (!location.pathname.startsWith("/documents")) return;
+    if (!storagePath) {
+      if (selectedDocument?.storage_path) setSelectedDocument(null);
+      return;
+    }
+    if (documentItems.length === 0) return;
     const match = documentItems.find((item) => item.storage_path === storagePath);
     if (match && match.storage_path !== selectedDocument?.storage_path) {
       setSelectedDocument(match);
     }
-  }, [documentItems, documentMatch?.params.storagePath, selectedDocument?.storage_path, setSelectedDocument]);
+  }, [documentItems, documentMatch?.params.storagePath, location.pathname, selectedDocument?.storage_path, setSelectedDocument]);
 
   useEffect(() => {
     if (!location.pathname.startsWith("/chats")) {
@@ -130,9 +154,17 @@ function AuthenticatedApp({ userId }: { userId: string }) {
       onClearDocument={() => documents.setSelectedDocument(null)}
       onSend={sendChatMessage}
       onResume={chat.resume}
-      onNewChat={() => { setChatHistoryOpen(false); chat.newChat(); navigate("/chats"); }}
+      onNewChat={() => {
+        setChatHistoryOpen(false);
+        setRetainedSessionId(null);
+        sessionStorage.removeItem(lastChatSessionKey(userId));
+        chat.newChat();
+        navigate("/chats");
+      }}
       onOpenSession={(sessionId) => {
         setChatHistoryOpen(false);
+        setRetainedSessionId(sessionId);
+        sessionStorage.setItem(lastChatSessionKey(userId), sessionId);
         navigate(`/chats/${encodeURIComponent(sessionId)}`);
       }}
       onCloseHistory={() => setChatHistoryOpen(false)}
@@ -178,8 +210,8 @@ function AuthenticatedApp({ userId }: { userId: string }) {
           <Route path="/home" element={<HomePage documents={documents.documents} loading={documents.loading} />} />
           <Route path="/chats" element={chatsPage} />
           <Route path="/chats/:sessionId" element={chatsPage} />
-          <Route path="/documents" element={<DocumentsPage canPush={canManage} documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} loading={documents.loading} uploading={documents.uploading} updatingFields={documents.updatingFields} analyzingStoragePath={documents.analyzingStoragePath} deletingDocument={documents.deleting} error={documents.error} onUpload={uploadDocument} onUpdateFields={documents.updateFields} onAnalyzeDocument={analyzeDocument} onDeleteDocument={documents.deleteDocument} onGenerateDetailedSummary={documents.generateDetailedSummary} generatingDetailedSummary={documents.generatingDetailedSummary} documentText={documents.documentText} onSaveText={documents.saveText} savingText={documents.savingText} onReextract={documents.reextractText} reextracting={documents.reextracting} onSelect={(document) => { selectDocument(document); navigate(`/documents/${encodeURIComponent(document.storage_path)}`); }} onCloseDocument={() => { documents.setSelectedDocument(null); navigate("/documents"); }} />} />
-          <Route path="/documents/:storagePath" element={<DocumentsPage canPush={canManage} documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} loading={documents.loading} uploading={documents.uploading} updatingFields={documents.updatingFields} analyzingStoragePath={documents.analyzingStoragePath} deletingDocument={documents.deleting} error={documents.error} onUpload={uploadDocument} onUpdateFields={documents.updateFields} onAnalyzeDocument={analyzeDocument} onDeleteDocument={documents.deleteDocument} onGenerateDetailedSummary={documents.generateDetailedSummary} generatingDetailedSummary={documents.generatingDetailedSummary} documentText={documents.documentText} onSaveText={documents.saveText} savingText={documents.savingText} onReextract={documents.reextractText} reextracting={documents.reextracting} onSelect={(document) => { selectDocument(document); navigate(`/documents/${encodeURIComponent(document.storage_path)}`); }} onCloseDocument={() => { documents.setSelectedDocument(null); navigate("/documents"); }} />} />
+          <Route path="/documents" element={<DocumentsPage canPush={canManage} documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} loading={documents.loading} uploading={documents.uploading} updatingFields={documents.updatingFields} analyzingStoragePath={documents.analyzingStoragePath} deletingDocument={documents.deleting} error={documents.error} onUpload={uploadDocument} onUpdateFields={documents.updateFields} onAnalyzeDocument={analyzeDocument} onDeleteDocument={documents.deleteDocument} onGenerateDetailedSummary={documents.generateDetailedSummary} generatingDetailedSummary={documents.generatingDetailedSummary} documentText={documents.documentText} onSaveText={documents.saveText} savingText={documents.savingText} onReextract={documents.reextractText} reextracting={documents.reextracting} onSelect={(document) => { selectDocument(document); navigate(`/documents/${encodeURIComponent(document.storage_path)}`); }} onCloseDocument={() => navigate("/documents")} />} />
+          <Route path="/documents/:storagePath" element={<DocumentsPage canPush={canManage} documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} loading={documents.loading} uploading={documents.uploading} updatingFields={documents.updatingFields} analyzingStoragePath={documents.analyzingStoragePath} deletingDocument={documents.deleting} error={documents.error} onUpload={uploadDocument} onUpdateFields={documents.updateFields} onAnalyzeDocument={analyzeDocument} onDeleteDocument={documents.deleteDocument} onGenerateDetailedSummary={documents.generateDetailedSummary} generatingDetailedSummary={documents.generatingDetailedSummary} documentText={documents.documentText} onSaveText={documents.saveText} savingText={documents.savingText} onReextract={documents.reextractText} reextracting={documents.reextracting} onSelect={(document) => { selectDocument(document); navigate(`/documents/${encodeURIComponent(document.storage_path)}`); }} onCloseDocument={() => navigate("/documents")} />} />
           <Route path="/drafts" element={<DraftsPage documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} onSelect={selectDocument} onOpenDraft={(draftId) => navigate(`/drafts/${encodeURIComponent(draftId)}`)} onCloseDraft={() => navigate("/drafts")} />} />
           <Route path="/drafts/:draftId" element={<DraftsPage documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} activeDraftId={activeDraftId} onSelect={selectDocument} onOpenDraft={(draftId) => navigate(`/drafts/${encodeURIComponent(draftId)}`)} onCloseDraft={() => navigate("/drafts")} />} />
           <Route path="/graph" element={<GraphPage />} />
@@ -199,7 +231,7 @@ function AuthenticatedApp({ userId }: { userId: string }) {
 export default function App() {
   const { user, loading } = useAuth();
   const location = useLocation();
-  if (loading) return <div className="centered-state app-loading">Oturum doğrulanıyor…</div>;
+  if (loading) return <div className="centered-state app-loading"><Spinner size="lg" label="Oturum doğrulanıyor" />Oturum doğrulanıyor…</div>;
   return (
     <Suspense fallback={<PageFallback />}>
       <Routes>

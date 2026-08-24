@@ -51,6 +51,7 @@ export function GroupParticipantsPanel({
       open={open}
       id="group-participants-panel"
       className="group-participants-panel"
+      bodyClassName="people-drawer-body"
       title={addMode ? "Üye ekle" : "Grup üyeleri"}
       closeLabel="Grup üyeleri panelini kapat"
       onClose={() => {

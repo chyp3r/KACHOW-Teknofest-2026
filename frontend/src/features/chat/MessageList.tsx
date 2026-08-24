@@ -1,5 +1,5 @@
-import { Bot, FilePenLine, FileSearch, Info, MessageSquare, Route, UserRound } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { Bot, FilePenLine, FileSearch, Info, MessageSquare, Route, UploadCloud, UserRound } from "lucide-react";
+import { useCallback, useEffect, useRef } from "react";
 import type { UIEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import type {
@@ -9,7 +9,9 @@ import type {
   WorkflowNodeStatus,
 } from "../../types/chat";
 import { Button } from "../../components/Button";
+import { Accordion } from "../../components/Accordion";
 import { EmptyState } from "../../components/EmptyState";
+import { Spinner } from "../../components/Surface";
 import { PromptQuestionCard } from "./PromptQuestionCard";
 import { DraftMetaStrip } from "./DraftMetaStrip";
 import { FeedbackButtons } from "./FeedbackButtons";
@@ -18,6 +20,7 @@ import { ThinkingBubble } from "./ThinkingBubble";
 import { ResolvedPromptCard } from "./ResolvedPromptCard";
 import type { PromptAnswers } from "./PromptQuestionCard";
 import type { FeedbackTargetKind } from "../../types/feedback";
+import { AnimatedMessageText } from "./AnimatedMessageText";
 
 // What a message's vote should be filed under, plus a small context
 // snapshot worth carrying alongside it (see FeedbackModel.context) --
@@ -44,6 +47,7 @@ export function MessageList({
   messages,
   streamingText,
   loading,
+  uploadingDocumentName,
   hasSelectedDocument,
   interrupt,
   onResume,
@@ -65,6 +69,7 @@ export function MessageList({
   messages: ChatMessage[];
   streamingText: string;
   loading: boolean;
+  uploadingDocumentName?: string | null;
   hasSelectedDocument: boolean;
   // Rendered as the last bubble in the scrolling conversation (see the
   // interrupt-message article below) rather than as a standalone panel
@@ -106,14 +111,16 @@ export function MessageList({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
-  useEffect(() => {
+  const scrollToBottom = useCallback(() => {
     const container = containerRef.current;
     if (!container || !pinnedRef.current) return;
-    const frame = requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
       container.scrollTop = container.scrollHeight;
     });
-    return () => cancelAnimationFrame(frame);
-  }, [messages, streamingText, interrupt]);
+  }, []);
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, streamingText, interrupt, uploadingDocumentName, scrollToBottom]);
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
     const el = event.currentTarget;
     pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 96;
@@ -124,7 +131,7 @@ export function MessageList({
   });
   return (
     <div className="messages-area" ref={containerRef} onScroll={handleScroll}>
-      {visibleMessages.length === 0 && !streamingText && !interrupt ? (
+      {visibleMessages.length === 0 && !streamingText && !interrupt && !uploadingDocumentName ? (
         <EmptyState className="chat-empty-state" icon={MessageSquare} title="Nasıl yardımcı olabilirim?" description="Bir evrak üzerinde çalışın veya resmî yazışma süreciniz için destek alın." primaryAction={
           <div className="suggested-actions" aria-label="Önerilen başlangıçlar">
             {hasSelectedDocument && (
@@ -166,9 +173,11 @@ export function MessageList({
                     : "Siz"}
               </header>
               {message.text && (
-                <div className="markdown-content">
-                  <ReactMarkdown>{message.text}</ReactMarkdown>
-                </div>
+                <AnimatedMessageText
+                  text={message.text}
+                  animate={message.animate}
+                  onProgress={scrollToBottom}
+                />
               )}
               {message.resolvedPrompt && (
                 <ResolvedPromptCard interaction={message.resolvedPrompt} />
@@ -191,15 +200,14 @@ export function MessageList({
                 />
               ) : null}
               {message.logs?.length ? (
-                <details className="message-logs">
-                  <summary>Akış günlüğü ({message.logs.length})</summary>
+                <Accordion className="message-logs" title={`Akış günlüğü (${message.logs.length})`}>
                   {message.logs.map((log, logIndex) => (
                     <p key={logIndex}>
                       <time>{log.time}</time>
                       {log.text}
                     </p>
                   ))}
-                </details>
+                </Accordion>
               ) : null}
               {message.sender === "assistant" && message.kind !== "notice" && message.text && (
                 <FeedbackButtons
@@ -212,6 +220,20 @@ export function MessageList({
             </div>
           </article>
         ))
+      )}
+      {uploadingDocumentName && (
+        <article className="chat-message assistant notice-message document-upload-message" role="status" aria-live="polite">
+          <span className="message-avatar">
+            <UploadCloud size={17} />
+          </span>
+          <div>
+            <header>Evrak yükleniyor</header>
+            <div className="document-upload-message-copy">
+              <Spinner size="sm" label={`${uploadingDocumentName} yükleniyor ve analiz ediliyor`} />
+              <p><strong>{uploadingDocumentName}</strong> yükleniyor ve analiz ediliyor…</p>
+            </div>
+          </div>
+        </article>
       )}
       {streamingText && (
         <article className="chat-message assistant">

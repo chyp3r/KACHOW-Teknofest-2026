@@ -213,5 +213,7 @@ export interface CorpusGraph extends KnowledgeGraph {
   truncated: boolean;
   total_document_count: number;
   hidden_document_count: number;
+  /** The corpus endpoint failed, so the client assembled this view from document graph endpoints. */
+  is_fallback?: boolean;
 }
 import type { SensitivityLevel } from "./security";

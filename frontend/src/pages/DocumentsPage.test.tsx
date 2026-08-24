@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -62,6 +62,36 @@ describe("DocumentsPage", () => {
     expect(screen.getByRole("button", { name: "Yüklemeyi kapat" })).toBeInTheDocument();
   });
 
+  it("keeps the same draft-style master list before and after a document is opened", () => {
+    const commonProps = {
+      documents: [document],
+      analysis: null,
+      loading: false,
+      uploading: false,
+      error: null,
+      onUpload: vi.fn().mockResolvedValue(undefined),
+      onSelect: vi.fn(),
+    };
+    const view = renderPage(<DocumentsPage {...commonProps} selected={null} />);
+
+    const closedList = screen.getByRole("list", { name: "Evrak listesi" });
+    const closedRow = within(closedList).getByRole("button", { name: /izin-talebi\.pdf/ });
+    expect(closedRow).toHaveClass("document-list-item");
+    expect(screen.queryByRole("table", { name: "Evrak kütüphanesi" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Bir evrak seçin" })).toBeInTheDocument();
+
+    view.rerender(
+      <MemoryRouter>
+        <DocumentsPage {...commonProps} selected={document} analysis={analysis} />
+      </MemoryRouter>,
+    );
+
+    const openList = screen.getByRole("list", { name: "Evrak listesi" });
+    const openRow = within(openList).getByRole("button", { name: /izin-talebi\.pdf/ });
+    expect(openRow).toHaveClass("document-list-item");
+    expect(openRow).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("shows analysis in the detail pane and supports closing it", () => {
     const onCloseDocument = vi.fn();
     renderPage(
@@ -80,6 +110,7 @@ describe("DocumentsPage", () => {
 
     const row = screen.getByRole("button", { name: /izin-talebi\.pdf/ });
     expect(row).toHaveAttribute("aria-expanded", "true");
+    expect(within(screen.getByRole("list", { name: "Evrak listesi" })).getByText("Yıllık izin talebi")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Evrak Özeti" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Liste görünümüne dön" }));
@@ -308,6 +339,30 @@ describe("DocumentsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Filtreleri temizle" }));
     expect(screen.getByRole("textbox", { name: "Evraklarda ara" })).toHaveValue("");
     expect(screen.queryByLabelText("Etkin filtreler")).not.toBeInTheDocument();
+  });
+
+  it("keeps the same ten-row page size after opening document details", () => {
+    const manyDocuments = Array.from({ length: 11 }, (_, index) => ({
+      ...document,
+      file_name: `evrak-${index + 1}.pdf`,
+      storage_path: `documents/evrak-${index + 1}.pdf`,
+    }));
+
+    renderPage(
+      <DocumentsPage
+        documents={manyDocuments}
+        selected={manyDocuments[0]}
+        analysis={{ ...analysis, ...manyDocuments[0] }}
+        loading={false}
+        uploading={false}
+        error={null}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(within(screen.getByRole("list", { name: "Evrak listesi" })).getAllByRole("button")).toHaveLength(10);
+    expect(screen.getByText("1–10 / 11")).toBeInTheDocument();
   });
 
   it("edits extracted text page by page", async () => {

@@ -1,7 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MessagesPage } from "./MessagesPage";
+
+const mocks = vi.hoisted(() => ({
+  markRead: vi.fn().mockResolvedValue(undefined),
+  unreadCount: 0,
+}));
 
 vi.mock("../features/messaging/ConversationList", () => ({
   ConversationList: () => <div data-testid="conversation-list">Konuşmalar</div>,
@@ -31,7 +36,8 @@ vi.mock("../hooks/useConversations", () => ({
       {
         id: "conversation-1",
         kind: "dm",
-        unread_count: 0,
+        unread_count: mocks.unreadCount,
+        last_message_at: "2026-08-20T10:00:00Z",
         participants: [
           { user_id: "employee-1", username: "employee", left_at: null },
           { user_id: "employee-2", username: "colleague", left_at: null },
@@ -56,7 +62,7 @@ vi.mock("../hooks/useMessageThread", () => ({
     hasMore: false,
     sending: false,
     errorObject: null,
-    markRead: vi.fn(),
+    markRead: mocks.markRead,
     loadOlder: vi.fn(),
     send: vi.fn(),
   }),
@@ -76,6 +82,11 @@ function renderPage(activeConversationId?: string, onCloseConversation = vi.fn()
 }
 
 describe("MessagesPage responsive conversation navigation", () => {
+  beforeEach(() => {
+    mocks.unreadCount = 0;
+    mocks.markRead.mockClear();
+  });
+
   it("marks an active thread so mobile CSS can switch from the list to the thread", () => {
     renderPage("conversation-1");
 
@@ -92,5 +103,13 @@ describe("MessagesPage responsive conversation navigation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Konuşma listesine dön" }));
 
     expect(onCloseConversation).toHaveBeenCalledOnce();
+  });
+
+  it("marks incoming unread messages as read when their thread is visible", async () => {
+    mocks.unreadCount = 2;
+
+    renderPage("conversation-1");
+
+    await waitFor(() => expect(mocks.markRead).toHaveBeenCalledOnce());
   });
 });

@@ -3,11 +3,9 @@ import { useRef, useState, type DragEvent, type ReactNode } from "react";
 import { validateUploadFile } from "../documents/uploadConstraints";
 
 export function ChatDropZone({
-  uploading,
   onUpload,
   children,
 }: {
-  uploading: boolean;
   onUpload: (file: File) => Promise<void>;
   children: ReactNode;
 }) {
@@ -65,7 +63,7 @@ export function ChatDropZone({
       onDrop={(event) => void handleDrop(event)}
     >
       {children}
-      {(dragging || uploading || error) && (
+      {(dragging || error) && (
         <div className="chat-dropzone-overlay" role="status" aria-live="polite">
           <div className="chat-dropzone-overlay-content">
             <span className="chat-dropzone-overlay-icon" aria-hidden="true">
@@ -82,8 +80,6 @@ export function ChatDropZone({
                   Kapat
                 </button>
               </>
-            ) : uploading ? (
-              <strong>Evrak analiz ediliyor…</strong>
             ) : (
               <>
                 <strong>Dosyanızı buraya bırakın</strong>

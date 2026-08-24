@@ -222,6 +222,10 @@ export function useChatWorkflow(
   const threadIdRef = useRef<string | null>(activeSessionId);
   const seenInterrupts = useRef(new Set<string>());
   const activeRequest = useRef<AbortController | null>(null);
+  // A manual stop may race the backend just as it checkpoints an interrupt.
+  // Keep that late state recovery hidden for the stopped turn; a later send
+  // clears the marker and can recover a genuinely still-paused session.
+  const cancelledThreadId = useRef<string | null>(null);
   const internallyResolvedSession = useRef<string | null>(null);
   // Set by the last "question" event this turn, consumed once by the very
   // next "final_result" (the clarify step's own reply) and cleared -- a
@@ -289,6 +293,7 @@ export function useChatWorkflow(
       return;
     }
     internallyResolvedSession.current = null;
+    cancelledThreadId.current = null;
     activeRequest.current?.abort();
     threadIdRef.current = activeSessionId;
     setThreadId(activeSessionId);
@@ -360,7 +365,15 @@ export function useChatWorkflow(
 
   useEffect(() => {
     const state = stateQuery.data;
-    if (!threadId || state?.status !== "interrupted" || !state.interrupt) return;
+    if (!threadId || !state) return;
+    if (state.status !== "interrupted" || !state.interrupt) {
+      setPendingInterrupt(null);
+      return;
+    }
+    if (cancelledThreadId.current === threadId) {
+      setPendingInterrupt(null);
+      return;
+    }
     const { kind: recoveredKind, ...payload } = state.interrupt;
     // human_gate only ever produces "missing_information" now -- a stale
     // recovery payload with no explicit kind (from before this) still
@@ -472,8 +485,9 @@ export function useChatWorkflow(
           appendLog(`${event.label} atlandı: ${event.reason}`);
           break;
         case "token":
-          streamingTextRef.current += event.text;
-          setStreamingText((previous) => previous + event.text);
+          // Transport chunks are intentionally ignored. The complete,
+          // validated final_result is inserted once in conversation order;
+          // MessageList owns the purely visual typewriter animation.
           break;
         case "partial_result":
           if (typeof event.value === "object" && event.value !== null)
@@ -561,6 +575,7 @@ export function useChatWorkflow(
               logs: logsRef.current,
               details: event.details,
               questions,
+              animate: true,
             },
           ]);
           if (threadIdRef.current) refreshServerState(threadIdRef.current);
@@ -591,6 +606,7 @@ export function useChatWorkflow(
 
   const send = useCallback(async (text: string, reasoningLevel: ReasoningLevel, useDocument: boolean, documentIdOverride?: string, draftId?: string | null) => {
     if (!text.trim() || loading || activeRequest.current) return;
+    cancelledThreadId.current = null;
     setLoading(true);
     setPendingInterrupt(null);
     resetFlow();
@@ -617,7 +633,14 @@ export function useChatWorkflow(
     const receiptId = `interaction:${currentInterrupt.interruptId}`;
     try {
       const state = await chatService.state(threadId);
-      if (state.status !== "interrupted") throw new Error("Bekleyen onay artık geçerli değil. Oturum yenileniyor.");
+      if (state.status !== "interrupted" || !state.interrupt) {
+        // The state query and a resume click can cross in flight. Treat an
+        // already-settled interrupt as stale UI, not as a user-facing error,
+        // and never restore its form in the catch block below.
+        setPendingInterrupt(null);
+        refreshServerState(threadId);
+        return;
+      }
       setPendingInterrupt(null);
       setMessages((previous) => [
         ...previous,
@@ -662,11 +685,27 @@ export function useChatWorkflow(
     threadIdRef.current = null;
     setThreadId(null);
     setPendingInterrupt(null);
+    cancelledThreadId.current = null;
     seenInterrupts.current.clear();
     resetFlow();
   }, [resetFlow]);
 
-  const cancel = useCallback(() => activeRequest.current?.abort(), []);
+  const cancel = useCallback(() => {
+    const controller = activeRequest.current;
+    if (!controller || controller.signal.aborted) return;
+    cancelledThreadId.current = threadIdRef.current;
+    controller.abort();
+    setPendingInterrupt(null);
+    resetFlow();
+    setMessages((previous) => [
+      ...previous,
+      {
+        sender: "assistant",
+        text: "İşlem durduruldu.",
+        kind: "notice",
+      },
+    ]);
+  }, [resetFlow]);
   const addUploadMessage = useCallback((fileName: string) => setMessages((previous) => [...previous, { sender: "assistant", text: `“${fileName}” evrakı yüklendi ve analiz edildi.` }]), []);
 
   return {

@@ -445,11 +445,7 @@ describe("useChatWorkflow", () => {
     });
   });
 
-  it("appends the streamed reply as one message with no diff artifact, since token text and final reply are always the same string", async () => {
-    // Mirrors the backend invariant (see app.ai.workflows.events.
-    // emit_reply_stream): the only text ever streamed is the exact final
-    // reply, chunked, emitted once from the terminal event -- never a raw
-    // per-agent generation that final_result could later diverge from.
+  it("inserts the final reply once and marks it for local animation", async () => {
     mocks.send.mockImplementationOnce(async (_request, onEvent) => {
       onEvent({ event: "session", thread_id: "user-1:web:thread" });
       onEvent({ event: "node_start", node: "draft", label: "Taslak Oluşturma", message: "" });
@@ -469,6 +465,7 @@ describe("useChatWorkflow", () => {
     expect(assistantMessage?.text).toBe(
       "Resmî yazı taslağınız hazırlandı.\n\nSayın Makam, ...",
     );
+    expect(assistantMessage?.animate).toBe(true);
     expect(assistantMessage).not.toHaveProperty("diffSegments");
     expect(result.current.streamingText).toBe("");
   });
@@ -504,7 +501,7 @@ describe("useChatWorkflow", () => {
     ).toBe(true);
   });
 
-  it("does not blank an in-progress stream on a node_start, since no per-agent node streams its own raw output anymore", async () => {
+  it("keeps transport chunks out of UI state until the final reply is ready", async () => {
     let emitToken: (() => void) | undefined;
     mocks.send.mockImplementationOnce(async (_request, onEvent) => {
       onEvent({ event: "session", thread_id: "user-1:web:thread" });
@@ -522,18 +519,33 @@ describe("useChatWorkflow", () => {
       pending = result.current.send("selam", "balanced", false);
     });
 
-    await waitFor(() => expect(result.current.streamingText).toBe("Merhaba"));
+    await waitFor(() => expect(result.current.nodeStatus.verify).toBe("running"));
+    expect(result.current.streamingText).toBe("");
 
     await act(async () => {
       emitToken?.();
       await pending;
     });
+    expect(result.current.messages[result.current.messages.length - 1]).toMatchObject({
+      sender: "assistant",
+      text: "Merhaba",
+      animate: true,
+    });
   });
 
   it("aborts an active stream without rendering a workflow failure", async () => {
     let receivedSignal: AbortSignal | undefined;
-    mocks.send.mockImplementation((_request, _onEvent, signal: AbortSignal) => {
+    mocks.state.mockResolvedValue({
+      status: "interrupted",
+      interrupt: {
+        kind: "writing_brief",
+        questions: [{ key: "type", question: "Tür?", required: true }],
+      },
+    });
+    mocks.send.mockImplementation((_request, onEvent, signal: AbortSignal) => {
       receivedSignal = signal;
+      onEvent({ event: "session", thread_id: "user-1:web:cancelled" });
+      onEvent({ event: "node_start", node: "brief", label: "Brief", message: "Başladı" });
       return new Promise<void>((_resolve, reject) => {
         signal.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")));
       });
@@ -547,6 +559,47 @@ describe("useChatWorkflow", () => {
     await act(async () => pending);
 
     expect(receivedSignal?.aborted).toBe(true);
-    expect(result.current.messages).toEqual([{ sender: "user", text: "iptal et" }]);
+    await waitFor(() => expect(mocks.state).toHaveBeenCalledWith("user-1:web:cancelled"));
+    expect(result.current.pendingInterrupt).toBeNull();
+    expect(result.current.nodeStatus).toEqual({});
+    expect(result.current.messages).toEqual([
+      { sender: "user", text: "iptal et" },
+      { sender: "assistant", text: "İşlem durduruldu.", kind: "notice" },
+    ]);
+  });
+
+  it("silently clears an interrupt that settled before its form was submitted", async () => {
+    const interrupt = {
+      kind: "writing_brief" as const,
+      questions: [{ key: "type", question: "Tür?", required: true }],
+    };
+    let stale = false;
+    mocks.state.mockImplementation(async () =>
+      stale
+        ? { status: "idle", interrupt: null }
+        : { status: "interrupted", interrupt },
+    );
+    mocks.send.mockImplementationOnce(async (_request, onEvent) => {
+      onEvent({ event: "session", thread_id: "user-1:web:stale" });
+      onEvent({
+        event: "interrupt",
+        kind: "writing_brief",
+        interrupt_id: "stale-brief",
+        payload: interrupt,
+      });
+    });
+
+    const { result } = renderHook(() => useChatWorkflow(null, "user-1"), { wrapper });
+    await act(() => result.current.send("taslak hazırla", "balanced", false));
+    await waitFor(() => expect(result.current.pendingInterrupt).not.toBeNull());
+
+    stale = true;
+    await act(() => result.current.resume("reject", {}, "", "Kullanıcı vazgeçti."));
+
+    expect(mocks.resume).not.toHaveBeenCalled();
+    expect(result.current.pendingInterrupt).toBeNull();
+    expect(result.current.messages.some((message) =>
+      message.text.includes("Bekleyen onay artık geçerli değil"),
+    )).toBe(false);
   });
 });

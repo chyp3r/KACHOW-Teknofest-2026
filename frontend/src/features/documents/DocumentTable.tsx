@@ -25,7 +25,7 @@ import type { DocumentAnalysis, DocumentMetadata, DocumentText, EvrakFields, Kno
 import { DocumentAnalysisPanel } from "./DocumentAnalysisPanel";
 import { Card, Spinner } from "../../components/Surface";
 import { Tabs } from "../../components/Tabs";
-import { DocumentActionsMenu, DocumentListItem } from "./DocumentListItem";
+import { DocumentListItem } from "./DocumentListItem";
 
 type DetailTab = "summary" | "analysis" | "text" | "details";
 type StatusFilter = "all" | "analyzed" | "pending" | "attention";
@@ -206,7 +206,7 @@ export function DocumentTable({
   ] : [];
 
   return (
-    <Card className={`document-list-card ${selected ? "has-document-detail" : "is-table-view"}`} role="region" aria-label="Kayıtlı evraklar">
+    <Card className="document-list-card" role="region" aria-label="Kayıtlı evraklar">
       <div className="table-toolbar document-list-toolbar">
         <Input
           fieldClassName="search-field"
@@ -254,13 +254,13 @@ export function DocumentTable({
           title="Evrak bulunamadı"
           description={query || type !== "all" || status !== "all" || date !== "all" ? "Arama veya filtre ölçütlerini değiştirin." : "Sağ üstteki Evrak yükle düğmesiyle ilk evrakınızı yükleyin."}
         />
-      ) : selected ? (
+      ) : (
         <div className="document-library-layout">
           <div className="document-master-column">
             <div className="document-result-count"><strong>{filtered.length} sonuç</strong></div>
             <ul className="document-master-list" aria-label="Evrak listesi">
               {visibleDocuments.map((item) => {
-                const expanded = selected.storage_path === item.storage_path;
+                const expanded = selected?.storage_path === item.storage_path;
                 const detailId = `document-detail-${item.storage_path.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
                 return (
                   <li key={item.storage_path} className={expanded ? "is-selected" : undefined}>
@@ -284,6 +284,7 @@ export function DocumentTable({
             </footer>
           </div>
 
+          {selected ? (
           <section id={`document-detail-${selected.storage_path.replace(/[^a-zA-Z0-9_-]/g, "-")}`} className="document-detail-pane" aria-label="Evrak ayrıntıları">
             <header className="document-detail-header">
               <span className="document-detail-file-icon" aria-hidden="true"><FileText /></span>
@@ -366,34 +367,16 @@ export function DocumentTable({
               )}
             </div>
           </section>
+          ) : (
+            <section className="document-detail-pane" aria-label="Evrak çalışma alanı">
+              <EmptyState
+                icon={FileText}
+                title="Bir evrak seçin"
+                description="Evrakı incelemek ve analiz ayrıntılarına erişmek için soldaki listeden seçim yapın."
+              />
+            </section>
+          )}
         </div>
-      ) : (
-        <>
-          <div className="document-result-count"><strong>{filtered.length} sonuç</strong></div>
-          <div className="document-reference-table" role="table" aria-label="Evrak kütüphanesi">
-            <div className="document-reference-table-header" role="row">
-              {['Evrak adı', 'Tür', 'Tarih', 'Durum', 'İşlemler'].map((label) => <span key={label} role="columnheader">{label}</span>)}
-            </div>
-            <div role="rowgroup">
-              {visibleDocuments.map((document) => {
-                const itemStatus = documentStatus(document);
-                return (
-                  <div className="document-reference-table-row" role="row" key={document.storage_path}>
-                    <button type="button" className="document-reference-name" role="cell" onClick={() => selectWithTab(document, "summary")}><span><FileText /></span><span><strong>{document.file_name}</strong><small>{document.summary || "Özet bulunmuyor."}</small></span></button>
-                    <span role="cell">{document.document_type_label || document.document_type || "—"}</span>
-                    <time role="cell" dateTime={document.upload_time}>{formatDate(document.upload_time)}</time>
-                    <span role="cell"><StatusBadge tone={itemStatus.tone}>{itemStatus.label}</StatusBadge></span>
-                    <span className="document-reference-row-actions" role="cell"><DocumentActionsMenu document={document} onSelect={() => selectWithTab(document, "summary")} onViewAnalysis={() => selectWithTab(document, "analysis")} onAnalyze={onAnalyzeDocument ? () => void onAnalyzeDocument(document.storage_path).catch(() => undefined) : undefined} analyzing={analyzingStoragePath === document.storage_path} onDelete={onDeleteDocument ? () => setPendingDeletePath(document.storage_path) : undefined} /></span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <footer className="document-pagination">
-            <span>{(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} / {filtered.length}</span>
-            <div><IconButton variant="ghost" icon={<ChevronLeft />} aria-label="Önceki sayfa" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} /><span>{page} / {totalPages}</span><IconButton variant="ghost" icon={<ChevronRight />} aria-label="Sonraki sayfa" disabled={page === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} /></div>
-          </footer>
-        </>
       )}
 
       <ConfirmationDialog

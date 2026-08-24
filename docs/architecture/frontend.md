@@ -63,12 +63,17 @@ sequenceDiagram
     
     User->>UI: Soru Sor
     UI->>API: POST /chat/message
-    API-->>UI: Chunk 1 (Stream)
-    UI-->>User: Metin Güncellemesi
-    API-->>UI: Chunk 2 (Stream)
-    UI-->>User: Metin Güncellemesi
-    API-->>UI: Tamamlandı [Event]
+    API-->>UI: İlerleme olayları
+    API-->>UI: final_result
+    UI-->>UI: Mesajı sıraya tek seferde ekle
+    UI-->>User: Yerel yazma animasyonu
 ```
+
+Backend `token` parçalarını yapay bekleme olmadan taşıyabilir; bunlar UI yazma
+hızının kaynağı değildir. Frontend doğrulanmış `final_result` cevabını konuşma
+state'ine bir kez ekler ve yalnız canlı gelen bu mesajı `AnimatedMessageText`
+ile görsel olarak açar. Kalıcı geçmiş mesajları anında gösterilir; işletim
+sisteminde azaltılmış hareket tercihi açıksa animasyon uygulanmaz.
 
 ## Performans ve Optimizasyon
 
@@ -76,6 +81,19 @@ Modern web standartlarına uygunluk için frontend uygulamasında aşağıdaki t
 - **Lazy Loading & Code Splitting:** Sadece ziyaret edilen sayfanın kodları (chunk) indirilir.
 - **Memoization:** Gereksiz React render'larını engellemek için `useMemo` ve `useCallback` kullanımı.
 - **Virtualization:** Çok uzun evrak listeleri veya sohbet geçmişinde sadece ekranda görünen öğelerin render edilmesi.
+
+## Çalışma Alanı Desenleri
+
+Evrak Kütüphanesi seçimden bağımsız olarak aynı master-detail yapısını ve
+`DocumentListItem` listesini korur. Ayrıntı kapatıldığında rota `/documents`
+olarak güncellenir ve seçili kayıt bu rotadan türetilir. Mevzuat Haritası toplu
+grafik ucu 5xx döndürdüğünde mevcut evrak listesi ile tekil grafik uçlarından
+kimliğe göre birleştirilmiş, eksik evrak sayısını bildiren kısmi görünüm üretir.
+
+Yönetim analitiği yalnız backend servislerinin sunduğu ölçüleri görselleştirir;
+frontend eksik metrikleri tahmin etmez. Açılır yönetim içerikleri ortak
+`Accordion`, dialoglar ise sabit başlık/eylem ve kaydırılabilir gövde kullanan
+tasarım sistemi bileşenlerini kullanır.
 
 ## Typography ve Design System
 
