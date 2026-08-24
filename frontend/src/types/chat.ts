@@ -60,6 +60,8 @@ export interface ChatMessage {
   id?: string;
   sender: "user" | "assistant";
   text: string;
+  /** Only live final replies opt into the local typewriter effect. */
+  animate?: boolean;
   status?: string;
   logs?: WorkflowLog[];
   details?: Record<string, unknown>;

@@ -23,6 +23,8 @@ const NotFoundPage = lazy(() => import("./pages/NotFoundPage").then((module) => 
 
 const PageFallback = () => <div className="centered-state app-loading"><Spinner size="lg" label="Sayfa yükleniyor" />Sayfa yükleniyor…</div>;
 
+const lastChatSessionKey = (userId: string) => `kachow.chat.last-session.${userId}`;
+
 function RootAuthenticatedApp() {
   return <AppShell><Suspense fallback={<PageFallback />}><Routes><Route path="/platform" element={<PlatformPage />} /><Route path="/account" element={<AccountPage />} /><Route path="*" element={<Navigate to="/platform" replace />} /></Routes></Suspense></AppShell>;
 }
@@ -36,7 +38,10 @@ function AuthenticatedApp({ userId }: { userId: string }) {
   const documentMatch = useMatch("/documents/:storagePath");
   const messagesMatch = useMatch("/messages/:conversationId");
   const routeSessionId = chatMatch?.params.sessionId ?? null;
-  const [retainedSessionId, setRetainedSessionId] = useState<string | null>(routeSessionId);
+  const [retainedSessionId, setRetainedSessionId] = useState<string | null>(() =>
+    routeSessionId ?? sessionStorage.getItem(lastChatSessionKey(userId)),
+  );
+  const activeSessionId = routeSessionId ?? retainedSessionId;
   const activeDraftId = draftMatch?.params.draftId;
   const activeConversationId = messagesMatch?.params.conversationId;
   const documents = useDocuments(userId);
@@ -45,14 +50,24 @@ function AuthenticatedApp({ userId }: { userId: string }) {
   const setSelectedDocument = documents.setSelectedDocument;
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
-  useEffect(() => {
-    if (routeSessionId) setRetainedSessionId(routeSessionId);
-  }, [routeSessionId]);
   const onSessionResolved = useCallback((sessionId: string) => {
     setRetainedSessionId(sessionId);
+    sessionStorage.setItem(lastChatSessionKey(userId), sessionId);
     navigate(`/chats/${encodeURIComponent(sessionId)}`, { replace: true });
-  }, [navigate]);
-  const chat = useChatWorkflow(documents.selectedDocument, userId, retainedSessionId, onSessionResolved);
+  }, [navigate, userId]);
+  const chat = useChatWorkflow(documents.selectedDocument, userId, activeSessionId, onSessionResolved);
+  const cancelChat = chat.cancel;
+
+  useEffect(() => {
+    if (!routeSessionId) return;
+    setRetainedSessionId(routeSessionId);
+    sessionStorage.setItem(lastChatSessionKey(userId), routeSessionId);
+  }, [routeSessionId, userId]);
+
+  useEffect(() => {
+    if (location.pathname !== "/chats" || !retainedSessionId) return;
+    navigate(`/chats/${encodeURIComponent(retainedSessionId)}`, { replace: true });
+  }, [location.pathname, navigate, retainedSessionId]);
 
   useEffect(() => {
     const storagePath = documentMatch?.params.storagePath;
@@ -70,10 +85,11 @@ function AuthenticatedApp({ userId }: { userId: string }) {
 
   useEffect(() => {
     if (!location.pathname.startsWith("/chats")) {
+      cancelChat();
       setChatHistoryOpen(false);
       setWorkflowOpen(false);
     }
-  }, [location.pathname]);
+  }, [cancelChat, location.pathname]);
 
   const selectDocument = (document: DocumentMetadata) => {
     documents.setSelectedDocument(document);
@@ -110,7 +126,7 @@ function AuthenticatedApp({ userId }: { userId: string }) {
     <ChatsPage
       documents={documents.documents}
       sessions={chat.sessions}
-      activeSessionId={retainedSessionId}
+      activeSessionId={activeSessionId}
       sessionsLoading={chat.sessionsLoading}
       sessionsRefreshing={chat.sessionsRefreshing}
       sessionsError={chat.sessionsError}
@@ -138,10 +154,17 @@ function AuthenticatedApp({ userId }: { userId: string }) {
       onClearDocument={() => documents.setSelectedDocument(null)}
       onSend={sendChatMessage}
       onResume={chat.resume}
-      onNewChat={() => { setChatHistoryOpen(false); setRetainedSessionId(null); chat.newChat(); navigate("/chats"); }}
+      onNewChat={() => {
+        setChatHistoryOpen(false);
+        setRetainedSessionId(null);
+        sessionStorage.removeItem(lastChatSessionKey(userId));
+        chat.newChat();
+        navigate("/chats");
+      }}
       onOpenSession={(sessionId) => {
         setChatHistoryOpen(false);
         setRetainedSessionId(sessionId);
+        sessionStorage.setItem(lastChatSessionKey(userId), sessionId);
         navigate(`/chats/${encodeURIComponent(sessionId)}`);
       }}
       onCloseHistory={() => setChatHistoryOpen(false)}

@@ -68,7 +68,7 @@ function persistedInteraction(
   pendingInterrupt: InterruptState | null,
 ): ResolvedPromptInteraction | null {
   const response = asRecord(asRecord(message.details)?.interaction_response);
-  if (!response) return null;
+  if (!response || !pendingInterrupt) return null;
   const action = response.action;
   if (
     action !== "answer" &&
@@ -85,23 +85,8 @@ function persistedInteraction(
       answers[key] = value as string[];
     }
   }
-  const fallbackQuestions: PromptQuestion[] = Object.keys(answers).map((key) => ({
-    key,
-    question: key
-      .replace(/[_-]+/g, " ")
-      .replace(/(^|\s)\S/g, (letter) => letter.toLocaleUpperCase("tr-TR")),
-    options: [],
-    multi_select: Array.isArray(answers[key]),
-    allow_free_text: true,
-    required: false,
-  }));
-  const interaction = pendingInterrupt ?? {
-    kind: "missing_information" as const,
-    interruptId: `history-response:${message.id}`,
-    payload: { title: "Yanıtlanan bilgiler", questions: fallbackQuestions },
-  };
   return resolvedInteraction(
-    interaction,
+    pendingInterrupt,
     action,
     answers,
     typeof response.instructions === "string" ? response.instructions : "",
@@ -115,32 +100,16 @@ function legacyPersistedInteraction(
 ): ResolvedPromptInteraction | null {
   if (!pendingInterrupt || message.role !== "user") return null;
   const questions = pendingInterrupt.payload.questions ?? [];
-  const legacyAction = message.content.match(/^\s*(approve|revise|reject|select)\s*:\s*([\s\S]+)$/i);
-  if (legacyAction) {
-    const action = legacyAction[1].toLowerCase() as ResolvedPromptInteraction["action"];
-    const value = legacyAction[2].trim();
-    return resolvedInteraction(
-      pendingInterrupt,
-      action,
-      {},
-      action === "revise" ? value : "",
-      action === "reject" ? value : undefined,
-    );
-  }
   if (questions.length === 0) return null;
+  const questionByKey = new Map(questions.map((question) => [question.key, question]));
   const answers: Record<string, string | string[]> = {};
-  const escapedKeys = questions.map((question) =>
-    question.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-  );
-  const marker = new RegExp(`(?:^|[;\\n])\\s*(${escapedKeys.join("|")})\\s*:\\s*`, "g");
-  const matches = [...message.content.matchAll(marker)];
 
-  for (const [index, match] of matches.entries()) {
-    const key = match[1];
-    const question = questions.find((item) => item.key === key);
-    const valueStart = (match.index ?? 0) + match[0].length;
-    const valueEnd = matches[index + 1]?.index ?? message.content.length;
-    const value = message.content.slice(valueStart, valueEnd).trim().replace(/[;\n]\s*$/, "");
+  for (const segment of message.content.split(";")) {
+    const separator = segment.indexOf(":");
+    if (separator < 1) continue;
+    const key = segment.slice(0, separator).trim();
+    const value = segment.slice(separator + 1).trim();
+    const question = questionByKey.get(key);
     if (!question || !value) continue;
     answers[key] = question.multi_select
       ? value.split(",").map((item) => item.trim()).filter(Boolean)
@@ -157,16 +126,7 @@ function toChatMessages(items: PersistedChatMessage[]): ChatMessage[] {
   let pendingInterruptMessage: PersistedChatMessage | null = null;
   const messages: ChatMessage[] = [];
 
-  const orderedItems = items
-    .map((item, index) => ({ item, index }))
-    .sort((left, right) => {
-      const timeDifference = new Date(left.item.created_at).getTime()
-        - new Date(right.item.created_at).getTime();
-      return timeDifference || left.index - right.index;
-    })
-    .map(({ item }) => item);
-
-  for (const item of orderedItems) {
+  for (const item of items) {
     const interrupt = asRecord(asRecord(item.details)?.interrupt);
     if (item.role === "assistant" && interrupt) {
       const kind = interrupt.kind;
@@ -176,6 +136,7 @@ function toChatMessages(items: PersistedChatMessage[]): ChatMessage[] {
         kind === "artifact_transfer_confirm" ||
         kind === "artifact_transfer_disambiguate"
       ) {
+        if (pendingInterruptMessage) messages.push(toChatMessage(pendingInterruptMessage));
         pendingInterrupt = {
           kind,
           interruptId: `history:${item.id}`,
@@ -203,8 +164,8 @@ function toChatMessages(items: PersistedChatMessage[]): ChatMessage[] {
       continue;
     }
 
-    if (item.role === "user") {
-      if (pendingInterruptMessage) messages.push(toChatMessage(pendingInterruptMessage));
+    if (pendingInterruptMessage) {
+      messages.push(toChatMessage(pendingInterruptMessage));
       pendingInterrupt = null;
       pendingInterruptMessage = null;
     }
@@ -261,6 +222,10 @@ export function useChatWorkflow(
   const threadIdRef = useRef<string | null>(activeSessionId);
   const seenInterrupts = useRef(new Set<string>());
   const activeRequest = useRef<AbortController | null>(null);
+  // A manual stop may race the backend just as it checkpoints an interrupt.
+  // Keep that late state recovery hidden for the stopped turn; a later send
+  // clears the marker and can recover a genuinely still-paused session.
+  const cancelledThreadId = useRef<string | null>(null);
   const internallyResolvedSession = useRef<string | null>(null);
   // Set by the last "question" event this turn, consumed once by the very
   // next "final_result" (the clarify step's own reply) and cleared -- a
@@ -273,8 +238,6 @@ export function useChatWorkflow(
   // the settled reply, so a guardrail redaction animates in place instead
   // of the streamed draft just vanishing and reappearing edited.
   const streamingTextRef = useRef("");
-  const nodeFirstSequence = useRef<Record<string, number>>({});
-  const nodeLatestSequence = useRef<Record<string, number>>({});
 
   // Declared before every effect below -- the session-switch effect's own
   // dependency array references `resetFlow` directly, and a dependency
@@ -300,8 +263,6 @@ export function useChatWorkflow(
     logsRef.current = [];
     setLogs([]);
     pendingQuestions.current = null;
-    nodeFirstSequence.current = {};
-    nodeLatestSequence.current = {};
   }, []);
 
   const sessionsQuery = useQuery({
@@ -332,6 +293,7 @@ export function useChatWorkflow(
       return;
     }
     internallyResolvedSession.current = null;
+    cancelledThreadId.current = null;
     activeRequest.current?.abort();
     threadIdRef.current = activeSessionId;
     setThreadId(activeSessionId);
@@ -352,27 +314,9 @@ export function useChatWorkflow(
   // Records a node's backend-supplied label and its first-seen order --
   // idempotent, since a node can re-enter (e.g. "revise" runs once per
   // repair round) without moving in the order or losing its label.
-  const noteNode = useCallback((node: string, label: string, sequence?: number) => {
+  const noteNode = useCallback((node: string, label: string) => {
     setNodeLabels((previous) => (previous[node] === label ? previous : { ...previous, [node]: label }));
-    if (sequence !== undefined) {
-      nodeFirstSequence.current[node] = Math.min(nodeFirstSequence.current[node] ?? sequence, sequence);
-    }
-    setNodeOrder((previous) => {
-      const next = previous.includes(node) ? [...previous] : [...previous, node];
-      const arrivalOrder = new Map(next.map((item, index) => [item, index]));
-      return next.sort((left, right) => {
-        const leftSequence = nodeFirstSequence.current[left] ?? Number.POSITIVE_INFINITY;
-        const rightSequence = nodeFirstSequence.current[right] ?? Number.POSITIVE_INFINITY;
-        return leftSequence - rightSequence || (arrivalOrder.get(left) ?? 0) - (arrivalOrder.get(right) ?? 0);
-      });
-    });
-  }, []);
-
-  const updateNodeStatus = useCallback((node: string, status: WorkflowNodeStatus, sequence?: number) => {
-    if (sequence !== undefined && sequence < (nodeLatestSequence.current[node] ?? Number.NEGATIVE_INFINITY)) return false;
-    if (sequence !== undefined) nodeLatestSequence.current[node] = sequence;
-    setNodeStatus((previous) => ({ ...previous, [node]: status }));
-    return true;
+    setNodeOrder((previous) => (previous.includes(node) ? previous : [...previous, node]));
   }, []);
 
   useEffect(() => {
@@ -421,7 +365,15 @@ export function useChatWorkflow(
 
   useEffect(() => {
     const state = stateQuery.data;
-    if (!threadId || state?.status !== "interrupted" || !state.interrupt) return;
+    if (!threadId || !state) return;
+    if (state.status !== "interrupted" || !state.interrupt) {
+      setPendingInterrupt(null);
+      return;
+    }
+    if (cancelledThreadId.current === threadId) {
+      setPendingInterrupt(null);
+      return;
+    }
     const { kind: recoveredKind, ...payload } = state.interrupt;
     // human_gate only ever produces "missing_information" now -- a stale
     // recovery payload with no explicit kind (from before this) still
@@ -495,8 +447,9 @@ export function useChatWorkflow(
           onSessionResolved?.(event.thread_id);
           break;
         case "node_start":
-          noteNode(event.node, event.label, event.seq);
-          if (updateNodeStatus(event.node, "running", event.seq)) setNodeStartedAt((previous) => ({ ...previous, [event.node]: Date.now() }));
+          noteNode(event.node, event.label);
+          setNodeStatus((previous) => ({ ...previous, [event.node]: "running" }));
+          setNodeStartedAt((previous) => ({ ...previous, [event.node]: Date.now() }));
           if (event.meta) setNodeMeta((previous) => ({ ...previous, [event.node]: event.meta ?? {} }));
           // No node clears streamingText here anymore -- draft/revise/assist
           // no longer stream their own raw output (see backend
@@ -511,29 +464,30 @@ export function useChatWorkflow(
         case "planning_completed":
           setPlanSteps(event.plan_steps.map((step) => step.toLowerCase()));
           setPlanIntent(event.intent);
-          updateNodeStatus("planning", "completed", event.seq);
+          setNodeStatus((previous) => ({ ...previous, planning: "completed" }));
           appendLog(`İşlem planı belirlendi: ${event.plan_steps.join(" → ") || "genel sohbet"}.`);
           break;
         case "node_end":
-          noteNode(event.node, event.label, event.seq);
-          updateNodeStatus(event.node, "completed", event.seq);
+          noteNode(event.node, event.label);
+          setNodeStatus((previous) => ({ ...previous, [event.node]: "completed" }));
           if (event.result) setNodeResults((previous) => ({ ...previous, [event.node]: { ...(previous[event.node] ?? {}), ...event.result } }));
           if (event.meta) setNodeMeta((previous) => ({ ...previous, [event.node]: event.meta ?? {} }));
           appendLog(`${event.label} tamamlandı.`);
           break;
         case "node_error":
-          noteNode(event.node, event.label, event.seq);
-          if (event.fatal) updateNodeStatus(event.node, "failed", event.seq);
+          noteNode(event.node, event.label);
+          setNodeStatus((previous) => ({ ...previous, [event.node]: event.fatal ? "failed" : (previous[event.node] ?? "completed") }));
           appendLog(`${event.fatal ? "Hata" : "Uyarı"} (${event.label}): ${event.message}`);
           break;
         case "node_skipped":
-          noteNode(event.node, event.label, event.seq);
-          updateNodeStatus(event.node, "skipped", event.seq);
+          noteNode(event.node, event.label);
+          setNodeStatus((previous) => ({ ...previous, [event.node]: "skipped" }));
           appendLog(`${event.label} atlandı: ${event.reason}`);
           break;
         case "token":
-          streamingTextRef.current += event.text;
-          setStreamingText((previous) => previous + event.text);
+          // Transport chunks are intentionally ignored. The complete,
+          // validated final_result is inserted once in conversation order;
+          // MessageList owns the purely visual typewriter animation.
           break;
         case "partial_result":
           if (typeof event.value === "object" && event.value !== null)
@@ -621,6 +575,7 @@ export function useChatWorkflow(
               logs: logsRef.current,
               details: event.details,
               questions,
+              animate: true,
             },
           ]);
           if (threadIdRef.current) refreshServerState(threadIdRef.current);
@@ -646,11 +601,12 @@ export function useChatWorkflow(
         }
       }
     },
-    [appendLog, noteNode, onSessionResolved, recoverPausedSession, refreshServerState, updateNodeStatus],
+    [appendLog, noteNode, onSessionResolved, recoverPausedSession, refreshServerState],
   );
 
   const send = useCallback(async (text: string, reasoningLevel: ReasoningLevel, useDocument: boolean, documentIdOverride?: string, draftId?: string | null) => {
     if (!text.trim() || loading || activeRequest.current) return;
+    cancelledThreadId.current = null;
     setLoading(true);
     setPendingInterrupt(null);
     resetFlow();
@@ -677,7 +633,14 @@ export function useChatWorkflow(
     const receiptId = `interaction:${currentInterrupt.interruptId}`;
     try {
       const state = await chatService.state(threadId);
-      if (state.status !== "interrupted") throw new Error("Bekleyen onay artık geçerli değil. Oturum yenileniyor.");
+      if (state.status !== "interrupted" || !state.interrupt) {
+        // The state query and a resume click can cross in flight. Treat an
+        // already-settled interrupt as stale UI, not as a user-facing error,
+        // and never restore its form in the catch block below.
+        setPendingInterrupt(null);
+        refreshServerState(threadId);
+        return;
+      }
       setPendingInterrupt(null);
       setMessages((previous) => [
         ...previous,
@@ -722,11 +685,27 @@ export function useChatWorkflow(
     threadIdRef.current = null;
     setThreadId(null);
     setPendingInterrupt(null);
+    cancelledThreadId.current = null;
     seenInterrupts.current.clear();
     resetFlow();
   }, [resetFlow]);
 
-  const cancel = useCallback(() => activeRequest.current?.abort(), []);
+  const cancel = useCallback(() => {
+    const controller = activeRequest.current;
+    if (!controller || controller.signal.aborted) return;
+    cancelledThreadId.current = threadIdRef.current;
+    controller.abort();
+    setPendingInterrupt(null);
+    resetFlow();
+    setMessages((previous) => [
+      ...previous,
+      {
+        sender: "assistant",
+        text: "İşlem durduruldu.",
+        kind: "notice",
+      },
+    ]);
+  }, [resetFlow]);
   const addUploadMessage = useCallback((fileName: string) => setMessages((previous) => [...previous, { sender: "assistant", text: `“${fileName}” evrakı yüklendi ve analiz edildi.` }]), []);
 
   return {

@@ -1,5 +1,5 @@
 import { Bot, FilePenLine, FileSearch, Info, MessageSquare, Route, UploadCloud, UserRound } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { UIEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import type {
@@ -20,6 +20,7 @@ import { ThinkingBubble } from "./ThinkingBubble";
 import { ResolvedPromptCard } from "./ResolvedPromptCard";
 import type { PromptAnswers } from "./PromptQuestionCard";
 import type { FeedbackTargetKind } from "../../types/feedback";
+import { AnimatedMessageText } from "./AnimatedMessageText";
 
 // What a message's vote should be filed under, plus a small context
 // snapshot worth carrying alongside it (see FeedbackModel.context) --
@@ -110,14 +111,16 @@ export function MessageList({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
-  useEffect(() => {
+  const scrollToBottom = useCallback(() => {
     const container = containerRef.current;
     if (!container || !pinnedRef.current) return;
-    const frame = requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
       container.scrollTop = container.scrollHeight;
     });
-    return () => cancelAnimationFrame(frame);
-  }, [messages, streamingText, interrupt, uploadingDocumentName]);
+  }, []);
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, streamingText, interrupt, uploadingDocumentName, scrollToBottom]);
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
     const el = event.currentTarget;
     pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 96;
@@ -147,7 +150,7 @@ export function MessageList({
       ) : (
         visibleMessages.map((message, index) => (
           <article
-            key={message.id ?? `${message.sender}-${index}-${message.text.slice(0, 24)}`}
+            key={`${message.sender}-${index}`}
             className={`chat-message ${message.sender}${
               message.kind === "notice" ? " notice-message" : ""
             }${message.resolvedPrompt ? " resolved-prompt-message" : ""}`}
@@ -170,9 +173,11 @@ export function MessageList({
                     : "Siz"}
               </header>
               {message.text && (
-                <div className="markdown-content">
-                  <ReactMarkdown>{message.text}</ReactMarkdown>
-                </div>
+                <AnimatedMessageText
+                  text={message.text}
+                  animate={message.animate}
+                  onProgress={scrollToBottom}
+                />
               )}
               {message.resolvedPrompt && (
                 <ResolvedPromptCard interaction={message.resolvedPrompt} />

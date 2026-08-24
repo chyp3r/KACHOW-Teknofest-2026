@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
@@ -16,6 +16,8 @@ const state = vi.hoisted(() => ({
   },
   analyze: vi.fn(),
   chatSend: vi.fn(),
+  chatNew: vi.fn(),
+  activeChatSessionId: null as string | null,
 }));
 
 vi.mock("./hooks/useAuth", () => ({ useAuth: () => ({
@@ -29,22 +31,29 @@ vi.mock("./hooks/useDocuments", () => ({ useDocuments: () => ({
   setSelectedDocument: vi.fn(), upload: vi.fn(), analyze: state.analyze,
   updateFields: vi.fn(), deleteDocument: vi.fn(),
 }) }));
-vi.mock("./hooks/useChatWorkflow", () => ({ useChatWorkflow: () => ({
+vi.mock("./hooks/useChatWorkflow", () => ({ useChatWorkflow: (
+  _document: unknown,
+  _userId: string,
+  activeSessionId: string | null,
+) => {
+  state.activeChatSessionId = activeSessionId;
+  return ({
   sessions: [], sessionsLoading: false, sessionsRefreshing: false, sessionsError: null,
   historyLoading: false, historyError: null,
   messages: [], loading: false, streamingText: "", pendingInterrupt: null,
   nodeStatus: {}, nodeResults: {}, nodeMeta: {}, planSteps: [],
   nodeLabels: {}, nodeOrder: [], planIntent: "", logs: [],
-  toolCalls: [], guardrailEvents: [], send: state.chatSend, resume: vi.fn(), newChat: vi.fn(),
+  toolCalls: [], guardrailEvents: [], send: state.chatSend, resume: vi.fn(), newChat: state.chatNew,
   cancel: vi.fn(), addUploadMessage: vi.fn(), retrySessions: vi.fn(), retryHistory: vi.fn(),
-}) }));
+  });
+} }));
 vi.mock("./layouts/AppShell", () => ({ AppShell: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 vi.mock("./features/documents/DocumentLibraryPanel", () => ({ DocumentLibraryPanel: () => null }));
 vi.mock("./features/chat/DecisionFlow", () => ({ DecisionFlow: () => null }));
 vi.mock("./pages/LoginPage", () => ({ LoginPage: () => <h1>Login screen</h1> }));
 vi.mock("./pages/HomePage", () => ({ HomePage: () => <h1>Home screen</h1> }));
 vi.mock("./pages/DraftsPage", () => ({ DraftsPage: () => <h1>Drafts screen</h1> }));
-vi.mock("./pages/ChatsPage", () => ({ ChatsPage: ({ onSend }: { onSend: (text: string, level: "balanced", useDocument: boolean) => Promise<void> }) => <><h1>Chats screen</h1><button onClick={() => void onSend("Analiz et", "balanced", true)}>Send pending document</button></> }));
+vi.mock("./pages/ChatsPage", () => ({ ChatsPage: ({ onSend, onNewChat }: { onSend: (text: string, level: "balanced", useDocument: boolean) => Promise<void>; onNewChat: () => void }) => <><h1>Chats screen</h1><button onClick={() => void onSend("Analiz et", "balanced", true)}>Send pending document</button><button onClick={onNewChat}>New chat</button></> }));
 vi.mock("./pages/DocumentsPage", () => ({ DocumentsPage: ({ onCloseDocument }: { onCloseDocument?: () => void }) => <><h1>Documents screen</h1>{onCloseDocument && <button onClick={onCloseDocument}>Liste görünümüne dön</button>}</> }));
 vi.mock("./pages/AdminPage", () => ({ AdminPage: () => <h1>Admin screen</h1> }));
 
@@ -52,11 +61,19 @@ function LocationProbe() {
   return <output>{useLocation().pathname}</output>;
 }
 
+function RouteControls() {
+  const navigate = useNavigate();
+  return <><button onClick={() => navigate("/home")}>Go home</button><button onClick={() => navigate("/chats")}>Go chats</button></>;
+}
+
 describe("application route guards", () => {
   beforeEach(() => {
     state.selectedDocument = null;
     state.analyze.mockReset();
     state.chatSend.mockReset();
+    state.chatNew.mockReset();
+    state.activeChatSessionId = null;
+    sessionStorage.clear();
   });
   it("redirects a direct chat deep link to login when unauthenticated", async () => {
     state.user = null;
@@ -149,5 +166,31 @@ describe("application route guards", () => {
       "uploads/analyzed.pdf",
       undefined,
     );
+  });
+
+  it("restores the last chat after leaving the page until a new chat is requested", async () => {
+    state.user = {
+      id: "employee-1", username: "employee", email: "employee@example.test",
+      role: "employee", clearance_level: "hizmete_ozel", is_active: true, is_deleted: false,
+    };
+
+    render(<MemoryRouter initialEntries={["/chats/employee-1:web:last"]}><App /><RouteControls /><LocationProbe /></MemoryRouter>);
+
+    await waitFor(() => expect(state.activeChatSessionId).toBe("employee-1:web:last"));
+    expect(sessionStorage.getItem("kachow.chat.last-session.employee-1")).toBe("employee-1:web:last");
+
+    fireEvent.click(screen.getByRole("button", { name: "Go home" }));
+    await waitFor(() => expect(screen.getByText("/home")).toBeInTheDocument());
+    expect(state.activeChatSessionId).toBe("employee-1:web:last");
+
+    fireEvent.click(screen.getByRole("button", { name: "Go chats" }));
+    await waitFor(() => expect(screen.getByText("/chats/employee-1%3Aweb%3Alast")).toBeInTheDocument());
+    expect(state.activeChatSessionId).toBe("employee-1:web:last");
+
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    await waitFor(() => expect(screen.getByText("/chats")).toBeInTheDocument());
+    expect(state.activeChatSessionId).toBeNull();
+    expect(sessionStorage.getItem("kachow.chat.last-session.employee-1")).toBeNull();
+    expect(state.chatNew).toHaveBeenCalledOnce();
   });
 });
