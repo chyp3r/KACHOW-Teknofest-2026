@@ -128,8 +128,12 @@ DEFAULT_RESULTS_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "scratchpad", "ocr_real_results.json"
 )
 
-# Reference peak memory footprints (in MB) from benchmark profiling
-ENGINE_MEMORY_MB = {
+# Bunlar ÖLÇÜLMEDİ -- model boyutu/mimarisine göre elle yazılmış kaba
+# tahminler. `docker stats` veya benzeri bir profildeyici bu değerleri hiç
+# üretmedi, bu yüzden `_run_engine` bunları `estimated_memory_mb` anahtarıyla
+# döndürüyor ve tüketen her yer (örn. notebook grafiği) bunun bir tahmin
+# olduğunu okuyucuya açıkça belirtmeli.
+ESTIMATED_ENGINE_MEMORY_MB = {
     "opendataloader": 145.0,
     "open_data_loader": 145.0,
     "opencv+pyzbar": 203.2,
@@ -151,7 +155,7 @@ ENGINE_MEMORY_MB = {
 
 def _lookup_memory_mb(name: str) -> float:
     key = name.lower()
-    for pattern, mem in ENGINE_MEMORY_MB.items():
+    for pattern, mem in ESTIMATED_ENGINE_MEMORY_MB.items():
         if pattern in key:
             return mem
     return 1000.0
@@ -355,6 +359,27 @@ def _score(expected: dict, got: dict) -> dict:
 
 
 async def _run_engine(name: str, engine, documents: list) -> dict:
+    """Run one engine's raw and chain passes over every document.
+
+    Timing is measured raw-pass and chain-pass *separately*, never blended
+    into one number -- the same reasoning `_score` already applies to
+    header/signature recovery. For a vision engine the chain pass invokes
+    the *same model again* (`_build_chain` wires `header_repair=engine`):
+    once for the header-band crop, and again for a full-page transcription
+    when `signature_probe` reports the signature unparseable before or
+    after that crop (see `fallback.py`'s `_maybe_repair_page_one`). A
+    blended `raw + chain` time therefore doesn't measure "how fast is this
+    model" -- it measures "how fast is this model, weighted by how many
+    times the chain needed to ask it again", which is a different question.
+    A model whose signature-recovery escalation fires more *successfully*
+    (more genuine re-reads, not stuck loops) looks slower under a blended
+    number even when its own per-call latency is equal or faster -- exactly
+    what happened comparing glm-ocr against deepseek-ocr on this corpus:
+    glm-ocr's escalation path recovers signatures deepseek-ocr's doesn't,
+    which costs additional real vision calls the blended metric silently
+    priced in as "glm-ocr is slow instead of "glm-ocr tries harder and
+    wins".
+    """
     chain = _build_chain(engine)
     per_doc = {}
     # "chain"/"raw" are the two passes; each carries the header/signature
@@ -378,29 +403,38 @@ async def _run_engine(name: str, engine, documents: list) -> dict:
                 total_pages += 1
         else:
             total_pages += 1
-    started_all = time.time()
+    raw_wall_clock = 0.0
+    chain_wall_clock = 0.0
 
     for doc_name, pdf_bytes, expected in documents:
         line = f"  {doc_name[:40]:42s}"
-        doc_started = time.time()
+        raw_started = time.time()
         try:
             raw_result = await engine.extract(pdf_bytes, mime_type="application/pdf")
             raw_fields = parse_labelled_fields(raw_result.text)
         except Exception as exc:  # noqa: BLE001 - a failed engine recovers nothing
             print(f"{line} [RAW extract FAILED: {exc}]")
             raw_fields = {}
+        raw_elapsed = time.time() - raw_started
+        raw_wall_clock += raw_elapsed
         raw_score = _score(expected, raw_fields)
 
+        chain_started = time.time()
         try:
             chain_result = await chain.extract(pdf_bytes, file_name=doc_name, mime_type="application/pdf")
             chain_fields = parse_labelled_fields(chain_result.text)
         except Exception as exc:  # noqa: BLE001
             print(f"{line} [CHAIN extract FAILED: {exc}]")
             chain_fields = {}
+        chain_elapsed = time.time() - chain_started
+        chain_wall_clock += chain_elapsed
         chain_score = _score(expected, chain_fields)
-        elapsed = time.time() - doc_started
 
-        per_doc[doc_name] = {"raw": raw_score, "chain": chain_score, "seconds": elapsed}
+        per_doc[doc_name] = {
+            "raw": raw_score,
+            "chain": chain_score,
+            "seconds": {"raw": raw_elapsed, "chain": chain_elapsed},
+        }
         for pass_name, score in (("chain", chain_score), ("raw", raw_score)):
             for group in ("header", "signature"):
                 for metric in ("found", "raw_exact", "norm_exact", "expected"):
@@ -413,10 +447,17 @@ async def _run_engine(name: str, engine, documents: list) -> dict:
                 f"imz {s['found']}/{s['expected']}(t{s['raw_exact']})"
             )
 
-        print(f"{line} ham {_cell(raw_score)}  |  zincir {_cell(chain_score)}  {elapsed:.1f}s")
+        print(
+            f"{line} ham {_cell(raw_score)} {raw_elapsed:.1f}s  |  "
+            f"zincir {_cell(chain_score)} {chain_elapsed:.1f}s"
+        )
 
-    wall_clock = time.time() - started_all
-    seconds_per_page = wall_clock / total_pages if total_pages else 0.0
+    # Adil model-hızı karşılaştırması: yalnızca ham geçiş, zincirin kaç kez
+    # tekrar sorduğundan bağımsız. Üretimde gerçekten ödenen maliyet için
+    # chain_seconds_per_page'e bakın -- ikisi farklı soruları yanıtlıyor,
+    # bu yüzden ayrı raporlanıyor.
+    raw_seconds_per_page = raw_wall_clock / total_pages if total_pages else 0.0
+    chain_seconds_per_page = chain_wall_clock / total_pages if total_pages else 0.0
 
     ch = totals["chain"]
     h_found, h_exp = ch["header"]["found"], ch["header"]["expected"]
@@ -424,32 +465,36 @@ async def _run_engine(name: str, engine, documents: list) -> dict:
     header_pct = (100.0 * h_found / h_exp) if h_exp else 0.0
     signature_pct = (100.0 * s_found / s_exp) if s_exp else 0.0
     weighted_accuracy = (0.6 * header_pct) + (0.4 * signature_pct)
-    peak_memory_mb = _lookup_memory_mb(name)
+    # Ölçülmüş değil, sabit bir referans tablosundan -- bkz.
+    # ESTIMATED_ENGINE_MEMORY_MB'ın kendi docstring'i.
+    estimated_memory_mb = _lookup_memory_mb(name)
 
     return {
         "per_doc": per_doc,
         "totals": totals,
         "total_fields": total_fields,
         "total_pages": total_pages,
-        "wall_clock": wall_clock,
-        "seconds_per_page": seconds_per_page,
+        "raw_wall_clock": raw_wall_clock,
+        "chain_wall_clock": chain_wall_clock,
+        "raw_seconds_per_page": raw_seconds_per_page,
+        "chain_seconds_per_page": chain_seconds_per_page,
         "header_accuracy_pct": header_pct,
         "signature_accuracy_pct": signature_pct,
         "weighted_accuracy_pct": weighted_accuracy,
-        "peak_memory_mb": peak_memory_mb,
+        "estimated_memory_mb": estimated_memory_mb,
     }
 
 
 def _print_summary(all_results: dict) -> None:
     """Print the engine comparison, header and signature blocks apart."""
-    print("\n" + "=" * 120)
+    print("\n" + "=" * 130)
     print(
-        f"{'motor':26s} | {'ZİNCİR (üretim yolu)':^34s} | {'AĞIRLIKLI':^10s} | {'SAYFA/SN':^10s} | {'BELLEK':^10s} | {'TOPLAM SÜRE':>11s}"
+        f"{'motor':26s} | {'ZİNCİR (üretim yolu)':^34s} | {'AĞIRLIKLI':^10s} | {'SAYFA/SN (ham | zincir)':^24s} | {'BELLEK*':^10s} | {'TOPLAM SÜRE':>11s}"
     )
     print(
-        f"{'':26s} | {'başlık bul':>10s} {'imza bul':>10s} {'imza tam':>11s} | {'doğruluk':^10s} | {'gecikme':^10s} | {'(MB)':^10s} | {'':>11s}"
+        f"{'':26s} | {'başlık bul':>10s} {'imza bul':>10s} {'imza tam':>11s} | {'doğruluk':^10s} | {'':^24s} | {'(MB)':^10s} | {'':>11s}"
     )
-    print("-" * 120)
+    print("-" * 130)
 
     for name, result in all_results.items():
         t = result["totals"]
@@ -462,18 +507,24 @@ def _print_summary(all_results: dict) -> None:
             h_f, h_e = ch["header"]["found"], ch["header"]["expected"]
             s_f, s_e = ch["signature"]["found"], ch["signature"]["expected"]
             w_acc = 0.6 * (100 * h_f / h_e if h_e else 0) + 0.4 * (100 * s_f / s_e if s_e else 0)
-        s_per_p = result.get("seconds_per_page", 0.0)
-        mem_mb = result.get("peak_memory_mb", _lookup_memory_mb(name))
+        # raw = motorun tek çağrıdaki ham hızı; chain = üretimde imza/başlık
+        # kurtarma yeniden denemeleri dahil gerçekten ödenen maliyet. İkisi
+        # farklı sorulara cevap verir, tek bir sayıya karıştırılmaz.
+        raw_s_per_p = result.get("raw_seconds_per_page", 0.0)
+        chain_s_per_p = result.get("chain_seconds_per_page", 0.0)
+        mem_mb = result.get("estimated_memory_mb", _lookup_memory_mb(name))
+        chain_wall_clock = result.get("chain_wall_clock", 0.0)
         print(
             f"{name:26s} | "
             f"{ch['header']['found']:4d}/{ch['header']['expected']:<4d} "
             f"{ch['signature']['found']:4d}/{ch['signature']['expected']:<4d} "
             f"{ch['signature']['raw_exact']:5d}/{ch['signature']['expected']:<5d} | "
             f"{w_acc:8.1f}% | "
-            f"{s_per_p:7.2f}s/s | "
+            f"{raw_s_per_p:6.2f}s | {chain_s_per_p:6.2f}s | "
             f"{mem_mb:7.1f} MB | "
-            f"{result['wall_clock']:9.1f}s"
+            f"{chain_wall_clock:9.1f}s"
         )
+    print("* Bellek ölçülmedi -- model adına göre elle yazılmış kaba tahmin (ESTIMATED_ENGINE_MEMORY_MB).")
 
     print("-" * 120)
     print(
