@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -13,6 +13,7 @@ const document: DocumentMetadata = {
   document_type_label: "Dilekçe",
   compliance_status: "compliant",
   summary: "Yıllık izin talebi",
+  uploader_username: "employee-a",
 };
 
 const analysis: DocumentAnalysis = {
@@ -115,6 +116,122 @@ describe("DocumentsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Liste görünümüne dön" }));
     expect(onCloseDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows who uploaded each document in the manager view", () => {
+    renderPage(
+      <DocumentsPage
+        documents={[document]}
+        selected={document}
+        analysis={analysis}
+        loading={false}
+        uploading={false}
+        error={null}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+        onSelect={vi.fn()}
+        showUploader
+      />,
+    );
+
+    expect(
+      within(screen.getByRole("list", { name: "Evrak listesi" })).getByText(
+        /Yükleyen: employee-a/,
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Ayrıntılar" }));
+    expect(screen.getByText("Yükleyen")).toBeInTheDocument();
+    expect(screen.getByText("employee-a")).toBeInTheDocument();
+  });
+
+  it("shows the on-demand detailed summary action in the default summary tab", async () => {
+    const onGenerateDetailedSummary = vi.fn().mockResolvedValue(undefined);
+    renderPage(
+      <DocumentsPage
+        documents={[document]}
+        selected={document}
+        analysis={analysis}
+        loading={false}
+        uploading={false}
+        error={null}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+        onSelect={vi.fn()}
+        onGenerateDetailedSummary={onGenerateDetailedSummary}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Detaylı özet oluştur" }));
+
+    await waitFor(() =>
+      expect(onGenerateDetailedSummary).toHaveBeenCalledWith(document.storage_path),
+    );
+  });
+
+  it("shows an existing detailed summary instead of its generation action", () => {
+    renderPage(
+      <DocumentsPage
+        documents={[document]}
+        selected={document}
+        analysis={{ ...analysis, detailed_summary: "Belgenin kapsamlı özeti." }}
+        loading={false}
+        uploading={false}
+        error={null}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+        onSelect={vi.fn()}
+        onGenerateDetailedSummary={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(screen.getByText("Belgenin kapsamlı özeti.")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Detaylı özet oluştur" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows detailed summary generation as loading only for the matching document", () => {
+    const otherDocument: DocumentMetadata = {
+      ...document,
+      file_name: "ikinci-evrak.pdf",
+      storage_path: "documents/ikinci-evrak.pdf",
+      summary: "İkinci evrak",
+    };
+    const view = renderPage(
+      <DocumentsPage
+        documents={[document, otherDocument]}
+        selected={otherDocument}
+        analysis={{ ...analysis, ...otherDocument }}
+        loading={false}
+        uploading={false}
+        error={null}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+        onSelect={vi.fn()}
+        onGenerateDetailedSummary={vi.fn().mockResolvedValue(undefined)}
+        generatingDetailedSummary
+        generatingDetailedSummaryPath={document.storage_path}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Detaylı özet oluştur" })).not.toBeDisabled();
+
+    view.rerender(
+      <MemoryRouter>
+        <DocumentsPage
+          documents={[document, otherDocument]}
+          selected={document}
+          analysis={analysis}
+          loading={false}
+          uploading={false}
+          error={null}
+          onUpload={vi.fn().mockResolvedValue(undefined)}
+          onSelect={vi.fn()}
+          onGenerateDetailedSummary={vi.fn().mockResolvedValue(undefined)}
+          generatingDetailedSummary
+          generatingDetailedSummaryPath={document.storage_path}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: "Detaylı özet oluştur" })).toHaveAttribute("aria-busy", "true");
   });
 
   it("switches between the supported reference detail tabs", () => {
@@ -288,6 +405,43 @@ describe("DocumentsPage", () => {
     expect(analyzeButton).toBeInTheDocument();
     fireEvent.click(analyzeButton);
     expect(onAnalyzeDocument).toHaveBeenCalledWith("pending:test-document");
+  });
+
+  it("shows live elapsed seconds while the selected document is being analyzed", () => {
+    vi.useFakeTimers();
+    const pendingDocument: DocumentMetadata = {
+      ...document,
+      storage_path: "pending:timed-document",
+      document_type: "",
+      document_type_label: "",
+      compliance_status: "",
+      summary: "",
+      analyzed: false,
+    };
+
+    const view = renderPage(
+      <DocumentsPage
+        documents={[pendingDocument]}
+        selected={pendingDocument}
+        analysis={null}
+        loading={false}
+        uploading={false}
+        analyzingStoragePath={pendingDocument.storage_path}
+        error={null}
+        onUpload={vi.fn().mockResolvedValue(undefined)}
+        onAnalyzeDocument={vi.fn().mockResolvedValue(undefined)}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByRole("button", { name: "0 saniyedir analiz ediliyor" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "0 saniyedir analiz ediliyor" })[0]).toHaveAttribute("aria-busy", "true");
+
+    act(() => vi.advanceTimersByTime(3000));
+    expect(screen.getAllByRole("button", { name: "3 saniyedir analiz ediliyor" })).toHaveLength(2);
+
+    view.unmount();
+    vi.useRealTimers();
   });
 
   it("makes review the primary action and explains the number of issues", () => {
