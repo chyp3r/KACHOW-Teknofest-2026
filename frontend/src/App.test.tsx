@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
 const state = vi.hoisted(() => ({
   user: null as null | {
-    id: string; username: string; email: string; role: "employee";
+    id: string; username: string; email: string; role: "employee" | "manager" | "admin";
     clearance_level: "hizmete_ozel"; is_active: boolean; is_deleted: boolean;
   },
   selectedDocument: null as null | {
@@ -14,9 +14,12 @@ const state = vi.hoisted(() => ({
     document_type: string; document_type_label: string;
     compliance_status: string; summary: string; analyzed: boolean;
   },
+  upload: vi.fn(),
   analyze: vi.fn(),
   chatSend: vi.fn(),
   chatNew: vi.fn(),
+  chatCancel: vi.fn(),
+  resolveChatSession: null as null | ((sessionId: string) => void),
   activeChatSessionId: null as string | null,
 }));
 
@@ -28,15 +31,17 @@ vi.mock("./hooks/useDocuments", () => ({ useDocuments: () => ({
   selectedDocument: state.selectedDocument, analysis: null, loading: false,
   uploading: false, analyzing: false, analyzingStoragePath: null,
   updatingFields: false, deleting: false, error: null,
-  setSelectedDocument: vi.fn(), upload: vi.fn(), analyze: state.analyze,
+  setSelectedDocument: vi.fn(), upload: state.upload, analyze: state.analyze,
   updateFields: vi.fn(), deleteDocument: vi.fn(),
 }) }));
 vi.mock("./hooks/useChatWorkflow", () => ({ useChatWorkflow: (
   _document: unknown,
   _userId: string,
   activeSessionId: string | null,
+  onSessionResolved?: (sessionId: string) => void,
 ) => {
   state.activeChatSessionId = activeSessionId;
+  state.resolveChatSession = onSessionResolved ?? null;
   return ({
   sessions: [], sessionsLoading: false, sessionsRefreshing: false, sessionsError: null,
   historyLoading: false, historyError: null,
@@ -44,7 +49,7 @@ vi.mock("./hooks/useChatWorkflow", () => ({ useChatWorkflow: (
   nodeStatus: {}, nodeResults: {}, nodeMeta: {}, planSteps: [],
   nodeLabels: {}, nodeOrder: [], planIntent: "", logs: [],
   toolCalls: [], guardrailEvents: [], send: state.chatSend, resume: vi.fn(), newChat: state.chatNew,
-  cancel: vi.fn(), addUploadMessage: vi.fn(), retrySessions: vi.fn(), retryHistory: vi.fn(),
+  cancel: state.chatCancel, addUploadMessage: vi.fn(), retrySessions: vi.fn(), retryHistory: vi.fn(),
   });
 } }));
 vi.mock("./layouts/AppShell", () => ({ AppShell: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
@@ -54,8 +59,9 @@ vi.mock("./pages/LoginPage", () => ({ LoginPage: () => <h1>Login screen</h1> }))
 vi.mock("./pages/HomePage", () => ({ HomePage: () => <h1>Home screen</h1> }));
 vi.mock("./pages/DraftsPage", () => ({ DraftsPage: () => <h1>Drafts screen</h1> }));
 vi.mock("./pages/ChatsPage", () => ({ ChatsPage: ({ onSend, onNewChat }: { onSend: (text: string, level: "balanced", useDocument: boolean) => Promise<void>; onNewChat: () => void }) => <><h1>Chats screen</h1><button onClick={() => void onSend("Analiz et", "balanced", true)}>Send pending document</button><button onClick={onNewChat}>New chat</button></> }));
-vi.mock("./pages/DocumentsPage", () => ({ DocumentsPage: ({ onCloseDocument }: { onCloseDocument?: () => void }) => <><h1>Documents screen</h1>{onCloseDocument && <button onClick={onCloseDocument}>Liste görünümüne dön</button>}</> }));
+vi.mock("./pages/DocumentsPage", () => ({ DocumentsPage: ({ onCloseDocument, onUpload }: { onCloseDocument?: () => void; onUpload: (file: File) => Promise<void> }) => <><h1>Documents screen</h1><button onClick={() => void onUpload(new File(["belge"], "yeni.pdf", { type: "application/pdf" }))}>Upload document</button>{onCloseDocument && <button onClick={onCloseDocument}>Liste görünümüne dön</button>}</> }));
 vi.mock("./pages/AdminPage", () => ({ AdminPage: () => <h1>Admin screen</h1> }));
+vi.mock("./pages/StatusPage", () => ({ StatusPage: () => <h1>Status screen</h1> }));
 
 function LocationProbe() {
   return <output>{useLocation().pathname}</output>;
@@ -69,9 +75,12 @@ function RouteControls() {
 describe("application route guards", () => {
   beforeEach(() => {
     state.selectedDocument = null;
+    state.upload.mockReset();
     state.analyze.mockReset();
     state.chatSend.mockReset();
     state.chatNew.mockReset();
+    state.chatCancel.mockReset();
+    state.resolveChatSession = null;
     state.activeChatSessionId = null;
     sessionStorage.clear();
   });
@@ -92,6 +101,35 @@ describe("application route guards", () => {
 
     await waitFor(() => expect(screen.getByText("/home")).toBeInTheDocument());
     expect(screen.queryByText("Admin screen")).not.toBeInTheDocument();
+  });
+
+  it("allows managers into management but redirects them away from system status", async () => {
+    state.user = {
+      id: "manager-1", username: "manager", email: "manager@example.test",
+      role: "manager", clearance_level: "hizmete_ozel", is_active: true, is_deleted: false,
+    };
+    const management = render(
+      <MemoryRouter initialEntries={["/admin"]}><App /><LocationProbe /></MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Admin screen")).toBeInTheDocument();
+    expect(screen.getByText("/admin")).toBeInTheDocument();
+    management.unmount();
+
+    render(<MemoryRouter initialEntries={["/status"]}><App /><LocationProbe /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText("/home")).toBeInTheDocument());
+    expect(screen.queryByText("Status screen")).not.toBeInTheDocument();
+  });
+
+  it("keeps system status available to admins", async () => {
+    state.user = {
+      id: "admin-1", username: "admin", email: "admin@example.test",
+      role: "admin", clearance_level: "hizmete_ozel", is_active: true, is_deleted: false,
+    };
+    render(<MemoryRouter initialEntries={["/status"]}><App /><LocationProbe /></MemoryRouter>);
+
+    expect(await screen.findByText("Status screen")).toBeInTheDocument();
+    expect(screen.getByText("/status")).toBeInTheDocument();
   });
 
   it("uses the dashboard as the authenticated entry point", async () => {
@@ -168,6 +206,31 @@ describe("application route guards", () => {
     );
   });
 
+  it("opens a staged document route immediately after upload", async () => {
+    state.user = {
+      id: "employee-1", username: "employee", email: "employee@example.test",
+      role: "employee", clearance_level: "hizmete_ozel", is_active: true, is_deleted: false,
+    };
+    state.upload.mockResolvedValue({
+      file_name: "yeni.pdf",
+      storage_path: "pending:document",
+      upload_time: "2026-08-24T16:49:00Z",
+      document_type: "",
+      document_type_label: "",
+      compliance_status: "",
+      summary: "",
+      analyzed: false,
+    });
+
+    render(<MemoryRouter initialEntries={["/documents"]}><App /><LocationProbe /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Upload document" }));
+
+    await waitFor(() => expect(state.upload).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByText("/documents/pending%3Adocument")).toBeInTheDocument(),
+    );
+  });
+
   it("restores the last chat after leaving the page until a new chat is requested", async () => {
     state.user = {
       id: "employee-1", username: "employee", email: "employee@example.test",
@@ -192,5 +255,34 @@ describe("application route guards", () => {
     expect(state.activeChatSessionId).toBeNull();
     expect(sessionStorage.getItem("kachow.chat.last-session.employee-1")).toBeNull();
     expect(state.chatNew).toHaveBeenCalledOnce();
+  });
+
+  it("keeps chat processing when navigating away and does not pull the user back", async () => {
+    state.user = {
+      id: "employee-1", username: "employee", email: "employee@example.test",
+      role: "employee", clearance_level: "hizmete_ozel", is_active: true, is_deleted: false,
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/chats"]}>
+        <App />
+        <RouteControls />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Chats screen")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Go home" }));
+    await waitFor(() => expect(screen.getByText("/home")).toBeInTheDocument());
+
+    expect(state.chatCancel).not.toHaveBeenCalled();
+    act(() => state.resolveChatSession?.("employee-1:web:background"));
+
+    await waitFor(() =>
+      expect(sessionStorage.getItem("kachow.chat.last-session.employee-1"))
+        .toBe("employee-1:web:background"),
+    );
+    expect(screen.getByText("/home")).toBeInTheDocument();
+    expect(state.chatCancel).not.toHaveBeenCalled();
   });
 });

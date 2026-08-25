@@ -34,7 +34,7 @@ export function useDocuments(
   const textQuery = useQuery({
     queryKey: queryKeys.documentText(selectedDocument?.storage_path ?? ""),
     queryFn: () => documentService.getText(selectedDocument!.storage_path),
-    enabled: Boolean(selectedDocument),
+    enabled: Boolean(selectedDocument) && selectedDocument?.analyzed !== false,
     staleTime: 60_000,
   });
   const analyzeMutation = useMutation({
@@ -188,6 +188,9 @@ export function useDocuments(
       : null,
     updatingFields: updateFieldsMutation.isPending,
     generatingDetailedSummary: detailedSummaryMutation.isPending,
+    generatingDetailedSummaryPath: detailedSummaryMutation.isPending
+      ? detailedSummaryMutation.variables ?? null
+      : null,
     savingText: updateTextMutation.isPending,
     reextracting: reextractTextMutation.isPending,
     deleting: removeMutation.isPending,

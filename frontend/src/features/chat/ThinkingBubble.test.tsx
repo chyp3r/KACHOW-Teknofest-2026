@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThinkingBubble } from "./ThinkingBubble";
 
@@ -32,6 +32,23 @@ describe("ThinkingBubble", () => {
     const steps = screen.getAllByRole("listitem");
     const draftStep = steps.find((item) => item.textContent?.includes("Taslak"));
     expect(draftStep).toHaveClass("is-running");
+  });
+
+  it("indents source excerpts beneath draft creation as its subprocess", () => {
+    render(
+      <ThinkingBubble
+        {...baseProps}
+        nodeOrder={["planning", "draft", "source_chunks"]}
+        nodeLabels={{ draft: "Taslak Oluşturma", source_chunks: "Kaynak Alıntılar" }}
+        nodeStatus={{ planning: "completed", draft: "running", source_chunks: "completed" }}
+      />,
+    );
+
+    const draftStep = screen.getByText("Taslak Oluşturma").closest("li");
+    expect(draftStep).not.toBeNull();
+    const substeps = within(draftStep as HTMLElement).getByRole("list", { name: "Taslak Oluşturma alt adımları" });
+    expect(within(substeps).getByText("Kaynak Alıntılar")).toBeInTheDocument();
+    expect(within(substeps).getByText("Kaynak Alıntılar").closest("li")).toHaveClass("thinking-bubble-substep");
   });
 
   it("counts up the total elapsed time since the turn started", () => {

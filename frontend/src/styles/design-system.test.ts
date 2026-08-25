@@ -3,11 +3,24 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const css = readFileSync("src/styles/design-system.css", "utf8");
+const appCss = readFileSync("src/styles/App.css", "utf8");
 const integrationCss = readFileSync("src/styles/integration.css", "utf8");
 const referenceCss = readFileSync("src/styles/reference-ui.css", "utf8");
 const messagingCss = readFileSync("src/styles/messaging.css", "utf8");
 
 describe("design-system tokens", () => {
+  it("keeps live chat timers inline without shifting at double digits", () => {
+    expect(appCss).toMatch(
+      /\.thinking-bubble-header\s*{[^}]*justify-content: flex-start;/,
+    );
+    expect(appCss).toMatch(
+      /\.thinking-bubble-elapsed,[\s\S]*?\.thinking-bubble-step-time\s*{[^}]*flex: 0 0 5ch;[^}]*white-space: nowrap;[^}]*font-variant-numeric: tabular-nums;/,
+    );
+    expect(appCss).not.toMatch(
+      /\.thinking-bubble-step-time\s*{[^}]*margin-left: auto;/,
+    );
+  });
+
   it("keeps drawers out of page flow with stable padded person results", () => {
     expect(css).toContain("position: fixed");
     expect(css).toContain("height: 100dvh");
@@ -25,12 +38,57 @@ describe("design-system tokens", () => {
     );
   });
 
-  it("preserves the dashboard title hierarchy and the draft-style document rows", () => {
+  it("preserves the dashboard title hierarchy and status-safe document master rows", () => {
     expect(referenceCss).toContain("line-height: 1.05");
     expect(referenceCss).toContain(".home-activity-panel > header > .select { width: 10rem; flex: 0 0 10rem; }");
-    expect(referenceCss).toMatch(/\.draft-master li > button \{[\s\S]*?min-height: 7rem;[\s\S]*?padding: 0\.875rem;/);
-    expect(referenceCss).toMatch(/\.document-master-list \.document-list-item \{[\s\S]*?height: 7rem;[\s\S]*?min-height: 7rem;/);
-    expect(referenceCss).toMatch(/\.document-master-list \.document-list-item \{[\s\S]*?align-items: start;[\s\S]*?gap: 0\.75rem;[\s\S]*?padding: 0\.875rem 0\.5rem 0\.875rem 0\.875rem;/);
+    expect(referenceCss).toMatch(/\.draft-master li > button \{[\s\S]*?min-height: 7rem;[\s\S]*?padding: var\(--space-4\);/);
+    expect(referenceCss).toMatch(/\.document-master-list \.document-list-item \{[\s\S]*?height: auto;[\s\S]*?min-height: 8rem;/);
+    expect(referenceCss).toMatch(/\.document-master-list \.document-list-item \{[\s\S]*?align-items: start;[\s\S]*?gap: 0\.75rem;[\s\S]*?padding: var\(--space-4\) var\(--space-2\) var\(--space-5\) var\(--space-4\);/);
+  });
+
+  it("keeps document and draft master lists padded, scrollable, and inside the viewport", () => {
+    expect(referenceCss).toMatch(
+      /\.documents-page,[\s\S]*?\.drafts-page\s*\{[^}]*height: 100%;[^}]*min-height: 0;[^}]*padding-inline: var\(--page-gutter\);[^}]*overflow: hidden;/,
+    );
+    expect(referenceCss).toMatch(
+      /\.document-master-column \.document-result-count\s*\{[^}]*padding: var\(--space-3\) var\(--space-4\);/,
+    );
+    expect(referenceCss).toMatch(
+      /\.draft-master > header\s*\{[^}]*padding: var\(--space-3\) var\(--space-4\);/,
+    );
+    expect(referenceCss).toMatch(
+      /\.draft-master\s*\{[^}]*display: flex;[^}]*min-height: 0;[^}]*flex-direction: column;/,
+    );
+    expect(referenceCss).toMatch(
+      /\.draft-master > ul\s*\{[^}]*min-height: 0;[^}]*flex: 1;[^}]*overflow-y: auto;/,
+    );
+    expect(referenceCss).toMatch(
+      /\.document-master-pagination\s*\{[^}]*min-height: calc\(var\(--touch-target\) \+ var\(--space-4\)\);[^}]*flex: 0 0 auto;/,
+    );
+    expect(referenceCss).toMatch(
+      /@media \(max-width: 47\.5rem\)[\s\S]*?\.document-library-layout\s*\{[^}]*width: 100%;[^}]*margin-inline: 0;/,
+    );
+    expect(referenceCss).toMatch(
+      /@media \(max-width: 47\.5rem\)[\s\S]*?\.document-master-list\s*\{[^}]*max-height: none;[^}]*overflow-y: visible;[^}]*scrollbar-gutter: auto;/,
+    );
+    expect(referenceCss).toMatch(
+      /@media \(max-width: 30rem\)[\s\S]*?\.document-master-list \.document-item-metadata\s*\{[^}]*display: grid;[^}]*grid-template-columns: 1fr;[^}]*justify-items: start;/,
+    );
+  });
+
+  it("lets the legislation graph fill its page without losing mobile page scrolling", () => {
+    expect(integrationCss).toMatch(
+      /\.graph-page\s*\{[^}]*display: flex;[^}]*height: 100%;[^}]*min-height: 0;[^}]*overflow: hidden;/,
+    );
+    expect(integrationCss).toMatch(
+      /\.graph-page > \.entity-graph-view\s*\{[^}]*display: flex;[^}]*min-height: 0;[^}]*flex: 1;/,
+    );
+    expect(integrationCss).toMatch(
+      /\.graph-page \.interactive-graph\s*\{[^}]*grid-template-rows: auto minmax\(0, 1fr\) auto;/,
+    );
+    expect(integrationCss).toMatch(
+      /@media \(max-width: 47\.5rem\)[\s\S]*?\.graph-page\s*\{[^}]*overflow-y: auto;/,
+    );
   });
 
   it.each([
@@ -46,6 +104,10 @@ describe("design-system tokens", () => {
 
   it("uses the shared two-pixel focus ring", () => {
     expect(css).toMatch(/focus-visible[\s\S]*outline: 2px solid var\(--focus-ring\);[\s\S]*outline-offset: 2px;/);
+  });
+
+  it("defines the shared loading rotation used by spinners and loading icons", () => {
+    expect(css).toMatch(/@keyframes spin\s*{[^}]*transform: rotate\(360deg\);/);
   });
 
   it("keeps mobile, tablet, and desktop page gutters token-based", () => {
@@ -68,6 +130,15 @@ describe("design-system tokens", () => {
 
   it("keeps the user access header padded and flush with its table", () => {
     expect(referenceCss).toMatch(/\.users-panel > \.section-header \{[^}]*margin: 0;[^}]*padding: 1rem 1\.25rem;/);
+  });
+
+  it("reserves the full profile avatar width before the account identity", () => {
+    expect(referenceCss).toMatch(
+      /\.profile-summary-heading\s*\{[^}]*--profile-avatar-size: 4\.25rem;[^}]*grid-template-columns: var\(--profile-avatar-size\) minmax\(0, 1fr\) auto;[^}]*column-gap: var\(--space-5\);/,
+    );
+    expect(referenceCss).toMatch(
+      /\.profile-avatar\s*\{[^}]*width: var\(--profile-avatar-size\);[^}]*height: var\(--profile-avatar-size\);/,
+    );
   });
 
   it("neutralizes persisted compact navigation at the mobile breakpoint", () => {

@@ -78,7 +78,10 @@ async def _conversation_response(
     message_repository: ConversationMessageRepository,
 ) -> ConversationResponse:
     unread = await message_repository.count_unread(
-        conversation.id, conversation.company_id, caller_participant.last_read_message_id
+        conversation.id,
+        conversation.company_id,
+        caller_participant.user_id,
+        caller_participant.last_read_message_id,
     )
     return ConversationResponse(
         id=conversation.id,

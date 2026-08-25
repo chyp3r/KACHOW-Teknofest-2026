@@ -26,7 +26,7 @@ function renderWithQueryClient(ui: ReactNode) {
 const longDraftContent = "İkinci sürüm taslak içeriği. ".repeat(24);
 const draft = {
   id: "draft-2", user_id: "user-1", session_id: "session-1", document_id: "doc-1",
-  version: 2, parent_draft_id: "draft-1", content: longDraftContent, correspondence_type: "resmi_yazi",
+  version: 2, parent_draft_id: "draft-1", content: longDraftContent, correspondence_type: "bilgilendirme_metni",
   destination: "Hukuk Birimi", status: "ready", confidence_score: 92,
   requires_human_approval: true, attempts: 2, verification: null, judge: null,
   missing_information: null, instructions: null,
@@ -45,6 +45,7 @@ const sourceDocument = {
 
 const deleteDraft = vi.fn().mockResolvedValue(undefined);
 const updateDestination = vi.fn().mockResolvedValue(undefined);
+const approveReview = vi.fn().mockResolvedValue(undefined);
 const sendDraft = vi.fn().mockResolvedValue(undefined);
 const respondToShare = vi.fn().mockResolvedValue(undefined);
 const markShareRead = vi.fn().mockResolvedValue(undefined);
@@ -59,6 +60,7 @@ vi.mock("../hooks/useDrafts", () => ({ useDrafts: () => ({
   loading: false, detailLoading: false, refreshing: false, error: null,
   deleteDraft, deleting: false,
   updateDestination, updatingDestination: false,
+  approveReview, approvingReview: false,
   sendDraft, sending: false, respondToShare, responding: false,
   markShareRead, markingShareRead: false, revokeShare, revokingShare: false,
 }) }));
@@ -86,6 +88,7 @@ describe("DraftsPage", () => {
     outboxShares = [];
     sendDraft.mockClear();
     respondToShare.mockClear();
+    approveReview.mockClear();
     suggestRouting.mockClear();
   });
 
@@ -167,11 +170,31 @@ describe("DraftsPage", () => {
     expect(suggestRouting).toHaveBeenCalledWith({
       draft: longDraftContent,
       confidence_score: 92,
-      document_type: "resmi_yazi",
+      document_type: "petition",
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Öneriyi hedef birim yap" }));
     expect(updateDestination).toHaveBeenCalledWith("draft-2", "Strateji Geliştirme Birimi");
+  });
+
+  it("lets the authorized user approve the required human review", async () => {
+    renderWithQueryClient(
+      <MemoryRouter>
+        <DraftsPage
+          documents={[sourceDocument]}
+          selected={null}
+          analysis={null}
+          activeDraftId="draft-2"
+          onSelect={vi.fn()}
+          onOpenDraft={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Kontrol" }));
+    fireEvent.click(screen.getByRole("button", { name: "İnceledim, onaylıyorum" }));
+
+    await waitFor(() => expect(approveReview).toHaveBeenCalledWith("draft-2"));
   });
 
   it("keeps the creation form hidden until the header action is used", () => {

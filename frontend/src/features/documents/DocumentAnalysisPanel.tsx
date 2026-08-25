@@ -172,7 +172,7 @@ export function DocumentAnalysisPanel({
       await onGenerateDetailedSummary();
     } catch (error) {
       setDetailedSummaryError(
-        error instanceof Error ? error.message : "Ayrıntılı özet oluşturulamadı.",
+        error instanceof Error ? error.message : "Detaylı özet oluşturulamadı.",
       );
     }
   };

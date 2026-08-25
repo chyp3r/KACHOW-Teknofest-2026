@@ -65,6 +65,7 @@ async def test_update_destination_mutates_the_row_in_place_and_flushes(repo, moc
     assert draft.destination_unit_id == "unit-new"
     assert draft.destination_justification == "Yeni gerekçe."
     mock_session.flush.assert_awaited_once()
+    mock_session.refresh.assert_awaited_once_with(draft, attribute_names=["updated_at"])
     # No `db.execute()` -- this mutates the already-loaded ORM object and
     # relies on the caller's own commit/autoflush, same as
     # `create_version`'s `self.db.add`, not a raw UPDATE statement.
@@ -83,6 +84,28 @@ async def test_update_destination_leaves_the_justification_untouched_when_omitte
     )
 
     assert draft.destination_justification == "Orijinal gerekçe."
+
+
+@pytest.mark.asyncio
+async def test_approve_review_marks_only_the_human_gate_complete(repo, mock_session):
+    draft = DraftModel(
+        id="draft-1",
+        company_id="company-1",
+        version=1,
+        content="içerik",
+        status="NEEDS_HUMAN_APPROVAL",
+        requires_human_approval=True,
+        missing_information=[{"key": "sayi", "label": "Sayı"}],
+    )
+
+    updated = await repo.approve_review(draft)
+
+    assert updated is draft
+    assert draft.requires_human_approval is False
+    assert draft.status == "NEEDS_INPUT"
+    assert draft.missing_information == [{"key": "sayi", "label": "Sayı"}]
+    mock_session.flush.assert_awaited_once()
+    mock_session.refresh.assert_awaited_once_with(draft, attribute_names=["updated_at"])
 
 
 @pytest.mark.asyncio

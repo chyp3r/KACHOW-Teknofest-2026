@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useMatch, useNavigate } from "react-router-dom";
 import { DecisionFlow } from "./features/chat/DecisionFlow";
 import { useAuth } from "./hooks/useAuth";
@@ -50,13 +50,19 @@ function AuthenticatedApp({ userId }: { userId: string }) {
   const setSelectedDocument = documents.setSelectedDocument;
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
+  const locationPathnameRef = useRef(location.pathname);
+  locationPathnameRef.current = location.pathname;
   const onSessionResolved = useCallback((sessionId: string) => {
     setRetainedSessionId(sessionId);
     sessionStorage.setItem(lastChatSessionKey(userId), sessionId);
-    navigate(`/chats/${encodeURIComponent(sessionId)}`, { replace: true });
+    // The session event may arrive after the user has navigated away while
+    // the workflow continues in the background. Preserve the session for a
+    // later return, but do not pull the user back into the chat page.
+    if (locationPathnameRef.current.startsWith("/chats")) {
+      navigate(`/chats/${encodeURIComponent(sessionId)}`, { replace: true });
+    }
   }, [navigate, userId]);
   const chat = useChatWorkflow(documents.selectedDocument, userId, activeSessionId, onSessionResolved);
-  const cancelChat = chat.cancel;
 
   useEffect(() => {
     if (!routeSessionId) return;
@@ -85,17 +91,17 @@ function AuthenticatedApp({ userId }: { userId: string }) {
 
   useEffect(() => {
     if (!location.pathname.startsWith("/chats")) {
-      cancelChat();
       setChatHistoryOpen(false);
       setWorkflowOpen(false);
     }
-  }, [cancelChat, location.pathname]);
+  }, [location.pathname]);
 
   const selectDocument = (document: DocumentMetadata) => {
     documents.setSelectedDocument(document);
   };
   const uploadDocument = async (file: File) => {
-    await documents.upload(file);
+    const uploaded = await documents.upload(file);
+    navigate(`/documents/${encodeURIComponent(uploaded.storage_path)}`);
   };
   const uploadDocumentToChat = async (file: File) => {
     const uploaded = await documents.upload(file);
@@ -121,7 +127,8 @@ function AuthenticatedApp({ userId }: { userId: string }) {
     }
     await chat.send(text, level, useDocument, analyzedStoragePath, draftId);
   };
-  const canManage = user?.role === "admin" || user?.role === "manager";
+  const canManageCompany = user?.role === "admin" || user?.role === "manager";
+  const isAdmin = user?.role === "admin";
   const chatsPage = (
     <ChatsPage
       documents={documents.documents}
@@ -210,8 +217,8 @@ function AuthenticatedApp({ userId }: { userId: string }) {
           <Route path="/home" element={<HomePage documents={documents.documents} loading={documents.loading} />} />
           <Route path="/chats" element={chatsPage} />
           <Route path="/chats/:sessionId" element={chatsPage} />
-          <Route path="/documents" element={<DocumentsPage canPush={canManage} documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} loading={documents.loading} uploading={documents.uploading} updatingFields={documents.updatingFields} analyzingStoragePath={documents.analyzingStoragePath} deletingDocument={documents.deleting} error={documents.error} onUpload={uploadDocument} onUpdateFields={documents.updateFields} onAnalyzeDocument={analyzeDocument} onDeleteDocument={documents.deleteDocument} onGenerateDetailedSummary={documents.generateDetailedSummary} generatingDetailedSummary={documents.generatingDetailedSummary} documentText={documents.documentText} onSaveText={documents.saveText} savingText={documents.savingText} onReextract={documents.reextractText} reextracting={documents.reextracting} onSelect={(document) => { selectDocument(document); navigate(`/documents/${encodeURIComponent(document.storage_path)}`); }} onCloseDocument={() => navigate("/documents")} />} />
-          <Route path="/documents/:storagePath" element={<DocumentsPage canPush={canManage} documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} loading={documents.loading} uploading={documents.uploading} updatingFields={documents.updatingFields} analyzingStoragePath={documents.analyzingStoragePath} deletingDocument={documents.deleting} error={documents.error} onUpload={uploadDocument} onUpdateFields={documents.updateFields} onAnalyzeDocument={analyzeDocument} onDeleteDocument={documents.deleteDocument} onGenerateDetailedSummary={documents.generateDetailedSummary} generatingDetailedSummary={documents.generatingDetailedSummary} documentText={documents.documentText} onSaveText={documents.saveText} savingText={documents.savingText} onReextract={documents.reextractText} reextracting={documents.reextracting} onSelect={(document) => { selectDocument(document); navigate(`/documents/${encodeURIComponent(document.storage_path)}`); }} onCloseDocument={() => navigate("/documents")} />} />
+          <Route path="/documents" element={<DocumentsPage canPush={canManageCompany} showUploader={canManageCompany} documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} loading={documents.loading} uploading={documents.uploading} updatingFields={documents.updatingFields} analyzingStoragePath={documents.analyzingStoragePath} deletingDocument={documents.deleting} error={documents.error} onUpload={uploadDocument} onUpdateFields={documents.updateFields} onAnalyzeDocument={analyzeDocument} onDeleteDocument={documents.deleteDocument} onGenerateDetailedSummary={documents.generateDetailedSummary} generatingDetailedSummary={documents.generatingDetailedSummary} generatingDetailedSummaryPath={documents.generatingDetailedSummaryPath} documentText={documents.documentText} onSaveText={documents.saveText} savingText={documents.savingText} onReextract={documents.reextractText} reextracting={documents.reextracting} onSelect={(document) => { selectDocument(document); navigate(`/documents/${encodeURIComponent(document.storage_path)}`); }} onCloseDocument={() => navigate("/documents")} />} />
+          <Route path="/documents/:storagePath" element={<DocumentsPage canPush={canManageCompany} showUploader={canManageCompany} documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} loading={documents.loading} uploading={documents.uploading} updatingFields={documents.updatingFields} analyzingStoragePath={documents.analyzingStoragePath} deletingDocument={documents.deleting} error={documents.error} onUpload={uploadDocument} onUpdateFields={documents.updateFields} onAnalyzeDocument={analyzeDocument} onDeleteDocument={documents.deleteDocument} onGenerateDetailedSummary={documents.generateDetailedSummary} generatingDetailedSummary={documents.generatingDetailedSummary} generatingDetailedSummaryPath={documents.generatingDetailedSummaryPath} documentText={documents.documentText} onSaveText={documents.saveText} savingText={documents.savingText} onReextract={documents.reextractText} reextracting={documents.reextracting} onSelect={(document) => { selectDocument(document); navigate(`/documents/${encodeURIComponent(document.storage_path)}`); }} onCloseDocument={() => navigate("/documents")} />} />
           <Route path="/drafts" element={<DraftsPage documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} onSelect={selectDocument} onOpenDraft={(draftId) => navigate(`/drafts/${encodeURIComponent(draftId)}`)} onCloseDraft={() => navigate("/drafts")} />} />
           <Route path="/drafts/:draftId" element={<DraftsPage documents={documents.documents} selected={documents.selectedDocument} analysis={documents.analysis} activeDraftId={activeDraftId} onSelect={selectDocument} onOpenDraft={(draftId) => navigate(`/drafts/${encodeURIComponent(draftId)}`)} onCloseDraft={() => navigate("/drafts")} />} />
           <Route path="/graph" element={<GraphPage />} />
@@ -219,8 +226,8 @@ function AuthenticatedApp({ userId }: { userId: string }) {
           <Route path="/messages/:conversationId" element={<MessagesPage currentUserId={userId} activeConversationId={activeConversationId} onSelectConversation={(conversationId) => navigate(`/messages/${encodeURIComponent(conversationId)}`)} onCloseConversation={() => navigate("/messages")} />} />
           <Route path="/routing" element={<Navigate to="/drafts" replace />} />
           <Route path="/account" element={<AccountPage />} />
-          <Route path="/admin" element={canManage ? <AdminPage onLogin={() => navigate("/login")} /> : <Navigate to="/home" replace />} />
-          <Route path="/status" element={canManage ? <StatusPage /> : <Navigate to="/home" replace />} />
+          <Route path="/admin" element={canManageCompany ? <AdminPage onLogin={() => navigate("/login")} /> : <Navigate to="/home" replace />} />
+          <Route path="/status" element={isAdmin ? <StatusPage /> : <Navigate to="/home" replace />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>

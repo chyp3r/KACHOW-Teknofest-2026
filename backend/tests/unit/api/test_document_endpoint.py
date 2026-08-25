@@ -297,7 +297,7 @@ def test_generate_detailed_summary_surfaces_a_generation_failure_as_502(_unmeter
     502, not a generic 500 or a silently empty 200."""
     service = AsyncMock()
     service.generate_detailed_summary.side_effect = AIException(
-        message="Ayrıntılı özet oluşturma zaman aşımına uğradı."
+        message="Detaylı özet oluşturma zaman aşımına uğradı."
     )
     _override(service)
 

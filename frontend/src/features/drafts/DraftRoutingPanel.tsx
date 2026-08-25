@@ -5,14 +5,17 @@ import { Button } from "../../components/Button";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useRoutingSuggestion } from "../../hooks/useRoutingSuggestion";
 import type { PersistedDraft } from "../../types/drafts";
+import { isRoutingDocumentType } from "../../types/routing";
 import { UnitPicker } from "./UnitPicker";
 
 export function DraftRoutingPanel({
   draft,
+  sourceDocumentType,
   saving,
   onSave,
 }: {
   draft: PersistedDraft;
+  sourceDocumentType?: string | null;
   saving: boolean;
   onSave: (destination: string) => void;
 }) {
@@ -27,7 +30,9 @@ export function DraftRoutingPanel({
   const suggest = () => routing.suggest({
     draft: draft.content,
     ...(confidence !== null ? { confidence_score: confidence } : {}),
-    ...(draft.correspondence_type ? { document_type: draft.correspondence_type } : {}),
+    ...(isRoutingDocumentType(sourceDocumentType)
+      ? { document_type: sourceDocumentType }
+      : {}),
   });
 
   const suggestionApplied = Boolean(
