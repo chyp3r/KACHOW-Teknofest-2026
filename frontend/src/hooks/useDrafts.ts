@@ -72,6 +72,26 @@ export function useDrafts(activeDraftId?: string, includeShares = false) {
       );
     },
   });
+  const approveReviewMutation = useMutation({
+    mutationFn: (draftId: string) => draftService.approveReview(draftId),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(queryKeys.draft(updated.id), updated);
+      queryClient.setQueryData<PersistedDraft[]>(
+        queryKeys.draftVersions(updated.id),
+        (current) => current?.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      queryClient.setQueryData<PaginatedResponse<PersistedDraft>>(
+        queryKeys.drafts(),
+        (current) =>
+          current
+            ? {
+                ...current,
+                items: current.items.map((item) => (item.id === updated.id ? updated : item)),
+              }
+            : current,
+      );
+    },
+  });
   const sendMutation = useMutation({
     mutationFn: ({ draftId, recipientIds, message }: { draftId: string; recipientIds: string[]; message?: string }) =>
       draftService.send(draftId, recipientIds, message),
@@ -93,7 +113,13 @@ export function useDrafts(activeDraftId?: string, includeShares = false) {
     mutationFn: draftService.revokeShare,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.draftOutbox }),
   });
-  const errorObject = listQuery.error ?? detailQuery.error ?? versionsQuery.error ?? inboxQuery.error ?? outboxQuery.error;
+  const errorObject =
+    listQuery.error
+    ?? detailQuery.error
+    ?? versionsQuery.error
+    ?? inboxQuery.error
+    ?? outboxQuery.error
+    ?? approveReviewMutation.error;
 
   return {
     drafts: listQuery.data?.items ?? [],
@@ -114,7 +140,9 @@ export function useDrafts(activeDraftId?: string, includeShares = false) {
           ? detailQuery.error.message
           : versionsQuery.error instanceof Error
             ? versionsQuery.error.message
-            : null,
+            : approveReviewMutation.error instanceof Error
+              ? approveReviewMutation.error.message
+              : null,
     errorObject,
     refresh: () => listQuery.refetch(),
     registerCreatedDraft,
@@ -125,6 +153,10 @@ export function useDrafts(activeDraftId?: string, includeShares = false) {
     updatingDestination: updateDestinationMutation.isPending,
     updateDestination: async (draftId: string, destination: string) => {
       await updateDestinationMutation.mutateAsync({ draftId, destination });
+    },
+    approvingReview: approveReviewMutation.isPending,
+    approveReview: async (draftId: string) => {
+      await approveReviewMutation.mutateAsync(draftId);
     },
     sending: sendMutation.isPending,
     sendDraft: async (draftId: string, recipientIds: string[], message?: string) => {
