@@ -170,10 +170,17 @@ class PaddleOCRExtractor:
         self._ocr = None
 
     def _get_ocr(self):
+        # PaddleOCR 3.x (paddlex-backed) rejects unknown kwargs outright --
+        # `show_log` was a 2.x-only flag with no successor and raises
+        # `ValueError: Unknown argument: show_log` at construction time,
+        # which `extract()`'s caller (`_run_engine`) catches and silently
+        # scores as zero fields found. `use_angle_cls` still works (mapped
+        # to `use_textline_orientation` with a deprecation warning) but the
+        # new name avoids the warning.
         if self._ocr is None:
             try:
                 from paddleocr import PaddleOCR
-                self._ocr = PaddleOCR(use_angle_cls=True, lang=self.lang, show_log=False)
+                self._ocr = PaddleOCR(use_textline_orientation=True, lang=self.lang)
             except ImportError as exc:
                 raise RuntimeError(
                     "paddleocr kurulu değil. Kurulum: pip install paddlepaddle paddleocr"
@@ -190,12 +197,15 @@ class PaddleOCRExtractor:
         for img in images:
             import numpy as np
             arr = np.array(img.convert("RGB"))
-            result = ocr.ocr(arr, cls=True)
+            # 3.x's `.ocr()` is a thin deprecated shim over `.predict()` and
+            # no longer accepts `cls=`; `.predict()` returns a list of
+            # dict-like `OCRResult` objects (one per input image) with
+            # recognised text under the `rec_texts` key -- not the old
+            # `[box, (text, score)]` tuple list `.ocr()` used to return.
+            result = ocr.predict(arr)
             page_lines = []
             if result and result[0]:
-                for line in result[0]:
-                    if line and len(line) >= 2 and line[1]:
-                        page_lines.append(str(line[1][0]))
+                page_lines = [str(text) for text in result[0].get("rec_texts", []) if text]
             pages.append("\n".join(page_lines))
         full_text = "\n\n".join(pages).strip()
         return ExtractedDocument(
