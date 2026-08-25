@@ -1,7 +1,7 @@
 from typing import List, Optional
 from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.chat.model.chat_model import ChatMessageModel, ChatSessionModel
@@ -114,11 +114,24 @@ class ChatMessageRepository:
     async def list_for_session(
         self, session_id: str, skip: int = 0, limit: int = 200
     ) -> List[ChatMessageModel]:
-        """List a session's messages, oldest first (conversation order)."""
+        """List a session's messages in deterministic conversation order.
+
+        PostgreSQL's ``now()`` is fixed for the whole transaction, so the
+        user and assistant rows written by ``record_turn`` have the exact
+        same ``created_at`` value. Ordering by that column alone therefore
+        let the database return a resume result before its structured user
+        response, which exposed the transport summary as a normal chat
+        bubble. The role and id tie-breakers preserve the write contract
+        (user, then assistant) and make pagination stable for existing rows.
+        """
         query = (
             select(ChatMessageModel)
             .where(ChatMessageModel.session_id == session_id)
-            .order_by(ChatMessageModel.created_at.asc())
+            .order_by(
+                ChatMessageModel.created_at.asc(),
+                case((ChatMessageModel.role == "user", 0), else_=1).asc(),
+                ChatMessageModel.id.asc(),
+            )
             .offset(skip)
             .limit(limit)
         )
