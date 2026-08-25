@@ -24,10 +24,13 @@ logger = logging.getLogger(__name__)
 #: render density, so a descriptive string is clearer than reusing DPI as a
 #: key for something DPI doesn't actually vary by within one call.
 _REPAIR_TEXT_CACHE_KEY = "header_text"
-#: Same role as `_REPAIR_TEXT_CACHE_KEY`, for `_repair_signature`'s
+#: Same role as `_REPAIR_TEXT_CACHE_KEY`, for `_repair_full_page`'s
 #: full-page transcription -- a distinct key in the same `repair_cache`
-#: dict, since the two repair steps are mutually exclusive per document
-#: (see `_maybe_repair_page_one`) but share the dict's lifetime.
+#: dict, populated independently of `_REPAIR_TEXT_CACHE_KEY`: the crop may
+#: already have run and been discarded by the time this one fires (see
+#: `_maybe_repair_page_one`), only the *final* text a document ends up with
+#: is ever mutually exclusive between the two, not whether both vision
+#: calls happened.
 _REPAIR_PAGE_CACHE_KEY = "full_page_text"
 
 
@@ -102,7 +105,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
                 `header_field_probe`. When it reports the signature
                 unparseable, `_maybe_repair_page_one` replaces page 1
                 wholesale with a full-page vision transcription instead of
-                the header-band-only crop (see `_repair_signature`) --
+                the header-band-only crop (see `_repair_full_page`) --
                 header-band repair alone cannot reach a signature block,
                 which sits well below the header. None disables the
                 signature-recovery escalation entirely, restoring exactly
@@ -189,6 +192,69 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
             return False
         return self.scan_text_layer_probe(content)
 
+    def _header_repair_would_regress(
+        self, original: ExtractedDocument, candidate: ExtractedDocument
+    ) -> bool:
+        """Whether `candidate`'s page 1 recovers fewer header fields than
+        `original`'s did, via `header_field_probe`.
+
+        Deliberately header-only, not signature-aware -- unlike
+        `_repair_would_regress`. `_maybe_repair_header` is never the last
+        word on a document: `_maybe_repair_page_one` inspects *its* return
+        value afterward to decide whether the signature survived the crop
+        and, if not, escalates to `_repair_full_page`. If this check also
+        reverted on signature loss, it would silently swallow that signal
+        before `_maybe_repair_page_one` ever saw it -- the document would
+        keep its unrepaired header (no worse, but no better either) instead
+        of reaching the full-page transcription that could fix both.
+
+        Measured on the real corpus: header-band repair dropped CY-050 from
+        3/3 header fields to 2/3, which still cleared
+        `_has_enough_header_fields`'s floor (`MIN_HEADER_FIELD_COUNT`), so
+        it would not have been caught by the acceptance gate downstream.
+
+        Returns:
+            False when no `header_field_probe` is configured, keeping this
+            check inert for callers that didn't opt in -- same default
+            shape as `_has_enough_header_fields`.
+        """
+        return self._header_field_count(candidate) < self._header_field_count(original)
+
+    def _repair_would_regress(
+        self, original: ExtractedDocument, candidate: ExtractedDocument
+    ) -> bool:
+        """Whether `candidate`'s page 1 recovers fewer prescribed fields
+        than `original`'s did -- header fields (see
+        `_header_repair_would_regress`), or a signature that was parseable
+        in `original` and isn't in `candidate`. Either counts as a
+        regression.
+
+        Used only by `_repair_full_page`, the strongest repair available
+        and the last one `_maybe_repair_page_one` will try -- there is no
+        further escalation to fall through to, so this is the one place
+        that must catch a regression on *either* axis before committing to
+        it. Measured on the real corpus: full-page repair dropped three
+        documents from 4/4 header fields to 3/4. A vision transcription
+        that reads a genuine document worse than the text it was meant to
+        repair must never be trusted just because it came from a "smarter"
+        model -- this makes every repair step in this class monotonic: it
+        may only add fields back, never take them away.
+
+        Returns:
+            False when neither probe is configured, keeping this check
+            inert for callers that opted into neither -- same default
+            shape as `_has_enough_header_fields`.
+        """
+        if self._header_repair_would_regress(original, candidate):
+            return True
+        if (
+            self.signature_probe is not None
+            and self.signature_probe(self._page_one(original))
+            and not self.signature_probe(self._page_one(candidate))
+        ):
+            return True
+        return False
+
     def _rank_key(self, result: ExtractedDocument) -> tuple[int, float]:
         """Ordering key for best-effort candidate selection.
 
@@ -204,7 +270,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
     async def _rasterise_page_one(self, content: bytes, raster_cache: dict):
         """Return a rasterised page-1 image for vision repair.
 
-        Shared by `_maybe_repair_header` and `_repair_signature` -- both
+        Shared by `_maybe_repair_header` and `_repair_full_page` -- both
         need exactly this image, from exactly the same source, at exactly
         `self.header_repair.dpi`, so there is exactly one place that
         reuses `raster_cache` or falls back to rendering fresh.
@@ -246,34 +312,48 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         content: bytes,
         repair_cache: dict,
     ) -> ExtractedDocument:
-        """Repair page 1 with vision -- header band, or, when the signature
-        can't be parsed (before or after that crop), the whole page instead.
+        """Repair page 1 with vision -- header band, or, when the header-band
+        crop can't reach what's missing (an unparseable signature, or a
+        header field that still doesn't parse after the crop), the whole
+        page instead.
 
         Dispatches to exactly one of `_maybe_repair_header` (crop-only,
-        today's behaviour) or `_repair_signature` (full-page replacement)
+        today's behaviour) or `_repair_full_page` (full-page replacement)
         in the common case -- a document only ever pays one of the two
-        vision costs then. `signature_probe` decides which: header-band
-        repair alone cannot reach a signature block, which sits well below
-        the header band (`HEADER_BAND_FRACTION`), so when the signer's name
-        isn't parseable at all, a full-page transcription is what actually
-        has a chance at it -- and that transcription already covers the
-        header too, so cropping it separately afterwards would be paying
-        for the same page twice. See `_repair_signature`'s own docstring
-        for the measurement behind this.
+        vision costs then. `signature_probe` decides which up front:
+        header-band repair alone cannot reach a signature block, which sits
+        well below the header band (`HEADER_BAND_FRACTION`), so when the
+        signer's name isn't parseable at all, a full-page transcription is
+        what actually has a chance at it -- and that transcription already
+        covers the header too, so cropping it separately afterwards would
+        be paying for the same page twice. See `_repair_full_page`'s own
+        docstring for the measurement behind this.
 
-        One case pays for both: header-band repair's own splice replaces
-        only the leading `HEADER_REPAIR_LINE_COUNT` lines of the page, an
-        approximation calibrated for a typical multi-paragraph letter --
-        on a short document (measured on the real corpus: CY-003/023/028,
-        each a brief one-paragraph reply) the signature block itself can
-        sit inside that range, and the splice silently discards it even
-        though it parsed fine from the pre-repair text. This is detected
-        after the fact, not predicted: if the signature was parseable
-        before header-band repair and isn't afterwards, the crop ate it --
-        fall through to a full-page transcription of the *original*
-        result. Rare (3/23 on the measured corpus) and worth the double
-        vision cost when it happens: reporting a real signer as a missing
-        required field is worse than one slow upload.
+        Two cases detect the need for the same escalation only *after* the
+        crop has already run:
+
+        - Header-band repair's own splice replaces only the leading
+          `HEADER_REPAIR_LINE_COUNT` lines of the page, an approximation
+          calibrated for a typical multi-paragraph letter -- on a short
+          document (measured on the real corpus: CY-003/023/028, each a
+          brief one-paragraph reply) the signature block itself can sit
+          inside that range, and the splice silently discards it even
+          though it parsed fine from the pre-repair text. Rare (3/23 on the
+          measured corpus) and worth the double vision cost when it
+          happens: reporting a real signer as a missing required field is
+          worse than one slow upload.
+        - The crop only ever covers the top `HEADER_BAND_FRACTION` of the
+          page -- a prescribed header field below that line is exactly as
+          unreachable to the crop as a signature is (measured on the real
+          corpus: 6 of 9 documents left short on header fields after
+          header-band repair had already run took only the crop path, never
+          escalating, because their signature parsed fine throughout).
+
+        Either escalation replaces page 1 from the *original*, pre-repair
+        `result`, never from the crop's own output -- `_repair_full_page`
+        internally refuses to keep anything that recovers fewer fields than
+        `result` did (see `_repair_would_regress`), so this method never
+        needs to compare the two candidates itself.
 
         Args:
             result: The chain's chosen result.
@@ -285,7 +365,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
 
         Returns:
             `result`, repaired by whichever path applied, or unchanged if
-            none did.
+            none did (or if every repair attempted would have regressed).
         """
         if self.header_repair is None or not result.pages:
             return result
@@ -294,7 +374,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         if self.signature_probe is not None and not self.signature_probe(
             self._page_one(result)
         ):
-            return await self._repair_signature(
+            return await self._repair_full_page(
                 result, raster_cache, content, repair_cache
             )
 
@@ -310,12 +390,25 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
                 "full-page transcription instead.",
                 result.extractor,
             )
-            return await self._repair_signature(
+            return await self._repair_full_page(
+                result, raster_cache, content, repair_cache
+            )
+        if not self._has_enough_header_fields(repaired):
+            logger.info(
+                "Header-band repair on [%s] still left page 1 with only %d "
+                "of the prescribed header fields (floor %d) -- the missing "
+                "field(s) may sit below the repaired band; escalating to a "
+                "full-page transcription instead.",
+                result.extractor,
+                self._header_field_count(repaired),
+                self.min_header_field_count,
+            )
+            return await self._repair_full_page(
                 result, raster_cache, content, repair_cache
             )
         return repaired
 
-    async def _repair_signature(
+    async def _repair_full_page(
         self,
         result: ExtractedDocument,
         raster_cache: dict,
@@ -323,8 +416,9 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         repair_cache: dict,
     ) -> ExtractedDocument:
         """Best-effort: replace page 1 entirely with a full-page vision
-        transcription, for the one failure mode header-band repair cannot
-        reach.
+        transcription, for the two failure modes header-band repair cannot
+        reach: an unparseable signature, or a header field sitting below
+        the repaired band.
 
         Header-band repair only ever touches the top `HEADER_BAND_FRACTION`
         of the page, but a signature block sits well below it -- so no
@@ -334,29 +428,41 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         the signature line entirely or mangled it beyond recognition
         (`"İF; BOZDAG ;"` for `"Bekir BOZDAĞ"`): full-page vision
         transcription recovered the correct name on all four (see
-        `OllamaVisionExtractor.transcribe_page`'s own docstring).
+        `OllamaVisionExtractor.transcribe_page`'s own docstring). The same
+        blind spot applies to any other prescribed header field that
+        happens to sit below the crop -- `_maybe_repair_page_one` reaches
+        this method for that reason too, once header-band repair alone
+        proved insufficient.
 
-        Only called once `_maybe_repair_page_one` has already established
-        `signature_probe` reports the signature unparseable -- this method
-        itself does not re-check that, so it always replaces page 1 when
-        it successfully transcribes something.
+        Called by `_maybe_repair_page_one` for either reason -- this method
+        itself does not re-check which one applied, so it always attempts
+        to replace page 1 when it successfully transcribes something. What
+        it *does* check is whether that replacement is actually better than
+        what it's replacing (see `_repair_would_regress`): a full-page
+        transcription is the strongest repair available, but "strongest"
+        does not mean "guaranteed correct" -- measured on the real corpus,
+        it dropped three documents from 4/4 header fields to 3/4.
 
         Args:
-            result: The chain's chosen result.
+            result: The chain's chosen result, and the baseline
+                `_repair_would_regress` compares the transcription against.
             raster_cache: The same cache the chain's extractors rasterised
                 into -- reused here so no page is rendered a second time.
             content: The raw document bytes, for `_rasterise_page_one`.
             repair_cache: Memoises the full-page transcription across every
                 candidate this one `extract()` call repairs, under its own
                 key (`_REPAIR_PAGE_CACHE_KEY`) separate from header-band
-                repair's -- the two never fire for the same document (see
-                `_maybe_repair_page_one`), but share the dict's lifetime.
+                repair's -- header-band repair may already have run and
+                been discarded by the time this fires (see
+                `_maybe_repair_page_one`), so the two keys are populated
+                independently even though they share the dict's lifetime.
 
         Returns:
             `result` with its first page replaced by the vision model's
             full transcription, or `result` completely unchanged on any
-            failure or empty output -- this step must never turn a working
-            extraction into a failed one.
+            failure, empty output, or a transcription that recovers fewer
+            fields than `result` already had -- this step must never turn
+            a working extraction into a worse one.
         """
         if _REPAIR_PAGE_CACHE_KEY in repair_cache:
             page_text = repair_cache[_REPAIR_PAGE_CACHE_KEY]
@@ -368,8 +474,8 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
                 page_text = await self.header_repair.transcribe_page(page_one_image)
             except Exception:
                 logger.warning(
-                    "Full-page signature repair failed for [%s]; keeping "
-                    "its original text.",
+                    "Full-page repair failed for [%s]; keeping its "
+                    "original text.",
                     result.extractor,
                     exc_info=True,
                 )
@@ -381,16 +487,27 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
             return result
 
         pages = [page_text, *result.pages[1:]]
+        candidate = result.model_copy(
+            update={"pages": pages, "text": "\n\n".join(pages).strip()}
+        )
+        if self._repair_would_regress(result, candidate):
+            logger.info(
+                "Full-page transcription of [%s] recovered fewer fields "
+                "than the original (%d header field(s) vs %d); keeping "
+                "the original text.",
+                result.extractor,
+                self._header_field_count(candidate),
+                self._header_field_count(result),
+            )
+            return result
+
         logger.info(
             "Replaced [%s]'s first page with a full-page vision "
-            "transcription (%d characters) -- its signature could not be "
-            "parsed from the original.",
+            "transcription (%d characters).",
             result.extractor,
             len(page_text),
         )
-        return result.model_copy(
-            update={"pages": pages, "text": "\n\n".join(pages).strip()}
-        )
+        return candidate
 
     async def _maybe_repair_header(
         self,
@@ -437,8 +554,10 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         Returns:
             `result` with its first page's leading `HEADER_REPAIR_LINE_COUNT`
             lines replaced by the vision model's transcription of that band,
-            or `result` completely unchanged on any failure or empty output --
-            this step must never turn a working extraction into a failed one.
+            or `result` completely unchanged on any failure, empty output,
+            or a crop that recovers fewer header fields than `result`
+            already had (see `_header_repair_would_regress`) -- this step
+            must never turn a working extraction into a worse one.
         """
         if self.header_repair is None or not result.pages:
             return result
@@ -475,14 +594,26 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
             "\n".join([header_text, *remaining_lines]),
             *result.pages[1:],
         ]
+        candidate = result.model_copy(
+            update={"pages": pages, "text": "\n\n".join(pages).strip()}
+        )
+        if self._header_repair_would_regress(result, candidate):
+            logger.info(
+                "Header-band repair on [%s] recovered fewer fields than "
+                "the original (%d header field(s) vs %d); keeping the "
+                "original text.",
+                result.extractor,
+                self._header_field_count(candidate),
+                self._header_field_count(result),
+            )
+            return result
+
         logger.info(
             "Repaired the header band of [%s]'s first page (%d characters).",
             result.extractor,
             len(header_text),
         )
-        return result.model_copy(
-            update={"pages": pages, "text": "\n\n".join(pages).strip()}
-        )
+        return candidate
 
     async def extract(
         self,
