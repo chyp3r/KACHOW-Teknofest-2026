@@ -99,10 +99,22 @@ export function ThinkingBubble({
               const stepElapsed = stage.status === "running" && stepStartedAt ? now - stepStartedAt : 0;
               return (
                 <li key={stage.id} className={`thinking-bubble-step is-${stage.status}`}>
-                  <span className="thinking-bubble-step-marker" aria-hidden="true" />
-                  <span className="thinking-bubble-step-label">{stage.label}</span>
-                  {stage.status === "running" && stepElapsed >= 1000 && (
-                    <span className="thinking-bubble-step-time">{formatElapsed(stepElapsed)}</span>
+                  <span className="thinking-bubble-step-row">
+                    <span className="thinking-bubble-step-marker" aria-hidden="true" />
+                    <span className="thinking-bubble-step-label">{stage.label}</span>
+                    {stage.status === "running" && stepElapsed >= 1000 && (
+                      <span className="thinking-bubble-step-time">{formatElapsed(stepElapsed)}</span>
+                    )}
+                  </span>
+                  {stage.subItems && stage.subItems.length > 0 && (
+                    <ul className="thinking-bubble-substeps" aria-label={`${stage.label} alt adımları`}>
+                      {stage.subItems.map((subItem) => (
+                        <li key={subItem.id} className={`thinking-bubble-substep${subItem.status ? ` is-${subItem.status}` : ""}`}>
+                          <span className="thinking-bubble-substep-marker" aria-hidden="true" />
+                          <span>{subItem.label}</span>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </li>
               );

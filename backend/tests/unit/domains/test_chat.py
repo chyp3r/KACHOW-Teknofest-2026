@@ -494,6 +494,80 @@ async def test_get_session_state_refuses_a_thread_belonging_to_a_different_user(
         await chat_service.get_session_state("user-1:abc", user_id="user-2")
 
 
+@pytest.mark.asyncio
+async def test_cancel_session_rejects_a_pending_interrupt(
+    chat_service, mock_planning_graph
+):
+    """A stop at a human gate must run the gate's own cleanup path."""
+    paused = MagicMock(
+        next=("human_gate",),
+        tasks=(
+            MagicMock(
+                interrupts=(
+                    MagicMock(value={"kind": "missing_information"}),
+                )
+            ),
+        ),
+    )
+    terminal = MagicMock(next=())
+    mock_planning_graph.aget_state.side_effect = [paused, terminal]
+
+    result = await chat_service.cancel_session(
+        "user-1:web:cancel", user_id="user-1", company_id="company-1"
+    )
+
+    assert result == {"status": "cancelled"}
+    command = mock_planning_graph.ainvoke.await_args.args[0]
+    assert command.resume == {
+        "action": "reject",
+        "answers": {},
+        "instructions": "",
+        "reason": "İşlem kullanıcı tarafından durduruldu.",
+        "reasoning_level": None,
+    }
+    mock_planning_graph.aupdate_state.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cancel_session_terminalizes_an_orphaned_running_checkpoint(
+    chat_service, mock_planning_graph, monkeypatch
+):
+    """An aborted ordinary node must not block the thread's next message."""
+    from app.domains.chat import chat_service as chat_service_module
+
+    end_run = AsyncMock()
+    monkeypatch.setattr(chat_service_module, "end_run", end_run)
+    running = MagicMock(next=("executor",), tasks=())
+    cancelled = MagicMock(
+        next=(), values={"run_id": "run-cancel", "company_id": "company-1"}
+    )
+    mock_planning_graph.aget_state.side_effect = [running, cancelled]
+
+    result = await chat_service.cancel_session(
+        "user-1:web:cancel", user_id="user-1", company_id="company-1"
+    )
+
+    assert result == {"status": "cancelled"}
+    update = mock_planning_graph.aupdate_state.await_args
+    assert update.kwargs["as_node"] == "consolidate_memory"
+    assert update.args[1]["final_output"]["status"] == "CANCELLED"
+    end_run.assert_awaited_once_with(
+        run_id="run-cancel", status="cancelled", company_id="company-1"
+    )
+
+
+@pytest.mark.asyncio
+async def test_cancel_session_refuses_a_thread_belonging_to_a_different_user(
+    chat_service, mock_planning_graph
+):
+    from app.api.exceptions.authorization import AuthorizationException
+
+    with pytest.raises(AuthorizationException):
+        await chat_service.cancel_session("user-1:abc", user_id="user-2")
+
+    mock_planning_graph.aget_state.assert_not_awaited()
+
+
 # ==========================================
 # Revision pipeline: reject reason, conflicts, changelog surfaced to the user
 # ==========================================

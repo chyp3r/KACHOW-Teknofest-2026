@@ -5,10 +5,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDocuments } from "./useDocuments";
 
 const mocks = vi.hoisted(() => ({
-  list: vi.fn(), analyze: vi.fn(), getAnalysis: vi.fn(),
+  list: vi.fn(), analyze: vi.fn(), getAnalysis: vi.fn(), getText: vi.fn(),
+  generateDetailedSummary: vi.fn(),
+  documentGraph: vi.fn(),
 }));
 
 vi.mock("../services/documentService", () => ({ documentService: mocks }));
+vi.mock("../services/graphService", () => ({
+  graphService: { documentGraph: mocks.documentGraph },
+}));
 
 const remoteDocument = {
   file_name: "remote.pdf",
@@ -31,6 +36,15 @@ describe("useDocuments", () => {
     mocks.list.mockReset().mockResolvedValue([remoteDocument]);
     mocks.analyze.mockReset();
     mocks.getAnalysis.mockReset().mockResolvedValue({ ...remoteDocument });
+    mocks.getText.mockReset().mockResolvedValue({
+      pages: ["Belge metni"],
+      extracted_text: "Belge metni",
+      page_count: 1,
+      extractor: "pdfium",
+      used_ocr: false,
+    });
+    mocks.generateDetailedSummary.mockReset();
+    mocks.documentGraph.mockReset().mockResolvedValue(null);
   });
 
   it("clears a selected ghost document that is absent from the backend list", async () => {
@@ -79,6 +93,7 @@ describe("useDocuments", () => {
       analyzed: false,
     });
     expect(mocks.analyze).not.toHaveBeenCalled();
+    expect(mocks.getText).not.toHaveBeenCalled();
 
     await act(async () => {
       await result.current.analyze(pendingPath);
@@ -90,6 +105,9 @@ describe("useDocuments", () => {
       storage_path: "uploads/analyzed.pdf",
       analyzed: true,
     });
+    await waitFor(() =>
+      expect(mocks.getText).toHaveBeenCalledWith("uploads/analyzed.pdf"),
+    );
   });
 
   it("can analyze a file immediately after staging it for chat", async () => {
@@ -121,5 +139,35 @@ describe("useDocuments", () => {
 
     expect(mocks.analyze).toHaveBeenCalledTimes(1);
     expect(result.current.documents[0].storage_path).toBe("uploads/chat.pdf");
+  });
+
+  it("tracks detailed summary generation by storage path and publishes the result", async () => {
+    let resolveSummary!: (analysis: typeof remoteDocument & { detailed_summary: string }) => void;
+    const summaryPromise = new Promise<typeof remoteDocument & { detailed_summary: string }>((resolve) => {
+      resolveSummary = resolve;
+    });
+    mocks.generateDetailedSummary.mockReturnValue(summaryPromise);
+    const { result } = renderHook(() => useDocuments("user-1"), { wrapper });
+    await waitFor(() => expect(result.current.documents).toEqual([remoteDocument]));
+
+    act(() => result.current.setSelectedDocument(remoteDocument));
+    await waitFor(() => expect(result.current.analysis).toMatchObject(remoteDocument));
+
+    let generatePromise!: Promise<void>;
+    act(() => {
+      generatePromise = result.current.generateDetailedSummary(remoteDocument.storage_path);
+    });
+
+    await waitFor(() =>
+      expect(result.current.generatingDetailedSummaryPath).toBe(remoteDocument.storage_path),
+    );
+
+    await act(async () => {
+      resolveSummary({ ...remoteDocument, detailed_summary: "Detaylı özet metni." });
+      await generatePromise;
+    });
+
+    await waitFor(() => expect(result.current.generatingDetailedSummaryPath).toBeNull());
+    expect(result.current.analysis?.detailed_summary).toBe("Detaylı özet metni.");
   });
 });

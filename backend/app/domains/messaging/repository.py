@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional, Tuple
 
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.messaging.model.conversation_message_model import ConversationMessageModel
@@ -212,15 +212,27 @@ class ConversationMessageRepository:
         return list(result.scalars().all())
 
     async def count_unread(
-        self, conversation_id: str, company_id: str, last_read_message_id: Optional[str]
+        self,
+        conversation_id: str,
+        company_id: str,
+        user_id: str,
+        last_read_message_id: Optional[str],
     ) -> int:
-        """Messages newer than `last_read_message_id` (or every message, if
-        nothing has ever been read). Compares `created_at`, not the id
-        itself -- message ids are opaque uuid-hex, not ordered."""
+        """Unread messages received by `user_id`.
+
+        A user's own messages are never unread for that user. System-authored
+        messages have no sender and remain countable. The read cursor compares
+        `created_at`, not the id itself -- message ids are opaque uuid-hex, not
+        ordered.
+        """
         base = select(func.count(ConversationMessageModel.id)).where(
             ConversationMessageModel.conversation_id == conversation_id,
             ConversationMessageModel.company_id == company_id,
             ConversationMessageModel.deleted_at.is_(None),
+            or_(
+                ConversationMessageModel.sender_id.is_(None),
+                ConversationMessageModel.sender_id != user_id,
+            ),
         )
         if last_read_message_id is None:
             result = await self.db.execute(base)

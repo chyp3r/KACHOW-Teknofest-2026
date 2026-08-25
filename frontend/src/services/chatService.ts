@@ -149,4 +149,9 @@ export const chatService = {
     apiRequest<SessionState>(
       `/api/v1/chat/sessions/${encodeURIComponent(threadId)}/state`,
     ),
+  cancel: (threadId: string) =>
+    apiRequest<{ status: "cancelled" | "idle" }>(
+      `/api/v1/chat/sessions/${encodeURIComponent(threadId)}/cancel`,
+      { method: "POST" },
+    ),
 };

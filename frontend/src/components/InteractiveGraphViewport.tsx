@@ -1,11 +1,11 @@
 import { Minus, Plus, RotateCcw } from "lucide-react";
 import {
+  useEffect,
   useRef,
   useState,
   type KeyboardEvent,
   type PointerEvent,
   type ReactNode,
-  type WheelEvent,
 } from "react";
 import { IconButton } from "./Button";
 import { GraphViewportContext, type Point } from "./graphViewportContext";
@@ -70,6 +70,7 @@ export function InteractiveGraphViewport({
   const pointers = useRef(new Map<number, Point>());
   const dragStart = useRef<DragStart | null>(null);
   const pinchStart = useRef<PinchStart | null>(null);
+  const wheelHandlerRef = useRef<(event: globalThis.WheelEvent) => void>(() => undefined);
 
   const updateCamera = (next: Camera) => {
     cameraRef.current = next;
@@ -146,6 +147,24 @@ export function InteractiveGraphViewport({
     const anchor = graphPointAt(clientPoint, current);
     updateCamera(cameraForAnchor(anchor, clientPoint, scale));
   };
+
+  wheelHandlerRef.current = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const direction = event.deltaY < 0 ? 1 : -1;
+    zoomAt(cameraRef.current.scale + direction * SCALE_STEP, {
+      x: event.clientX,
+      y: event.clientY,
+    });
+  };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    const handleWheel = (event: globalThis.WheelEvent) => wheelHandlerRef.current(event);
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", handleWheel);
+  }, []);
 
   const reset = () => updateCamera(initialCamera);
 
@@ -235,15 +254,6 @@ export function InteractiveGraphViewport({
     }
   };
 
-  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const direction = event.deltaY < 0 ? 1 : -1;
-    zoomAt(cameraRef.current.scale + direction * SCALE_STEP, {
-      x: event.clientX,
-      y: event.clientY,
-    });
-  };
-
   const handleKeyboard = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.currentTarget !== event.target) return;
     const current = cameraRef.current;
@@ -309,7 +319,6 @@ export function InteractiveGraphViewport({
             onPointerMove={movePointer}
             onPointerUp={endPointer}
             onPointerCancel={endPointer}
-            onWheel={handleWheel}
             onKeyDown={handleKeyboard}
           >
             <svg

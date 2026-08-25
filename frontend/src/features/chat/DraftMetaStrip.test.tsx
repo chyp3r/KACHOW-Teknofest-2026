@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DraftMetaStrip } from "./DraftMetaStrip";
 
 vi.mock("../../services/unitsService", () => ({
@@ -14,8 +14,10 @@ vi.mock("../../services/unitsService", () => ({
 }));
 
 const updateDestinationMock = vi.fn();
+const getDraftMock = vi.fn();
 vi.mock("../../services/draftService", () => ({
   draftService: {
+    get: (draftId: string) => getDraftMock(draftId),
     updateDestination: (draftId: string, destination: string) =>
       updateDestinationMock(draftId, destination),
   },
@@ -27,6 +29,14 @@ function renderWithQueryClient(ui: ReactNode) {
 }
 
 describe("DraftMetaStrip", () => {
+  beforeEach(() => {
+    updateDestinationMock.mockReset();
+    getDraftMock.mockReset().mockResolvedValue({
+      id: "draft-1",
+      destination: "İnsan Kaynakları",
+    });
+  });
+
   it("renders nothing without a draft", () => {
     const { container } = renderWithQueryClient(<DraftMetaStrip details={{}} />);
     expect(container).toBeEmptyDOMElement();
@@ -194,7 +204,27 @@ describe("DraftMetaStrip", () => {
 
     await waitFor(() => expect(updateDestinationMock).toHaveBeenCalledWith("draft-1", "Mali İşler"));
     await waitFor(() =>
-      expect(screen.getByText(/Önerilen birim: Mali İşler/)).toBeInTheDocument(),
+      expect(screen.getByText(/Hedef birim: Mali İşler/)).toBeInTheDocument(),
     );
+  });
+
+  it("rehydrates the persisted target unit instead of reverting to the old chat suggestion", async () => {
+    getDraftMock.mockResolvedValueOnce({
+      id: "draft-1",
+      destination: "Mali İşler",
+    });
+    renderWithQueryClient(
+      <DraftMetaStrip
+        details={{
+          draft: { id: "draft-1", draft: "Taslak metni", status: "COMPLETED", combined_score: 92 },
+          routing: { routed_unit: "İnsan Kaynakları", alternative_units: ["Mali İşler"] },
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("Hedef birim: Mali İşler")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/Alternatif:/)).not.toBeInTheDocument();
   });
 });

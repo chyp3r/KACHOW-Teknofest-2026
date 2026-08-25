@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from typing import Optional, List, Tuple
 from sqlalchemy import delete, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -76,6 +77,24 @@ class UserRepository:
         query = query.offset(skip).limit(limit)
         result = await self.db.execute(query)
         return list(result.scalars().all())
+
+    async def get_usernames_by_ids(
+        self, company_id: str, user_ids: Collection[str]
+    ) -> dict[str, str]:
+        """Resolve uploader usernames in one tenant-scoped query.
+
+        Soft-deleted users are deliberately included so historical documents
+        still identify who uploaded them after that employee leaves.
+        """
+        if not user_ids:
+            return {}
+        result = await self.db.execute(
+            select(UserModel.id, UserModel.username).where(
+                UserModel.company_id == company_id,
+                UserModel.id.in_(user_ids),
+            )
+        )
+        return dict(result.all())
 
     async def create(self, user: UserModel) -> UserModel:
         """Persist a new user record in the database."""

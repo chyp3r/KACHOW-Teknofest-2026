@@ -74,6 +74,14 @@ Resmî yazı taslağı oluşturur ve kalite kapısı (Reflexion) döngüsünü i
 
 > **NOT:** Eğer `missing_information` alanı dolu gelirse, taslak `[...]` yer tutucuları içeriyor demektir ve `destination` boş kalır. Bu durumda `/chat/resume` kullanılarak eksik bilgiler kullanıcıdan istenmelidir (HITL akışı).
 
+## `POST /api/v1/drafts/{draft_id}/review/approve`
+
+Yetkili kullanıcının seçili taslak sürümünü incelediğini kaydeder. İşlem
+`requires_human_approval` alanını `false` yapar. Başka bulgu yoksa taslak
+durumu `APPROVED` olur; `missing_information` varsa bu bulgular korunur ve
+durum `NEEDS_INPUT` kalır. Taslak sahibi ile aynı kurumdaki yönetici rollerinin
+`draft:update` yetkisi gerekir.
+
 #### 422 Unprocessable Entity
 `VALIDATION_ERROR`: `storage_path` geçersiz veya evrak okunamadı.
 

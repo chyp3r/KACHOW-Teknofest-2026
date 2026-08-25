@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle2, Route, XCircle } from "lucide-react";
+import { ApiErrorNotice } from "../../components/ApiErrorNotice";
 import { UnitPicker } from "../drafts/UnitPicker";
 import { draftService } from "../../services/draftService";
 import { queryKeys } from "../../query/queryKeys";
@@ -52,17 +52,22 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
   const routing = details?.routing as RoutingDetails | undefined;
   const draftId = draft?.id;
   const queryClient = useQueryClient();
-  // Overrides the routing chip's display once the user picks a unit here --
-  // `details` is a frozen snapshot of the turn that produced this message,
-  // so a successful save has nothing else in this component to update.
-  const [savedDestination, setSavedDestination] = useState<string | null>(null);
+  // Chat message details are an immutable snapshot of the turn that created
+  // them. The persisted draft is the authoritative source after a human
+  // changes its target unit, including after this message remounts on a page
+  // reload or history navigation.
+  const persistedDraftQuery = useQuery({
+    queryKey: queryKeys.draft(draftId ?? ""),
+    queryFn: () => draftService.get(draftId!),
+    enabled: Boolean(draftId),
+    staleTime: 20_000,
+  });
   const updateDestinationMutation = useMutation({
     mutationFn: (destination: string) => {
       if (!draftId) throw new Error("Taslak kimliği bulunamadı.");
       return draftService.updateDestination(draftId, destination);
     },
     onSuccess: (updated) => {
-      setSavedDestination(updated.destination);
       queryClient.setQueryData(queryKeys.draft(updated.id), updated);
       void queryClient.invalidateQueries({ queryKey: ["drafts"] });
     },
@@ -71,7 +76,13 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
   if (!draft?.draft) return null;
 
   const hasScore = typeof draft.combined_score === "number";
-  const routedUnit = savedDestination ?? routing?.routed_unit;
+  const persistedDestination = persistedDraftQuery.data?.destination;
+  const routedUnit = persistedDestination ?? routing?.routed_unit;
+  const destinationOverridden = Boolean(
+    persistedDestination
+      && routing?.routed_unit
+      && persistedDestination !== routing.routed_unit,
+  );
   const alternativeUnits = routing?.alternative_units ?? [];
   const isRejected = draft.status === "REJECTED";
   const isReviseExhausted = draft.status === "REVISE_REQUESTED";
@@ -128,6 +139,8 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
         </div>
       </header>
 
+      <ApiErrorNotice error={updateDestinationMutation.error} />
+
       <div className="draft-meta-body">
         {appliedRules.length > 0 && (
           <details className="draft-meta-detail">
@@ -149,8 +162,8 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
             {routedUnit && (
               <span className="draft-meta-chip draft-routing-value">
                 <Route size={14} />
-                Önerilen birim: {routedUnit}
-                {alternativeUnits.length > 0 && !savedDestination
+                {destinationOverridden ? "Hedef birim" : "Önerilen birim"}: {routedUnit}
+                {alternativeUnits.length > 0 && !destinationOverridden
                   ? ` · Alternatif: ${alternativeUnits.join(", ")}`
                   : ""}
               </span>

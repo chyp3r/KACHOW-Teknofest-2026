@@ -22,6 +22,7 @@ from app.api.dependency import (
     get_draft_repository,
     get_draft_history_service,
     get_draft_service,
+    get_user_repository,
     require_auth_if_enabled,
 )
 from app.domains.chat.chat_service import ChatService
@@ -52,6 +53,7 @@ def _user(user_id: str, role: str = "employee", company_id: str = "company-1") -
 @pytest.fixture(autouse=True)
 def _clear_overrides():
     app.dependency_overrides[get_draft_repository] = lambda: AsyncMock()
+    app.dependency_overrides[get_user_repository] = lambda: AsyncMock()
     yield
     app.dependency_overrides.clear()
 
@@ -454,6 +456,44 @@ def test_list_documents_lists_everything_for_a_manager():
 
     assert response.status_code == 200
     assert document_repository.list_for_owner.await_args.args == ("company-1", None)
+
+
+def test_list_documents_includes_uploader_usernames_for_a_manager():
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user("mgr-x", role="manager")
+    document_repository = AsyncMock()
+    document_repository.list_for_owner.return_value = [
+        DocumentModel(
+            company_id="company-1",
+            id="uploads/owned-by-a.pdf",
+            owner_id="user-a",
+            file_name="owned-by-a.pdf",
+            created_at=datetime(2026, 8, 24, tzinfo=timezone.utc),
+        ),
+        DocumentModel(
+            company_id="company-1",
+            id="uploads/owned-by-b.pdf",
+            owner_id="user-b",
+            file_name="owned-by-b.pdf",
+            created_at=datetime(2026, 8, 23, tzinfo=timezone.utc),
+        ),
+    ]
+    document_repository.count_for_owner.return_value = 2
+    app.dependency_overrides[get_document_repository] = lambda: document_repository
+    user_repository = AsyncMock()
+    user_repository.get_usernames_by_ids.return_value = {
+        "user-a": "employee-a",
+        "user-b": "employee-b",
+    }
+    app.dependency_overrides[get_user_repository] = lambda: user_repository
+
+    response = client.get("/api/v1/documents")
+
+    assert response.status_code == 200
+    items = response.json()["data"]["items"]
+    assert [item["uploader_username"] for item in items] == ["employee-a", "employee-b"]
+    user_repository.get_usernames_by_ids.assert_awaited_once_with(
+        "company-1", {"user-a", "user-b"}
+    )
 
 
 # ==========================================

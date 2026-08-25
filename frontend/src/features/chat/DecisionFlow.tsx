@@ -42,6 +42,7 @@ export const NODE_INFO: Record<string, { label: string; short: string; descripti
   brief: { label: "Yazışma Bilgileri", short: "BİLGİ", description: "Taslak öncesi taraf, muhatap ve kapanış bilgilerini netleştirir." },
   brief_gate: { label: "Yazışma Bilgileri", short: "BİLGİ", description: "Yazışma bilgilerindeki belirsiz alanlar için kullanıcıya sorar." },
   draft: { label: "Taslak Hazırlama", short: "TASLAK", description: "Belge ve mevzuat bağlamından resmî yazı taslağı oluşturur." },
+  source_chunks: { label: "Kaynak Alıntılar", short: "ALINTI", description: "Taslağı kaynak belge bölümleriyle temellendirir." },
   verify: { label: "Doğrulama", short: "KANIT", description: "Taslağın iddialarını kaynak evrak ve mevzuata karşı denetler." },
   judge: { label: "Kalite Yargıcı", short: "YARGIÇ", description: "Talebe uygunluk, resmî üslup ve muhatap tutarlılığını değerlendirir." },
   revise: { label: "Revizyon", short: "REVİZE", description: "Doğrulama ve kalite bulgularını düzeltme listesine dönüştürür." },
@@ -146,7 +147,7 @@ const STAGE_DESCRIPTIONS: Record<string, string> = {
 const SUB_STEPS: Record<string, string[]> = {
   classification: ["rag"],
   brief: ["brief_gate"],
-  draft: ["examples", "verify", "judge"],
+  draft: ["examples", "source_chunks", "verify", "judge"],
   revise: ["revise_parse", "revise_retrieve", "revise_repair", "revise_audit", "verify", "judge"],
   human_gate: ["gate_revise"],
   // Faz 4 (#201) -- transfer_gate is triggered by the assist step's own

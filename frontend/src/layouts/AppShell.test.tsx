@@ -82,7 +82,7 @@ describe("AppShell compact navigation", () => {
     expect(screen.getAllByRole("button", { name: "Menüyü kapat" })).not.toHaveLength(0);
   });
 
-  it("places notification and a single cycling theme button above the workspace navigation", () => {
+  it("places the theme button before the notification at opposite sidebar edges above navigation", () => {
     render(
       withQueryClient(
         <MemoryRouter initialEntries={["/chats"]}>
@@ -92,9 +92,11 @@ describe("AppShell compact navigation", () => {
     );
 
     const themeButton = screen.getByRole("button", { name: "Tema: Sistem. Temayı değiştir" });
+    const notificationButton = screen.getByRole("button", { name: "Bildirimler" });
     const tools = screen.getByLabelText("Bildirim ve tema araçları");
     const navigation = screen.getByRole("navigation");
     expect(screen.queryByRole("combobox", { name: "Tema seçimi" })).not.toBeInTheDocument();
+    expect(themeButton.compareDocumentPosition(notificationButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(tools.compareDocumentPosition(navigation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(themeButton);
     expect(setMode).toHaveBeenCalledWith("light");

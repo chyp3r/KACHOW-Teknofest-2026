@@ -302,6 +302,11 @@ def get_document_repository(db: AsyncSession = Depends(get_db)) -> DocumentRepos
     return DocumentRepository(db)
 
 
+def get_user_repository(db: AsyncSession = Depends(get_db)) -> UserRepository:
+    """Provide tenant-scoped user lookups to API routes."""
+    return UserRepository(db)
+
+
 def get_chat_session_repository(db: AsyncSession = Depends(get_db)) -> ChatSessionRepository:
     """Provide the chat session listing repository."""
     return ChatSessionRepository(db)

@@ -876,14 +876,16 @@ textarea { min-height: 105px; resize: vertical; }
    animation-duration in this block to near-zero, so no separate
    reduced-motion handling is needed here. */
 .thinking-bubble-body { display: grid; gap: var(--space-3); }
-.thinking-bubble-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); color: var(--text-secondary); }
+.thinking-bubble-header { display: flex; align-items: center; justify-content: flex-start; gap: var(--space-2); color: var(--text-secondary); }
 .thinking-bubble-title { display: inline-flex; align-items: center; gap: var(--space-2); }
 .thinking-bubble-spinner { animation: thinking-bubble-spin .9s linear infinite; color: var(--accent-blue); }
-.thinking-bubble-elapsed { font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.thinking-bubble-elapsed,
+.thinking-bubble-step-time { flex: 0 0 5ch; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text-muted); }
 @keyframes thinking-bubble-spin { to { transform: rotate(360deg); } }
 
 .thinking-bubble-steps { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.thinking-bubble-step { display: flex; align-items: center; gap: var(--space-2); color: var(--text-muted); }
+.thinking-bubble-step { display: grid; gap: var(--space-2); color: var(--text-muted); }
+.thinking-bubble-step-row { display: flex; align-items: center; gap: var(--space-2); }
 .thinking-bubble-step-marker { width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--border-default); flex: 0 0 auto; }
 .thinking-bubble-step.is-completed { color: var(--text-secondary); }
 .thinking-bubble-step.is-completed .thinking-bubble-step-marker { background: var(--status-completed); }
@@ -893,7 +895,14 @@ textarea { min-height: 105px; resize: vertical; }
 .thinking-bubble-step.is-interrupted .thinking-bubble-step-marker { background: var(--status-running); }
 .thinking-bubble-step.is-skipped { opacity: .55; }
 .thinking-bubble-step.is-skipped .thinking-bubble-step-marker { background: var(--status-skipped); }
-.thinking-bubble-step-time { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.thinking-bubble-substeps { display: grid; gap: var(--space-2); margin: 0; padding: 0 0 0 calc(8px + var(--space-2)); list-style: none; }
+.thinking-bubble-substep { display: flex; align-items: center; gap: var(--space-2); color: var(--text-muted); }
+.thinking-bubble-substep-marker { width: 6px; height: 6px; flex: 0 0 auto; border-radius: var(--radius-full); background: var(--border-default); }
+.thinking-bubble-substep.is-completed .thinking-bubble-substep-marker { background: var(--status-completed); }
+.thinking-bubble-substep.is-running { color: var(--text-primary); }
+.thinking-bubble-substep.is-running .thinking-bubble-substep-marker { background: var(--status-running); animation: pulse 1s ease-in-out infinite alternate; }
+.thinking-bubble-substep.is-failed .thinking-bubble-substep-marker { background: var(--status-failed); }
+.thinking-bubble-substep.is-skipped { opacity: .55; }
 
 .thinking-bubble-subtext { margin: 0; color: var(--text-muted); }
 

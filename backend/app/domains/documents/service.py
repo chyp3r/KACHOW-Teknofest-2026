@@ -1536,13 +1536,13 @@ class DocumentService:
             )
         except asyncio.TimeoutError as exc:
             raise AIException(
-                message="Ayrıntılı özet oluşturma zaman aşımına uğradı.",
+                message="Detaylı özet oluşturma zaman aşımına uğradı.",
                 details={"timeout_seconds": settings.DETAILED_SUMMARY_TIMEOUT_SECONDS},
             ) from exc
         except Exception as exc:
             logger.exception("Detailed summary generation failed for %s", storage_path)
             raise AIException(
-                message="Ayrıntılı özet oluşturulurken bir hata oluştu.",
+                message="Detaylı özet oluşturulurken bir hata oluştu.",
                 details={"reason": str(exc)},
             ) from exc
 

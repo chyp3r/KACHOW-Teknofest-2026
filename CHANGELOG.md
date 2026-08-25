@@ -26,6 +26,105 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   mevzuat fıkra atfını sahte bir belge sayısı ("15/2") sanıyordu --
   `LEGISLATION_PATTERN`'de zaten var olan ters yöndeki korumanın aynısı
   eklendi, doğru ve dayanaklı bir açıklama artık gereksiz yere atılmıyor.
+- Detaylı özet üretiminde loading durumu belge bazına indirildi; bir evrakta
+  başlatılan işlem diğer evraklarda çalışıyor gibi görünmüyor. Detaylı özet
+  hata metinleri de başlıkla aynı terimi kullanacak şekilde tutarlı hâle
+  getirildi.
+- Platform Yönetimi kullanıcı istatistikleri ve sistem sağlığı sekmeleri;
+  aktiflik oranları, rol ve kurum dağılımları, servis durum kartları ve kurum
+  aktivite zaman çizgisiyle daha güçlü bir görsel hiyerarşiye kavuştu.
+- Evrak master listesindeki satır yüksekliği ve alt boşluk artırıldı; durum
+  rozetleri artık satır ayraçlarına fazla yaklaşmıyor.
+- Evrak master listesi dar ekranlarda sabit iç scroll ve masaüstü meta
+  hizasından çıkarıldı; rozet, tarih ve aksiyon alanı mobil genişlikte taşmadan
+  yerleşiyor.
+- Ana Sayfadaki evrak durum grafiği taslak odaklı hâle getirildi; görsel artık
+  gerçek taslak kayıtlarını gönderime hazır, inceleme gerekiyor ve hazırlanıyor
+  durumlarında gösteriyor.
+- Hesap profil başlığında avatar için ayrılan grid kolonu gerçek avatar
+  boyutuyla eşleştirildi; kullanıcı adı ve e-posta ikondan okunabilir bir
+  token boşluğu kadar uzaklaştırıldı.
+- Mevzuat Haritası kullanılabilir sayfa yüksekliğini dolduracak biçimde
+  genişletildi. Mevzuat ve teknik akış grafiklerinde mouse wheel artık yalnız
+  grafiği ölçekliyor; aynı anda dış sayfayı kaydırmıyor.
+- Yönetim Analitik ekranındaki güvenlik kararları artık kontrolün ne zaman ve
+  ne amaçla yapıldığını, kararın sonucunu ve görülme sayısını açıklıyor;
+  `needs_review` teknik kodu “İnsan incelemesi gerekli” olarak gösteriliyor.
+- Sohbette evrak veya taslak seçili değilken evraka bağlı taslak ve hedef birim
+  önerileri gösterilmiyor; boş durum bunun yerine genel asistan yetenekleri ve
+  selamlaşma için uygun sohbet başlangıçları sunuyor.
+- Evraklar ve Taslaklar master listelerinin başlık/satır başlangıçları ortak
+  spacing tokenlarıyla paddingli hizalandı. Taslak listesi yeniden kendi
+  alanında kaydırılabiliyor; evrak sayfalama çubuğu da viewport altında
+  kırpılmadan tam görünüyor.
+- Grafana ve Langfuse gözlemlenebilirlik bağlantıları manager analitik
+  görünümünden kaldırıldı; manager için bağlantı isteği yapılmıyor ve ilgili
+  backend ucu yalnızca admin/root rollerine izin veriyor.
+- Yeni mesaj SSE olayı, backend işlemi commit edilmeden yapılan erken liste
+  yenilemesine takılmıyor; Mesajlar sayfası açılmadan sidebar okunmamış sayacı
+  anında ve aynı olay için yalnız bir kez artıyor.
+- Taslakta “İnceledim, onaylıyorum” ve hedef birim güncelleme işlemleri,
+  veritabanının yenilediği `updated_at` alanını yanıt öncesinde açıkça tekrar
+  yükleyerek `MissingGreenlet` kaynaklı 500 hatası vermiyor.
+- Taslak yönlendirme önerisi artık üretilen yazışma türünü gelen evrak türü
+  gibi göndermiyor; bağlı kaynak evrakın türü kullanılıyor ve bilinmeyen eski
+  türler isteğin tamamını `VALIDATION_ERROR` ile düşürmek yerine atlanıyor.
+- Sohbet içindeki taslak önerisinde değiştirilen hedef birim artık mesajın eski
+  yönlendirme anlık görüntüsüne geri dönmüyor; kart kayıtlı taslağın güncel
+  hedef birimini izliyor ve sohbet yeniden açıldığında da seçimi koruyor.
+- Sohbetin canlı süre sayaçları balonun en sağına itilmek yerine ilgili başlık
+  ve adımın yanında sabit genişlikte gösteriliyor; 9’dan 10 saniyeye geçerken
+  oluşan hizalama sıçraması kaldırıldı.
+- Manager ve admin evrak kütüphanesinde her belgenin yükleyen kullanıcı adı
+  artık hem liste satırında hem de Ayrıntılar sekmesinde gösteriliyor.
+- Ana Sayfa kompakt hero ve KPI satırına geçirildi; haftalık hareketlilik ve
+  evrak durumu grafikleri ilk görünüme taşındı, tekrarlanan hızlı işlemler en
+  altta kompakt Kısayollar satırına dönüştürüldü.
+- Evrak çalışma alanının master–detail tasarımına geçişinde görünmez olan
+  “Detaylı özet oluştur” eylemi Özet sekmesine geri getirildi. Üretim hatası
+  aynı bölümde gösteriliyor; daha önce oluşturulmuş detaylı özet buton yerine
+  doğrudan okunabiliyor.
+- Taslak Kontrol sekmesindeki zorunlu insan incelemesi artık “İnceledim,
+  onaylıyorum” eylemiyle tamamlanabiliyor. Onay taslak sürümüne kalıcı olarak
+  yazılıyor, diğer eksik bilgi bulgularını koruyor ve denetim kaydına alınıyor.
+- Sohbet ekranından Ana Sayfa, Evraklar veya başka bir bölüme geçmek artık
+  devam eden yazım akışını iptal etmiyor. İş arka planda tamamlanıyor, oturum
+  korunuyor ve geç ulaşan oturum olayı kullanıcıyı bulunduğu sayfadan zorla
+  tekrar sohbete döndürmüyor; iptal yalnız açık “İşlemi durdur” ve “Yeni
+  sohbet” eylemlerinde yapılıyor.
+- Sohbet geçmişindeki form/onay yanıtları artık aynı zaman damgasına sahip
+  asistan cevabının arkasına düşüp `belge_sayisi: ...` veya `reject: ...`
+  biçiminde kullanıcı mesajı olarak görünmüyor. Geçmiş sırası deterministik
+  hâle getirildi; daha önce ters kaydedilmiş teknik yanıtlar da tamamlanan
+  adım kartına dönüştürülüyor veya eşleşmiyorsa görünür sohbetten çıkarılıyor.
+- Sohbette “İşlemi durdur” artık yalnızca istemci akışını kapatmakla kalmıyor;
+  sunucudaki bekleyen LangGraph kontrol noktasını da reddederek veya
+  `CANCELLED` durumuyla terminale taşıyor. Sunucu durdurmayı doğrulayana kadar
+  aynı oturuma yeni mesaj gönderilemediği için sonraki mesaj artık
+  `SESSION_PAUSED` hatasına düşmüyor.
+- Denetim kayıtlarındaki güncel işlem, rol ve kaynak türleri Türkçe etiketlerle
+  gösterilmeye başladı.
+- Mevzuat Haritası yedek grafiğe geçtiğinde gösterilen geçici/kısmi görünüm
+  uyarısı kaldırıldı.
+- Manager rolünden AI ve Eğitim alanı ile Sistem Durumu erişimi kaldırıldı;
+  iki alan da yalnızca admin rolüne açıldı.
+- Evrak yüklenirken kullanılan `pending:<uuid>` geçici kimliği artık belge
+  metni endpoint'ine gönderilmiyor. Yeni evrak yükleme sonrası geçici ayrıntı
+  rotası hemen açılıyor; analiz tamamlanınca gerçek `uploads/<uuid>.<uzantı>`
+  rotasına geçildiği için sayfadan çıkıp yeniden girmek gerekmiyor.
+- Canlı yanıt akışında “Kaynak Alıntılar”, ayrı bir ana adım yerine “Taslak
+  Oluşturma” altında girintili bir alt süreç olarak gösteriliyor.
+- Evrak analizi yükleme ikonları yeniden dönüyor; analiz butonları işlem
+  sürerken geçen süreyi saniye olarak canlı gösteriyor.
+- Yönetim Analitik ekranındaki AI iş akışı ve güvenlik kararı durum/bulgu
+  rozetleri Türkçeleştirildi.
+- Sidebar tema ve bildirim kontrolleri tüm satıra yayıldı; tema solda, bildirim
+  sağda hizalandı.
+- Mesajlardaki konuşma ve menü rozetleri artık kullanıcının kendi gönderdiği
+  mesajları okunmamış olarak saymıyor; yalnızca diğer katılımcılardan ve
+  sistemden gelen yeni mesajlar sayaca dahil ediliyor.
+- Giriş ekranının sol panelindeki telif metni, görsel denge için bir boşluk
+  kademesi aşağı taşındı.
 - Ana Sayfa hareketlilik grafiği tüm rollerde aynı yedi günlük kişisel evrak /
   taslak ritmine geçirildi; hızlı işlemler banner altına taşındı. Kenar çubuğu
   bildirim ve tek düğmeli sistem/açık/koyu tema geçişi çalışma alanının üstünde

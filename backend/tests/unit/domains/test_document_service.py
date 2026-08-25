@@ -1184,9 +1184,10 @@ async def test_generate_detailed_summary_wraps_a_timeout_in_ai_exception_without
     with patch(
         "app.domains.documents.service.build_detailed_summary", side_effect=_never_finishes
     ):
-        with pytest.raises(AIException):
+        with pytest.raises(AIException) as exc_info:
             await service.generate_detailed_summary(storage_path)
 
+    assert exc_info.value.message == "Detaylı özet oluşturma zaman aşımına uğradı."
     assert storage.blobs[_analysis_cache_key(storage_path)] == before
 
 

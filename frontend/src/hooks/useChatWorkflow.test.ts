@@ -7,6 +7,7 @@ import { useChatWorkflow } from "./useChatWorkflow";
 const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   resume: vi.fn(),
+  cancel: vi.fn(),
   state: vi.fn(),
   sessions: vi.fn(),
   messages: vi.fn(),
@@ -25,6 +26,7 @@ describe("useChatWorkflow", () => {
   beforeEach(() => {
     mocks.send.mockReset();
     mocks.resume.mockReset();
+    mocks.cancel.mockReset().mockResolvedValue({ status: "cancelled" });
     mocks.sessions.mockReset().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20 });
     mocks.messages.mockReset().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 50 });
     mocks.state.mockReset().mockResolvedValue({ status: "idle", interrupt: null });
@@ -391,6 +393,159 @@ describe("useChatWorkflow", () => {
     });
   });
 
+  it("repairs a same-timestamp resume returned after its assistant result", async () => {
+    const questions = [{
+      key: "belge_sayisi",
+      question: "Belge sayısı nedir?",
+      header: "Belge sayısı",
+      options: [],
+      multi_select: false,
+      allow_free_text: true,
+      required: true,
+    }];
+    mocks.messages.mockResolvedValue({
+      items: [
+        {
+          id: "interrupt-before-reversed-pair",
+          role: "assistant",
+          content: "Birkaç bilgi daha gerekiyor.",
+          workflow_status: "INTERRUPTED",
+          details: { interrupt: { kind: "missing_information", questions } },
+          created_at: "2026-08-24T16:40:00Z",
+        },
+        {
+          id: "assistant-result-sorted-first",
+          role: "assistant",
+          content: "Taslak hazırlandı.",
+          workflow_status: "COMPLETED",
+          details: null,
+          created_at: "2026-08-24T16:41:00Z",
+        },
+        {
+          id: "structured-response-sorted-last",
+          role: "user",
+          content: "belge_sayisi: 123",
+          workflow_status: null,
+          details: {
+            interaction_response: {
+              action: "answer",
+              answers: { belge_sayisi: "123" },
+              instructions: "",
+              reason: null,
+            },
+          },
+          created_at: "2026-08-24T16:41:00Z",
+        },
+      ],
+      total: 3,
+      page: 1,
+      page_size: 50,
+    });
+
+    const { result } = renderHook(
+      () => useChatWorkflow(null, "user-1", "user-1:web:reversed"),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(2));
+    expect(result.current.messages[0]).toMatchObject({
+      sender: "assistant",
+      text: "",
+      resolvedPrompt: { action: "answer", answers: { belge_sayisi: "123" } },
+    });
+    expect(result.current.messages[1]).toMatchObject({
+      sender: "assistant",
+      text: "Taslak hazırlandı.",
+    });
+    expect(result.current.messages.some((message) => message.sender === "user")).toBe(false);
+  });
+
+  it("repairs a legacy rejection returned after the cancellation reply", async () => {
+    mocks.messages.mockResolvedValue({
+      items: [
+        {
+          id: "legacy-reject-interrupt",
+          role: "assistant",
+          content: "Taslağı onaylıyor musunuz?",
+          workflow_status: "INTERRUPTED",
+          details: {
+            interrupt: {
+              kind: "writing_brief",
+              title: "Taslak kontrolü",
+              questions: [],
+            },
+          },
+          created_at: "2026-08-24T16:48:00Z",
+        },
+        {
+          id: "legacy-cancel-reply",
+          role: "assistant",
+          content: "Taslak talebi iptal edildi.",
+          workflow_status: "COMPLETED",
+          details: null,
+          created_at: "2026-08-24T16:49:00Z",
+        },
+        {
+          id: "legacy-reject-summary",
+          role: "user",
+          content: "reject: Kullanıcı taslağı iptal etti.",
+          workflow_status: null,
+          details: null,
+          created_at: "2026-08-24T16:49:00Z",
+        },
+      ],
+      total: 3,
+      page: 1,
+      page_size: 50,
+    });
+
+    const { result } = renderHook(
+      () => useChatWorkflow(null, "user-1", "user-1:web:legacy-reject"),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(2));
+    expect(result.current.messages[0]).toMatchObject({
+      sender: "assistant",
+      text: "",
+      resolvedPrompt: {
+        action: "reject",
+        reason: "Kullanıcı taslağı iptal etti.",
+      },
+    });
+    expect(result.current.messages[1]?.text).toBe("Taslak talebi iptal edildi.");
+    expect(result.current.messages.some((message) => message.sender === "user")).toBe(false);
+  });
+
+  it("never exposes an orphan structured resume carrier as a user bubble", async () => {
+    mocks.messages.mockResolvedValue({
+      items: [{
+        id: "orphan-resume-carrier",
+        role: "user",
+        content: "belge_sayisi: 123",
+        workflow_status: null,
+        details: {
+          interaction_response: {
+            action: "answer",
+            answers: { belge_sayisi: "123" },
+          },
+        },
+        created_at: "2026-08-24T16:50:00Z",
+      }],
+      total: 1,
+      page: 1,
+      page_size: 50,
+    });
+
+    const { result } = renderHook(
+      () => useChatWorkflow(null, "user-1", "user-1:web:orphan"),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(mocks.messages).toHaveBeenCalled());
+    expect(result.current.messages).toEqual([]);
+  });
+
   it("records each node's backend label and first-seen order, then clears both on the next send", async () => {
     mocks.send.mockImplementationOnce(async (_request, onEvent) => {
       onEvent({ event: "session", thread_id: "user-1:web:thread" });
@@ -535,13 +690,6 @@ describe("useChatWorkflow", () => {
 
   it("aborts an active stream without rendering a workflow failure", async () => {
     let receivedSignal: AbortSignal | undefined;
-    mocks.state.mockResolvedValue({
-      status: "interrupted",
-      interrupt: {
-        kind: "writing_brief",
-        questions: [{ key: "type", question: "Tür?", required: true }],
-      },
-    });
     mocks.send.mockImplementation((_request, onEvent, signal: AbortSignal) => {
       receivedSignal = signal;
       onEvent({ event: "session", thread_id: "user-1:web:cancelled" });
@@ -559,13 +707,54 @@ describe("useChatWorkflow", () => {
     await act(async () => pending);
 
     expect(receivedSignal?.aborted).toBe(true);
-    await waitFor(() => expect(mocks.state).toHaveBeenCalledWith("user-1:web:cancelled"));
+    await waitFor(() => expect(mocks.cancel).toHaveBeenCalledWith("user-1:web:cancelled"));
+    await waitFor(() => expect(result.current.messages[1]?.text).toBe("İşlem durduruldu."));
     expect(result.current.pendingInterrupt).toBeNull();
     expect(result.current.nodeStatus).toEqual({});
     expect(result.current.messages).toEqual([
       { sender: "user", text: "iptal et" },
-      { sender: "assistant", text: "İşlem durduruldu.", kind: "notice" },
+      {
+        id: expect.stringMatching(/^cancel:/),
+        sender: "assistant",
+        text: "İşlem durduruldu.",
+        kind: "notice",
+      },
     ]);
+  });
+
+  it("blocks the next message until backend cancellation settles", async () => {
+    let settleCancellation!: () => void;
+    mocks.cancel.mockImplementationOnce(() => new Promise<{ status: "cancelled" }>((resolve) => {
+      settleCancellation = () => resolve({ status: "cancelled" });
+    }));
+    mocks.send.mockImplementationOnce((_request, onEvent, signal: AbortSignal) => {
+      onEvent({ event: "session", thread_id: "user-1:web:stop-race" });
+      return new Promise<void>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")));
+      });
+    });
+    const { result } = renderHook(() => useChatWorkflow(null, "user-1"), { wrapper });
+
+    let firstTurn!: Promise<void>;
+    act(() => { firstTurn = result.current.send("ilk", "balanced", false); });
+    await waitFor(() => expect(result.current.loading).toBe(true));
+    act(() => result.current.cancel());
+    await act(async () => firstTurn);
+
+    await act(() => result.current.send("çok erken", "balanced", false));
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+
+    mocks.send.mockImplementationOnce(async (_request, onEvent) => {
+      onEvent({ event: "final_result", reply: "devam", workflow_status: "COMPLETED" });
+    });
+    await act(async () => {
+      settleCancellation();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.messages[1]?.text).toBe("İşlem durduruldu."));
+
+    await act(() => result.current.send("şimdi gönder", "balanced", false));
+    expect(mocks.send).toHaveBeenCalledTimes(2);
   });
 
   it("silently clears an interrupt that settled before its form was submitted", async () => {
