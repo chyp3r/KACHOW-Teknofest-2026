@@ -4,6 +4,28 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [Unreleased]
 ### Düzeltildi
+- Gerçek 23 belgelik derlem üzerinde ölçülen OCR karşılaştırması README'ye
+  eklendi (üretimde kullanılan `glm-ocr`'ın ölçülmemiş "95" değeri gerçek
+  başlık/imza kurtarma oranlarıyla değiştirildi, iki grafik eklendi). Ölçüm
+  vision onarım zincirinde iki gerçek hata ortaya çıkardı, ikisi de
+  düzeltildi: onarım artık öncesine göre daha az alan kurtarıyorsa
+  ([fallback.py](backend/app/infrastructure/extractors/fallback.py))
+  orijinal metin korunuyor (koruma yoktu, CY-050 3/3→2/3 gibi regresyonlar
+  sessizce geçiyordu); header-band kırpımı yetersiz kaldığında imza için
+  zaten var olan tam-sayfa yükseltme mekanizması artık başlık alanları
+  için de tetikleniyor (6/9 header-eksik belge daha önce hiç
+  yükselmiyordu).
+- Mevzuat önerisinin açıklaması (`aciklama`) `check_groundedness` tarafından
+  desteksiz bulunduğunda hiçbir yere loglanmadan sessizce jenerik
+  "otomatik açıklama üretilemedi" metniyle değiştiriliyordu
+  ([document_analysis_graph.py](backend/app/ai/workflows/document_analysis_graph.py))
+  -- artık hangi iddianın neden reddedildiği WARNING seviyesinde loglanıyor.
+  Bu loglama gerçek bir üretim örneğini yakaladı: `DOCUMENT_NUMBER_PATTERN`
+  ([draft_verifier.py](backend/app/ai/verification/draft_verifier.py)),
+  belge sayısı deseniyle aynı şekli paylaştığı için "Madde 15/2" gibi bir
+  mevzuat fıkra atfını sahte bir belge sayısı ("15/2") sanıyordu --
+  `LEGISLATION_PATTERN`'de zaten var olan ters yöndeki korumanın aynısı
+  eklendi, doğru ve dayanaklı bir açıklama artık gereksiz yere atılmıyor.
 - Ana Sayfa hareketlilik grafiği tüm rollerde aynı yedi günlük kişisel evrak /
   taslak ritmine geçirildi; hızlı işlemler banner altına taşındı. Kenar çubuğu
   bildirim ve tek düğmeli sistem/açık/koyu tema geçişi çalışma alanının üstünde
