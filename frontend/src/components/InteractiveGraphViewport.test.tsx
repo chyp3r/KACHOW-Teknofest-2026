@@ -86,4 +86,31 @@ describe("InteractiveGraphViewport", () => {
 
     expect(graph.getAttribute("viewBox")).not.toBe(initialViewBox);
   });
+
+  it("uses the wheel only for graph zoom and does not scroll an ancestor", () => {
+    const onParentWheel = vi.fn();
+    render(
+      <div onWheel={onParentWheel}>
+        <InteractiveGraphViewport ariaLabel="test graph">
+          <circle r={5} />
+        </InteractiveGraphViewport>
+      </div>,
+    );
+    const graph = mockSvgRect();
+    const viewport = screen.getByRole("region", { name: "Etkileşimli teknik grafik" });
+    const initialViewBox = graph.getAttribute("viewBox");
+    const wheelEvent = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 280,
+      clientY: 350,
+      deltaY: -100,
+    });
+
+    fireEvent(viewport, wheelEvent);
+
+    expect(wheelEvent.defaultPrevented).toBe(true);
+    expect(onParentWheel).not.toHaveBeenCalled();
+    expect(graph.getAttribute("viewBox")).not.toBe(initialViewBox);
+  });
 });

@@ -23,7 +23,7 @@ import { Input, Select, Textarea } from "../../components/FormControls";
 import { StatusBadge } from "../../components/StatusBadge";
 import type { DocumentAnalysis, DocumentMetadata, DocumentText, EvrakFields, KnowledgeGraph } from "../../types/documents";
 import { DocumentAnalysisPanel } from "./DocumentAnalysisPanel";
-import { Card, Spinner } from "../../components/Surface";
+import { Alert, Card, Spinner } from "../../components/Surface";
 import { Tabs } from "../../components/Tabs";
 import { DocumentListItem } from "./DocumentListItem";
 
@@ -87,6 +87,7 @@ export function DocumentTable({
   deletingDocument,
   onGenerateDetailedSummary,
   generatingDetailedSummary,
+  generatingDetailedSummaryPath,
   documentGraph,
   loadingDocumentGraph,
   documentText,
@@ -94,6 +95,7 @@ export function DocumentTable({
   savingText,
   onReextract,
   reextracting,
+  showUploader = false,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
@@ -109,6 +111,7 @@ export function DocumentTable({
   deletingDocument?: boolean;
   onGenerateDetailedSummary?: (storagePath: string) => Promise<void>;
   generatingDetailedSummary?: boolean;
+  generatingDetailedSummaryPath?: string | null;
   documentGraph?: KnowledgeGraph | null;
   loadingDocumentGraph?: boolean;
   documentText?: DocumentText | null;
@@ -116,6 +119,7 @@ export function DocumentTable({
   savingText?: boolean;
   onReextract?: (storagePath: string) => Promise<void>;
   reextracting?: boolean;
+  showUploader?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
@@ -128,8 +132,24 @@ export function DocumentTable({
   const [editingText, setEditingText] = useState(false);
   const [textDraft, setTextDraft] = useState<string[]>([]);
   const [textError, setTextError] = useState<string | null>(null);
+  const [detailedSummaryError, setDetailedSummaryError] = useState<string | null>(null);
+  const [analysisElapsedSeconds, setAnalysisElapsedSeconds] = useState(0);
 
   useEffect(() => setPage(1), [query, type, status, date]);
+  useEffect(() => {
+    if (!analyzingStoragePath) {
+      setAnalysisElapsedSeconds(0);
+      return undefined;
+    }
+
+    const startedAt = Date.now();
+    const updateElapsedSeconds = () => {
+      setAnalysisElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    };
+    updateElapsedSeconds();
+    const intervalId = window.setInterval(updateElapsedSeconds, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [analyzingStoragePath]);
 
   const detailTab = detailState.path === selected?.storage_path ? detailState.tab : "summary";
   const setDetailTab = (tab: DetailTab) => setDetailState({ path: selected?.storage_path ?? null, tab });
@@ -137,7 +157,20 @@ export function DocumentTable({
     setDetailState({ path: document.storage_path, tab });
     setEditingText(false);
     setTextError(null);
+    setDetailedSummaryError(null);
     onSelect(document);
+  };
+
+  const generateDetailedSummary = async () => {
+    if (!selected || !onGenerateDetailedSummary) return;
+    setDetailedSummaryError(null);
+    try {
+      await onGenerateDetailedSummary(selected.storage_path);
+    } catch (error) {
+      setDetailedSummaryError(
+        error instanceof Error ? error.message : "Detaylı özet oluşturulamadı.",
+      );
+    }
   };
 
   const types = useMemo(
@@ -185,6 +218,18 @@ export function DocumentTable({
   const selectedNeedsReview = selected?.analyzed !== false
     && (selectedIssueCount > 0 || selected?.compliance_status.toLocaleLowerCase("tr-TR") !== "compliant");
   const selectedStatus = selected ? documentStatus(selected, selectedIssueCount) : null;
+  const selectedIsAnalyzing = analyzingStoragePath === selected?.storage_path;
+  const selectedIsGeneratingDetailedSummary = Boolean(
+    selected
+    && generatingDetailedSummary
+    && (
+      generatingDetailedSummaryPath == null
+      || generatingDetailedSummaryPath === selected.storage_path
+    ),
+  );
+  const analysisActionLabel = selectedIsAnalyzing
+    ? `${analysisElapsedSeconds} saniyedir analiz ediliyor`
+    : "Analiz et";
   const primaryFields = analysis
     ? (Object.entries(FIELD_LABELS) as Array<[keyof EvrakFields, string]>)
       .filter(([key]) => hasValue(analysis.fields[key]))
@@ -273,6 +318,7 @@ export function DocumentTable({
                       onAnalyze={onAnalyzeDocument ? () => void onAnalyzeDocument(item.storage_path).catch(() => undefined) : undefined}
                       analyzing={analyzingStoragePath === item.storage_path}
                       onDelete={onDeleteDocument ? () => setPendingDeletePath(item.storage_path) : undefined}
+                      showUploader={showUploader}
                     />
                   </li>
                 );
@@ -295,7 +341,7 @@ export function DocumentTable({
 
             <div className="document-detail-actions">
               {selected.analyzed === false && onAnalyzeDocument ? (
-                <Button leadingIcon={<FileSearch />} loading={analyzingStoragePath === selected.storage_path} onClick={() => void onAnalyzeDocument(selected.storage_path).catch(() => undefined)}>Analiz et</Button>
+                <Button leadingIcon={<FileSearch />} loading={selectedIsAnalyzing} onClick={() => void onAnalyzeDocument(selected.storage_path).catch(() => undefined)}>{analysisActionLabel}</Button>
               ) : selectedNeedsReview ? (
                 <Button leadingIcon={<FileSearch />} onClick={() => setDetailTab("analysis")}>Analizi incele</Button>
               ) : (
@@ -321,7 +367,7 @@ export function DocumentTable({
                 <div className="document-analysis-pending">
                   <span className="document-detail-pending-icon"><FileSearch /></span>
                   <div><strong>Bu evrak henüz analiz edilmedi</strong><p>Belge türü, özet ve ilgili alanları oluşturmak için analizi başlatın.</p></div>
-                  {onAnalyzeDocument && <Button loading={analyzingStoragePath === selected.storage_path} onClick={() => void onAnalyzeDocument(selected.storage_path).catch(() => undefined)}>Analizi başlat</Button>}
+                  {onAnalyzeDocument && <Button loading={selectedIsAnalyzing} onClick={() => void onAnalyzeDocument(selected.storage_path).catch(() => undefined)}>{selectedIsAnalyzing ? analysisActionLabel : "Analizi başlat"}</Button>}
                 </div>
               ) : loading && !analysis ? (
                 <div className="centered-state"><Spinner label="Analiz ayrıntıları yükleniyor" />Analiz ayrıntıları yükleniyor…</div>
@@ -335,6 +381,33 @@ export function DocumentTable({
                       <span><small>Sayfa</small><strong>{analysis?.extraction.page_count ?? "—"}</strong></span>
                     </aside>
                   </div>
+                  {analysis && onGenerateDetailedSummary && (
+                    <section className="document-detailed-summary">
+                      <header>
+                        <div>
+                          <h3>Detaylı özet</h3>
+                          {!analysis.detailed_summary && (
+                            <p>Belgenin tamamını kapsayan ayrıntılı özeti ihtiyaç halinde oluşturun.</p>
+                          )}
+                        </div>
+                        {!analysis.detailed_summary && (
+                          <Button
+                            leadingIcon={<FileSearch />}
+                            loading={selectedIsGeneratingDetailedSummary}
+                            onClick={() => void generateDetailedSummary()}
+                          >
+                            Detaylı özet oluştur
+                          </Button>
+                        )}
+                      </header>
+                      {detailedSummaryError && <Alert variant="error">{detailedSummaryError}</Alert>}
+                      {analysis.detailed_summary && (
+                        <p className="document-summary-text document-summary-text-detailed">
+                          {analysis.detailed_summary}
+                        </p>
+                      )}
+                    </section>
+                  )}
                   {primaryFields.length > 0 && <section><h3>Temel bilgiler</h3><dl>{primaryFields.map((item) => <div key={item.key}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl></section>}
                   {analysis && <section className="document-detected-elements"><h3>Tespit edilen unsurlar</h3><div className="document-detected-counts"><span><strong>{detectedEntities.length}</strong> ad/kurum/yer</span><span><strong>{analysis.fields.ilgi?.length ?? 0}</strong> ilgi</span><span><strong>{analysis.fields.ekler?.length ?? 0}</strong> ek</span></div>{detectedEntities.length > 0 && <ul>{detectedEntities.map((entity) => <li key={entity}>{entity}</li>)}</ul>}</section>}
                 </div>
@@ -342,6 +415,7 @@ export function DocumentTable({
                 <dl className="document-reference-metadata">
                   <div><dt>Evrak adı</dt><dd>{selected.file_name}</dd></div>
                   <div><dt>Evrak türü</dt><dd>{selected.document_type_label || selected.document_type || "—"}</dd></div>
+                  {showUploader && <div><dt>Yükleyen</dt><dd>{selected.uploader_username || "Bilinmeyen kullanıcı"}</dd></div>}
                   <div><dt>Yükleme tarihi</dt><dd>{formatDate(selected.upload_time)}</dd></div>
                   <div><dt>Durum</dt><dd>{selectedStatus?.label || "—"}</dd></div>
                   <div><dt>Sayfa sayısı</dt><dd>{analysis?.extraction.page_count ?? "—"}</dd></div>
@@ -362,7 +436,7 @@ export function DocumentTable({
                   <section className={`document-analysis-verdict ${analysisIssues.length ? "needs-review" : "is-ready"}`}><span>{analysisIssues.length ? <AlertTriangle /> : <CheckCircle2 />}</span><div><h3>{analysisIssues.length ? `${analysisIssues.length} konu incelenmeli` : "Belge karar sürecine hazır"}</h3><p>{analysisIssues.length ? "Taslak veya yönlendirme öncesinde aşağıdaki bulguları doğrulayın." : "Zorunlu alanlar ve güvenlik kontrolleri tamamlandı."}</p></div></section>
                   {analysisIssues.length > 0 && <section><h3>İnceleme başlıkları</h3><ol className="document-issue-list">{analysisIssues.map((issue, index) => <li key={`${issue.title}-${index}`} className={`is-${issue.tone}`}><span>{index + 1}</span><div><strong>{issue.title}</strong><p>{issue.detail}</p></div></li>)}</ol></section>}
                   {analysis && <section><h3>Mevzuat ve dayanaklar</h3>{analysis.mevzuat_references.length ? <ul className="document-reference-list">{analysis.mevzuat_references.map((item, index) => <li key={`${item.mevzuat}-${index}`}><strong>{item.mevzuat}</strong><p>{item.aciklama}</p></li>)}</ul> : <p className="detail-empty">Ek bir mevzuat önerisi bulunmadı.</p>}</section>}
-                  <DocumentAnalysisPanel variant="compact" analysis={analysis} saving={updatingFields} onSave={onUpdateFields && analysis ? (fields) => onUpdateFields(analysis.storage_path, fields) : undefined} generatingDetailedSummary={generatingDetailedSummary} onGenerateDetailedSummary={onGenerateDetailedSummary && analysis ? () => onGenerateDetailedSummary(analysis.storage_path) : undefined} documentGraph={documentGraph} loadingDocumentGraph={loadingDocumentGraph} />
+                  <DocumentAnalysisPanel variant="compact" analysis={analysis} saving={updatingFields} onSave={onUpdateFields && analysis ? (fields) => onUpdateFields(analysis.storage_path, fields) : undefined} generatingDetailedSummary={selectedIsGeneratingDetailedSummary} onGenerateDetailedSummary={onGenerateDetailedSummary && analysis ? () => onGenerateDetailedSummary(analysis.storage_path) : undefined} documentGraph={documentGraph} loadingDocumentGraph={loadingDocumentGraph} />
                 </div>
               )}
             </div>
