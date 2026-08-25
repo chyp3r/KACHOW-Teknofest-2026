@@ -27,7 +27,6 @@ from app.ai.embeddings.models import get_embeddings_client  # noqa: E402
 from app.ai.policy import POLICY_VERSION  # noqa: E402
 from app.ai.policy.prototypes import FAMILIES, prototype_texts  # noqa: E402
 from app.ai.semantic.prototype_matcher import PROTOTYPE_DIR  # noqa: E402
-from app.core.config import settings  # noqa: E402
 
 
 async def build() -> int:
@@ -37,7 +36,7 @@ async def build() -> int:
         Process exit code.
     """
     client = get_embeddings_client()
-    model_name = settings.OLLAMA_EMBEDDING_MODEL
+    model_name = client.model_name
     PROTOTYPE_DIR.mkdir(parents=True, exist_ok=True)
 
     for family in FAMILIES:

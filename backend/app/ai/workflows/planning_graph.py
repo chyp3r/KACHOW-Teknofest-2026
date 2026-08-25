@@ -824,7 +824,7 @@ def create_planning_graph(
     prototype_matcher: PrototypeMatcher | None = None
     if embeddings_client is not None:
         candidate = PrototypeMatcher(
-            embeddings_client, model_name=settings.OLLAMA_EMBEDDING_MODEL
+            embeddings_client, model_name=embeddings_client.model_name
         )
         prototype_matcher = candidate if candidate.available else None
 
