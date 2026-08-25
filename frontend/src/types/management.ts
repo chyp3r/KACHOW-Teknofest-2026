@@ -202,6 +202,11 @@ export interface RootUserStats {
 
 export interface RootHealth {
   status: string;
+  project?: string;
+  environment?: string;
+  dependencies?: Record<"postgres" | "redis" | "qdrant" | "ollama", import("./health").DependencyHealth>;
+  checkpointer?: import("./health").DependencyHealth;
+  router_semantic?: import("./health").DependencyHealth;
   companies_last_activity: Record<string, string | null>;
   [key: string]: unknown;
 }

@@ -43,6 +43,10 @@ export const draftService = {
       method: "PATCH",
       body: JSON.stringify({ destination }),
     }),
+  approveReview: (draftId: string) =>
+    apiRequest<PersistedDraft>(`/api/v1/drafts/${encodeURIComponent(draftId)}/review/approve`, {
+      method: "POST",
+    }),
   remove: (draftId: string) =>
     apiRequest<{ deleted: boolean }>(`/api/v1/drafts/${encodeURIComponent(draftId)}`, {
       method: "DELETE",
