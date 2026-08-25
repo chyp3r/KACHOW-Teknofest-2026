@@ -1183,7 +1183,7 @@ async def test_header_repair_degrades_to_the_original_text_on_an_empty_transcrip
 
 # ==========================================
 # Signature-recovery escalation (`_maybe_repair_page_one` /
-# `_repair_signature`) -- header-band repair only ever touches the top
+# `_repair_full_page`) -- header-band repair only ever touches the top
 # HEADER_BAND_FRACTION of the page, but a signature block sits well below
 # it. `signature_probe` decides whether a document instead gets a
 # full-page transcription, which replaces page 1 wholesale (and so also
@@ -1296,6 +1296,118 @@ async def test_no_signature_probe_configured_keeps_header_band_only_behaviour():
         assert mock_urlopen.call_count == 1
 
 
+# ==========================================
+# Regression guard (`_repair_would_regress`) -- every vision repair in this
+# class must be monotonic: it may only add prescribed fields back, never
+# take them away. Added after measuring the real corpus: header-band repair
+# dropped CY-050 from 3/3 header fields to 2/3, and full-page repair
+# dropped three other documents from 4/4 to 3/4 -- both still cleared
+# MIN_HEADER_FIELD_COUNT's floor, so neither would have been caught
+# downstream without this check.
+# ==========================================
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.vision.urllib.request.urlopen")
+async def test_header_band_repair_reverts_when_it_recovers_fewer_fields(mock_urlopen):
+    """The crop replaces the leading HEADER_REPAIR_LINE_COUNT lines, where
+    both prescribed fields in this document happen to sit -- the vision
+    transcription only recovers one of them. Recovering fewer fields than
+    the original already had must revert to the original, not accept a
+    'repair' that made things worse."""
+    mock_urlopen.return_value = _fake_ollama_response("ALAN1 kırpılmış (1 alan)")
+    vision = OllamaVisionExtractor()
+    original_lines = [f"satır {i}" for i in range(20)]
+    original_lines[5] = "ALAN1 ALAN2 satır5"  # inside the first 14 lines -- the crop replaces this
+    chain = FallbackDocumentExtractor(
+        [], header_repair=vision,
+        header_field_probe=lambda text: text.count("ALAN"),
+    )
+    result = ExtractedDocument(
+        text="\n".join(original_lines), pages=["\n".join(original_lines)], page_count=1,
+        extractor="tesseract", used_ocr=True,
+    )
+    raster_cache = {vision.dpi: [Image.new("L", (100, 400), color=255)]}
+
+    repaired = await chain._maybe_repair_header(result, raster_cache, PDF_BYTES, {})
+
+    assert repaired.pages[0] == result.pages[0]  # unchanged, not the 1-field crop
+    assert mock_urlopen.call_count == 1  # the crop was attempted, then discarded
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.vision.urllib.request.urlopen")
+async def test_header_band_repair_insufficient_escalates_to_full_page(mock_urlopen):
+    """A prescribed header field can sit below HEADER_BAND_FRACTION just
+    like a signature can -- when the crop alone still leaves page 1 short
+    of the header-field floor, escalate to a full-page transcription
+    instead of silently accepting the crop as final (measured on the real
+    corpus: 6 of 9 header-short documents never escalated past the crop
+    because their signature parsed fine throughout, so nothing else
+    triggered a second look)."""
+    responses = iter([
+        _fake_ollama_response("ALAN1 (kırpma -- yetersiz)"),
+        _fake_ollama_response("ALAN1 ALAN2 (tam sayfa)"),
+    ])
+    mock_urlopen.side_effect = lambda *a, **k: next(responses)
+    vision = OllamaVisionExtractor()
+    original_lines = [f"satır {i}" for i in range(20)]  # zero ALAN markers to start
+    chain = FallbackDocumentExtractor(
+        [], header_repair=vision,
+        header_field_probe=lambda text: text.count("ALAN"),
+        min_header_field_count=2,
+    )
+    result = ExtractedDocument(
+        text="\n".join(original_lines), pages=["\n".join(original_lines)], page_count=1,
+        extractor="tesseract", used_ocr=True,
+    )
+    raster_cache = {vision.dpi: [Image.new("L", (100, 400), color=255)]}
+
+    repaired = await chain._maybe_repair_page_one(result, raster_cache, PDF_BYTES, {})
+
+    # The crop alone (1 field) recovers more than the original (0) so it's
+    # not a regression, but 1 is still below the floor of 2 -- escalation
+    # fires and the full-page transcription (2 fields) wins.
+    assert repaired.pages[0] == "ALAN1 ALAN2 (tam sayfa)"
+    assert mock_urlopen.call_count == 2  # crop, then full-page escalation
+
+
+@pytest.mark.asyncio
+@patch("app.infrastructure.extractors.vision.urllib.request.urlopen")
+async def test_full_page_escalation_also_regressing_keeps_the_true_original(mock_urlopen):
+    """Cascading revert: the crop isn't a regression on its own (so it's
+    accepted) but still leaves page 1 below the header-field floor, so
+    _maybe_repair_page_one escalates to a full-page transcription -- which
+    itself recovers fewer fields than the ORIGINAL (pre-crop) result. The
+    final output must be the untouched original, not the crop (already
+    discarded once escalation fired) and not the worse full-page text."""
+    responses = iter([
+        _fake_ollama_response("kırpma metni"),          # crop: 0 fields of its own
+        _fake_ollama_response("tam sayfa, alan yok"),    # full-page: 0 fields, replaces everything
+    ])
+    mock_urlopen.side_effect = lambda *a, **k: next(responses)
+    vision = OllamaVisionExtractor()
+    original_lines = [f"satır {i}" for i in range(20)]
+    original_lines[15] = "ALAN1 içeren satır"  # past HEADER_REPAIR_LINE_COUNT (14) -- survives the crop
+    chain = FallbackDocumentExtractor(
+        [], header_repair=vision,
+        header_field_probe=lambda text: text.count("ALAN"),
+        min_header_field_count=2,
+    )
+    result = ExtractedDocument(
+        text="\n".join(original_lines), pages=["\n".join(original_lines)], page_count=1,
+        extractor="tesseract", used_ocr=True,
+    )
+    raster_cache = {vision.dpi: [Image.new("L", (100, 400), color=255)]}
+
+    repaired = await chain._maybe_repair_page_one(result, raster_cache, PDF_BYTES, {})
+
+    # Crop keeps "ALAN1 içeren satır" via the surviving lines (1 field,
+    # same as the original -- not a regression, but still below the floor
+    # of 2) -- escalates. Full-page replaces the whole page and loses that
+    # field too (0 < the original's 1) -- reverts all the way back.
+    assert repaired.pages[0] == result.pages[0]
+    assert mock_urlopen.call_count == 2  # crop, then a full-page attempt that also lost
+
+
 # ------------------------------------------------------------------------
 # Field-triggered escalation, combined with header repair inside the chain
 # loop -- these exercise the two traps repairing a candidate mid-loop
@@ -1333,18 +1445,32 @@ async def test_repair_crop_is_transcribed_once_per_extract_call(mock_urlopen):
 
     assert first.call_count == 1
     assert second.call_count == 1
-    assert mock_urlopen.call_count == 1
+    # A probe that never reports "enough" also never lets the crop clear
+    # `_has_enough_header_fields`, so `_maybe_repair_page_one` escalates to
+    # a full-page transcription too (see `test_header_band_repair_insufficient_
+    # escalates_to_full_page`) -- 2 distinct vision costs (crop + full-page),
+    # each still transcribed exactly once and reused across both candidates,
+    # not 2 calls total across the loop.
+    assert mock_urlopen.call_count == 2
 
 
 @pytest.mark.asyncio
 @patch("app.infrastructure.extractors.vision.urllib.request.urlopen")
 async def test_best_effort_does_not_double_splice_an_already_repaired_result(mock_urlopen):
     """The loop-exit best-effort return must not repair a `best` that was
-    already repaired inside the loop. Splicing twice would re-replace the
-    first HEADER_REPAIR_LINE_COUNT (14) lines of what is by then the
-    repaired header (1 line) plus real body lines -- on a 7-line repaired
-    page that deletes the body entirely."""
-    mock_urlopen.return_value = _fake_ollama_response("T.C.\nÖRNEK BAKANLIĞI (onarıldı)")
+    already repaired inside the loop. With header_field_probe unsatisfiable,
+    `_maybe_repair_page_one` escalates in-loop all the way to a full-page
+    transcription (see test_header_band_repair_insufficient_escalates_to_
+    full_page) -- re-running header-band repair on THAT result at loop-exit
+    would splice its own first HEADER_REPAIR_LINE_COUNT (14) lines away a
+    second time, discarding real content the full-page transcription
+    already recovered."""
+    full_page_text = "\n".join(f"TAMSAYFA{i}" for i in range(16))
+    responses = iter([
+        _fake_ollama_response("KIRPILMIŞ BAŞLIK"),
+        _fake_ollama_response(full_page_text),
+    ])
+    mock_urlopen.side_effect = lambda *a, **k: next(responses)
     vision = OllamaVisionExtractor()
     text = "\n".join(f"satır{i}" for i in range(20))  # see quality_ratio note above
     only = _FakeExtractor("only", text=text, used_ocr=True)
@@ -1359,9 +1485,11 @@ async def test_best_effort_does_not_double_splice_an_already_repaired_result(moc
 
     result = await chain.extract(b"data", raster_cache=raster_cache)
 
-    assert result.pages[0].startswith("T.C.\nÖRNEK BAKANLIĞI (onarıldı)\n")
-    assert "satır14" in result.pages[0]
-    assert "satır19" in result.pages[0]
+    # A second splice would replace TAMSAYFA0..13 with "KIRPILMIŞ BAŞLIK"
+    # (only TAMSAYFA14/15 would survive as the "remaining lines") -- exact
+    # equality catches that immediately.
+    assert result.pages[0] == full_page_text
+    assert mock_urlopen.call_count == 2  # crop, then the full-page escalation -- never more
 
 
 @pytest.mark.asyncio
@@ -1369,11 +1497,16 @@ async def test_max_ocr_pages_skips_full_page_vision_but_not_header_repair():
     """A long attachment bundle should not pay full-document vision cost to
     fix header fields that only ever live on page 1: the vision extractor
     (also configured as `header_repair`) is skipped as a *chain member* once
-    a prior candidate's page count exceeds MAX_OCR_PAGES, but header-band
-    repair -- always page-1-only regardless of document length -- still
-    applies to whichever result the chain does return."""
+    a prior candidate's page count exceeds MAX_OCR_PAGES, but page-1 repair
+    -- header-band, and full-page escalation when that alone isn't enough --
+    is always page-1-only regardless of document length, so it still applies
+    to whichever result the chain does return."""
     with patch("app.infrastructure.extractors.vision.urllib.request.urlopen") as mock_urlopen:
-        mock_urlopen.return_value = _fake_ollama_response("T.C.\nÖRNEK BAKANLIĞI (onarıldı)")
+        responses = iter([
+            _fake_ollama_response("KIRPILMIŞ BAŞLIK"),
+            _fake_ollama_response("TAM SAYFA ONARIM"),
+        ])
+        mock_urlopen.side_effect = lambda *a, **k: next(responses)
         vision = OllamaVisionExtractor()
 
         class _LongDocument(_FakeExtractor):
@@ -1397,12 +1530,16 @@ async def test_max_ocr_pages_skips_full_page_vision_but_not_header_repair():
         result = await chain.extract(b"data", raster_cache=raster_cache)
 
     # The vision extractor never ran as a full chain member (its own
-    # .extract() would have produced text="T.C.\nÖRNEK BAKANLIĞI (onarıldı)"
-    # with no "satır" lines at all) -- long_doc's best-effort result won
-    # instead, with header repair still spliced over its first page.
+    # .extract() would have transcribed the whole "satır0".."satır19" text,
+    # not produced either mocked repair response below) -- long_doc's
+    # best-effort result won instead. The unsatisfiable probe means the
+    # crop alone never clears the header-field floor, so page-1 repair
+    # escalates all the way to a full-page transcription -- exactly as it
+    # would for a short document, since MAX_OCR_PAGES only gates chain
+    # membership, never page-1 repair.
     assert result.extractor == "long_doc"
-    assert result.pages[0].startswith("T.C.\nÖRNEK BAKANLIĞI (onarıldı)\n")
-    assert "satır19" in result.pages[0]
+    assert result.pages[0] == "TAM SAYFA ONARIM"
+    assert mock_urlopen.call_count == 2  # crop, then the full-page escalation
 
 
 # ==========================================
