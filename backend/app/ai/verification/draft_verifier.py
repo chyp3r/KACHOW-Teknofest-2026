@@ -43,7 +43,25 @@ MIN_AUTOMATED_CONFIDENCE_SCORE = get_policy().verification.min_automated_confide
 PLACEHOLDER_PATTERN = re.compile(r"\[[^\]]*\]")
 
 #: Document numbers such as "E-12345678-903-4567" or "2024/145".
-DOCUMENT_NUMBER_PATTERN = re.compile(r"\b(?:[A-ZÇĞİÖŞÜ]-)?\d{2,}(?:[-/]\d+)+\b")
+#:
+#: The negative lookbehinds are load-bearing, the mirror image of
+#: LEGISLATION_PATTERN's own guard below. Without them this pattern reads a
+#: "madde N/fıkra" legislation reference as a document number: "Madde 15/2"
+#: yields a phantom "15/2" document-number claim, checked against the real
+#: document numbers in context and reported as fabricated on a perfectly
+#: grounded mevzuat explanation -- confirmed in production
+#: (suggest_mevzuat_node's own diagnostic log): an explanation citing
+#: "Madde 15/2" and accurately noting the document's date field was empty
+#: got discarded over exactly this phantom "sayı='15/2'" claim, replaced
+#: with the generic "otomatik açıklama üretilemedi" fallback.
+#: Scoped (?i:...) rather than a compile-time re.IGNORECASE flag: the
+#: latter would also fold [A-ZÇĞİÖŞÜ] below to match a lowercase prefix,
+#: silently widening what counts as a document number well beyond this
+#: fix's actual scope (case-insensitive "madde"/"m." only).
+DOCUMENT_NUMBER_PATTERN = re.compile(
+    r"(?<!(?i:madde) )(?<!(?i:m)\. )(?<!(?i:m)\.)"
+    r"\b(?:[A-ZÇĞİÖŞÜ]-)?\d{2,}(?:[-/]\d+)+\b"
+)
 
 #: Dates in the formats the regulation uses, plus ISO 8601 ("2026-04-09") --
 #: an uploaded document's own extracted text uses that shape at least as

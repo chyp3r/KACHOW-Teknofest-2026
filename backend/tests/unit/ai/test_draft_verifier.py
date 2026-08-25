@@ -348,6 +348,35 @@ def test_a_reference_number_is_not_read_as_a_legislation_citation():
     assert [claim.value for claim in report.unsupported_claims] == []
 
 
+def test_an_article_paragraph_reference_is_not_read_as_a_document_number():
+    """"Madde 15/2" must not yield a phantom "15/2" document-number claim.
+
+    Mirror image of test_a_reference_number_is_not_read_as_a_legislation_
+    citation above -- DOCUMENT_NUMBER_PATTERN's own N/N shape collides with
+    Turkish "madde N/fıkra" notation the same way LEGISLATION_PATTERN's
+    "N sayılı" shape collided with a document number's tail. Confirmed in
+    production (suggest_mevzuat_node's diagnostic log): a mevzuat
+    explanation citing "Madde 15/2" and correctly noting the document's
+    date field was empty was discarded over exactly this phantom claim.
+    """
+    draft = WELL_FORMED_DRAFT.replace(
+        "Arz ederim.", "Madde 15/2 uyarınca arz ederim."
+    )
+
+    report = verify_draft(draft, source_document="Sayı: E-123-456 Tarih: 30.07.2026")
+
+    assert "sayı" not in {claim.kind for claim in report.unsupported_claims}
+
+
+def test_an_abbreviated_article_paragraph_reference_is_not_read_as_a_document_number():
+    """Same guard, "m." abbreviated form -- "m.15/2" and "m. 15/2" both."""
+    draft = WELL_FORMED_DRAFT.replace("Arz ederim.", "m.15/2 uyarınca arz ederim.")
+
+    report = verify_draft(draft, source_document="Sayı: E-123-456 Tarih: 30.07.2026")
+
+    assert "sayı" not in {claim.kind for claim in report.unsupported_claims}
+
+
 def test_a_genuine_law_citation_is_still_extracted():
     """The lookbehind must not blind the pattern to real citations."""
     draft = WELL_FORMED_DRAFT.replace("Arz ederim.", "9999 sayılı Kanun uyarınca arz ederim.")
