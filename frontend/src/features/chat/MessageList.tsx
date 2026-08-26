@@ -1,4 +1,4 @@
-import { Bot, FilePenLine, FileSearch, Info, MessageSquare, Route, UploadCloud, UserRound } from "lucide-react";
+import { Bot, FilePenLine, FileSearch, Info, MessageCircle, MessageSquare, Route, Sparkles, UploadCloud, UserRound } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import type { UIEvent } from "react";
 import ReactMarkdown from "react-markdown";
@@ -132,19 +132,33 @@ export function MessageList({
   return (
     <div className="messages-area" ref={containerRef} onScroll={handleScroll}>
       {visibleMessages.length === 0 && !streamingText && !interrupt && !uploadingDocumentName ? (
-        <EmptyState className="chat-empty-state" icon={MessageSquare} title="Nasıl yardımcı olabilirim?" description="Bir evrak üzerinde çalışın veya resmî yazışma süreciniz için destek alın." primaryAction={
+        <EmptyState className="chat-empty-state" icon={MessageSquare} title="Nasıl yardımcı olabilirim?" description={hasSelectedDocument
+          ? "Seçili içerik üzerinde çalışın veya resmî yazışma süreciniz için destek alın."
+          : "Bir soru sorun, birlikte fikir üretin veya KACHOW'un neler yapabildiğini keşfedin."
+        } primaryAction={
           <div className="suggested-actions" aria-label="Önerilen başlangıçlar">
-            {hasSelectedDocument && (
-              <Button variant="secondary" leadingIcon={<FileSearch />} onClick={() => onSuggestion("Seçili evrakı incele ve önemli noktaları özetle.")}>
-                <span><strong>Seçili evrakı incele</strong><small>Önemli noktaları ve eksikleri özetle</small></span>
-              </Button>
+            {hasSelectedDocument ? (
+              <>
+                <Button variant="secondary" leadingIcon={<FileSearch />} onClick={() => onSuggestion("Seçili evrakı incele ve önemli noktaları özetle.")}>
+                  <span><strong>Seçili içeriği incele</strong><small>Önemli noktaları ve eksikleri özetle</small></span>
+                </Button>
+                <Button variant="secondary" leadingIcon={<FilePenLine />} onClick={() => onSuggestion("Seçili içerik için resmî yazı taslağı hazırla.")}>
+                  <span><strong>Resmî taslak hazırla</strong><small>Uygun yazışma biçimini kullan</small></span>
+                </Button>
+                <Button variant="secondary" leadingIcon={<Route />} onClick={() => onSuggestion("Seçili içerik için uygun hedef birimi gerekçesiyle öner.")}>
+                  <span><strong>Hedef birim öner</strong><small>Son kararı vermeden öneri oluştur</small></span>
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="secondary" leadingIcon={<Sparkles />} onClick={() => onSuggestion("Neler yapabildiğini ve bana hangi konularda yardımcı olabileceğini kısaca anlat.")}>
+                  <span><strong>Neler yapabilirsin?</strong><small>KACHOW'un yeteneklerini keşfet</small></span>
+                </Button>
+                <Button variant="secondary" leadingIcon={<MessageCircle />} onClick={() => onSuggestion("Merhaba! Bugün nasılsın?")}>
+                  <span><strong>Sohbete başlayalım</strong><small>Selam ver ve asistanla tanış</small></span>
+                </Button>
+              </>
             )}
-            <Button variant="secondary" leadingIcon={<FilePenLine />} onClick={() => onSuggestion("Seçili evrak için resmî yazı taslağı hazırla.")}>
-              <span><strong>Resmî taslak hazırla</strong><small>Uygun yazışma biçimini kullan</small></span>
-            </Button>
-            <Button variant="secondary" leadingIcon={<Route />} onClick={() => onSuggestion("Bu içerik için uygun hedef birimi gerekçesiyle öner.")}>
-              <span><strong>Hedef birim öner</strong><small>Son kararı vermeden öneri oluştur</small></span>
-            </Button>
           </div>
         } />
       ) : (

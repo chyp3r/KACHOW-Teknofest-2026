@@ -106,7 +106,7 @@ async def analytics_guardrails(
 @router.get("/{company_id}/analytics/links", response_model=APIResponse[AnalyticsLinksResponse])
 async def analytics_links(
     company_id: str,
-    current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN, UserRole.MANAGER)),
+    current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Hedef aracın desteklediği durumlarda bu şirkete önceden filtrelenmiş

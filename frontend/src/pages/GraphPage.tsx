@@ -16,12 +16,6 @@ export function GraphPage() {
       />
 
       {error && <Alert variant="error">{error}</Alert>}
-      {graph?.is_fallback && (
-        <Alert variant="warning">
-          Toplu harita geçici olarak oluşturulamadı. Görünüm, erişilebilen evrak haritalarından birleştirildi
-          {graph.hidden_document_count > 0 ? `; ${graph.hidden_document_count} evrak gösterilemedi.` : "."}
-        </Alert>
-      )}
 
       <EntityGraphView
         graph={graph}

@@ -25,7 +25,7 @@ export function WeeklyActivityChart({ points }: { points: ActivityPoint[] }) {
           const height = Math.max(total ? 12 : 3, Math.round((total / maximum) * 100));
           const documentShare = total ? Math.round((point.documents / total) * 100) : 0;
           return (
-            <div className="home-chart-column" key={point.label} aria-label={`${point.label}: ${point.documents} evrak, ${point.drafts} taslak`}>
+            <div className="home-chart-column" key={point.label} aria-label={`${point.label}: ${point.documents} evrak, ${point.drafts} taslak`} title={`${point.label}: ${point.documents} evrak, ${point.drafts} taslak`}>
               <span className="home-stacked-bar" style={{ "--bar-height": `${height}%`, "--document-share": `${documentShare}%` } as VariableStyle}><i /><b /></span>
               <small>{point.label}</small>
             </div>
@@ -37,18 +37,18 @@ export function WeeklyActivityChart({ points }: { points: ActivityPoint[] }) {
   );
 }
 
-export function DocumentStatusChart({ ready, review, pending }: { ready: number; review: number; pending: number }) {
+export function DraftStatusChart({ ready, review, pending }: { ready: number; review: number; pending: number }) {
   const total = ready + review + pending;
   const readyAngle = total ? (ready / total) * 360 : 0;
   const reviewAngle = total ? ((ready + review) / total) * 360 : 0;
   const style = { "--ready-angle": `${readyAngle}deg`, "--review-angle": `${reviewAngle}deg` } as VariableStyle;
   return (
     <div className="home-status-chart">
-      <div className={`home-donut${total ? "" : " is-empty"}`} style={style} role="img" aria-label={`${ready} hazır, ${review} inceleme gerekli, ${pending} analiz bekliyor`}><span><strong>{total}</strong><small>toplam</small></span></div>
+      <div className={`home-donut${total ? "" : " is-empty"}`} style={style} role="img" aria-label={`${ready} gönderime hazır, ${review} inceleme gerekiyor, ${pending} hazırlanıyor`}><span><strong>{total}</strong><small>taslak</small></span></div>
       <dl>
-        <div className="is-ready"><dt>Hazır</dt><dd>{ready}</dd></div>
-        <div className="is-review"><dt>İncelenecek</dt><dd>{review}</dd></div>
-        <div className="is-pending"><dt>Bekliyor</dt><dd>{pending}</dd></div>
+        <div className="is-ready"><dt>Gönderime hazır</dt><dd>{ready}</dd></div>
+        <div className="is-review"><dt>İnceleme gerekiyor</dt><dd>{review}</dd></div>
+        <div className="is-pending"><dt>Hazırlanıyor</dt><dd>{pending}</dd></div>
       </dl>
     </div>
   );

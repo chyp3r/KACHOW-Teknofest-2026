@@ -24,19 +24,20 @@ describe("DecisionFlow", () => {
     );
   });
 
-  it("groups a draft plan's verify/judge nodes under the draft stage instead of giving them their own row", () => {
+  it("groups source excerpts and verification nodes under the draft stage instead of giving them their own row", () => {
     render(
       <DecisionFlow
-        statuses={{ planning: "completed", draft: "completed", verify: "completed", judge: "completed" }}
+        statuses={{ planning: "completed", draft: "completed", source_chunks: "completed", verify: "completed", judge: "completed" }}
         results={{}}
         meta={{}}
         planSteps={["draft"]}
-        nodeOrder={["planning", "draft", "verify", "judge"]}
+        nodeOrder={["planning", "draft", "source_chunks", "verify", "judge"]}
       />,
     );
     const stepper = screen.getByRole("list", { name: "İş akışı adımları" });
     expect(within(stepper).getAllByRole("button")).toHaveLength(2);
     expect(within(stepper).getByText("Taslak Hazırlama")).toBeInTheDocument();
+    expect(within(stepper).getByText("Kaynak Alıntılar")).toBeInTheDocument();
     expect(within(stepper).getByText("Doğrulama")).toBeInTheDocument();
     expect(within(stepper).getByText("Kalite Yargıcı")).toBeInTheDocument();
   });

@@ -1,7 +1,7 @@
 from typing import List, Optional
 from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.chat.model.chat_model import ChatMessageModel, ChatSessionModel
@@ -115,11 +115,26 @@ class ChatMessageRepository:
     async def list_for_session(
         self, session_id: str, skip: int = 0, limit: int = 200
     ) -> List[ChatMessageModel]:
-        """Bir oturumun mesajlarını, en eski önce (konuşma sırasıyla) listele."""
+        """Bir oturumun mesajlarını, belirli bir sırayla (konuşma sırasıyla) listele.
+
+        PostgreSQL'in ``now()``'ı tüm transaction boyunca sabittir, bu yüzden
+        ``record_turn``'ün yazdığı user ve assistant satırları tam olarak
+        aynı ``created_at`` değerine sahip olur. Yalnızca bu sütuna göre
+        sıralamak, veritabanının yapılandırılmış user cevabından önce bir
+        resume sonucunu döndürmesine izin veriyordu, bu da transport
+        özetini normal bir sohbet balonu olarak açığa çıkarıyordu. role ve
+        id eşitlik bozucuları yazma sözleşmesini (önce user, sonra
+        assistant) korur ve mevcut satırlar için sayfalamayı kararlı hale
+        getirir.
+        """
         query = (
             select(ChatMessageModel)
             .where(ChatMessageModel.session_id == session_id)
-            .order_by(ChatMessageModel.created_at.asc())
+            .order_by(
+                ChatMessageModel.created_at.asc(),
+                case((ChatMessageModel.role == "user", 0), else_=1).asc(),
+                ChatMessageModel.id.asc(),
+            )
             .offset(skip)
             .limit(limit)
         )

@@ -127,3 +127,31 @@ async def test_update_destination_raises_not_found_for_a_missing_draft(service, 
         await service.update_destination("does-not-exist", "İnsan Kaynakları", "company-1")
 
     repository.update_destination.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_approve_review_updates_a_draft_that_requires_human_approval(
+    service, repository
+):
+    draft = _draft()
+    draft.requires_human_approval = True
+    repository.get_by_id.return_value = draft
+    repository.approve_review.return_value = draft
+
+    await service.approve_review("draft-1")
+
+    repository.approve_review.assert_awaited_once_with(draft)
+
+
+@pytest.mark.asyncio
+async def test_approve_review_is_idempotent_for_an_already_reviewed_draft(
+    service, repository
+):
+    draft = _draft()
+    draft.requires_human_approval = False
+    repository.get_by_id.return_value = draft
+
+    result = await service.approve_review("draft-1")
+
+    assert result is draft
+    repository.approve_review.assert_not_awaited()

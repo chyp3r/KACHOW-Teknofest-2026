@@ -386,3 +386,20 @@ async def get_session_state(
         session_id, user_id=current_user.id
     )
     return SuccessResponse(data=state)
+
+
+@router.post("/sessions/{session_id}/cancel", response_model=None)
+async def cancel_chat_session(
+    session_id: str,
+    service: ChatService = Depends(get_chat_service),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+):
+    """Stop the active turn and settle its persisted workflow checkpoint."""
+    if not session_id:
+        raise HTTPException(status_code=422, detail="session_id is required.")
+    result = await service.cancel_session(
+        session_id,
+        user_id=current_user.id,
+        company_id=current_user.company_id,
+    )
+    return SuccessResponse(data=result)

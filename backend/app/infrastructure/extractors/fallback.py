@@ -25,10 +25,13 @@ logger = logging.getLogger(__name__)
 #: bu çağrı içinde hiç değişmeyen bir şey için anahtar olarak yeniden
 #: kullanmaktan daha açıklayıcı bir dize kullanmak daha nettir.
 _REPAIR_TEXT_CACHE_KEY = "header_text"
-#: `_repair_signature`'ın tam sayfa transkripsiyonu için
+#: `_repair_full_page`'in tam sayfa transkripsiyonu için
 #: `_REPAIR_TEXT_CACHE_KEY` ile aynı rol -- aynı `repair_cache` sözlüğünde
-#: farklı bir anahtar, çünkü iki onarım adımı belge başına birbirini
-#: dışlar (bkz. `_maybe_repair_page_one`) ama sözlüğün ömrünü paylaşır.
+#: farklı bir anahtar, `_REPAIR_TEXT_CACHE_KEY`'den bağımsız olarak
+#: doldurulur: kırpım bu tetiklendiğinde zaten çalışmış ve atılmış olabilir
+#: (bkz. `_maybe_repair_page_one`), ikisi arasında yalnızca bir belgenin
+#: sonunda sahip olduğu *nihai* metin karşılıklı dışlayıcıdır, her iki
+#: vision çağrısının da gerçekleşip gerçekleşmediği değil.
 _REPAIR_PAGE_CACHE_KEY = "full_page_text"
 
 
@@ -108,7 +111,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
                 ayrışamaz olduğunu bildirdiğinde, `_maybe_repair_page_one`
                 1. sayfayı yalnızca başlık bandı kırpımı yerine tamamen bir
                 tam sayfa vision transkripsiyonuyla değiştirir (bkz.
-                `_repair_signature`) -- başlık bandı onarımı tek başına bir
+                `_repair_full_page`) -- başlık bandı onarımı tek başına bir
                 imza bloğuna ulaşamaz, o başlığın çok altında yer alır.
                 None imza kurtarma yükselmesini tamamen devre dışı bırakır,
                 tam olarak bugünkü yalnızca başlık bandı onarımını geri
@@ -200,6 +203,69 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
             return False
         return self.scan_text_layer_probe(content)
 
+    def _header_repair_would_regress(
+        self, original: ExtractedDocument, candidate: ExtractedDocument
+    ) -> bool:
+        """Whether `candidate`'s page 1 recovers fewer header fields than
+        `original`'s did, via `header_field_probe`.
+
+        Deliberately header-only, not signature-aware -- unlike
+        `_repair_would_regress`. `_maybe_repair_header` is never the last
+        word on a document: `_maybe_repair_page_one` inspects *its* return
+        value afterward to decide whether the signature survived the crop
+        and, if not, escalates to `_repair_full_page`. If this check also
+        reverted on signature loss, it would silently swallow that signal
+        before `_maybe_repair_page_one` ever saw it -- the document would
+        keep its unrepaired header (no worse, but no better either) instead
+        of reaching the full-page transcription that could fix both.
+
+        Measured on the real corpus: header-band repair dropped CY-050 from
+        3/3 header fields to 2/3, which still cleared
+        `_has_enough_header_fields`'s floor (`MIN_HEADER_FIELD_COUNT`), so
+        it would not have been caught by the acceptance gate downstream.
+
+        Returns:
+            False when no `header_field_probe` is configured, keeping this
+            check inert for callers that didn't opt in -- same default
+            shape as `_has_enough_header_fields`.
+        """
+        return self._header_field_count(candidate) < self._header_field_count(original)
+
+    def _repair_would_regress(
+        self, original: ExtractedDocument, candidate: ExtractedDocument
+    ) -> bool:
+        """Whether `candidate`'s page 1 recovers fewer prescribed fields
+        than `original`'s did -- header fields (see
+        `_header_repair_would_regress`), or a signature that was parseable
+        in `original` and isn't in `candidate`. Either counts as a
+        regression.
+
+        Used only by `_repair_full_page`, the strongest repair available
+        and the last one `_maybe_repair_page_one` will try -- there is no
+        further escalation to fall through to, so this is the one place
+        that must catch a regression on *either* axis before committing to
+        it. Measured on the real corpus: full-page repair dropped three
+        documents from 4/4 header fields to 3/4. A vision transcription
+        that reads a genuine document worse than the text it was meant to
+        repair must never be trusted just because it came from a "smarter"
+        model -- this makes every repair step in this class monotonic: it
+        may only add fields back, never take them away.
+
+        Returns:
+            False when neither probe is configured, keeping this check
+            inert for callers that opted into neither -- same default
+            shape as `_has_enough_header_fields`.
+        """
+        if self._header_repair_would_regress(original, candidate):
+            return True
+        if (
+            self.signature_probe is not None
+            and self.signature_probe(self._page_one(original))
+            and not self.signature_probe(self._page_one(candidate))
+        ):
+            return True
+        return False
+
     def _rank_key(self, result: ExtractedDocument) -> tuple[int, float]:
         """En iyi çaba aday seçimi için sıralama anahtarı.
 
@@ -215,7 +281,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
     async def _rasterise_page_one(self, content: bytes, raster_cache: dict):
         """Vision onarımı için rasterize edilmiş bir 1. sayfa görüntüsü döndür.
 
-        `_maybe_repair_header` ve `_repair_signature` tarafından paylaşılır
+        `_maybe_repair_header` ve `_repair_full_page` tarafından paylaşılır
         -- ikisi de tam olarak bu görüntüye, tam olarak aynı kaynaktan, tam
         olarak `self.header_repair.dpi`'de ihtiyaç duyar, bu yüzden
         `raster_cache`'i yeniden kullanan ya da yeniden render etmeye
@@ -261,34 +327,51 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         content: bytes,
         repair_cache: dict,
     ) -> ExtractedDocument:
-        """1. sayfayı vision ile onar -- başlık bandı, ya da imza ayrışamıyorsa
-        (kırpımdan önce ya da sonra), bunun yerine tüm sayfa.
+        """1. sayfayı vision ile onar -- başlık bandı, ya da başlık bandı
+        kırpımı eksik olanı yakalayamadığında (ayrışamayan bir imza, ya da
+        kırpımdan sonra hâlâ ayrışmayan bir başlık alanı), bunun yerine tüm
+        sayfa.
 
         Yaygın durumda tam olarak `_maybe_repair_header` (yalnızca kırpım,
-        bugünkü davranış) veya `_repair_signature` (tam sayfa değişimi)
+        bugünkü davranış) veya `_repair_full_page` (tam sayfa değişimi)
         ikisinden birine dallanır -- bir belge o zaman iki vision
         maliyetinden yalnızca birini öder. `signature_probe` hangisine
-        karar verir: başlık bandı onarımı tek başına bir imza bloğuna
-        ulaşamaz, başlık bandının (`HEADER_BAND_FRACTION`) çok altında
-        yer alır, bu yüzden imza sahibinin adı hiç ayrışamadığında, gerçekten
-        ona ulaşma şansı olan şey tam sayfa transkripsiyonudur -- ve o
-        transkripsiyon zaten başlığı da kapsar, bu yüzden sonradan ayrıca
-        kırpmak aynı sayfa için iki kez ödemek olurdu.
+        önceden karar verir: başlık bandı onarımı tek başına bir imza
+        bloğuna ulaşamaz, başlık bandının (`HEADER_BAND_FRACTION`) çok
+        altında yer alır, bu yüzden imza sahibinin adı hiç ayrışamadığında,
+        gerçekten ona ulaşma şansı olan şey tam sayfa transkripsiyonudur --
+        ve o transkripsiyon zaten başlığı da kapsar, bu yüzden sonradan
+        ayrıca kırpmak aynı sayfa için iki kez ödemek olurdu. Bunun
+        arkasındaki ölçüm için `_repair_full_page`'in kendi docstring'ine
+        bakın.
 
-        Bir durum ikisi için de öder: başlık bandı onarımının kendi
-        birleştirmesi yalnızca sayfanın önde gelen
-        `HEADER_REPAIR_LINE_COUNT` satırlarını değiştirir, tipik çok
-        paragraflı bir mektup için kalibre edilmiş bir yaklaşım -- kısa bir
-        belgede (gerçek korpus üzerinde ölçüldü: CY-003/023/028, her biri
-        kısa tek paragraflık bir yanıt) imza bloğunun kendisi o aralığın
-        içine düşebilir, ve birleştirme onu, onarım öncesi metinden gayet
-        iyi ayrışmış olsa bile sessizce atar. Bu, tahmin edilmiyor, sonradan
-        tespit ediliyor: imza başlık bandı onarımından önce ayrışabiliyorsa
-        ve sonrasında ayrışamıyorsa, kırpım onu yemiştir -- *orijinal*
-        sonucun tam sayfa transkripsiyonuna düş. Nadir (ölçülen korpusta
-        23'te 3) ve gerçekleştiğinde çift vision maliyetine değer: gerçek
-        bir imza sahibini eksik zorunlu alan olarak raporlamak, bir yavaş
-        yüklemeden daha kötüdür.
+        İki durum, aynı yükselme ihtiyacını yalnızca kırpım *zaten
+        çalıştıktan sonra* tespit eder:
+
+        - Başlık bandı onarımının kendi birleştirmesi yalnızca sayfanın
+          önde gelen `HEADER_REPAIR_LINE_COUNT` satırlarını değiştirir,
+          tipik çok paragraflı bir mektup için kalibre edilmiş bir
+          yaklaşım -- kısa bir belgede (gerçek korpus üzerinde ölçüldü:
+          CY-003/023/028, her biri kısa tek paragraflık bir yanıt) imza
+          bloğunun kendisi o aralığın içine düşebilir, ve birleştirme onu,
+          onarım öncesi metinden gayet iyi ayrışmış olsa bile sessizce
+          atar. Nadir (ölçülen korpusta 23'te 3) ve gerçekleştiğinde çift
+          vision maliyetine değer: gerçek bir imza sahibini eksik zorunlu
+          alan olarak raporlamak, bir yavaş yüklemeden daha kötüdür.
+        - Kırpım yalnızca sayfanın üst `HEADER_BAND_FRACTION`'ını kapsar --
+          o satırın altındaki öngörülen bir başlık alanı, kırpım için tam
+          olarak bir imza kadar ulaşılamazdır (gerçek korpus üzerinde
+          ölçüldü: başlık bandı onarımı zaten çalıştıktan sonra başlık
+          alanlarında eksik kalan 9 belgeden 6'sı yalnızca kırpım yolunu
+          izledi, hiç yükselmedi, çünkü imzaları baştan sona gayet iyi
+          ayrıştı).
+
+        Her iki yükselme de 1. sayfayı *orijinal*, onarım öncesi
+        `result`'tan değiştirir, asla kırpımın kendi çıktısından değil --
+        `_repair_full_page` içeride `result`'tan daha az alan kurtaran
+        hiçbir şeyi tutmayı reddeder (bkz. `_repair_would_regress`), bu
+        yüzden bu metodun iki adayı kendisinin karşılaştırmasına hiç
+        gerek yoktur.
 
         Args:
             result: Zincirin seçtiği sonuç.
@@ -299,7 +382,8 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
 
         Returns:
             `result`, hangi yol uygulandıysa onunla onarılmış, ya da hiçbiri
-            uygulanmadıysa değişmemiş.
+            uygulanmadıysa (veya denenen her onarım geriletme olacaksa)
+            değişmemiş.
         """
         if self.header_repair is None or not result.pages:
             return result
@@ -308,7 +392,7 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         if self.signature_probe is not None and not self.signature_probe(
             self._page_one(result)
         ):
-            return await self._repair_signature(
+            return await self._repair_full_page(
                 result, raster_cache, content, repair_cache
             )
 
@@ -324,20 +408,35 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
                 "full-page transcription instead.",
                 result.extractor,
             )
-            return await self._repair_signature(
+            return await self._repair_full_page(
+                result, raster_cache, content, repair_cache
+            )
+        if not self._has_enough_header_fields(repaired):
+            logger.info(
+                "Header-band repair on [%s] still left page 1 with only %d "
+                "of the prescribed header fields (floor %d) -- the missing "
+                "field(s) may sit below the repaired band; escalating to a "
+                "full-page transcription instead.",
+                result.extractor,
+                self._header_field_count(repaired),
+                self.min_header_field_count,
+            )
+            return await self._repair_full_page(
                 result, raster_cache, content, repair_cache
             )
         return repaired
 
-    async def _repair_signature(
+    async def _repair_full_page(
         self,
         result: ExtractedDocument,
         raster_cache: dict,
         content: bytes,
         repair_cache: dict,
     ) -> ExtractedDocument:
-        """En iyi çaba: 1. sayfayı tamamen tam sayfa bir vision transkripsiyonuyla
-        değiştir, başlık bandı onarımının ulaşamadığı tek başarısızlık modu için.
+        """En iyi çaba: 1. sayfayı tamamen tam sayfa bir vision
+        transkripsiyonuyla değiştir, başlık bandı onarımının ulaşamadığı
+        iki başarısızlık modu için: ayrışamayan bir imza, ya da onarılmış
+        bandın altında oturan bir başlık alanı.
 
         Başlık bandı onarımı yalnızca sayfanın üst `HEADER_BAND_FRACTION`'ına
         dokunur, ama bir imza bloğu onun çok altında yer alır -- bu yüzden
@@ -348,15 +447,24 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         belge üzerinde doğrudan ölçüldü (`"Bekir BOZDAĞ"` için
         `"İF; BOZDAG ;"`): tam sayfa vision transkripsiyonu dördünde de
         doğru ismi kurtardı (bkz. `OllamaVisionExtractor.transcribe_page`'in
-        kendi docstring'i).
+        kendi docstring'i). Aynı kör nokta, kırpımın altında oturan başka
+        herhangi bir öngörülen başlık alanı için de geçerlidir --
+        `_maybe_repair_page_one`, yalnızca başlık bandı onarımı tek başına
+        yetersiz kaldığında da bu yüzden bu metoda ulaşır.
 
-        Yalnızca `_maybe_repair_page_one` `signature_probe`'un imzayı
-        ayrışamaz olarak bildirdiğini zaten tespit ettikten sonra çağrılır
-        -- bu metodun kendisi bunu yeniden kontrol etmez, bu yüzden
-        başarıyla bir şey transkribe ettiğinde her zaman 1. sayfayı değiştirir.
+        `_maybe_repair_page_one` tarafından her iki nedenle de çağrılır --
+        bu metodun kendisi hangisinin geçerli olduğunu yeniden kontrol
+        etmez, bu yüzden başarıyla bir şey transkribe ettiğinde her zaman
+        1. sayfayı değiştirmeye çalışır. *Gerçekten* kontrol ettiği şey, bu
+        değişimin değiştirdiği şeyden gerçekten daha iyi olup olmadığıdır
+        (bkz. `_repair_would_regress`): tam sayfa transkripsiyonu mevcut en
+        güçlü onarımdır, ama "en güçlü" "kesinlikle doğru" anlamına gelmez
+        -- gerçek korpus üzerinde ölçüldü, üç belgeyi 4/4 başlık alanından
+        3/4'e düşürdü.
 
         Args:
-            result: Zincirin seçtiği sonuç.
+            result: Zincirin seçtiği sonuç, ve `_repair_would_regress`'in
+                transkripsiyonu karşılaştırdığı referans.
             raster_cache: Zincirin çıkarıcılarının rasterize ettiği aynı
                 önbellek -- hiçbir sayfanın ikinci kez render edilmemesi
                 için burada yeniden kullanılır.
@@ -364,15 +472,17 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
             repair_cache: Bu tek `extract()` çağrısının onardığı her aday
                 arasında tam sayfa transkripsiyonu belleklemesi, başlık
                 bandı onarımının anahtarından ayrı kendi anahtarı altında
-                (`_REPAIR_PAGE_CACHE_KEY`) -- ikisi aynı belge için asla
-                birlikte tetiklenmez (bkz. `_maybe_repair_page_one`), ama
-                sözlüğün ömrünü paylaşır.
+                (`_REPAIR_PAGE_CACHE_KEY`) -- başlık bandı onarımı bu
+                tetiklendiğinde zaten çalışmış ve atılmış olabilir (bkz.
+                `_maybe_repair_page_one`), bu yüzden iki anahtar, sözlüğün
+                ömrünü paylaşsalar bile bağımsız olarak doldurulur.
 
         Returns:
             İlk sayfası vision modelinin tam transkripsiyonuyla değiştirilmiş
-            `result`, ya da herhangi bir başarısızlıkta veya boş çıktıda
-            tamamen değişmemiş `result` -- bu adım çalışan bir çıkarımı
-            asla başarısız birine dönüştürmemelidir.
+            `result`, ya da herhangi bir başarısızlıkta, boş çıktıda veya
+            `result`'ın zaten sahip olduğundan daha az alan kurtaran bir
+            transkripsiyonda tamamen değişmemiş `result` -- bu adım çalışan
+            bir çıkarımı asla başarısız birine dönüştürmemelidir.
         """
         if _REPAIR_PAGE_CACHE_KEY in repair_cache:
             page_text = repair_cache[_REPAIR_PAGE_CACHE_KEY]
@@ -384,8 +494,8 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
                 page_text = await self.header_repair.transcribe_page(page_one_image)
             except Exception:
                 logger.warning(
-                    "Full-page signature repair failed for [%s]; keeping "
-                    "its original text.",
+                    "Full-page repair failed for [%s]; keeping its "
+                    "original text.",
                     result.extractor,
                     exc_info=True,
                 )
@@ -397,16 +507,27 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
             return result
 
         pages = [page_text, *result.pages[1:]]
+        candidate = result.model_copy(
+            update={"pages": pages, "text": "\n\n".join(pages).strip()}
+        )
+        if self._repair_would_regress(result, candidate):
+            logger.info(
+                "Full-page transcription of [%s] recovered fewer fields "
+                "than the original (%d header field(s) vs %d); keeping "
+                "the original text.",
+                result.extractor,
+                self._header_field_count(candidate),
+                self._header_field_count(result),
+            )
+            return result
+
         logger.info(
             "Replaced [%s]'s first page with a full-page vision "
-            "transcription (%d characters) -- its signature could not be "
-            "parsed from the original.",
+            "transcription (%d characters).",
             result.extractor,
             len(page_text),
         )
-        return result.model_copy(
-            update={"pages": pages, "text": "\n\n".join(pages).strip()}
-        )
+        return candidate
 
     async def _maybe_repair_header(
         self,
@@ -458,7 +579,9 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
         Returns:
             İlk sayfasının önde gelen `HEADER_REPAIR_LINE_COUNT` satırları
             vision modelinin o bandın transkripsiyonuyla değiştirilmiş
-            `result`, ya da herhangi bir başarısızlıkta veya boş çıktıda
+            `result`, ya da herhangi bir başarısızlıkta, boş çıktıda veya
+            `result`'ın zaten sahip olduğundan daha az başlık alanı
+            kurtaran bir kırpımda (bkz. `_header_repair_would_regress`)
             tamamen değişmemiş `result` -- bu adım çalışan bir çıkarımı
             asla başarısız birine dönüştürmemelidir.
         """
@@ -497,14 +620,26 @@ class FallbackDocumentExtractor(BaseDocumentExtractor):
             "\n".join([header_text, *remaining_lines]),
             *result.pages[1:],
         ]
+        candidate = result.model_copy(
+            update={"pages": pages, "text": "\n\n".join(pages).strip()}
+        )
+        if self._header_repair_would_regress(result, candidate):
+            logger.info(
+                "Header-band repair on [%s] recovered fewer fields than "
+                "the original (%d header field(s) vs %d); keeping the "
+                "original text.",
+                result.extractor,
+                self._header_field_count(candidate),
+                self._header_field_count(result),
+            )
+            return result
+
         logger.info(
             "Repaired the header band of [%s]'s first page (%d characters).",
             result.extractor,
             len(header_text),
         )
-        return result.model_copy(
-            update={"pages": pages, "text": "\n\n".join(pages).strip()}
-        )
+        return candidate
 
     async def extract(
         self,

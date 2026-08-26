@@ -88,7 +88,13 @@ Evrak Kütüphanesi seçimden bağımsız olarak aynı master-detail yapısını
 `DocumentListItem` listesini korur. Ayrıntı kapatıldığında rota `/documents`
 olarak güncellenir ve seçili kayıt bu rotadan türetilir. Mevzuat Haritası toplu
 grafik ucu 5xx döndürdüğünde mevcut evrak listesi ile tekil grafik uçlarından
-kimliğe göre birleştirilmiş, eksik evrak sayısını bildiren kısmi görünüm üretir.
+kimliğe göre birleştirilmiş kısmi görünümü ek bir uyarı göstermeden sunar.
+
+Ana Sayfa operasyonel öncelik sırasını korur: kompakt karşılama alanı ve KPI
+satırının hemen ardından haftalık hareketlilik ile evrak durumu grafikleri
+gelir. Son evraklar ve hedef birim dağılımı ikinci satırda, tekrarlanan çalışma
+kısayolları ise ana verilerin altında gösterilir; böylece masaüstünde grafikler
+ilk görünüm içinde kalır.
 
 Yönetim analitiği yalnız backend servislerinin sunduğu ölçüleri görselleştirir;
 frontend eksik metrikleri tahmin etmez. Açılır yönetim içerikleri ortak

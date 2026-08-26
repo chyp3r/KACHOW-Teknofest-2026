@@ -483,6 +483,89 @@ class ChatService:
             return {"status": "running", "interrupt": None}
         return {"status": "interrupted", "interrupt": interrupt_payload}
 
+    async def cancel_session(
+        self,
+        session_id: str,
+        user_id: Optional[str] = None,
+        company_id: Optional[str] = None,
+    ) -> dict[str, str]:
+        """Stop a session and settle any checkpoint left by the aborted stream.
+
+        Closing the SSE connection cancels the in-process worker, but LangGraph
+        may already have persisted a checkpoint whose ``next`` node is still
+        pending.  A later message on that thread would then be rejected as a
+        paused/running session.  Cancellation therefore participates in the
+        same per-session lock as send/resume and explicitly makes that
+        checkpoint terminal.
+
+        A genuine human interrupt is resumed with ``reject`` first so its
+        domain cleanup still runs (for example, a pending transfer intent is
+        cancelled and a draft awaiting input is rejected).  A checkpoint left
+        between ordinary nodes has no interrupt to resume, so it is advanced
+        as the graph's terminal ``consolidate_memory`` node and its audit run
+        is closed as cancelled.
+        """
+        from langgraph.types import Command
+
+        self._verify_thread_ownership(session_id, user_id)
+        async with _session_lock(session_id):
+            config = self._trace_config(session_id, user_id, company_id)
+            try:
+                snapshot = await self.planning_graph.aget_state(config)
+            except Exception:
+                # Without a readable checkpointer there is no persisted work
+                # to settle; the disconnected stream's task cancellation is
+                # sufficient.
+                return {"status": "cancelled"}
+
+            if not getattr(snapshot, "next", ()):
+                return {"status": "idle"}
+
+            if self._extract_interrupt(snapshot) is not None:
+                try:
+                    await asyncio.wait_for(
+                        self.planning_graph.ainvoke(
+                            Command(
+                                resume={
+                                    "action": "reject",
+                                    "answers": {},
+                                    "instructions": "",
+                                    "reason": "İşlem kullanıcı tarafından durduruldu.",
+                                    "reasoning_level": None,
+                                }
+                            ),
+                            config=config,
+                        ),
+                        timeout=ORCHESTRATION_TIMEOUT_SECONDS,
+                    )
+                except Exception:
+                    # The graph must not remain unusable even if an interrupt's
+                    # domain-specific rejection path fails.  Keep the failure
+                    # visible in logs, then close the checkpoint below.
+                    logger.exception(
+                        "Interrupt cleanup failed while cancelling session %s",
+                        session_id,
+                    )
+                else:
+                    if not await self._is_paused(config):
+                        return {"status": "cancelled"}
+
+            await self.planning_graph.aupdate_state(
+                config,
+                {
+                    "final_output": {
+                        "status": "CANCELLED",
+                        "assist": {
+                            "reply": "İşlem kullanıcı tarafından durduruldu.",
+                            "status": "CANCELLED",
+                        },
+                    }
+                },
+                as_node="consolidate_memory",
+            )
+            await self._end_orphaned_run(config, "cancelled")
+            return {"status": "cancelled"}
+
     async def _invoke(
         self,
         request: ChatMessageRequest,

@@ -1,7 +1,6 @@
 import {
   ArrowUpRight,
   BarChart3,
-  CheckCircle2,
   Clock3,
   FileCheck2,
   FilePenLine,
@@ -10,19 +9,19 @@ import {
   Inbox,
   MessageSquare,
   Route,
-  Sparkles,
   Upload,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ApiErrorNotice } from "../components/ApiErrorNotice";
 import { StatusBadge } from "../components/StatusBadge";
 import {
-  DocumentStatusChart,
+  DraftStatusChart,
   TypeDistribution,
   WeeklyActivityChart,
   type ActivityPoint,
   type DistributionItem,
 } from "../features/home/HomeDashboardCharts";
+import { draftState } from "../features/drafts/draftState";
 import { useAuth } from "../hooks/useAuth";
 import { useConversations } from "../hooks/useConversations";
 import { useDrafts } from "../hooks/useDrafts";
@@ -71,15 +70,22 @@ export function HomePage({
     0,
     documents.length - readyDocuments - pendingDocuments,
   );
-  const readyDrafts = drafts.drafts.filter(
-    (item) =>
-      !item.requires_human_approval &&
-      !item.missing_information?.length &&
-      (item.confidence_score ?? 0) >= 80,
-  ).length;
+  const approvalDrafts = canViewAnalytics && analytics.summary
+    ? analytics.summary.draft_stats.requires_human_approval
+    : drafts.drafts.filter((item) => item.requires_human_approval).length;
+  const draftStatusCounts = drafts.drafts.reduce(
+    (counts, item) => {
+      counts[draftState(item).category] += 1;
+      return counts;
+    },
+    { ready: 0, review: 0, pending: 0 },
+  );
   const pendingWork = pendingDocuments + reviewDocuments + drafts.inboxTotal + conversations.unreadTotal;
   const localActivity = buildActivity(documents, drafts.drafts.map((item) => item.updated_at));
   const activity = localActivity;
+  const weeklyDocumentTotal = activity.reduce((total, item) => total + item.documents, 0);
+  const weeklyDraftTotal = activity.reduce((total, item) => total + item.drafts, 0);
+  const attentionCount = approvalDrafts + pendingDocuments + reviewDocuments;
   const recentDocuments = [...documents]
     .sort(
       (left, right) =>
@@ -97,18 +103,25 @@ export function HomePage({
     .slice(0, 4)
     .map(([label, value], index) => ({ label, value, tone: tones[index] }));
   const distribution = canViewAnalytics && analytics.units.length
-    ? analytics.units.slice(0, 4).map((item, index) => ({ label: item.destination ?? "Belirtilmemiş", value: item.count, tone: tones[index] }))
+    ? [...analytics.units]
+      .sort((left, right) => Number(Boolean(left.destination)) - Number(Boolean(right.destination)) || right.count - left.count)
+      .slice(0, 4)
+      .map((item, index) => ({
+        label: item.destination ?? "Belirtilmemiş",
+        value: item.count,
+        tone: (item.destination ? tones[index % 3] : "amber") as DistributionItem["tone"],
+      }))
     : localDistribution;
   const metrics = canViewAnalytics && analytics.summary ? [
-    { label: "Toplam evrak", value: analytics.summary.document_count, note: "Şirket genelindeki kayıtlar", icon: FileText, tone: "blue", route: "/documents" },
-    { label: "Taslaklar", value: analytics.summary.draft_stats.total, note: `${analytics.summary.draft_stats.requires_human_approval} insan onayı bekliyor`, icon: FilePenLine, tone: "violet", route: "/drafts" },
-    { label: "Aktif kullanıcı", value: analytics.summary.active_users_7d, note: "Son 7 günlük çalışma", icon: FileCheck2, tone: "emerald", route: "/admin" },
-    { label: "Engellenen işlem", value: analytics.summary.guardrail_blocked_total, note: "Guardrail kararları", icon: Inbox, tone: "amber", route: "/admin" },
+    { label: "Toplam evrak", value: analytics.summary.document_count, icon: FileText, tone: "blue", route: "/documents" },
+    { label: "Taslaklar", value: analytics.summary.draft_stats.total, icon: FilePenLine, tone: "violet", route: "/drafts" },
+    { label: "Onay bekleyen", value: approvalDrafts, icon: FileCheck2, tone: "emerald", route: "/drafts" },
+    { label: "Engellenen işlem", value: analytics.summary.guardrail_blocked_total, icon: Inbox, tone: "amber", route: "/admin" },
   ] : [
-    { label: "Toplam evrak", value: documents.length, note: `${readyDocuments} işleme hazır`, icon: FileText, tone: "blue", route: "/documents" },
-    { label: "Tamamlanan analiz", value: readyDocuments, note: `${reviewDocuments} inceleme bekliyor`, icon: FileCheck2, tone: "emerald", route: "/documents" },
-    { label: "Taslaklar", value: drafts.total, note: `${readyDrafts} gönderime hazır`, icon: FilePenLine, tone: "violet", route: "/drafts" },
-    { label: "Bekleyen işler", value: pendingWork, note: `${conversations.unreadTotal} okunmamış mesaj`, icon: Inbox, tone: "amber", route: "/messages" },
+    { label: "Toplam evrak", value: documents.length, icon: FileText, tone: "blue", route: "/documents" },
+    { label: "Taslaklar", value: drafts.total, icon: FilePenLine, tone: "violet", route: "/drafts" },
+    { label: "Onay bekleyen", value: approvalDrafts, icon: FileCheck2, tone: "emerald", route: "/drafts" },
+    { label: "Bekleyen işler", value: pendingWork, icon: Inbox, tone: "amber", route: "/messages" },
   ];
 
   return (
@@ -116,11 +129,12 @@ export function HomePage({
       <ApiErrorNotice error={drafts.errorObject ?? conversations.errorObject} />
       <section className="home-hero">
         <div className="home-hero-copy">
-          <span><Sparkles /> KACHOW çalışma alanı</span>
           <h1>Ana Sayfa</h1>
           <p>
-            Hoş geldiniz, <strong>{user?.username ?? "kullanıcı"}</strong>. Evrak,
-            taslak ve karar süreçlerinizin güncel görünümü burada.
+            Hoş geldiniz, <strong>{user?.username ?? "kullanıcı"}</strong>.
+            {attentionCount > 0
+              ? ` Dikkatinizi bekleyen ${attentionCount} işlem var.`
+              : " Bekleyen kritik işleminiz bulunmuyor."}
           </p>
           <small>{DATE_FORMAT.format(new Date())}</small>
         </div>
@@ -129,7 +143,7 @@ export function HomePage({
             <MessageSquare />Yeni sohbet
           </Link>
           <Link className="button home-hero-secondary control-md" to="/documents">
-            <Upload />Evrakları aç
+            <Upload />Evrak yükle
           </Link>
         </div>
         <div className="home-hero-orbit" aria-hidden="true">
@@ -137,32 +151,13 @@ export function HomePage({
         </div>
       </section>
 
-      <section className="home-quick-section">
-        <header><div><h2>Hızlı işlemler</h2><p>Sık kullanılan çalışma adımlarına doğrudan geçin.</p></div></header>
-        <div className="home-quick-grid">
-          <Link className="is-blue" to="/documents">
-            <FileSearch /><span><strong>Evrak analiz et</strong><small>Yeni evrak ekleyin ve inceleyin.</small></span><ArrowUpRight />
-          </Link>
-          <Link className="is-violet" to="/drafts">
-            <FilePenLine /><span><strong>Taslak hazırla</strong><small>Resmî yazışma sürecini başlatın.</small></span><ArrowUpRight />
-          </Link>
-          <Link className="is-emerald" to="/drafts">
-            <Route /><span><strong>Birim yönlendirme</strong><small>Hedef birim önerilerini inceleyin.</small></span><ArrowUpRight />
-          </Link>
-          <Link className="is-amber" to="/messages">
-            <MessageSquare /><span><strong>Mesajları görüntüle</strong><small>Ekip iletişimini takip edin.</small></span><ArrowUpRight />
-          </Link>
-        </div>
-      </section>
-
       <section className="home-metric-grid" aria-label="Genel istatistikler">
-        {metrics.map(({ label, value, note, icon: Icon, tone, route }) => (
+        {metrics.map(({ label, value, icon: Icon, tone, route }) => (
           <Link key={label} to={route} className={`home-metric-card is-${tone}`}>
             <span><Icon /></span>
             <div>
-              <small>{label}</small>
               <strong>{loading || drafts.loading || (canViewAnalytics && analytics.loading) ? "—" : value}</strong>
-              <p>{note}</p>
+              <small>{label}</small>
             </div>
             <ArrowUpRight />
           </Link>
@@ -176,23 +171,22 @@ export function HomePage({
               <span className="home-panel-icon is-blue"><BarChart3 /></span>
               <div><h2>Haftalık hareketlilik</h2><p>Evrak ve taslak üretim ritmi</p></div>
             </div>
-            <StatusBadge tone="info">Son 7 gün</StatusBadge>
+            <StatusBadge tone="info">{`${weeklyDocumentTotal} evrak · ${weeklyDraftTotal} taslak`}</StatusBadge>
           </header>
           <WeeklyActivityChart points={activity} />
         </section>
         <section className="home-panel home-status-panel">
           <header>
             <div>
-              <span className="home-panel-icon is-emerald"><CheckCircle2 /></span>
-              <div><h2>Evrak durumu</h2><p>Karar sürecine hazırlık</p></div>
+              <span className="home-panel-icon is-violet"><FilePenLine /></span>
+              <div><h2>Taslak durumu</h2><p>Gönderim ve inceleme hazırlığı</p></div>
             </div>
           </header>
-          <DocumentStatusChart
-            ready={readyDocuments}
-            review={reviewDocuments}
-            pending={pendingDocuments}
+          <DraftStatusChart
+            ready={draftStatusCounts.ready}
+            review={draftStatusCounts.review}
+            pending={draftStatusCounts.pending}
           />
-          <p className="home-status-note">Bekliyor → analiz edilmedi · İncelenecek → eksik veya uyumsuz alan var · Hazır → kontroller tamamlandı</p>
         </section>
 
         <section className="home-panel home-recent-panel">
@@ -230,7 +224,7 @@ export function HomePage({
           <header>
             <div>
               <span className="home-panel-icon is-amber"><BarChart3 /></span>
-              <div><h2>{canViewAnalytics ? "Birim hareketliliği" : "Evrak dağılımı"}</h2><p>{canViewAnalytics ? "Yönlendirilen taslak hacmi" : "Belge türlerine göre yoğunluk"}</p></div>
+              <div><h2>{canViewAnalytics ? "Taslakların hedef birim dağılımı" : "Evrak dağılımı"}</h2><p>{canViewAnalytics ? "Yönlendirilen taslakların hedefleri" : "Belge türlerine göre yoğunluk"}</p></div>
             </div>
           </header>
           {distribution.length ? (
@@ -240,6 +234,24 @@ export function HomePage({
           )}
         </section>
       </div>
+
+      <section className="home-quick-section">
+        <header><div><h2>Kısayollar</h2><p>Sık kullanılan çalışma adımları</p></div></header>
+        <div className="home-quick-grid">
+          <Link className="is-blue" to="/documents">
+            <FileSearch /><span><strong>Evrak analiz et</strong></span><ArrowUpRight />
+          </Link>
+          <Link className="is-violet" to="/drafts">
+            <FilePenLine /><span><strong>Taslak hazırla</strong></span><ArrowUpRight />
+          </Link>
+          <Link className="is-emerald" to="/drafts">
+            <Route /><span><strong>Birim yönlendirme</strong></span><ArrowUpRight />
+          </Link>
+          <Link className="is-amber" to="/messages">
+            <MessageSquare /><span><strong>Mesajları görüntüle</strong></span><ArrowUpRight />
+          </Link>
+        </div>
+      </section>
 
     </div>
   );

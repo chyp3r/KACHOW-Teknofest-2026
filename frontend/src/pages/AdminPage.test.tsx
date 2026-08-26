@@ -62,6 +62,8 @@ describe("AdminPage manager permissions", () => {
     expect(screen.getByLabelText("employee gizlilik yetkisi")).toBeDisabled();
     expect(screen.getByText("Yalnızca admin değiştirebilir")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Denetçi" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "AI ve Eğitim" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Sistem durumu" })).not.toBeInTheDocument();
   });
 });
 import { createElement, type ReactNode } from "react";

@@ -99,6 +99,20 @@ function legacyPersistedInteraction(
   pendingInterrupt: InterruptState | null,
 ): ResolvedPromptInteraction | null {
   if (!pendingInterrupt || message.role !== "user") return null;
+  const actionMatch = message.content.trim().match(
+    /^(answer|approve|revise|reject|select)(?::\s*(.*))?$/,
+  );
+  if (actionMatch) {
+    const action = actionMatch[1] as ResolvedPromptInteraction["action"];
+    const note = actionMatch[2]?.trim() ?? "";
+    return resolvedInteraction(
+      pendingInterrupt,
+      action,
+      {},
+      action === "reject" ? "" : note,
+      action === "reject" ? note || undefined : undefined,
+    );
+  }
   const questions = pendingInterrupt.payload.questions ?? [];
   if (questions.length === 0) return null;
   const questionByKey = new Map(questions.map((question) => [question.key, question]));
@@ -124,11 +138,21 @@ function legacyPersistedInteraction(
 function toChatMessages(items: PersistedChatMessage[]): ChatMessage[] {
   let pendingInterrupt: InterruptState | null = null;
   let pendingInterruptMessage: PersistedChatMessage | null = null;
+  let deferredAssistantMessages: PersistedChatMessage[] = [];
   const messages: ChatMessage[] = [];
 
-  for (const item of items) {
+  const hasInteractionResponse = (item: PersistedChatMessage) =>
+    item.role === "user" && Boolean(asRecord(asRecord(item.details)?.interaction_response));
+
+  const clearPending = () => {
+    pendingInterrupt = null;
+    pendingInterruptMessage = null;
+    deferredAssistantMessages = [];
+  };
+
+  const processItem = (item: PersistedChatMessage) => {
     const interrupt = asRecord(asRecord(item.details)?.interrupt);
-    if (item.role === "assistant" && interrupt) {
+    if (!pendingInterrupt && item.role === "assistant" && interrupt) {
       const kind = interrupt.kind;
       if (
         kind === "missing_information" ||
@@ -136,14 +160,13 @@ function toChatMessages(items: PersistedChatMessage[]): ChatMessage[] {
         kind === "artifact_transfer_confirm" ||
         kind === "artifact_transfer_disambiguate"
       ) {
-        if (pendingInterruptMessage) messages.push(toChatMessage(pendingInterruptMessage));
         pendingInterrupt = {
           kind,
           interruptId: `history:${item.id}`,
           payload: interrupt as InterruptState["payload"],
         };
         pendingInterruptMessage = item;
-        continue;
+        return;
       }
     }
 
@@ -153,28 +176,55 @@ function toChatMessages(items: PersistedChatMessage[]): ChatMessage[] {
           legacyPersistedInteraction(item, pendingInterrupt)
         : null;
     if (resolvedPrompt) {
-      pendingInterrupt = null;
-      pendingInterruptMessage = null;
       messages.push({
         ...toChatMessage(item),
         sender: "assistant",
         text: "",
         resolvedPrompt,
       });
-      continue;
+      const deferred = deferredAssistantMessages;
+      clearPending();
+      // Old rows can have the same transaction timestamp and arrive as
+      // interrupt -> assistant result -> structured user response. Replay
+      // the deferred result only after the completed interaction receipt so
+      // the transport-only response can never leak as a "Siz" bubble.
+      deferred.forEach(processItem);
+      return;
+    }
+
+    if (pendingInterrupt && item.role === "assistant") {
+      deferredAssistantMessages.push(item);
+      return;
     }
 
     if (pendingInterruptMessage) {
       messages.push(toChatMessage(pendingInterruptMessage));
-      pendingInterrupt = null;
-      pendingInterruptMessage = null;
+      messages.push(...deferredAssistantMessages.map(toChatMessage));
+      clearPending();
     }
+
+    // Structured resume rows are persistence/rehydration carriers, not user
+    // chat messages. If their matching interrupt is absent (legacy or
+    // truncated history), omitting them is safer than exposing internal
+    // field keys and actions in the conversation.
+    if (hasInteractionResponse(item)) return;
     messages.push(toChatMessage(item));
+  };
+
+  for (const item of items) {
+    processItem(item);
   }
 
   // A final unresolved interrupt is rendered by `pendingInterrupt` as the
   // live form. Keeping its persisted generic assistant sentence as well
   // would produce two messages for the same question.
+  // If later assistant rows were deferred but no response carrier followed,
+  // keep them visible: only the final, genuinely unresolved interrupt may
+  // be represented exclusively by the live form.
+  if (pendingInterruptMessage && deferredAssistantMessages.length > 0) {
+    messages.push(toChatMessage(pendingInterruptMessage));
+    messages.push(...deferredAssistantMessages.map(toChatMessage));
+  }
   return messages;
 }
 
@@ -295,6 +345,7 @@ export function useChatWorkflow(
     internallyResolvedSession.current = null;
     cancelledThreadId.current = null;
     activeRequest.current?.abort();
+    activeRequest.current = null;
     threadIdRef.current = activeSessionId;
     setThreadId(activeSessionId);
     setClientId(
@@ -679,6 +730,7 @@ export function useChatWorkflow(
 
   const newChat = useCallback(() => {
     activeRequest.current?.abort();
+    activeRequest.current = null;
     internallyResolvedSession.current = null;
     setMessages([]);
     setClientId(createClientSessionId());
@@ -693,19 +745,46 @@ export function useChatWorkflow(
   const cancel = useCallback(() => {
     const controller = activeRequest.current;
     if (!controller || controller.signal.aborted) return;
-    cancelledThreadId.current = threadIdRef.current;
+    const resolvedThreadId = threadIdRef.current ?? `${userId}:${clientId}`;
+    const noticeId = `cancel:${Date.now()}`;
+    cancelledThreadId.current = resolvedThreadId;
     controller.abort();
+    // The aborted stream's finally block would normally clear activeRequest
+    // immediately. Keep a distinct guard in place until the backend confirms
+    // that its persisted checkpoint is terminal, so a fast next message can
+    // never race the stop request and hit SESSION_PAUSED.
+    const stopGuard = new AbortController();
+    stopGuard.abort();
+    activeRequest.current = stopGuard;
     setPendingInterrupt(null);
     resetFlow();
     setMessages((previous) => [
       ...previous,
       {
+        id: noticeId,
         sender: "assistant",
-        text: "İşlem durduruldu.",
+        text: "İşlem durduruluyor…",
         kind: "notice",
       },
     ]);
-  }, [resetFlow]);
+    void chatService.cancel(resolvedThreadId)
+      .then(() => {
+        setMessages((previous) => previous.map((message) =>
+          message.id === noticeId ? { ...message, text: "İşlem durduruldu." } : message
+        ));
+        refreshServerState(resolvedThreadId);
+      })
+      .catch(() => {
+        setMessages((previous) => previous.map((message) =>
+          message.id === noticeId
+            ? { ...message, text: "İşlem durdurulamadı. Lütfen tekrar deneyin.", status: "FAILED" }
+            : message
+        ));
+      })
+      .finally(() => {
+        if (activeRequest.current === stopGuard) activeRequest.current = null;
+      });
+  }, [clientId, refreshServerState, resetFlow, userId]);
   const addUploadMessage = useCallback((fileName: string) => setMessages((previous) => [...previous, { sender: "assistant", text: `“${fileName}” evrakı yüklendi ve analiz edildi.` }]), []);
 
   return {

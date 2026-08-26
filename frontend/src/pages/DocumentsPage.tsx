@@ -28,6 +28,7 @@ export function DocumentsPage({
   onCloseDocument,
   onGenerateDetailedSummary,
   generatingDetailedSummary,
+  generatingDetailedSummaryPath,
   documentGraph,
   loadingDocumentGraph,
   documentText,
@@ -36,6 +37,7 @@ export function DocumentsPage({
   onReextract,
   reextracting,
   canPush = false,
+  showUploader = false,
 }: {
   documents: DocumentMetadata[];
   selected: DocumentMetadata | null;
@@ -54,6 +56,7 @@ export function DocumentsPage({
   onCloseDocument?: () => void;
   onGenerateDetailedSummary?: (storagePath: string) => Promise<void>;
   generatingDetailedSummary?: boolean;
+  generatingDetailedSummaryPath?: string | null;
   documentGraph?: KnowledgeGraph | null;
   loadingDocumentGraph?: boolean;
   documentText?: DocumentText | null;
@@ -62,6 +65,7 @@ export function DocumentsPage({
   onReextract?: (storagePath: string) => Promise<void>;
   reextracting?: boolean;
   canPush?: boolean;
+  showUploader?: boolean;
 }) {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [tab, setTab] = useState<"library" | "incoming">("library");
@@ -118,6 +122,7 @@ export function DocumentsPage({
         onDeleteDocument={onDeleteDocument}
         onGenerateDetailedSummary={onGenerateDetailedSummary}
         generatingDetailedSummary={generatingDetailedSummary}
+        generatingDetailedSummaryPath={generatingDetailedSummaryPath}
         documentGraph={documentGraph}
         loadingDocumentGraph={loadingDocumentGraph}
         documentText={documentText}
@@ -125,6 +130,7 @@ export function DocumentsPage({
         savingText={savingText}
         onReextract={onReextract}
         reextracting={reextracting}
+        showUploader={showUploader}
       /> : <IncomingDocumentsPanel />}
       {canPush && selected && <PoolPushDialog open={pushOpen} documentId={selected.storage_path} onClose={() => setPushOpen(false)} />}
     </div>

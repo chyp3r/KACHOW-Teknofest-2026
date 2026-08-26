@@ -5,6 +5,7 @@ from app.api.dependency import (
     get_document_analysis_service,
     get_document_repository,
     get_draft_service,
+    get_user_repository,
     require_auth_if_enabled,
 )
 from app.api.exceptions.authorization import AuthorizationException
@@ -28,6 +29,7 @@ from app.domains.documents.schema.document_schema import (
 )
 from app.infrastructure.extractors.base import DocumentExtractionError
 from app.domains.users.model.user_model import UserModel
+from app.domains.users.repository import UserRepository
 from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 from app.shared.validator.storage_path_validator import validate_storage_path
 
@@ -196,6 +198,7 @@ async def generate_draft(
 async def list_documents(
     pagination: PaginationParam = Depends(),
     document_repository: DocumentRepository = Depends(get_document_repository),
+    user_repository: UserRepository = Depends(get_user_repository),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
     """Yüklenen evrakları özet meta verileriyle birlikte en yeniden en eskiye listeler.
@@ -210,13 +213,22 @@ async def list_documents(
 
     Returns:
         7 alanlı kütüphane izdüşümü üzerinde sayfalanmış bir zarf (tam
-        analiz için bkz. ``GET /documents/{storage_path}``).
+        analiz için bkz. ``GET /documents/{storage_path}``). Şirket geneli
+        görüntüleyiciler ayrıca yükleyenin kullanıcı adını da alır.
     """
-    owner_id = None if bypasses_ownership(current_user) else current_user.id
+    company_wide = bypasses_ownership(current_user)
+    owner_id = None if company_wide else current_user.id
     documents = await document_repository.list_for_owner(
         current_user.company_id, owner_id, skip=pagination.offset, limit=pagination.limit
     )
     total = await document_repository.count_for_owner(current_user.company_id, owner_id)
+    uploader_usernames = (
+        await user_repository.get_usernames_by_ids(
+            current_user.company_id, {document.owner_id for document in documents}
+        )
+        if company_wide and documents
+        else {}
+    )
 
     page_items = [
         {
@@ -227,6 +239,7 @@ async def list_documents(
             "document_type_label": document.document_type_label,
             "compliance_status": document.compliance_status,
             "summary": document.summary,
+            "uploader_username": uploader_usernames.get(document.owner_id),
         }
         for document in documents
     ]

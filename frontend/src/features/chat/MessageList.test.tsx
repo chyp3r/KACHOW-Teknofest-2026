@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { ChatMessage, InterruptState } from "../../types/chat";
@@ -23,6 +23,31 @@ function renderWithQueryClient(ui: ReactNode) {
 }
 
 describe("MessageList", () => {
+  it("offers general conversation starters when no document or draft is selected", () => {
+    const onSuggestion = vi.fn();
+    renderWithQueryClient(<MessageList {...baseProps} onSuggestion={onSuggestion} />);
+
+    expect(screen.getByText("Neler yapabilirsin?")).toBeInTheDocument();
+    expect(screen.getByText("Sohbete başlayalım")).toBeInTheDocument();
+    expect(screen.queryByText("Resmî taslak hazırla")).not.toBeInTheDocument();
+    expect(screen.queryByText("Hedef birim öner")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Neler yapabilirsin/ }));
+    expect(onSuggestion).toHaveBeenCalledWith(
+      "Neler yapabildiğini ve bana hangi konularda yardımcı olabileceğini kısaca anlat.",
+    );
+  });
+
+  it("offers document-specific starters only when a document or draft is selected", () => {
+    renderWithQueryClient(<MessageList {...baseProps} hasSelectedDocument />);
+
+    expect(screen.getByText("Seçili içeriği incele")).toBeInTheDocument();
+    expect(screen.getByText("Resmî taslak hazırla")).toBeInTheDocument();
+    expect(screen.getByText("Hedef birim öner")).toBeInTheDocument();
+    expect(screen.queryByText("Neler yapabilirsin?")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sohbete başlayalım")).not.toBeInTheDocument();
+  });
+
   it("renders a pending missing-information gate as a chat bubble in the scrolling conversation, not a standalone panel", () => {
     const interrupt: InterruptState = {
       kind: "missing_information",

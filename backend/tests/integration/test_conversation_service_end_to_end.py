@@ -15,8 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.exceptions.authorization import AuthorizationException
 
-# Constructing ConversationModel (FK -> companies.id) requires CompanyModel
-# to already be registered in Base.metadata -- same reasoning
+# Constructing the messaging models requires their foreign-key targets to
+# already be registered in Base.metadata -- same reasoning
 # `test_tenant_repository_scoping.py` documents for UnitModel/companies.
 from app.domains.companies.model.company_model import CompanyModel  # noqa: F401
 from app.domains.messaging.repository import (
@@ -25,6 +25,7 @@ from app.domains.messaging.repository import (
     ConversationRepository,
 )
 from app.domains.messaging.service import ConversationService
+from app.domains.transfers.model.transfer_model import ArtifactTransferModel  # noqa: F401
 from app.domains.users.model.user_model import UserModel
 from app.domains.users.repository import UserRepository
 
@@ -103,8 +104,14 @@ async def test_dm_message_flows_and_unread_count_updates(
 
     async with owner_session_maker() as session:
         message_repo = ConversationMessageRepository(session)
-        unread = await message_repo.count_unread(conversation.id, company_id, last_read_message_id=None)
-    assert unread == 1
+        recipient_unread = await message_repo.count_unread(
+            conversation.id, company_id, recipient.id, last_read_message_id=None
+        )
+        sender_unread = await message_repo.count_unread(
+            conversation.id, company_id, sender.id, last_read_message_id=None
+        )
+    assert recipient_unread == 1
+    assert sender_unread == 0
 
     async with owner_session_maker() as session:
         service = _service(session)
@@ -114,7 +121,10 @@ async def test_dm_message_flows_and_unread_count_updates(
     async with owner_session_maker() as session:
         message_repo = ConversationMessageRepository(session)
         unread_after = await message_repo.count_unread(
-            conversation.id, company_id, last_read_message_id=participant.last_read_message_id
+            conversation.id,
+            company_id,
+            recipient.id,
+            last_read_message_id=participant.last_read_message_id,
         )
     assert unread_after == 0
 

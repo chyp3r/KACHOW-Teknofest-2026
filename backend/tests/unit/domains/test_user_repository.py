@@ -52,6 +52,18 @@ async def test_get_by_username(repo, mock_session):
     assert user.username == "testuser"
     mock_session.execute.assert_called_once()
 
+
+@pytest.mark.asyncio
+async def test_get_usernames_by_ids_is_batched_and_company_scoped(repo, mock_session):
+    mock_result = MagicMock()
+    mock_result.all.return_value = [("user-a", "employee-a"), ("user-b", "employee-b")]
+    mock_session.execute.return_value = mock_result
+
+    usernames = await repo.get_usernames_by_ids("company-1", {"user-a", "user-b"})
+
+    assert usernames == {"user-a": "employee-a", "user-b": "employee-b"}
+    mock_session.execute.assert_awaited_once()
+
 @pytest.mark.asyncio
 async def test_create(repo, mock_session):
     new_user = UserModel(id="user-123", username="testuser", email="test@example.com", role="employee", is_active=True, is_deleted=False, hashed_password="pw")

@@ -335,27 +335,31 @@ async def test_graph_drops_a_fabricated_citation_and_falls_back_to_raw_citation(
 @patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
 @patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
 async def test_graph_keeps_a_grounded_citation_but_replaces_an_ungrounded_explanation(
-    mock_classify, mock_suggest
+    mock_classify, mock_suggest, caplog
 ):
     """The citation is real (law 2646, article 11 is genuinely in the
     excerpt) but the explanation invents an institution the document never
     mentions. Only the explanation should be swapped for the neutral
     fallback text -- the citation itself is what requirement 5 needs and
-    must survive untouched."""
+    must survive untouched.
+
+    Also the one place this silent replacement is observable at all: until
+    this test existed, nothing logged which claim triggered it or what text
+    was discarded -- a real occurrence (confirmed in production output) was
+    indistinguishable from any other, with no way to tell a false positive
+    from a genuine fabrication after the fact."""
     mock_classify.return_value = _merged(
         DocumentType.OFFICIAL_LETTER,
         "İzin talebi.",
         **COMPLETE_FIELDS.model_copy(update={"sayi": None}).model_dump(),
     )
+    invented_aciklama = (
+        "Bu husus Enerji ve Tabii Kaynaklar Bakanlığı Hukuk Müşavirliği "
+        "tarafından da teyit edilmiştir."
+    )
     mock_suggest.return_value = MevzuatSuggestionOutput(
         suggestions=[
-            MevzuatSuggestion(
-                mevzuat="RYUEHY m.11",
-                aciklama=(
-                    "Bu husus Enerji ve Tabii Kaynaklar Bakanlığı Hukuk Müşavirliği "
-                    "tarafından da teyit edilmiştir."
-                ),
-            )
+            MevzuatSuggestion(mevzuat="RYUEHY m.11", aciklama=invented_aciklama)
         ]
     )
 
@@ -367,13 +371,19 @@ async def test_graph_keeps_a_grounded_citation_but_replaces_an_ungrounded_explan
     graph = create_document_analysis_graph(
         MagicMock(spec=BaseLLMClient), mevzuat_retriever=retriever
     )
-    result = await graph.ainvoke({"input_text": INCOMPLETE_LETTER_TEXT})
+    with caplog.at_level("WARNING", logger="app.ai.workflows.document_analysis_graph"):
+        result = await graph.ainvoke({"input_text": INCOMPLETE_LETTER_TEXT})
 
     assert len(result["mevzuat_suggestions"]) == 1
     assert result["mevzuat_suggestions"][0]["mevzuat"] == "RYUEHY m.11"
     assert result["mevzuat_suggestions"][0]["aciklama"] == (
         "İlgili olabilecek mevzuat alıntısı (otomatik açıklama üretilemedi)."
     )
+
+    [record] = [r for r in caplog.records if "failed groundedness" in r.message]
+    assert "RYUEHY m.11" in record.message
+    assert invented_aciklama in record.message
+    assert "kurum=" in record.message  # the institution claim that triggered this
 
 
 @pytest.mark.asyncio

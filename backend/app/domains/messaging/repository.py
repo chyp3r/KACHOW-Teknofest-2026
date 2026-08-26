@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional, Tuple
 
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.messaging.model.conversation_message_model import ConversationMessageModel
@@ -215,15 +215,28 @@ class ConversationMessageRepository:
         return list(result.scalars().all())
 
     async def count_unread(
-        self, conversation_id: str, company_id: str, last_read_message_id: Optional[str]
+        self,
+        conversation_id: str,
+        company_id: str,
+        user_id: str,
+        last_read_message_id: Optional[str],
     ) -> int:
-        """`last_read_message_id`'den daha yeni mesajlar (veya hiç
-        okunmamışsa tüm mesajlar). Id'nin kendisini değil `created_at`'i
-        karşılaştırır -- mesaj id'leri sıralı değil, opak uuid-hex'tir."""
+        """`user_id` tarafından alınan okunmamış mesajlar.
+
+        Bir kullanıcının kendi mesajları o kullanıcı için asla okunmamış
+        sayılmaz. Sistem tarafından yazılan mesajların göndereni yoktur ve
+        sayılabilir kalır. Okuma imleci `id`'nin kendisini değil
+        `created_at`'i karşılaştırır -- mesaj id'leri sıralı değil, opak
+        uuid-hex'tir.
+        """
         base = select(func.count(ConversationMessageModel.id)).where(
             ConversationMessageModel.conversation_id == conversation_id,
             ConversationMessageModel.company_id == company_id,
             ConversationMessageModel.deleted_at.is_(None),
+            or_(
+                ConversationMessageModel.sender_id.is_(None),
+                ConversationMessageModel.sender_id != user_id,
+            ),
         )
         if last_read_message_id is None:
             result = await self.db.execute(base)

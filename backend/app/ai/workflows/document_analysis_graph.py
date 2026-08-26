@@ -830,9 +830,35 @@ def create_document_analysis_graph(
                 if not support.grounded:
                     dropped += 1
                     continue
-                if check_groundedness(
+                unsupported_claims = check_groundedness(
                     item.get("aciklama", ""), source_materials=source_materials
-                ):
+                )
+                if unsupported_claims:
+                    # Diagnostic-only: the citation itself already passed
+                    # `citation_support` above, so this is never about a
+                    # fabricated reference -- only ever about
+                    # `check_groundedness` (built for auditing *drafts* against
+                    # tool results, not for auditing a citation's own
+                    # explanatory prose) flagging some claim in `aciklama`
+                    # that its narrower source_materials don't happen to
+                    # cover. Logged at warning, unlike the `dropped` branch
+                    # above, because until now nothing recorded which claim
+                    # triggered this or what text was discarded -- a user
+                    # seeing the generic fallback message had no way to tell
+                    # a real false positive from a genuine fabrication, and
+                    # neither did anyone reading the logs afterward.
+                    logger.warning(
+                        "Mevzuat suggestion aciklama for [%s] failed "
+                        "groundedness (%d unsupported claim(s): %s); "
+                        "replacing with the generic fallback. Original: %r",
+                        item.get("mevzuat", ""),
+                        len(unsupported_claims),
+                        [
+                            f"{claim.kind}={claim.value!r}"
+                            for claim in unsupported_claims
+                        ],
+                        item.get("aciklama", ""),
+                    )
                     item = {
                         **item,
                         "aciklama": (

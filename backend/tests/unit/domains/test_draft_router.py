@@ -182,6 +182,45 @@ def test_update_draft_destination_rejects_a_blank_value():
     service.get_draft.assert_not_awaited()
 
 
+def test_approve_draft_review_allows_the_owner(monkeypatch):
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user(user_id="emp-1")
+    service = AsyncMock()
+    pending = _draft(
+        user_id="emp-1",
+        status="NEEDS_HUMAN_APPROVAL",
+        requires_human_approval=True,
+    )
+    approved = _draft(user_id="emp-1", status="APPROVED", requires_human_approval=False)
+    service.get_draft.return_value = pending
+    service.approve_review.return_value = approved
+    app.dependency_overrides[get_draft_history_service] = lambda: service
+    audit = AsyncMock()
+    monkeypatch.setattr("app.domains.drafts.router._audit_service", lambda _db: audit)
+
+    response = client.post("/drafts/draft-1/review/approve")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["requires_human_approval"] is False
+    assert response.json()["data"]["status"] == "APPROVED"
+    service.approve_review.assert_awaited_once_with("draft-1")
+    audit.record.assert_awaited_once()
+    assert audit.record.await_args.kwargs["action"] == "draft:review_approve"
+
+
+def test_approve_draft_review_refuses_a_non_owner_employee():
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user(user_id="emp-2")
+    service = AsyncMock()
+    service.get_draft.return_value = _draft(
+        user_id="emp-1", requires_human_approval=True
+    )
+    app.dependency_overrides[get_draft_history_service] = lambda: service
+
+    response = client.post("/drafts/draft-1/review/approve")
+
+    assert response.status_code == 403
+    service.approve_review.assert_not_awaited()
+
+
 def test_delete_draft_refuses_a_non_owner_employee():
     app.dependency_overrides[require_auth_if_enabled] = lambda: _user(user_id="emp-2")
     service = AsyncMock()

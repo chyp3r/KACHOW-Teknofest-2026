@@ -146,9 +146,11 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
         title="Yönetim Paneli"
         description="Kullanıcı rollerini, erişimi ve gizlilik yetkilerini backend kurallarıyla yönetin."
         secondaryActions={
-          <Link className="button button-secondary" to="/status">
-            <Activity size={16} /> Sistem durumu
-          </Link>
+          canManage ? (
+            <Link className="button button-secondary" to="/status">
+              <Activity size={16} /> Sistem durumu
+            </Link>
+          ) : undefined
         }
       />
       <ApiErrorNotice error={admin.errorObject ?? error} />
@@ -161,7 +163,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
           { id: "users", label: "Kullanıcılar", icon: <Users /> },
           { id: "units", label: "Birimler", icon: <Building2 /> },
           ...(canManage ? [{ id: "company" as const, label: "Kurum", icon: <Briefcase /> }] : []),
-          { id: "ai", label: "AI ve Eğitim", icon: <Bot /> },
+          ...(canManage ? [{ id: "ai" as const, label: "AI ve Eğitim", icon: <Bot /> }] : []),
           { id: "analytics", label: "Analitik", icon: <BarChart3 /> },
           ...(canManage ? [{ id: "audit" as const, label: "Denetim", icon: <ScrollText /> }] : []),
         ]}
@@ -319,7 +321,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
       </div>}
       {activeSection === "units" && <UnitsPanel canManage />}
       {activeSection === "company" && user.company_id && <CompanySettingsPanel companyId={user.company_id} canManage={canManage} />}
-      {activeSection === "ai" && (
+      {activeSection === "ai" && canManage && (
         <div className="admin-section" role="tabpanel">
           {user.company_id ? (
             <AiManagementPanel companyId={user.company_id} canManage={canManage} />
@@ -328,7 +330,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
           )}
         </div>
       )}
-      {activeSection === "analytics" && user.company_id && <AnalyticsPanel companyId={user.company_id} />}
+      {activeSection === "analytics" && user.company_id && <AnalyticsPanel companyId={user.company_id} canViewObservability={canManage} />}
       {activeSection === "audit" && <AuditPanel companyId={user.company_id ?? undefined} />}
       <ConfirmationDialog
         open={Boolean(removeTarget)}

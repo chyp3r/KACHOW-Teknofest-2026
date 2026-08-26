@@ -126,3 +126,16 @@ class DraftService:
             destination_unit_id=unit.id if unit else None,
             destination_justification="Kullanıcı tarafından manuel olarak seçildi.",
         )
+
+    async def approve_review(self, draft_id: str) -> DraftModel:
+        """Mark a draft version's required human review as completed.
+
+        The operation is idempotent so a retried button request cannot create
+        a conflicting state. It only resolves the human-approval flag;
+        ``missing_information`` remains untouched and continues to appear as
+        a separate blocking review item in the client.
+        """
+        draft = await self.get_draft(draft_id)
+        if not draft.requires_human_approval:
+            return draft
+        return await self.repository.approve_review(draft)

@@ -5,6 +5,7 @@ from uuid import uuid4
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.enums.step_status import StepStatus
 from app.domains.drafts.model.draft_model import DraftModel
 from app.domains.drafts.model.draft_share_model import DraftShareModel
 
@@ -247,6 +248,30 @@ class DraftRepository:
         if destination_justification is not None:
             draft.destination_justification = destination_justification
         await self.db.flush()
+        # TimestampMixin.updated_at uses a SQL expression (`func.now()`) on
+        # UPDATE. SQLAlchemy expires that attribute after flush; reading it
+        # later from Pydantic would otherwise attempt implicit async I/O and
+        # fail with MissingGreenlet.
+        await self.db.refresh(draft, attribute_names=["updated_at"])
+        return draft
+
+    async def approve_review(self, draft: DraftModel) -> DraftModel:
+        """Record the human review decision on this exact draft version.
+
+        Review metadata belongs to the version being inspected, so this is
+        an in-place metadata update just like ``update_destination`` rather
+        than a content revision. Missing-information findings are deliberately
+        preserved; approving the human-review gate must not silently claim
+        that unanswered placeholders were resolved.
+        """
+        draft.requires_human_approval = False
+        draft.status = (
+            StepStatus.NEEDS_INPUT.value
+            if draft.missing_information
+            else StepStatus.APPROVED.value
+        )
+        await self.db.flush()
+        await self.db.refresh(draft, attribute_names=["updated_at"])
         return draft
 
     async def soft_delete_session(self, session_id: str) -> None:

@@ -236,6 +236,10 @@
 .spinner-lg { width: var(--icon-lg); height: var(--icon-lg); }
 .is-loading-icon { animation: spin 0.8s linear infinite; }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .form-field { display: grid; min-width: 0; gap: var(--space-2); }
 .form-field-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .form-field-label-row label { color: var(--text-primary); }

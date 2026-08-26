@@ -153,7 +153,6 @@ export function AppShell({
         </div>
         {user?.role !== "root" && (
           <div className="sidebar-utility-row" aria-label="Bildirim ve tema araçları">
-            <NotificationBell />
             <IconButton
               className="theme-cycle-button"
               icon={<ThemeIcon />}
@@ -161,6 +160,7 @@ export function AppShell({
               title={`Tema: ${THEME_LABELS[mode]}`}
               onClick={cycleTheme}
             />
+            <NotificationBell />
           </div>
         )}
         <nav className="sidebar-nav">

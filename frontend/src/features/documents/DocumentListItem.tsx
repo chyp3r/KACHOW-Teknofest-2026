@@ -76,6 +76,7 @@ export function DocumentListItem({
   onAnalyze,
   analyzing,
   onDelete,
+  showUploader = false,
 }: {
   document: DocumentMetadata;
   expanded: boolean;
@@ -85,6 +86,7 @@ export function DocumentListItem({
   onAnalyze?: () => void;
   analyzing?: boolean;
   onDelete?: () => void;
+  showUploader?: boolean;
 }) {
   const status = compliance(document);
   const analyzed = document.analyzed !== false;
@@ -101,7 +103,10 @@ export function DocumentListItem({
         <span className="document-item-icon" aria-hidden="true"><FileText /></span>
         <span className="document-item-copy">
           <strong title={document.file_name}>{document.file_name}</strong>
-          <small>{type}</small>
+          <small>
+            {type}
+            {showUploader && ` · Yükleyen: ${document.uploader_username || "Bilinmeyen kullanıcı"}`}
+          </small>
           <span className="document-item-summary" title={document.summary || undefined}>
             {document.summary || (analyzed ? "Özet bulunmuyor." : "Henüz analiz edilmedi.")}
           </span>

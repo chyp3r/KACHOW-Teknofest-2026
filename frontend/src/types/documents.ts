@@ -50,6 +50,7 @@ export interface DocumentMetadata {
   document_type_label: string;
   compliance_status: string;
   summary: string;
+  uploader_username?: string | null;
   analyzed?: boolean;
   pending_file?: File;
 }

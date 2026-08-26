@@ -45,7 +45,25 @@ MIN_AUTOMATED_CONFIDENCE_SCORE = get_policy().verification.min_automated_confide
 PLACEHOLDER_PATTERN = re.compile(r"\[[^\]]*\]")
 
 #: "E-12345678-903-4567" veya "2024/145" gibi belge numaraları.
-DOCUMENT_NUMBER_PATTERN = re.compile(r"\b(?:[A-ZÇĞİÖŞÜ]-)?\d{2,}(?:[-/]\d+)+\b")
+#:
+#: Negatif lookbehind'lar yük taşıyor, aşağıdaki LEGISLATION_PATTERN'in
+#: kendi korumasının ayna görüntüsü. Bunlar olmadan bu desen bir
+#: "madde N/fıkra" mevzuat referansını belge numarası olarak okur:
+#: "Madde 15/2" hayalet bir "15/2" belge-numarası iddiası üretir, bağlamdaki
+#: gerçek belge numaralarıyla karşılaştırılır ve mükemmel şekilde
+#: dayanaklı bir mevzuat açıklamasında uydurma olarak raporlanır -- üretimde
+#: doğrulandı (suggest_mevzuat_node'un kendi tanılama logunda): "Madde 15/2"
+#: alıntılayan ve belgenin tarih alanının boş olduğunu doğru şekilde belirten
+#: bir açıklama, tam da bu hayalet "sayı='15/2'" iddiası yüzünden atıldı,
+#: yerine genel "otomatik açıklama üretilemedi" yedeği konuldu.
+#: Derleme zamanı re.IGNORECASE bayrağı yerine (?i:...) ile kapsam
+#: daraltıldı: bayrak aşağıdaki [A-ZÇĞİÖŞÜ]'yü de küçük harfli bir önekle
+#: eşleşecek şekilde katlar, bu düzeltmenin asıl kapsamının (yalnızca
+#: büyük/küçük harf duyarsız "madde"/"m.") çok ötesine sessizce genişletir.
+DOCUMENT_NUMBER_PATTERN = re.compile(
+    r"(?<!(?i:madde) )(?<!(?i:m)\. )(?<!(?i:m)\.)"
+    r"\b(?:[A-ZÇĞİÖŞÜ]-)?\d{2,}(?:[-/]\d+)+\b"
+)
 
 #: Yönetmeliğin kullandığı biçimlerdeki tarihler, artı ISO 8601 ("2026-04-09")
 #: -- yüklenen bir belgenin kendi çıkarılmış metni bu biçimi en az Türkçe

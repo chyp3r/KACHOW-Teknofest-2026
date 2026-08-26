@@ -20,6 +20,7 @@ from app.main import app
 RESUME_SYNC_ENDPOINT = "/api/v1/chat/resume/sync"
 RESUME_STREAM_ENDPOINT = "/api/v1/chat/resume"
 STATE_ENDPOINT = "/api/v1/chat/sessions/{session_id}/state"
+CANCEL_ENDPOINT = "/api/v1/chat/sessions/{session_id}/cancel"
 
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -161,3 +162,21 @@ def test_session_state_surfaces_a_pending_interrupt():
     data = response.json()["data"]
     assert data["status"] == "interrupted"
     assert data["interrupt"]["kind"] == "missing_information"
+
+
+def test_cancel_session_settles_the_authenticated_users_checkpoint():
+    service = AsyncMock()
+    service.cancel_session.return_value = {"status": "cancelled"}
+    _override(service)
+
+    response = client.post(
+        CANCEL_ENDPOINT.format(session_id="user-1:web:cancelled")
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"status": "cancelled"}
+    service.cancel_session.assert_awaited_once_with(
+        "user-1:web:cancelled",
+        user_id="user-1",
+        company_id="company-1",
+    )

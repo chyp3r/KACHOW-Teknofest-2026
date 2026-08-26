@@ -226,6 +226,36 @@ async def update_draft_destination(
     return SuccessResponse(data=DraftResponse.model_validate(updated).model_dump(mode="json"))
 
 
+@router.post("/{draft_id}/review/approve", response_model=None)
+async def approve_draft_review(
+    draft_id: str,
+    service: DraftService = Depends(get_draft_history_service),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+):
+    """Confirm that an authorized human reviewed this draft version."""
+    draft = await service.get_draft(draft_id)
+    _assert_can_update_draft(draft, current_user)
+    before = {
+        "status": draft.status,
+        "requires_human_approval": draft.requires_human_approval,
+    }
+    updated = await service.approve_review(draft_id)
+    await _audit_service(service.repository.db).record(
+        company_id=current_user.company_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role,
+        action="draft:review_approve",
+        resource_type="draft",
+        resource_id=draft_id,
+        before=before,
+        after={
+            "status": updated.status,
+            "requires_human_approval": updated.requires_human_approval,
+        },
+    )
+    return SuccessResponse(data=DraftResponse.model_validate(updated).model_dump(mode="json"))
+
+
 @router.delete("/{draft_id}", response_model=None)
 async def delete_draft(
     draft_id: str,
