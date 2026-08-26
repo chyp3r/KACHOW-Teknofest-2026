@@ -8,11 +8,11 @@ from app.domains.transfers.model.transfer_model import ArtifactTransferModel
 
 
 class ArtifactTransferRepository:
-    """Repository for `artifact_transfers` (see `ArtifactTransferModel`).
+    """`artifact_transfers` için repository (bkz. `ArtifactTransferModel`).
 
-    Every method takes an explicit `company_id`, same convention as every
-    other repository since the tenancy work -- RLS backs this up, it does
-    not replace it.
+    Her metot açık bir `company_id` alır, kiracılık (tenancy) işinden bu
+    yana diğer her repository ile aynı kural -- RLS bunu destekler, yerini
+    almaz.
     """
 
     def __init__(self, db: AsyncSession):
@@ -45,9 +45,9 @@ class ArtifactTransferRepository:
     async def list_for_artifact(
         self, company_id: str, artifact_kind: str, source_artifact_id: str
     ) -> List[ArtifactTransferModel]:
-        """Every transfer of one specific artifact, newest first -- used by
-        `RecipientRecommendationService` to avoid re-suggesting someone the
-        artifact was already sent to."""
+        """Belirli bir belgenin her transferi, en yeniden en eskiye --
+        `RecipientRecommendationService` tarafından belgenin zaten
+        gönderildiği birinin tekrar önerilmesini önlemek için kullanılır."""
         result = await self.db.execute(
             select(ArtifactTransferModel)
             .where(
@@ -61,13 +61,14 @@ class ArtifactTransferRepository:
 
 
 class ArtifactTransferIntentRepository:
-    """Repository for `artifact_transfer_intents` (see
-    `ArtifactTransferIntentModel`) -- the AI channel's confirmation
-    lifecycle. `cas_update` is the one method the whole state machine
-    (`app.domains.transfers.intent_service.TransferIntentService`) advances
-    through: a plain `UPDATE ... WHERE state IN (:expected)` is what turns a
-    duplicate or stale confirmation into "0 rows changed" instead of a race,
-    per the plan's §I/§H ("Confirmation güvenliği").
+    """`artifact_transfer_intents` için repository (bkz.
+    `ArtifactTransferIntentModel`) -- AI kanalının onay yaşam döngüsü.
+    `cas_update`, tüm durum makinesinin
+    (`app.domains.transfers.intent_service.TransferIntentService`)
+    ilerlediği tek metottur: düz bir `UPDATE ... WHERE state IN
+    (:expected)`, planın §I/§H'sine ("Confirmation güvenliği") göre
+    tekrarlanan veya eskimiş bir onayı bir yarış durumu yerine "0 satır
+    değişti"ye dönüştüren şeydir.
     """
 
     def __init__(self, db: AsyncSession):
@@ -94,15 +95,16 @@ class ArtifactTransferIntentRepository:
         expected_states: Sequence[str],
         **values,
     ) -> Optional[ArtifactTransferIntentModel]:
-        """Advance `intent_id`'s `state` only if it is still one of
-        `expected_states`, atomically.
+        """`intent_id`'nin `state`'ini, yalnızca hâlâ `expected_states`'ten
+        biriyse, atomik olarak ilerletir.
 
         Returns:
-            The row, freshly re-read, when the conditional `UPDATE` actually
-            matched a row; `None` when it matched zero -- the caller (a
-            duplicate resume, two tabs racing, or a stale interrupt replay)
-            must treat that as "already resolved elsewhere", never retry it
-            as if it were a transient failure.
+            Koşullu `UPDATE` gerçekten bir satırla eşleştiğinde, satırın
+            yeniden okunmuş hali; sıfır satırla eşleştiğinde `None` --
+            çağıran (tekrarlanan bir resume, yarışan iki sekme veya
+            eskimiş bir interrupt replay'i) bunu geçici bir hataymış gibi
+            asla yeniden denememeli, "başka bir yerde zaten çözümlendi"
+            olarak ele almalıdır.
         """
         result = await self.db.execute(
             update(ArtifactTransferIntentModel)

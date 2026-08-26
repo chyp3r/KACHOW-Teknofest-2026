@@ -10,7 +10,7 @@ from app.domains.drafts.model.draft_share_model import DraftShareModel
 
 
 class DraftRepository:
-    """The version-chain registry backing `drafts` (see `DraftModel`)."""
+    """`drafts` tablosunun arkasındaki versiyon-zinciri kayıt defteri (bkz. `DraftModel`)."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -22,7 +22,7 @@ class DraftRepository:
         return result.scalar_one_or_none()
 
     async def get_latest_for_session(self, session_id: str) -> Optional[DraftModel]:
-        """The most recent version for a session -- "the current draft"."""
+        """Bir oturum için en son versiyon -- "geçerli taslak"."""
         result = await self.db.execute(
             select(DraftModel)
             .where(DraftModel.session_id == session_id, DraftModel.is_deleted.is_(False))
@@ -32,7 +32,7 @@ class DraftRepository:
         return result.scalar_one_or_none()
 
     async def attach_session(self, draft: DraftModel, session_id: str) -> DraftModel:
-        """Attach a formerly session-less draft to its first revision chat."""
+        """Daha önce oturumsuz olan bir taslağı, ilk revizyon chat'ine bağla."""
         if draft.session_id is not None:
             return draft
         draft.session_id = session_id
@@ -40,7 +40,7 @@ class DraftRepository:
         return draft
 
     async def list_versions_for_session(self, session_id: str) -> List[DraftModel]:
-        """Every version for a session, oldest first."""
+        """Bir oturuma ait tüm versiyonlar, en eskiden en yeniye."""
         result = await self.db.execute(
             select(DraftModel)
             .where(DraftModel.session_id == session_id, DraftModel.is_deleted.is_(False))
@@ -55,10 +55,11 @@ class DraftRepository:
         document_id: Optional[str],
         user_id: Optional[str],
     ):
-        """The filtered "one row per collapsed chain" query, with no
-        ordering/pagination applied -- shared by `list_drafts` (which adds
-        `order_by`/`offset`/`limit`) and `count_drafts` (which wraps this in
-        `SELECT count()` instead of fetching and `len()`-ing every row)."""
+        """Filtrelenmiş, sıralama/sayfalama uygulanmamış "birleştirilmiş zincir
+        başına bir satır" sorgusu -- `list_drafts` (bunun üzerine
+        `order_by`/`offset`/`limit` ekler) ve `count_drafts` (bunu her
+        satırı çekip `len()` almak yerine `SELECT count()` içine sarar)
+        tarafından paylaşılır."""
         group_key = func.coalesce(DraftModel.session_id, DraftModel.id)
         latest_version = (
             select(
@@ -93,43 +94,48 @@ class DraftRepository:
         skip: int = 0,
         limit: int = 100,
     ) -> List[DraftModel]:
-        """List drafts one row per session -- only each session's latest version.
+        """Taslakları oturum başına bir satır olarak listele -- yalnızca her
+        oturumun en son versiyonu.
 
-        Built as a self-join against a per-`session_id` `max(version)`
-        subquery rather than `DocumentRepository.count_for_owner`'s
-        list-then-len approach, since a draft listing must already collapse
-        each session's version chain down to one row and a subquery join
-        does that in one query instead of fetching every version.
+        `DocumentRepository.count_for_owner`'ın listele-sonra-`len()`-al
+        yaklaşımı yerine, `session_id` başına `max(version)` alt sorgusuna
+        karşı bir self-join olarak kuruldu; çünkü bir taslak listelemesi
+        zaten her oturumun versiyon zincirini tek bir satıra indirgemek
+        zorundadır ve bir alt sorgu join'i bunu her versiyonu çekmek yerine
+        tek bir sorguda yapar.
 
-        The grouping key is `COALESCE(session_id, id)`, not bare
-        `session_id`. A direct `POST /documents/draft` call (no chat
-        session at all -- see `DraftModel.session_id`'s docstring) leaves
-        `session_id` `NULL`, and SQL's three-valued logic makes `NULL =
-        NULL` evaluate to `NULL`, not `TRUE`: a plain `session_id ==
-        session_id` join condition would silently drop *every* such draft
-        from this listing, and grouping by bare `session_id` would (via
-        `GROUP BY`, which does bucket `NULL`s together, unlike a join
-        predicate) collapse every unrelated session-less draft in the
-        system into one shared "latest version" -- hiding all but a single
-        globally-dominant row, system-wide, once any of them exceeded
-        `version=1` (which only became possible once `DraftShareService.
-        respond`'s accept-fork could produce one). Falling back to the
-        row's own `id` when `session_id` is `NULL` gives every session-less
-        draft its own singleton group instead: correct for the common case
-        (independent direct drafts, which were never meant to collapse into
-        each other), and for an accepted share's forked copy specifically
-        -- the fork is owned by a different user than the original (see
-        `DraftShareService.respond`), so both showing up as separate rows
-        in a company-wide (ADMIN/MANAGER/ROOT) listing is the right
-        outcome, not a duplicate to hide.
+        Gruplama anahtarı yalın `session_id` değil, `COALESCE(session_id,
+        id)`'dir. Doğrudan bir `POST /documents/draft` çağrısı (hiç chat
+        oturumu yok -- bkz. `DraftModel.session_id`'in docstring'i)
+        `session_id`'yi `NULL` bırakır ve SQL'in üç değerli mantığı `NULL =
+        NULL`'u `TRUE` değil `NULL` olarak değerlendirir: yalın bir
+        `session_id == session_id` join koşulu bu tür *her* taslağı bu
+        listeden sessizce düşürürdü, ve yalın `session_id`'ye göre
+        gruplamak da (join koşulunun aksine `NULL`'ları gerçekten bir arada
+        kovalayan `GROUP BY` üzerinden) sistemdeki tüm ilgisiz oturumsuz
+        taslakları tek bir ortak "en son versiyon"a birleştirirdi --
+        bunlardan herhangi biri `version=1`'i aştığı anda (ki bu yalnızca
+        `DraftShareService.respond`'un kabul-fork'u bir tane
+        üretebildiğinden beri mümkün) sistem genelinde tek, baskın bir
+        satır dışında hepsini gizlerdi. `session_id` `NULL` olduğunda
+        satırın kendi `id`'sine geri dönmek, bunun yerine her oturumsuz
+        taslağa kendi tekil grubunu verir: hem yaygın durum için doğrudur
+        (birbirine hiç birleşmemesi gereken bağımsız doğrudan taslaklar),
+        hem de özellikle kabul edilmiş bir paylaşımın fork'lanmış kopyası
+        için -- fork, orijinalden farklı bir kullanıcıya aittir (bkz.
+        `DraftShareService.respond`), bu yüzden şirket çapında
+        (ADMIN/MANAGER/ROOT) bir listelemede ikisinin de ayrı satırlar
+        olarak görünmesi gizlenmesi gereken bir yinelenme değil, doğru
+        sonuçtur.
 
-        `company_id` is `Optional` only because `drafts.company_id` itself
-        still is (see `DraftModel.company_id`'s docstring) -- omitted
-        entirely rather than filtered to `NULL`, so a caller that hasn't
-        adopted tenant scoping yet keeps seeing every company's drafts
-        exactly as before, matching every other repository's convention of
-        filtering explicitly rather than leaning on row-level security
-        alone.
+        `company_id`'nin `Optional` olmasının tek nedeni `drafts.
+        company_id`'nin kendisinin hâlâ öyle olmasıdır (bkz. `DraftModel.
+        company_id`'in docstring'i) -- `NULL`'a filtrelenmek yerine
+        tamamen atlanır, böylece henüz kiracı (tenant) kapsamına
+        geçmemiş bir çağıran, tıpkı öncesinde olduğu gibi tüm şirketlerin
+        taslaklarını görmeye devam eder; bu, diğer tüm repository'lerin
+        yalnızca satır düzeyi güvenliğe yaslanmak yerine açıkça
+        filtreleme kuralına uyar.
         """
         query = self._latest_version_query(company_id, session_id, document_id, user_id)
         query = query.order_by(DraftModel.updated_at.desc()).offset(skip).limit(limit)
@@ -143,11 +149,12 @@ class DraftRepository:
         document_id: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> int:
-        """A real `SELECT count()` over the same collapsed-chain query
-        `list_drafts` builds, not a `list_drafts(..., limit=10_000)` +
-        `len()` -- the previous approach silently under-counted (and paid
-        for) anything past 10,000 rows, the exact anti-pattern
-        `DocumentRepository.count_for_owner` was already fixed to avoid."""
+        """`list_drafts`'ın kurduğu aynı birleştirilmiş-zincir sorgusu
+        üzerinde gerçek bir `SELECT count()` -- bir `list_drafts(...,
+        limit=10_000)` + `len()` değil; önceki yaklaşım 10.000 satırı aşan
+        her şeyi sessizce eksik sayıyordu (ve bunun maliyetini
+        ödüyordu); bu tam olarak `DocumentRepository.count_for_owner`'ın
+        önlemek için zaten düzeltildiği anti-pattern."""
         query = self._latest_version_query(company_id, session_id, document_id, user_id)
         result = await self.db.execute(select(func.count()).select_from(query.subquery()))
         return result.scalar_one()
@@ -174,7 +181,7 @@ class DraftRepository:
         missing_information: Optional[list] = None,
         instructions: Optional[str] = None,
     ) -> DraftModel:
-        """Append a new version, chained to `parent` when this is a revision."""
+        """Yeni bir versiyon ekle; bu bir revizyon ise `parent`'a zincirlenir."""
         draft = DraftModel(
             id=uuid4().hex,
             company_id=company_id,
@@ -209,27 +216,31 @@ class DraftRepository:
         destination_unit_id: Optional[str],
         destination_justification: Optional[str],
     ) -> DraftModel:
-        """Overwrite this one version's routed unit -- in place, not a new version.
+        """Bu tek versiyonun yönlendirildiği birimi -- yeni versiyon açmadan, yerinde -- güncelle.
 
-        Deliberately not an append like `create_version`: `destination` is
-        routing metadata *about* this version's text, not the text itself,
-        so correcting it (the human picking a different unit than the
-        best-effort suggestion) does not warrant a whole new draft version
-        the way an actual content revision would.
+        Kasıtlı olarak `create_version` gibi bir ekleme değil: `destination`
+        bu versiyonun metni *hakkında* yönlendirme meta verisidir, metnin
+        kendisi değil; bu yüzden onu düzeltmek (insanın en iyi çaba
+        önerisinden farklı bir birim seçmesi), gerçek bir içerik
+        revizyonunun gerektirdiği gibi tamamen yeni bir taslak versiyonu
+        gerektirmez.
 
         Args:
-            draft: The already-fetched, already-authorized row to update.
-            destination: The new unit name (may be free text that matches
-                no real `units` row -- see `destination_unit_id`'s own
-                docstring on `DraftModel`; a custom destination is allowed
-                the same way routing's own fallback already tolerates one).
-            destination_unit_id: The resolved `units.id`, or `None` when
-                `destination` doesn't match any unit in this company.
-            destination_justification: Turkish rationale to persist
-                alongside the new destination, or `None` to leave whatever
-                was already stored untouched (a manual pick from the
-                suggested list doesn't need a fresh sentence explaining
-                itself the way the router's own guess did).
+            draft: Zaten çekilmiş, zaten yetkilendirilmiş, güncellenecek satır.
+            destination: Yeni birim adı (gerçek bir `units` satırıyla
+                eşleşmeyen serbest metin olabilir -- bkz. `DraftModel`
+                üzerindeki `destination_unit_id`'in kendi docstring'i;
+                özel bir hedef, routing'in kendi fallback'inin zaten
+                tolere ettiği şekilde kabul edilir).
+            destination_unit_id: Çözümlenmiş `units.id`, ya da
+                `destination` bu şirkette hiçbir birimle eşleşmiyorsa
+                `None`.
+            destination_justification: Yeni hedefle birlikte kalıcı
+                hale getirilecek Türkçe gerekçe, ya da zaten saklanmış
+                olanı değiştirmeden bırakmak için `None` (önerilen
+                listeden manuel bir seçim, router'ın kendi tahmininin
+                yaptığı gibi kendini açıklayan yeni bir cümleye ihtiyaç
+                duymaz).
         """
         draft.destination = destination
         draft.destination_unit_id = destination_unit_id
@@ -239,12 +250,13 @@ class DraftRepository:
         return draft
 
     async def soft_delete_session(self, session_id: str) -> None:
-        """Mark every version in a session's revision chain as deleted.
+        """Bir oturumun revizyon zincirindeki her versiyonu silinmiş olarak işaretle.
 
-        `list_drafts` collapses a session down to just its latest version
-        (see the `max(version)` subquery above) -- soft-deleting only that
-        one row would "resurrect" the previous version as the session's new
-        listing, which is not what deleting the draft from the UI means.
+        `list_drafts`, bir oturumu yalnızca en son versiyonuna indirger
+        (yukarıdaki `max(version)` alt sorgusuna bakın) -- yalnızca o tek
+        satırı soft-delete yapmak, önceki versiyonu oturumun yeni
+        listelemesi olarak "diriltirdi"; bu, UI'dan taslağı silmenin
+        anlamı değildir.
         """
         await self.db.execute(
             update(DraftModel)
@@ -254,9 +266,9 @@ class DraftRepository:
         await self.db.flush()
 
     async def soft_delete(self, draft_id: str) -> None:
-        """Mark a single draft as deleted -- for a `session_id=None` draft
-        (a direct `POST /documents/draft` call), where there is no chain to
-        collapse."""
+        """Tek bir taslağı silinmiş olarak işaretle -- `session_id=None` olan
+        bir taslak için (doğrudan bir `POST /documents/draft` çağrısı),
+        burada indirgenecek bir zincir yoktur."""
         await self.db.execute(
             update(DraftModel).where(DraftModel.id == draft_id).values(is_deleted=True)
         )
@@ -264,11 +276,11 @@ class DraftRepository:
 
 
 class DraftShareRepository:
-    """Repository for `draft_shares` (see `DraftShareModel`).
+    """`draft_shares` için repository (bkz. `DraftShareModel`).
 
-    Every method takes an explicit `company_id`, same convention as every
-    other repository since the tenancy work -- RLS backs this up, it does
-    not replace it.
+    Her metod açık bir `company_id` alır; kiracı (tenancy) işi
+    yapıldığından beri diğer tüm repository'lerle aynı gelenek -- RLS
+    bunu destekler, yerini almaz.
     """
 
     def __init__(self, db: AsyncSession):
@@ -305,7 +317,7 @@ class DraftShareRepository:
         skip: int = 0,
         limit: int = 100,
     ) -> List[Tuple[DraftShareModel, DraftModel]]:
-        """Shares received by `user_id`, newest first, joined with the draft's content."""
+        """`user_id`'nin aldığı paylaşımlar, en yeniden en eskiye, taslağın içeriğiyle join edilmiş."""
         query = (
             self._inbox_query(company_id, user_id, status)
             .order_by(DraftShareModel.created_at.desc())
@@ -332,7 +344,7 @@ class DraftShareRepository:
         skip: int = 0,
         limit: int = 100,
     ) -> List[Tuple[DraftShareModel, DraftModel]]:
-        """Shares sent by `user_id`, newest first, joined with the draft's content."""
+        """`user_id`'nin gönderdiği paylaşımlar, en yeniden en eskiye, taslağın içeriğiyle join edilmiş."""
         query = select(DraftShareModel, DraftModel).join(
             DraftModel, DraftModel.id == DraftShareModel.draft_id
         ).where(
@@ -354,8 +366,9 @@ class DraftShareRepository:
         return result.scalar_one()
 
     async def mark_read(self, share: DraftShareModel) -> DraftShareModel:
-        """Advance a still-`sent` share to `read`. A no-op past `sent` (already
-        `accepted`/`rejected`/`withdrawn` shares don't regress to `read`)."""
+        """Hâlâ `sent` durumundaki bir paylaşımı `read`'e ilerlet. `sent`
+        durumunu geçmişse no-op'tur (zaten `accepted`/`rejected`/
+        `withdrawn` olan paylaşımlar `read`'e geri dönmez)."""
         if share.status == "sent":
             share.status = "read"
         await self.db.flush()
@@ -364,7 +377,7 @@ class DraftShareRepository:
     async def respond(
         self, share: DraftShareModel, status: str, response_note: Optional[str]
     ) -> DraftShareModel:
-        """Resolve a share as `accepted` or `rejected`."""
+        """Bir paylaşımı `accepted` ya da `rejected` olarak sonuçlandır."""
         share.status = status
         share.response_note = response_note
         share.responded_at = datetime.now(timezone.utc)

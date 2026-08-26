@@ -10,44 +10,45 @@ from app.infrastructure.vectorstore.base import BaseVectorStore
 
 logger = logging.getLogger(__name__)
 
-#: Name of the sparse vector used by the hybrid retriever. Collections created
-#: before this was introduced do not have it, and Qdrant rejects any query that
-#: names a vector the collection lacks.
+#: Hibrit retriever'ın kullandığı seyrek vektörün adı. Bu tanıtılmadan önce
+#: oluşturulan koleksiyonlarda bu yoktur, ve Qdrant koleksiyonun sahip
+#: olmadığı bir vektörü adlandıran herhangi bir sorguyu reddeder.
 SPARSE_VECTOR_NAME = "text-sparse"
 
-#: Points per upsert() call. A single unbatched call was fine against the
-#: local, same-host Docker Qdrant (sub-second regardless of size), but
-#: verified live to genuinely time out against a remote cluster (Evren):
-#: indexing 429 dense(1024)+sparse points in one call took over 120s and
-#: still didn't finish. Chunking bounds each request's size independent of
-#: corpus size, which also means one failed batch doesn't invalidate an
-#: otherwise-successful large upsert.
+#: upsert() çağrısı başına nokta sayısı. Yerel, aynı host'taki Docker
+#: Qdrant'a karşı tek, gruplanmamış bir çağrı sorun değildi (boyuttan
+#: bağımsız olarak bir saniyeden az), ama uzak bir kümeye (Evren) karşı
+#: gerçekten zaman aşımına uğradığı canlı doğrulandı: bir çağrıda
+#: 429 yoğun(1024)+seyrek noktayı indekslemek 120 saniyeden fazla sürdü ve
+#: yine de bitmedi. Gruplama, her isteğin boyutunu korpus boyutundan
+#: bağımsız olarak sınırlar, bu da başarısız bir grubun aksi halde başarılı
+#: büyük bir upsert'i geçersiz kılmadığı anlamına gelir.
 _UPSERT_BATCH_SIZE = 64
 
-#: Range-condition operator keys a ``filter_dict`` value may use instead of a
-#: plain scalar (exact match) -- e.g. ``{"sensitivity_rank": {"lte": 3}}``
-#: restricts a search to chunks whose payload field is at or below 3. Named
-#: after Qdrant's own ``models.Range`` fields, passed straight through.
+#: Bir ``filter_dict`` değerinin düz bir skaler (tam eşleşme) yerine
+#: kullanabileceği aralık koşulu operatör anahtarları -- örn.
+#: ``{"sensitivity_rank": {"lte": 3}}`` bir aramayı, payload alanı 3'te
+#: veya altında olan parçalarla sınırlar. Qdrant'ın kendi ``models.Range``
+#: alanlarından adlandırılmış, doğrudan geçirilir.
 _RANGE_OPERATORS = frozenset({"lt", "lte", "gt", "gte"})
 
 
 def _build_qdrant_filter(filter_dict: Optional[Dict[str, Any]]) -> Optional[models.Filter]:
-    """Translate this module's ``filter_dict`` convention into a Qdrant filter.
+    """Bu modülün ``filter_dict`` sözleşmesini bir Qdrant filtresine çevir.
 
-    A value is either a scalar (exact match, the original and still most
-    common case -- ``{"storage_path": "uploads/x.pdf"}``) or a dict of range
-    operators (``{"sensitivity_rank": {"lte": 3}}``), used to restrict a
-    search by an ordered numeric payload field -- e.g. RBAC clearance
-    filtering, where a chunk above the requester's rank must never be
-    returned from the vector search at all, not merely filtered out
-    downstream after the model has already seen it.
+    Bir değer ya bir skalerdir (tam eşleşme, orijinal ve hâlâ en yaygın
+    durum -- ``{"storage_path": "uploads/x.pdf"}``) ya da sıralı bir sayısal
+    payload alanına göre bir aramayı sınırlamak için kullanılan bir aralık
+    operatörleri sözlüğüdür (``{"sensitivity_rank": {"lte": 3}}``) -- örn.
+    RBAC yetki filtrelemesi, burada isteği yapanın rütbesinin üzerindeki bir
+    parça, model onu zaten gördükten sonra alt akışta filtrelenmek yerine
+    vektör aramasından hiç döndürülmemelidir.
 
     Args:
-        filter_dict: This module's filter convention, or None/empty for no
-            filter.
+        filter_dict: Bu modülün filtre sözleşmesi, veya filtre yoksa None/boş.
 
     Returns:
-        The equivalent Qdrant filter, or None when ``filter_dict`` is empty.
+        Eşdeğer Qdrant filtresi, veya ``filter_dict`` boşsa None.
     """
     if not filter_dict:
         return None
@@ -67,57 +68,60 @@ def _build_qdrant_filter(filter_dict: Optional[Dict[str, Any]]) -> Optional[mode
 
 
 class QdrantStore(BaseVectorStore):
-    """Qdrant client implementation of BaseVectorStore for vector storage and search."""
+    """Vektör depolama ve arama için BaseVectorStore'un Qdrant istemci implementasyonu."""
 
     def __init__(self, qdrant_url: str, api_key: Optional[str] = None):
-        """Initialize Qdrant Store client.
+        """Qdrant Store istemcisini başlat.
 
         Args:
-            qdrant_url: Endpoint URL of Qdrant DB (e.g. "http://localhost:6333",
-                or Evren's dedicated cluster when LOCAL_MODE=False).
-            api_key: Team API key, required for Evren's cluster; unused (and
-                unnecessary) against the local Docker-Compose Qdrant.
+            qdrant_url: Qdrant DB'nin uç nokta URL'i (örn. "http://localhost:6333",
+                veya LOCAL_MODE=False iken Evren'in özel kümesi).
+            api_key: Evren'in kümesi için gerekli takım API anahtarı;
+                yerel Docker-Compose Qdrant'a karşı kullanılmaz (ve gereksizdir).
         """
         self.qdrant_url = qdrant_url
-        # port=None (qdrant-client's own default is 6333, always) so a URL
-        # with no explicit port falls through to the scheme's own default
-        # (443 for https) instead of being forced onto 6333 regardless of
-        # what the URL says. Harmless for the local Docker Qdrant URL, which
-        # always spells out ":6333" explicitly -- that still wins, since
-        # qdrant-client only falls back to this `port` kwarg when the URL
-        # itself carries none. Needed for Evren's cluster, which sits behind
-        # a plain HTTPS reverse proxy on 443 with a team-specific path
-        # prefix (e.g. "https://evren-vektor.ssyz.org.tr/team07") rather
-        # than exposing 6333 directly -- verified live: with the qdrant-client
-        # default (port=6333) every request timed out; with port=None the
-        # same URL resolves to 443 and succeeds.
-        # qdrant-client defaults to a 5s timeout (DEFAULT_GRPC_TIMEOUT,
-        # reused for REST too) when none is given -- fine against the local
-        # Docker Qdrant on the same host, but a single unbatched
-        # upsert_documents() call of a few hundred embedded chunks
-        # genuinely needs longer than that over the internet against
-        # Evren's cluster. Verified live: indexing the 429-example
-        # yazışma corpus against Evren timed out with WriteTimeout at the
-        # 5s default.
+        # port=None (qdrant-client'ın kendi varsayılanı her zaman 6333)
+        # böylece açık bir port taşımayan bir URL, URL'nin ne söylediğinden
+        # bağımsız olarak 6333'e zorlanmak yerine şemanın kendi varsayılanına
+        # (https için 443) düşer. Her zaman ":6333"ü açıkça belirten yerel
+        # Docker Qdrant URL'i için zararsızdır -- o yine kazanır, çünkü
+        # qdrant-client bu `port` kwarg'ına yalnızca URL'nin kendisi hiçbirini
+        # taşımadığında düşer. 6333'ü doğrudan açığa çıkarmak yerine
+        # takıma özel bir yol öneki (örn.
+        # "https://evren-vektor.ssyz.org.tr/team07") ile 443'te düz bir HTTPS
+        # ters proxy'nin arkasında oturan Evren'in kümesi için gereklidir --
+        # canlı doğrulandı: qdrant-client varsayılanıyla (port=6333) her
+        # istek zaman aşımına uğradı; port=None ile aynı URL 443'e çözülür
+        # ve başarılı olur.
+        # qdrant-client, hiçbiri verilmediğinde 5 saniyelik bir zaman aşımına
+        # (DEFAULT_GRPC_TIMEOUT, REST için de yeniden kullanılır) varsayılan
+        # olarak geçer -- aynı host'taki yerel Docker Qdrant'a karşı sorun
+        # değil, ama birkaç yüz embed edilmiş parçanın tek, gruplanmamış
+        # upsert_documents() çağrısı, internet üzerinden Evren'in kümesine
+        # karşı gerçekten bundan daha uzun süreye ihtiyaç duyar. Canlı
+        # doğrulandı: 429 örnekli yazışma korpusunu Evren'e karşı
+        # indekslemek 5s varsayılanında WriteTimeout ile zaman aşımına uğradı.
         self.client = AsyncQdrantClient(
             url=qdrant_url, api_key=api_key, port=None, timeout=120
         )
-        # Cache of collection_name -> "does it have a sparse vector". Probed once
-        # per process so a stale collection costs one extra call, not one failed
-        # query (and one stack trace) per retrieval.
+        # collection_name -> "seyrek vektörü var mı" önbelleği. Süreç
+        # başına bir kez sondalanır, böylece eski bir koleksiyon bir ekstra
+        # çağrıya mal olur, alma başına başarısız bir sorguya (ve bir yığın
+        # izine) değil.
         self._sparse_support: Dict[str, bool] = {}
         logger.info(f"Initialized AsyncQdrantClient targeting: {qdrant_url}")
 
     async def _has_sparse_vector(self, collection_name: str) -> bool:
-        """Report whether a collection is configured for sparse vectors.
+        """Bir koleksiyonun seyrek vektörler için yapılandırılıp yapılandırılmadığını bildir.
 
         Args:
-            collection_name: The collection to inspect.
+            collection_name: İncelenecek koleksiyon.
 
         Returns:
-            True when the collection declares the sparse vector the hybrid
-            retriever needs. Unknown or unreachable collections report False, so
-            retrieval degrades to dense-only rather than erroring.
+            Koleksiyon hibrit retriever'ın ihtiyaç duyduğu seyrek vektörü
+            tanımlıyorsa True. Bilinmeyen veya ulaşılamayan koleksiyonlar
+            False bildirir, böylece alma hata vermek yerine yalnızca
+            yoğun-vektöre düşer.
         """
         cached = self._sparse_support.get(collection_name)
         if cached is not None:
@@ -149,20 +153,21 @@ class QdrantStore(BaseVectorStore):
     async def create_collection(
         self, collection_name: str, vector_size: int, distance: str = "Cosine"
     ) -> bool:
-        """Create the collection, or validate the schema of an existing one.
+        """Koleksiyonu oluştur, veya var olan birinin şemasını doğrula.
 
-        An existing collection is *checked*, not blindly accepted. The previous
-        version returned success on any existing collection, so one created
-        before sparse vectors existed stayed permanently incompatible with
-        hybrid search while every retrieval logged a 400 from Qdrant.
+        Var olan bir koleksiyon körü körüne kabul edilmez, *kontrol edilir*.
+        Önceki sürüm var olan herhangi bir koleksiyonda başarı döndürüyordu,
+        bu yüzden seyrek vektörler var olmadan önce oluşturulan bir tanesi,
+        her alma Qdrant'tan bir 400 loglarken hibrit aramayla kalıcı olarak
+        uyumsuz kalıyordu.
 
         Args:
-            collection_name: Target collection.
-            vector_size: Dense vector dimensionality.
-            distance: Distance metric name.
+            collection_name: Hedef koleksiyon.
+            vector_size: Yoğun vektör boyutsallığı.
+            distance: Mesafe metriği adı.
 
         Returns:
-            True when the collection exists and is usable for dense search.
+            Koleksiyon varsa ve yoğun arama için kullanılabilirse True.
         """
         dist_enum = models.Distance.COSINE
         dist_lower = distance.lower()
@@ -204,14 +209,14 @@ class QdrantStore(BaseVectorStore):
     async def _validate_existing(
         self, collection_name: str, vector_size: int
     ) -> bool:
-        """Check that an existing collection matches what the code expects.
+        """Var olan bir koleksiyonun kodun beklediğiyle eşleştiğini kontrol et.
 
         Args:
-            collection_name: The collection to check.
-            vector_size: The dense dimensionality the caller intends to write.
+            collection_name: Kontrol edilecek koleksiyon.
+            vector_size: Çağıranın yazmayı amaçladığı yoğun boyutsallık.
 
         Returns:
-            True when the collection can accept dense writes of this size.
+            Koleksiyon bu boyutta yoğun yazmaları kabul edebiliyorsa True.
         """
         try:
             info = await self.client.get_collection(collection_name)
@@ -224,8 +229,9 @@ class QdrantStore(BaseVectorStore):
                 existing_size = getattr(default, "size", None)
 
             if existing_size is not None and existing_size != vector_size:
-                # Writing 768-dim vectors into a 3584-dim collection fails on
-                # every point and is otherwise only visible as a silent no-op.
+                # 768 boyutlu vektörleri 3584 boyutlu bir koleksiyona yazmak
+                # her noktada başarısız olur ve bunun dışında yalnızca
+                # sessiz bir hiçbir-şey-yapmama olarak görünür.
                 logger.error(
                     "Collection '%s' has dimension %d but the embedding model "
                     "produces %d. Delete the collection and re-index.",
@@ -258,17 +264,17 @@ class QdrantStore(BaseVectorStore):
     async def upsert_documents(
         self, collection_name: str, chunks: List[EmbeddedChunk]
     ) -> bool:
-        """Upsert embedded chunks into Qdrant collection."""
+        """Embed edilmiş parçaları Qdrant koleksiyonuna upsert et."""
         if not chunks:
             return True
 
         points = []
         for chunk in chunks:
             point_id = str(uuid.uuid4())
-            # Save raw text inside payload along with any metadata keys
+            # Ham metni herhangi bir metadata anahtarıyla birlikte payload içine kaydet
             payload = {"text": chunk.text, **chunk.metadata}
-            
-            # Format vector based on presence of sparse vector
+
+            # Seyrek vektör varlığına göre vektörü biçimlendir
             if chunk.sparse_vector:
                 vector_data = {
                     "": chunk.vector,
@@ -304,12 +310,13 @@ class QdrantStore(BaseVectorStore):
     async def similarity_search(
         self, collection_name: str, query_vector: List[float], limit: int = 5, filter_dict: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
-        """Search similar vectors in Qdrant collection and return normalized payload objects."""
+        """Qdrant koleksiyonunda benzer vektörleri ara ve normalize edilmiş payload nesneleri döndür."""
         try:
-            # `search()` was removed in qdrant-client 1.x in favour of
-            # `query_points()`. Because this method swallows exceptions and returns
-            # an empty list, calling the removed API made every dense lookup return
-            # no hits silently, degrading hybrid retrieval to sparse-only.
+            # `search()`, qdrant-client 1.x'te `query_points()` lehine
+            # kaldırıldı. Bu metod exception'ları yuttuğu ve boş bir liste
+            # döndürdüğü için, kaldırılan API'yi çağırmak her yoğun
+            # aramanın sessizce sonuç döndürmemesine neden oluyordu, hibrit
+            # almayı yalnızca-seyreğe düşürüyordu.
             qdrant_filter = _build_qdrant_filter(filter_dict)
 
             response = await self.client.query_points(
@@ -344,22 +351,23 @@ class QdrantStore(BaseVectorStore):
         limit: int = 5,
         filter_dict: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
-        """Perform native hybrid search using Qdrant Prefetch API and RRF fusion."""
+        """Qdrant Prefetch API ve RRF füzyonu kullanarak yerel hibrit arama yap."""
         try:
             qdrant_filter = _build_qdrant_filter(filter_dict)
 
-            # Define prefetch queries for dense and sparse
+            # Yoğun ve seyrek için prefetch sorgularını tanımla
             dense_prefetch = models.Prefetch(
                 query=query_vector,
-                using="",  # Default dense vector
-                limit=limit * 3,  # Fetch more candidates to fuse
+                using="",  # Varsayılan yoğun vektör
+                limit=limit * 3,  # Birleştirmek için daha fazla aday getir
                 filter=qdrant_filter,
             )
 
             prefetch_list = [dense_prefetch]
-            # Only prefetch sparse when the query has tokens *and* the collection
-            # actually declares the vector. Naming a vector the collection lacks
-            # makes Qdrant reject the whole request with a 400.
+            # Yalnızca sorgunun jetonları *ve* koleksiyonun gerçekten
+            # vektörü tanımladığı durumda seyreği önden getir. Koleksiyonun
+            # sahip olmadığı bir vektörü adlandırmak, Qdrant'ın tüm isteği
+            # bir 400 ile reddetmesine neden olur.
             if (
                 sparse_indices
                 and sparse_values
@@ -377,8 +385,8 @@ class QdrantStore(BaseVectorStore):
                     )
                 )
 
-            # A single prefetch branch has nothing to fuse; go straight to dense
-            # search rather than paying for a degenerate RRF round trip.
+            # Tek bir prefetch dalının birleştirecek bir şeyi yok; bozuk bir
+            # RRF gidiş-dönüşü ödemek yerine doğrudan yoğun aramaya git.
             if len(prefetch_list) == 1:
                 return await self.similarity_search(
                     collection_name=collection_name,
@@ -387,7 +395,7 @@ class QdrantStore(BaseVectorStore):
                     filter_dict=filter_dict,
                 )
 
-            # Query Qdrant with Fusion (Reciprocal Rank Fusion)
+            # Qdrant'ı Füzyon ile sorgula (Reciprocal Rank Fusion)
             response = await self.client.query_points(
                 collection_name=collection_name,
                 prefetch=prefetch_list,
@@ -406,16 +414,16 @@ class QdrantStore(BaseVectorStore):
                 )
             return hits
         except Exception as e:
-            # Logged without a traceback: the dense fallback below still answers
-            # the query, so this is a degradation notice, not a crash. Emitting a
-            # full stack trace per retrieval buried the real errors in the log.
+            # Yığın izi olmadan loglandı: aşağıdaki yoğun yedek hâlâ sorguyu
+            # yanıtlar, bu yüzden bu bir çökme değil, bir bozulma bildirimidir.
+            # Alma başına tam bir yığın izi yaymak gerçek hataları logda gömüyordu.
             logger.warning(
                 "Qdrant hybrid_search failed in '%s' (%s); falling back to dense search.",
                 collection_name,
                 e,
             )
             self._sparse_support[collection_name] = False
-            # Fallback to similarity search
+            # Benzerlik aramasına düş
             return await self.similarity_search(
                 collection_name=collection_name,
                 query_vector=query_vector,
@@ -424,7 +432,7 @@ class QdrantStore(BaseVectorStore):
             )
 
     async def delete_collection(self, collection_name: str) -> bool:
-        """Delete a collection from Qdrant database."""
+        """Qdrant veritabanından bir koleksiyonu sil."""
         try:
             exists = await self.client.collection_exists(collection_name)
             if not exists:
@@ -445,8 +453,8 @@ class QdrantStore(BaseVectorStore):
     async def delete_by_filter(
         self, collection_name: str, filter_dict: Dict[str, Any]
     ) -> bool:
-        """Delete every point matching a filter (e.g. one document's chunks)
-        without dropping the rest of the collection."""
+        """Koleksiyonun geri kalanını düşürmeden bir filtreyle eşleşen her
+        noktayı (örn. tek bir belgenin parçalarını) sil."""
         if not filter_dict:
             logger.error(
                 f"delete_by_filter refused an empty filter for '{collection_name}' "

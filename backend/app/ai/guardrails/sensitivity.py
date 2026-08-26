@@ -1,10 +1,10 @@
-"""Combine confidentiality marking, PII findings and injection markers into
-one input-side sensitivity assessment.
+"""Gizlilik damgasını, PII bulgularını ve enjeksiyon işaretlerini tek bir
+girdi tarafı hassasiyet değerlendirmesinde birleştirir.
 
-Pure function over already-extracted data (``EvrakField``, PII findings,
-injection-scrub markers) -- no I/O, no model call, unit-testable the same way
-``app.ai.verification.draft_verifier.verify_draft`` is: given inputs, one
-deterministic verdict.
+Zaten çıkarılmış veriler (``EvrakField``, PII bulguları, enjeksiyon temizleme
+işaretleri) üzerinde çalışan saf bir fonksiyon -- I/O yok, model çağrısı yok,
+``app.ai.verification.draft_verifier.verify_draft`` ile aynı şekilde birim
+test edilebilir: girdiler verildiğinde, tek bir deterministik karar.
 """
 
 import unicodedata
@@ -17,10 +17,11 @@ from app.ai.guardrails.pii import PiiFinding, find_pii
 from app.ai.policy import GuardrailPolicy, get_policy
 from app.core.enums.sensitivity_level import LABEL_ALIASES, SensitivityLevel
 
-#: Same fold technique as ``app.ai.guardrails.injection._fold`` and
-#: ``app.ai.verification.normalizers._fold`` -- each guardrail/verification
-#: module owns its own copy rather than sharing a private helper across
-#: module boundaries, matching this codebase's existing convention.
+#: ``app.ai.guardrails.injection._fold`` ve
+#: ``app.ai.verification.normalizers._fold`` ile aynı katlama tekniği --
+#: her guardrail/doğrulama modülü, modül sınırları arasında özel bir
+#: yardımcıyı paylaşmak yerine kendi kopyasına sahip; bu codebase'in mevcut
+#: kuralıyla uyumlu.
 _TURKISH_MAP = str.maketrans(
     {
         "ç": "c", "Ç": "c", "ğ": "g", "Ğ": "g", "ı": "i", "İ": "i",
@@ -30,23 +31,23 @@ _TURKISH_MAP = str.maketrans(
 
 
 def _fold(text: str) -> str:
-    """Fold Turkish text to lowercase ASCII for label matching."""
+    """Etiket eşleştirmesi için Türkçe metni küçük harf ASCII'ye katlar."""
     translated = (text or "").translate(_TURKISH_MAP)
     normalized = unicodedata.normalize("NFKD", translated)
     return normalized.encode("ascii", "ignore").decode("ascii").lower().strip()
 
 
 def _level_from_label(label: Optional[str]) -> SensitivityLevel:
-    """Map a free-text ``gizlilik_derecesi`` value onto ``SensitivityLevel``.
+    """Serbest metin bir ``gizlilik_derecesi`` değerini ``SensitivityLevel``'a eşler.
 
     Args:
-        label: The raw value read off the document (e.g. "Hizmete Özel"), or
-            None when the document carries no confidentiality marking.
+        label: Belgeden okunan ham değer (örn. "Hizmete Özel"), veya belge
+            hiç gizlilik damgası taşımıyorsa None.
 
     Returns:
-        The matched level, or ``UNMARKED`` when the label is absent or does
-        not match a known grade -- an unrecognised label is not evidence of
-        anything, so it must not silently escalate.
+        Eşleşen derece, ya da etiket yoksa veya bilinen bir dereceyle
+        eşleşmiyorsa ``UNMARKED`` -- tanınmayan bir etiket hiçbir şeyin
+        kanıtı değildir, bu yüzden sessizce yükseltilmemelidir.
     """
     if not label:
         return SensitivityLevel.UNMARKED
@@ -54,7 +55,7 @@ def _level_from_label(label: Optional[str]) -> SensitivityLevel:
 
 
 class SensitivityAssessment(BaseModel):
-    """Input-side guardrail verdict for one document."""
+    """Bir belge için girdi tarafı guardrail kararı."""
 
     level: SensitivityLevel = Field(
         description=(
@@ -88,24 +89,25 @@ def assess(
     scrub_markers: Sequence[str] = (),
     policy: Optional[GuardrailPolicy] = None,
 ) -> SensitivityAssessment:
-    """Assess a document's sensitivity from its parsed fields and raw text.
+    """Bir belgenin hassasiyetini, ayrıştırılmış alanlarından ve ham metninden değerlendirir.
 
     Args:
-        fields: The document's extracted ``EvrakField`` (reads
-            ``gizlilik_derecesi``).
-        text: Extracted document text, scanned for PII patterns.
-        scrub_markers: Injection-scrub markers already found by
-            ``app.ai.guardrails.injection.scrub_extracted_text``, folded into
-            the reasons list so one call site (``DocumentService``) has one
-            place to log everything a document tripped.
-        policy: Guardrail policy to gate against. Defaults to the process
-            policy.
+        fields: Belgenin çıkarılmış ``EvrakField``'ı (``gizlilik_derecesi``'ni okur).
+        text: PII kalıpları için taranan, çıkarılmış belge metni.
+        scrub_markers: ``app.ai.guardrails.injection.scrub_extracted_text``
+            tarafından zaten bulunmuş enjeksiyon temizleme işaretleri; bir
+            çağrı noktasının (``DocumentService``) bir belgenin tetiklediği
+            her şeyi tek bir yerde loglayabilmesi için reasons listesine
+            katlanır.
+        policy: Karşılaştırılacak guardrail politikası. Varsayılan olarak
+            süreç politikası kullanılır.
 
     Returns:
-        The combined assessment. ``requires_review`` reflects only the
-        confidentiality grade (per the resolved policy: a marked Gizli/Çok
-        Gizli document routes to human review the same way a low-confidence
-        draft does) -- PII alone flags without blocking, per the same policy.
+        Birleşik değerlendirme. ``requires_review`` yalnızca gizlilik
+        derecesini yansıtır (çözümlenmiş politikaya göre: damgalı bir
+        Gizli/Çok Gizli belge, düşük güvenli bir taslakla aynı şekilde
+        insan incelemesine yönlendirilir) -- aynı politikaya göre PII tek
+        başına engellemeden işaretlenir.
     """
     active_policy = policy or get_policy().guardrail
 
@@ -145,29 +147,28 @@ def assess(
 
 
 def assessment_from_analysis(analysis: dict[str, Any]) -> SensitivityAssessment:
-    """Reconstruct a ``SensitivityAssessment`` from a classification dict.
+    """Bir sınıflandırma dict'inden bir ``SensitivityAssessment`` yeniden inşa eder.
 
-    Two different shapes reach this function depending on which path
-    ``planning_graph._run_classification`` took this turn: a live
-    ``document_analysis_graph`` invocation carries the assessment under
-    ``sensitivity_assessment`` with this module's own field names (``level``,
-    ``requires_review``), while the cached path returns an assembled
-    ``DocumentAnalysisResponseSchema`` dump, which carries the same
-    information under ``guardrail`` with the API-facing schema's field names
-    (``sensitivity_level``, ``requires_human_review``) -- see
-    ``GuardrailAssessmentSchema`` in ``app.domains.documents.schema.
-    document_schema``. Both are read here so callers (``_run_assist``,
-    ``output_gate.evaluate_response``) don't have to know which path produced
-    the dict they're holding.
+    Bu turda ``planning_graph._run_classification``'ın hangi yolu izlediğine
+    bağlı olarak bu fonksiyona iki farklı şekil ulaşır: canlı bir
+    ``document_analysis_graph`` çağrısı, değerlendirmeyi bu modülün kendi
+    alan adlarıyla (``level``, ``requires_review``) ``sensitivity_assessment``
+    altında taşır; önbellekten gelen yol ise aynı bilgiyi API'ye dönük
+    şemanın alan adlarıyla (``sensitivity_level``, ``requires_human_review``)
+    ``guardrail`` altında taşıyan derlenmiş bir ``DocumentAnalysisResponseSchema``
+    dökümü döndürür -- bkz. ``app.domains.documents.schema.document_schema``
+    içindeki ``GuardrailAssessmentSchema``. Çağıranların (``_run_assist``,
+    ``output_gate.evaluate_response``) elindeki dict'i hangi yolun ürettiğini
+    bilmesine gerek kalmasın diye ikisi de burada okunur.
 
     Args:
-        analysis: A classification/analysis dict, in either shape above.
+        analysis: Yukarıdaki şekillerden birinde bir sınıflandırma/analiz dict'i.
 
     Returns:
-        The reconstructed assessment. Missing or unrecognised data degrades
-        to an all-clear ``UNMARKED`` assessment rather than raising -- a
-        malformed or absent assessment must never itself become the reason a
-        response is blocked.
+        Yeniden inşa edilen değerlendirme. Eksik veya tanınmayan veri, hata
+        fırlatmak yerine sorunsuz bir ``UNMARKED`` değerlendirmesine
+        düşürülür -- hatalı biçimlendirilmiş veya olmayan bir değerlendirme
+        asla kendisi bir yanıtın engellenme nedeni olmamalıdır.
     """
     raw = analysis.get("guardrail") or analysis.get("sensitivity_assessment") or {}
 
@@ -177,9 +178,10 @@ def assessment_from_analysis(analysis: dict[str, Any]) -> SensitivityAssessment:
     except ValueError:
         level = SensitivityLevel.UNMARKED
 
-    # Older cached analyses (written before effective_level existed) carry
-    # no such key -- falls back to `level` itself, same as if the document
-    # had never been defaulted, rather than raising or silently blocking.
+    # Daha eski önbellekli analizler (effective_level var olmadan önce
+    # yazılmış) böyle bir anahtar taşımaz -- hata fırlatmak veya sessizce
+    # engellemek yerine, belge hiç varsayılana düşürülmemiş gibi `level`in
+    # kendisine döner.
     effective_level_raw = raw.get("effective_sensitivity_level", raw.get("effective_level"))
     try:
         effective_level = (

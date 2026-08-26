@@ -1,18 +1,18 @@
-"""Process-wide LangGraph checkpointer lifecycle.
+"""Süreç geneli LangGraph checkpointer yaşam döngüsü.
 
-``AsyncPostgresSaver.from_conn_string()`` is an async context manager, not a
-plain constructor -- it owns a connection pool that is torn down the moment
-the context exits. Awaiting and discarding it (the naive approach) would
-close the pool before the first checkpoint write. Instead the context is
-entered once, held open in an :class:`~contextlib.AsyncExitStack` for the
-lifetime of the process, and closed explicitly at shutdown.
+``AsyncPostgresSaver.from_conn_string()`` düz bir constructor değil,
+eşzamansız bir context manager'dır -- bağlam çıkar çıkmaz sökülen bir
+bağlantı havuzuna sahiptir. Bunu await edip atmak (naif yaklaşım), havuzu
+ilk checkpoint yazımından önce kapatırdı. Bunun yerine bağlam bir kez
+girilir, sürecin ömrü boyunca bir :class:`~contextlib.AsyncExitStack` içinde
+açık tutulur, ve kapatma sırasında açıkça kapatılır.
 
-Best-effort by design, matching ``app.lifespan``: a missing or unreachable
-Postgres, or the checkpoint packages not being installed, must not prevent
-the API from booting. ``get_checkpointer()`` returning ``None`` means the
-planning graph compiles without one -- Görev 1 and the non-interrupt half of
-Görev 2 keep working; only human-in-the-loop (missing-info requests, draft
-approval) becomes unavailable.
+``app.lifespan``'e uygun şekilde bilinçli olarak en iyi çaba: eksik veya
+ulaşılamayan bir Postgres, veya checkpoint paketlerinin kurulu olmaması,
+API'nin başlamasını engellememelidir. ``get_checkpointer()``'ın ``None``
+döndürmesi, planlama grafiğinin onsuz derlendiği anlamına gelir -- Görev 1
+ve Görev 2'nin kesinti-dışı yarısı çalışmaya devam eder; yalnızca insan
+döngüde (eksik bilgi istekleri, taslak onayı) kullanılamaz hale gelir.
 """
 
 import logging
@@ -28,14 +28,14 @@ _saver: Optional[Any] = None
 
 
 async def init_checkpointer() -> Optional[Any]:
-    """Open the checkpointer's connection pool and run its schema setup.
+    """Checkpointer'ın bağlantı havuzunu aç ve şema kurulumunu çalıştır.
 
-    Must be called before the planning graph is compiled, since the
-    checkpointer is passed into ``StateGraph.compile(checkpointer=...)``.
+    Planlama grafiği derlenmeden önce çağrılmalıdır, çünkü checkpointer
+    ``StateGraph.compile(checkpointer=...)``'e geçirilir.
 
     Returns:
-        The ready :class:`AsyncPostgresSaver`, or ``None`` when checkpointing
-        is disabled or unavailable.
+        Hazır :class:`AsyncPostgresSaver`, veya checkpointing devre dışıysa
+        ya da kullanılamıyorsa ``None``.
     """
     global _stack, _saver
 
@@ -56,8 +56,8 @@ async def init_checkpointer() -> Optional[Any]:
         saver = await stack.enter_async_context(
             AsyncPostgresSaver.from_conn_string(settings.checkpointer_dsn)
         )
-        # Idempotent: safe to run on every boot, including against a database
-        # the checkpointer has already set up in a previous run.
+        # İdempotent: checkpointer'ın önceki bir çalıştırmada zaten kurduğu
+        # bir veritabanına karşı olanlar dahil, her başlangıçta çalıştırmak güvenlidir.
         await saver.setup()
     except Exception:
         logger.warning(
@@ -74,7 +74,7 @@ async def init_checkpointer() -> Optional[Any]:
 
 
 async def close_checkpointer() -> None:
-    """Close the checkpointer's connection pool. Safe to call if never opened."""
+    """Checkpointer'ın bağlantı havuzunu kapat. Hiç açılmadıysa çağırmak güvenlidir."""
     global _stack, _saver
     if _stack is not None:
         await _stack.aclose()
@@ -83,5 +83,5 @@ async def close_checkpointer() -> None:
 
 
 def get_checkpointer() -> Optional[Any]:
-    """Return the process-wide checkpointer, or ``None`` if unavailable."""
+    """Süreç geneli checkpointer'ı döndür, veya kullanılamıyorsa ``None``."""
     return _saver

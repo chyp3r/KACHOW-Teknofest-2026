@@ -6,21 +6,22 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class UsageCounterModel(Base, TimestampMixin):
-    """One company's running count of one metric within one billing period.
+    """Bir şirketin bir fatura döneminde tek bir metriğin işleyen sayacı.
 
-    `period` is a `"YYYY-MM"` string, not a `DateTime` -- usage is always
-    reasoned about a whole calendar month at a time (see
-    `app.domains.quotas.service.current_period`), never an arbitrary window,
-    so a comparable/sortable string bucket is simpler than a date plus
-    truncation logic at every call site. One row per `(company_id, metric,
-    period)`; `count` is incremented in place rather than one row per event,
-    which is what keeps a quota check a single indexed lookup instead of a
-    `COUNT(*)` over potentially thousands of rows.
+    `period`, bir `DateTime` değil `"YYYY-MM"` string'idir -- kullanım her
+    zaman keyfi bir pencere değil, her seferinde bütün bir takvim ayı
+    üzerinden değerlendirilir (bkz. `app.domains.quotas.service.
+    current_period`), bu yüzden karşılaştırılabilir/sıralanabilir bir
+    string kova, her çağrı noktasında tarih artı kesme mantığından daha
+    basittir. `(company_id, metric, period)` başına bir satır; `count`
+    olay başına bir satır yerine yerinde artırılır, bu da bir kota
+    kontrolünü potansiyel olarak binlerce satır üzerinde bir `COUNT(*)`
+    yerine tek bir indeksli arama olarak tutar.
 
-    `metric` is deliberately only `"documents"` and `"drafts"` today, not
-    `"llm_tokens"` -- see `QuotaService`'s module docstring for why a token-
-    based quota would have to fabricate a number `BaseLLMClient.generate()`
-    does not actually expose yet.
+    `metric` bugün bilerek yalnızca `"documents"` ve `"drafts"`tir,
+    `"llm_tokens"` değil -- token tabanlı bir kotanın `BaseLLMClient.
+    generate()`'in henüz fiilen açığa çıkarmadığı bir sayıyı neden uydurmak
+    zorunda kalacağı için `QuotaService`'in modül docstring'ine bakın.
     """
 
     __tablename__ = "usage_counters"

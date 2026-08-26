@@ -1,9 +1,10 @@
-"""Registers listeners on the process-wide event bus.
+"""Süreç genelindeki event bus'a listener kaydeder.
 
-``DocumentService``/``DraftService`` already publish ``DocumentUploadedEvent``
-and ``DocumentAnalyzedEvent``, but nothing ever subscribed to them -- the bus
-was write-only. Importing this module (see ``app.lifespan``) registers the
-first listener so those publishes have an effect.
+``DocumentService``/``DraftService`` zaten ``DocumentUploadedEvent`` ve
+``DocumentAnalyzedEvent`` yayınlıyordu, ancak bunlara hiçbir zaman abone
+olunmamıştı -- bus yalnızca yazma amaçlıydı. Bu modülün import edilmesi
+(bkz. ``app.lifespan``) ilk listener'ı kaydeder, böylece bu yayınların bir
+etkisi olur.
 """
 
 import logging
@@ -26,12 +27,12 @@ logger = logging.getLogger(__name__)
 
 @subscribe("document.analyzed")
 async def _log_document_analyzed(event: DocumentAnalyzedEvent) -> None:
-    """Structured log line for every completed Görev 1 analysis.
+    """Tamamlanan her Görev 1 analizi için yapılandırılmış log satırı.
 
-    A stand-in for a real downstream consumer (a search index, an audit
-    trail, a Prometheus counter labelled by document_type) -- the point here
-    is that the event now reaches at least one listener, not what that
-    listener does.
+    Gerçek bir downstream tüketicisi (bir arama indeksi, bir denetim izi,
+    document_type'a göre etiketlenmiş bir Prometheus sayacı) için bir
+    yer tutucu -- buradaki asıl nokta, event'in artık en az bir listener'a
+    ulaşması, o listener'ın ne yaptığı değil.
     """
     logger.info(
         "document_analyzed",
@@ -54,17 +55,18 @@ async def _write_notification(
     resource_type: str,
     resource_id: str,
 ) -> None:
-    """Shared body for both draft-share listeners below: open a tenant-scoped
-    session (there is no request in flight here to read GUCs from -- see
-    ``tenant_session``'s own docstring), write the notification row, and
-    best-effort publish it live.
+    """Aşağıdaki iki draft-share listener'ı için ortak gövde: tenant kapsamlı
+    bir session açar (burada GUC'ları okuyacak bir istek akışta değildir --
+    bkz. ``tenant_session``'ın kendi docstring'i), bildirim satırını yazar
+    ve best-effort şekilde canlı olarak yayınlar.
 
-    A listener raising would only ever be logged by ``EventBus.
-    _safe_execute_async`` and silently swallowed (see its docstring) -- so a
-    failure here costs the live push and the row, not the request that
-    triggered the event; the caller (``DraftShareService``) already
-    committed the share itself before publishing, so this failing never
-    rolls back the action the user actually asked for.
+    Bir listener'ın exception fırlatması yalnızca ``EventBus.
+    _safe_execute_async`` tarafından loglanır ve sessizce yutulur (bkz. onun
+    docstring'i) -- yani buradaki bir hata, event'i tetikleyen isteği değil,
+    yalnızca canlı bildirim ve satırı kaybettirir; çağıran
+    (``DraftShareService``) yayınlamadan önce paylaşımı zaten commit etmiş
+    olduğundan, buradaki bir başarısızlık kullanıcının asıl istediği
+    eylemi asla geri almaz.
     """
     async with tenant_session(company_id) as session:
         service = NotificationService(NotificationRepository(session), cache=get_cache())
@@ -81,7 +83,7 @@ async def _write_notification(
 
 @subscribe("draft.shared")
 async def _notify_draft_shared(event: DraftSharedEvent) -> None:
-    """A taslak was sent to someone -- notify the recipient."""
+    """Bir taslak birisine gönderildi -- alıcıyı bilgilendir."""
     sender_username = event.payload.get("sender_username", "Bir kullanıcı")
     await _write_notification(
         company_id=event.payload["company_id"],
@@ -96,7 +98,7 @@ async def _notify_draft_shared(event: DraftSharedEvent) -> None:
 
 @subscribe("draft.share_responded")
 async def _notify_draft_share_responded(event: DraftShareRespondedEvent) -> None:
-    """A recipient accepted/rejected a shared taslak -- notify the sender."""
+    """Bir alıcı paylaşılan taslağı kabul etti/reddetti -- göndereni bilgilendir."""
     recipient_username = event.payload.get("recipient_username", "Alıcı")
     status = event.payload["status"]
     verb = "kabul etti" if status == "accepted" else "reddetti"
@@ -113,15 +115,16 @@ async def _notify_draft_share_responded(event: DraftShareRespondedEvent) -> None
 
 @subscribe("messaging.message_created")
 async def _notify_new_message(event: ConversationMessageCreatedEvent) -> None:
-    """A conversation message was sent -- notify one active recipient.
+    """Bir sohbet mesajı gönderildi -- bir aktif alıcıyı bilgilendir.
 
-    Published once per active recipient (see `ConversationMessageCreatedEvent`'s
-    own docstring), so this fires once per recipient, same as
-    `_notify_draft_shared`. `body` here is `payload["body_preview"]`, not
-    the full message -- a notification row is a durable, broadly-read
-    record (`GET /notifications`); the full conversation content stays in
-    `conversation_messages`, read only through the participation-gated
-    `GET /messaging/conversations/{id}/messages`.
+    Her aktif alıcı başına bir kez yayınlanır (bkz.
+    `ConversationMessageCreatedEvent`'in kendi docstring'i), bu yüzden bu
+    fonksiyon `_notify_draft_shared` ile aynı şekilde alıcı başına bir kez
+    tetiklenir. Buradaki `body`, mesajın tamamı değil
+    `payload["body_preview"]`'dir -- bir bildirim satırı kalıcı, geniş
+    çapta okunan bir kayıttır (`GET /notifications`); sohbetin tam içeriği
+    `conversation_messages`'ta kalır ve yalnızca katılım kısıtlı
+    `GET /messaging/conversations/{id}/messages` üzerinden okunur.
     """
     sender_username = event.payload.get("sender_username", "Bir kullanıcı")
     preview = event.payload.get("body_preview", "")
@@ -138,12 +141,12 @@ async def _notify_new_message(event: ConversationMessageCreatedEvent) -> None:
 
 @subscribe("artifact.transferred")
 async def _notify_artifact_transferred(event: ArtifactTransferredEvent) -> None:
-    """An artifact (taslak/evrak) was transferred -- notify the recipient.
+    """Bir artifact (taslak/evrak) transfer edildi -- alıcıyı bilgilendir.
 
-    No `body` beyond a fixed Turkish sentence -- the artifact's own title/
-    content lives in the transfer row and the conversation's `kind=
-    "artifact"` message, never duplicated into a notification (see
-    `ArtifactTransferredEvent`'s own docstring).
+    Sabit bir Türkçe cümle dışında `body` yok -- artifact'ın kendi
+    başlığı/içeriği transfer satırında ve sohbetin `kind="artifact"`
+    mesajında yaşar, asla bir bildirime kopyalanmaz (bkz.
+    `ArtifactTransferredEvent`'in kendi docstring'i).
     """
     sender_username = event.payload.get("sender_username", "Bir kullanıcı")
     kind_label = "bir taslak" if event.payload.get("artifact_kind") == "draft" else "bir evrak"

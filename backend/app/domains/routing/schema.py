@@ -6,7 +6,8 @@ from app.core.enums.document_type import DocumentType
 
 
 class RoutingSuggestionRequest(BaseModel):
-    """Request a unit-routing decision for a draft, independent of drafting it."""
+    """Bir taslağı oluşturmaktan bağımsız olarak, onun için bir birim
+    yönlendirme kararı iste."""
 
     draft: str = Field(
         min_length=1, max_length=20000, description="Yönlendirilecek taslak veya evrak metni."
@@ -26,7 +27,7 @@ class RoutingSuggestionRequest(BaseModel):
 
 
 class RoutingSuggestionResponse(BaseModel):
-    """A unit-routing decision."""
+    """Bir birim yönlendirme kararı."""
 
     routed_unit: Optional[str] = Field(
         default=None,

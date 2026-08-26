@@ -1,49 +1,55 @@
-"""Pure entity-resolution pipeline for the knowledge graph's Entity nodes.
+"""Bilgi grafiğinin Entity düğümleri için saf (pure) entity-çözümleme
+hattı (pipeline).
 
-`resolve_entities` takes every raw surface-form string a document's
-`muhatap` / `gonderen_kurum` / `entities[]` fields produced across the whole
-corpus and maps each one to a `ResolvedEntity` -- the canonical node it
-belongs to, a human-readable label, a heuristic kind, and every surface form
-that was merged into it (so the graph's node inspector can disclose the
-merge rather than hide it).
+`resolve_entities`, bir evrakın `muhatap` / `gonderen_kurum` / `entities[]`
+alanlarının tüm korpus genelinde ürettiği her ham yüzey-formu dizgesini alır
+ve her birini bir `ResolvedEntity`'ye eşler -- ait olduğu kanonik düğüm,
+okunabilir bir etiket, sezgisel bir tür ve o düğümde birleştirilen her yüzey
+formu (böylece grafiğin düğüm inceleyicisi birleşmeyi gizlemek yerine ifşa
+edebilir).
 
-Why this exists at all: the v1 knowledge graph (see `knowledge_graph.py`'s
-own docstring) deliberately excluded any node keyed by extracted document
-text, because raw string identity puts OCR damage straight into node
-identity. Measured on the real corpus, `muhatap` alone carries four surface
-forms of one institution -- markdown heading junk, a leaked önerge number, a
-clean form, and one with a genuine OCR substitution (Ğ misread as Ç). This
-module is what turns "OCR damage in node identity" from a reason to exclude
-Kurum/Entity nodes into a reason to *resolve* them instead.
+Bu modülün var olma nedeni: v1 bilgi grafiği (bkz. `knowledge_graph.py`'nin
+kendi docstring'i) bilinçli olarak çıkarılan evrak metniyle anahtarlanan
+herhangi bir düğümü dışladı, çünkü ham dizge kimliği OCR hasarını doğrudan
+düğüm kimliğine taşır. Gerçek korpus üzerinde ölçüldüğünde, yalnızca
+`muhatap` bile bir kurumun dört yüzey formunu taşıyor -- markdown başlık
+kalıntısı, sızmış bir önerge numarası, temiz bir form ve gerçek bir OCR
+yer değiştirmesi (Ğ'nin Ç olarak yanlış okunması) içeren bir form. Bu modül,
+"düğüm kimliğindeki OCR hasarını" Kurum/Entity düğümlerini dışlama
+gerekçesi olmaktan çıkarıp bunun yerine onları *çözme* gerekçesine dönüştürür.
 
-Pipeline, applied to each raw string independently before clustering:
+Her ham dizgeye, kümelemeden önce bağımsız olarak uygulanan hat (pipeline):
 
-1. Strip leading markdown/list artifacts (`#####`, `*`, `>`, `-`).
-2. Strip trailing parentheticals -- `(Kanunlar ve Kararlar Başkanlığı)`.
-3. Strip leaked 4+ digit numbers -- an önerge number landing mid-string.
-4. Turkish-aware fold to lowercase ASCII, reusing `normalizers._fold` --
-   deliberately not a second Turkish case table.
-5. Strip urgency markers absorbed into the name as a trailing token --
-   `GÜNLÜDÜR` / `İVEDİ` / `ACELE` (measured: `CUMHURBAŞKANI YARDIMCISI
-   GÜNLÜDÜR` vs `CUMHURBAŞKANI YARDIMCISI`, same office).
-6. Strip a dative/directional case ending from the *final* token only --
-   `...BAŞKANLIĞINA` -> `...BAŞKANLIĞI`. Only the two-letter buffer-n
-   dative (`-na`/`-ne`) and buffer-y dative (`-ya`/`-ye`) are stripped, not
-   a three-letter `-ina`/`-ine` variant: the word already ends in the
-   possessive `-ı`/`-i` that the case suffix attaches to, and removing the
-   longer variant would eat that possessive vowel too.
+1. Baştaki markdown/liste kalıntılarını temizle (`#####`, `*`, `>`, `-`).
+2. Sondaki parantez içi ifadeleri temizle -- `(Kanunlar ve Kararlar
+   Başkanlığı)`.
+3. Sızmış 4+ haneli sayıları temizle -- dizgenin ortasına düşen bir önerge
+   numarası.
+4. `normalizers._fold`'u yeniden kullanarak Türkçe'ye duyarlı biçimde küçük
+   harf ASCII'ye katla -- bilinçli olarak ikinci bir Türkçe büyük/küçük harf
+   tablosu değil.
+5. İsme sondaki bir belirteç olarak sızmış ivedilik işaretlerini temizle --
+   `GÜNLÜDÜR` / `İVEDİ` / `ACELE` (ölçüldü: `CUMHURBAŞKANI YARDIMCISI
+   GÜNLÜDÜR` ile `CUMHURBAŞKANI YARDIMCISI`, aynı makam).
+6. Yalnızca *son* token'dan bir hal/yönelme eki temizle --
+   `...BAŞKANLIĞINA` -> `...BAŞKANLIĞI`. Yalnızca iki harfli n-tamponlu
+   yönelme eki (`-na`/`-ne`) ve y-tamponlu yönelme eki (`-ya`/`-ye`)
+   temizlenir, üç harfli `-ina`/`-ine` varyantı temizlenmez: kelime zaten
+   hal ekinin eklendiği iyelik `-ı`/`-i` ile bitiyor ve daha uzun varyantı
+   kaldırmak o iyelik ünlüsünü de yerdi.
 
-What steps 1-6 cannot fix is residual single-character OCR noise (Ğ<->Ç in
-the example above folds to two *different* ASCII letters, g and c -- not a
-case-folding problem, a genuine misread). That residue is caught by a
-deterministic fuzzy pass over the *canonical* keys, not the raw strings:
-sort keys, then single-pass agglomeration against already-emitted cluster
-representatives via `difflib.SequenceMatcher`, representative = the
-lexicographically smallest key in the cluster. Sorting first is what makes
-clustering independent of input order -- a plain greedy pass over
-unsorted input would make the graph's shape depend on dict/list iteration
-order, which is exactly the kind of non-determinism this graph cannot
-afford on a projector.
+1-6. adımların düzeltemediği şey, kalıntı tek karakterlik OCR gürültüsüdür
+(yukarıdaki örnekte Ğ<->Ç, iki *farklı* ASCII harfine, g ve c'ye katlanır --
+bu bir harf katlama sorunu değil, gerçek bir yanlış okumadır). Bu kalıntı,
+ham dizgeler üzerinde değil *kanonik* anahtarlar üzerinde deterministik bir
+bulanık (fuzzy) geçişle yakalanır: anahtarları sırala, sonra
+`difflib.SequenceMatcher` ile zaten üretilmiş küme temsilcilerine karşı
+tek geçişli birleştirme (agglomeration) yap; temsilci = kümedeki sözlüksel
+olarak en küçük anahtar. Önce sıralamak, kümelemenin girdi sırasından
+bağımsız olmasını sağlar -- sıralanmamış girdi üzerinde düz açgözlü (greedy)
+bir geçiş, grafiğin şeklini dict/list yineleme sırasına bağımlı kılardı; bu
+da tam olarak bu grafiğin bir projektörde göze alamayacağı türden bir
+belirsizliktir.
 """
 
 from collections import Counter
@@ -53,29 +59,31 @@ from typing import Optional, Sequence
 
 from app.ai.verification.normalizers import _fold
 
-#: Trailing tokens that are urgency/routing markers absorbed into a name
-#: field by extraction, not part of the institution's name itself. Already
-#: folded (lowercase ASCII) since they are compared against folded tokens.
+#: Çıkarım (extraction) sırasında bir isim alanına sızmış, kurumun isminin
+#: kendisinin bir parçası olmayan ivedilik/yönlendirme belirteçleri olan
+#: sondaki token'lar. Katlanmış token'larla karşılaştırıldıkları için zaten
+#: katlanmış (küçük harf ASCII) haldedir.
 _URGENCY_MARKERS = {"gunludur", "ivedi", "acele"}
 
-#: The two-letter Turkish dative/directional case endings this corpus's
-#: institution names actually carry (buffer-n after a possessive vowel,
-#: buffer-y after other vowels). Deliberately excludes the three-letter
-#: "-ina"/"-ine" shape -- see the module docstring for why.
+#: Bu korpustaki kurum isimlerinin gerçekten taşıdığı iki harfli Türkçe
+#: hal/yönelme ekleri (iyelik ünlüsünden sonra n-tamponu, diğer ünlülerden
+#: sonra y-tamponu). Bilinçli olarak üç harfli "-ina"/"-ine" şeklini
+#: dışlar -- nedeni için modül docstring'ine bakın.
 _DATIVE_SUFFIXES = ("na", "ne", "ya", "ye")
 _MIN_TOKEN_LENGTH_FOR_SUFFIX_STRIP = 6
 
-#: Below this length, two canonical keys are never fuzzy-compared -- short
-#: strings produce spuriously high SequenceMatcher ratios (e.g. "tbmm" vs
-#: "tbnm" is a single-character diff at 75% length) and risk merging two
-#: genuinely different short institutions.
+#: Bu uzunluğun altında iki kanonik anahtar asla bulanık (fuzzy)
+#: karşılaştırılmaz -- kısa dizgeler yapay olarak yüksek SequenceMatcher
+#: oranları üretir (örn. "tbmm" ile "tbnm" arasında %75 uzunlukta tek
+#: karakterlik bir fark vardır) ve gerçekten farklı iki kısa kurumu
+#: birleştirme riski taşır.
 _MIN_FUZZY_LENGTH = 8
 _FUZZY_RATIO_THRESHOLD = 0.88
 
-#: Folded tokens that mark an institution regardless of position in the
-#: name -- used both to steer the fuzzy-merge-adjacent classifier and to
-#: catch multi-word offices the suffix check alone would miss (e.g.
-#: "hukuk hizmetleri genel mudurlugu").
+#: İsim içindeki konumdan bağımsız olarak bir kurumu işaret eden katlanmış
+#: token'lar -- hem bulanık-birleştirmeye yakın sınıflandırıcıyı yönlendirmek
+#: hem de yalnızca ek kontrolünün kaçıracağı çok kelimeli makamları
+#: yakalamak için kullanılır (örn. "hukuk hizmetleri genel mudurlugu").
 _INSTITUTION_TOKENS = {
     "bakanligi", "bakanlik", "baskanligi", "baskanlik", "mudurlugu", "mudurluk",
     "komisyonu", "komisyon", "meclisi", "meclis", "kaymakamligi", "valiligi",
@@ -86,8 +94,8 @@ _INSTITUTION_TOKENS = {
 
 @dataclass(frozen=True)
 class ResolvedEntity:
-    """One resolved Entity node: everything the graph builder and the
-    frontend's node inspector need."""
+    """Tek bir çözülmüş Entity düğümü: grafik oluşturucunun ve frontend'in
+    düğüm inceleyicisinin ihtiyaç duyduğu her şey."""
 
     key: str
     label: str
@@ -105,18 +113,18 @@ def _strip_dative_suffix(token: str) -> str:
 
 
 def _canonicalize_single(raw: Optional[str]) -> Optional[str]:
-    """Steps 1-6 of the module docstring's pipeline, applied to one string."""
+    """Modül docstring'indeki hattın 1-6 adımları, tek bir dizgeye uygulanır."""
     if not raw:
         return None
     text = raw.strip()
     text = text.lstrip("#*>- \t")
-    # Trailing parenthetical(s), possibly with leading whitespace.
+    # Sondaki parantez içi ifade(ler), başında boşluk olabilir.
     while "(" in text and text.rstrip().endswith(")"):
         open_index = text.rfind("(")
         if open_index == -1:
             break
         text = text[:open_index].rstrip()
-    # Leaked 4+ digit numbers (a document number mid-string).
+    # Sızmış 4+ haneli sayılar (dizgenin ortasındaki bir evrak numarası).
     text = "".join(
         part if not (part.isdigit() and len(part) >= 4) else " "
         for part in _split_keep_digits(text)
@@ -135,9 +143,9 @@ def _canonicalize_single(raw: Optional[str]) -> Optional[str]:
 
 
 def _split_keep_digits(text: str) -> list[str]:
-    """Split into runs of digits and non-digits, e.g. 'a 741393 b' ->
-    ['a ', '741393', ' b'] -- lets the caller blank out only the numeric
-    runs long enough to be a leaked document/önerge number."""
+    """Rakam ve rakam olmayan çalışmalara (run) böler, örn. 'a 741393 b' ->
+    ['a ', '741393', ' b'] -- çağıranın yalnızca sızmış bir evrak/önerge
+    numarası olacak kadar uzun rakam çalışmalarını boşaltmasını sağlar."""
     parts: list[str] = []
     current = []
     current_is_digit: Optional[bool] = None
@@ -155,10 +163,10 @@ def _split_keep_digits(text: str) -> list[str]:
 
 
 def _cluster_canonical_keys(keys: set[str]) -> dict[str, str]:
-    """Map each canonical key to its cluster representative. Deterministic
-    and independent of input order: keys are sorted before clustering, and
-    the representative of any cluster is always the lexicographically
-    smallest key in it (the first-sorted key that started that cluster)."""
+    """Her kanonik anahtarı küme temsilcisine eşler. Girdi sırasından
+    bağımsız ve deterministiktir: anahtarlar kümelemeden önce sıralanır ve
+    herhangi bir kümenin temsilcisi her zaman içindeki sözlüksel olarak en
+    küçük anahtardır (o kümeyi başlatan, sıralamada ilk gelen anahtar)."""
     representatives: list[str] = []
     assignment: dict[str, str] = {}
     for key in sorted(keys):
@@ -183,10 +191,11 @@ def _classify_kind(canonical_key: str, label: str) -> str:
     if any(t in _INSTITUTION_TOKENS for t in tokens):
         return "kurum"
     if len(tokens) == 1 and len(canonical_key) <= 6:
-        # A single short token that survived resolution without matching a
-        # known institution word is almost always an abbreviation (NATO,
-        # BTK) -- Turkish person names are never a single all-caps token,
-        # so treating this as "kisi" would be the more misleading guess.
+        # Bilinen bir kurum kelimesiyle eşleşmeden çözümden kurtulan tek ve
+        # kısa bir token neredeyse her zaman bir kısaltmadır (NATO, BTK) --
+        # Türkçe kişi isimleri asla tek, tamamen büyük harfli bir token
+        # olmaz, bu yüzden burayı "kisi" saymak daha yanıltıcı bir tahmin
+        # olurdu.
         letters_only = "".join(ch for ch in label if ch.isalpha())
         if letters_only and letters_only == letters_only.upper():
             return "kurum"
@@ -199,20 +208,20 @@ def _classify_kind(canonical_key: str, label: str) -> str:
 
 
 def resolve_entities(raw_names: Sequence[Optional[str]]) -> dict[str, "ResolvedEntity"]:
-    """Resolve every raw surface-form string into its shared `ResolvedEntity`.
+    """Her ham yüzey-formu dizgesini paylaşılan `ResolvedEntity`'sine çözer.
 
     Args:
-        raw_names: Every raw string a document's `muhatap` /
-            `gonderen_kurum` / `entities[]` field produced, across every
-            document in scope -- duplicates expected and meaningful (they
-            drive the "most frequent surface form" label choice).
+        raw_names: Kapsamdaki her evrakın `muhatap` / `gonderen_kurum` /
+            `entities[]` alanının ürettiği her ham dizge -- yinelemeler
+            beklenir ve anlamlıdır ("en sık geçen yüzey formu" etiket
+            seçimini bunlar yönlendirir).
 
     Returns:
-        A mapping from each *distinct, non-empty* raw string in the input to
-        the `ResolvedEntity` its cluster resolved to. Two raw strings that
-        merged share an identical `ResolvedEntity` (dataclass equality, not
-        just the same `key`). Empty/`None`/whitespace-only entries are
-        skipped, not mapped.
+        Girdideki her *farklı, boş olmayan* ham dizgeyi, kümesinin
+        çözüldüğü `ResolvedEntity`'ye eşleyen bir eşleme. Birleşen iki ham
+        dizge, aynı `ResolvedEntity`'yi paylaşır (dataclass eşitliği, yalnız
+        aynı `key` değil). Boş/`None`/yalnızca boşluk içeren girdiler
+        eşlenmez, atlanır.
     """
     canonical_by_raw: dict[str, str] = {}
     for raw in raw_names:
@@ -238,15 +247,15 @@ def resolve_entities(raw_names: Sequence[Optional[str]]) -> dict[str, "ResolvedE
     result: dict[str, ResolvedEntity] = {}
     for representative, forms in forms_by_representative.items():
         raw_label = sorted(forms.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
-        # Measured on the real corpus: a markdown-prefixed surface form can
-        # legitimately be the *most frequent* one (5 of 11 occurrences here
-        # vs. 4 for the clean form) -- "most frequent wins" would otherwise
-        # put "##### TÜRKİYE ... BAŞKANLIĞINA" on a graph node in front of a
-        # jury. Only leading markdown noise is stripped for display; a
-        # trailing parenthetical is real information (e.g. a sub-office)
-        # and survives. `surface_forms` below still discloses the raw,
-        # unstripped form -- this is cosmetic only, not a second
-        # canonicalization.
+        # Gerçek korpus üzerinde ölçüldü: markdown önekli bir yüzey formu
+        # meşru şekilde *en sık geçen* olabilir (burada 11 geçişten 5'i,
+        # temiz formda ise 4) -- "en sık geçen kazanır" kuralı aksi halde
+        # bir jürinin önündeki grafik düğümüne "##### TÜRKİYE ...
+        # BAŞKANLIĞINA" yazardı. Görüntü için yalnızca baştaki markdown
+        # gürültüsü temizlenir; sondaki bir parantez içi ifade gerçek bir
+        # bilgidir (örn. bir alt birim) ve korunur. Aşağıdaki
+        # `surface_forms` yine de ham, temizlenmemiş formu ifşa eder --
+        # bu yalnızca kozmetiktir, ikinci bir kanonikleştirme değildir.
         label = raw_label.lstrip("#*>- \t") or raw_label
         surface_forms = tuple(sorted(forms))
         kind = _classify_kind(representative, label)

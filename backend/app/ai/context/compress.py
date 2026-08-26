@@ -1,35 +1,37 @@
-"""Generic ``ContextBlock`` compressors.
+"""Genel ``ContextBlock`` sıkıştırıcıları.
 
-Each function has the ``Compressor`` shape (``(text, budget_tokens) ->
-text``) from ``app.ai.context.builder`` and is provider-agnostic: it works
-in characters, using ``CHARS_PER_TOKEN_TR`` to translate a token budget into
-a character one, since the block itself doesn't have access to the active
-client's exact estimator.
+Her fonksiyon ``app.ai.context.builder``'daki ``Compressor`` biçimine
+(``(text, budget_tokens) -> text``) sahiptir ve sağlayıcıdan bağımsızdır:
+blok, aktif istemcinin tam tahmin edicisine erişemediğinden, bir token
+bütçesini karakter bütçesine çevirmek için ``CHARS_PER_TOKEN_TR`` kullanarak
+karakterler üzerinde çalışır.
 """
 
 from app.ai.llms.base import CHARS_PER_TOKEN_TR
 
-#: Marker inserted between the surviving head and tail, matching the one
-#: `document_analysis_graph._trim_for_extraction` already uses for the same
-#: purpose -- a reader (human or model) seeing it once already knows what it
-#: means.
+#: Ayakta kalan baş ve son kısım arasına eklenen işaretçi;
+#: `document_analysis_graph._trim_for_extraction`'ın aynı amaçla zaten
+#: kullandığı işaretçiyle aynıdır -- bir okuyucu (insan ya da model) onu
+#: bir kez gördüğünde ne anlama geldiğini zaten bilir.
 ELISION_MARKER = "\n\n[... içeriğin orta kısmı kısaltıldı ...]\n\n"
 
 
 def truncate_with_marker(text: str, budget_tokens: int) -> str:
-    """Keep the head and tail of `text`, eliding the middle.
+    """`text`'in baş ve son kısmını korur, ortasını çıkarır.
 
-    A document's header and signature/closing block carry the fields most
-    prompts need; the middle is the part safest to lose when something has
-    to give. Splits the available characters evenly between head and tail.
+    Bir belgenin başlığı ve imza/kapanış bloğu çoğu prompt'un ihtiyaç
+    duyduğu alanları taşır; bir şeyden fedakarlık edilmesi gerektiğinde
+    kaybedilmesi en güvenli kısım ortadır. Mevcut karakterleri baş ve son
+    kısımlar arasında eşit olarak böler.
 
     Args:
-        text: The text to shrink.
-        budget_tokens: The token budget to fit into.
+        text: Küçültülecek metin.
+        budget_tokens: İçine sığdırılacak token bütçesi.
 
     Returns:
-        `text` unchanged if it already fits, otherwise head+tail elided to
-        approximately `budget_tokens`.
+        Zaten sığıyorsa `text` değişmeden; aksi halde yaklaşık
+        `budget_tokens`'a sığacak şekilde baş+son korunmuş, ortası
+        çıkarılmış hali.
     """
     budget_chars = max(0, int(budget_tokens * CHARS_PER_TOKEN_TR))
     marker_chars = len(ELISION_MARKER)

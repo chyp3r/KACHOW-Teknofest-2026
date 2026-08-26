@@ -1,16 +1,16 @@
-"""Best-effort persistence of each generated/revised draft.
+"""Her üretilen/revize edilen taslağın en iyi çaba (best-effort) ile kalıcılaştırılması.
 
-Same reasoning as `app.observability.run_recorder` and
-`app.domains.chat.chat_recorder`: both call sites -- the stateless
-`/documents/draft` endpoint's request-scoped handler, and `ChatService`'s
-turn-completion hook -- are simpler to keep on one write path than to give
-each its own session-management story, and `ChatService` in particular runs
-outside a request-scoped `Depends(get_db)` session during SSE streaming (see
-`chat_recorder`'s own docstring). So this opens and closes its own
-short-lived session per call, the same as those two.
+`app.observability.run_recorder` ve `app.domains.chat.chat_recorder` ile aynı
+gerekçe: her iki çağrı noktası -- durumsuz `/documents/draft` endpoint'inin
+istek kapsamlı handler'ı ve `ChatService`'in tur-tamamlanma hook'u -- kendi
+oturum yönetimi hikayelerini kurmaktansa tek bir yazma yolunda kalmaları daha
+basit, ve özellikle `ChatService`, SSE streaming sırasında istek kapsamlı bir
+`Depends(get_db)` oturumunun dışında çalışır (bkz. `chat_recorder`'ın kendi
+docstring'i). Bu yüzden bu modül, tıpkı o ikisi gibi, her çağrıda kendi
+kısa ömürlü oturumunu açıp kapatır.
 
-Every function swallows its own exceptions and only logs -- recording a
-draft must never be the reason draft generation fails.
+Her fonksiyon kendi exception'larını yutar ve yalnızca loglar -- bir taslağı
+kaydetmek, taslak üretiminin başarısız olmasının nedeni olmamalıdır.
 """
 
 import logging
@@ -28,11 +28,12 @@ logger = logging.getLogger(__name__)
 async def attach_to_session(
     *, draft_id: str, session_id: str, company_id: Optional[str]
 ) -> bool:
-    """Give a direct-API draft a chat session before its first revision.
+    """Doğrudan API üzerinden oluşturulan bir taslağa, ilk revizyonundan önce bir chat oturumu ata.
 
-    This lets the normal ``record_draft`` lookup find that row as the parent
-    and append version 2 instead of accidentally starting an unrelated
-    version-1 chain. Existing session-backed drafts are left untouched.
+    Bu, normal ``record_draft`` sorgusunun bu satırı üst (parent) olarak
+    bulup versiyon 2'yi eklemesini sağlar; aksi halde yanlışlıkla ilgisiz
+    yeni bir version-1 zinciri başlatılırdı. Zaten bir oturuma bağlı olan
+    taslaklara dokunulmaz.
     """
     try:
         async with tenant_session(company_id) as session:
@@ -69,25 +70,26 @@ async def record_draft(
     instructions: Optional[str] = None,
     company_id: Optional[str] = None,
 ) -> Optional[str]:
-    """Append a new draft version and return its id, or `None` if not recorded.
+    """Yeni bir taslak versiyonu ekle ve id'sini döndür, kaydedilmediyse `None` döndür.
 
-    When `session_id` is given, chains onto that session's latest version
-    (a revision); when it is `None` (a direct `/documents/draft` call with
-    no chat session), always starts a fresh version=1 draft, since there is
-    no key to find a prior version against.
+    `session_id` verildiğinde, o oturumun en son versiyonuna zincirlenir
+    (bir revizyon); `None` olduğunda (chat oturumu olmayan doğrudan bir
+    `/documents/draft` çağrısı), her zaman yeni bir version=1 taslağı
+    başlatılır, çünkü karşısında önceki bir versiyonu bulacak bir anahtar
+    yoktur.
 
     Args:
-        company_id: The caller's tenant -- from `DraftService.
-            generate_draft_and_route`'s own `company_id` parameter on the
-            direct-API path, or `PlanningState.company_id` via
-            `ChatService._maybe_record_draft` on the chat path. Threaded
-            through so this write passes `drafts`' row-level-security
-            `WITH CHECK` once that table is migrated to it.
+        company_id: Çağıranın kiracısı (tenant) -- doğrudan API yolunda
+            `DraftService.generate_draft_and_route`'un kendi `company_id`
+            parametresinden, chat yolunda ise `ChatService.
+            _maybe_record_draft` üzerinden `PlanningState.company_id`'den
+            gelir. Bu değer, `drafts` tablosu satır düzeyi güvenliğe (RLS)
+            geçtiğinde bu yazmanın `WITH CHECK`'i geçmesi için taşınır.
 
     Returns:
-        The new draft's id, or `None` when history recording is disabled or
-        the write failed -- callers should tolerate an unpopulated
-        `draft_id` rather than treat this as fatal.
+        Yeni taslağın id'si, ya da geçmiş kaydı devre dışıysa veya yazma
+        başarısız olduysa `None` -- çağıranlar boş bir `draft_id`'yi ölümcül
+        bir hata gibi değil, tolere edilebilir bir durum gibi ele almalıdır.
     """
     if not settings.DRAFT_HISTORY_ENABLED:
         return None
@@ -99,13 +101,14 @@ async def record_draft(
                 if session_id is not None
                 else None
             )
-            # `destination` is the routing graph's free-text unit *name* --
-            # resolved to a real `units` row here, once, at write time, the
-            # same lookup `DraftShareService.send` used to have to redo on
-            # every send (see `drafts.destination_unit_id`'s own docstring).
-            # A name that doesn't match any unit in this company (renamed,
-            # deleted, or routing came back empty) resolves to `None`,
-            # not an error.
+            # `destination`, routing graph'ın serbest metin birim *adı*dır --
+            # burada, yazma anında, bir kere gerçek bir `units` satırına
+            # çözümlenir; `DraftShareService.send`'in eskiden her
+            # gönderimde tekrar yapmak zorunda olduğu aynı sorgu (bkz.
+            # `drafts.destination_unit_id`'in kendi docstring'i). Bu
+            # şirkette hiçbir birimle eşleşmeyen bir ad (yeniden
+            # adlandırılmış, silinmiş ya da routing boş dönmüş) hataya
+            # değil, `None`'a çözümlenir.
             destination_unit_id = None
             if destination and company_id:
                 unit = await UnitRepository(session).get_by_name(destination, company_id)

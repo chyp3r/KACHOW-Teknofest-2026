@@ -1,11 +1,12 @@
-"""Read-side access to a document's analysis cache for the planning graph.
+"""Planlama grafiği için bir belgenin analiz önbelleğine okuma-tarafı erişim.
 
-Kept inside `app.domains.documents` rather than read from `app.ai` directly:
-`app.ai.workflows.planning_graph` never imports `app.domains` (see
-`docs/architecture/backend.md`, and `backend/tests/unit/ai/
-test_ai_never_imports_domains.py`'s static enforcement of it), so this is
-handed to the graph as a plain callable at construction time instead, the
-same way `units_provider`/`adapter_provider` already are.
+Doğrudan `app.ai`'dan okumak yerine `app.domains.documents` içinde
+tutuluyor: `app.ai.workflows.planning_graph` hiçbir zaman `app.domains`'i
+import etmez (bkz. `docs/architecture/backend.md` ve bunun statik
+uygulamasını yapan `backend/tests/unit/ai/
+test_ai_never_imports_domains.py`), bu yüzden bu, `units_provider`/
+`adapter_provider`'ın zaten yaptığı gibi, inşa anında grafiğe düz bir
+çağrılabilir (callable) olarak veriliyor.
 """
 
 import json
@@ -18,23 +19,25 @@ logger = logging.getLogger(__name__)
 
 
 async def get_cached_document(document_id: str) -> dict:
-    """Read a previously analyzed document's cache for the planning graph.
+    """Planlama grafiği için önceden analiz edilmiş bir belgenin önbelleğini oku.
 
-    Reads through `get_storage_client()` -- the same backend a document's
-    own bytes and its analysis cache live in (see `app.domains.documents.
-    service._save_document_analysis_cache`) -- not a raw local-filesystem
-    path. Degrades to an empty dict on any failure (missing key, unreadable
-    JSON, a storage backend outage): a missing cache is a normal, frequent
-    case (the user is referencing a document by name, not by a prior
-    upload), not an error worth failing the whole planning step over.
+    `get_storage_client()` üzerinden okur -- bir belgenin kendi byte'larının
+    ve analiz önbelleğinin yaşadığı aynı backend (bkz.
+    `app.domains.documents.service._save_document_analysis_cache`) -- ham
+    bir yerel-dosya-sistemi yolu değil. Herhangi bir hatada (eksik anahtar,
+    okunamayan JSON, bir depolama backend kesintisi) boş bir dict'e düşer:
+    eksik bir önbellek normal, sık karşılaşılan bir durumdur (kullanıcı
+    bir belgeye önceki bir yükleme yerine isimle atıfta bulunuyor), tüm
+    planlama adımını başarısız kılmaya değecek bir hata değildir.
 
     Args:
-        document_id: The document's storage path.
+        document_id: Belgenin depolama yolu.
 
     Returns:
-        The cache payload (`extracted_text`/`pages`/`analysis` keys -- see
-        `_save_document_analysis_cache`), or `{}` if there is nothing to
-        load or reading/parsing it fails for any reason.
+        Önbellek payload'ı (`extracted_text`/`pages`/`analysis` anahtarları --
+        bkz. `_save_document_analysis_cache`), ya da yüklenecek bir şey
+        yoksa veya okuma/ayrıştırma herhangi bir nedenle başarısız olursa
+        `{}`.
     """
     try:
         content = await get_storage_client().get_file(analysis_cache_key(document_id))

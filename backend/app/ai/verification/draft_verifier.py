@@ -1,20 +1,22 @@
-"""Deterministic grounding and structure checks for generated drafts.
+"""Üretilen taslaklar için deterministik dayanak (grounding) ve yapı kontrolleri.
 
-This replaces the LLM editor node, which had two problems beyond its cost.
+Bu, maliyetinin ötesinde iki sorunu olan LLM editör düğümünün yerini alır.
 
-*Cost*: the editor's structured output had to re-emit ``final_draft`` in full, so
-every draft was generated twice. On Apple Silicon at roughly 28 tokens/second an
-800-token draft costs about 29 seconds, and the editor doubled that -- more than
-half of the entire latency budget spent re-typing text the writer had already
-produced correctly.
+*Maliyet*: editörün yapılandırılmış çıktısı ``final_draft``'ı tam olarak
+yeniden yayınlamak zorundaydı, dolayısıyla her taslak iki kez üretiliyordu.
+Apple Silicon'da saniyede yaklaşık 28 token hızında 800 token'lık bir taslak
+yaklaşık 29 saniyeye mal olur ve editör bunu ikiye katlıyordu -- toplam
+gecikme bütçesinin yarısından fazlası, yazarın zaten doğru ürettiği metni
+yeniden yazmaya harcanıyordu.
 
-*Validity*: the editor was the same model, scoring its own output. A model that
-invents a document number does not reliably notice that it invented it, so the
-confidence score measured fluency rather than faithfulness.
+*Geçerlilik*: editör aynı modeldi, kendi çıktısını puanlıyordu. Bir belge
+numarası uyduran bir model, onu uydurduğunu güvenilir şekilde fark etmez,
+bu yüzden güven skoru sadakati değil akıcılığı ölçüyordu.
 
-Checking groundedness is a set-membership question -- does every number, date and
-institution in the draft trace back to the source or the retrieved legislation?
--- which string matching answers exactly, instantly, and reproducibly.
+Dayanaklılığı kontrol etmek bir küme üyeliği sorusudur -- taslaktaki her
+sayı, tarih ve kurum kaynağa veya getirilen mevzuata kadar izlenebiliyor mu?
+-- ki bunu dizge eşleştirmesi tam, anında ve tekrar üretilebilir şekilde
+cevaplar.
 """
 
 import logging
@@ -32,26 +34,27 @@ from app.observability.ai_metrics import CLAIM_MATCH
 
 logger = logging.getLogger(__name__)
 
-#: Drafts scoring below this need a human before they can be sent.
-#: Derived from the policy rather than duplicated, so the invariant tying it to
-#: the routing threshold (see app.ai.policy.schema) cannot be violated by
-#: editing one of the two numbers in isolation.
+#: Bunun altında skorlanan taslakların gönderilmeden önce bir insana ihtiyacı vardır.
+#: Tekrarlanmak yerine policy'den türetilir, böylece bunu routing eşiğine
+#: bağlayan değişmez kural (bkz. app.ai.policy.schema) iki sayıdan birinin
+#: tek başına düzenlenmesiyle bozulamaz.
 MIN_AUTOMATED_CONFIDENCE_SCORE = get_policy().verification.min_automated_confidence
 
-#: Placeholders the writer is instructed to emit for missing information.
-#: Content inside them is a deliberate gap, not a hallucination.
+#: Yazarın eksik bilgi için yayınlaması talimatı verilen yer tutucular.
+#: İçlerindeki içerik kasıtlı bir boşluktur, halüsinasyon değildir.
 PLACEHOLDER_PATTERN = re.compile(r"\[[^\]]*\]")
 
-#: Document numbers such as "E-12345678-903-4567" or "2024/145".
+#: "E-12345678-903-4567" veya "2024/145" gibi belge numaraları.
 DOCUMENT_NUMBER_PATTERN = re.compile(r"\b(?:[A-ZÇĞİÖŞÜ]-)?\d{2,}(?:[-/]\d+)+\b")
 
-#: Dates in the formats the regulation uses, plus ISO 8601 ("2026-04-09") --
-#: an uploaded document's own extracted text uses that shape at least as
-#: often as the Turkish DD.MM.YYYY one (a PDF form field like "Dates:
-#: 2026-04-09 to 2026-05-06" is common). Without it, a source date written in
-#: ISO form is invisible to _build_canonical_index, so a draft correctly
-#: restating the same date in Turkish format ("09.04.2026") finds nothing to
-#: match and gets flagged as an unsupported claim despite being grounded.
+#: Yönetmeliğin kullandığı biçimlerdeki tarihler, artı ISO 8601 ("2026-04-09")
+#: -- yüklenen bir belgenin kendi çıkarılmış metni bu biçimi en az Türkçe
+#: GG.AA.YYYY biçimi kadar sık kullanır (bir PDF form alanında "Dates:
+#: 2026-04-09 to 2026-05-06" yaygındır). Bu olmadan, ISO biçiminde yazılmış
+#: bir kaynak tarih _build_canonical_index için görünmez olur, dolayısıyla
+#: aynı tarihi Türkçe biçimde ("09.04.2026") doğru şekilde tekrar eden bir
+#: taslak eşleşecek hiçbir şey bulamaz ve dayanaklı olmasına rağmen
+#: dayanaksız bir iddia olarak işaretlenir.
 DATE_PATTERN = re.compile(
     r"\b\d{1,2}[./]\d{1,2}[./]\d{4}\b"
     r"|\b\d{4}-\d{1,2}-\d{1,2}\b"
@@ -59,39 +62,41 @@ DATE_PATTERN = re.compile(
     r"Eylül|Ekim|Kasım|Aralık)\s+\d{4}\b"
 )
 
-#: Legislation citations: "4982 sayılı", "madde 12", "m. 7/2".
+#: Mevzuat alıntıları: "4982 sayılı", "madde 12", "m. 7/2".
 #:
-#: The lookbehind is load-bearing. Without it the pattern reads the tail of an
-#: official document number as a law number -- "E-22222222-903-118 sayılı
-#: yazınız" yields a phantom "118 sayılı" citation, which is then checked
-#: against the legislation the draft actually cites and can be reported as a
-#: fabricated reference on a perfectly grounded draft. Today that phantom is
-#: absorbed by the token-overlap fallback only when some *other* "N sayılı"
-#: citation happens to be in context; a draft whose context contains none would
-#: have its own reference number flagged. Guarding against a preceding digit
-#: also stops "12345 sayılı" from additionally matching as "2345 sayılı".
+#: Lookbehind yük taşıyıcıdır (load-bearing). Bu olmadan, desen resmî bir belge
+#: numarasının kuyruğunu bir kanun numarası olarak okur -- "E-22222222-903-118
+#: sayılı yazınız" hayali bir "118 sayılı" alıntısı üretir, bu da daha sonra
+#: taslağın gerçekten alıntıladığı mevzuata karşı kontrol edilir ve mükemmel
+#: dayanaklı bir taslakta uydurma bir referans olarak raporlanabilir. Bugün bu
+#: hayalet, yalnızca bağlamda *başka* bir "N sayılı" alıntısı varsa
+#: token-overlap yedeği tarafından soğurulur; bağlamı hiçbirini içermeyen bir
+#: taslağın kendi referans numarası işaretlenmiş olur. Önceki bir rakama karşı
+#: koruma yapmak, ayrıca "12345 sayılı"nın ek olarak "2345 sayılı" ile
+#: eşleşmesini de engeller.
 LEGISLATION_PATTERN = re.compile(
     r"(?<![-/\d])\b\d{3,5}\s+say[ıi]l[ıi]\b|\bmadde\s+\d+\b|\bm\.\s*\d+\b",
     re.IGNORECASE,
 )
 
-#: Institution names ending in a recognisable public-body suffix.
+#: Tanınabilir bir kamu-kurumu son ekiyle biten kurum adları.
 INSTITUTION_PATTERN = re.compile(
     r"\b(?:[A-ZÇĞİÖŞÜ][\wçğıöşüÇĞİÖŞÜ]*\s+){1,5}"
     r"(?:Bakanlığı|Başkanlığı|Müdürlüğü|Müsteşarlığı|Müşavirliği|Genel Müdürlüğü|"
     r"Valiliği|Kaymakamlığı|Belediyesi|Daire Başkanlığı|Rektörlüğü|Dekanlığı)\b"
 )
 
-#: Monetary amounts.
+#: Parasal tutarlar.
 AMOUNT_PATTERN = re.compile(
     r"\b\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*(?:TL|₺|lira|Euro|EUR|USD|Dolar)\b",
     re.IGNORECASE,
 )
 
-#: Structural elements a well-formed official letter carries. The penalty for
-#: each lives in `confidence_rules.RULES` (see `_STRUCTURE_RULE_IDS` below),
-#: not here -- this table stays purely detection (key/label/pattern), so
-#: there is exactly one place a structural weight can be edited.
+#: İyi biçimlendirilmiş bir resmî yazının taşıdığı yapısal unsurlar. Her biri
+#: için ceza `confidence_rules.RULES`'da yaşar (bkz. aşağıdaki
+#: `_STRUCTURE_RULE_IDS`), burada değil -- bu tablo yalnızca tespit
+#: (key/label/pattern) olarak kalır, böylece yapısal bir ağırlığın
+#: düzenlenebileceği tam olarak tek bir yer vardır.
 STRUCTURE_CHECKS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
     ("konu", "Konu satırı", re.compile(r"^\s*Konu\s*:", re.MULTILINE | re.IGNORECASE)),
     ("sayi", "Sayı satırı", re.compile(r"^\s*Sayı\s*:", re.MULTILINE | re.IGNORECASE)),
@@ -108,7 +113,7 @@ STRUCTURE_CHECKS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
     ),
 )
 
-#: `STRUCTURE_CHECKS` key -> the `confidence_rules.RULES` id it feeds.
+#: `STRUCTURE_CHECKS` anahtarı -> beslediği `confidence_rules.RULES` kimliği.
 _STRUCTURE_RULE_IDS: dict[str, str] = {
     "konu": "eksik_konu_satiri",
     "sayi": "eksik_sayi_satiri",
@@ -118,17 +123,17 @@ _STRUCTURE_RULE_IDS: dict[str, str] = {
 }
 
 
-#: How a claim was matched against the trusted sources, weakest last.
-#: ``exact`` and ``normalized`` are substring hits, ``canonical`` is a
-#: type-aware equality (see :mod:`app.ai.verification.normalizers`),
-#: ``token_overlap`` is the tolerant fallback for names, ``none`` means the
-#: claim is ungrounded.
+#: Bir iddianın güvenilir kaynaklara karşı nasıl eşleştirildiği, en zayıfı en
+#: sonda. ``exact`` ve ``normalized`` alt dizge eşleşmeleridir, ``canonical``
+#: tip-farkında bir eşitliktir (bkz. :mod:`app.ai.verification.normalizers`),
+#: ``token_overlap`` isimler için toleranslı yedektir, ``none`` iddianın
+#: dayanaksız olduğu anlamına gelir.
 MatchMethod = Literal["exact", "canonical", "token_overlap", "empty", "none"]
 
 
 @dataclass(frozen=True)
 class _Support:
-    """The outcome of checking one claim against the trusted material."""
+    """Bir iddianın güvenilir materyale karşı kontrol edilmesinin sonucu."""
 
     supported: bool
     method: MatchMethod
@@ -137,7 +142,7 @@ class _Support:
 
 
 class UnsupportedClaim(BaseModel):
-    """A concrete assertion in the draft with no basis in the source material."""
+    """Taslakta kaynak materyalde hiçbir dayanağı olmayan somut bir iddia."""
 
     kind: str = Field(description="Bulgunun türü (ör. 'sayı', 'tarih', 'kurum').")
     value: str = Field(description="Taslakta geçen, kaynakta doğrulanamayan ifade.")
@@ -161,7 +166,7 @@ class UnsupportedClaim(BaseModel):
 
 
 class VerificationReport(BaseModel):
-    """Outcome of verifying a draft against its source material."""
+    """Bir taslağın kaynak materyaline karşı doğrulanmasının sonucu."""
 
     confidence_score: float = Field(
         ge=0.0, le=100.0, description="Taslağın kaynağa bağlılık ve yapı güven skoru."
@@ -235,26 +240,28 @@ class VerificationReport(BaseModel):
 
 
 def _fold(text: str) -> str:
-    """Normalize text for tolerant substring comparison.
+    """Metni toleranslı alt dizge karşılaştırması için normalize eder.
 
     Args:
-        text: Raw text.
+        text: Ham metin.
 
     Returns:
-        Lowercase ASCII with whitespace and punctuation collapsed, so that
-        "E-12345678-903" matches "e 12345678 903" and casing or spacing
-        differences between draft and source do not read as fabrication.
+        Boşluk ve noktalama işaretleri sıkıştırılmış küçük harf ASCII,
+        böylece "E-12345678-903" "e 12345678 903" ile eşleşir ve taslak
+        ile kaynak arasındaki büyük/küçük harf veya boşluk farkları
+        uydurma olarak okunmaz.
     """
-    # Turkish letters are translated explicitly before NFKD, not left to it: "ı"
-    # (U+0131, dotless i) has no NFKD decomposition, so ascii/ignore silently
-    # deleted it -- 'Kadıköy Kaymakamlığı' folded to 'kadkoy kaymakamlg' while the
-    # same institution written 'KADIKÖY KAYMAKAMLIĞI' (the all-caps Turkish
-    # letterhead convention, and also what OCR of a scanned header yields) folded
-    # to 'kadikoy kaymakamligi' -- two different strings for one institution. A
-    # draft that copied the name straight off the source document's own
-    # letterhead scored as fabricating it twice and lost 24 points. Same map and
-    # same translate-before-NFKD order as every other Turkish-aware fold in this
-    # codebase (see app.ai.compliance.checker.normalize_value).
+    # Türkçe harfler NFKD'ye bırakılmak yerine öncesinde açıkça çevrilir: "ı"
+    # (U+0131, noktasız i) NFKD ayrıştırması içermez, bu yüzden ascii/ignore
+    # onu sessizce siliyordu -- 'Kadıköy Kaymakamlığı' 'kadkoy kaymakamlg'e
+    # katlanırken aynı kurumun 'KADIKÖY KAYMAKAMLIĞI' yazılışı (tümü büyük
+    # harf Türkçe antet geleneği, ve ayrıca taranmış bir başlığın OCR'ının
+    # ürettiği şey) 'kadikoy kaymakamligi'ye katlanıyordu -- tek bir kurum
+    # için iki farklı dizge. Adı doğrudan kaynak belgenin kendi antetinden
+    # kopyalayan bir taslak, onu iki kez uydurmuş gibi skorlandı ve 24 puan
+    # kaybetti. Bu kod tabanındaki Türkçe-farkında diğer her katlama ile
+    # aynı harita ve aynı çevir-sonra-NFKD sırası (bkz.
+    # app.ai.compliance.checker.normalize_value).
     folded = (text or "").translate(_TURKISH_MAP)
     decomposed = unicodedata.normalize("NFKD", folded)
     ascii_text = decomposed.encode("ascii", "ignore").decode("ascii").lower()
@@ -262,12 +269,12 @@ def _fold(text: str) -> str:
 
 
 def _strip_placeholders(text: str) -> str:
-    """Remove ``[...]`` placeholders so their contents are not audited."""
+    """İçeriği denetlenmesin diye ``[...]`` yer tutucularını kaldırır."""
     return PLACEHOLDER_PATTERN.sub(" ", text)
 
 
 def _findall(pattern: re.Pattern[str], text: str) -> list[str]:
-    """Return de-duplicated, whitespace-normalised matches for a pattern."""
+    """Bir desen için tekilleştirilmiş, boşluğu normalize edilmiş eşleşmeleri döndürür."""
     seen: dict[str, None] = {}
     for match in pattern.findall(text):
         value = (match if isinstance(match, str) else match[0]).strip()
@@ -276,9 +283,9 @@ def _findall(pattern: re.Pattern[str], text: str) -> list[str]:
     return list(seen)
 
 
-#: Claim kinds, their extraction pattern and the Turkish explanation shown when
-#: one turns out to be ungrounded. Module level so the canonical index and the
-#: claim collector are guaranteed to iterate the same set of kinds.
+#: İddia türleri, çıkarım desenleri ve biri dayanaksız çıktığında gösterilen
+#: Türkçe açıklama. Modül düzeyinde tutulur, böylece kanonik indeks ve iddia
+#: toplayıcısının aynı tür kümesi üzerinde iterasyon yapması garanti edilir.
 CLAIM_CHECKS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ("sayı", DOCUMENT_NUMBER_PATTERN, "Kaynak evrakta veya bağlamda geçmeyen bir belge sayısı."),
     ("tarih", DATE_PATTERN, "Kaynak evrakta veya bağlamda geçmeyen bir tarih."),
@@ -287,23 +294,24 @@ CLAIM_CHECKS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ("tutar", AMOUNT_PATTERN, "Kaynak evrakta veya bağlamda geçmeyen bir parasal tutar."),
 )
 
-#: Minimum share of a value's significant tokens that must appear in the
-#: sources for the tolerant fallback to accept it.
+#: Toleranslı yedeğin bir değeri kabul etmesi için, değerin anlamlı
+#: token'larının kaynaklarda görünmesi gereken minimum pay.
 TOKEN_OVERLAP_THRESHOLD = get_policy().verification.token_overlap_threshold
 
 
 def _build_canonical_index(raw_sources: str) -> dict[str, set[str]]:
-    """Index every typed value in the trusted material by its canonical form.
+    """Güvenilir materyaldeki her tipli değeri kanonik biçimine göre indeksler.
 
-    Built from the *raw* sources rather than the folded haystack: the extraction
-    patterns are case-sensitive where it matters (``INSTITUTION_PATTERN``) and
-    the textual date alternation matches "Mart", not "mart".
+    Katlanmış (folded) yığın yerine *ham* kaynaklardan inşa edilir: çıkarım
+    desenleri önemli olduğu yerde büyük/küçük harfe duyarlıdır
+    (``INSTITUTION_PATTERN``) ve metinsel tarih alternatifi "mart" değil
+    "Mart" ile eşleşir.
 
     Args:
-        raw_sources: The trusted material, joined but not folded.
+        raw_sources: Güvenilir materyal, birleştirilmiş ama katlanmamış.
 
     Returns:
-        Claim kind -> the set of canonical forms present in the sources.
+        İddia türü -> kaynaklarda bulunan kanonik biçimlerin kümesi.
     """
     index: dict[str, set[str]] = {}
     for kind, pattern, _explanation in CLAIM_CHECKS:

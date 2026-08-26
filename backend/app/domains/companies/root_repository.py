@@ -1,17 +1,19 @@
-"""System-wide (unscoped) aggregate queries backing `GET /root/*` -- the
-root console. Every method here deliberately has no `company_id` filter,
-unlike every other repository in this codebase; that is the entire point
-of this module existing separately from `app.domains.analytics.
-repository.AnalyticsRepository` rather than just calling that with
-`company_id=None` (which its queries don't support, and shouldn't -- a
-per-company repository silently accepting "no company" would be an easy
-way to leak cross-tenant data through a forgotten filter).
+"""`GET /root/*` -- root konsolu -- için sistem geneli (kapsamsız) toplu
+sorgular. Buradaki her metot bilinçli olarak `company_id` filtresi
+taşımaz; bu, kod tabanındaki diğer tüm repository'lerin aksine bir
+durumdur. Bu modülün `app.domains.analytics.repository.
+AnalyticsRepository`'yi `company_id=None` ile çağırmak yerine ayrı bir
+modül olarak var olmasının tüm nedeni de budur (o repository'nin
+sorguları bunu desteklemiyor ve desteklememeli de -- şirkete özel bir
+repository'nin "şirket yok" durumunu sessizce kabul etmesi, unutulan bir
+filtre yüzünden kiracılar arası veri sızdırmanın kolay bir yolu olurdu).
 
-Runs on the same RLS-scoped `kachow_app` connection as everything else --
-these queries are reachable through `GET /root/*` (root-only), and root's
-own session carries `app.is_root='on'`, which every `tenant_isolation`
-policy already ORs in (see migration `0013_rls`), so no separate DB
-connection or bypass is needed here.
+Diğer her şeyle aynı RLS kapsamlı `kachow_app` bağlantısı üzerinde
+çalışır -- bu sorgulara `GET /root/*` (yalnızca root) üzerinden
+erişilir ve root'un kendi oturumu, her `tenant_isolation` politikasının
+zaten OR ile eklediği `app.is_root='on'` bayrağını taşır (bkz. `0013_rls`
+migration'ı); bu yüzden burada ayrı bir DB bağlantısına veya bypass'a
+gerek yoktur.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -67,14 +69,15 @@ class RootRepository:
         return result.scalar_one()
 
     async def company_rollup(self) -> List[dict]:
-        """One row per company: identity plus user/document/draft counts.
+        """Şirket başına bir satır: kimlik bilgisi artı kullanıcı/belge/taslak sayıları.
 
-        Three grouped counts, not one join -- `documents`/`drafts` both
-        joining against `companies` in a single query would multiply rows
-        (a company with 5 documents and 3 drafts would otherwise produce 15
-        joined rows before aggregation), the classic fan-out trap; three
-        separate `GROUP BY company_id` queries merged in Python avoids it
-        without needing `COUNT(DISTINCT ...)` gymnastics.
+        Tek bir join yerine üç ayrı gruplanmış sayım -- `documents`/`drafts`
+        tablolarının ikisinin de `companies` ile tek bir sorguda join
+        edilmesi satırları çoğaltırdı (5 belgesi ve 3 taslağı olan bir
+        şirket, agregasyondan önce 15 join'li satır üretirdi), klasik
+        fan-out tuzağı; Python'da birleştirilen üç ayrı
+        `GROUP BY company_id` sorgusu, `COUNT(DISTINCT ...)` cambazlığına
+        gerek kalmadan bunu önler.
         """
         companies_result = await self.db.execute(
             select(CompanyModel.id, CompanyModel.name, CompanyModel.slug, CompanyModel.is_active)
@@ -117,8 +120,9 @@ class RootRepository:
         ]
 
     async def last_activity_by_company(self) -> dict:
-        """`{company_id: last_run_created_at}` -- the most recent `runs` row
-        per company, for `GET /root/health`'s per-company staleness view."""
+        """`{company_id: last_run_created_at}` -- şirket başına en son `runs`
+        satırı; `GET /root/health`'in şirket başına bayatlık (staleness)
+        görünümü için kullanılır."""
         result = await self.db.execute(
             select(RunModel.company_id, func.max(RunModel.created_at)).group_by(RunModel.company_id)
         )

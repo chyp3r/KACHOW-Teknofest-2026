@@ -1,13 +1,12 @@
-"""Application startup and shutdown hooks.
+"""Uygulama başlatma ve kapatma kancaları.
 
-The expensive, one-off work that used to be paid by whichever unlucky user sent
-the first request happens here instead: loading models into Ollama and compiling
-the LangGraph workflows. On Apple Silicon a cold 9B load is several seconds, and
-paying it inside a request makes the system look far slower than it is.
+Eskiden ilk isteği gönderen şanssız kullanıcının ödediği pahalı, tek seferlik iş
+artık burada yapılıyor: modelleri Ollama'ya yüklemek ve LangGraph iş akışlarını
+derlemek. 
 
-Every step is best-effort. A missing Ollama or an unreachable Qdrant must not
-prevent the API from booting -- the health endpoint should come up and report the
-problem rather than the process dying at import time.
+Her adım best-effort'tur (en iyi çabayla). Eksik bir Ollama veya erişilemeyen bir
+Qdrant, API'nin ayağa kalkmasını engellememelidir -- süreç import zamanında ölmek
+yerine health endpoint'i ayağa kalkmalı ve sorunu raporlamalıdır.
 """
 
 import asyncio
@@ -21,13 +20,13 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-#: Cap on startup warm-up. Past this the API should come up anyway and let the
-#: first request pay the remainder.
+#: Başlangıç ısınması için üst sınır. Bunun ötesinde API yine de ayağa kalkmalı
+#: ve kalan kısmı ilk isteğe ödettirmelidir.
 WARMUP_TIMEOUT_SECONDS = 120
 
 
 async def _warm_up_models() -> None:
-    """Load the configured models into Ollama's memory."""
+    """Yapılandırılmış modelleri Ollama'nın belleğine yükler."""
     from app.ai.llms import get_fast_llm_client, get_llm_client
 
     clients = [get_llm_client()]
@@ -43,7 +42,7 @@ async def _warm_up_models() -> None:
 
 
 async def _warm_up_graphs() -> None:
-    """Compile the workflows and build the retrievers before traffic arrives."""
+    """Trafik gelmeden önce iş akışlarını derler ve retriever'ları oluşturur."""
     from app.api.dependency import (
         get_document_analysis_graph,
         get_document_analysis_mevzuat_retriever,
@@ -62,13 +61,14 @@ async def _warm_up_graphs() -> None:
     routing_graph = await get_routing_graph()
     await get_planning_graph(analysis_graph, rag_graph, draft_graph, routing_graph)
 
-    # Best-effort like every step in this module: only present when
-    # MEVZUAT_SOURCE="mcp" built a FallbackMevzuatRetriever (see
-    # get_document_analysis_mevzuat_retriever); a plain HybridRetriever (local
-    # mode) has no warm-up step at all. Runs inside this function's own best-
-    # effort gather in _startup(), so a slow or unreachable MCP server delays
-    # the live source coming online without blocking or failing the boot --
-    # every request in the meantime just uses the already-graceful fallback.
+    # Bu modüldeki her adım gibi best-effort: yalnızca MEVZUAT_SOURCE="mcp"
+    # bir FallbackMevzuatRetriever oluşturduğunda mevcuttur (bkz.
+    # get_document_analysis_mevzuat_retriever); düz bir HybridRetriever'ın
+    # (yerel mod) hiç warm-up adımı yoktur. _startup() içindeki bu fonksiyonun
+    # kendi best-effort gather'ı içinde çalışır, böylece yavaş veya erişilemez
+    # bir MCP sunucusu, canlı kaynağın devreye girmesini geciktirir ama
+    # başlangıcı engellemez veya başarısız kılmaz -- bu sırada gelen her istek
+    # zaten zarif olan fallback'i kullanır.
     warm_up = getattr(analysis_retriever, "warm_up", None)
     if warm_up is not None:
         await warm_up()
@@ -77,7 +77,7 @@ async def _warm_up_graphs() -> None:
 
 
 async def _startup() -> None:
-    """Run every warm-up step, tolerating individual failures."""
+    """Bireysel hatalara tolerans göstererek her ısınma adımını çalıştırır."""
     tasks = [_warm_up_graphs()]
     if settings.OLLAMA_WARMUP_ON_STARTUP:
         tasks.append(_warm_up_models())
@@ -100,19 +100,21 @@ async def _startup() -> None:
 
 
 def _require_auth_in_production() -> None:
-    """Refuse to boot a production deployment with auth left open.
+    """Kimlik doğrulaması açık bırakılmış bir production dağıtımının ayağa
+    kalkmasını reddeder.
 
-    /chat and /documents hold a local model busy for tens of seconds per
-    request and read whatever storage_path/session_id they're given (see
-    settings.REQUIRE_AUTH's docstring) -- open by default so the competition
-    demo works without a login flow, but a real "production" deployment left
-    that way is the IDOR this phase exists to close. Refusing to boot is
-    deliberate: REQUIRE_AUTH is trivial to flip and a log line is easy to
-    miss, but a process that never started is not.
+    /chat ve /documents, istek başına onlarca saniye boyunca yerel bir modeli
+    meşgul eder ve kendisine verilen storage_path/session_id her ne ise onu
+    okur (bkz. settings.REQUIRE_AUTH'un docstring'i) -- yarışma demosu bir
+    login akışı olmadan çalışsın diye varsayılan olarak açıktır, ancak gerçek
+    bir "production" dağıtımının bu şekilde bırakılması, bu aşamanın kapatmayı
+    amaçladığı IDOR açığıdır. Ayağa kalkmayı reddetmek kasıtlıdır: REQUIRE_AUTH
+    değerini değiştirmek çok kolaydır ve bir log satırı kolayca gözden
+    kaçabilir, ama hiç başlamamış bir süreç kaçmaz.
 
     Raises:
-        RuntimeError: If `ENVIRONMENT == "production"` and `REQUIRE_AUTH` is
-            not enabled.
+        RuntimeError: `ENVIRONMENT == "production"` ise ve `REQUIRE_AUTH`
+            etkin değilse.
     """
     if settings.ENVIRONMENT == "production" and not settings.REQUIRE_AUTH:
         raise RuntimeError(
@@ -121,24 +123,26 @@ def _require_auth_in_production() -> None:
         )
 
 
-#: Settings.SECRET_KEY's own default, kept as a module constant so this
-#: guard and the field declaration cannot silently drift apart.
+#: Settings.SECRET_KEY'nin kendi varsayılanı; bu koruma ile alan tanımının
+#: sessizce birbirinden ayrışmaması için modül sabiti olarak tutulur.
 _DEFAULT_SECRET_KEY = "supersecretkeychangeinproduction"
 
 
 def _require_secret_key_in_production() -> None:
-    """Refuse to boot a production deployment with the default SECRET_KEY.
+    """Varsayılan SECRET_KEY ile bir production dağıtımının ayağa kalkmasını
+    reddeder.
 
-    SECRET_KEY signs every access/refresh JWT (see app.core.security); the
-    published default is public (it's in this repository's own source), so
-    leaving it in place in production is equivalent to accepting tokens
-    signed by anyone. Same shape as _require_auth_in_production() above and
-    for the same reason: a wrong default is easy to miss in a log line, but
-    a process that never started is not.
+    SECRET_KEY her access/refresh JWT'yi imzalar (bkz. app.core.security);
+    yayınlanan varsayılan değer herkese açıktır (bu deponun kendi kaynak
+    kodunda yer alır), bu yüzden onu production'da olduğu gibi bırakmak
+    herkesin imzaladığı token'ları kabul etmekle eşdeğerdir. Yukarıdaki
+    _require_auth_in_production() ile aynı yapıda ve aynı sebeple: yanlış
+    bir varsayılan değer bir log satırında kolayca gözden kaçabilir, ama hiç
+    başlamamış bir süreç kaçmaz.
 
     Raises:
-        RuntimeError: If `ENVIRONMENT == "production"` and `SECRET_KEY` is
-            still the published default.
+        RuntimeError: `ENVIRONMENT == "production"` ise ve `SECRET_KEY` hâlâ
+            yayınlanan varsayılan değerdeyse.
     """
     if settings.ENVIRONMENT == "production" and settings.SECRET_KEY == _DEFAULT_SECRET_KEY:
         raise RuntimeError(
@@ -150,50 +154,51 @@ def _require_secret_key_in_production() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Manage application startup and shutdown.
+    """Uygulama başlatma ve kapatmayı yönetir.
 
     Args:
-        app: The FastAPI application.
+        app: FastAPI uygulaması.
 
     Yields:
-        Control to the running application.
+        Kontrolü çalışan uygulamaya devreder.
     """
     logger.info("Starting %s (%s)...", settings.PROJECT_NAME, settings.ENVIRONMENT)
 
     _require_auth_in_production()
     _require_secret_key_in_production()
 
-    # Registers the event bus's listeners as a side effect of import (the
-    # @subscribe decorator runs at module load time). Without this import
-    # DocumentService/DraftService's publish() calls have no subscriber at
-    # all -- the bus was write-only.
+    # Import'un yan etkisi olarak event bus'ın dinleyicilerini kaydeder
+    # (@subscribe dekoratörü modül yüklenirken çalışır). Bu import olmadan
+    # DocumentService/DraftService'in publish() çağrılarının hiçbir
+    # dinleyicisi olmaz -- bus yalnızca yazma amaçlı kalırdı.
     import app.events.subscribers  # noqa: F401
 
-    # External MCP servers, if any are configured. A no-op by default: the
-    # legislation server is off unless MEVZUAT_MCP_ENABLED is set, and nothing
-    # here contacts it -- registration only records how to launch it, so a
-    # missing or unreachable server costs nothing until a tool is actually
-    # called.
+    # Yapılandırılmışsa harici MCP sunucuları. Varsayılan olarak hiçbir şey
+    # yapmaz: MEVZUAT_MCP_ENABLED ayarlanmadıkça mevzuat sunucusu kapalıdır
+    # ve burada ona hiçbir şey temas etmez -- kayıt yalnızca nasıl
+    # başlatılacağını kaydeder, bu yüzden eksik veya erişilemeyen bir sunucu
+    # bir araç gerçekten çağrılana kadar hiçbir şeye mal olmaz.
     from app.mcp.registry import register_servers
 
     register_servers()
 
-    # Deliberately outside _startup()'s WARMUP_TIMEOUT_SECONDS budget: the
-    # planning graph's compilation (inside _warm_up_graphs) needs the
-    # checkpointer already open, and a slow Postgres must not silently steal
-    # time from the model warm-up budget or get skipped by it.
+    # Kasıtlı olarak _startup()'ın WARMUP_TIMEOUT_SECONDS bütçesinin dışında:
+    # planlama grafiğinin derlemesi (_warm_up_graphs içinde) checkpointer'ın
+    # zaten açık olmasını gerektirir ve yavaş bir Postgres, model ısınma
+    # bütçesinden sessizce zaman çalmamalı veya bu bütçe tarafından atlanmamalıdır.
     from app.infrastructure.checkpointing import init_checkpointer
 
     await init_checkpointer()
 
-    # Best-effort, like every other step here: a seeding failure must not
-    # prevent the API from booting. Placed after the checkpointer (so the
-    # database is known-reachable) and outside _startup()'s warm-up budget,
-    # same reasoning as init_checkpointer() itself.
+    # Buradaki her adım gibi best-effort: bir seed hatası API'nin ayağa
+    # kalkmasını engellememelidir. Checkpointer'dan sonra yerleştirilmiştir
+    # (böylece veritabanının erişilebilir olduğu bilinir) ve
+    # _startup()'ın ısınma bütçesinin dışındadır, init_checkpointer()'ın
+    # kendisiyle aynı gerekçeyle.
     #
-    # Order matters: the demo company must exist before the users and units
-    # seeded below it can reference its id (see
-    # app.domains.companies.seeder's own docstring).
+    # Sıra önemlidir: demo şirketi, altında seed edilen kullanıcıların ve
+    # birimlerin onun id'sine referans verebilmesi için önce var olmalıdır
+    # (bkz. app.domains.companies.seeder'ın kendi docstring'i).
     from app.domains.companies.seeder import seed_demo_company
 
     demo_company_id = await seed_demo_company()

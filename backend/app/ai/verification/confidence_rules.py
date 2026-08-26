@@ -1,34 +1,34 @@
-"""The single, deterministic, auditable rule table a draft's confidence
-score is computed from.
+"""Bir taslağın güven skorunun hesaplandığı tek, deterministik, denetlenebilir
+kural tablosu.
 
-Before this module, the score was two things pretending to be one: a
-deterministic penalty (unsupported claims + missing structure) blended
-``0.6/0.4`` with a fast-tier LLM judge's own free-floating 0-100 opinion
-(``app.ai.verification.llm_judge.merge_verdicts``, pre-refactor). Three
-problems followed from that:
+Bu modülden önce skor, tek bir şeymiş gibi görünen iki ayrı şeydi: deterministik
+bir ceza (desteklenmeyen iddialar + eksik yapı) ``0.6/0.4`` oranıyla hızlı
+katmandaki bir LLM yargıcının kendi serbest 0-100 görüşüyle karıştırılıyordu
+(``app.ai.verification.llm_judge.merge_verdicts``, refaktörden önce). Bundan
+üç sorun doğuyordu:
 
-1. **Not reproducible.** The same draft, scored twice, could come back with
-   two different numbers -- the judge leg is a model call, and even at
-   ``temperature=0.0`` a local model is not guaranteed bit-identical output
-   twice.
-2. **Discontinuous.** When the judge call degraded (timeout, echo,
-   disabled), the score silently *jumped* to the deterministic leg alone --
-   the 0.4 weight simply vanished from the arithmetic rather than being
-   redistributed or accounted for.
-3. **Some real defects moved the gate but not the number.** A style-example
-   leak or an unresolved placeholder forced human approval but left the
-   *score* untouched (100.0), so two drafts needing review for very
-   different reasons -- one perfect but for a single leaked institution
-   name, one riddled with unfilled placeholders -- displayed the identical
-   confidence number.
+1. **Tekrarlanabilir değil.** Aynı taslak iki kez skorlandığında iki farklı
+   sayı dönebiliyordu -- yargıç ayağı bir model çağrısı ve ``temperature=0.0``
+   olsa bile yerel bir model iki kez bit-birebir aynı çıktıyı garanti etmiyor.
+2. **Süreksiz.** Yargıç çağrısı bozulduğunda (zaman aşımı, yankı, devre dışı),
+   skor sessizce *sadece* deterministik ayağa *sıçrıyordu* -- 0.4 ağırlığı
+   yeniden dağıtılmak veya hesaba katılmak yerine aritmetikten olduğu gibi
+   kayboluyordu.
+3. **Bazı gerçek kusurlar kapıyı hareket ettiriyor ama sayıyı etkilemiyordu.**
+   Bir üslup-örneği sızıntısı veya doldurulmamış bir yer tutucu insan onayını
+   zorunlu kılıyordu ama *skoru* dokunulmamış bırakıyordu (100.0); yani çok
+   farklı nedenlerle incelemeye ihtiyaç duyan iki taslak -- biri tek bir
+   sızmış kurum adı dışında kusursuz, diğeri doldurulmamış yer tutucularla
+   dolu -- aynı güven sayısını gösteriyordu.
 
-This module fixes all three by making the score a pure function of a list of
-named rule findings: same findings in, same score out, always. The judge
-still has a job -- flagging defects a regex cannot see (register, closing
-direction, request fit) -- but it does that job by contributing findings
-(gated through ``forces_approval``, at zero score weight) rather than a
-number that gets averaged in. See ``app.ai.verification.llm_judge.
-merge_verdicts`` for where a judge verdict is translated into findings.
+Bu modül, skoru adlandırılmış kural bulgularından oluşan bir listenin saf bir
+fonksiyonu haline getirerek üç sorunu da çözer: aynı bulgular girer, her
+zaman aynı skor çıkar. Yargıcın hâlâ bir işi var -- bir regex'in göremeyeceği
+kusurları (kayıt/üslup, kapanış yönü, talebe uygunluk) işaretlemek -- ama
+bunu artık ortalamaya katılan bir sayı yerine bulgulara katkıda bulunarak
+yapıyor (``forces_approval`` üzerinden kapı geçişi sağlanır, skor ağırlığı
+sıfırdır). Bir yargıç kararının bulgulara nasıl çevrildiğini görmek için
+``app.ai.verification.llm_judge.merge_verdicts``'e bakın.
 """
 
 from dataclasses import dataclass
@@ -41,33 +41,35 @@ RuleCategory = Literal["yapi", "dayanak", "gizlilik", "belirsizlik", "butunluk"]
 
 @dataclass(frozen=True)
 class ConfidenceRule:
-    """One named, penalized defect category.
+    """Adlandırılmış, cezalandırılan bir kusur kategorisi.
 
     Attributes:
-        id: Stable identifier. Reported on every ``AppliedRule`` so a score
-            is traceable back to exactly which rules produced it -- this is
-            what makes the score auditable rather than a black box.
-        label: Turkish label shown to the user (e.g. in a "why is this
-            62?" breakdown).
-        category: Broad grouping for display -- structural, groundedness,
-            confidentiality, unresolved-ness, or overall integrity.
-        penalty: Points deducted. Per occurrence when ``per_occurrence`` is
-            set, otherwise a single flat deduction regardless of how many
-            findings fired this rule.
-        per_occurrence: Whether ``penalty`` multiplies by how many findings
-            fired this rule.
-        cap: Ceiling on this rule's own total deduction, so a draft with
-            many small issues of one kind still scores above one that is
-            structurally broken outright -- the two failure modes must not
-            collapse onto the same number. ``None`` means uncapped (only
-            meaningful together with ``per_occurrence``; a non-per-occurrence
-            rule's own single ``penalty`` is already its ceiling).
-        forces_approval: Whether this rule, on its own, requires a human
-            before the draft can be sent -- independent of the numeric
-            score. A single finding can be true (the value copied is
-            genuinely correct) and still be forbidden in this specific
-            place (see ``gelen_sayi_sizintisi``), which is exactly why this
-            is a separate flag rather than derived from the score.
+        id: Sabit kimlik. Her ``AppliedRule`` üzerinde raporlanır, böylece
+            bir skorun tam olarak hangi kurallardan üretildiği izlenebilir --
+            skoru bir kara kutu olmaktan çıkarıp denetlenebilir kılan şey
+            budur.
+        label: Kullanıcıya gösterilen Türkçe etiket (örn. "bu neden 62?"
+            dökümünde).
+        category: Görüntüleme için geniş gruplama -- yapısal, dayanaklılık,
+            gizlilik, çözülmemişlik veya genel bütünlük.
+        penalty: Düşülen puan. ``per_occurrence`` ayarlıysa her tekrar için,
+            değilse bu kuralı kaç bulgunun tetiklediğinden bağımsız olarak
+            tek bir sabit düşüş.
+        per_occurrence: ``penalty``'nin bu kuralı tetikleyen bulgu sayısıyla
+            çarpılıp çarpılmayacağı.
+        cap: Bu kuralın kendi toplam düşüşü için tavan; böylece tek tür
+            küçük sorunları çok olan bir taslak, yapısal olarak baştan
+            bozuk olan bir taslaktan hâlâ daha yüksek puan alır -- bu iki
+            başarısızlık modu aynı sayıya çökmemelidir. ``None`` tavansız
+            demektir (sadece ``per_occurrence`` ile birlikte anlamlıdır;
+            per_occurrence olmayan bir kuralın tek ``penalty``'si zaten
+            kendi tavanıdır).
+        forces_approval: Bu kuralın tek başına, sayısal skordan bağımsız
+            olarak, taslak gönderilmeden önce bir insanı gerektirip
+            gerektirmediği. Tek bir bulgu doğru olabilir (kopyalanan değer
+            gerçekten doğrudur) ve yine de bu belirli yerde yasak olabilir
+            (bkz. ``gelen_sayi_sizintisi``) -- bu tam olarak neden bunun
+            skordan türetilmek yerine ayrı bir bayrak olduğunun nedenidir.
     """
 
     id: str
@@ -79,16 +81,16 @@ class ConfidenceRule:
     forces_approval: bool = True
 
 
-#: The rule table. Calibrated to reproduce the pre-existing deterministic
-#: weights exactly where one already existed (the five structural checks,
-#: the unsupported-claim penalty/cap) -- and to give a real score weight,
-#: for the first time, to defects that previously only flipped the approval
-#: gate without moving the number at all (``ornek_sizintisi``,
-#: ``doldurulmamis_yer_tutucu``, and everything ``merge_verdicts`` folds in
-#: from outside the deterministic verifier: ``pii_bulgusu``,
-#: ``tur_tahmini``, ``mevzuat_baglami_yok``, ``icerik_kaybi``). The two
-#: judge-sourced rules carry zero penalty by design -- see this module's
-#: docstring on why the judge no longer moves the score, only the gate.
+#: Kural tablosu. Zaten var olan yerlerde önceki deterministik ağırlıkları
+#: birebir üretecek şekilde kalibre edilmiştir (beş yapısal kontrol,
+#: desteklenmeyen-iddia cezası/tavanı) -- ve daha önce sadece onay kapısını
+#: çevirip sayıyı hiç etkilemeyen kusurlara (``ornek_sizintisi``,
+#: ``doldurulmamis_yer_tutucu`` ve ``merge_verdicts``'in deterministik
+#: doğrulayıcının dışından kattığı her şey: ``pii_bulgusu``,
+#: ``tur_tahmini``, ``mevzuat_baglami_yok``, ``icerik_kaybi``) ilk kez
+#: gerçek bir skor ağırlığı verir. İki yargıç-kaynaklı kural tasarım gereği
+#: sıfır ceza taşır -- yargıcın artık neden skoru değil sadece kapıyı
+#: hareket ettirdiğini görmek için bu modülün docstring'ine bakın.
 RULES: dict[str, ConfidenceRule] = {
     rule.id: rule
     for rule in (
@@ -109,11 +111,12 @@ RULES: dict[str, ConfidenceRule] = {
             "gelen_sayi_sizintisi", "Gelen evrakın sayısı kendi Sayı alanına sızmış",
             "dayanak", 25.0,
         ),
-        # Party-model rules (see app.ai.identity.parties and
-        # draft_verifier._check_identity_slot_leaks): the counterparty's own
-        # identity ending up in one of OUR identity slots. Two ids because
-        # they are two different confusions, not the same one twice -- see
-        # _check_identity_slot_leaks's own docstring for which is which.
+        # Taraf-modeli kuralları (bkz. app.ai.identity.parties ve
+        # draft_verifier._check_identity_slot_leaks): karşı tarafın kendi
+        # kimliğinin BİZİM kimlik alanlarımızdan birine sızması. İki ayrı id
+        # var çünkü bunlar iki farklı karışıklık, aynı şeyin iki kez
+        # yazılması değil -- hangisinin hangisi olduğunu görmek için
+        # _check_identity_slot_leaks'in kendi docstring'ine bakın.
         ConfidenceRule(
             "gonderen_muhatap_karisikligi", "Gönderen kurum muhatap/antet karışıklığı",
             "butunluk", 30.0,
@@ -122,18 +125,19 @@ RULES: dict[str, ConfidenceRule] = {
             "karsi_taraf_kimlik_sizintisi", "Karşı tarafın kimliği bizim kimlik alanımızda",
             "dayanak", 30.0,
         ),
-        # Style/register rules (see app.ai.verification.style_checks) --
-        # rule ids defined here alongside every other rule, detection
-        # logic lives in its own module the same way structural/groundedness
-        # detection lives in draft_verifier.py. The two pattern-heuristic
-        # rules (kisi_tutarsizligi, dolgu_ifade) do not force approval on
-        # their own: they still cost score and still feed the repair loop
-        # (see llm_judge.merge_verdicts), but a heuristic match alone
-        # shouldn't be able to strand an otherwise-clean draft in human
-        # review the way a confirmed identity/groundedness defect does.
-        # imza_blogu_uydurma keeps the table's default (forces_approval=True)
-        # -- an exact bare-label match in the signature block is as
-        # high-precision as gelen_sayi_sizintisi/karsi_taraf_kimlik_sizintisi.
+        # Üslup/kayıt kuralları (bkz. app.ai.verification.style_checks) --
+        # kural id'leri diğer her kuralla birlikte burada tanımlanır, tespit
+        # mantığı ise yapısal/dayanaklılık tespitinin draft_verifier.py'de
+        # yaşadığı gibi kendi modülünde yaşar. İki örüntü-sezgisel kural
+        # (kisi_tutarsizligi, dolgu_ifade) tek başına onayı zorunlu kılmaz:
+        # yine de skordan puan götürürler ve onarım döngüsünü beslemeye
+        # devam ederler (bkz. llm_judge.merge_verdicts), ama tek başına bir
+        # sezgisel eşleşme, doğrulanmış bir kimlik/dayanaklılık kusurunun
+        # yaptığı gibi aksi hâlde temiz bir taslağı insan incelemesinde
+        # mahsur bırakmamalıdır. imza_blogu_uydurma tablonun varsayılanını
+        # (forces_approval=True) korur -- imza bloğunda tam, çıplak-etiket
+        # eşleşmesi, gelen_sayi_sizintisi/karsi_taraf_kimlik_sizintisi kadar
+        # yüksek kesinliktedir.
         ConfidenceRule(
             "kisi_tutarsizligi", "Kişi/hitap tutarsızlığı", "butunluk",
             8.0, per_occurrence=True, cap=24.0, forces_approval=False,
@@ -158,16 +162,16 @@ RULES: dict[str, ConfidenceRule] = {
             15.0, per_occurrence=True, cap=30.0,
         ),
         ConfidenceRule("icerik_kaybi", "İçerik kaybı (revizyonda elenmiş metin)", "butunluk", 25.0),
-        # Zero-penalty by design -- see module docstring.
+        # Tasarım gereği sıfır ceza -- bkz. modül docstring'i.
         ConfidenceRule("yargic_kritik_bulgu", "Kalite yargıcı: kritik bulgu", "butunluk", 0.0),
         ConfidenceRule("talebi_karsilamiyor", "Kalite yargıcı: talebi karşılamıyor", "butunluk", 0.0),
-        # Same zero-penalty-by-design reasoning: a company rule violation
-        # (app.ai.adapters.company_rules) gates approval and drives the
-        # repair loop through its own JudgeFinding(kind="kurum_kurali")
-        # entries (see llm_judge.REVISABLE_JUDGE_KINDS); this rule exists
-        # only so the violation also lands in the auditable applied_rules
-        # breakdown, even on the rare turn the judge reports
-        # violated_rule_ids without a matching structured finding.
+        # Aynı tasarım-gereği-sıfır-ceza mantığı: bir şirket kuralı ihlali
+        # (app.ai.adapters.company_rules) onayı kapılar ve onarım döngüsünü
+        # kendi JudgeFinding(kind="kurum_kurali") kayıtları üzerinden yönetir
+        # (bkz. llm_judge.REVISABLE_JUDGE_KINDS); bu kural sadece ihlalin,
+        # yargıcın eşleşen bir yapılandırılmış bulgu olmadan
+        # violated_rule_ids raporladığı nadir turda bile, denetlenebilir
+        # applied_rules dökümüne düşmesi için var.
         ConfidenceRule("sirket_kurali_ihlali", "Şirket kuralı ihlali", "butunluk", 0.0),
     )
 }
@@ -175,19 +179,20 @@ RULES: dict[str, ConfidenceRule] = {
 
 @dataclass(frozen=True)
 class RuleFinding:
-    """One occurrence of a rule firing, on a specific piece of evidence.
+    """Bir kuralın belirli bir kanıt üzerinde tetiklendiği tek bir örnek.
 
     Attributes:
-        rule_id: Must be a key in ``RULES``.
-        detail: Short, specific description of this occurrence (e.g. the
-            exact unsupported value), for display alongside the score.
-        forces_approval: Overrides the rule's own default for this specific
-            occurrence when set. Exists for exactly one case today: an
-            unsupported claim under a lenient (``strict=False``)
-            correspondence type still costs score, but does not, on its
-            own, force a human into the loop the way it does under a strict
-            type (see ``app.ai.verification.draft_verifier.verify_draft``'s
-            own ``strict`` parameter).
+        rule_id: ``RULES`` içinde bir anahtar olmalıdır.
+        detail: Bu örneğin kısa, spesifik açıklaması (örn. desteklenmeyen
+            tam değer), skorla birlikte görüntülenmek üzere.
+        forces_approval: Ayarlandığında kuralın kendi varsayılanını bu
+            belirli örnek için geçersiz kılar. Bugün tam olarak tek bir
+            durum için var: gevşek (``strict=False``) bir yazışma türü
+            altında desteklenmeyen bir iddia yine de skordan puan götürür,
+            ama tek başına, sıkı bir tür altında yaptığı gibi bir insanı
+            döngüye zorlamaz (bkz.
+            ``app.ai.verification.draft_verifier.verify_draft``'ın kendi
+            ``strict`` parametresi).
     """
 
     rule_id: str
@@ -196,13 +201,14 @@ class RuleFinding:
 
 
 class AppliedRule(BaseModel):
-    """One rule's aggregated contribution to a final score.
+    """Bir kuralın nihai skora toplu katkısı.
 
-    What a caller shows the user for "why is this score 62?" -- one row per
-    rule that fired at least once, not one row per individual finding. A
-    pydantic model (unlike the rest of this module) because it is the one
-    piece of this module that crosses into ``VerificationReport`` and gets
-    persisted/serialized (``draft_result["verification"]["applied_rules"]``).
+    Bir çağıranın kullanıcıya "bu skor neden 62?" için gösterdiği şey --
+    her bireysel bulgu için değil, en az bir kez tetiklenen her kural için
+    bir satır. (Modülün geri kalanının aksine) bir pydantic modeli, çünkü
+    bu modülün ``VerificationReport``'a geçen ve
+    kalıcılaştırılan/serileştirilen
+    (``draft_result["verification"]["applied_rules"]``) tek parçasıdır.
     """
 
     rule_id: str
@@ -215,12 +221,12 @@ class AppliedRule(BaseModel):
 
 @dataclass(frozen=True)
 class ConfidenceOutcome:
-    """The result of scoring a list of findings against ``RULES``.
+    """Bir bulgu listesinin ``RULES``'a karşı skorlanma sonucu.
 
-    ``total_penalty`` (not just ``score``) is carried explicitly so
-    ``combine_outcomes`` can sum two outcomes correctly -- ``100 - a`` and
-    ``100 - b`` do not combine into ``100 - (a + b)`` by adding the scores
-    themselves, only by adding the penalties first.
+    ``combine_outcomes``'un iki sonucu doğru şekilde toplayabilmesi için
+    (sadece ``score`` değil) ``total_penalty`` açıkça taşınır -- ``100 - a``
+    ve ``100 - b``, skorların kendisi toplanarak ``100 - (a + b)``'ye
+    birleşmez, ancak önce cezalar toplanarak birleşir.
     """
 
     total_penalty: float
@@ -233,20 +239,20 @@ class ConfidenceOutcome:
 
 
 def score_findings(findings: list[RuleFinding]) -> ConfidenceOutcome:
-    """Score a list of rule findings against ``RULES``.
+    """Bir kural bulguları listesini ``RULES``'a karşı skorlar.
 
-    Pure and total: the same list of findings always produces the same
-    outcome, regardless of what produced them or in what order they were
-    collected -- this is the property the rest of the module docstring's
-    "not reproducible" complaint is about fixing.
+    Saf ve toplamlı: aynı bulgu listesi, onları neyin ürettiğinden veya
+    hangi sırayla toplandığından bağımsız olarak her zaman aynı sonucu
+    üretir -- modül docstring'inin geri kalanının "tekrarlanabilir değil"
+    şikayetinin düzeltmeye çalıştığı özellik budur.
 
     Args:
-        findings: Every rule finding collected for one draft, from every
-            source (deterministic groundedness/structure, PII, correspondence
-            type resolution, mevzuat context, judge findings).
+        findings: Bir taslak için her kaynaktan (deterministik
+            dayanaklılık/yapı, PII, yazışma türü çözümlemesi, mevzuat
+            bağlamı, yargıç bulguları) toplanan her kural bulgusu.
 
     Returns:
-        The combined outcome.
+        Birleştirilmiş sonuç.
     """
     by_rule: dict[str, list[RuleFinding]] = {}
     for finding in findings:
@@ -289,19 +295,20 @@ def score_findings(findings: list[RuleFinding]) -> ConfidenceOutcome:
 
 
 def combine_outcomes(*outcomes: ConfidenceOutcome) -> ConfidenceOutcome:
-    """Merge outcomes computed separately (e.g. the deterministic verifier's
-    own pass and the additional findings ``merge_verdicts`` folds in from
-    PII/correspondence-type/mevzuat/judge) into one.
+    """Ayrı ayrı hesaplanan sonuçları (örn. deterministik doğrulayıcının
+    kendi geçişi ile ``merge_verdicts``'in PII/yazışma-türü/mevzuat/yargıç
+    tarafından kattığı ek bulgular) tek bir sonuçta birleştirir.
 
     Args:
-        outcomes: Any number of previously computed outcomes. No rule id
-            overlaps between the deterministic verifier's own rules and the
-            ones ``merge_verdicts`` adds, so a plain sum is exact -- this
-            does not need to re-bucket by rule id the way ``score_findings``
-            does over raw findings.
+        outcomes: Daha önce hesaplanmış herhangi sayıda sonuç. Deterministik
+            doğrulayıcının kendi kuralları ile ``merge_verdicts``'in
+            eklediği kurallar arasında hiçbir kural id çakışması yoktur, bu
+            yüzden düz bir toplam kesindir -- bu, ``score_findings``'in ham
+            bulgular üzerinde yaptığı gibi kural id'sine göre yeniden
+            gruplama gerektirmez.
 
     Returns:
-        The combined outcome.
+        Birleştirilmiş sonuç.
     """
     return ConfidenceOutcome(
         total_penalty=round(sum(outcome.total_penalty for outcome in outcomes), 1),

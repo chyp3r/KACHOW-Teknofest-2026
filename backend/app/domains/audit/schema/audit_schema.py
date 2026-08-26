@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 
 class AuditLogResponse(BaseModel):
-    """Pydantic schema for one `audit_log` row."""
+    """Tek bir `audit_log` satırı için Pydantic şeması."""
 
     model_config = {"from_attributes": True}
 
@@ -27,7 +27,7 @@ class AuditLogResponse(BaseModel):
 
 
 class ChainVerificationResponse(BaseModel):
-    """Pydantic schema for `GET /audit/verify`'s result."""
+    """`GET /audit/verify`'ın sonucu için Pydantic şeması."""
 
     valid: bool
     rows_checked: int

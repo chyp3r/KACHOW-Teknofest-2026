@@ -13,23 +13,26 @@ logger = logging.getLogger(__name__)
 
 
 def channel_for(company_id: str, user_id: str) -> str:
-    """The Redis pub/sub channel one user's live notification stream listens on.
+    """Bir kullanıcının canlı bildirim akışının dinlediği Redis pub/sub
+    kanalı.
 
-    Shared between `NotificationService.create` (publisher) and
-    `app.domains.notifications.router`'s SSE endpoint (subscriber) --
-    `company_id` is folded into the channel name even though `user_id`
-    alone is already globally unique, purely so a stray cross-company
-    channel collision is structurally impossible, not just unlikely.
+    `NotificationService.create` (yayıncı) ile
+    `app.domains.notifications.router`'ın SSE endpoint'i (abone) arasında
+    paylaşılır -- `user_id` tek başına zaten global olarak benzersiz
+    olmasına rağmen `company_id` kanal adına dahil edilir, salt sapkın
+    bir şirketler-arası kanal çakışmasının yalnızca olası değil, yapısal
+    olarak imkansız olması için.
     """
     return f"notifications:{company_id}:{user_id}"
 
 
 class NotificationService:
-    """Service for `notifications` -- read/write plus the live-push side effect.
+    """`notifications` için servis -- okuma/yazma artı canlı-push yan
+    etkisi.
 
-    Deliberately no `bypasses_ownership` company-wide view (see
-    `NotificationModel`'s docstring): every method here is scoped to the
-    caller's own `user_id`, full stop.
+    Bilinçli olarak `bypasses_ownership` şirket-geneli görünüm yok (bkz.
+    `NotificationModel`'in docstring'i): buradaki her metot yalnızca
+    çağıranın kendi `user_id`'siyle sınırlıdır, nokta.
     """
 
     def __init__(self, repository: NotificationRepository, cache: Optional[RedisCache] = None):
@@ -47,23 +50,25 @@ class NotificationService:
         resource_type: Optional[str] = None,
         resource_id: Optional[str] = None,
     ) -> NotificationModel:
-        """Write a notification row, then best-effort publish it live.
+        """Bir bildirim satırı yazar, ardından best-effort olarak canlı
+        yayınlar.
 
         Args:
-            company_id: Tenant scope.
-            user_id: Who this notification is for.
-            type: A short machine tag (see `NotificationModel.type`).
-            title: Human-readable headline.
-            body: Optional human-readable detail.
-            resource_type: What the notification is about (e.g. "draft_share").
-            resource_id: The related row's id.
+            company_id: Kiracı kapsamı.
+            user_id: Bu bildirimin kimin için olduğu.
+            type: Kısa bir makine etiketi (bkz. `NotificationModel.type`).
+            title: İnsan tarafından okunabilir başlık.
+            body: Opsiyonel insan tarafından okunabilir ayrıntı.
+            resource_type: Bildirimin ne hakkında olduğu (örn. "draft_share").
+            resource_id: İlgili satırın id'si.
 
         Returns:
-            The persisted `NotificationModel`. The DB write always happens;
-            the Redis publish below is a pure side effect on top of it, so a
-            Redis outage never prevents the notification from existing --
-            see `RedisCache.publish`'s own docstring for why this ordering
-            (write first, then best-effort push) is deliberate.
+            Kalıcı hale getirilmiş `NotificationModel`. DB yazımı her
+            zaman gerçekleşir; aşağıdaki Redis yayını bunun üzerine saf
+            bir yan etkidir, bu yüzden bir Redis kesintisi bildirimin var
+            olmasını hiçbir zaman engellemez -- bu sıralamanın (önce yaz,
+            sonra best-effort push) neden bilinçli olduğu için
+            `RedisCache.publish`'in kendi docstring'ine bakın.
         """
         notification = await self.repository.create(
             NotificationModel(

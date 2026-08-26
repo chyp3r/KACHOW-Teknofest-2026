@@ -1,17 +1,19 @@
-"""`arq` job runner wiring -- Faz C3, Aşama 3 (#191).
+"""`arq` job çalıştırıcı bağlantısı -- Faz C3, Aşama 3 (#191).
 
-`WorkerSettings` is the process entrypoint (`arq app.workers.queue.
-WorkerSettings`, see `deploy/docker/worker.Dockerfile`'s `CMD`), run only
-inside the training worker container -- never started by `docker compose
-up` (see `compose.yml`'s `worker` service, `profiles: ["training"]`), only
-via `scripts/start_training_worker.sh`.
+`WorkerSettings`, süreç giriş noktasıdır (`arq app.workers.queue.
+WorkerSettings`, bkz. `deploy/docker/worker.Dockerfile`'ın `CMD`'si),
+yalnızca training worker container'ı içinde çalışır -- `docker compose up`
+ile asla başlatılmaz (bkz. `compose.yml`'ın `worker` servisi,
+`profiles: ["training"]`), yalnızca `scripts/start_training_worker.sh`
+üzerinden.
 
-`enqueue_lora_training_job` is the caller side, imported and used by the
-main backend process (`app.domains.training.service`) to hand a job to
-whichever worker process happens to be running -- `arq` itself doesn't
-care which process actually picks a job off the shared Redis queue, so the
-API process enqueueing and a separate container executing is the normal
-shape, not a special case.
+`enqueue_lora_training_job` çağıran taraftır; ana backend süreci
+(`app.domains.training.service`) tarafından, o anda çalışan hangi worker
+süreci olursa olsun ona bir iş devretmek için import edilir ve kullanılır
+-- `arq`'ın kendisi paylaşılan Redis kuyruğundan işi hangi sürecin
+gerçekten aldığını umursamaz, bu yüzden API sürecinin kuyruğa eklemesi ve
+ayrı bir container'ın çalıştırması normal bir durumdur, özel bir durum
+değil.
 """
 
 from typing import Optional
@@ -30,9 +32,10 @@ def _redis_settings() -> RedisSettings:
 
 
 async def get_arq_pool() -> ArqRedis:
-    """A process-wide, lazily-connected arq Redis pool -- mirrors
-    `app.infrastructure.cache.get_cache`'s own singleton-per-process
-    convention, same reasoning (one pool, not one connection per call)."""
+    """Süreç genelinde, tembel bağlanan bir arq Redis havuzu --
+    `app.infrastructure.cache.get_cache`'in kendi süreç-başına-tekil
+    kuralını yansıtır, aynı gerekçeyle (çağrı başına bir bağlantı değil,
+    tek bir havuz)."""
     global _pool
     if _pool is None:
         _pool = await create_pool(_redis_settings())
@@ -40,9 +43,10 @@ async def get_arq_pool() -> ArqRedis:
 
 
 async def enqueue_lora_training_job(company_id: str, run_id: str) -> str:
-    """Queue one LoRA training run. Returns arq's own job id (for logging
-    only -- the durable status lives on `training_runs.status`, polled via
-    `GET /companies/{id}/training-runs`, not this id)."""
+    """Bir LoRA training run'ını kuyruğa alır. arq'ın kendi job id'sini
+    döner (yalnızca loglama amaçlı -- kalıcı durum bu id'de değil,
+    `GET /companies/{id}/training-runs` üzerinden sorgulanan
+    `training_runs.status`'ta yaşar)."""
     pool = await get_arq_pool()
     job = await pool.enqueue_job("run_lora_training_job", company_id, run_id)
     return job.job_id if job is not None else run_id
@@ -51,8 +55,10 @@ async def enqueue_lora_training_job(company_id: str, run_id: str) -> str:
 class WorkerSettings:
     functions = [run_lora_training_job]
     redis_settings = _redis_settings()
-    #: One job at a time -- a single GPU host cannot usefully run two
-    #: fine-tunes concurrently, and serializing avoids fighting over VRAM.
+    #: Aynı anda tek bir iş -- tek bir GPU host, iki fine-tune işlemini eş
+    #: zamanlı olarak faydalı bir şekilde çalıştıramaz; sıralı çalıştırmak
+    #: VRAM için çekişmeyi önler.
     max_jobs = 1
-    #: Generous: a full LoRA run can genuinely take hours on real data.
+    #: Cömert bir süre: gerçek veri üzerinde tam bir LoRA run'ı gerçekten
+    #: saatler sürebilir.
     job_timeout = 6 * 60 * 60

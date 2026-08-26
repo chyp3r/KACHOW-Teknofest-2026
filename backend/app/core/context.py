@@ -1,11 +1,12 @@
-"""Request-scoped tenant context, propagated via a ``ContextVar``.
+"""Bir ``ContextVar`` aracılığıyla yayılan, istek kapsamlı kiracı bağlamı.
 
-Same rationale as ``app.api.middleware.correlation``'s ``request_id_var``: the
-value needs to reach ``app.infrastructure.database.session.get_db``, which
-has no ``Request`` object in scope, and a ``ContextVar`` propagates through
-the async call chain of the same task automatically -- threading it through
-every dependency signature between the middleware and ``get_db`` would touch
-a lot of code for no benefit over just reading it back out where it's needed.
+``app.api.middleware.correlation``'ın ``request_id_var``'ı ile aynı gerekçe:
+değerin, kapsamında hiçbir ``Request`` nesnesi olmayan
+``app.infrastructure.database.session.get_db``'ye ulaşması gerekir, ve bir
+``ContextVar`` aynı görevin asenkron çağrı zinciri boyunca otomatik olarak
+yayılır -- bunu middleware ile ``get_db`` arasındaki her dependency
+imzasından geçirmek, ihtiyaç duyulan yerde basitçe geri okumaya kıyasla
+hiçbir fayda sağlamadan çok fazla kodu etkiler.
 """
 
 from contextvars import ContextVar
@@ -15,16 +16,17 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class TenantContext:
-    """The tenant identity resolved from the current request's JWT, if any.
+    """Varsa, mevcut isteğin JWT'sinden çözümlenen kiracı kimliği.
 
     Attributes:
-        company_id: The caller's company, or ``None`` for a ``UserRole.ROOT``
-            subject (which has none -- see ``UserModel.company_id``'s
-            docstring) or when no valid token was present at all.
-        is_root: Whether the caller's JWT ``role`` claim is ``"root"`` --
-            drives the ``app.is_root`` Postgres GUC, which the RLS policies
-            added in migration ``0013_rls`` OR into their ``company_id``
-            comparison so a scoped-in root subject can cross companies.
+        company_id: Çağıranın şirketi, ya da bir ``UserRole.ROOT`` öznesi
+            için ``None`` (hiç şirketi yoktur -- bkz. ``UserModel.company_id``'nin
+            docstring'i) ya da geçerli bir token hiç yoksa.
+        is_root: Çağıranın JWT ``role`` iddiasının ``"root"`` olup olmadığı
+            -- ``0013_rls`` göçünde eklenen RLS politikalarının
+            ``company_id`` karşılaştırmalarına OR ile eklediği
+            ``app.is_root`` Postgres GUC'unu yönlendirir; böylece kapsam
+            belirlemiş bir root öznesi şirketler arasına geçebilir.
     """
 
     company_id: Optional[str]
@@ -35,13 +37,14 @@ current_tenant_var: ContextVar[Optional[TenantContext]] = ContextVar("current_te
 
 
 def get_current_tenant() -> Optional[TenantContext]:
-    """The current request's resolved tenant context, or ``None``.
+    """Mevcut isteğin çözümlenmiş kiracı bağlamı, ya da ``None``.
 
-    ``None`` covers both "no request in flight" and "a request with no
-    valid JWT" (an anonymous call, or one whose token failed to decode) --
-    callers that care about the difference don't exist today, since every
-    reader (``app.infrastructure.database.session.get_db``) treats both
-    identically: no company, no root bypass, RLS returns zero rows on every
-    tenant-scoped table until a real identity is established.
+    ``None`` hem "işlemde hiçbir istek yok" hem de "geçerli bir JWT'si
+    olmayan bir istek" (anonim bir çağrı, ya da token'ı çözümlenemeyen bir
+    istek) durumlarını kapsar -- bugün bu farkı önemseyen çağıranlar yok,
+    çünkü her okuyucu (``app.infrastructure.database.session.get_db``)
+    ikisine de aynı şekilde davranır: şirket yok, root atlaması yok, gerçek
+    bir kimlik kurulana kadar RLS her kiracı-kapsamlı tabloda sıfır satır
+    döner.
     """
     return current_tenant_var.get()

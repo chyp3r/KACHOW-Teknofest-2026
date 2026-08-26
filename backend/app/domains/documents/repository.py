@@ -7,27 +7,27 @@ from app.domains.documents.model.document_model import DocumentModel
 
 
 class DocumentRepository:
-    """The ownership + listing registry backing `documents` (see `DocumentModel`).
+    """`documents`'in arkasındaki sahiplik + listeleme kaydı (bkz. `DocumentModel`).
 
-    Every method takes an explicit `company_id` and filters on it -- the
-    mandatory tenant boundary (see the tenancy plan's Faz 1) -- on top of
-    whatever ownership filtering the caller also asks for. There is no
-    "company_id=None means every company" escape hatch anywhere here, unlike
-    the owner-scoping parameters: a missing company boundary is a bug, not a
-    supported mode.
+    Her metot açık bir `company_id` alır ve buna göre filtreler --
+    çağıranın istediği herhangi bir sahiplik filtrelemesinin üzerine
+    eklenen zorunlu kiracı sınırı (bkz. kiracılık planının Faz 1'i). Sahip
+    kapsamlama parametrelerinin aksine, burada hiçbir yerde "company_id=None
+    tüm şirketler demektir" kaçış kapısı yoktur: eksik bir şirket sınırı
+    bir hatadır, desteklenen bir mod değil.
     """
 
     def __init__(self, db: AsyncSession):
         self.db = db
 
     async def create(self, document: DocumentModel) -> DocumentModel:
-        """Register a newly analysed document."""
+        """Yeni analiz edilmiş bir belgeyi kaydet."""
         self.db.add(document)
         await self.db.flush()
         return document
 
     async def get_by_id(self, storage_path: str, company_id: str) -> Optional[DocumentModel]:
-        """Fetch a document's registry row by storage path, scoped to `company_id`."""
+        """`company_id` kapsamında, depolama yoluna göre bir belgenin kayıt satırını getir."""
         result = await self.db.execute(
             select(DocumentModel).where(
                 DocumentModel.id == storage_path, DocumentModel.company_id == company_id
@@ -42,12 +42,13 @@ class DocumentRepository:
         skip: int = 0,
         limit: int = 100,
     ) -> List[DocumentModel]:
-        """List documents visible to `owner_id` within `company_id`, newest first.
+        """`company_id` içinde `owner_id`'nin görebildiği belgeleri, en yeni önce listele.
 
-        `owner_id=None` lists every document in the company -- the
-        ADMIN/MANAGER/ROOT "company-wide" view (see
-        `app.core.permissions.role_checker.bypasses_ownership`), never a
-        cross-company one: `company_id` is always applied regardless.
+        `owner_id=None` şirketteki her belgeyi listeler -- ADMIN/MANAGER/ROOT
+        "şirket geneli" görünümü (bkz.
+        `app.core.permissions.role_checker.bypasses_ownership`), asla
+        şirketler arası bir görünüm değil: `company_id` her durumda her
+        zaman uygulanır.
         """
         query = select(DocumentModel).where(DocumentModel.company_id == company_id)
         if owner_id is not None:
@@ -57,7 +58,7 @@ class DocumentRepository:
         return list(result.scalars().all())
 
     async def count_for_owner(self, company_id: str, owner_id: Optional[str]) -> int:
-        """Total documents visible to `owner_id` within `company_id`, for pagination."""
+        """Sayfalama için, `company_id` içinde `owner_id`'nin görebildiği toplam belge sayısı."""
         query = select(func.count()).select_from(DocumentModel).where(
             DocumentModel.company_id == company_id
         )
@@ -67,12 +68,13 @@ class DocumentRepository:
         return result.scalar_one()
 
     async def delete(self, storage_path: str, company_id: str) -> None:
-        """Remove a document's registry row, scoped to `company_id`.
+        """`company_id` kapsamında, bir belgenin kayıt satırını kaldır.
 
-        Unlike drafts, documents are hard-deleted -- there is no version
-        chain or audit read path that depends on the row still existing,
-        and the raw file/analysis cache/vector chunks this leaves behind
-        are cleaned up by the caller (see `DocumentService.delete_document`).
+        Taslakların aksine, belgeler kalıcı olarak silinir (hard-delete) --
+        satırın hâlâ var olmasına bağlı bir versiyon zinciri veya audit okuma
+        yolu yoktur, ve bunun geride bıraktığı ham dosya/analiz
+        önbelleği/vektör parçaları çağıran tarafından temizlenir (bkz.
+        `DocumentService.delete_document`).
         """
         await self.db.execute(
             delete(DocumentModel).where(
@@ -82,12 +84,12 @@ class DocumentRepository:
         await self.db.flush()
 
     async def is_owned_by(self, storage_path: str, owner_id: str, company_id: str) -> bool:
-        """Whether `storage_path` is registered, in `company_id`, and belongs to `owner_id`.
+        """`storage_path`'in kayıtlı olup olmadığı, `company_id` içinde olup olmadığı ve `owner_id`'ye ait olup olmadığı.
 
-        The one call that actually closes the IDOR gap: every read of a
-        document's content -- through chat's `document_id` or the
-        `GET /documents/{storage_path}` endpoint -- must pass this before
-        the content is returned.
+        IDOR açığını gerçekten kapatan tek çağrı: bir belgenin içeriğinin
+        her okunması -- sohbetin `document_id`'si veya
+        `GET /documents/{storage_path}` endpoint'i üzerinden -- içerik
+        döndürülmeden önce bundan geçmelidir.
         """
         document = await self.get_by_id(storage_path, company_id)
         return document is not None and document.owner_id == owner_id

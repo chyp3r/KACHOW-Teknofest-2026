@@ -1,42 +1,45 @@
-"""Deterministic resolution of who is writing to whom, before a draft exists.
+"""Bir taslak var olmadan önce, kimin kime yazdığının deterministik çözümü.
 
-``app.ai.workflows.draft_graph._build_brief`` renders ``Muhatap``/``Gönderen
-Kurum`` from the incoming document's classification, but never states which
-direction those two names point relative to the *writer*. For a
-document-less request the classification carries neither at all. Either way
-the writer prompt has nothing telling it which proper noun in the user's
-own text is the sender and which is the addressee -- so it puts the only
-name it sees ("KACMAK ekibi olarak") in the one slot the prompt does
-describe, ``Muhatap``, producing a draft addressed *to* the requesting team
-instead of written *by* it.
+``app.ai.workflows.draft_graph._build_brief``, gelen belgenin
+sınıflandırmasından ``Muhatap``/``Gönderen Kurum``'u üretir, ancak bu iki
+adın *yazan* kişiye göre hangi yöne işaret ettiğini hiç belirtmez. Belgesiz
+bir istek için sınıflandırma ikisini de hiç taşımaz. Her iki durumda da
+writer prompt'unda, kullanıcının kendi metnindeki hangi özel adın gönderen,
+hangisinin muhatap olduğunu söyleyen hiçbir şey yoktur -- bu yüzden gördüğü
+tek adı ("KACMAK ekibi olarak") prompt'un tanımladığı tek slota, yani
+``Muhatap``'a koyar; bu da isteği yapan ekibe *gönderilen* değil, o ekip
+*tarafından yazılan* bir taslak üretilmesi gerekirken tam tersini üretir.
 
-This module is the fix: a small set of writing-style slots (who's writing,
-who it's going to, first-person-plural vs. institutional voice, closing
-formula) resolved deterministically from the user's message and the
-document's own classification, asked about only when unresolved, and never
-by a model -- see :func:`resolve_brief`'s docstring for why. Same two-piece
-shape as ``app.ai.workflows.correspondence``: a resolver
-(``resolve_brief``) and a prompt renderer (``format_writing_brief``).
+Bu modül bunun düzeltmesidir: küçük bir yazım stili slot kümesi (kim
+yazıyor, kime gidiyor, birinci çoğul mu yoksa kurumsal ses mi, kapanış
+formülü) kullanıcının mesajından ve belgenin kendi sınıflandırmasından
+deterministik olarak çözülür, yalnızca çözülemediğinde sorulur ve asla bir
+model tarafından değil -- nedeni için :func:`resolve_brief`'in kendi
+docstring'ine bakın. ``app.ai.workflows.correspondence`` ile aynı iki
+parçalı şekil: bir çözümleyici (``resolve_brief``) ve bir prompt
+oluşturucu (``format_writing_brief``).
 
-Every resolver call lands in one of three tiers, not two:
+Her çözümleyici çağrısı ikiye değil üç katmandan birine düşer:
 
-* **Confident** -- a strong, specific signal (an explicit "X ekibi olarak",
-  a document's own header field, or -- for ``muhatap`` -- a single named
-  addressee said in the same breath as an actual drafting verb, e.g.
-  "Ahmet Yılmaz'a bir izin yazısı hazırla"; see ``_resolve_muhatap``'s own
-  docstring). Never asked about at all.
-* **Suggested** -- a weaker signal (a bare capitalized phrase, an inferred
-  hierarchy guess, more than one named candidate) worth surfacing, but not
-  worth silently trusting. Still asked about, but the guess rides along as
-  the question's first option, labelled "(Önerilen)", and the question
-  itself is phrased as an explicit confirmation ("Önerilen muhatap: X. Bu
-  doğru mu?") -- a click confirms it instead of retyping it.
-* **Unknown** -- nothing to go on. Asked plainly, no option pre-favoured.
+* **Emin (Confident)** -- güçlü, spesifik bir sinyal (açık bir "X ekibi
+  olarak", belgenin kendi başlık alanı, ya da -- ``muhatap`` için -- gerçek
+  bir yazım fiiliyle aynı nefeste söylenmiş tek bir adlandırılmış muhatap,
+  örn. "Ahmet Yılmaz'a bir izin yazısı hazırla"; bkz. ``_resolve_muhatap``'ın
+  kendi docstring'i). Hiçbir zaman sorulmaz.
+* **Önerilen (Suggested)** -- daha zayıf bir sinyal (yalın büyük harfli bir
+  ifade, çıkarılmış bir hiyerarşi tahmini, birden fazla adlandırılmış aday)
+  göstermeye değer ama sessizce güvenilmeye değmez. Yine de sorulur, ama
+  tahmin sorunun ilk seçeneği olarak "(Önerilen)" etiketiyle birlikte gelir
+  ve sorunun kendisi açık bir onay olarak ifade edilir ("Önerilen muhatap:
+  X. Bu doğru mu?") -- bir tıklama yeniden yazmak yerine onaylar.
+* **Bilinmiyor (Unknown)** -- elde hiçbir şey yok. Düz sorulur, önceden
+  kayırılan bir seçenek yok.
 
-Only the confident tier ever suppresses a question; a suggestion never
-counts as "resolved" for :attr:`BriefResolution.resolved` (the "Bilinenler"
-strip), because it was never actually resolved from anything -- showing a
-guess there would misrepresent it as a known fact.
+Sadece emin katman bir soruyu tamamen bastırır; bir öneri hiçbir zaman
+:attr:`BriefResolution.resolved` ("Bilinenler" şeridi) için "çözülmüş"
+sayılmaz, çünkü aslında hiçbir şeyden çözülmemiştir, sadece tahmin
+edilmiştir -- orada bir tahmini göstermek onu bilinen bir gerçek gibi
+yanlış tanıtır.
 """
 
 import re
@@ -50,15 +53,16 @@ from app.ai.workflows.correspondence import (
 )
 from app.ai.workflows.intent_scorer import normalize
 
-#: The "Sen karar ver" sentinel. Never blank: an empty string reads as
-#: "unanswered" everywhere a residual-questions check runs, which would
-#: re-ask a slot the user explicitly said they don't care about.
+#: "Sen karar ver" sentinel değeri. Asla boş bırakılmaz: boş bir string,
+#: bir residual-questions kontrolünün çalıştığı her yerde "cevaplanmamış"
+#: olarak okunur; bu da kullanıcının açıkça "önemli değil" dediği bir slotu
+#: yeniden sormaya yol açar.
 AUTO_ANSWER = "__auto__"
 
-#: The brief-gate card never asks more than this many questions in one
-#: round, so it can never balloon into an eight-field form. Slots are
-#: ordered by ``BriefSlotSpec.priority`` before the cap is applied, so which
-#: four is deterministic rather than dict-ordering-dependent.
+#: Brief-gate kartı bir turda bundan fazla soru asla sormaz, böylece sekiz
+#: alanlık bir forma dönüşemez. Slotlar bu sınır uygulanmadan önce
+#: ``BriefSlotSpec.priority``'ye göre sıralanır, böylece hangi dördünün
+#: seçileceği dict sıralamasına bağlı değil deterministiktir.
 MAX_BRIEF_QUESTIONS = 4
 
 SlotSource = Literal[
@@ -81,16 +85,15 @@ class SlotResolution:
     value: str
     source: SlotSource
     label: str = ""
-    #: False marks a low-confidence guess: the slot is still asked about
-    #: (see the module docstring's three-tier split), with this value
-    #: offered as the question's suggested option rather than applied
-    #: outright.
+    #: False, düşük güvenli bir tahmini işaretler: slot yine de sorulur
+    #: (bkz. modül docstring'inin üç katmanlı ayrımı), bu değer doğrudan
+    #: uygulanmak yerine sorunun önerilen seçeneği olarak sunulur.
     confident: bool = True
 
 
 @dataclass(frozen=True)
 class BriefSlotSpec:
-    """One writing-style fact the brief either resolves or asks about."""
+    """Brief'in ya çözdüğü ya da hakkında soru sorduğu tek bir yazım stili gerçeği."""
 
     key: str
     header: str
@@ -99,24 +102,25 @@ class BriefSlotSpec:
     multi_select: bool = False
     allow_free_text: bool = True
     required: bool = True
-    #: Fixed ordering used both to pick a stable ``MAX_BRIEF_QUESTIONS`` subset
-    #: and to render the resolved brief in a predictable order.
+    #: Hem sabit bir ``MAX_BRIEF_QUESTIONS`` alt kümesi seçmek hem de
+    #: çözülen brief'i tahmin edilebilir bir sırada göstermek için kullanılan
+    #: sabit sıralama.
     priority: int = 0
 
     def to_prompt_question(self, suggestion: Optional[SlotResolution] = None) -> dict[str, Any]:
-        """Render this slot as a PromptQuestion, folding in a suggestion if any.
+        """Bu slotu, varsa bir öneriyi de içine katarak bir PromptQuestion olarak oluştur.
 
-        A suggestion whose value matches one of this slot's own catalog
-        options (e.g. ``kapanis``'s "arz_ederim") promotes that option to
-        the front and marks it recommended, rather than duplicating it. A
-        suggestion with no catalog match (a guessed name/institution --
-        always ``yazan_taraf``/``muhatap``, the only slots with no fixed
-        options at all) is prepended as its own synthetic option instead,
-        and the question itself is rewritten as an explicit yes/no
-        confirmation ("Önerilen muhatap: Ahmet Yılmaz. Bu doğru mu?")
-        rather than the slot's own generic phrasing ("Yazı kime
-        gönderilecek?") -- a click on the recommended option should read as
-        confirming a specific guess, not answering an open question blind.
+        Değeri bu slotun kendi katalog seçeneklerinden biriyle eşleşen bir
+        öneri (örn. ``kapanis``'in "arz_ederim"'i) o seçeneği tekrarlamak
+        yerine öne çıkarır ve önerilen olarak işaretler. Katalogda eşleşmesi
+        olmayan bir öneri (tahmin edilmiş bir ad/kurum -- her zaman
+        ``yazan_taraf``/``muhatap``, sabit seçenekleri hiç olmayan tek
+        slotlar) bunun yerine kendi sentetik seçeneği olarak başa eklenir ve
+        sorunun kendisi, slotun genel ifadesi ("Yazı kime gönderilecek?")
+        yerine açık bir evet/hayır onayı olarak yeniden yazılır ("Önerilen
+        muhatap: Ahmet Yılmaz. Bu doğru mu?") -- önerilen seçeneğe tıklamak,
+        açık bir soruyu körlemesine cevaplamak değil, belirli bir tahmini
+        onaylamak gibi okunmalıdır.
         """
         options = list(self.options)
         question_text = self.question
@@ -140,17 +144,17 @@ class BriefSlotSpec:
                     description="Sistemin önerisi",
                 )
                 options = [recommended, *options]
-                # Only for the no-catalog slots (see this method's own
-                # docstring) -- a catalog slot's question ("Kapanış ifadesi
-                # ne olsun?") already reads fine with a recommended option
-                # promoted to the front; it does not name a guessed value
-                # that needs confirming the way a bare name/institution does.
+                # Sadece katalogsuz slotlar için (bkz. bu metodun kendi
+                # docstring'i) -- katalog sahibi bir slotun sorusu ("Kapanış
+                # ifadesi ne olsun?") önerilen bir seçenek başa alındığında
+                # zaten gayet iyi okunur; yalın bir ad/kurumun gerektirdiği
+                # gibi onaylanması gereken tahmin edilmiş bir değer adlandırmaz.
                 question_text = (
                     f"Önerilen {self.header.lower()}: "
                     f"{suggestion.label or suggestion.value}. Bu doğru mu?"
                 )
-        # Always present, even for a slot with no catalog options
-        # (yazan_taraf/muhatap) -- every slot offers "Sen karar ver".
+        # Katalog seçeneği olmayan bir slot (yazan_taraf/muhatap) için bile
+        # her zaman mevcut -- her slot "Sen karar ver" sunar.
         options = [*options, _AUTO_OPTION]
 
         return {
@@ -169,12 +173,12 @@ class BriefSlotSpec:
         }
 
 
-#: The party context a call site that doesn't resolve one (a test, or a
-#: caller predating this module's party-awareness) gets by default --
-#: `is_known=False`/`relation="none"` on both sides, so every resolver's
-#: party-aware branch is a no-op and behaviour falls through to the
-#: purely textual heuristics exactly as it did before `PartyContext`
-#: existed.
+#: Bir taraf çözümlemeyen çağrı noktasının (bir test, veya bu modülün taraf
+#: farkındalığından önce yazılmış bir çağıran) varsayılan olarak aldığı taraf
+#: bağlamı -- her iki tarafta da `is_known=False`/`relation="none"`, böylece
+#: her çözümleyicinin taraf-farkında dalı bir no-op olur ve davranış,
+#: `PartyContext` var olmadan önce olduğu gibi tamamen metinsel sezgilere
+#: geri düşer.
 _UNKNOWN_PARTY = PartyContext(us=SelfParty(), them=CounterParty(), relation="none")
 
 
@@ -184,35 +188,38 @@ class BriefEvidence:
     normalized_text: str
     fields: dict[str, Any]
     prior_brief: dict[str, Any]
-    #: Who is writing this letter and who the incoming document (if any)
-    #: actually names -- see ``app.ai.identity.parties``. Defaults to an
-    #: unknown/neutral context (every resolver's party-aware branch
-    #: becomes a no-op) so a caller that never resolved one -- a test, or
-    #: any pre-party-model code path -- behaves exactly as it did before
-    #: this field existed.
+    #: Bu mektubu kimin yazdığı ve gelen belgenin (varsa) gerçekten kimi
+    #: adlandırdığı -- bkz. ``app.ai.identity.parties``. Bilinmeyen/nötr bir
+    #: bağlama varsayılan olur (her çözümleyicinin taraf-farkında dalı bir
+    #: no-op olur), böylece hiç çözümlemeyen bir çağıran -- bir test, veya
+    #: taraf-modeli öncesi herhangi bir kod yolu -- bu alan var olmadan önce
+    #: davrandığı gibi davranır.
     party: PartyContext = field(default_factory=lambda: _UNKNOWN_PARTY)
 
 
 @dataclass(frozen=True)
 class BriefResolution:
-    #: Confidently-resolved slots, keyed by slot key -- what the
-    #: "Bilinenler" strip shows. A suggestion never lands here (see the
-    #: module docstring): it was never resolved *from* anything, only
-    #: guessed, so surfacing it as a known fact would misrepresent it.
+    #: Slot anahtarına göre gruplanmış, emin bir şekilde çözülmüş slotlar --
+    #: "Bilinenler" şeridinin gösterdiği şey. Bir öneri asla buraya düşmez
+    #: (bkz. modül docstring'i): hiçbir şeyden çözülmemiştir, sadece tahmin
+    #: edilmiştir, bu yüzden burada göstermek onu bilinen bir gerçek gibi
+    #: yanlış tanıtır.
     resolved: dict[str, SlotResolution] = field(default_factory=dict)
-    #: PromptQuestion-shaped dicts for unresolved slots, priority-ordered and
-    #: capped at MAX_BRIEF_QUESTIONS. A slot with a low-confidence guess
-    #: still appears here, with the guess folded in as a suggested option.
+    #: Çözülmemiş slotlar için PromptQuestion şeklinde dict'ler; öncelik
+    #: sırasına göre ve MAX_BRIEF_QUESTIONS ile sınırlı. Düşük güvenli bir
+    #: tahmini olan bir slot yine de burada görünür, tahmin önerilen bir
+    #: seçenek olarak içine katılmış halde.
     questions: tuple[dict[str, Any], ...] = ()
 
 
 SLOT_CATALOG: tuple[BriefSlotSpec, ...] = (
-    #: Priority 0 (lowest number, asked first / never crowded out by the
-    #: MAX_BRIEF_QUESTIONS cap) -- getting the correspondence type wrong
-    #: shapes the entire draft, unlike a wrong anlatım/kapanış guess which a
-    #: revise turn can cheaply correct. See
-    #: app.ai.workflows.correspondence.resolve_correspondence_type: this
-    #: slot's resolved answer is what "explicit" precedence there refers to.
+    #: Öncelik 0 (en düşük sayı, önce sorulur / MAX_BRIEF_QUESTIONS
+    #: sınırı tarafından asla dışarı itilmez) -- yazışma türünü yanlış
+    #: bilmek tüm taslağı şekillendirir; bir revize turunun ucuza
+    #: düzeltebileceği yanlış bir anlatım/kapanış tahmininin aksine. Bkz.
+    #: app.ai.workflows.correspondence.resolve_correspondence_type: bu
+    #: slotun çözülen cevabı, oradaki "açık" öncelik ifadesinin atıfta
+    #: bulunduğu şeydir.
     BriefSlotSpec(
         key="yazisma_turu",
         header="Yazışma türü",
@@ -269,10 +276,10 @@ SLOT_CATALOG: tuple[BriefSlotSpec, ...] = (
     BriefSlotSpec(
         key="sayi",
         header="Sayı",
-        # Tarih is deliberately not part of this slot -- it is never asked
-        # about at all (see app.ai.workflows.dates.today_tr and
-        # draft_graph._build_brief's "0. BUGÜNÜN TARİHİ" section, which
-        # fills the writer's own "Tarih:" line automatically).
+        # Tarih bilerek bu slotun bir parçası değildir -- hakkında hiçbir
+        # zaman soru sorulmaz (bkz. app.ai.workflows.dates.today_tr ve
+        # draft_graph._build_brief'in writer'ın kendi "Tarih:" satırını
+        # otomatik dolduran "0. BUGÜNÜN TARİHİ" bölümü).
         question="Sayı alanı nasıl işlensin?",
         options=(
             AnswerOption("yer_tutucu", "Yer tutucu bırak", ""),
@@ -287,11 +294,11 @@ _SLOT_BY_KEY: dict[str, BriefSlotSpec] = {spec.key: spec for spec in SLOT_CATALO
 
 
 def _coerce_fields(classification: dict[str, Any]) -> dict[str, Any]:
-    """Return the extracted header fields as a plain dict.
+    """Çıkarılan başlık alanlarını düz bir dict olarak döndür.
 
-    Duplicated from ``draft_graph``/``revise_graph``/``revision.retrieval``
-    on purpose -- a shared four-line helper isn't worth a cross-module
-    dependency here.
+    Bilerek ``draft_graph``/``revise_graph``/``revision.retrieval``'dan
+    kopyalanmıştır -- paylaşılan dört satırlık bir yardımcı burada
+    modüller-arası bir bağımlılığa değmez.
     """
     fields = (classification or {}).get("fields", {})
     if hasattr(fields, "model_dump"):
@@ -299,25 +306,25 @@ def _coerce_fields(classification: dict[str, Any]) -> dict[str, Any]:
     return fields if isinstance(fields, dict) else {}
 
 
-#: Collective-noun suffixes that make "<name> <suffix> olarak" read as a
-#: self-declaration of who is writing, not a description of the addressee.
+#: "<isim> <ek> olarak" ifadesinin muhatabın bir tanımı değil, yazanın kendi
+#: beyanı olarak okunmasını sağlayan topluluk-ismi ekleri.
 _COLLECTIVE_SUFFIX = (
     r"(?:ekibi|ekip|tak[ıi]m[ıi]|tak[ıi]m|kul[uü]b[uü]|kulup|derne[gğ]i|dernek|"
     r"toplulu[gğ]u|topluluk|firmasi|firma|sirketi|sirket|b[oö]l[uü]m[uü]|"
     r"b[oö]l[uü]m|birimi|birim)"
 )
 
-#: A candidate name token: must start uppercase (Latin or Turkish), so a
-#: run of ordinary lowercase Turkish verbs/connectors before the collective
-#: noun ("...dilekçe yazmak istiyoruz KACMAK ekibi olarak") can never be
-#: swept into the captured name -- only the actual proper noun can, since
-#: Turkish sentence prose is lowercase apart from proper nouns and sentence
-#: starts. Bounded to at most 4 tokens so a genuinely multi-word name
-#: ("Hacettepe Bilişim Kulübü") still matches whole.
+#: Aday bir ad token'ı: büyük harfle başlamalı (Latin veya Türkçe), böylece
+#: topluluk isminden önceki sıradan küçük harfli Türkçe fiil/bağlaç dizisi
+#: ("...dilekçe yazmak istiyoruz KACMAK ekibi olarak") hiçbir zaman
+#: yakalanan ada karışamaz -- sadece gerçek özel isim yakalanabilir, çünkü
+#: Türkçe cümle metni özel isimler ve cümle başları dışında küçük harflidir.
+#: En fazla 4 token ile sınırlıdır, böylece gerçekten çok kelimeli bir ad
+#: ("Hacettepe Bilişim Kulübü") yine bütün olarak eşleşir.
 _NAME_TOKEN = r"[A-ZÇĞİÖŞÜ]\w*"
 
-#: Confident: a collective noun ("... ekibi olarak") or an explicit "adına"
-#: -- both name the sender unambiguously.
+#: Emin: bir topluluk ismi ("... ekibi olarak") veya açık bir "adına" --
+#: ikisi de göndereni belirsizlik olmadan adlandırır.
 _YAZAN_TARAF_STRONG_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(
         rf"((?:{_NAME_TOKEN}\s+){{0,3}}{_NAME_TOKEN}\s+(?i:{_COLLECTIVE_SUFFIX}))\s+(?i:olarak)\b"
@@ -325,18 +332,19 @@ _YAZAN_TARAF_STRONG_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(rf"((?:{_NAME_TOKEN}\s+){{0,3}}{_NAME_TOKEN})\s+(?i:ad[ıi]na)\b"),
 )
 
-#: Suggested only: any capitalized phrase directly followed by "olarak",
-#: without the collective-noun requirement above -- catches a personal
-#: name ("Ahmet Yılmaz olarak") the strong pattern doesn't, but is loose
-#: enough (any sentence-initial capital + "olarak") to be worth a guess
-#: rather than a silent resolution.
+#: Sadece önerilen: doğrudan "olarak" ile takip edilen, yukarıdaki topluluk
+#: ismi şartı olmadan herhangi bir büyük harfli ifade -- güçlü desenin
+#: yakalamadığı kişisel bir adı ("Ahmet Yılmaz olarak") yakalar, ama
+#: kesinlikle yanlış tahmin etmek yerine bir tahmine değecek kadar gevşektir
+#: (herhangi bir cümle-başı büyük harf + "olarak").
 _YAZAN_TARAF_WEAK_PATTERN = re.compile(
     rf"((?:{_NAME_TOKEN}\s+){{0,3}}{_NAME_TOKEN})\s+(?i:olarak)\b"
 )
 
-#: Curated institution vocabulary for confidently guessing an addressee.
-#: Conservative on purpose -- see the module docstring: no hit falls
-#: through to the weak pattern below rather than guessing wrong outright.
+#: Bir muhatabı emin bir şekilde tahmin etmek için derlenmiş kurum
+#: kelime dağarcığı. Bilerek muhafazakâr -- bkz. modül docstring'i:
+#: hiçbir eşleşme aşağıdaki zayıf desene düşmez, kesinlikle yanlış tahmin
+#: etmek yerine.
 _INSTITUTION_VOCABULARY: dict[str, str] = {
     "rektorluk": "Rektörlük",
     "dekanlik": "Dekanlık",
@@ -352,79 +360,79 @@ _INSTITUTION_VOCABULARY: dict[str, str] = {
     "tubitak": "TÜBİTAK",
 }
 
-#: A capitalized proper noun in the Turkish dative case, apostrophe-marked
-#: ("TEKNOFEST'e", "KACMAK'a", "Ahmet Yılmaz'a") -- the orthographic
-#: convention for a proper noun taking a case suffix, and a reasonable
-#: signal that this is who the letter is addressed to.
+#: Türkçe -e hali (dative) ekiyle, kesme işaretiyle işaretlenmiş büyük
+#: harfli bir özel isim ("TEKNOFEST'e", "KACMAK'a", "Ahmet Yılmaz'a") --
+#: bir hal eki alan özel isim için yazım kuralı, ve mektubun kime hitap
+#: ettiğine dair makul bir sinyal.
 _MUHATAP_DATIVE_APOSTROPHE_PATTERN = re.compile(
     rf"((?:{_NAME_TOKEN}\s+){{0,2}}{_NAME_TOKEN})'(?:e|a|ye|ya|ne|na)\b"
 )
 
-#: Same case, without the apostrophe -- a name/institution written the way
-#: most people actually type it ("Ahmet Yılmaza", "İnsan Kaynakları
-#: Müdürlüğüne"), not the orthographically "correct" apostrophe-marked
-#: form. Longest suffix first so "-ne"/"-ya" aren't shadowed by their own
-#: trailing "-e"/"-a".
+#: Aynı hal, kesme işareti olmadan -- çoğu insanın gerçekte yazdığı şekilde
+#: bir ad/kurum ("Ahmet Yılmaza", "İnsan Kaynakları Müdürlüğüne"), yazım
+#: kurallarına göre "doğru" kesme işaretli biçim değil. En uzun ek önce
+#: gelir, böylece "-ne"/"-ya" kendi sondaki "-e"/"-a"'sı tarafından
+#: gölgelenmez.
 #:
-#: Deliberately stops at the two-letter buffer+case forms ("ne"/"na"/"ye"/
-#: "ya") rather than also matching the three-letter "üne"/"ına"/"ine"/"una"
-#: forms a buffer-consonant analysis would suggest: a Turkish institution
-#: name overwhelmingly already ends in its own possessive vowel before the
-#: dative attaches ("Müdürlüğü" + "ne" -> "Müdürlüğüne", "Fakültesi" + "ne"
-#: -> "Fakültesine") -- stripping the matching two-letter suffix recovers
-#: the exact base in that (dominant, in this domain) case. Stripping a
-#: three-letter suffix instead would eat into that base vowel too
-#: ("Müdürlüğüne" -> "Müdürlüğ", not a word). The trade-off is a stem that
-#: itself ends in a bare consonant before an inserted buffer vowel (e.g.
-#: "ev" + "ine" -> "evine") comes back one letter too long ("evi", not
-#: "ev") -- an acceptable miss for a suggestion-tier heuristic, and not the
-#: shape a person/institution name in this domain takes.
+#: Bilerek bir tampon-ünsüz analizinin önereceği üç harfli "üne"/"ına"/
+#: "ine"/"una" biçimlerini de eşleştirmek yerine iki harfli tampon+hal
+#: biçimlerinde ("ne"/"na"/"ye"/"ya") durur: bir Türkçe kurum adı, -e hali
+#: eklenmeden önce ezici çoğunlukla zaten kendi iyelik ünlüsüyle biter
+#: ("Müdürlüğü" + "ne" -> "Müdürlüğüne", "Fakültesi" + "ne" ->
+#: "Fakültesine") -- eşleşen iki harfli eki çıkarmak bu (bu alanda baskın)
+#: durumda tam kökü geri kazandırır. Bunun yerine üç harfli bir eki
+#: çıkarmak, o kök ünlüsünü de yiyip bitirirdi ("Müdürlüğüne" ->
+#: "Müdürlüğ", bir kelime değil). Ödünleşim şu: eklenen bir tampon ünlüden
+#: önce yalın bir ünsüzle biten bir kök (örn. "ev" + "ine" -> "evine") bir
+#: harf fazla uzun geri döner ("evi", "ev" değil) -- öneri katmanı bir
+#: sezgi için kabul edilebilir bir kaçırma, ve bu alanda bir kişi/kurum
+#: adının aldığı şekil değil.
 _DATIVE_SUFFIXES: tuple[str, ...] = ("ya", "ye", "na", "ne", "a", "e")
 _MUHATAP_DATIVE_BARE_PATTERN = re.compile(
     rf"((?:{_NAME_TOKEN}\s+){{0,2}}{_NAME_TOKEN}(?:{'|'.join(_DATIVE_SUFFIXES)}))\b"
 )
 
-#: "Sayın X" -- an explicit salutation naming the addressee outright, the
-#: same convention a real official letter's own muhatap line uses.
+#: "Sayın X" -- muhatabı açıkça adlandıran bir hitap, gerçek bir resmi
+#: mektubun kendi muhatap satırının kullandığı aynı kural.
 _MUHATAP_SAYIN_PATTERN = re.compile(
     rf"\bSay[ıi]n\s+((?:{_NAME_TOKEN}\s+){{0,3}}{_NAME_TOKEN})"
 )
 
-#: "X Bey'e" / "X Hanım'a" -- name plus Turkish honorific plus dative.
-#: Captures the honorific too (kept in the display value on purpose, e.g.
-#: "Ahmet Bey" -- dropping it would silently downgrade a respectful
-#: address the user chose deliberately).
+#: "X Bey'e" / "X Hanım'a" -- ad artı Türkçe unvan artı -e hali. Unvanı da
+#: yakalar (görüntülenen değerde bilerek tutulur, örn. "Ahmet Bey" --
+#: bunu bırakmak, kullanıcının bilerek seçtiği saygılı bir hitabı sessizce
+#: düşürür).
 _MUHATAP_HONORIFIC_PATTERN = re.compile(
     rf"((?:{_NAME_TOKEN}\s+){{0,2}}{_NAME_TOKEN}\s+(?:Bey|Hanım))'(?:e|ne)\b"
 )
 
-#: "X için" -- "(a letter/petition) for X" -- a common way to name who a
-#: piece of correspondence concerns without any case marking at all.
+#: "X için" -- bir yazışmanın kimi ilgilendirdiğini hiçbir hal eki olmadan
+#: adlandırmanın yaygın bir yolu.
 _MUHATAP_ICIN_PATTERN = re.compile(
     rf"((?:{_NAME_TOKEN}\s+){{0,3}}{_NAME_TOKEN})\s+i[cç]in\b"
 )
 
-#: Strips a leading "Sayın " from a candidate value -- "Sayın" itself is a
-#: capitalized token and satisfies `_NAME_TOKEN`, so a pattern with no
-#: reason to exclude it (`_MUHATAP_ICIN_PATTERN` in particular: "Sayın
-#: Ahmet Yılmaz için" reads as one long name-token run ending in "için")
-#: would otherwise capture "Sayın Ahmet Yılmaz" as a *different* candidate
-#: string than `_MUHATAP_SAYIN_PATTERN`'s own "Ahmet Yılmaz" -- two
-#: distinct-looking candidates for what is obviously the same person,
-#: which would wrongly downgrade a single-name mention to "ambiguous".
+#: Bir aday değerin başındaki "Sayın "ı temizler -- "Sayın" kendisi büyük
+#: harfli bir token'dır ve `_NAME_TOKEN`'ı sağlar, bu yüzden onu hariç
+#: tutmak için hiçbir nedeni olmayan bir desen (özellikle
+#: `_MUHATAP_ICIN_PATTERN`: "Sayın Ahmet Yılmaz için" "için" ile biten tek
+#: uzun bir ad-token dizisi olarak okunur) aksi halde "Sayın Ahmet
+#: Yılmaz"ı `_MUHATAP_SAYIN_PATTERN`'ın kendi "Ahmet Yılmaz"ından *farklı*
+#: bir aday string olarak yakalardı -- açıkça aynı kişi için iki farklı
+#: görünen aday, bu da tek adlı bir sözü yanlışlıkla "belirsiz"e düşürürdü.
 _LEADING_SAYIN_PATTERN = re.compile(r"^Say[ıi]n\s+", re.IGNORECASE)
 
-#: A drafting-request verb stem -- corroborates a single muhatap candidate
-#: as confident (see `_resolve_muhatap`): "Ahmet Yılmaz'a bir izin yazısı
-#: hazırla" names its addressee unambiguously enough that asking "kime
-#: gönderilecek?" back would be redundant, the same way an explicit
-#: "X ekibi olarak" already skips asking about yazan_taraf.
+#: Bir taslak-isteği fiil kökü -- tek bir muhatap adayını emin olarak
+#: doğrular (bkz. `_resolve_muhatap`): "Ahmet Yılmaz'a bir izin yazısı
+#: hazırla" muhatabını "kime gönderilecek?" diye geri sormanın gereksiz
+#: olacağı kadar belirsizlik olmadan adlandırır, tıpkı açık bir "X ekibi
+#: olarak"ın yazan_taraf hakkında sormayı zaten atlaması gibi.
 _WRITING_VERB_PATTERN = re.compile(r"\b(yaz|hazirla|olustur)\w*\b")
 
-#: Institution keywords that usually sit above the sender in the
-#: correspondence hierarchy -- back a weak "Arz ederim" guess for
-#: `kapanis` when the resolved/suggested `muhatap` names one of these and
-#: neither "arz" nor "rica" was said explicitly.
+#: Yazışma hiyerarşisinde genellikle göndericinin üstünde olan kurum
+#: anahtar kelimeleri -- çözülen/önerilen `muhatap` bunlardan birini
+#: adlandırdığında ve ne "arz" ne de "rica" açıkça söylenmediğinde
+#: `kapanis` için zayıf bir "Arz ederim" tahminini destekler.
 _AUTHORITY_KEYWORDS = (
     "rektorluk", "dekanlik", "valilik", "kaymakamlik", "bakanlik",
     "baskanlik", "genel mudurluk",
@@ -454,28 +462,28 @@ def _resolve_yazan_taraf(
             if value:
                 return SlotResolution(value=value, source="user_text", label=value)
 
-    # A configured company identity is the most reliable signal for who is
-    # writing this letter that exists anywhere in the pipeline -- more
-    # reliable than a guess derived from the *incoming* document's own
-    # header, which is what this fell back to before PartyContext existed
-    # (see app.ai.identity.parties's module docstring for the concrete bug
-    # that produced: a document's own muhatap treated as our sender
-    # unconditionally, with no check that the document was ever actually
-    # addressed to us). Ranked above the document-reply fallback below on
-    # purpose: an admin-entered identity should win over an inference from
-    # document text even when that inference happens to be available too.
+    # Yapılandırılmış bir şirket kimliği, bu mektubu kimin yazdığına dair
+    # pipeline'da var olan en güvenilir sinyaldir -- *gelen* belgenin kendi
+    # başlığından çıkarılan bir tahminden daha güvenilir; PartyContext var
+    # olmadan önce bu buna geri düşüyordu (üretilen somut hata için bkz.
+    # app.ai.identity.parties'in modül docstring'i: bir belgenin kendi
+    # muhatabı, belgenin gerçekten bize hitap edip etmediği kontrol
+    # edilmeden koşulsuzca bizim göndericimiz olarak ele alınıyordu).
+    # Aşağıdaki document-reply yedeğinin üstüne bilerek yerleştirilmiştir:
+    # o çıkarım da mevcut olsa bile, yönetici tarafından girilmiş bir
+    # kimlik belge metninden bir çıkarıma kazanmalıdır.
     us = evidence.party.us
     if us.is_known:
         value = us.display_name or us.short_name
         if value:
             return SlotResolution(value=value, source="company_profile", label=value)
 
-    # Only reverse the incoming document's own addressee into our sender
-    # slot when the document was actually confirmed addressed to us (see
-    # resolve_party_context) -- never unconditionally. A document whose
-    # muhatap doesn't match our own configured identity (a CV, a
-    # third-party report, or one we simply cannot verify) must never
-    # donate its addressee to our own antet/imza.
+    # Gelen belgenin kendi muhatabını bizim gönderici slotumuza yalnızca
+    # belge gerçekten bize hitap ediyor olarak doğrulandığında ters çevir
+    # (bkz. resolve_party_context) -- asla koşulsuzca değil. Muhatabı bizim
+    # yapılandırılmış kimliğimizle eşleşmeyen bir belge (bir özgeçmiş,
+    # üçüncü taraf bir rapor, veya sadece doğrulayamadığımız biri) muhatabını
+    # asla bizim kendi antet/imzamıza bağışlamamalıdır.
     if evidence.party.relation == "reply_to_us":
         document_muhatap = evidence.fields.get("muhatap")
         if document_muhatap:
@@ -491,22 +499,22 @@ def _resolve_yazan_taraf(
 
 
 def _strip_dative_suffix(phrase: str) -> str:
-    """Drop a recognised dative suffix from a matched phrase's last token.
+    """Eşleşen bir ifadenin son token'ından tanınan bir -e hali ekini çıkar.
 
-    Only ``_MUHATAP_DATIVE_BARE_PATTERN`` needs this -- every other muhatap
-    pattern captures the name without its case ending to begin with (the
-    apostrophe/honorific patterns exclude it from the capture group by
-    construction, and "Sayın X"/"X için" carry no case suffix at all).
+    Sadece ``_MUHATAP_DATIVE_BARE_PATTERN`` buna ihtiyaç duyar -- diğer her
+    muhatap deseni adı zaten hal eki olmadan yakalar (kesme
+    işareti/unvan desenleri onu yapı gereği yakalama grubundan hariç
+    tutar, ve "Sayın X"/"X için" hiç hal eki taşımaz).
 
     Args:
-        phrase: The full matched phrase, e.g. "Ahmet Yılmaza" or
+        phrase: Eşleşen tam ifade, örn. "Ahmet Yılmaza" veya
             "İnsan Kaynakları Müdürlüğüne".
 
     Returns:
-        The phrase with its last token's suffix removed, e.g.
-        "Ahmet Yılmaz" / "İnsan Kaynakları Müdürlüğü". Falls back to the
-        input unchanged if no listed suffix actually matches (defensive;
-        the pattern that produced ``phrase`` already guarantees one does).
+        Son token'ının eki çıkarılmış ifade, örn. "Ahmet Yılmaz" /
+        "İnsan Kaynakları Müdürlüğü". Listelenen hiçbir ek gerçekten
+        eşleşmiyorsa girdiyi değişmeden geri döndürür (savunmacı; ``phrase``'i
+        üreten desen zaten birinin eşleştiğini garanti eder).
     """
     words = phrase.rsplit(" ", 1)
     last = words[-1]
@@ -518,20 +526,20 @@ def _strip_dative_suffix(phrase: str) -> str:
 
 
 def _muhatap_candidates(evidence: BriefEvidence) -> list[str]:
-    """Every plausible addressee phrase the user's own text names.
+    """Kullanıcının kendi metninin adlandırdığı her olası muhatap ifadesi.
 
-    Order matters only for which candidate is offered as the suggestion
-    when there is more than one (the first found); the *count* is what
-    decides confidence in ``_resolve_muhatap`` -- a single candidate
-    corroborated by a drafting verb is confident, anything else (zero
-    candidates aside) is a suggestion to confirm.
+    Sıra yalnızca birden fazla aday olduğunda hangisinin öneri olarak
+    sunulacağı için önemlidir (ilk bulunan); *sayı* ise ``_resolve_muhatap``'ta
+    güveni belirleyen şeydir -- bir taslak fiiliyle doğrulanan tek bir aday
+    emindir, geri kalan her şey (sıfır aday hariç) onaylanması gereken bir
+    öneridir.
 
     Args:
-        evidence: This turn's resolved input.
+        evidence: Bu turun çözülmüş girdisi.
 
     Returns:
-        Distinct candidate phrases (deduplicated by folded form), in the
-        order their patterns were tried.
+        Farklı aday ifadeler (katlanmış biçime göre tekilleştirilmiş),
+        desenlerin denendiği sırayla.
     """
     candidates: list[str] = []
     seen: set[str] = set()
@@ -554,19 +562,19 @@ def _muhatap_candidates(evidence: BriefEvidence) -> list[str]:
         _add(match.group(1))
     for match in _MUHATAP_DATIVE_BARE_PATTERN.finditer(evidence.raw_text):
         phrase = match.group(1)
-        # A *single* capitalized word at the very start of the message is
-        # not a reliable name signal -- with no apostrophe, honorific or
-        # "Sayın" to disambiguate it, an ordinary sentence-opener that
-        # happens to end in a dative-shaped suffix ("Yarışmaya katılmak
-        # için...") reads exactly like a genuine bare-dative name
-        # otherwise (see `test_a_dative_marked_proper_noun_suggests_the_
-        # addressee`'s own note on this same sharp edge for the
-        # apostrophe form). A *multi*-word capitalized run in the same
-        # position ("Ahmet Yılmaza bir izin yazısı hazırla", "İnsan
-        # Kaynakları Müdürlüğüne...") doesn't share that risk -- two or
-        # three ordinary words capitalized back to back for no reason is
-        # not something Turkish sentences do, position or not -- so only
-        # the single-token case is excluded here.
+        # Mesajın en başındaki *tek* büyük harfli bir kelime güvenilir bir
+        # ad sinyali değildir -- onu belirsizlikten kurtaracak bir kesme
+        # işareti, unvan veya "Sayın" olmadan, tesadüfen -e hali biçimli bir
+        # ekle biten sıradan bir cümle açılışı ("Yarışmaya katılmak
+        # için...") aksi halde gerçek bir yalın -e hali adı gibi okunur
+        # (bkz. `test_a_dative_marked_proper_noun_suggests_the_addressee`'in
+        # kesme işaretli biçim için aynı keskin kenar üzerine kendi notu).
+        # Aynı konumdaki *çok* kelimeli büyük harfli bir dizi ("Ahmet
+        # Yılmaza bir izin yazısı hazırla", "İnsan Kaynakları
+        # Müdürlüğüne...") bu riski taşımaz -- iki veya üç sıradan
+        # kelimenin sebepsiz yere art arda büyük harfli olması, konumdan
+        # bağımsız olarak, Türkçe cümlelerin yapmadığı bir şeydir -- bu
+        # yüzden burada sadece tek-token durumu hariç tutulur.
         is_sentence_initial = not evidence.raw_text[: match.start()].strip()
         if is_sentence_initial and len(phrase.split()) == 1:
             continue
@@ -581,10 +589,10 @@ def _resolve_muhatap(
     evidence: BriefEvidence, known: dict[str, SlotResolution]
 ) -> Optional[SlotResolution]:
     del known
-    # Same guard as _resolve_yazan_taraf's own document-reply branch: only
-    # reverse the document's own sender into our addressee slot when the
-    # document is confirmed addressed to us. Otherwise this institution
-    # belongs to the counterparty and must never become who WE write to.
+    # _resolve_yazan_taraf'ın kendi document-reply dalıyla aynı koruma:
+    # belgenin kendi göndericisini bizim muhatap slotumuza sadece belge
+    # bize hitap ediyor olarak doğrulandığında ters çevir. Aksi halde bu
+    # kurum karşı tarafa aittir ve asla BİZİM kime yazdığımız olmamalıdır.
     if evidence.party.relation == "reply_to_us":
         document_sender = evidence.fields.get("gonderen_kurum")
         if document_sender:
@@ -592,9 +600,10 @@ def _resolve_muhatap(
             return SlotResolution(value=value, source="document_reply", label=value)
     for surface, label in _INSTITUTION_VOCABULARY.items():
         if re.search(rf"\b{re.escape(surface)}\w*\b", evidence.normalized_text):
-            # Our own unit ("İnsan Kaynakları Müdürlüğü" as one of *our*
-            # departments) mentioned in the user's own message describes
-            # who is writing, never who the letter is addressed to.
+            # Kullanıcının kendi mesajında geçen bizim kendi birimimiz
+            # ("İnsan Kaynakları Müdürlüğü" *bizim* departmanlarımızdan
+            # biri olarak), kimin yazdığını tanımlar, mektubun kime hitap
+            # ettiğini asla tanımlamaz.
             if evidence.party.belongs_to_us(label):
                 continue
             return SlotResolution(value=label, source="user_text", label=label)
@@ -607,12 +616,12 @@ def _resolve_muhatap(
         return None
 
     value = candidates[0]
-    # A single named candidate, said in the same breath as an actual
-    # drafting request ("Ahmet Yılmaz'a bir izin yazısı hazırla"), is
-    # unambiguous enough to skip the question entirely -- see
-    # _WRITING_VERB_PATTERN's own docstring. More than one candidate (the
-    # message names two people/institutions) or no drafting verb at all
-    # (a passing mention, not clearly a request) stays a suggestion.
+    # Gerçek bir taslak isteğiyle aynı nefeste söylenmiş tek bir
+    # adlandırılmış aday ("Ahmet Yılmaz'a bir izin yazısı hazırla"), soruyu
+    # tamamen atlamaya yetecek kadar belirsizlik içermez -- bkz.
+    # _WRITING_VERB_PATTERN'ın kendi docstring'i. Birden fazla aday (mesaj
+    # iki kişi/kurum adlandırıyor) veya hiç taslak fiili olmaması (geçici
+    # bir söz, açıkça bir istek değil) bir öneri olarak kalır.
     if len(candidates) == 1 and _WRITING_VERB_PATTERN.search(evidence.normalized_text):
         return SlotResolution(value=value, source="user_text", label=value)
     return SlotResolution(value=value, source="user_text", label=value, confident=False)
@@ -625,17 +634,17 @@ def _resolve_anlatim(
         return SlotResolution(value="birinci_cogul", source="user_text", label="Biz dili")
     yazan_taraf = known.get("yazan_taraf")
     if yazan_taraf is not None and yazan_taraf.source == "company_profile":
-        # The company itself is resolved as the sender (see
-        # _resolve_yazan_taraf) -- the same first-person-plural voice an
-        # explicit "... ekibi olarak" gets, since a company writing on its
-        # own behalf is exactly that same case, just resolved from its
-        # configured identity instead of the message's own wording.
+        # Şirketin kendisi gönderici olarak çözülmüştür (bkz.
+        # _resolve_yazan_taraf) -- açık bir "... ekibi olarak"ın aldığı
+        # aynı birinci çoğul ses, çünkü kendi adına yazan bir şirket tam
+        # olarak aynı durumdur, sadece mesajın kendi ifadesi yerine
+        # yapılandırılmış kimliğinden çözülmüştür.
         return SlotResolution(value="birinci_cogul", source="company_profile", label="Biz dili")
     if "dilekce" in evidence.normalized_text and not evidence.fields.get("gonderen_kurum"):
         return SlotResolution(value="birinci_tekil", source="user_text", label="Ben dili")
-    # Institutional third-person voice only follows from the document's own
-    # sender when the document is confirmed addressed to us -- a
-    # third-party document's presence says nothing about our own register.
+    # Kurumsal üçüncü tekil şahıs sesi, sadece belge bize hitap ediyor
+    # olarak doğrulandığında belgenin kendi göndericisinden çıkar -- üçüncü
+    # taraf bir belgenin varlığı kendi üslubumuz hakkında hiçbir şey söylemez.
     if evidence.party.relation == "reply_to_us" and evidence.fields.get("gonderen_kurum"):
         return SlotResolution(value="kurumsal", source="document_reply", label="Kurumsal dil")
     return None
@@ -655,9 +664,10 @@ def _resolve_kapanis(
     if has_rica:
         return SlotResolution(value="rica_ederim", source="user_text", label="Rica ederim")
 
-    # No explicit closing word -- fall back to a weak hierarchy guess from
-    # whatever muhatap already resolved or was suggested this same pass
-    # (kapanis's priority puts it after muhatap, see SLOT_CATALOG).
+    # Açık bir kapanış kelimesi yok -- muhatabın bu aynı geçişte zaten
+    # çözdüğü veya önerdiği her neyse ondan zayıf bir hiyerarşi tahminine
+    # geri düş (kapanis'in önceliği onu muhataptan sonraya koyar, bkz.
+    # SLOT_CATALOG).
     muhatap = known.get("muhatap")
     if muhatap and any(
         keyword in normalize(muhatap.value) for keyword in _AUTHORITY_KEYWORDS
@@ -666,13 +676,13 @@ def _resolve_kapanis(
     return None
 
 
-#: One resolver per slot, tried only when the prior-brief carry-forward
-#: (checked first, uniformly, in ``resolve_brief``) didn't already answer
-#: it. Absent from this map -- imza/sayi -- means "never inferred,
-#: only ever answered by the user or left to Sen karar ver". Each resolver
-#: also receives `known`, the slots already settled earlier this same pass
-#: (in `SLOT_CATALOG` priority order) -- `kapanis` reads `known["muhatap"]`
-#: for its hierarchy guess.
+#: Slot başına bir çözümleyici, yalnızca prior-brief devri (``resolve_brief``
+#: içinde önce, tek tip olarak kontrol edilir) onu zaten cevaplamamışsa
+#: denenir. Bu haritada bulunmaması -- imza/sayi -- "asla çıkarılmaz,
+#: yalnızca kullanıcı tarafından cevaplanır ya da Sen karar ver'e bırakılır"
+#: anlamına gelir. Her çözümleyici ayrıca `known`'ı da alır; bu aynı geçişte
+#: daha önce çözülmüş slotlardır (`SLOT_CATALOG` öncelik sırasında) --
+#: `kapanis` hiyerarşi tahmini için `known["muhatap"]`'ı okur.
 _SLOT_RESOLVERS: dict[
     str, Callable[[BriefEvidence, dict[str, SlotResolution]], Optional[SlotResolution]]
 ] = {
@@ -690,45 +700,45 @@ def resolve_brief(
     prior_brief: Optional[dict[str, Any]] = None,
     party: Optional[PartyContext] = None,
 ) -> BriefResolution:
-    """Resolve every writing-style slot, asking only about what's unknown.
+    """Her yazım stili slotunu çöz, yalnızca bilinmeyen hakkında sor.
 
-    Deterministic and LLM-free on purpose: the brief gate is a real
-    ``interrupt()`` (see ``app.ai.workflows.planning_graph.brief_gate_node``),
-    which replays its own node on resume, and the question set's hash is
-    what the frontend dedups the interrupt on -- an unpinned model call in
-    this path would make that hash (and the questions themselves)
-    non-reproducible across the initial ask and the resume. It also sits
-    directly in front of the ~30s draft generation; a second model hop here
-    is a visible latency regression for a job a handful of regexes and a
-    curated vocabulary already do -- "X ekibi olarak" is a surface pattern,
-    not a semantics problem.
+    Bilerek deterministik ve LLM'siz: brief gate gerçek bir
+    ``interrupt()``'tır (bkz. ``app.ai.workflows.planning_graph.brief_gate_node``),
+    devam edildiğinde kendi düğümünü tekrar oynatır ve soru kümesinin hash'i
+    frontend'in interrupt'ı üzerinde tekilleştirme yaptığı şeydir -- bu
+    yolda pin'lenmemiş bir model çağrısı, o hash'i (ve soruların kendisini)
+    ilk soru ile devam etme arasında tekrarlanamaz kılardı. Ayrıca ~30
+    saniyelik taslak üretiminin doğrudan önünde durur; burada ikinci bir
+    model sıçraması, bir avuç regex ve derlenmiş bir kelime dağarcığının
+    zaten yaptığı bir iş için görünür bir gecikme gerilemesidir -- "X ekibi
+    olarak" bir yüzey deseni sorunu, bir semantik sorunu değil.
 
     Args:
-        input_text: The user's message this turn.
-        classification: The document-analysis result, if a document is
-            attached. Its ``fields.muhatap``/``fields.gonderen_kurum``
-            back the role-inversion rule for a reply-to-a-document turn --
-            but only when ``party.relation == "reply_to_us"`` confirms the
-            document was actually addressed to us (see
-            ``app.ai.identity.parties.resolve_party_context``); a document
-            we cannot verify was addressed to us (a CV, a third-party
-            report, or simply no self-identity configured to check
-            against) never triggers the reversal.
-        prior_brief: ``SessionFocus.writing_brief`` from an earlier turn in
-            the same session, if any. Every slot it carries is treated as
-            already answered, which is what makes turn 2+ of a session
-            silent.
-        party: This turn's resolved party context (see
-            ``app.ai.identity.parties.resolve_party_context``). Defaults to
-            an unknown/neutral context -- every party-aware branch below
-            becomes a no-op, and resolution falls back to the purely
-            textual heuristics that predate this parameter.
+        input_text: Kullanıcının bu turdaki mesajı.
+        classification: Bir belge eklenmişse belge-analizi sonucu. Onun
+            ``fields.muhatap``/``fields.gonderen_kurum``'u, bir belgeye
+            yanıt turu için rol-tersine çevirme kuralını destekler -- ama
+            yalnızca ``party.relation == "reply_to_us"`` belgenin gerçekten
+            bize hitap ettiğini doğruladığında (bkz.
+            ``app.ai.identity.parties.resolve_party_context``); bize hitap
+            ettiğini doğrulayamadığımız bir belge (bir özgeçmiş, üçüncü
+            taraf bir rapor, veya kontrol edecek hiçbir öz-kimlik
+            yapılandırılmamış) tersine çevirmeyi asla tetiklemez.
+        prior_brief: Aynı oturumdaki daha önceki bir turdan, varsa,
+            ``SessionFocus.writing_brief``. Taşıdığı her slot zaten
+            cevaplanmış sayılır; bu da bir oturumun 2. ve sonraki turlarını
+            sessiz yapan şeydir.
+        party: Bu turun çözülen taraf bağlamı (bkz.
+            ``app.ai.identity.parties.resolve_party_context``). Bilinmeyen/
+            nötr bir bağlama varsayılan olur -- aşağıdaki her taraf-farkında
+            dal bir no-op olur ve çözümleme bu parametreden önce var olan
+            tamamen metinsel sezgilere geri düşer.
 
     Returns:
-        Resolved slots plus the (priority-ordered, capped) list of
-        remaining questions -- each carrying a suggested option when a
-        resolver had a low-confidence guess for it (see the module
-        docstring's three-tier split).
+        Çözülmüş slotlar artı (öncelik sırasına göre sıralanmış, sınırlı)
+        kalan sorular listesi -- her biri, bir çözümleyicinin düşük güvenli
+        bir tahmini olduğunda önerilen bir seçenek taşır (bkz. modül
+        docstring'inin üç katmanlı ayrımı).
     """
     fields = _coerce_fields(classification or {})
     evidence = BriefEvidence(
@@ -741,8 +751,9 @@ def resolve_brief(
 
     resolved: dict[str, SlotResolution] = {}
     suggested: dict[str, SlotResolution] = {}
-    #: resolved ∪ suggested, in priority order, so a later resolver
-    #: (kapanis) can read an earlier slot's outcome either way.
+    #: resolved ∪ suggested, öncelik sırasında, böylece sonraki bir
+    #: çözümleyici (kapanis) daha önceki bir slotun sonucunu her iki
+    #: durumda da okuyabilir.
     known: dict[str, SlotResolution] = {}
 
     for spec in SLOT_CATALOG:
@@ -764,14 +775,14 @@ def resolve_brief(
             suggested[spec.key] = resolution
             known[spec.key] = resolution
         elif not spec.required:
-            # An optional slot with nothing to infer defaults straight to
-            # "Sen karar ver" instead of competing for one of the
-            # MAX_BRIEF_QUESTIONS slots -- required=False means "never
-            # worth blocking on", not "ask anyway but let them skip it".
-            # Without this, imza/sayi (which have no resolver at
-            # all) would always be unresolved and could crowd out a
-            # genuinely unknown required slot, or open the gate on a turn
-            # where every required fact is already known.
+            # Çıkarılacak hiçbir şeyi olmayan isteğe bağlı bir slot,
+            # MAX_BRIEF_QUESTIONS slotlarından biri için yarışmak yerine
+            # doğrudan "Sen karar ver"e varsayılan olur -- required=False
+            # "üzerinde asla bloklamaya değmez" demektir, "yine de sor ama
+            # atlamalarına izin ver" değil. Bu olmadan, imza/sayi (hiç
+            # çözümleyicisi olmayan) her zaman çözülmemiş kalır ve gerçekten
+            # bilinmeyen, zorunlu bir slotu dışarı itebilir, ya da her
+            # zorunlu gerçeğin zaten bilindiği bir turda gate'i açabilirdi.
             default = SlotResolution(value=AUTO_ANSWER, source="default", label="Sen karar ver")
             resolved[spec.key] = default
             known[spec.key] = default
@@ -786,10 +797,10 @@ def resolve_brief(
 
 
 def _display_value(key: str, value: str) -> str:
-    """Translate a slug answer (e.g. ``"arz_ederim"``) to its Turkish label.
+    """Bir slug cevabını (örn. ``"arz_ederim"``) Türkçe etiketine çevir.
 
-    Free-text answers (a name, an institution typed by hand) have no
-    matching option and are returned unchanged.
+    Serbest metin cevaplarının (elle yazılmış bir ad, bir kurum) eşleşen
+    bir seçeneği yoktur ve değişmeden döndürülür.
     """
     spec = _SLOT_BY_KEY.get(key)
     if spec is None:

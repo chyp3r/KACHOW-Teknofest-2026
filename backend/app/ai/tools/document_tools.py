@@ -1,11 +1,11 @@
-"""Tool factories the assistant agent can bind for one turn.
+"""Asistan ajanının bir tur için bağlayabileceği araç fabrikaları.
 
-Every handler here is a closure over the document already attached to *this*
-request (``document_id``, ``cached_document``) -- the model is never given a
-document id to pass as an argument, so it structurally cannot search or read
-any document other than the one the user actually attached. When no document
-is attached, :func:`build_assistant_tools` simply omits the document-scoped
-tools; the model never sees them to call in the first place.
+Buradaki her handler, *bu* isteğe zaten eklenmiş belge üzerine bir closure'dır
+(``document_id``, ``cached_document``) -- modele argüman olarak geçirmesi
+için asla bir belge id'si verilmez, bu yüzden yapısal olarak kullanıcının
+gerçekten eklediği belge dışında hiçbir belgeyi arayamaz veya okuyamaz.
+Hiçbir belge eklenmediğinde, :func:`build_assistant_tools` belge kapsamlı
+araçları basitçe atlar; model onları hiçbir zaman çağırmak için görmez.
 """
 
 import json
@@ -30,35 +30,36 @@ logger = logging.getLogger(__name__)
 
 QA_COLLECTION_NAME = "document_qa"
 
-#: Fallback slice size when vector search returns nothing at all and there is
-#: no other way to answer. Bounded so it doesn't blow the prompt budget.
+#: Vektör araması hiçbir şey döndürmediğinde ve yanıtlamanın başka bir yolu
+#: olmadığında yedek dilim boyutu. Prompt bütçesini şişirmesin diye sınırlı.
 TEXT_SLICE_CHARS = 8000
 
 
 class ToolResult(BaseModel):
-    """What a tool actually returned, for the output gate rather than the model.
+    """Bir aracın model için değil, output gate için fiilen döndürdüğü şey.
 
-    The model only ever sees the plain string a handler returns (LangChain's
-    tool-call contract needs a string, and changing that is out of scope
-    here) -- this is a parallel, structured record of the same call, reported
-    through ``on_tool_result`` the same way ``on_anchor_referenced`` already
-    reports page references. ``app.ai.guardrails.output_gate.evaluate_response``
-    uses ``text``/``source_ids`` as this turn's groundedness sources and
-    ``sensitivity_level`` to know whether a leaked PII span traces back to a
-    confidentiality-marked document.
+    Model yalnızca bir handler'ın döndürdüğü düz string'i görür (LangChain'in
+    araç çağrısı sözleşmesi bir string ister, ve bunu değiştirmek burada
+    kapsam dışıdır) -- bu, aynı çağrının, ``on_anchor_referenced``'in sayfa
+    referanslarını zaten raporladığı şekilde ``on_tool_result`` aracılığıyla
+    raporlanan paralel, yapılandırılmış bir kaydıdır.
+    ``app.ai.guardrails.output_gate.evaluate_response``, ``text``/``source_ids``'i
+    bu turun dayanaklılık kaynakları olarak, ``sensitivity_level``'ı ise
+    sızmış bir PII aralığının gizlilik damgalı bir belgeye kadar izlenip
+    izlenmediğini bilmek için kullanır.
     """
 
-    tool: str = Field(description="The tool name that produced this result.")
-    text: str = Field(description="The same text returned to the model.")
+    tool: str = Field(description="Bu sonucu üreten araç adı.")
+    text: str = Field(description="Modele döndürülenle aynı metin.")
     citations: list[str] = Field(
-        default_factory=list, description="Page anchors referenced (e.g. '[s. 3]')."
+        default_factory=list, description="Atıfta bulunulan sayfa çıpaları (örn. '[s. 3]')."
     )
     source_ids: list[str] = Field(
-        default_factory=list, description="Document/legislation identifiers this result drew on."
+        default_factory=list, description="Bu sonucun dayandığı belge/mevzuat tanımlayıcıları."
     )
     sensitivity_level: SensitivityLevel = Field(default=SensitivityLevel.UNMARKED)
     confidence: float = Field(
-        default=1.0, description="1.0 for a real retrieval hit, lower for a degraded fallback path."
+        default=1.0, description="Gerçek bir alma isabeti için 1.0, düşürülmüş bir yedek yol için daha düşük."
     )
 
 
@@ -69,13 +70,13 @@ class SearchDocumentArgs(BaseModel):
 
 
 class GetDocumentDetailsArgs(BaseModel):
-    """``get_document_details`` takes no arguments; analysis is already scoped
-    to the one attached document."""
+    """``get_document_details`` hiçbir argüman almaz; analiz zaten eklenmiş
+    tek belgeye kapsamlanmıştır."""
 
 
 class GetDocumentOutlineArgs(BaseModel):
-    """``get_document_outline`` takes no arguments; it lists every page of
-    the one attached document."""
+    """``get_document_outline`` hiçbir argüman almaz; eklenmiş tek belgenin
+    her sayfasını listeler."""
 
 
 class GetDocumentSectionArgs(BaseModel):
@@ -90,11 +91,11 @@ class SearchLegislationArgs(BaseModel):
     query: str = Field(description="Mevzuat veritabanında aranacak konu veya soru.")
 
 
-#: Returned by every document-scoped tool instead of the real passage when
-#: the requester's clearance doesn't cover the document's confidentiality
-#: level -- deny-at-retrieval, the cheapest and most robust point to stop a
-#: leak (the content never reaches the model's context at all, so it can't
-#: be paraphrased around ``output_gate.py``'s downstream checks).
+#: İstek yapanın yetkisi, belgenin gizlilik derecesini kapsamadığında, her
+#: belge kapsamlı araç tarafından gerçek pasaj yerine döndürülür --
+#: alma-noktasında-reddet, bir sızıntıyı durdurmanın en ucuz ve en sağlam
+#: noktası (içerik modelin bağlamına hiç ulaşmaz, bu yüzden
+#: ``output_gate.py``'nin aşağı akış kontrolleri etrafından parafraz edilemez).
 _CLEARANCE_REFUSAL = "Bu belgenin içeriğini görüntülemek için yeterli yetkiniz yok."
 
 
@@ -112,47 +113,51 @@ def build_assistant_tools(
     on_tool_result: Optional[Callable[[ToolResult], None]] = None,
     requester_clearance: Optional[SensitivityLevel] = None,
 ) -> list[ToolSpec]:
-    """Build the tool set available to the assistant agent for one turn.
+    """Bir tur için asistan ajanının kullanabileceği araç setini inşa eder.
 
     Args:
-        document_id: Storage path of the attached document, or None.
-        cached_document: The document's cached analysis/extracted text/pages,
-            when ``document_id`` is set (see
+        document_id: Eklenmiş belgenin depolama yolu, veya None.
+        cached_document: ``document_id`` ayarlıysa belgenin önbelleklenmiş
+            analizi/çıkarılmış metni/sayfaları (bkz.
             ``planning_graph._load_cached_document``).
-        vector_store: Vector store backing document retrieval.
-        embeddings_client: Embeddings client backing document retrieval.
-        qa_sparse_encoder: Unfit sparse encoder, same one the pre-merge
-            document Q&A path used for RRF fusion's lexical half.
-        qa_result_limit: Max passages a document search returns.
-        rag_graph: Compiled legislation retrieval sub-graph.
-        config: The assist step's runnable config, forwarded to the RAG
-            sub-graph via ``child_config`` so its own progress events (and any
-            tracing callbacks) still reach the SSE stream.
-        on_anchor_referenced: Called with a page anchor (e.g. ``"[s. 3]"``)
-            whenever ``get_document_section`` reads a page, so the caller can
-            carry it into ``SessionFocus.last_referenced_anchor``.
-        on_tool_result: Called with a ``ToolResult`` after every tool call
-            that returns real content, so the caller can accumulate this
-            turn's actual sources for ``output_gate.evaluate_response`` to
-            check groundedness/leakage against -- see ``ToolResult``'s
-            docstring for why this is a side-channel rather than a change to
-            what handlers return to the model.
-        requester_clearance: The authenticated caller's resolved clearance
-            (see ``app.core.permissions.role_checker.clearance_for``).
-            ``None`` skips the check entirely -- same convention
-            ``chat/router.py``'s ownership check already uses for "no
-            authenticated user" (``settings.REQUIRE_AUTH`` off), so the
-            documented local-dev escape hatch stays genuinely open rather
-            than silently refusing every document tool call. This is
-            narrower than ``output_gate.py``'s own ``requester_clearance``
-            handling, which stays fail-secure on ``None`` for the rarer
-            PII/semantic-leak block -- deny-at-retrieval here is a coarser,
-            much more frequently hit gate, and the two are independent
-            layers of the same defense, not required to agree on every edge.
+        vector_store: Belge almayı destekleyen vektör deposu.
+        embeddings_client: Belge almayı destekleyen embeddings istemcisi.
+        qa_sparse_encoder: Fit edilmemiş sparse encoder; birleştirme
+            öncesi belge Soru-Cevap yolunun RRF füzyonunun sözcüksel yarısı
+            için kullandığı aynı encoder.
+        qa_result_limit: Bir belge aramasının döndürdüğü maksimum pasaj.
+        rag_graph: Derlenmiş mevzuat alma alt-graph'ı.
+        config: Assist adımının çalıştırılabilir config'i; kendi ilerleme
+            olaylarının (ve herhangi bir izleme geri çağırımının) yine de
+            SSE akışına ulaşması için ``child_config`` aracılığıyla RAG
+            alt-graph'ına iletilir.
+        on_anchor_referenced: ``get_document_section`` bir sayfa okuduğunda
+            bir sayfa çıpasıyla (örn. ``"[s. 3]"``) çağrılır; böylece çağıran
+            onu ``SessionFocus.last_referenced_anchor``'a taşıyabilir.
+        on_tool_result: Gerçek içerik döndüren her araç çağrısından sonra bir
+            ``ToolResult`` ile çağrılır; böylece çağıran,
+            ``output_gate.evaluate_response``'un dayanaklılık/sızıntı
+            kontrolü yapması için bu turun gerçek kaynaklarını
+            biriktirebilir -- bunun handler'ların modele döndürdüğü şeyde bir
+            değişiklik yerine neden bir yan kanal olduğu için
+            ``ToolResult``'un docstring'ine bakın.
+        requester_clearance: Kimliği doğrulanmış çağıranın çözümlenmiş yetkisi
+            (bkz. ``app.core.permissions.role_checker.clearance_for``).
+            ``None``, kontrolü tamamen atlar -- ``chat/router.py``'nin
+            sahiplik kontrolünün "kimliği doğrulanmış kullanıcı yok"
+            (``settings.REQUIRE_AUTH`` kapalı) için zaten kullandığı aynı
+            kural; böylece belgelenmiş yerel-geliştirme kaçış kapısı, her
+            belge aracı çağrısını sessizce reddetmek yerine gerçekten açık
+            kalır. Bu, daha nadir PII/semantik-sızıntı engeli için ``None``
+            üzerinde başarısızlık-güvenli kalan ``output_gate.py``'nin kendi
+            ``requester_clearance`` işlemesinden daha dardır -- buradaki
+            alma-noktasında-reddet, daha kaba, çok daha sık tetiklenen bir
+            kapıdır ve ikisi aynı savunmanın bağımsız katmanlarıdır, her
+            sınırda aynı fikirde olmaları gerekmez.
 
     Returns:
-        Document-scoped tools only when a document is attached; legislation
-        search whenever a RAG graph is available, document or not.
+        Yalnızca bir belge eklendiğinde belge kapsamlı araçlar; belge olsun
+        olmasın bir RAG graph'ı mevcut olduğunda mevzuat araması.
     """
     tools: list[ToolSpec] = []
 
@@ -184,14 +189,15 @@ def build_assistant_tools(
             try:
                 query_vector = await embeddings_client.embed_query(query)
                 sparse_indices, sparse_values = qa_sparse_encoder.encode_query(query)
-                # Defense-in-depth alongside the clearance_ok gate above: every
-                # chunk of this document was tagged with the same
-                # document-level rank (see DocumentService._index_for_qa), so
-                # this is currently redundant with that whole-document check
-                # for this single-document-scoped tool -- but it costs
-                # nothing here and is what actually protects a future
-                # cross-document search tool from ever letting Qdrant return
-                # an over-classified chunk in the first place.
+                # Yukarıdaki clearance_ok kapısının yanında derinlemesine
+                # savunma: bu belgenin her parçası aynı belge düzeyi
+                # dereceyle etiketlendi (bkz.
+                # DocumentService._index_for_qa), bu yüzden bu, tek belge
+                # kapsamlı bu araç için o bütün-belge kontrolüyle şu anda
+                # fazlalıklı -- ama burada hiçbir şeye mal olmaz ve
+                # gelecekteki bir çapraz belge arama aracının Qdrant'ın
+                # fazla sınıflandırılmış bir parçayı döndürmesine baştan
+                # hiç izin vermemesini fiilen sağlayan şeydir.
                 search_filter: dict[str, Any] = {"storage_path": document_id}
                 if requester_clearance is not None:
                     search_filter["sensitivity_rank"] = {"lte": requester_clearance.rank}
@@ -215,15 +221,16 @@ def build_assistant_tools(
             confidence = 1.0
             degraded = False
             if not passages and cached_document.get("extracted_text"):
-                # A retrieval outage and "genuinely no matching passage" used
-                # to collapse into this same branch with no distinguishing
-                # signal, so the model read the document's opening lines with
-                # the same confidence as a real targeted hit -- and a
-                # question about page 40 of a 60-page document got answered,
-                # wrongly, from pages 1-2. `confidence` already recorded the
-                # difference for ToolResult/output_gate's groundedness check;
-                # `degraded` carries the same fact into the text the model
-                # itself reads, which previously had no marker at all.
+                # Bir alma kesintisi ile "gerçekten eşleşen pasaj yok"
+                # eskiden hiçbir ayırt edici sinyal olmadan bu aynı dala
+                # çöküyordu, bu yüzden model belgenin açılış satırlarını
+                # gerçek, hedeflenmiş bir isabetle aynı güvenle okuyordu --
+                # ve 60 sayfalık bir belgenin 40. sayfası hakkındaki bir
+                # soru, yanlışlıkla 1-2. sayfalardan yanıtlanıyordu.
+                # `confidence`, ToolResult/output_gate'in dayanaklılık
+                # kontrolü için farkı zaten kaydediyordu; `degraded`, daha
+                # önce hiç işareti olmayan, modelin kendisinin okuduğu
+                # metne aynı gerçeği taşır.
                 passages = [cached_document["extracted_text"][:TEXT_SLICE_CHARS]]
                 confidence = 0.5
                 degraded = True
@@ -268,13 +275,14 @@ def build_assistant_tools(
             if analysis.get("compliance_status"):
                 parts.append(f"Uygunluk durumu: {analysis['compliance_status']}")
             if analysis.get("missing_fields"):
-                # Every producer of this list writes MissingField.model_dump()
-                # dicts (see document_analysis_graph.py's check_compliance_node),
-                # never bare strings -- joining the list directly raised
-                # TypeError on any document with a real compliance gap, which
-                # the assistant then swallowed and answered without the
-                # document's analysis at all, silently. `label` is the one key
-                # every dict is guaranteed to carry.
+                # Bu listenin her üreticisi MissingField.model_dump()
+                # dict'leri yazar (bkz. document_analysis_graph.py'nin
+                # check_compliance_node'u), asla çıplak string değil --
+                # listeyi doğrudan birleştirmek, gerçek bir uygunluk
+                # boşluğu olan herhangi bir belgede TypeError fırlatıyordu;
+                # asistan bunu sessizce yutup belgenin analizi hiç
+                # olmadan yanıt veriyordu. `label`, her dict'in taşıması
+                # garanti edilen tek anahtardır.
                 labels = [
                     item.get("label", str(item)) if isinstance(item, dict) else str(item)
                     for item in analysis["missing_fields"]
@@ -392,9 +400,9 @@ def build_assistant_tools(
                 context = ""
             if not context:
                 return "İlgili bir mevzuat maddesi bulunamadı."
-            # Legislation is public reference material by nature, never a
-            # confidentiality-marked source -- always UNMARKED regardless of
-            # whether a document happens to be attached this turn.
+            # Mevzuat, doğası gereği kamuya açık referans materyalidir, asla
+            # gizlilik damgalı bir kaynak değil -- bu turda bir belge
+            # ekli olsun olmasın her zaman UNMARKED.
             _report(ToolResult(tool="search_legislation", text=context))
             return context
 
@@ -411,10 +419,10 @@ def build_assistant_tools(
             )
         )
 
-    # Appended after the corpus tool on purpose: the model picks from an ordered
-    # list, and the offline path should be the default. This adds nothing when
-    # MEVZUAT_MCP_ENABLED is off, so the model is never offered a tool that
-    # cannot run.
+    # Bilinçli olarak korpus aracından sonra eklenir: model sıralı bir
+    # listeden seçer ve çevrimdışı yol varsayılan olmalıdır. Bu,
+    # MEVZUAT_MCP_ENABLED kapalıyken hiçbir şey eklemez, bu yüzden modele
+    # asla çalışamayacak bir araç sunulmaz.
     tools.extend(build_live_legislation_tools())
 
     return tools

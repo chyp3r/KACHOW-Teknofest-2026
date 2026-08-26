@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class DocumentPoolResponse(BaseModel):
-    """Pydantic schema for a pool's own metadata."""
+    """Bir havuzun kendi üstverisi için Pydantic şeması."""
 
     id: str
     owner_type: str
@@ -17,7 +17,7 @@ class DocumentPoolResponse(BaseModel):
 
 
 class DocumentPoolItemResponse(BaseModel):
-    """Pydantic schema for one pool item, joined with its document's file name."""
+    """Evrakının dosya adıyla birleştirilmiş bir havuz öğesi için Pydantic şeması."""
 
     id: str
     pool_id: str
@@ -33,14 +33,14 @@ class DocumentPoolItemResponse(BaseModel):
 
 
 class PoolItemCreate(BaseModel):
-    """Pydantic schema for pushing one document into a specific pool."""
+    """Bir evrakı belirli bir havuza itmek için Pydantic şeması."""
 
     document_id: str = Field(description="İtilecek evrakın storage_path'i")
     note: Optional[str] = Field(default=None, max_length=1000)
 
 
 class PoolPushRequest(BaseModel):
-    """Pydantic schema for a bulk push: one document, several recipients or a whole unit."""
+    """Toplu itme için Pydantic şeması: bir evrak, birden çok alıcı veya tüm bir birim."""
 
     document_id: str = Field(description="İtilecek evrakın storage_path'i")
     recipient_ids: Optional[List[str]] = Field(default=None, description="Alıcı kullanıcı ID'leri")
@@ -55,7 +55,7 @@ class PoolPushRequest(BaseModel):
 
 
 class PoolPushResultItem(BaseModel):
-    """Pydantic schema for one recipient's outcome within a bulk push."""
+    """Toplu itme içinde bir alıcının sonucu için Pydantic şeması."""
 
     user_id: str
     status: str = Field(description="'pushed' | 'denied_clearance' | 'not_found'")

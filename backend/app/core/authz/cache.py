@@ -1,20 +1,23 @@
-"""Epoch-invalidated Redis cache for ``authorize()`` decisions.
+"""``authorize()`` kararları için epoch tabanlı geçersizleştirme kullanan Redis önbelleği.
 
-Key design constraint from the tenancy plan: invalidation is an epoch bump
-(``INCR authz:epoch:{company_id}``), never a ``SCAN``/``DEL`` sweep. A
-multi-worker uvicorn deployment shares one Redis, and a decision's own key
-already embeds the epoch it was computed under -- bumping the epoch makes
-every previously-cached decision for that company unreachable (the next
-lookup asks for a key under the new epoch, which is a cache miss) without
-ever touching the old keys, which simply expire on their own TTL.
+Kiracılık planından gelen temel tasarım kısıtı: geçersizleştirme bir epoch
+artırımıdır (``INCR authz:epoch:{company_id}``), asla bir ``SCAN``/``DEL``
+taraması değildir. Çok işçili (multi-worker) bir uvicorn dağıtımı tek bir
+Redis'i paylaşır ve bir kararın kendi anahtarı, hesaplandığı epoch'u zaten
+içerir -- epoch'u artırmak, o şirket için önceden önbelleklenmiş her kararı
+erişilemez hale getirir (bir sonraki arama yeni epoch altındaki bir anahtarı
+sorar, ki bu bir önbellek ıskasıdır) ve eski anahtarlara hiç dokunmadan,
+onlar kendi TTL'lerinde kendiliğinden sona erer.
 
-Fail-open on Redis errors: a cache miss (real or from an unreachable Redis)
-just means ``AuthzService`` recomputes via ``engine.authorize`` -- slower,
-never wrong. ``app.infrastructure.cache.redis.RedisCache`` already swallows
-and logs its own exceptions for exactly this reason (see its module
-docstring's neighbours, e.g. ``app.api.rate_limit`` being deliberately
-fail-open); this module adds no additional try/except on top because there
-is nothing left that could raise past that boundary.
+Redis hatalarında fail-open (açık kalarak hataya toleranslı davranış):
+bir önbellek ıskası (gerçek ya da erişilemeyen bir Redis'ten kaynaklanan)
+sadece ``AuthzService``'in ``engine.authorize`` üzerinden yeniden hesaplama
+yapması anlamına gelir -- daha yavaş, ama asla yanlış değil.
+``app.infrastructure.cache.redis.RedisCache`` tam da bu sebeple kendi
+istisnalarını zaten yutar ve loglar (bkz. modül docstring'inin komşuları,
+örn. ``app.api.rate_limit``'in bilinçli olarak fail-open olması); bu modül
+bunun üzerine ekstra bir try/except eklemez çünkü bu sınırın ötesinde
+fırlatabilecek başka bir şey kalmamıştır.
 """
 
 import json
@@ -41,15 +44,15 @@ def _decision_key(
 
 
 class AuthzDecisionCache:
-    """Wraps ``RedisCache`` with the epoch-key scheme and ``Decision`` (de)serialization."""
+    """``RedisCache``'i epoch-anahtar şeması ve ``Decision`` (de)serileştirmesiyle sarmalar."""
 
     def __init__(self, cache: RedisCache):
         self._cache = cache
 
     async def current_epoch(self, company_id: str) -> int:
-        """The active epoch for ``company_id``. Defaults to ``0`` if unset (a fresh company,
-        or a Redis miss/error -- either way, epoch ``0`` is just as valid a namespace as any
-        other, it simply starts empty)."""
+        """``company_id`` için etkin epoch. Ayarlanmamışsa ``0`` döner (yeni bir şirket,
+        ya da bir Redis ıskası/hatası -- her iki durumda da epoch ``0`` diğerleri kadar
+        geçerli bir ad alanıdır, sadece boş başlar)."""
         raw = await self._cache.get(_epoch_key(company_id))
         if raw is None:
             return 0
@@ -59,12 +62,13 @@ class AuthzDecisionCache:
             return 0
 
     async def bump_epoch(self, company_id: str) -> None:
-        """Invalidate every cached decision for ``company_id``.
+        """``company_id`` için önbelleklenmiş her kararı geçersiz kıl.
 
-        Call this on every write to something a cached decision could have
-        depended on: a ``permission_grants`` row created/revoked, or (once
-        those fields become mutable through this system) a user's role or
-        clearance level.
+        Bu, önbelleklenmiş bir kararın bağlı olabileceği herhangi bir yazma
+        işleminde çağrılmalıdır: bir ``permission_grants`` satırının
+        oluşturulması/iptali, ya da (bu alanlar bu sistem üzerinden
+        değiştirilebilir hale geldiğinde) bir kullanıcının rolü ya da
+        yetkilendirme seviyesi.
         """
         result = await self._cache.incr(_epoch_key(company_id))
         if result is None:

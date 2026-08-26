@@ -1,16 +1,17 @@
-"""Best-effort persistence of each chat turn's messages.
+"""Her sohbet turunun mesajlarının en iyi çaba (best-effort) ile kalıcı hale getirilmesi.
 
-`ChatService` is invoked both from a normal request (`/chat/message`,
-`/chat/resume/sync`) and from the SSE streaming endpoints, where the actual
-work happens in a background `asyncio.create_task` consumed by an async
-generator (see `ChatService.handle_message_stream`). By the time that task
-runs, the FastAPI request handler that owned any `Depends(get_db)` session
-has already returned the `StreamingResponse` object and moved on -- so, same
-as `app.observability.run_recorder`, this opens and closes its own
-short-lived session per call instead of taking an injected one.
+`ChatService`, hem normal bir istekten (`/chat/message`, `/chat/resume/sync`)
+hem de SSE streaming endpoint'lerinden çağrılır; ikincisinde gerçek iş bir
+async generator tarafından tüketilen arka plan `asyncio.create_task`'i
+içinde gerçekleşir (bkz. `ChatService.handle_message_stream`). O görev
+çalıştığında, herhangi bir `Depends(get_db)` session'ına sahip olan FastAPI
+istek işleyicisi zaten `StreamingResponse` nesnesini döndürüp işini
+bitirmiştir -- bu yüzden, `app.observability.run_recorder` ile aynı şekilde,
+bu modül enjekte edilmiş bir session almak yerine her çağrı için kendi
+kısa ömürlü session'ını açıp kapatır.
 
-Every function swallows its own exceptions and only logs -- recording a
-chat turn must never be the reason a chat turn fails.
+Her fonksiyon kendi istisnalarını yutar ve sadece loglar -- bir sohbet
+turunu kaydetmek, o sohbet turunun başarısız olmasının nedeni olmamalıdır.
 """
 
 import logging
@@ -35,24 +36,25 @@ async def record_turn(
     details: Optional[dict[str, Any]] = None,
     company_id: Optional[str] = None,
 ) -> None:
-    """Persist one completed turn: the session row plus both its messages.
+    """Tamamlanmış bir turu kalıcı hale getir: oturum satırı artı her iki mesajı.
 
     Args:
-        thread_id: The composed checkpointer thread_id (see
-            `ChatService._thread_id`), reused as `ChatSessionModel.id`.
-        user_id: The authenticated caller, when known.
-        document_id: The document attached to this turn, if any.
-        user_message: The caller's input text this turn.
-        user_details: Optional structured metadata stored on the caller's
-            message. Resume turns use this to preserve the answered HITL
-            form without changing the public request/response contract.
-        reply: The assistant's reply text (or the interrupted-turn prompt).
-        workflow_status: `ChatMessageResponse.workflow_status` for this turn.
-        details: `ChatMessageResponse.details` for this turn, stored on the
-            assistant message only.
-        company_id: The caller's tenant -- threaded through so this write
-            passes `chat_sessions`/`chat_messages`' row-level-security
-            `WITH CHECK` once those tables are migrated to it.
+        thread_id: Birleştirilmiş checkpointer thread_id'si (bkz.
+            `ChatService._thread_id`), `ChatSessionModel.id` olarak yeniden kullanılır.
+        user_id: Bilindiği durumda, kimliği doğrulanmış çağıran.
+        document_id: Varsa, bu tura eklenen belge.
+        user_message: Çağıranın bu turdaki girdi metni.
+        user_details: Çağıranın mesajında saklanan isteğe bağlı yapılandırılmış
+            metadata. Devam (resume) turları, genel istek/yanıt sözleşmesini
+            değiştirmeden cevaplanmış HITL formunu korumak için bunu kullanır.
+        reply: Asistanın yanıt metni (veya kesintiye uğramış tur istemi).
+        workflow_status: Bu tur için `ChatMessageResponse.workflow_status`.
+        details: Bu tur için `ChatMessageResponse.details`, yalnızca asistan
+            mesajında saklanır.
+        company_id: Çağıranın kiracısı -- bu yazma işleminin, o tablolar
+            buna geçirildiğinde `chat_sessions`/`chat_messages`'in
+            satır düzeyi güvenlik (row-level-security) `WITH CHECK`'inden
+            geçmesi için taşınır.
     """
     if not settings.CHAT_HISTORY_ENABLED:
         return
@@ -88,7 +90,7 @@ async def record_turn(
 
 
 def _derive_title(user_message: str, max_length: int = 80) -> str:
-    """A cheap display label for a session list -- no LLM call involved."""
+    """Bir oturum listesi için ucuz bir görüntüleme etiketi -- LLM çağrısı içermez."""
     text = " ".join(user_message.split())
     if len(text) <= max_length:
         return text

@@ -1,9 +1,9 @@
-"""Prometheus collectors for the artifact transfer domain (Faz 5, #205).
+"""Artifact transfer domaini için Prometheus collector'ları (Faz 5, #205).
 
-Same one-module-per-domain shape `ai_metrics.py`/`company_metrics.py`
-already establish: module-level `Counter`s that self-register with the
-default registry at import time, plus a no-op `init_transfer_metrics()`
-so `main.py` has an explicit, greppable call site.
+`ai_metrics.py`/`company_metrics.py`'nin zaten oturttuğu aynı domain-başına-
+tek-modül şekli: import zamanında varsayılan registry'ye kendi kendine
+kayıt olan modül seviyesi `Counter`'lar, artı `main.py`'nin açık, grep'lenebilir
+bir çağrı noktasına sahip olması için no-op bir `init_transfer_metrics()`.
 """
 
 import logging
@@ -12,24 +12,24 @@ from prometheus_client import Counter
 
 logger = logging.getLogger(__name__)
 
-#: Every `ArtifactTransferService.execute()` outcome, by channel
-#: (`"chat"|"ai"|"rest"`) and result (`"success"|"denied"|"not_found"`).
-#: An idempotent replay (an already-executed transfer returned as-is for a
-#: repeated `idempotency_key`) is deliberately not counted here -- it is
-#: not a new attempt, and counting it would double-count the same transfer
-#: on every client retry.
+#: Her `ArtifactTransferService.execute()` sonucu, kanala
+#: (`"chat"|"ai"|"rest"`) ve sonuca (`"success"|"denied"|"not_found"`) göre.
+#: Idempotent bir tekrar (tekrarlanan bir `idempotency_key` için olduğu
+#: gibi döndürülen zaten çalıştırılmış bir transfer) burada kasıtlı olarak
+#: sayılmaz -- bu yeni bir deneme değildir ve sayılması, her istemci
+#: tekrarında aynı transferin çift sayılmasına yol açardı.
 ARTIFACT_TRANSFERS = Counter(
     "kachow_artifact_transfers_total",
     "Artifact transfer attempts, by channel and result.",
     ["channel", "result"],
 )
 
-#: `TransferPolicy.evaluate` deny decisions specifically, by
-#: `TransferPolicyDecision.reason_code` (`"self_transfer"`,
-#: `"recipient_inactive"`, `"clearance"`, `"favorite_required"`) -- a
-#: narrower signal than `ARTIFACT_TRANSFERS{result="denied"}`, which also
-#: covers a PDP-level `Action.ARTIFACT_TRANSFER` denial that never reaches
-#: `TransferPolicy` at all.
+#: Özellikle `TransferPolicy.evaluate` deny kararları,
+#: `TransferPolicyDecision.reason_code`'a göre (`"self_transfer"`,
+#: `"recipient_inactive"`, `"clearance"`, `"favorite_required"`) --
+#: `ARTIFACT_TRANSFERS{result="denied"}`'den daha dar bir sinyal; o
+#: ayrıca `TransferPolicy`'e hiç ulaşmayan PDP seviyesindeki bir
+#: `Action.ARTIFACT_TRANSFER` reddini de kapsar.
 TRANSFER_POLICY_DENIALS = Counter(
     "kachow_transfer_policy_denials_total",
     "TransferPolicy deny decisions, by reason.",
@@ -38,9 +38,9 @@ TRANSFER_POLICY_DENIALS = Counter(
 
 
 def init_transfer_metrics() -> None:
-    """Force this module's import so its collectors register with Prometheus.
+    """Collector'larının Prometheus'a kayıt olması için bu modülün import edilmesini zorunlu kılar.
 
-    Symmetric with `app.observability.ai_metrics.init_ai_metrics` and
-    `app.observability.company_metrics.init_company_metrics`.
+    `app.observability.ai_metrics.init_ai_metrics` ve
+    `app.observability.company_metrics.init_company_metrics` ile simetriktir.
     """
     logger.debug("Transfer metrics registered.")

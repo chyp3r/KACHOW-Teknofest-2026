@@ -1,50 +1,54 @@
-"""Pure builder for the compliance knowledge graph -- Document x Madde x Kanun.
+"""Uyumluluk bilgi grafiği için saf (pure) oluşturucu -- Evrak x Madde x Kanun.
 
-Every candidate edge type was measured against the real corpus before this
-module was designed (see the session's plan file for the full table). Two
-survive:
+Bu modül tasarlanmadan önce her aday kenar (edge) türü gerçek korpus
+üzerinde ölçüldü (tam tabloyu görmek için oturumun plan dosyasına bakın).
+İki tanesi hayatta kaldı:
 
-- `ihlal` (Document -> Madde, `source_kind="rule"`): from `missing_fields`,
-  itself produced by the hand-maintained `REQUIRED_FIELD_RULES` table
-  (`app.ai.compliance.field_rule`). Deterministic and guaranteed present --
-  see `test_mevzuat_citation.py`'s contract test, which asserts every rule
-  citation resolves fully. **This is the only edge source the headline
-  insight (`top_breached_madde`) may read.**
-- `atif` (Document -> Madde or Kanun, `source_kind="llm"`): from the model's
-  free-text `mevzuat_references`. Not reproducible across re-analyses of the
-  same document, so it never drives the headline -- only the rule edges do.
+- `ihlal` (Evrak -> Madde, `source_kind="rule"`): elle bakımı yapılan
+  `REQUIRED_FIELD_RULES` tablosunun (`app.ai.compliance.field_rule`) ürettiği
+  `missing_fields`'tan gelir. Deterministiktir ve varlığı garantidir --
+  bkz. `test_mevzuat_citation.py`'nin, her kural atfının eksiksiz çözüldüğünü
+  doğrulayan sözleşme (contract) testi. **Manşet içgörünün
+  (`top_breached_madde`) okuyabileceği tek kenar kaynağı budur.**
+- `atif` (Evrak -> Madde veya Kanun, `source_kind="llm"`): modelin serbest
+  metin `mevzuat_references` alanından gelir. Aynı evrakın tekrar analiz
+  edilmesi durumunda yeniden üretilebilir olmadığından manşeti hiçbir zaman
+  belirlemez -- yalnızca kural kenarları belirler.
 
-**v2 update:** a fourth and fifth node type, Entity and Konu, were added --
-see `entity_resolution.py`. The v1 exclusion of any node keyed by extracted
-document text was reversed, not abandoned: every candidate (`muhatap`,
-`entities`, `gonderen_kurum`) was measured and each one puts OCR damage
-straight into naive *node identity* if used raw -- `muhatap` needs
-whitespace/markdown repair before it yields anything, `entities` needs four
-surface forms of "TBMM" resolved to one node. Rather than exclude these
-sources, `entity_resolution.resolve_entities` resolves them: the node id is
-a canonicalized key (a pure function of the raw string, never the raw
-string itself), and every raw surface form that merged into it is retained
-on the node for disclosure. The invariant that survives is narrower but
-still absolute: no node id is *directly* the raw extracted text. Document
-ids come from the caller (a Postgres primary key); Madde/Kanun ids come from
-`app.ai.compliance.resolve_citation` and a curated law registry; Entity/Konu
-ids come from the canonicalizer.
+**v2 güncellemesi:** dördüncü ve beşinci düğüm türü olarak Entity ve Konu
+eklendi -- bkz. `entity_resolution.py`. v1'de, çıkarılan evrak metniyle
+anahtarlanan herhangi bir düğümün dışlanması kararı tersine çevrildi,
+tamamen terk edilmedi: her aday (`muhatap`, `entities`, `gonderen_kurum`)
+ölçüldü ve her biri, ham haliyle kullanıldığında OCR hasarını doğrudan saf
+*düğüm kimliğine* taşıyor -- `muhatap` bir şey üretmeden önce boşluk/markdown
+onarımı gerektiriyor, `entities` ise "TBMM"nin dört farklı yüzey formunun tek
+bir düğüme çözülmesini gerektiriyor. Bu kaynakları dışlamak yerine
+`entity_resolution.resolve_entities` bunları çözüyor: düğüm kimliği
+kanonikleştirilmiş bir anahtardır (ham dizgenin saf bir fonksiyonu, asla ham
+dizgenin kendisi değil) ve o düğüme birleşen her ham yüzey formu, ifşa
+edilebilmesi için düğüm üzerinde saklanır. Hayatta kalan değişmez kural daha
+dar ama yine de mutlaktır: hiçbir düğüm kimliği *doğrudan* ham çıkarılmış
+metin değildir. Evrak kimlikleri çağırandan gelir (bir Postgres birincil
+anahtarı); Madde/Kanun kimlikleri `app.ai.compliance.resolve_citation`'dan
+ve derlenmiş bir kanun sicilinden gelir; Entity/Konu kimlikleri ise
+kanonikleştiriciden gelir.
 
-`muhatap`, `gonderen_kurum` and every `entities[]` mention across the whole
-corpus are resolved through one shared canonicalization pass -- this is what
-lets a document's addressee and another document's mention of the same
-institution collapse onto one node (measured: `muhatap`'s
-"TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA" and an `entities[]` mention of
-"Türkiye Büyük Millet Meclisi Başkanlığı" canonicalize identically). `konu`
-is resolved through a separate pass into its own `konu:` namespace -- a
-shared topic string is not the same kind of thing as a shared institution,
-and mixing the namespaces would let a topic and an institution collide.
+`muhatap`, `gonderen_kurum` ve tüm korpustaki her `entities[]` bahsi, tek bir
+paylaşılan kanonikleştirme geçişinden çözülür -- bu, bir evrakın muhatabı ile
+başka bir evrakın aynı kuruma yaptığı bahsin tek bir düğümde birleşmesini
+sağlar (ölçüldü: `muhatap`'taki "TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA"
+ile `entities[]` içindeki "Türkiye Büyük Millet Meclisi Başkanlığı" bahsi
+aynı şekilde kanonikleşiyor). `konu` ise ayrı bir geçişle kendi `konu:`
+ad alanına çözülür -- paylaşılan bir konu dizgesi, paylaşılan bir kurumla
+aynı türden bir şey değildir ve ad alanlarını karıştırmak bir konu ile bir
+kurumun çakışmasına yol açardı.
 
-The Madde node id is `madde:{kanun}:{madde}`, composed rather than bare --
-`canonical_legislation` keeps law and article in separate namespaces on
-purpose (see its own docstring), but a graph needs the join: measured on the
-real corpus, article 4 exists under both kanun 2646 (RYUEHY) and kanun 3071,
-and a bare `madde:4` id would silently merge two unrelated articles.
+Madde düğüm kimliği, çıplak değil bileşik olarak `madde:{kanun}:{madde}`
+şeklindedir -- `canonical_legislation` kanun ve maddeyi bilinçli olarak ayrı
+ad alanlarında tutar (kendi docstring'ine bakın), ama grafiğin birleştirme
+(join) yapması gerekir: gerçek korpus üzerinde ölçüldüğünde, madde 4 hem
+2646 sayılı kanun (RYUEHY) hem de 3071 sayılı kanun altında var oluyor ve
+çıplak bir `madde:4` kimliği iki ilgisiz maddeyi sessizce birleştirirdi.
 """
 
 from dataclasses import dataclass, field
@@ -57,9 +61,9 @@ from app.domains.documents.entity_resolution import resolve_entities
 
 @dataclass(frozen=True)
 class MissingFieldInput:
-    """One `MissingField` as the graph builder needs it -- see
-    `app.ai.compliance.evrak_field.MissingField` for the source shape this
-    mirrors."""
+    """Grafik oluşturucunun ihtiyaç duyduğu haliyle tek bir `MissingField` --
+    karşılık geldiği kaynak yapı için bkz.
+    `app.ai.compliance.evrak_field.MissingField`."""
 
     key: str
     label: str
@@ -70,7 +74,7 @@ class MissingFieldInput:
 
 @dataclass(frozen=True)
 class MevzuatReferenceInput:
-    """One `mevzuat_references[]` entry -- see
+    """Tek bir `mevzuat_references[]` girdisi -- bkz.
     `app.domains.documents.schema.document_schema.MevzuatReferenceSchema`."""
 
     mevzuat: str
@@ -79,9 +83,9 @@ class MevzuatReferenceInput:
 
 @dataclass(frozen=True)
 class DocumentGraphInput:
-    """One document's contribution to the graph, already loaded from
-    wherever the caller keeps it (Postgres row + analysis cache, or a test
-    fixture) -- this module never reads anything itself."""
+    """Bir evrakın grafiğe katkısı; çağıranın tuttuğu yerden zaten
+    yüklenmiş halde (Postgres satırı + analiz önbelleği, ya da bir test
+    fixture'ı) -- bu modül kendisi hiçbir şey okumaz."""
 
     storage_path: str
     file_name: str
@@ -90,10 +94,11 @@ class DocumentGraphInput:
     has_analysis: bool = True
     missing_fields: tuple[MissingFieldInput, ...] = ()
     mevzuat_references: tuple[MevzuatReferenceInput, ...] = ()
-    #: Entity/Konu/attribute-payload sources, all optional -- a fixture or
-    #: caller that never sets these (e.g. every v1 test, `_load_fixture`)
-    #: must produce zero entity/konu nodes and zero new edges, byte-for-byte
-    #: identical to the graph that shipped before this module grew them.
+    #: Entity/Konu/attribute-payload kaynakları, hepsi opsiyonel -- bunları
+    #: hiç ayarlamayan bir fixture veya çağıran (örn. her v1 testi,
+    #: `_load_fixture`), bu modül büyümeden önce yayınlanan grafikle
+    #: bayt bayt aynı olacak şekilde sıfır entity/konu düğümü ve sıfır yeni
+    #: kenar üretmelidir.
     sayi: Optional[str] = None
     tarih: Optional[str] = None
     konu: Optional[str] = None
@@ -106,11 +111,12 @@ class DocumentGraphInput:
 
 @dataclass(frozen=True)
 class GraphNode:
-    """A Document, Madde or Kanun node. Fields not meaningful for a given
-    `node_type` are left at their default -- see the module docstring for
-    why this stays a flat bag of optional fields rather than a tagged
-    union: three node kinds sharing one shape is simpler to build, test and
-    serialise than three dataclasses plus a discriminator."""
+    """Bir Evrak, Madde veya Kanun düğümü. Belirli bir `node_type` için
+    anlamlı olmayan alanlar varsayılan değerinde bırakılır -- bunun neden
+    etiketli bir union yerine düz, opsiyonel alanlardan oluşan bir yığın
+    olarak kaldığı için modül docstring'ine bakın: üç düğüm türünün tek bir
+    şekli paylaşması, üç ayrı dataclass artı bir ayırt edici kullanmaktan
+    daha basit şekilde oluşturulur, test edilir ve serileştirilir."""
 
     id: str
     node_type: str  # "document" | "madde" | "kanun" | "entity" | "konu"
@@ -124,24 +130,27 @@ class GraphNode:
     madde: Optional[str] = None
     field_labels: tuple[str, ...] = ()
     document_count: Optional[int] = None
-    #: "entity" nodes only -- "kurum" | "kisi" | "diger", see
-    #: entity_resolution._classify_kind. Heuristic, not authoritative.
+    #: Yalnızca "entity" düğümleri için -- "kurum" | "kisi" | "diger", bkz.
+    #: entity_resolution._classify_kind. Sezgisel bir tahmindir, kesin
+    #: doğru kabul edilmemelidir.
     entity_kind: Optional[str] = None
-    #: "entity" nodes only -- every raw surface form that merged into this
-    #: node, so the inspector can disclose the merge rather than hide it.
+    #: Yalnızca "entity" düğümleri için -- bu düğümde birleşen her ham
+    #: yüzey formu, böylece inceleyici (inspector) birleşmeyi gizlemek
+    #: yerine ifşa edebilir.
     surface_forms: tuple[str, ...] = ()
-    #: "document" nodes only, for now -- the node inspector's per-type
-    #: payload. A generic dict rather than more typed fields because this
-    #: is where the shape genuinely varies by node_type and is expected to
-    #: grow; madde/kanun/entity nodes already have everything they need in
-    #: the typed fields above.
+    #: Şimdilik yalnızca "document" düğümleri için -- düğüm inceleyicisinin
+    #: türe özgü yükü (payload). Daha fazla tipli alan yerine genel bir
+    #: sözlük kullanılmasının nedeni, şeklin gerçekten node_type'a göre
+    #: değişmesi ve büyümesinin beklenmesidir; madde/kanun/entity
+    #: düğümlerinin ihtiyaç duyduğu her şey zaten yukarıdaki tipli
+    #: alanlarda mevcuttur.
     attributes: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class GraphEdge:
-    """An `ihlal` (rule) or `atif` (LLM) edge. See `GraphNode` for why the
-    two shapes share one dataclass."""
+    """Bir `ihlal` (kural) ya da `atif` (LLM) kenarı. İki şeklin tek bir
+    dataclass'ta neden paylaşıldığı için `GraphNode`'a bakın."""
 
     source: str
     target: str
@@ -157,9 +166,9 @@ class GraphEdge:
 
 @dataclass(frozen=True)
 class TopBreachedMadde:
-    """The headline stat: the madde breached by the most *distinct*
-    documents, counted from `ihlal` edges only (never `atif` -- see the
-    module docstring)."""
+    """Manşet istatistik: en fazla *farklı* evrak tarafından ihlal edilen
+    madde; yalnızca `ihlal` kenarlarından sayılır (asla `atif`'ten değil --
+    bkz. modül docstring'i)."""
 
     madde_id: str
     kanun: str
@@ -198,12 +207,13 @@ class _MaddeAccumulator:
 
 @dataclass
 class _NamedGroupAccumulator:
-    """Shared by the Entity and Konu accumulation passes -- both are
-    "resolve a bag of raw strings, then count distinct documents per
-    resolved group" with the same shape, differing only in whether `kind`/
-    `surface_forms` are meaningful (Entity) or left at their defaults (Konu,
-    which has no analogous concept -- a topic isn't a kurum/kişi and its
-    canonical key already *is* its only surface form worth keeping)."""
+    """Entity ve Konu biriktirme geçişleri arasında paylaşılır -- ikisi de
+    aynı şekle sahip "ham dizge yığınını çöz, sonra çözülmüş her grup için
+    farklı evrak sayısını say" işlemidir; tek fark, `kind`/`surface_forms`
+    alanlarının anlamlı olup olmamasıdır (Entity'de anlamlıdır, Konu'da
+    varsayılan değerlerinde bırakılır -- Konu'nun benzer bir kavramı yoktur:
+    bir konu bir kurum/kişi ile aynı şey değildir ve kanonik anahtarı zaten
+    saklamaya değer tek yüzey formudur)."""
 
     label: str
     kind: Optional[str] = None
@@ -212,18 +222,19 @@ class _NamedGroupAccumulator:
 
 
 def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
-    """Build the corpus-wide graph from already-loaded document data.
+    """Zaten yüklenmiş evrak verisinden korpus genelinde grafiği oluşturur.
 
     Args:
-        entries: One `DocumentGraphInput` per document. A document with no
-            cached analysis still gets an entry (`has_analysis=False`, empty
-            field/reference tuples) -- it must never be skipped, or a
-            headline like "7 of 9" would be computed against the wrong 9.
+        entries: Evrak başına bir `DocumentGraphInput`. Önbelleğe alınmış
+            analizi olmayan bir evrak yine de bir girdi alır
+            (`has_analysis=False`, boş alan/atıf demetleri) -- asla
+            atlanmamalıdır, aksi halde "9 üzerinden 7" gibi bir manşet
+            yanlış 9 üzerinden hesaplanır.
 
     Returns:
-        The graph: every document as an isolated-or-connected node, every
-        madde/kanun/entity/konu reached by at least one edge, and the
-        insights the headline stat is drawn from.
+        Grafik: her evrak izole veya bağlı bir düğüm olarak, her
+        madde/kanun/entity/konu en az bir kenarla ulaşılabilir olarak ve
+        manşet istatistiğin çıkarıldığı içgörülerle birlikte.
     """
     document_nodes: list[GraphNode] = []
     madde_index: dict[str, _MaddeAccumulator] = {}
@@ -251,13 +262,13 @@ def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
             madde_index[madde_id] = _MaddeAccumulator(kanun=kanun, madde=madde)
         return madde_id
 
-    # --- Entity/Konu resolution: one pass over every raw string in the
-    # whole corpus, *before* the per-document loop below assigns edges.
-    # This is what lets one document's `muhatap` and another document's
-    # `entities[]` mention of the same institution collapse onto one node
-    # -- resolving per-document would never see the cross-document overlap.
-    # Konu gets its own, separately-resolved namespace (see
-    # `_NamedGroupAccumulator`'s docstring).
+    # --- Entity/Konu çözümü: aşağıdaki evrak-başına döngü kenarları
+    # atamadan *önce*, tüm korpustaki her ham dizge üzerinde tek bir geçiş.
+    # Bunu yapmak, bir evrakın `muhatap`'ı ile başka bir evrakın aynı
+    # kuruma yaptığı `entities[]` bahsinin tek bir düğümde birleşmesini
+    # sağlar -- evrak başına çözüm yapmak evraklar arası örtüşmeyi asla
+    # görmezdi. Konu, kendi ayrı çözülen ad alanını alır (bkz.
+    # `_NamedGroupAccumulator`'ın docstring'i).
     all_entity_raw = [
         raw
         for entry in entries
@@ -324,11 +335,11 @@ def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
             edges.append(GraphEdge(source=doc_id, target=entity_id, edge_type="gonderen", source_kind="rule"))
             rule_edge_count += 1
 
-        # `entities[]` can repeat a mention within one document (the model
-        # is not asked to deduplicate); collapse to at most one `bahseder`
-        # edge per resolved entity per document, or a repeated mention
-        # would silently inflate that entity's document_count-adjacent edge
-        # count without adding any real information.
+        # `entities[]` bir evrak içinde aynı bahsi tekrar edebilir (modelden
+        # tekilleştirme yapması istenmiyor); evrak başına çözülmüş entity
+        # başına en fazla bir `bahseder` kenarına indirgenir, aksi halde
+        # tekrarlanan bir bahis, hiçbir gerçek bilgi eklemeden o entity'nin
+        # document_count'a yakın kenar sayısını sessizce şişirirdi.
         seen_entity_ids: set[str] = set()
         for raw_entity in entry.entities:
             if not raw_entity:
@@ -350,11 +361,11 @@ def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
         for missing_field in entry.missing_fields:
             citation = resolve_citation(missing_field.mevzuat)
             if citation.kanun is None or citation.madde is None:
-                # REQUIRED_FIELD_RULES is a closed, hand-maintained set whose
-                # citations are contract-tested to fully resolve (see
-                # test_mevzuat_citation.py) -- this branch should be
-                # unreachable for real data. Skip rather than crash the
-                # whole graph if it is ever violated.
+                # REQUIRED_FIELD_RULES kapalı, elle bakımı yapılan bir
+                # kümedir ve atıflarının eksiksiz çözüldüğü sözleşme testiyle
+                # doğrulanır (bkz. test_mevzuat_citation.py) -- bu dal,
+                # gerçek veri için erişilemez olmalıdır. Kural bir şekilde
+                # ihlal edilirse tüm grafiği çökertmek yerine atla.
                 continue
             madde_id = ensure_madde(citation.kanun, citation.madde)
             accumulator = madde_index[madde_id]
@@ -434,9 +445,10 @@ def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
 
     top_breached_madde = None
     if madde_nodes:
-        # Sorted ascending by id first so `max` (which returns the first
-        # maximal element on a tie) breaks ties toward the lexicographically
-        # smallest madde id, keeping the winner deterministic.
+        # Önce id'ye göre artan sırayla sıralanır ki `max` (eşitlik
+        # durumunda ilk maksimal elemanı döndürür) eşitlikleri
+        # sözlüksel olarak en küçük madde id'sine doğru bozsun; bu da
+        # kazananı deterministik tutar.
         winner = max(sorted(madde_nodes, key=lambda node: node.id), key=lambda node: node.document_count)
         if winner.document_count > 0:
             top_breached_madde = TopBreachedMadde(

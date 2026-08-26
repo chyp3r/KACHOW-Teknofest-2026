@@ -8,26 +8,28 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class TrainingSampleModel(Base, TimestampMixin):
-    """One derived preference-pair sample, persisted so the data an admin
-    sees (`GET /companies/{id}/training-samples`) and the data a training
-    run actually reads are provably the same rows (Faz C3, #187).
+    """Türetilmiş bir tercih-çifti örneği; bir yöneticinin gördüğü veri
+    (`GET /companies/{id}/training-samples`) ile bir eğitim çalıştırmasının
+    fiilen okuduğu veri kanıtlanabilir şekilde aynı satırlar olsun diye
+    kalıcı hale getirilir (Faz C3, #187).
 
-    `source` is `"explicit_feedback"` today -- compiled from `feedback`
-    votes whose rated text could be resolved back to a `drafts` row (see
+    `source` bugün `"explicit_feedback"`tir -- derecelendirilen metni bir
+    `drafts` satırına geri çözülebilen `feedback` oylarından derlenir (bkz.
     `app.ai.training.dataset.compile_pairs_from_feedback`). `"hitl_
-    rejection"` / `"hitl_revision"` / `"gate_approval"` (implicit signal
-    from the HITL approve/reject/revise trail the plan calls out) are
-    reserved values, not yet produced -- see #187's body for why: `drafts.
-    status` today records workflow outcome (`COMPLETED`/`FAILED`/
-    `INTERRUPTED`), not a user accept/reject decision, so deriving a
-    preference label from it without a dedicated decision field would
-    silently mislabel data. `target_kind`-shaped looseness on this column
-    mirrors `FeedbackModel.target_kind`.
+    rejection"` / `"hitl_revision"` / `"gate_approval"` (planın işaret
+    ettiği HITL onayla/reddet/revize et izinden gelen örtük sinyal) ayrılmış
+    değerlerdir, henüz üretilmezler -- nedeni için #187'nin gövdesine
+    bakın: `drafts.status` bugün bir kullanıcı kabul/red kararını değil,
+    iş akışı sonucunu (`COMPLETED`/`FAILED`/`INTERRUPTED`) kaydeder, bu
+    yüzden özel bir karar alanı olmadan ondan bir tercih etiketi türetmek
+    veriyi sessizce yanlış etiketlerdi. Bu sütundaki `target_kind` şeklinde
+    gevşeklik `FeedbackModel.target_kind`'ı yansıtır.
 
-    `chosen`/`rejected` are single-wing by construction for the only source
-    implemented so far: one feedback vote is one side of a pair (a 👍 is a
-    `chosen`-only row, a 👎 is `rejected`-only), never both -- see the class
-    docstring on `PreferencePair` for the full reasoning.
+    `chosen`/`rejected`, şimdiye kadar uygulanan tek kaynak için yapı
+    gereği tek kanatlıdır: bir geri bildirim oyu bir çiftin bir tarafıdır
+    (bir 👍 yalnızca `chosen` olan bir satırdır, bir 👎 yalnızca
+    `rejected`), asla ikisi birden değil -- tam mantık için
+    `PreferencePair` üzerindeki sınıf docstring'ine bakın.
     """
 
     __tablename__ = "training_samples"
@@ -39,24 +41,27 @@ class TrainingSampleModel(Base, TimestampMixin):
     company_id: Mapped[str] = mapped_column(
         String, ForeignKey("companies.id"), nullable=False, index=True
     )
-    #: Which compile-and-mine run last produced/refreshed this row, if any
-    #: -- nullable since compiling (`POST .../training-samples/compile`) is
-    #: a step an admin can run independently of actually training.
+    #: Varsa, bu satırı en son hangi compile-and-mine çalıştırmasının
+    #: ürettiği/yenilediği -- nullable olabilir çünkü derleme (`POST
+    #: .../training-samples/compile`) bir yöneticinin fiilen eğitimden
+    #: bağımsız olarak çalıştırabileceği bir adımdır.
     training_run_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("training_runs.id"), nullable=True, index=True
     )
     source: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    #: Loose references back to the raw row this was derived from -- same
-    #: looseness as `FeedbackModel.draft_id`, traceability only, no FK.
+    #: Bunun türetildiği ham satıra geri gevşek referanslar --
+    #: `FeedbackModel.draft_id` ile aynı gevşeklik, yalnızca izlenebilirlik
+    #: için, FK yok.
     source_feedback_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     source_draft_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     prompt_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     chosen: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     rejected: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
-    #: Identity a re-compile upserts onto -- see `app.ai.training.dataset`
-    #: for how this is derived; keeps re-running the compiler idempotent.
+    #: Yeniden derlemenin üzerine upsert yaptığı kimlik -- bunun nasıl
+    #: türetildiği için `app.ai.training.dataset`'e bakın; derleyicinin
+    #: tekrar çalıştırılmasını idempotent tutar.
     pair_hash: Mapped[str] = mapped_column(String, nullable=False)
-    #: `list[str]` of `training_runs.id` that have consumed this sample.
+    #: Bu örneği tüketmiş `training_runs.id`'lerin `list[str]`'i.
     used_in_runs: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

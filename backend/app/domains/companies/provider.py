@@ -1,22 +1,25 @@
-"""Read/write access to a company's runtime style adapter (Faz C2, #185).
+"""Bir şirketin çalışma zamanı stil adaptörüne okuma/yazma erişimi (Faz C2, #185).
 
-``app.ai.workflows.draft_graph``/``revise_graph`` never import
-``app.domains`` directly (see ``docs/architecture/backend.md``, "Backend
-yalnızca AI Core'u çağırır") -- this module is handed to those graphs as a
-plain async callable at construction time instead, the exact pattern
-``app.domains.units.provider.get_active_units_for_routing`` already
-established for the routing graph's ``units_provider``. Same reason those
-graphs are compiled once per process outside any request-scoped
-``Depends(get_db)``: this opens its own short-lived session per call (see
-``tenant_session``), same as ``app.domains.drafts.draft_recorder``.
+``app.ai.workflows.draft_graph``/``revise_graph`` asla doğrudan
+``app.domains``'i import etmez (bkz. ``docs/architecture/backend.md``,
+"Backend yalnızca AI Core'u çağırır") -- bu modül yerine bu graph'lara
+oluşturma sırasında düz bir async çağrılabilir olarak verilir; yönlendirme
+graph'ının ``units_provider``'ı için ``app.domains.units.provider.
+get_active_units_for_routing``'in zaten kurduğu tam desen budur. Aynı
+nedenle bu graph'lar süreç başına bir kez, herhangi bir istek kapsamlı
+``Depends(get_db)`` dışında derlenir: bu modül her çağrı için kendi
+kısa ömürlü oturumunu açar (bkz. ``tenant_session``), ``app.domains.
+drafts.draft_recorder`` ile aynı şekilde.
 
-Redis-cached (5 minute TTL) since ``get_company_adapter`` is read on every
-single draft/revise turn -- a stale read for up to 5 minutes after an admin
-edits the adapter is an acceptable tradeoff against hitting Postgres on
-every writer/reviser call. Fails open on a cache error: ``RedisCache``'s own
-methods already catch and log, returning ``None``/``False`` rather than
-raising, so a Redis outage degrades this to "always read from Postgres,"
-never to a hard failure of the draft/revise turn itself.
+Redis'te önbelleklenir (5 dakika TTL), çünkü ``get_company_adapter`` her
+tek yazım/revize turunda okunur -- bir admin adaptörü düzenledikten sonra
+en fazla 5 dakika boyunca bayat bir okuma, her yazıcı/revize eden
+çağrısında Postgres'e gitmeye karşı kabul edilebilir bir ödünleşimdir.
+Önbellek hatasında açık başarısız olur (fail open): ``RedisCache``'in
+kendi metotları zaten hataları yakalayıp loglar, fırlatmak yerine
+``None``/``False`` döner; böylece bir Redis kesintisi bunu "her zaman
+Postgres'ten oku"ya düşürür, asla yazım/revize turunun kendisinin sert
+bir şekilde başarısız olmasına yol açmaz.
 """
 
 import json
@@ -36,9 +39,10 @@ from app.infrastructure.database.session import tenant_session
 
 logger = logging.getLogger(__name__)
 
-#: The key this adapter lives under inside CompanyModel.settings -- kept to
-#: one key so the rest of the settings bag (feature flags, routing notes)
-#: is untouched by a write here (see set_company_adapter's read-merge-write).
+#: Bu adaptörün CompanyModel.settings içinde altında yaşadığı anahtar --
+#: tek bir anahtarda tutulur ki buradaki bir yazma, settings torbasının
+#: geri kalanına (özellik bayrakları, yönlendirme notları) dokunmasın
+#: (bkz. set_company_adapter'ın okuma-birleştirme-yazma deseni).
 _SETTINGS_KEY = "company_adapter"
 _CACHE_TTL_SECONDS = 300
 _CACHE_PREFIX = "company_adapter:"
@@ -49,17 +53,18 @@ def _cache_key(company_id: str) -> str:
 
 
 async def get_company_adapter(company_id: str) -> CompanyAdapter:
-    """Return ``company_id``'s current adapter, cache-first.
+    """``company_id``'nin mevcut adaptörünü, önce önbellekten olmak üzere döndürür.
 
-    Never raises and never returns ``None`` -- a company with nothing
-    configured, an unknown ``company_id``, or a Postgres/Redis hiccup all
-    resolve to ``CompanyAdapter.empty(company_id)``, which every caller
-    already treats as "nothing to inject" via ``.is_empty``.
+    Asla hata fırlatmaz ve asla ``None`` döndürmez -- hiçbir şey
+    yapılandırılmamış bir şirket, bilinmeyen bir ``company_id`` veya bir
+    Postgres/Redis aksaklığı, hepsi ``CompanyAdapter.empty(company_id)``'e
+    çözülür; bu da her çağıranın ``.is_empty`` üzerinden zaten "enjekte
+    edilecek bir şey yok" olarak ele aldığı bir değerdir.
 
     Args:
-        company_id: The tenant to read. Falsy returns an empty adapter
-            without touching cache or the database, same convention as
-            ``get_active_units_for_routing``.
+        company_id: Okunacak kiracı. Falsy ise, önbelleğe veya veritabanına
+            dokunmadan boş bir adaptör döner; ``get_active_units_for_routing``
+            ile aynı kural.
     """
     if not company_id:
         return CompanyAdapter.empty("")
@@ -99,31 +104,32 @@ async def set_company_adapter(
     avoided_patterns: Sequence[str] = (),
     sample_count: int = 0,
 ) -> CompanyAdapter:
-    """Replace ``company_id``'s adapter and invalidate the cache.
+    """``company_id``'nin adaptörünü değiştirir ve önbelleği geçersiz kılar.
 
-    Used today by the manual admin endpoint (``PUT /companies/{id}/adapter``
-    -- there is no automated training yet, see #185's own "kapsam dışı"
-    note); Faz C3's training pipeline will call this same function once it
-    exists, with a real ``sample_count`` instead of 0.
+    Bugün elle çalışan admin endpoint'i tarafından kullanılır
+    (``PUT /companies/{id}/adapter`` -- henüz otomatik eğitim yok, bkz.
+    #185'in kendi "kapsam dışı" notu); Faz C3'ün eğitim pipeline'ı, o var
+    olduğunda 0 yerine gerçek bir ``sample_count`` ile aynı bu fonksiyonu
+    çağıracak.
 
-    Read-merge-write on ``CompanyModel.settings``: only the
-    ``company_adapter`` key is touched, every other settings key already on
-    the row survives untouched.
+    ``CompanyModel.settings`` üzerinde okuma-birleştirme-yazma: yalnızca
+    ``company_adapter`` anahtarına dokunulur, satırda zaten bulunan diğer
+    tüm settings anahtarları dokunulmadan kalır.
 
     Args:
-        company_id: The tenant to write.
-        style_rules: Replaces the adapter's entire rule list (not appended).
-        preferred_examples: Replaces the entire example list.
-        avoided_patterns: Replaces the entire avoided-pattern list.
-        sample_count: How many samples informed this version -- 0 for a
-            hand-authored edit.
+        company_id: Yazılacak kiracı.
+        style_rules: Adaptörün tüm kural listesinin yerine geçer (eklenmez).
+        preferred_examples: Tüm örnek listesinin yerine geçer.
+        avoided_patterns: Tüm kaçınılan-desen listesinin yerine geçer.
+        sample_count: Bu sürümü kaç örneğin bilgilendirdiği -- elle yapılan
+            bir düzenleme için 0.
 
     Returns:
-        The persisted adapter, with ``version`` bumped and ``trained_at``
-        set to now.
+        Kalıcı hale getirilen adaptör; ``version`` artırılmış ve
+        ``trained_at`` şimdiki zamana ayarlanmış olarak.
 
     Raises:
-        ValueError: If ``company_id`` doesn't exist.
+        ValueError: ``company_id`` mevcut değilse.
     """
     async with tenant_session(company_id, is_root=False) as session:
         result = await session.execute(select(CompanyModel).where(CompanyModel.id == company_id))
@@ -151,18 +157,20 @@ async def set_company_adapter(
     return adapter
 
 
-#: The key a company's identity profile lives under -- separate from
-#: _SETTINGS_KEY (company_adapter), same read-merge-write/cache pattern.
+#: Bir şirketin kimlik profilinin altında yaşadığı anahtar -- _SETTINGS_KEY
+#: (company_adapter)'dan ayrı, aynı okuma-birleştirme-yazma/önbellek deseni.
 _PROFILE_SETTINGS_KEY = "company_profile"
 _PROFILE_CACHE_PREFIX = "company_profile:"
 
-#: Slug of the synthetic company `alembic/versions/0010_backfill_tenancy.py`
-#: (and `0015_backfill_recorder_company_id.py`) creates as an FK target for
-#: rows that predate multi-tenancy -- not a real tenant, never admin-
-#: configurable. Its `CompanyModel.name` ("Eski Kayıtlar (Kiracı Öncesi)")
-#: must never donate itself as a `display_name` fallback below: unlike a
-#: real company's own name, this string names the backfill mechanism, not
-#: an identity a draft should ever present as "known."
+#: `alembic/versions/0010_backfill_tenancy.py`'nin (ve
+#: `0015_backfill_recorder_company_id.py`'nin) çoklu kiracılıktan önceki
+#: satırlar için bir FK hedefi olarak oluşturduğu sentetik şirketin slug'ı
+#: -- gerçek bir kiracı değildir, asla admin tarafından yapılandırılamaz.
+#: Onun `CompanyModel.name`'i ("Eski Kayıtlar (Kiracı Öncesi)") aşağıda
+#: asla kendini bir `display_name` fallback'i olarak sunmamalıdır: gerçek
+#: bir şirketin kendi adının aksine, bu string bir kimliği değil, backfill
+#: mekanizmasını adlandırır ve bir taslağın onu asla "bilinen" olarak
+#: sunmaması gerekir.
 _LEGACY_COMPANY_SLUG = "legacy-pre-tenancy"
 
 
@@ -171,10 +179,11 @@ def _profile_cache_key(company_id: str) -> str:
 
 
 async def get_company_profile(company_id: str) -> CompanyProfile:
-    """Return ``company_id``'s current identity profile, cache-first.
+    """``company_id``'nin mevcut kimlik profilini, önce önbellekten olmak
+    üzere döndürür.
 
-    Never raises and never returns ``None`` -- mirrors
-    ``get_company_adapter`` exactly.
+    Asla hata fırlatmaz ve asla ``None`` döndürmez -- ``get_company_adapter``
+    ile birebir aynıdır.
     """
     if not company_id:
         return CompanyProfile.empty("")
@@ -197,26 +206,28 @@ async def get_company_profile(company_id: str) -> CompanyProfile:
 
 
 async def _read_profile_from_db(company_id: str) -> CompanyProfile:
-    """Read this company's profile, falling back to its registered
-    ``CompanyModel.name`` when no admin has ever filled in ``display_name``.
+    """Bu şirketin profilini okur; hiçbir admin ``display_name``'i hiç
+    doldurmamışsa kayıtlı ``CompanyModel.name``'ine geri düşer.
 
-    Without this fallback, a company with no profile configured at all
-    resolves to ``CompanyProfile.empty``, which means ``app.ai.identity.
-    parties.SelfParty.is_known`` is False for it: the party model has no
-    name to match "is this document addressed to us" against, and the
-    writer's own identity section never renders. ``companies.name`` is NOT
-    NULL and set at creation for every real company, so this is a real
-    fallback for a company an admin hasn't configured yet, not a rare edge
-    -- ``display_name``/``short_name``/``letterhead`` etc. remain empty
-    (this only ever supplies a name to match/render, never invents an
-    antet or a signer).
+    Bu fallback olmadan, hiç profili yapılandırılmamış bir şirket
+    ``CompanyProfile.empty``'e çözülür; bu da onun için ``app.ai.identity.
+    parties.SelfParty.is_known``'un False olması demektir: taraf modelinin
+    "bu belge bize mi gönderilmiş" diye eşleştirecek bir adı yoktur ve
+    yazarın kendi kimlik bölümü hiçbir zaman render edilmez.
+    ``companies.name`` her gerçek şirket için oluşturulurken NOT NULL
+    olarak ayarlanır, dolayısıyla bu, henüz yapılandırılmamış bir şirket
+    için gerçek bir fallback'tir, nadir bir uç durum değil --
+    ``display_name``/``short_name``/``letterhead`` vb. boş kalır (bu
+    yalnızca eşleştirme/render için bir ad sağlar, asla bir antet veya
+    imza sahibi uydurmaz).
 
-    Exception: the synthetic ``_LEGACY_COMPANY_SLUG`` company never takes
-    this fallback, even though it never has (and never sensibly could have)
-    a configured ``display_name`` either -- its ``name`` describes the
-    backfill mechanism that created it, not an identity, and treating it as
-    one let ``writing_brief._resolve_yazan_taraf`` present "Eski Kayıtlar
-    (Kiracı Öncesi)" as a confident, always-resolved sender fact.
+    İstisna: sentetik ``_LEGACY_COMPANY_SLUG`` şirketi bu fallback'i asla
+    almaz, ne kadar yapılandırılmış bir ``display_name``'e sahip olmasa
+    (ve mantıken hiç sahip olamasa) da -- onun ``name``'i bir kimliği
+    değil, kendisini oluşturan backfill mekanizmasını tanımlar; onu bir
+    kimlikmiş gibi ele almak, ``writing_brief._resolve_yazan_taraf``'ın
+    "Eski Kayıtlar (Kiracı Öncesi)"ni kendinden emin, her zaman çözülmüş
+    bir gönderen gerçeği olarak sunmasına yol açardı.
     """
     try:
         async with tenant_session(company_id, is_root=False) as session:
@@ -250,13 +261,14 @@ async def set_company_profile(
     default_signer_name: str = "",
     aliases: Sequence[str] = (),
 ) -> CompanyProfile:
-    """Replace ``company_id``'s identity profile and invalidate the cache.
+    """``company_id``'nin kimlik profilini değiştirir ve önbelleği geçersiz kılar.
 
-    Every field replaces the profile's current value (not a partial patch),
-    same "replaces, does not merge" contract as ``set_company_adapter``.
+    Her alan, profilin mevcut değerinin yerine geçer (kısmi bir patch
+    değildir); ``set_company_adapter`` ile aynı "değiştirir, birleştirmez"
+    sözleşmesi.
 
     Raises:
-        ValueError: If ``company_id`` doesn't exist.
+        ValueError: ``company_id`` mevcut değilse.
     """
     async with tenant_session(company_id, is_root=False) as session:
         result = await session.execute(select(CompanyModel).where(CompanyModel.id == company_id))
@@ -289,11 +301,12 @@ async def set_company_profile(
     return profile
 
 
-#: The key a company's mandatory drafting rules live under -- deliberately
-#: separate from _SETTINGS_KEY (company_adapter): Faz C3's training worker
-#: rewrites company_adapter wholesale on every successful run (see
-#: set_company_adapter's "replaces the whole list" contract), and a rule an
-#: admin hand-authored here must survive that rewrite untouched.
+#: Bir şirketin zorunlu yazım kurallarının altında yaşadığı anahtar --
+#: bilinçli olarak _SETTINGS_KEY (company_adapter)'dan ayrıdır: Faz C3'ün
+#: eğitim worker'ı her başarılı çalıştırmada company_adapter'ı topluca
+#: yeniden yazar (bkz. set_company_adapter'ın "tüm listenin yerine geçer"
+#: sözleşmesi) ve bir adminin burada elle oluşturduğu bir kural, bu yeniden
+#: yazmadan dokunulmadan kurtulmalıdır.
 _RULES_SETTINGS_KEY = "company_rules"
 _RULES_CACHE_PREFIX = "company_rules:"
 
@@ -303,10 +316,11 @@ def _rules_cache_key(company_id: str) -> str:
 
 
 async def get_company_rules(company_id: str) -> CompanyRuleSet:
-    """Return ``company_id``'s current mandatory rule set, cache-first.
+    """``company_id``'nin mevcut zorunlu kural setini, önce önbellekten
+    olmak üzere döndürür.
 
-    Never raises and never returns ``None`` -- mirrors
-    ``get_company_adapter`` exactly.
+    Asla hata fırlatmaz ve asla ``None`` döndürmez -- ``get_company_adapter``
+    ile birebir aynıdır.
     """
     if not company_id:
         return CompanyRuleSet.empty("")
@@ -343,26 +357,27 @@ async def _read_rules_from_db(company_id: str) -> CompanyRuleSet:
 
 
 async def set_company_rules(company_id: str, *, rules: Sequence[dict[str, Any]]) -> CompanyRuleSet:
-    """Replace ``company_id``'s mandatory rule set and invalidate the cache.
+    """``company_id``'nin zorunlu kural setini değiştirir ve önbelleği geçersiz kılar.
 
     Args:
-        company_id: The tenant to write.
-        rules: The full replacement rule list, each a plain dict with
-            ``text`` (required), ``severity`` ("zorunlu"/"onerilen",
-            default "zorunlu"), ``enabled`` (default True), and an optional
-            ``id``. An item that already carries an id (an admin editing an
-            existing rule) keeps it, so a judge verdict's own
-            ``violated_rule_ids`` recorded before this edit still refers to
-            something meaningful; a blank id gets a fresh server-assigned
-            one (``K{n}``) so ids are never reused, even across edits that
-            remove rules.
+        company_id: Yazılacak kiracı.
+        rules: Tam değiştirme kural listesi; her biri ``text`` (zorunlu),
+            ``severity`` ("zorunlu"/"onerilen", varsayılan "zorunlu"),
+            ``enabled`` (varsayılan True) ve opsiyonel bir ``id`` içeren
+            düz bir dict. Zaten bir id taşıyan bir öğe (mevcut bir kuralı
+            düzenleyen bir admin) bu id'yi korur; böylece bu düzenlemeden
+            önce kaydedilmiş bir hakem kararının kendi
+            ``violated_rule_ids``'i hâlâ anlamlı bir şeye işaret eder;
+            boş bir id, sunucu tarafından atanan yeni bir id (``K{n}``)
+            alır; böylece kuralları kaldıran düzenlemelerde bile id'ler
+            hiçbir zaman yeniden kullanılmaz.
 
     Returns:
-        The persisted rule set, with ``version`` bumped and ``updated_at``
-        set to now.
+        Kalıcı hale getirilen kural seti; ``version`` artırılmış ve
+        ``updated_at`` şimdiki zamana ayarlanmış olarak.
 
     Raises:
-        ValueError: If ``company_id`` doesn't exist.
+        ValueError: ``company_id`` mevcut değilse.
     """
     async with tenant_session(company_id, is_root=False) as session:
         result = await session.execute(select(CompanyModel).where(CompanyModel.id == company_id))
@@ -398,9 +413,10 @@ async def set_company_rules(company_id: str, *, rules: Sequence[dict[str, Any]])
 
         merged_settings = dict(company.settings or {})
         persisted = ruleset.to_dict()
-        # Provider-internal bookkeeping, not part of CompanyRuleSet's own
-        # shape -- from_dict reads only version/rules/updated_at, so this
-        # extra key is silently ignored by every other reader.
+        # Provider'a özel bir kayıt tutma alanı, CompanyRuleSet'in kendi
+        # şeklinin bir parçası değil -- from_dict yalnızca
+        # version/rules/updated_at'ı okur, bu yüzden bu ekstra anahtar
+        # diğer tüm okuyucular tarafından sessizce yok sayılır.
         persisted["next_id_seq"] = next_seq
         merged_settings[_RULES_SETTINGS_KEY] = persisted
         company.settings = merged_settings
@@ -410,27 +426,29 @@ async def set_company_rules(company_id: str, *, rules: Sequence[dict[str, Any]])
     return ruleset
 
 
-#: Faz C3 Aşama 3 (#191) -- the Ollama model name a successful LoRA
-#: training run publishes (`kachow-{slug}:v{n}`). Deliberately a *separate*
-#: settings key from `_SETTINGS_KEY`, not folded into `CompanyAdapter`: a
-#: model override is an infrastructure fact (which weights answer this
-#: company's calls), not a style preference, and the two are set
-#: independently -- a LoRA run does not have to succeed for a style-adapter
-#: run (Aşama 2) to keep working, and vice versa.
+#: Faz C3 Aşama 3 (#191) -- başarılı bir LoRA eğitim çalıştırmasının
+#: yayımladığı Ollama model adı (`kachow-{slug}:v{n}`). `_SETTINGS_KEY`'den
+#: bilinçli olarak *ayrı* bir settings anahtarıdır, `CompanyAdapter`'a
+#: katılmamıştır: bir model override'ı bir altyapı gerçeğidir (bu şirketin
+#: çağrılarını hangi ağırlıkların yanıtlayacağı), bir stil tercihi değil,
+#: ve ikisi bağımsız olarak ayarlanır -- bir stil-adaptörü çalıştırmasının
+#: (Aşama 2) çalışmaya devam etmesi için bir LoRA çalıştırmasının başarılı
+#: olması gerekmez, tersi de geçerlidir.
 #:
-#: Written by `app.workers.training.run_lora_training_job` after a shadow
-#: evaluation passes; **not consumed anywhere yet** -- wiring the live
-#: draft/revise graphs to pick a company's model per request is a separate,
-#: larger change (constructing/caching a graph per model instead of once
-#: per process) intentionally left out of #191's scope. Read this value
-#: once that wiring exists.
+#: Bir gölge (shadow) değerlendirme geçtikten sonra
+#: `app.workers.training.run_lora_training_job` tarafından yazılır;
+#: **henüz hiçbir yerde tüketilmiyor** -- canlı yazım/revize graph'larını
+#: istek başına bir şirketin modelini seçecek şekilde bağlamak, ayrı ve
+#: daha büyük bir değişikliktir (süreç başına bir kez yerine model başına
+#: bir graph oluşturmak/önbelleklemek) ve bilinçli olarak #191'in kapsamı
+#: dışında bırakılmıştır. Bu bağlantı kurulduğunda bu değeri okuyun.
 _MODEL_OVERRIDE_KEY = "llm_model_override"
 
 
 async def get_llm_model_override(company_id: str) -> Optional[str]:
-    """The Ollama model name a shadow-eval-passed LoRA adapter published
-    for ``company_id``, or ``None`` if it has never trained one (the
-    common case -- callers should fall back to ``settings.OLLAMA_MODEL``)."""
+    """Gölge değerlendirmesini geçmiş bir LoRA adaptörünün ``company_id``
+    için yayımladığı Ollama model adı, ya da hiç eğitmemişse (yaygın durum
+    -- çağıranlar ``settings.OLLAMA_MODEL``'e geri düşmelidir) ``None``."""
     if not company_id:
         return None
     try:
@@ -446,11 +464,12 @@ async def get_llm_model_override(company_id: str) -> Optional[str]:
 
 
 async def set_llm_model_override(company_id: str, model_name: str) -> None:
-    """Record ``model_name`` as ``company_id``'s override, read-merge-write
-    on ``CompanyModel.settings`` same as ``set_company_adapter``.
+    """``model_name``'i ``company_id``'nin override'ı olarak kaydeder;
+    ``set_company_adapter`` ile aynı şekilde ``CompanyModel.settings``
+    üzerinde okuma-birleştirme-yazma.
 
     Raises:
-        ValueError: If ``company_id`` doesn't exist.
+        ValueError: ``company_id`` mevcut değilse.
     """
     async with tenant_session(company_id, is_root=False) as session:
         result = await session.execute(select(CompanyModel).where(CompanyModel.id == company_id))

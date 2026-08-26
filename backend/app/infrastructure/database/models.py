@@ -7,9 +7,8 @@ from app.infrastructure.database.base import Base
 
 
 class TimestampMixin:
-    """ORM Mixin that automatically adds timezone-aware created_at and updated_at
-
-    timestamp fields to any inheriting table model.
+    """Miras alan herhangi bir tablo modeline otomatik olarak zaman dilimi
+    farkında created_at ve updated_at zaman damgası alanları ekleyen ORM Mixin'i.
     """
 
     created_at: Mapped[datetime] = mapped_column(

@@ -1,24 +1,28 @@
-"""Typed, versioned parameters for the deterministic decision layer.
+"""Deterministik karar katmanı için tipli, sürümlenmiş parametreler.
 
-Every threshold the non-LLM decision layer acts on used to live next to the code
-that read it: ``70.0`` in ``draft_verifier``, ``50.0`` in ``routing_graph``,
-``0.6/0.4`` in ``llm_judge``, ``12`` and ``40`` and ``4`` in ``planning_graph``.
-Individually reasonable, collectively unreviewable -- two of them are the *same*
-concept ("does this need a human?") with no stated relationship, and one table
-had entries nothing read at all.
+LLM olmayan karar katmanının kullandığı her eşik değer eskiden onu okuyan
+kodun yanında yaşıyordu: ``draft_verifier`` içinde ``70.0``, ``routing_graph``
+içinde ``50.0``, ``llm_judge`` içinde ``0.6/0.4``, ``planning_graph`` içinde
+``12``, ``40`` ve ``4``. Tek tek makul ama toplu olarak gözden geçirilemez
+durumdaydılar -- bunlardan ikisi, aralarında belirtilmiş bir ilişki olmadan
+*aynı* kavramdı ("bunun bir insana ihtiyacı var mı?") ve bir tabloda hiçbir
+şeyin okumadığı girdiler vardı.
 
-Why frozen dataclasses rather than YAML
----------------------------------------
-A configuration file buys the ability to change a threshold without changing
-code, which is precisely what is *not* wanted here. These numbers are
-calibrated against ``evaluation/datasets``; moving one should require a
-CHANGELOG entry and an eval run, not a redeploy. Typed dataclasses give the
-invariants below somewhere to live, mypy and the IDE work on them for free, and
-there is no parse path where production and tests can drift apart.
+Neden YAML değil de dondurulmuş (frozen) veri sınıfları
+--------------------------------------------------------
+Bir yapılandırma dosyası, kodu değiştirmeden bir eşiği değiştirme imkanı
+sağlar; burada tam olarak *istenmeyen* şey de budur. Bu sayılar
+``evaluation/datasets``'e karşı kalibre edilmiştir; birini değiştirmek bir
+CHANGELOG girdisi ve bir değerlendirme (eval) çalıştırması gerektirmeli,
+bir yeniden dağıtım değil. Tipli veri sınıfları aşağıdaki değişmezlerin
+yaşayabileceği bir yer sağlar, mypy ve IDE bunlar üzerinde bedavaya çalışır
+ve production ile testlerin birbirinden sapabileceği bir ayrıştırma yolu
+yoktur.
 
-The invariants are the real product of this module. They encode relationships
-that were previously only true by coincidence -- nothing stopped someone raising
-the routing threshold above the automation threshold and inverting the gate.
+Bu modülün gerçek ürünü değişmezlerdir (invariants). Bunlar, daha önce yalnızca
+tesadüfen doğru olan ilişkileri kodlar -- daha önce hiçbir şey birinin
+yönlendirme eşiğini otomasyon eşiğinin üzerine çıkarıp geçidi tersine
+çevirmesini engellemiyordu.
 """
 
 from dataclasses import dataclass, field
@@ -44,29 +48,32 @@ __all__ = [
 
 @dataclass(frozen=True)
 class VerificationPolicy:
-    """Thresholds for the deterministic draft gate.
+    """Deterministik taslak geçidi için eşik değerleri.
 
-    The penalty *values* a draft is scored against (per-claim, per-leak,
-    per-missing-structural-element, ...) do not live here any more -- they
-    are the single rule table at ``app.ai.verification.confidence_rules.
-    RULES``, versioned and reviewed on its own terms rather than as loose
-    floats scattered across this dataclass and the modules that read it.
-    This dataclass keeps only the thresholds that are not a rule's own
-    penalty: where the automated/human-review line sits, and the matching
-    tolerances the groundedness check itself uses. Similarly, the judge no
-    longer contributes a blended numeric score (see
-    ``app.ai.verification.llm_judge.merge_verdicts``'s module docstring) --
-    it contributes rule findings like everything else, so there is no
-    "judge weight" left to configure here either.
+    Bir taslağın karşı puanlandığı ceza *değerleri* (iddia başına, sızıntı
+    başına, eksik yapısal öge başına, ...) artık burada yaşamıyor -- bunlar
+    ``app.ai.verification.confidence_rules.RULES`` içindeki tek kural
+    tablosunda, bu veri sınıfına ve onu okuyan modüllere dağılmış gevşek
+    float'lar yerine kendi koşullarında sürümlenip gözden geçiriliyor. Bu
+    veri sınıfı yalnızca bir kuralın kendi cezası olmayan eşikleri tutar:
+    otomatik/insan incelemesi çizgisinin nerede olduğu ve dayanaklılık
+    (groundedness) kontrolünün kendisinin kullandığı eşleşme toleransları.
+    Benzer şekilde, yargıç (judge) artık harmanlanmış bir sayısal puana
+    katkıda bulunmuyor (bkz. ``app.ai.verification.llm_judge.merge_verdicts``
+    modülünün docstring'i) -- diğer her şey gibi kural bulguları katkıda
+    bulunuyor, dolayısıyla burada yapılandırılacak bir "yargıç ağırlığı" da
+    kalmadı.
 
     Attributes:
-        min_automated_confidence: At or above this a draft may be sent without
-            a human. The upper of the two human-approval thresholds.
-        token_overlap_threshold: Share of a value's significant tokens that must
-            appear in the sources for the tolerant fallback to accept it.
-        judge_echo_overlap_threshold: Above this share of a verdict's own tokens
-            appearing in the draft, the verdict is an echo rather than a
-            judgement and is discarded.
+        min_automated_confidence: Bu değere eşit veya üzerindeyse bir taslak
+            insan onayı olmadan gönderilebilir. İki insan onayı eşiğinden
+            üst olanı.
+        token_overlap_threshold: Toleranslı geri düşüşün (fallback) bir
+            değeri kabul etmesi için, o değerin önemli token'larından
+            kaynaklarda görünmesi gereken pay.
+        judge_echo_overlap_threshold: Bir kararın kendi token'larının
+            taslakta görünme payı bu değerin üzerindeyse, o karar bir yargı
+            değil bir yankı (echo) sayılır ve atılır.
     """
 
     min_automated_confidence: float = 70.0
@@ -76,23 +83,25 @@ class VerificationPolicy:
 
 @dataclass(frozen=True)
 class RoutingPolicy:
-    """The score below which nothing may be routed automatically.
+    """Altındaki hiçbir şeyin otomatik olarak yönlendirilemeyeceği puan.
 
-    The unit list itself is no longer policy -- units are managed at runtime
-    through the ``units`` domain (``POST/PATCH/DELETE /units``, admin/manager
-    only) and read fresh on every routing decision by ``routing_graph`` via
-    ``app.domains.units.provider.get_active_units_for_routing``. There is no
-    "İnsan Onayı Gerekli" pseudo-unit anymore: when routing can't confidently
-    pick a real unit (empty draft, low score, an LLM failure, or a unit name
-    outside the current list), no unit is assigned and the existing
-    ``requires_human_approval`` flag is set instead -- the same flag the
-    draft-quality gate already uses, not a special unit value.
+    Birim listesinin kendisi artık bir politika değil -- birimler,
+    ``units`` alanı (domain) aracılığıyla çalışma zamanında yönetilir
+    (``POST/PATCH/DELETE /units``, yalnızca admin/manager) ve
+    ``routing_graph`` tarafından her yönlendirme kararında
+    ``app.domains.units.provider.get_active_units_for_routing`` üzerinden
+    tazece okunur. Artık bir "İnsan Onayı Gerekli" sahte-birimi yok: yönlendirme
+    gerçek bir birimi güvenle seçemediğinde (boş taslak, düşük puan, bir LLM
+    hatası veya güncel listenin dışında bir birim adı), hiçbir birim atanmaz
+    ve bunun yerine mevcut ``requires_human_approval`` bayrağı ayarlanır --
+    özel bir birim değeri değil, taslak-kalitesi geçidinin zaten kullandığı
+    aynı bayrak.
 
     Attributes:
-        human_approval_score_threshold: Below this a draft is not trustworthy
-            enough to route anywhere but a human. The *lower* of the two
-            thresholds -- see :func:`Policy.check_invariants` for why the
-            relationship matters.
+        human_approval_score_threshold: Bunun altında bir taslak, bir insan
+            dışında herhangi bir yere yönlendirilecek kadar güvenilir
+            değildir. İki eşikten *düşük* olanı -- ilişkinin neden önemli
+            olduğu için bkz. :func:`Policy.check_invariants`.
     """
 
     human_approval_score_threshold: float = 50.0
@@ -100,47 +109,50 @@ class RoutingPolicy:
 
 @dataclass(frozen=True)
 class IntentPolicy:
-    """Margin thresholds for the lexical layer, and probability bands for the
-    fused decision built on top of it.
+    """Sözcüksel katman için marj eşikleri ve onun üzerine kurulu füzyon
+    kararı için olasılık bantları.
 
     Attributes:
-        presence_floor: Below this an intent is noise, not a candidate in the
-            lexical layer's own scoring. Without a floor two rules scoring 0.1
-            and 0.0 would read as a confident decision purely because nothing
-            contested them. Still meaningful as a property of
-            ``score_intents``'s output even though the top-level decision
-            (see ``tau_high``/``tau_low`` below) no longer gates on it
-            directly.
-        decisive_margin: Reference lead for the lexical layer's own margin;
-            same status as ``presence_floor`` above.
-        compound_floor: Score at which both draft and analyze count as
-            independently well-attested lexically, making the message a
-            compound request. Checked on the raw additive lexical scores
-            *before* fusion runs, deliberately -- a softmax's classes compete
-            by construction, so it cannot represent "both readings are
-            independently strong" the way an additive score can (see
-            ``scripts/fit_router.py``'s module docstring).
-        confidence_scale: Margin that maps to the lexical layer's own
-            confidence in [0, 1] (``IntentScores.confidence``).
-        tau_high: Minimum fused probability for the router to commit to an
-            intent outright. Below it the ladder does not guess.
-        tau_low: Below this fused probability the fusion signal alone is too
-            thin to *report* as a committed decision, but it no longer gates
-            the model call -- a fast-tier model is asked whenever one is
-            available (see ``app.ai.workflows.planner.resolve_plan``), since
-            a low fused probability is exactly the case a model call is
-            useful for, not a reason to skip it. ``tau_low`` still bounds
-            when a clarifying question is asked instead of trusting the
-            model's own ``unclear`` verdict: only when the fused evidence is
-            this thin *and* the model couldn't separate the top two options
-            either (see ``clarify_margin``).
-        clarify_margin: Minimum lead the top fused intent must hold over the
-            runner-up for the model's ``unclear`` verdict to be honored as a
-            genuine tie rather than overridden with the fused top intent. A
-            model saying "I'm not sure" about a message the fusion layer
-            already leads clearly on (lexical evidence just happened to fall
-            under ``tau_high``) should not turn into an unnecessary question
-            -- only a genuine photo finish should.
+        presence_floor: Bunun altında bir niyet, sözcüksel katmanın kendi
+            puanlamasında bir aday değil, gürültüdür. Bir taban olmadan,
+            0.1 ve 0.0 puan alan iki kural, sırf kimse itiraz etmediği için
+            kendinden emin bir karar gibi okunurdu. Üst düzey karar (aşağıdaki
+            ``tau_high``/``tau_low``'a bakın) artık doğrudan buna
+            dayanmasa bile, ``score_intents``'in çıktısının bir özelliği
+            olarak hâlâ anlamlıdır.
+        decisive_margin: Sözcüksel katmanın kendi marjı için referans fark;
+            yukarıdaki ``presence_floor`` ile aynı statüde.
+        compound_floor: Hem taslak hem de analiz sözcüksel olarak bağımsız
+            biçimde iyi kanıtlanmış sayıldığında ve mesajın bileşik bir
+            istek haline geldiği puan. Kasıtlı olarak, füzyon çalışmadan
+            *önceki* ham toplamsal (additive) sözcüksel puanlar üzerinde
+            kontrol edilir -- bir softmax'ın sınıfları yapısı gereği
+            birbiriyle yarışır, bu yüzden "her iki okuma da bağımsız olarak
+            güçlü" durumunu toplamsal bir puanın yapabildiği gibi temsil
+            edemez (bkz. ``scripts/fit_router.py``'nin modül docstring'i).
+        confidence_scale: Sözcüksel katmanın kendi güvenine [0, 1] aralığında
+            eşlenen marj (``IntentScores.confidence``).
+        tau_high: Yönlendiricinin bir niyete doğrudan bağlanması için gereken
+            minimum füzyon olasılığı. Bunun altında merdiven tahmin yapmaz.
+        tau_low: Bu füzyon olasılığının altında, tek başına füzyon sinyali
+            bağlayıcı bir karar olarak *raporlanamayacak* kadar zayıftır,
+            ama artık model çağrısını engellemez -- bir hızlı katman modeli
+            mevcut olduğunda her zaman sorulur (bkz.
+            ``app.ai.workflows.planner.resolve_plan``), çünkü düşük bir
+            füzyon olasılığı tam olarak bir model çağrısının işe yaradığı
+            durumdur, onu atlamak için bir sebep değil. ``tau_low`` yine de
+            modelin kendi ``unclear`` kararına güvenmek yerine bir açıklayıcı
+            soru sorulup sorulmayacağını sınırlar: yalnızca füzyon kanıtı bu
+            kadar zayıfken *ve* model de en iyi iki seçeneği birbirinden
+            ayıramamışsa (bkz. ``clarify_margin``).
+        clarify_margin: En üstteki füzyon niyetinin, modelin ``unclear``
+            kararının başka bir şeyle geçersiz kılınmak yerine gerçek bir
+            berabere olarak kabul edilmesi için ikinciye karşı taşıması
+            gereken minimum fark. Füzyon katmanının zaten net bir şekilde
+            önde olduğu bir mesaj hakkında (sözcüksel kanıt yalnızca
+            ``tau_high``'ın altında kaldığı için) modelin "emin değilim"
+            demesi gereksiz bir soruya dönüşmemeli -- yalnızca gerçek bir
+            fotobitirişte (photo finish) bu olmalı.
     """
 
     presence_floor: float = 1.4
@@ -154,16 +166,17 @@ class IntentPolicy:
 
 @dataclass(frozen=True)
 class MemoryPolicy:
-    """Conversation-history retention bounds.
+    """Konuşma geçmişi saklama sınırları.
 
     Attributes:
-        history_window: Turns kept verbatim in the prompt each turn.
-        history_raw_cap: Raw turns retained in state before consolidation must
-            have folded them into the summary. Must exceed ``history_window``
-            so consolidation always has the overflow available.
-        consolidation_batch_size: Minimum newly-overflowed turns worth a model
-            call.
-        qa_result_limit: Passages retrieved for document Q&A.
+        history_window: Her turda prompt içinde harfiyen tutulan tur sayısı.
+        history_raw_cap: Konsolidasyonun bunları özete katmış olması
+            gerekmeden önce durumda tutulan ham tur sayısı. Konsolidasyonun
+            her zaman elinde taşan (overflow) bir şey olması için
+            ``history_window``'u aşmalıdır.
+        consolidation_batch_size: Bir model çağrısına değecek minimum yeni
+            taşan tur sayısı.
+        qa_result_limit: Belge soru-cevabı için getirilen pasaj sayısı.
     """
 
     history_window: int = 12
@@ -174,33 +187,33 @@ class MemoryPolicy:
 
 @dataclass(frozen=True)
 class SemanticPolicy:
-    """Thresholds for the embedding-based prototype layer.
+    """Gömme (embedding) tabanlı prototip katmanı için eşikler.
 
-    Both must be cleared for a semantic match to be acted on. Cosine similarity
-    between short Turkish sentences is compressed -- unrelated official-register
-    sentences routinely sit around 0.6 -- so an absolute threshold alone fires
-    constantly, while a margin alone fires on two equally-poor matches that
-    happen to differ.
+    Bir anlamsal eşleşmenin işleme alınması için ikisinin de aşılması
+    gerekir. Kısa Türkçe cümleler arasındaki kosinüs benzerliği sıkışıktır --
+    ilgisiz resmi kayıt cümleleri rutin olarak 0.6 civarında oturur -- bu
+    yüzden tek başına mutlak bir eşik sürekli tetiklenirken, tek başına bir
+    marj da tesadüfen farklılaşan iki eşit derecede kötü eşleşmede tetiklenir.
 
-    Calibrated against ``evaluation/datasets/intents.jsonl`` with real
-    nomic-embed-text vectors. The measurement is stark: correct decisions score
-    0.859 and 0.880, while 0.747-0.758 is a coin flip (one correct, three wrong)
-    and every genuinely under-specified message tops out at 0.740. The initial
-    0.72 sat inside the noise band and produced three correct decisions against
-    three wrong ones -- a layer that decides at random is worse than no layer,
-    because the messages it gets wrong were previously escalating to a model
-    that might have got them right.
+    ``evaluation/datasets/intents.jsonl``'a karşı gerçek nomic-embed-text
+    vektörleriyle kalibre edilmiştir. Ölçüm nettir: doğru kararlar 0.859 ve
+    0.880 puan alırken, 0.747-0.758 bir yazı-tura gibidir (biri doğru, üçü
+    yanlış) ve gerçekten eksik belirtilmiş her mesaj en fazla 0.740'a
+    ulaşır. İlk 0.72 değeri gürültü bandının içinde kalıyordu ve üç doğru
+    karara karşı üç yanlış karar üretiyordu -- rastgele karar veren bir
+    katman, katman hiç olmamasından daha kötüdür, çünkü yanlış anladığı
+    mesajlar daha önce doğru anlayabilecek bir modele yükseltiliyordu.
 
-    0.80 is the middle of the safe band (0.758 -> 0.859), not its edge. Picking
-    the point that merely beats the last error would leave 0.002 of headroom on
-    a fifteen-case sample.
+    0.80, güvenli bandın (0.758 -> 0.859) kenarı değil ortasıdır. Yalnızca
+    son hatayı geçen noktayı seçmek, on beş vakalık bir örneklemde yalnızca
+    0.002'lik bir pay bırakırdı.
 
     Attributes:
-        decisive_similarity: Minimum cosine similarity to the winning class.
-        decisive_margin: Minimum lead over the runner-up class. Not binding at
-            the calibrated similarity -- both surviving decisions clear it
-            comfortably (0.154, 0.098) -- but retained because two equally-good
-            matches should not be separated by rounding.
+        decisive_similarity: Kazanan sınıfa minimum kosinüs benzerliği.
+        decisive_margin: İkinciye karşı minimum fark. Kalibre edilmiş
+            benzerlikte bağlayıcı değildir -- ayakta kalan her iki karar da
+            bunu rahatça geçer (0.154, 0.098) -- ama iki eşit derecede iyi
+            eşleşmenin yuvarlamayla ayrılmaması için korunur.
     """
 
     decisive_similarity: float = 0.80
@@ -209,14 +222,14 @@ class SemanticPolicy:
 
 @dataclass(frozen=True)
 class BudgetPolicy:
-    """Per-node time budgets at the balanced reasoning level.
+    """Dengeli akıl yürütme seviyesinde düğüm başına zaman bütçeleri.
 
     Attributes:
-        node_seconds: Node name -> budget. Every key must be consumed by a node
-            somewhere; a dead entry is a budget someone believes is enforced and
-            is not.
-        workflow_ceiling_seconds: The whole-workflow timeout no scaled node
-            budget may exceed.
+        node_seconds: Düğüm adı -> bütçe. Her anahtar bir yerde bir düğüm
+            tarafından tüketilmelidir; kullanılmayan bir girdi, birinin
+            uygulandığına inandığı ama aslında uygulanmayan bir bütçedir.
+        workflow_ceiling_seconds: Ölçeklenmiş hiçbir düğüm bütçesinin
+            aşamayacağı, tüm iş akışına ait zaman aşımı.
     """
 
     node_seconds: Mapping[str, float] = field(
@@ -228,29 +241,30 @@ class BudgetPolicy:
                 "route": 45.0,
                 "writer": 180.0,
                 "assist": 70.0,
-                # Must comfortably exceed GUARDRAIL_JUDGE_TIMEOUT_SECONDS
-                # (15.0s default): the node-level timeout has to lose the
-                # race to the judge call's own internal timeout, or the
-                # whole node gets cancelled mid-judge instead of the judge
-                # gracefully degrading to None and the node finishing on the
-                # deterministic result alone.
+                # GUARDRAIL_JUDGE_TIMEOUT_SECONDS'ı (varsayılan 15.0s)
+                # rahatça aşmalıdır: düğüm seviyesindeki zaman aşımı, yargıç
+                # çağrısının kendi iç zaman aşımına karşı yarışı kaybetmelidir;
+                # aksi halde tüm düğüm, yargıcın zarifçe None'a düşüp düğümün
+                # yalnızca deterministik sonuçla bitirmesi yerine, yargılama
+                # ortasında iptal edilir.
                 "scan_sensitivity": 25.0,
-                # Same budget as retrieve_mevzuat: an identical Qdrant/Ollama
-                # round trip, and a timeout degrades to zero style examples
-                # rather than failing the draft (see retrieve_examples_node).
+                # retrieve_mevzuat ile aynı bütçe: aynı Qdrant/Ollama gidiş
+                # dönüşü ve bir zaman aşımı, taslağı başarısız kılmak yerine
+                # sıfır üslup örneğine düşer (bkz. retrieve_examples_node).
                 "retrieve_examples": 25.0,
-                # Same Qdrant/Ollama round trip as retrieve_examples, against
-                # the document_qa collection instead -- a timeout degrades to
-                # zero source excerpts (the writer still has the analysis
-                # step's own summary), not a failed draft (see
-                # retrieve_source_chunks_node).
+                # retrieve_examples ile aynı Qdrant/Ollama gidiş dönüşü, ama
+                # bunun yerine document_qa koleksiyonuna karşı -- bir zaman
+                # aşımı sıfır kaynak alıntısına düşer (yazar hâlâ analiz
+                # adımının kendi özetine sahiptir), başarısız bir taslağa
+                # değil (bkz. retrieve_source_chunks_node).
                 "retrieve_source_chunks": 25.0,
-                # No "summarize" entry: detailed summarization is on-demand
-                # (DocumentService.generate_detailed_summary), not a graph
-                # node, and bounds itself with
-                # settings.DETAILED_SUMMARY_TIMEOUT_SECONDS instead -- see
-                # that setting's own docstring for the real per-call numbers
-                # this project measured behind the 400s figure.
+                # "summarize" girdisi yok: ayrıntılı özetleme
+                # (DocumentService.generate_detailed_summary) bir grafik
+                # düğümü değil, isteğe bağlıdır (on-demand) ve kendini
+                # bunun yerine settings.DETAILED_SUMMARY_TIMEOUT_SECONDS ile
+                # sınırlar -- bu projenin 400s rakamının arkasında ölçtüğü
+                # gerçek çağrı başına sayılar için o ayarın kendi
+                # docstring'ine bakın.
             }
         )
     )
@@ -259,66 +273,71 @@ class BudgetPolicy:
 
 @dataclass(frozen=True)
 class GuardrailPolicy:
-    """Thresholds and role mapping for the input/output guardrail layer.
+    """Girdi/çıktı koruma (guardrail) katmanı için eşikler ve rol eşlemesi.
 
     Attributes:
-        sensitivity_block_levels: ``gizlilik_derecesi`` grades that force a
-            document (or a draft built from it) to ``NEEDS_HUMAN_APPROVAL``
-            instead of proceeding automatically -- the same routing a
-            low-confidence draft already gets, not a separate mechanism.
-        output_groundedness_threshold: Minimum share of an assist reply's
-            extracted claims that must trace back to retrieved source
-            material before ``output_gate`` lets it pass unredacted. Same
-            concept as ``VerificationPolicy.min_automated_confidence``, scaled
-            to a share rather than a 0-100 score because the assist path has
-            no draft-quality score to reuse.
-        pii_confidence_floor: Below this confidence a PII pattern match is
-            treated as noise (logged, not flagged) rather than a finding --
-            keeps an incidental 11-digit number from tripping TCKN handling
-            on every partial match.
-        judge_echo_overlap_threshold: Reuses
-            ``VerificationPolicy.judge_echo_overlap_threshold``'s concept for
-            the guardrail judge: above this token-overlap share with the
-            content it was asked to judge, a verdict is an echo, not a
-            judgement, and is discarded.
-        judge_promotion_confidence: Minimum confidence the guardrail judge
-            (a fast-tier, pattern-blind model call) must clear before its
-            "this reads as sensitive" verdict is trusted for anything --
-            promoting an input document to ``requires_review``
-            (``document_analysis_graph.scan_sensitivity_node``), or, on the
-            output side, being treated as a leak at all
-            (``output_gate.evaluate_response``'s ``semantic_leak``). Raised
-            from an earlier 0.5 to 0.75: a low-confidence judge guess used
-            to be enough on its own to promote a document to human review
-            or block a reply outright, which is what produced the
-            unexplained "mesajda PII var, kısıldı" false positives Görev's
-            bug report names -- the judge is a second opinion, not a second
-            deterministic detector, and its uncertainty should read as
-            uncertainty.
-        role_clearance_map: The maximum ``SensitivityLevel`` each
-            ``UserRole`` may read. Every ``UserRole`` member must have an
-            entry -- an omitted role is not "no access", it is a role
-            ``require_clearance`` cannot evaluate at all, which is a bug, not
-            a restrictive default. ADMIN and MANAGER both map to the ceiling
-            (a company manager is trusted with full access, same as an
-            admin); EMPLOYEE's entry here is only the *default* a new
-            employee starts at (``UserModel.clearance_level``'s own column
-            default matches it) -- ``app.core.permissions.role_checker.
-            clearance_for`` reads that per-user field for an EMPLOYEE
-            rather than this map entry, since two employees can
-            legitimately need different access.
-        default_sensitivity_level: The level a document with no
-            confidentiality marking at all (``gizlilik_derecesi`` extracted
-            as ``None``, so ``SensitivityLevel.UNMARKED``) is treated as for
-            every access-control and retrieval-filter decision. Only ever
-            *fills in* an absent grade -- it never lowers a grade the
-            document actually carries, and ``UNMARKED`` itself is never
-            overwritten as the raw extraction result (see
-            ``app.ai.guardrails.sensitivity.SensitivityAssessment.level``
-            vs. its ``effective_level``): the distinction between "never
-            stated a grade" and "positively marked unclassified" stays in
-            the audit trail even though every consumer downstream of
-            ``effective_level`` sees a real grade instead of "unmarked".
+        sensitivity_block_levels: Bir belgeyi (veya ondan üretilen bir taslağı)
+            otomatik olarak ilerlemek yerine ``NEEDS_HUMAN_APPROVAL``'a
+            zorlayan ``gizlilik_derecesi`` dereceleri -- ayrı bir mekanizma
+            değil, düşük güvenli bir taslağın zaten aldığı yönlendirmenin
+            aynısı.
+        output_groundedness_threshold: ``output_gate`` bir yardım
+            (assist) yanıtını sansürsüz geçirmeden önce, o yanıttan
+            çıkarılan iddiaların getirilen kaynak materyale kadar
+            izlenebilmesi gereken minimum pay. ``VerificationPolicy.
+            min_automated_confidence`` ile aynı kavram, ama 0-100 bir puan
+            yerine bir paya ölçeklenmiş, çünkü assist yolunun yeniden
+            kullanabileceği bir taslak-kalitesi puanı yok.
+        pii_confidence_floor: Bu güvenin altında bir PII deseni eşleşmesi
+            bir bulgu değil, gürültü olarak ele alınır (kaydedilir,
+            işaretlenmez) -- rastlantısal 11 haneli bir sayının her kısmi
+            eşleşmede TCKN işlemesini tetiklemesini engeller.
+        judge_echo_overlap_threshold: Koruma yargıcı için
+            ``VerificationPolicy.judge_echo_overlap_threshold``'un kavramını
+            yeniden kullanır: yargılaması istenen içerikle bu token-örtüşme
+            payının üzerinde, bir karar bir yargı değil bir yankıdır ve
+            atılır.
+        judge_promotion_confidence: Koruma yargıcının (hızlı katman, deseni
+            görmeyen bir model çağrısı) "bu hassas okunuyor" kararının
+            herhangi bir şey için güvenilmesi öncesinde geçmesi gereken
+            minimum güven -- bir girdi belgesini ``requires_review``'a
+            yükseltmek (``document_analysis_graph.scan_sensitivity_node``)
+            ya da çıktı tarafında, hiç sızıntı olarak ele alınıp
+            alınmayacağı (``output_gate.evaluate_response``'un
+            ``semantic_leak``'i). Önceki 0.5'ten 0.75'e yükseltildi: düşük
+            güvenli bir yargıç tahmini eskiden tek başına bir belgeyi
+            insan incelemesine yükseltmeye ya da bir yanıtı doğrudan
+            engellemeye yetiyordu; Görev'in hata raporunun adlandırdığı
+            açıklanamayan "mesajda PII var, kısıldı" yanlış pozitiflerini
+            üreten de buydu -- yargıç ikinci bir görüştür, ikinci bir
+            deterministik dedektör değil, ve belirsizliği belirsizlik
+            olarak okunmalıdır.
+        role_clearance_map: Her ``UserRole``'ün okuyabileceği maksimum
+            ``SensitivityLevel``. Her ``UserRole`` üyesinin bir girdisi
+            olmalıdır -- atlanmış bir rol "erişim yok" demek değildir,
+            ``require_clearance``'ın hiç değerlendiremediği bir roldür ki
+            bu bir hatadır, kısıtlayıcı bir varsayılan değil. ADMIN ve
+            MANAGER ikisi de tavana eşlenir (bir şirket yöneticisine tam
+            erişim güvenilir, tıpkı bir admin gibi); buradaki EMPLOYEE
+            girdisi yeni bir çalışanın başladığı *varsayılan* değerdir
+            (``UserModel.clearance_level``'ın kendi sütun varsayılanı buna
+            uyar) -- ``app.core.permissions.role_checker.clearance_for``,
+            bir EMPLOYEE için bu harita girdisi yerine kullanıcı başına bu
+            alanı okur, çünkü iki çalışanın meşru olarak farklı erişime
+            ihtiyacı olabilir.
+        default_sensitivity_level: Hiç gizlilik işareti taşımayan bir
+            belgenin (``gizlilik_derecesi`` ``None`` olarak çıkarılmış,
+            yani ``SensitivityLevel.UNMARKED``) her erişim kontrolü ve
+            getirme-filtresi kararı için hangi seviyede ele alındığı.
+            Yalnızca eksik bir dereceyi *doldurur* -- belgenin gerçekte
+            taşıdığı bir dereceyi asla düşürmez ve ``UNMARKED``'ın kendisi
+            ham çıkarma sonucu olarak asla üzerine yazılmaz (bkz.
+            ``app.ai.guardrails.sensitivity.SensitivityAssessment.level``'a
+            karşı ``effective_level``'ı): "hiç derece belirtilmedi" ile
+            "olumlu olarak sınıflandırılmamış işaretlendi" arasındaki
+            ayrım, ``effective_level``'ın alt akışındaki her tüketici
+            "işaretsiz" yerine gerçek bir derece görse bile denetim
+            izinde kalır.
     """
 
     sensitivity_block_levels: tuple[SensitivityLevel, ...] = (
@@ -344,43 +363,47 @@ class GuardrailPolicy:
 
 @dataclass(frozen=True)
 class DraftPolicy:
-    """Few-shot style-example and source-document retrieval for the draft writer.
+    """Taslak yazarı için az-örnekli (few-shot) üslup örneği ve kaynak belge
+    getirme.
 
     Attributes:
-        style_examples_enabled: Master switch. False reproduces pre-feature
-            behaviour exactly (``retrieve_examples_node`` short-circuits to
-            an empty list without touching Qdrant) -- the A/B and
-            emergency-rollback lever.
-        style_example_count: Style examples requested per draft. Two, not
-            one: a single example teaches its own idiosyncrasies as if they
-            were the format; two let the writer see what varies (wording,
-            length) versus what is structurally constant (field order,
-            closing direction). Not raised further without re-measuring --
-            more examples also means more surface for
-            ``draft_verifier``'s ``ornek_sizintisi`` check to have to catch.
-        style_example_char_budget: Ceiling on the combined character length
-            of retrieved example text; the longest example is dropped first
-            past this. Sized so brief + writer.md + examples stays well
-            inside ``OLLAMA_NUM_CTX`` (8192 tokens) even in Turkish, where
-            ``CHARS_PER_TOKEN_TR`` (2.8) makes the same text cost noticeably
-            more tokens than in English.
-        source_chunks_enabled: Master switch for
-            ``draft_graph.retrieve_source_chunks_node``. False reproduces
-            pre-feature behaviour exactly (the writer sees only the
-            analysis step's own summary, never document excerpts) -- same
-            A/B and emergency-rollback lever as ``style_examples_enabled``.
-        source_chunk_count: Document excerpts requested per draft from the
-            ``document_qa`` collection (the same index the assist step's
-            own ``search_document`` tool already queries). Sized well above
-            ``style_example_count`` -- grounding in the source document
-            itself is the primary defence against fabrication Görev's own
-            "yalnızca özet kullanmak kritik detayların kaybolmasına neden
-            olabilir" concern names, a few-shot style example is a
-            secondary quality boost.
-        source_chunk_char_budget: Ceiling on the combined character length
-            of retrieved excerpts, same role ``style_example_char_budget``
-            plays -- a whole chunk is dropped rather than truncated
-            mid-sentence past this (see the retrieval node itself).
+        style_examples_enabled: Ana anahtar. False, özellik-öncesi
+            davranışı tam olarak yeniden üretir (``retrieve_examples_node``
+            Qdrant'a hiç dokunmadan doğrudan boş bir listeye düşer) -- A/B
+            ve acil geri alma (rollback) kolu.
+        style_example_count: Taslak başına istenen üslup örneği sayısı.
+            Bir değil iki: tek bir örnek kendi tuhaflıklarını sanki format
+            buymuş gibi öğretir; iki örnek yazarın neyin değiştiğini
+            (ifade, uzunluk) neyin yapısal olarak sabit olduğuna (alan
+            sırası, kapanış yönü) karşı görmesini sağlar. Yeniden ölçüm
+            yapmadan daha da yükseltilmemeli -- daha fazla örnek, aynı
+            zamanda ``draft_verifier``'ın ``ornek_sizintisi`` kontrolünün
+            yakalaması gereken daha fazla yüzey demektir.
+        style_example_char_budget: Getirilen örnek metnin birleşik karakter
+            uzunluğu için tavan; bunu aşan durumda önce en uzun örnek
+            atılır. Brief + writer.md + örnekler toplamının, Türkçede bile
+            ``OLLAMA_NUM_CTX`` (8192 token) içinde rahatça kalması için
+            boyutlandırılmıştır; Türkçede ``CHARS_PER_TOKEN_TR`` (2.8)
+            aynı metnin İngilizceye göre belirgin biçimde daha fazla token
+            tutmasına neden olur.
+        source_chunks_enabled: ``draft_graph.retrieve_source_chunks_node``
+            için ana anahtar. False, özellik-öncesi davranışı tam olarak
+            yeniden üretir (yazar yalnızca analiz adımının kendi özetini
+            görür, belge alıntılarını asla görmez) --
+            ``style_examples_enabled`` ile aynı A/B ve acil geri alma kolu.
+        source_chunk_count: ``document_qa`` koleksiyonundan (assist
+            adımının kendi ``search_document`` aracının zaten sorguladığı
+            aynı indeks) taslak başına istenen belge alıntısı sayısı.
+            ``style_example_count``'un iyice üzerinde boyutlandırılmıştır --
+            kaynak belgenin kendisine dayanmak, Görev'in kendi "yalnızca
+            özet kullanmak kritik detayların kaybolmasına neden olabilir"
+            endişesinin adlandırdığı uydurmaya (fabrication) karşı birincil
+            savunmadır; az-örnekli üslup örneği ikincil bir kalite
+            artışıdır.
+        source_chunk_char_budget: Getirilen alıntıların birleşik karakter
+            uzunluğu için tavan, ``style_example_char_budget``'ın oynadığı
+            aynı rol -- bunu aşan durumda cümle ortasından kırpmak yerine
+            alıntının tamamı atılır (bkz. getirme düğümünün kendisi).
     """
 
     style_examples_enabled: bool = True
@@ -393,62 +416,69 @@ class DraftPolicy:
 
 @dataclass(frozen=True)
 class ChunkingPolicy:
-    """Chunk-size/overlap parameters for the two things this codebase splits
-    text for: the per-upload Document Q&A index and the offline mevzuat
-    corpus index.
+    """Bu kod tabanının metni böldüğü iki şey için parça boyutu/örtüşme
+    parametreleri: yükleme başına Belge Soru-Cevap indeksi ve çevrimdışı
+    mevzuat külliyat indeksi.
 
-    Both pairs used to be the same ``1000``/``200`` literal, copy-pasted
-    across four call sites (``app.domains.documents.service``,
-    ``app.ai.retrieval.mcp_mevzuat``, ``scripts/index_mevzuat.py``, and the
-    corpus loader they both feed) with a "must stay in sync" comment at
-    three of them and no mechanism enforcing it. This class is that
-    mechanism -- one source of truth read by all four.
+    Her iki çift de eskiden dört çağrı noktasına
+    (``app.domains.documents.service``, ``app.ai.retrieval.mcp_mevzuat``,
+    ``scripts/index_mevzuat.py`` ve ikisinin de beslediği külliyat
+    yükleyici) kopyala-yapıştır edilmiş aynı ``1000``/``200`` sabitiydi;
+    üçünde "senkron kalmalı" yorumu vardı ama bunu zorlayan bir mekanizma
+    yoktu. Bu sınıf o mekanizmadır -- dördü tarafından da okunan tek bir
+    gerçek kaynak.
 
-    Deliberately no ``strategy`` field selecting between chunkers. The only
-    production chunker is ``RecursiveChunker``
-    (``app.ai.embeddings.chunking.recursive``); ``SemanticChunker`` exists
-    in the same package and is unit-tested, but is not wired into any
-    production call site and must not be without first proving it helps --
-    see that module's own docstring for the concrete reasons it is not a
-    safe drop-in today (a Turkish sentence-boundary regex that mishandles
-    common abbreviations and uppercase vowels, an unbounded chunk size with
-    no overlap, and no ``start_index`` metadata, which would silently drop
-    the ``[s. N]`` page citation ``_index_for_qa`` builds from it).
-    ``evaluation``'s retrieval suite is where that question gets an answer;
-    this policy is not the place to pre-empt it with an unused field.
+    Kasıtlı olarak parçalayıcılar arasında seçim yapan bir ``strategy``
+    alanı yok. Tek üretim parçalayıcısı ``RecursiveChunker``
+    (``app.ai.embeddings.chunking.recursive``)'dır; ``SemanticChunker``
+    aynı paket içinde vardır ve birim testleri yazılmıştır, ama hiçbir
+    üretim çağrı noktasına bağlanmamıştır ve önce yardımcı olduğu
+    kanıtlanmadan bağlanmamalıdır -- bugün neden güvenli bir doğrudan
+    değiştirme (drop-in) olmadığının somut nedenleri için o modülün kendi
+    docstring'ine bakın (yaygın kısaltmaları ve büyük harfli sesli
+    harfleri yanlış ele alan bir Türkçe cümle-sınırı regex'i, örtüşmesiz
+    sınırsız bir parça boyutu ve ``_index_for_qa``'nın ondan oluşturduğu
+    ``[s. N]`` sayfa alıntısını sessizce düşürecek olan, olmayan bir
+    ``start_index`` meta verisi). Bu sorunun cevabı ``evaluation``'ın
+    getirme (retrieval) paketinde bulunur; bu politika, kullanılmayan bir
+    alanla bunu önceden yanıtlayacak yer değildir.
 
     Attributes:
-        qa_chunk_size: Character length of each ``document_qa`` chunk (the
-            per-upload Q&A index queried by ``retrieve_source_chunks_node``
-            and the ``search_document`` tool). Raised from 1000 to 1500
-            after ``evaluation``'s retrieval suite measured it against
-            real Ollama embeddings on official-correspondence text: at
-            1000/200 the baseline scored precision@6=0.84/nDCG@6=0.94,
-            while 1500/300 scored 1.00/1.00 on the same gold set (see
-            ``evaluation/reports/retrieval-baseline.md``) -- fewer, larger
-            chunks meant fewer answers landing on a chunk boundary. This
-            does not retroactively re-chunk documents already indexed
-            under the old value; ``make reset-document-qa`` clears the
-            collection so the next analysis rebuilds it under the new one.
-        qa_chunk_overlap: Character overlap between consecutive
-            ``document_qa`` chunks -- keeps an answer that straddles a
-            chunk boundary from being lost.
-        mevzuat_chunk_size: Character length of each mevzuat corpus chunk.
-            Kept as a separate field from ``qa_chunk_size`` rather than one
-            shared pair on purpose: the indexing worker
-            (``app.workers.indexing.index_mevzuat_corpus``) and the BM25
-            dependency path (``app.ai.retrieval.mcp_mevzuat``,
-            ``scripts/index_mevzuat.py``) must produce byte-identical
-            chunks for the same corpus text, or
-            ``app.ai.retrieval.fusion.reciprocal_rank_fusion``'s
-            exact-``page_content`` dedup double-counts a chunk that was
-            split two different ways. Changing this value re-chunks the
-            corpus differently from whatever is already sitting in the
-            committed ``mevzuat`` Qdrant collection and ``sparse_vocab.json``
-            -- it requires re-running ``scripts/index_mevzuat.py``, not just
-            a policy edit.
-        mevzuat_chunk_overlap: Character overlap for mevzuat corpus chunks;
-            same re-index caveat as ``mevzuat_chunk_size``.
+        qa_chunk_size: Her bir ``document_qa`` parçasının (
+            ``retrieve_source_chunks_node`` ve ``search_document`` aracı
+            tarafından sorgulanan, yükleme başına Soru-Cevap indeksi)
+            karakter uzunluğu. ``evaluation``'ın getirme paketi bunu resmi
+            yazışma metni üzerinde gerçek Ollama gömmelerine karşı
+            ölçtükten sonra 1000'den 1500'e yükseltildi: 1000/200'de taban
+            çizgisi precision@6=0.84/nDCG@6=0.94 puan alırken, aynı altın
+            veride 1500/300 1.00/1.00 puan aldı (bkz.
+            ``evaluation/reports/retrieval-baseline.md``) -- daha az ve
+            daha büyük parçalar, bir parça sınırına düşen daha az cevap
+            anlamına geliyordu. Bu, eski değer altında zaten indekslenmiş
+            belgeleri geriye dönük olarak yeniden parçalamaz;
+            ``make reset-document-qa`` koleksiyonu temizler, böylece bir
+            sonraki analiz onu yeni değer altında yeniden kurar.
+        qa_chunk_overlap: Ardışık ``document_qa`` parçaları arasındaki
+            karakter örtüşmesi -- bir parça sınırına yayılan bir cevabın
+            kaybolmasını engeller.
+        mevzuat_chunk_size: Her bir mevzuat külliyat parçasının karakter
+            uzunluğu. Kasıtlı olarak ``qa_chunk_size`` ile paylaşılan tek
+            bir çift yerine ayrı bir alan olarak tutulur: indeksleme
+            işçisi (``app.workers.indexing.index_mevzuat_corpus``) ve BM25
+            bağımlılık yolu (``app.ai.retrieval.mcp_mevzuat``,
+            ``scripts/index_mevzuat.py``) aynı külliyat metni için bayt
+            düzeyinde özdeş parçalar üretmelidir; aksi halde
+            ``app.ai.retrieval.fusion.reciprocal_rank_fusion``'ın tam
+            eşleşen ``page_content`` yinelenen giderme (dedup) işlemi, iki
+            farklı şekilde bölünmüş bir parçayı iki kez sayar. Bu değeri
+            değiştirmek, külliyatı işlenmiş (committed) ``mevzuat`` Qdrant
+            koleksiyonunda ve ``sparse_vocab.json``'da halihazırda duran
+            şeyden farklı bir şekilde yeniden parçalar -- yalnızca bir
+            politika düzenlemesi değil, ``scripts/index_mevzuat.py``'nin
+            yeniden çalıştırılmasını gerektirir.
+        mevzuat_chunk_overlap: Mevzuat külliyat parçaları için karakter
+            örtüşmesi; ``mevzuat_chunk_size`` ile aynı yeniden indeksleme
+            uyarısı geçerlidir.
     """
 
     qa_chunk_size: int = 1500
@@ -459,7 +489,7 @@ class ChunkingPolicy:
 
 @dataclass(frozen=True)
 class Policy:
-    """The complete parameter surface of the deterministic decision layer."""
+    """Deterministik karar katmanının tam parametre yüzeyi."""
 
     version: str
     verification: VerificationPolicy = field(default_factory=VerificationPolicy)
@@ -473,21 +503,23 @@ class Policy:
     chunking: ChunkingPolicy = field(default_factory=ChunkingPolicy)
 
     def check_invariants(self) -> None:
-        """Assert the relationships between parameters that must always hold.
+        """Her zaman geçerli olması gereken parametreler arası ilişkileri doğrular.
 
-        Called at import time, so a policy that contradicts itself fails the
-        process rather than producing quietly wrong decisions in production.
+        İçe aktarma (import) anında çağrılır; bu sayede kendisiyle çelişen
+        bir politika, üretimde sessizce yanlış kararlar üretmek yerine
+        süreci başarısız kılar.
 
         Raises:
-            ValueError: When any invariant is violated.
+            ValueError: Herhangi bir değişmez ihlal edildiğinde.
         """
         verification = self.verification
         routing = self.routing
 
-        # The two human-approval thresholds are the same concept at different
-        # severities: 70 is "may be sent without review", 50 is "may not be
-        # routed at all". Inverting them would make a draft too weak to route
-        # simultaneously good enough to send.
+        # İki insan-onayı eşiği, farklı ciddiyet seviyelerinde aynı
+        # kavramdır: 70 "incelemeden gönderilebilir", 50 "hiçbir yere
+        # yönlendirilemez" demektir. Bunları tersine çevirmek, bir taslağı
+        # yönlendirilemeyecek kadar zayıf ve aynı anda gönderilebilecek
+        # kadar iyi yapardı.
         if routing.human_approval_score_threshold >= verification.min_automated_confidence:
             raise ValueError(
                 "routing.human_approval_score_threshold must stay below "
@@ -583,10 +615,10 @@ class Policy:
             if overlap < 0:
                 raise ValueError(f"{overlap_name} must not be negative")
             if overlap >= size:
-                # RecursiveCharacterTextSplitter degenerates (near-duplicate
-                # or endlessly overlapping chunks) once overlap catches up
-                # with size -- this is not a valid configuration, not just
-                # an inefficient one.
+                # Örtüşme, boyuta yetiştiğinde RecursiveCharacterTextSplitter
+                # bozulur (neredeyse yinelenen ya da sonsuz örtüşen
+                # parçalar) -- bu yalnızca verimsiz değil, geçersiz bir
+                # yapılandırmadır.
                 raise ValueError(
                     f"{overlap_name} ({overlap}) must be smaller than "
                     f"{size_name} ({size})"

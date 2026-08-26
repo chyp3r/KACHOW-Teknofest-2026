@@ -1,11 +1,12 @@
-"""Deterministic "who should this draft go to" -- no new AI call.
+"""Deterministik "bu taslak kime gitmeli" -- yeni bir AI çağrısı yok.
 
-Same non-decision `GET /units/{id}/suggested-recipients` already is (see
-its own docstring): the routing graph already chose a unit
-(`drafts.destination_unit_id`); this only ranks that unit's membership,
-favorites first. Exposed as `GET /transfers/recommendations` so the manual
-send UI (Faz 3) can show a suggested-recipient chip without waiting for
-the Faz 4 AI channel to exist.
+`GET /units/{id}/suggested-recipients`'in zaten olduğu aynı karar
+vermeyen (non-decision) yapı (bkz. kendi docstring'i): yönlendirme grafiği
+zaten bir birim seçti (`drafts.destination_unit_id`); bu yalnızca o
+birimin üyeliğini, önce favoriler olacak şekilde sıralar. Manuel gönderim
+arayüzünün (Faz 3), Faz 4 AI kanalının var olmasını beklemeden önerilen
+alıcı çipini gösterebilmesi için `GET /transfers/recommendations` olarak
+sunulur.
 """
 
 from dataclasses import dataclass
@@ -22,7 +23,7 @@ DEFAULT_RECOMMENDATION_LIMIT = 5
 class RecipientRecommendation:
     user_id: str
     username: str
-    #: "favorite_in_unit" (ranked first) | "unit_member"
+    #: "favorite_in_unit" (önce sıralanır) | "unit_member"
     source: Literal["favorite_in_unit", "unit_member"]
     unit_id: str
     unit_name: str
@@ -48,14 +49,16 @@ class RecipientRecommendationService:
         requester_id: str,
         limit: int = DEFAULT_RECOMMENDATION_LIMIT,
     ) -> List[RecipientRecommendation]:
-        """Rank `draft`'s own routed unit's members, favorites first.
+        """`draft`'ın kendi yönlendirildiği birimin üyelerini, önce favoriler
+        olacak şekilde sıralar.
 
-        Returns an empty list -- never an error -- whenever there is
-        nothing to recommend: the draft doesn't exist or belongs to a
-        different company, it was never routed to a unit
-        (`destination_unit_id is None`), or that unit has since been
-        deactivated. A recommendation is a hint, not a requirement; an
-        empty result just means the caller falls back to manual search.
+        Önerecek bir şey olmadığında -- asla bir hata değil -- boş bir
+        liste döndürür: taslak mevcut değil ya da farklı bir şirkete ait,
+        hiçbir zaman bir birime yönlendirilmemiş
+        (`destination_unit_id is None`) veya o birim o zamandan beri devre
+        dışı bırakılmış. Bir öneri bir ipucudur, bir gereklilik değil;
+        boş bir sonuç yalnızca çağıranın manuel aramaya geri döneceği
+        anlamına gelir.
         """
         draft = await self.draft_repository.get_by_id(draft_id)
         if draft is None or draft.company_id != company_id or draft.is_deleted:
@@ -88,8 +91,8 @@ class RecipientRecommendationService:
             for _membership, user in members
             if user.id != requester_id
         ]
-        # `list_for_unit` already ranks primary -> lead -> rest; only
-        # promoting favorites ahead of that keeps the rest of its
-        # ordering, rather than re-sorting from scratch.
+        # `list_for_unit` zaten primary -> lead -> rest şeklinde sıralar;
+        # yalnızca favorileri bunun önüne çıkarmak, sıfırdan yeniden
+        # sıralamak yerine geri kalan sırasını korur.
         recommendations.sort(key=lambda r: r.source != "favorite_in_unit")
         return recommendations[:limit]

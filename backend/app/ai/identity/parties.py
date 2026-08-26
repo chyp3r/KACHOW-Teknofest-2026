@@ -1,46 +1,45 @@
-"""Who is "us" and who is "them" -- a party model the draft/revision
-pipeline had no notion of at all before this module existed.
+"""Kim "biz"iz, kim "onlar" -- bu modül var olmadan önce draft/revize
+pipeline'ının hiç bir kavramı olmadığı bir taraf modeli.
 
-Before this module, nothing in the pipeline ever asked "does this name
-belong to us, or to whoever sent us this document?" Two concrete
-consequences followed:
+Bu modülden önce, pipeline içinde hiçbir şey "bu ad bize mi ait, yoksa bu
+belgeyi bize gönderen kişiye mi?" diye sormuyordu. Bunun iki somut sonucu vardı:
 
-1. ``prompts/templates/writer.md``'s signature-block rule told the writer
-   to use "Yazım Briefi'nde veya **gelen evrakın imza sahibi alanı**nda"
-   varsa aynen kullan -- literally instructing it to sign OUR outgoing
-   letter with the incoming document's own signatory, whenever the writing
-   brief left the signer unspecified.
-2. ``app.ai.verification.draft_verifier.verify_draft`` folds the *entire*
-   classification (``_flatten_classification``, which includes
-   ``imza_sahibi``, ``gonderen_kurum``, ``entities``, ...) into its trusted
-   grounding haystack. So the exact identity swap (1) produces is not just
-   unpunished -- it is *maximally grounded*: the counterparty's own name is
-   "supported" by the very same classification it came from, and the draft
-   scores as if nothing were wrong.
+1. ``prompts/templates/writer.md``'nin imza bloğu kuralı yazarı "Yazım
+   Briefi'nde veya **gelen evrakın imza sahibi alanı**nda" varsa aynen
+   kullanmasını söylüyordu -- yazım briefi imzalayanı belirtilmemiş
+   bıraktığında BİZİM giden mektubumuzu gelen belgenin kendi imzalayanıyla
+   imzalamasını doğrudan söylüyordu.
+2. ``app.ai.verification.draft_verifier.verify_draft``, *tüm*
+   sınıflandırmayı (``imza_sahibi``, ``gonderen_kurum``, ``entities``, ...
+   dahil olan ``_flatten_classification``) kendi güvenilen dayanak
+   yığınına katlıyor. Yani (1)'in ürettiği kimlik değişimi yalnızca
+   cezasız kalmakla kalmıyor -- *maksimum düzeyde dayanaklı* hale
+   geliyor: karşı tarafın kendi adı, geldiği aynı sınıflandırma tarafından
+   "destekleniyor" ve taslak sanki hiçbir sorun yokmuş gibi puanlanıyor.
 
-``app.ai.workflows.writing_brief``'s reply-direction heuristic compounds
-this: ``_resolve_yazan_taraf``/``_resolve_muhatap`` unconditionally treat
-the incoming document as "addressed to us" and reverse its
-``gonderen_kurum``/``muhatap`` fields into our own sender/addressee slots,
-with no verification that the document was actually addressed to us at all
--- a CV, an internship evaluation report, or any third-party document
-reversed the same way, silently producing the wrong letterhead and the
-wrong addressee.
+``app.ai.workflows.writing_brief``'in yanıt yönü sezgiseli bunu daha da
+kötüleştiriyor: ``_resolve_yazan_taraf``/``_resolve_muhatap``, gelen belgeyi
+koşulsuz olarak "bize hitaben" olarak ele alıyor ve ``gonderen_kurum``/
+``muhatap`` alanlarını bizim kendi gönderen/muhatap alanlarımıza ters
+çeviriyor; belgenin gerçekten bize hitaben olup olmadığına dair hiçbir
+doğrulama yapmadan -- bir özgeçmiş, bir staj değerlendirme raporu veya
+başka herhangi bir üçüncü taraf belgesi aynı şekilde ters çevriliyor,
+sessizce yanlış antet ve yanlış muhatap üretiyordu.
 
-This module is the fix: a small, deterministic (no model call) party model
-resolved once per draft/revise turn and threaded through both the
-writing-brief resolver and the verifier's grounding split (see
-``app.ai.verification.draft_verifier``'s own ``own_facts``/
-``counterparty_facts`` split). ``resolve_party_context`` decides
-``DocumentRelation`` by checking whether the incoming document's own
-``muhatap`` field actually names *us* -- reusing the exact same
-token-overlap ladder (``TOKEN_OVERLAP_THRESHOLD``) ``draft_verifier``
-already uses for institution-name paraphrase matching, not a new
-similarity metric. When it does not match (or nothing about the document's
-own addressee is known at all), the document is never treated as
-"addressed to us", and no role reversal happens -- the counterparty's names
-stay counterparty names, usable only as body-text facts, never as our own
-identity.
+Bu modül bunun düzeltmesidir: her draft/revize turunda bir kez çözümlenen
+ve hem yazım briefi çözümleyicisi hem de doğrulayıcının dayanak ayrımı
+(bkz. ``app.ai.verification.draft_verifier``'ın kendi ``own_facts``/
+``counterparty_facts`` ayrımı) boyunca aktarılan küçük, deterministik
+(model çağrısı olmayan) bir taraf modeli. ``resolve_party_context``,
+gelen belgenin kendi ``muhatap`` alanının gerçekten *bizi* adlandırıp
+adlandırmadığını kontrol ederek ``DocumentRelation``'a karar verir -- yeni
+bir benzerlik metriği değil, ``draft_verifier``'ın kurum adı parafraz
+eşleştirmesi için zaten kullandığı aynı token-overlap merdivenini
+(``TOKEN_OVERLAP_THRESHOLD``) yeniden kullanarak. Eşleşme yoksa (veya
+belgenin kendi muhatabı hakkında hiçbir şey bilinmiyorsa), belge asla
+"bize hitaben" olarak ele alınmaz ve hiçbir rol ters çevirmesi yapılmaz --
+karşı tarafın adları karşı taraf adları olarak kalır, yalnızca gövde
+metni gerçeği olarak kullanılabilir, asla bizim kendi kimliğimiz olarak değil.
 """
 
 from dataclasses import dataclass
@@ -49,52 +48,51 @@ from typing import Any, Literal, Sequence
 from app.ai.identity.company_profile import CompanyProfile
 from app.ai.verification.draft_verifier import TOKEN_OVERLAP_THRESHOLD, _fold, _token_overlap
 
-#: How the incoming document relates to us, decided once by
-#: ``resolve_party_context`` and read everywhere a "was this addressed to
-#: us" decision is needed (``app.ai.workflows.writing_brief``'s
-#: role-reversal, the draft brief's own framing).
+#: Gelen belgenin bizimle nasıl ilişkili olduğu, ``resolve_party_context``
+#: tarafından bir kez karar verilir ve "bu bize mi hitaben" kararının
+#: gerektiği her yerde okunur (``app.ai.workflows.writing_brief``'in rol
+#: ters çevirmesi, taslak briefinin kendi çerçevelemesi).
 #:
-#: - ``"reply_to_us"``: the document's own ``muhatap`` field names us (see
-#:   :func:`resolve_party_context`) -- the classic "they wrote to us, we
-#:   write back" cycle. Only this value ever licenses treating the
-#:   document's ``gonderen_kurum`` as our reply's own addressee.
-#: - ``"third_party"``: a document exists and named *someone*, but not us
-#:   -- a CV, an internship report, a document genuinely addressed to a
-#:   different institution, or one whose addressee we simply cannot
-#:   confirm is us (no self-identity configured at all). Every name in it
-#:   is counterparty material: usable as a body-text fact, never assigned
-#:   to our own antet/imza/muhatap slots.
-#: - ``"none"``: no document is attached, or it carries no
-#:   sender/addressee fields at all -- there is nothing to reverse either
-#:   way; whoever is writing must be resolved from the user's own message
-#:   or our own configured identity instead.
+#: - ``"reply_to_us"``: belgenin kendi ``muhatap`` alanı bizi adlandırıyor
+#:   (bkz. :func:`resolve_party_context`) -- klasik "bize yazdılar, biz de
+#:   geri yazıyoruz" döngüsü. Yalnızca bu değer, belgenin ``gonderen_kurum``'unu
+#:   yanıtımızın kendi muhatabı olarak ele almaya izin verir.
+#: - ``"third_party"``: bir belge var ve *birini* adlandırıyor, ama bizi
+#:   değil -- bir özgeçmiş, bir staj raporu, gerçekten farklı bir kuruma
+#:   hitaben olan bir belge veya muhatabının biz olduğunu doğrulayamadığımız
+#:   bir belge (hiç kimlik yapılandırılmamış). İçindeki her ad karşı taraf
+#:   materyalidir: gövde metni gerçeği olarak kullanılabilir, asla bizim
+#:   kendi antet/imza/muhatap alanlarımıza atanamaz.
+#: - ``"none"``: hiçbir belge eklenmemiş, veya hiç gönderen/muhatap alanı
+#:   taşımıyor -- ters çevrilecek hiçbir şey yok; kim yazıyor, kullanıcının
+#:   kendi mesajından veya bizim kendi yapılandırılmış kimliğimizden
+#:   çözümlenmelidir.
 DocumentRelation = Literal["reply_to_us", "third_party", "none"]
 
 
 @dataclass(frozen=True)
 class SelfParty:
-    """Us: the company (and, loosely, the requesting user) actually
-    writing this letter.
+    """Biz: bu mektubu fiilen yazan şirket (ve gevşek biçimde, istek yapan kullanıcı).
 
     Attributes:
-        display_name: The company's full legal/official name (see
+        display_name: Şirketin tam yasal/resmî adı (bkz.
             ``CompanyProfile.display_name``).
-        short_name: A shorter form, if configured.
-        letterhead: The multi-line antet text a draft's header should use.
-        default_signer_title: The signature block's default unvan.
-        default_signer_name: The signature block's default ad soyad --
-            never the incoming document's own signatory (see this module's
-            docstring).
-        aliases: Alternate ways this company's own name appears in a
-            document or a user's message (see ``CompanyProfile.aliases``).
-        unit_names: This company's own department/unit names (see
+        short_name: Yapılandırılmışsa daha kısa bir biçim.
+        letterhead: Bir taslağın başlığının kullanması gereken çok satırlı antet metni.
+        default_signer_title: İmza bloğunun varsayılan unvanı.
+        default_signer_name: İmza bloğunun varsayılan ad soyadı --
+            asla gelen belgenin kendi imzalayanı değil (bkz. bu modülün docstring'i).
+        aliases: Bu şirketin kendi adının bir belgede veya kullanıcının
+            mesajında görünme biçimleri (bkz. ``CompanyProfile.aliases``).
+        unit_names: Bu şirketin kendi departman/birim adları (bkz.
             ``app.domains.units.provider.get_active_units_for_routing``) --
-            a user referring to "İnsan Kaynakları" as the sender means us,
-            not a document's addressee, when that is one of our own units.
-        requester_user_id: The id of the user who asked for this draft, for
-            completeness/observability. Never rendered into a prompt --
-            drafts are written on behalf of a company, not a named
-            employee, unless the writing brief itself says otherwise.
+            bir kullanıcının gönderen olarak "İnsan Kaynakları"na atıfta
+            bulunması, o bizim kendi birimlerimizden biriyse bir belgenin
+            muhatabı değil, bizi ifade eder.
+        requester_user_id: Bu taslağı isteyen kullanıcının id'si, tamlık/
+            gözlemlenebilirlik içindir. Asla bir promptun içine render
+            edilmez -- taslaklar, yazım briefinin kendisi aksini söylemedikçe
+            adlandırılmış bir çalışan adına değil, bir şirket adına yazılır.
     """
 
     display_name: str = ""
@@ -108,10 +106,10 @@ class SelfParty:
 
     @property
     def names(self) -> tuple[str, ...]:
-        """Every name variant that legitimately refers to us -- the
-        matching surface :func:`resolve_party_context`/``belongs_to_us``
-        compare candidate text against. Never rendered directly into a
-        prompt; ``display_name``/``letterhead`` are for that."""
+        """Meşru olarak bize atıfta bulunan her ad varyantı --
+        :func:`resolve_party_context`/``belongs_to_us``'un aday metni
+        karşılaştırdığı eşleştirme yüzeyi. Asla doğrudan bir promptun
+        içine render edilmez; bunun için ``display_name``/``letterhead`` vardır."""
         return tuple(
             name
             for name in (self.display_name, self.short_name, *self.aliases, *self.unit_names)
@@ -120,30 +118,30 @@ class SelfParty:
 
     @property
     def is_known(self) -> bool:
-        """Whether there is any configured identity to match against at
-        all. False for a company with no profile and no routable units --
-        the state most companies are in until an admin fills the profile
-        form in (see the seeder's minimal default, which keeps this True
-        for any real, named company)."""
+        """Karşılaştırılacak hiç yapılandırılmış bir kimlik olup olmadığı.
+        Ne profili ne de yönlendirilebilir birimi olan bir şirket için
+        False -- bir yöneticinin profil formunu doldurmasına kadar çoğu
+        şirketin içinde bulunduğu durum (bu, herhangi bir gerçek,
+        adlandırılmış şirket için bunu True tutan seeder'ın minimal
+        varsayılanıdır)."""
         return bool(self.names)
 
 
 @dataclass(frozen=True)
 class CounterParty:
-    """Them: whoever the incoming document's own header/signature fields
-    name -- material the writer may cite in the body, never assign to our
-    own antet/imza/muhatap slots.
+    """Onlar: gelen belgenin kendi başlık/imza alanlarının adlandırdığı kişi --
+    yazarın gövdede alıntılayabileceği ama asla kendi antet/imza/muhatap
+    alanlarımıza atayamayacağı materyal.
 
     Attributes:
-        gonderen_kurum: The document's own sender institution.
-        muhatap: The document's own addressee.
-        imza_sahibi: The document's own signatory.
-        basvuran_adi: The document's own applicant name, when it is a
-            petition-shaped document.
-        entities: Other names/institutions/dates the classifier noticed in
-            the document body (see ``EvrakField.entities``) -- untyped and
-            unprovenanced by construction, so treated the same as the
-            fields above: counterparty material, cite-only.
+        gonderen_kurum: Belgenin kendi gönderen kurumu.
+        muhatap: Belgenin kendi muhatabı.
+        imza_sahibi: Belgenin kendi imzalayanı.
+        basvuran_adi: Belge bir dilekçe şeklindeyse, belgenin kendi başvuran adı.
+        entities: Sınıflandırıcının belge gövdesinde fark ettiği diğer
+            ad/kurum/tarihler (bkz. ``EvrakField.entities``) -- yapı gereği
+            türsüz ve kaynaksız, bu yüzden yukarıdaki alanlarla aynı şekilde
+            ele alınır: karşı taraf materyali, yalnızca alıntılanabilir.
     """
 
     gonderen_kurum: str = ""
@@ -154,9 +152,9 @@ class CounterParty:
 
     @classmethod
     def from_classification(cls, classification: dict[str, Any] | None) -> "CounterParty":
-        """Build from a document-analysis ``classification`` dict (the
-        same shape ``app.ai.workflows.draft_graph._build_brief`` renders
-        from)."""
+        """Bir belge analizi ``classification`` dict'inden inşa eder (
+        ``app.ai.workflows.draft_graph._build_brief``'in render ettiği
+        aynı şekil)."""
         classification = classification or {}
         fields: Any = classification.get("fields") or {}
         if hasattr(fields, "model_dump"):
@@ -172,8 +170,8 @@ class CounterParty:
 
     @property
     def names(self) -> tuple[str, ...]:
-        """Every name this counterparty is known by -- the matching
-        surface ``belongs_to_them`` compares candidate text against."""
+        """Bu karşı tarafın bilindiği her ad -- ``belongs_to_them``'in
+        aday metni karşılaştırdığı eşleştirme yüzeyi."""
         return tuple(
             name
             for name in (
@@ -192,14 +190,15 @@ class CounterParty:
 
 
 def _matches_any(value: str, names: Sequence[str]) -> bool:
-    """Whether ``value`` refers to (one of) ``names``, tolerating
-    paraphrase the same way ``draft_verifier._support_for`` does for
-    institution names: an exact fold match, or a token-overlap ratio at or
-    above the same ``TOKEN_OVERLAP_THRESHOLD`` the deterministic verifier
-    already uses. Deliberately not a new similarity metric -- this is the
-    one place outside ``draft_verifier`` itself that needs "is this
-    paraphrase of that", and it should never drift from the verifier's own
-    answer to the same question.
+    """``value``'nun ``names``'ten (birine) atıfta bulunup bulunmadığı;
+    ``draft_verifier._support_for``'un kurum adları için yaptığı gibi
+    parafrazı tolere eder: tam bir katlama eşleşmesi, veya deterministik
+    doğrulayıcının kurum adı parafraz eşleştirmesi için zaten kullandığı
+    aynı ``TOKEN_OVERLAP_THRESHOLD``'a eşit ya da üzerinde bir
+    token-overlap oranı. Bilinçli olarak yeni bir benzerlik metriği değil --
+    burası ``draft_verifier``'ın dışında "bu, şunun parafrazı mı" sorusuna
+    ihtiyaç duyan tek yer ve verifier'ın aynı soruya verdiği yanıttan asla
+    sapmamalıdır.
     """
     if not value:
         return False
@@ -221,20 +220,20 @@ def _matches_any(value: str, names: Sequence[str]) -> bool:
 
 @dataclass(frozen=True)
 class PartyContext:
-    """The resolved party model for one draft/revise turn."""
+    """Bir draft/revize turu için çözümlenmiş taraf modeli."""
 
     us: SelfParty
     them: CounterParty
     relation: DocumentRelation
 
     def belongs_to_us(self, value: str) -> bool:
-        """Whether ``value`` (a name found somewhere in a draft or a slot
-        resolution) refers to us."""
+        """``value``'nun (bir taslakta veya bir alan çözümlemesinde
+        bulunan bir ad) bize atıfta bulunup bulunmadığı."""
         return _matches_any(value, self.us.names)
 
     def belongs_to_them(self, value: str) -> bool:
-        """Whether ``value`` refers to the counterparty named in the
-        incoming document."""
+        """``value``'nun gelen belgede adlandırılan karşı tarafa atıfta
+        bulunup bulunmadığı."""
         return _matches_any(value, self.them.names)
 
 
@@ -245,26 +244,27 @@ def resolve_party_context(
     classification: dict[str, Any] | None = None,
     requester_user_id: str = "",
 ) -> PartyContext:
-    """Resolve this turn's party model.
+    """Bu turun taraf modelini çözümler.
 
     Args:
-        profile: The requesting company's identity profile (see
+        profile: İstek yapan şirketin kimlik profili (bkz.
             ``app.domains.companies.provider.get_company_profile``).
-        unit_names: This company's own active routable unit names (see
-            ``app.domains.units.provider.get_active_units_for_routing``).
-        classification: The incoming document's analysis result, or
-            ``None``/``{}`` for a document-less turn.
-        requester_user_id: The id of the user who asked for this draft.
+        unit_names: Bu şirketin kendi aktif, yönlendirilebilir birim adları
+            (bkz. ``app.domains.units.provider.get_active_units_for_routing``).
+        classification: Gelen belgenin analiz sonucu, veya belgesiz bir tur
+            için ``None``/``{}``.
+        requester_user_id: Bu taslağı isteyen kullanıcının id'si.
 
     Returns:
-        The resolved context. ``relation`` is ``"reply_to_us"`` only when
-        the document's own ``muhatap`` field is known AND matches one of
-        ``us``'s own names -- never assumed by default the way the
-        pre-existing ``app.ai.workflows.writing_brief`` reply-direction
-        heuristic did. Everything else (a document with no party fields at
-        all, a document whose addressee doesn't match us, or one we simply
-        cannot verify because no self-identity is configured) resolves to
-        ``"third_party"``/``"none"``, never to a blind role reversal.
+        Çözümlenmiş bağlam. ``relation``, yalnızca belgenin kendi
+        ``muhatap`` alanı bilinip ``us``'un kendi adlarından biriyle
+        eşleştiğinde ``"reply_to_us"`` olur -- var olan
+        ``app.ai.workflows.writing_brief`` yanıt yönü sezgiselinin yaptığı
+        gibi asla varsayılan olarak varsayılmaz. Geri kalan her şey (hiç
+        taraf alanı olmayan bir belge, muhatabı bizimle eşleşmeyen bir
+        belge, veya hiç kendi kimliğimiz yapılandırılmadığı için basitçe
+        doğrulayamadığımız bir belge) ``"third_party"``/``"none"``'a
+        çözümlenir, asla kör bir rol ters çevirmesine değil.
     """
     us = SelfParty(
         display_name=profile.display_name,

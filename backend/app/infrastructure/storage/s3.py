@@ -11,18 +11,18 @@ logger = logging.getLogger(__name__)
 
 
 class S3Storage(BaseStorage):
-    """S3-compatible Object Storage implementation using boto3 (compatible with AWS S3 and MinIO)."""
+    """boto3 kullanan S3 uyumlu Nesne Depolama implementasyonu (AWS S3 ve MinIO ile uyumlu)."""
 
     def __init__(
         self, bucket_name: str, endpoint_url: str, access_key: str, secret_key: str
     ):
-        """Initialize S3 Storage client and ensure bucket exists.
+        """S3 Depolama istemcisini başlat ve bucket'ın var olduğundan emin ol.
 
         Args:
-            bucket_name: Name of the bucket.
-            endpoint_url: S3/MinIO API URL.
-            access_key: API Access Key.
-            secret_key: API Secret Key.
+            bucket_name: Bucket'ın adı.
+            endpoint_url: S3/MinIO API URL'i.
+            access_key: API Erişim Anahtarı.
+            secret_key: API Gizli Anahtarı.
         """
         self.bucket_name = bucket_name
         self.s3_client = boto3.client(
@@ -32,16 +32,16 @@ class S3Storage(BaseStorage):
             aws_secret_access_key=secret_key,
         )
 
-        # Pre-verify or create bucket
+        # Bucket'ı önceden doğrula veya oluştur
         try:
             self.s3_client.create_bucket(Bucket=bucket_name)
             logger.info(f"S3 bucket '{bucket_name}' verified/created.")
         except ClientError as e:
-            # Bucket might already exist or permissions might prevent creation
+            # Bucket zaten var olabilir veya izinler oluşturmayı engelleyebilir
             logger.debug(f"Bucket creation check warning: {e}")
 
     async def put_file(self, file_path: str, content: bytes) -> str:
-        """Upload file content asynchronously to S3/MinIO."""
+        """Dosya içeriğini eşzamansız olarak S3/MinIO'ya yükle."""
         def _upload():
             self.s3_client.put_object(
                 Bucket=self.bucket_name, Key=file_path, Body=content
@@ -52,7 +52,7 @@ class S3Storage(BaseStorage):
         return f"s3://{self.bucket_name}/{file_path}"
 
     async def get_file(self, file_path: str) -> bytes:
-        """Download file content asynchronously from S3/MinIO."""
+        """Dosya içeriğini eşzamansız olarak S3/MinIO'dan indir."""
         def _download():
             try:
                 response = self.s3_client.get_object(
@@ -67,7 +67,7 @@ class S3Storage(BaseStorage):
         return await asyncio.to_thread(_download)
 
     async def delete_file(self, file_path: str) -> bool:
-        """Delete file asynchronously from S3/MinIO."""
+        """Dosyayı eşzamansız olarak S3/MinIO'dan sil."""
         def _delete():
             try:
                 self.s3_client.delete_object(

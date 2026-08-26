@@ -13,7 +13,7 @@ from app.infrastructure.extractors.base import (
 
 logger = logging.getLogger(__name__)
 
-try:  # pragma: no cover - exercised via patching in tests
+try:  # pragma: no cover - testlerde patch ile çalıştırılır
     import pypdfium2 as pdfium
 except ImportError:  # pragma: no cover
     pdfium = None
@@ -22,12 +22,13 @@ PDF_EXTENSIONS = {"pdf"}
 
 
 class PdfiumExtractor(BaseDocumentExtractor):
-    """Pure-Python PDF text extractor built on PDFium via `pypdfium2`.
+    """`pypdfium2` üzerine kurulu saf Python PDF metin çıkarıcı.
 
-    Serves as the Java-free safety net behind `OpenDataLoaderExtractor`: it reads
-    bytes directly with no temporary file and no JVM, so the pipeline keeps
-    working when a Java runtime is unavailable or slow to start. It recovers the
-    raw text stream only, without reading order repair or table structure.
+    `OpenDataLoaderExtractor`'ın arkasında Java gerektirmeyen güvenlik ağı
+    olarak görev yapar: byte'ları geçici dosya ve JVM olmadan doğrudan okur,
+    böylece Java runtime'ı yoksa veya başlaması yavaşsa boru hattı çalışmaya
+    devam eder. Okuma sırası onarımı veya tablo yapısı olmadan yalnızca ham
+    metin akışını kurtarır.
     """
 
     name = "pdfium"
@@ -40,20 +41,20 @@ class PdfiumExtractor(BaseDocumentExtractor):
         mime_type: Optional[str] = None,
         raster_cache: Optional[dict] = None,
     ) -> ExtractedDocument:
-        """Extract the embedded text layer of a PDF.
+        """Bir PDF'in gömülü metin katmanını çıkar.
 
         Args:
-            content: The raw PDF bytes.
-            file_name: Original file name (unused).
-            mime_type: Declared content type (unused).
-            raster_cache: Unused; this extractor reads the PDF's own text
-                layer and never rasterises anything.
+            content: Ham PDF byte'ları.
+            file_name: Orijinal dosya adı (kullanılmıyor).
+            mime_type: Bildirilen içerik türü (kullanılmıyor).
+            raster_cache: Kullanılmıyor; bu çıkarıcı PDF'in kendi metin
+                katmanını okur ve hiçbir şeyi rasterize etmez.
 
         Returns:
-            The extracted text with one entry per page.
+            Sayfa başına bir girdi olan çıkarılan metin.
 
         Raises:
-            DocumentExtractionError: If pypdfium2 is unavailable or parsing fails.
+            DocumentExtractionError: pypdfium2 kullanılamıyorsa veya ayrıştırma başarısız olursa.
         """
         if pdfium is None:
             raise DocumentExtractionError(
@@ -80,13 +81,13 @@ class PdfiumExtractor(BaseDocumentExtractor):
         )
 
     def _read_pages(self, content: bytes) -> list[str]:
-        """Read the text layer of every page.
+        """Her sayfanın metin katmanını oku.
 
         Args:
-            content: The raw PDF bytes.
+            content: Ham PDF byte'ları.
 
         Returns:
-            Page text in document order.
+            Belge sırasına göre sayfa metni.
         """
         document = pdfium.PdfDocument(content)
         try:
@@ -109,12 +110,13 @@ class PdfiumExtractor(BaseDocumentExtractor):
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
     ) -> bool:
-        """Accept PDFs with a text layer; reject genuine scans outright.
+        """Metin katmanı olan PDF'leri kabul et; gerçek taramaları doğrudan reddet.
 
-        This extractor reads exactly the text layer `has_pdf_text_layer`
-        already probed for -- on a genuine scan `_read_pages` would return
-        nothing anyway, so skipping it here saves one PDF open-and-iterate
-        pass, and lets the chain reach the OCR extractors sooner.
+        Bu çıkarıcı `has_pdf_text_layer`'ın zaten sonda ettiği metin
+        katmanını tam olarak okur -- gerçek bir taramada `_read_pages` zaten
+        hiçbir şey döndürmeyecektir, bu yüzden burada atlamak bir PDF
+        aç-ve-yinele geçişinden tasarruf sağlar ve zincirin OCR
+        çıkarıcılarına daha erken ulaşmasını sağlar.
         """
         is_pdf = (
             has_pdf_magic_bytes(content)

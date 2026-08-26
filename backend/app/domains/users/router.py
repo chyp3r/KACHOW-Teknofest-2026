@@ -38,17 +38,19 @@ def _favorite_service(db: AsyncSession) -> FavoriteService:
 
 @router.post("", response_model=APIResponse[UserResponse])
 async def register(schema: UserCreate, db: AsyncSession = Depends(get_owner_db)):
-    """Register a new user account in the system, validating the email invitation whitelist.
+    """Sistemde yeni bir kullanıcı hesabı kaydeder, e-posta davet beyaz listesini doğrular.
 
-    Unauthenticated by design -- registration is invite-gated instead (see
-    `UserService.register_user`), and the invite is what determines both
-    the new account's role and its company, never the request body.
+    Tasarım gereği kimlik doğrulaması yoktur -- bunun yerine kayıt davet
+    tarafından kapılanır (bkz. `UserService.register_user`), ve yeni
+    hesabın hem rolünü hem de şirketini belirleyen davettir, istek gövdesi
+    asla değil.
 
-    Uses `get_owner_db`, not `get_db`: the invite lookup is by `email`,
-    unique system-wide (`InvitedEmailModel.email`, not per company), so
-    there is no tenant context yet to scope a row-level-security policy by
-    until the invite (and the company it belongs to) is found -- same
-    reasoning as `auth/router.py::login`.
+    `get_db` yerine `get_owner_db` kullanılır: davet araması `email` ile
+    yapılır, sistem genelinde benzersizdir (`InvitedEmailModel.email`,
+    şirket bazında değil), bu yüzden davet (ve ait olduğu şirket)
+    bulunana kadar satır düzeyinde bir güvenlik politikasını kapsayacak
+    bir kiracı bağlamı henüz yoktur -- `auth/router.py::login` ile aynı
+    gerekçe.
     """
     repository = UserRepository(db)
     service = UserService(repository)
@@ -62,8 +64,8 @@ async def invite_user(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
-    """Invite/whitelist an email address with a predefined role, into the
-    caller's own company (Admin/Manager only)."""
+    """Bir e-posta adresini önceden tanımlanmış bir rolle çağıranın kendi
+    şirketine davet eder/beyaz listeye alır (yalnızca Admin/Manager)."""
     repository = UserRepository(db)
     service = UserService(repository)
     invite = await service.invite_user_email(schema, current_user.company_id)
@@ -78,7 +80,7 @@ async def list_users(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
-    """Retrieve the caller's own company's users, paginated and role-filtered (Admin/Manager only)."""
+    """Çağıranın kendi şirketinin kullanıcılarını sayfalanmış ve role göre filtrelenmiş şekilde getirir (yalnızca Admin/Manager)."""
     repository = UserRepository(db)
     service = UserService(repository)
     role_str = role.value if role else None
@@ -88,15 +90,15 @@ async def list_users(
 
 @router.get("/me", response_model=APIResponse[UserResponse])
 async def get_me(current_user: UserModel = Depends(get_current_user)):
-    """Get profile details of the currently authenticated user."""
+    """Şu anda kimliği doğrulanmış kullanıcının profil bilgilerini getirir."""
     response_data = UserResponse.model_validate(current_user)
     return SuccessResponse(data=response_data)
 
 
-# NOTE: /search and /me/... must be registered before GET /{user_id} below
-# -- FastAPI matches routes in registration order, and a single-segment
-# path like "/search" would otherwise be swallowed by "/{user_id}"
-# (user_id="search") since that route is registered first otherwise.
+# NOT: /search ve /me/... aşağıdaki GET /{user_id}'den önce kaydedilmelidir
+# -- FastAPI rotaları kayıt sırasına göre eşleştirir ve "/search" gibi tek
+# segmentli bir yol, aksi halde o rota önce kaydedildiği için
+# "/{user_id}" (user_id="search") tarafından yutulurdu.
 @router.get(
     "/search",
     response_model=None,
@@ -110,11 +112,12 @@ async def search_users(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Search the caller's own company's users for the messaging/artifact-
-    transfer recipient picker. `q` requires at least 2 characters (rate-
-    limited on top -- see `rate_limit`'s own docstring) to keep this from
-    doubling as a company-wide user enumeration tool. Results are always
-    company-scoped by RLS + the explicit `company_id` filter regardless.
+    """Mesajlaşma/artefakt transferi alıcı seçicisi için çağıranın kendi
+    şirketinin kullanıcılarında arama yapar. `q`, bunun şirket geneli bir
+    kullanıcı listeleme aracına dönüşmesini engellemek için en az 2 karakter
+    gerektirir (üzerine hız sınırlaması da eklenmiştir -- bkz.
+    `rate_limit`'in kendi docstring'i). Sonuçlar, ne olursa olsun her zaman
+    RLS + açık `company_id` filtresi ile şirket bazlıdır.
     """
     service = UserService(UserRepository(db))
     favorite_repository = UserFavoriteRepository(db)
@@ -164,7 +167,7 @@ async def list_my_favorites(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """The caller's own favorites, newest-favorited first."""
+    """Çağıranın kendi favorileri, en son favorilenen önce."""
     items = await _favorite_service(db).list_favorites(current_user.company_id, current_user)
     return SuccessResponse(
         data=[_favorite_response(favorite, user).model_dump(mode="json") for favorite, user in items]
@@ -177,7 +180,7 @@ async def add_my_favorite(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Add a company user to the caller's own favorites."""
+    """Bir şirket kullanıcısını çağıranın kendi favorilerine ekler."""
     favorite, user = await _favorite_service(db).add_favorite(
         current_user.company_id, current_user, request.user_id, request.note
     )
@@ -190,7 +193,7 @@ async def remove_my_favorite(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Remove a user from the caller's own favorites."""
+    """Bir kullanıcıyı çağıranın kendi favorilerinden çıkarır."""
     await _favorite_service(db).remove_favorite(current_user.company_id, current_user, user_id)
     return SuccessResponse(data={"removed": True})
 
@@ -201,10 +204,11 @@ async def get_user(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Retrieve details of a specific user. Authenticated user can only
-    retrieve themselves, unless they are Admin/Manager of that user's own
-    company (ROOT is not implicitly cross-company here -- see the
-    `/companies` routes for root's company-scoped views)."""
+    """Belirli bir kullanıcının bilgilerini getirir. Kimliği doğrulanmış
+    kullanıcı, o kullanıcının kendi şirketinin Admin/Manager'ı olmadığı
+    sürece yalnızca kendisini getirebilir (ROOT burada örtük olarak şirketler
+    arası değildir -- root'un şirket bazlı görünümleri için `/companies`
+    rotalarına bakın)."""
     repository = UserRepository(db)
     service = UserService(repository)
 
@@ -213,7 +217,7 @@ async def get_user(
     else:
         is_admin_or_manager = current_user.role in [UserRole.ADMIN.value, UserRole.MANAGER.value]
         if not is_admin_or_manager:
-            raise AuthorizationException(message="You are not authorized to view this user's details.")
+            raise AuthorizationException(message="Bu kullanıcının bilgilerini görüntüleme yetkiniz yok.")
         user = await service.get_user_by_id_in_company(user_id, current_user.company_id)
 
     response_data = UserResponse.model_validate(user)
@@ -226,19 +230,19 @@ async def update_user(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Update profile details of a user. Role or status changes require Admin privileges."""
+    """Bir kullanıcının profil bilgilerini günceller. Rol veya durum değişiklikleri Admin yetkisi gerektirir."""
     is_admin = current_user.role == UserRole.ADMIN.value
     is_self = current_user.id == user_id
 
-    # Enforce privileges
+    # Yetkileri uygula
     if not is_admin and not is_self:
-        raise AuthorizationException(message="You are not authorized to update this user's information.")
+        raise AuthorizationException(message="Bu kullanıcının bilgilerini güncelleme yetkiniz yok.")
 
-    # Restrict field updates for non-admins
+    # Admin olmayanlar için alan güncellemelerini kısıtla
     if not is_admin:
         if schema.role is not None or schema.is_active is not None or schema.clearance_level is not None:
             raise AuthorizationException(
-                message="Only administrators can update role, account status, or clearance level."
+                message="Rol, hesap durumu veya yetki seviyesini yalnızca yöneticiler güncelleyebilir."
             )
 
     repository = UserRepository(db)
@@ -253,7 +257,7 @@ async def change_my_password(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Update password of current logged-in user after validation."""
+    """Doğrulamadan sonra şu anda giriş yapmış kullanıcının parolasını günceller."""
     repository = UserRepository(db)
     service = UserService(repository)
     await service.change_password(current_user.id, schema)
@@ -265,7 +269,7 @@ async def soft_delete(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db)
 ):
-    """Soft delete user account by setting is_deleted flag (Admin only, own company)."""
+    """is_deleted bayrağını ayarlayarak kullanıcı hesabını geri alınabilir şekilde siler (yalnızca Admin, kendi şirketi)."""
     repository = UserRepository(db)
     service = UserService(repository)
     await service.soft_delete_user(user_id, current_user.company_id)
@@ -277,7 +281,7 @@ async def hard_delete(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db)
 ):
-    """Permanently delete user record from database (Admin only, own company)."""
+    """Kullanıcı kaydını veritabanından kalıcı olarak siler (yalnızca Admin, kendi şirketi)."""
     repository = UserRepository(db)
     service = UserService(repository)
     await service.hard_delete_user(user_id, current_user.company_id)
@@ -292,17 +296,17 @@ async def grant_permission(
     db: AsyncSession = Depends(get_db),
     authz: AuthzService = Depends(get_authz_service),
 ):
-    """Delegate a permission to a company user (Admin/Manager only).
+    """Bir şirket kullanıcısına bir yetki devreder (yalnızca Admin/Manager).
 
-    Privilege non-escalation: the granter itself must be authorized for
-    ``schema.action`` (checked with its own identity standing in for the
-    resource's owner) before it may hand that action to someone else -- a
-    manager who only holds a delegated ``document:delete`` grant cannot in
-    turn grant ``draft:send``, since it was never granted that itself. Built
-    -in ADMIN/MANAGER role rules already cover every action defined today
-    (see ``app.core.authz.rules.BUILTIN_RULES``), so this check only starts
-    actually restricting once a manager's own permissions are themselves
-    grant-derived rather than role-derived.
+    Yetki yükseltmesi olmaması: yetkiyi verenin kendisi, o eylemi başka
+    birine devredebilmeden önce ``schema.action`` için yetkilendirilmiş
+    olmalıdır (kendi kimliği kaynağın sahibi yerine geçerek kontrol edilir)
+    -- yalnızca devredilmiş bir ``document:delete`` yetkisine sahip bir
+    yönetici, kendisine hiç verilmediği için ``draft:send`` yetkisini
+    devredemez. Yerleşik ADMIN/MANAGER rol kuralları bugün tanımlı her
+    eylemi zaten kapsadığından (bkz. ``app.core.authz.rules.BUILTIN_RULES``),
+    bu kontrol yalnızca bir yöneticinin kendi yetkileri rolden değil
+    devirden türetildiğinde fiilen kısıtlamaya başlar.
     """
     user_repository = UserRepository(db)
     target = await user_repository.get_by_id_in_company(user_id, current_user.company_id)
@@ -354,7 +358,7 @@ async def list_permissions(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """List every non-revoked permission explicitly granted to a company user (Admin/Manager only)."""
+    """Bir şirket kullanıcısına açıkça verilmiş, geri alınmamış her yetkiyi listeler (yalnızca Admin/Manager)."""
     grant_repository = PermissionGrantRepository(db)
     grants = await grant_repository.list_for_user(current_user.company_id, user_id)
     return SuccessResponse(
@@ -369,10 +373,10 @@ async def revoke_permission(
     db: AsyncSession = Depends(get_db),
     authz: AuthzService = Depends(get_authz_service),
 ):
-    """Revoke a permission grant (Admin/Manager only, own company).
+    """Bir yetki devrini geri alır (yalnızca Admin/Manager, kendi şirketi).
 
-    The revoked row is kept, not deleted (see
-    ``PermissionGrantModel.revoked_at``'s docstring) -- its own audit trail.
+    Geri alınan satır silinmez, saklanır (bkz.
+    ``PermissionGrantModel.revoked_at``'ın docstring'i) -- kendi denetim izi.
     """
     grant_repository = PermissionGrantRepository(db)
     revoked = await grant_repository.revoke(grant_id, current_user.company_id)

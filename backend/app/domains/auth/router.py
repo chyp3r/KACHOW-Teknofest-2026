@@ -28,15 +28,16 @@ async def login(
     db: AsyncSession = Depends(get_owner_db),
     _: None = Depends(rate_limit(max_requests=5, window_seconds=60, key_prefix="auth:login")),
 ):
-    """Authenticate user credentials and issue access + refresh tokens.
+    """Kullanıcı kimlik bilgilerini doğrular ve erişim + yenileme jetonu verir.
 
-    Rate limit: max 5 requests per minute per IP.
+    Hız sınırı: IP başına dakikada en fazla 5 istek.
 
-    Uses ``get_owner_db``, not ``get_db``: ``username``/``email`` are unique
-    system-wide, not per company, so looking a caller up by either one is
-    inherently cross-tenant -- there is no company to scope a row-level
-    -security policy by until this call resolves who they are (see
-    ``get_owner_db``'s own docstring).
+    ``get_db`` yerine ``get_owner_db`` kullanılır: ``username``/``email``
+    şirket bazında değil, sistem genelinde benzersizdir, bu yüzden çağıranı
+    bunlardan biriyle aramak doğası gereği çoklu kiracı (cross-tenant) bir
+    işlemdir -- bu çağrı çağıranın kim olduğunu çözene kadar, satır düzeyinde
+    bir güvenlik politikasını kapsayacak bir şirket yoktur (bkz.
+    ``get_owner_db``'nin kendi docstring'i).
     """
     user_repository = UserRepository(db)
     service = AuthService(user_repository)
@@ -50,24 +51,24 @@ async def refresh(
     db: AsyncSession = Depends(get_owner_db),
     _: None = Depends(rate_limit(max_requests=20, window_seconds=60, key_prefix="auth:refresh")),
 ):
-    """Exchange a valid refresh token for a new access + refresh token pair.
+    """Geçerli bir yenileme jetonunu yeni bir erişim + yenileme jetonu çiftiyle değiştirir.
 
-    Rate limit: max 20 requests per minute per IP.
-    The refresh token is validated against:
-    - JWT signature and expiry
-    - Token type (must be 'refresh', not 'access')
-    - Redis blacklist (invalidated on logout)
-    - Active user status
+    Hız sınırı: IP başına dakikada en fazla 20 istek.
+    Yenileme jetonu şunlara karşı doğrulanır:
+    - JWT imzası ve son kullanma tarihi
+    - Jeton türü ('access' değil, 'refresh' olmalı)
+    - Redis kara listesi (çıkışta geçersiz kılınır)
+    - Aktif kullanıcı durumu
 
-    Uses ``get_owner_db``, not ``get_db``: a refresh token carries no
-    ``company_id`` claim (only an access token does -- see
-    ``AuthService.refresh_access_token``), so there is no tenant context
-    available yet to scope a row-level-security policy by (same reasoning
-    as ``login`` above).
+    ``get_db`` yerine ``get_owner_db`` kullanılır: bir yenileme jetonu
+    ``company_id`` claim'i taşımaz (yalnızca bir erişim jetonu taşır -- bkz.
+    ``AuthService.refresh_access_token``), bu yüzden satır düzeyinde bir
+    güvenlik politikasını kapsayacak bir kiracı bağlamı henüz mevcut değildir
+    (yukarıdaki ``login`` ile aynı gerekçe).
     """
     cache = get_cache()
     if await cache.exists(f"token_blacklist:{schema.refresh_token}"):
-        raise AuthenticationException(message="This session has been terminated. Please log in again.")
+        raise AuthenticationException(message="Bu oturum sonlandırıldı. Lütfen tekrar giriş yapın.")
 
     user_repository = UserRepository(db)
     service = AuthService(user_repository)
@@ -75,25 +76,25 @@ async def refresh(
     return SuccessResponse(data=token_response)
 
 async def _blacklist(cache, token: str, now: float) -> Optional[bool]:
-    """Blacklist one token for the remainder of its natural lifetime.
+    """Bir jetonu, doğal yaşam süresinin kalanı boyunca kara listeye alır.
 
     Args:
-        cache: The Redis cache client.
-        token: The raw JWT to blacklist.
-        now: Current epoch time, shared across both tokens in one logout call
-            so they are judged against the same instant.
+        cache: Redis önbellek istemcisi.
+        token: Kara listeye alınacak ham JWT.
+        now: Tek bir çıkış çağrısındaki her iki jeton için paylaşılan geçerli
+            epoch zamanı, böylece ikisi de aynı ana göre değerlendirilir.
 
     Returns:
-        True if the token was live and successfully blacklisted, False if it
-        was live but the write failed, None if the token could not be decoded
-        or had already expired -- there was nothing to revoke, which is not a
-        failure. Only a `False` return should ever surface to the caller.
+        Jeton aktifti ve başarıyla kara listeye alındıysa True, aktifti ama
+        yazma başarısız olduysa False, jeton çözülemediyse veya zaten süresi
+        dolmuşsa None -- iptal edilecek bir şey yoktu, bu bir başarısızlık
+        değildir. Çağırana yalnızca bir `False` dönüşü yansıtılmalıdır.
     """
     try:
         payload = decode_token(token)
     except Exception:
-        # A malformed or already-expired token carries no live session to
-        # revoke -- nothing failed here, there was simply nothing to do.
+        # Bozuk veya süresi zaten dolmuş bir jetonun iptal edilecek aktif bir
+        # oturumu yoktur -- burada başarısız olan bir şey yok, yapılacak bir şey yoktu.
         return None
     exp = payload.get("exp")
     if not exp:
@@ -101,23 +102,24 @@ async def _blacklist(cache, token: str, now: float) -> Optional[bool]:
     remaining = int(exp - now)
     if remaining <= 0:
         return None
-    # cache.set() never raises (see RedisCache.set); it logs internally and
-    # returns False on failure. That return value is the only signal a
-    # blacklist attempt failed, and it used to be discarded entirely --
-    # logout returned 200 whether or not the token was actually revoked, so
-    # a user who logged out on a shared machine during a Redis blip had no
-    # way to know the token was still live.
+    # cache.set() asla hata fırlatmaz (bkz. RedisCache.set); dahili olarak
+    # loglar ve başarısızlıkta False döner. Bu dönüş değeri, bir kara listeye
+    # alma denemesinin başarısız olduğuna dair tek sinyaldi ve eskiden
+    # tamamen göz ardı edilirdi -- jeton gerçekten iptal edilmiş olsun ya da
+    # olmasın çıkış 200 döndürüyordu, bu yüzden paylaşımlı bir makinede
+    # çıkış yapan ve bu sırada bir Redis kesintisi yaşayan bir kullanıcının
+    # jetonun hâlâ aktif olduğunu bilme yolu yoktu.
     return await cache.set(f"token_blacklist:{token}", "1", expire_seconds=remaining)
 
 
 @router.post("/logout", response_model=APIResponse[None])
 async def logout(schema: RefreshRequest = Body(default=None), token: str = Depends(oauth2_scheme)):
-    """Logout the current user by blacklisting both access and refresh tokens in Redis.
+    """Redis'te hem erişim hem yenileme jetonunu kara listeye alarak mevcut kullanıcının oturumunu kapatır.
 
     Raises:
-        BaseAppException: 500, if a token that was still live could not be
-            blacklisted -- the caller must not be told logout succeeded when
-            the token remains usable.
+        BaseAppException: 500, hâlâ aktif olan bir jeton kara listeye
+            alınamazsa -- jeton kullanılabilir durumda kalırken çağırana
+            çıkışın başarılı olduğu söylenmemelidir.
     """
     cache = get_cache()
     now = time.time()
@@ -132,7 +134,7 @@ async def logout(schema: RefreshRequest = Body(default=None), token: str = Depen
     if failed:
         logger.error("Logout could not revoke %s token(s); they remain valid until natural expiry.", failed)
         raise BaseAppException(
-            message="Logout could not fully revoke your session. Please try again.",
+            message="Çıkış işlemi oturumunuzu tam olarak iptal edemedi. Lütfen tekrar deneyin.",
             error_code="LOGOUT_REVOCATION_FAILED",
             status_code=500,
             details={"unrevoked_tokens": failed},

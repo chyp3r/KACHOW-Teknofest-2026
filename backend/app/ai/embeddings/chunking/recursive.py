@@ -7,25 +7,26 @@ from app.ai.embeddings.chunking.base import BaseChunker
 
 
 class RecursiveChunker(BaseChunker):
-    """Recursive Character Chunker that recursively splits text by looking at a list of characters
+    """İlgili metinleri bir arada tutmak için bir karakter listesine
 
-    (paragraphs, sentences, words, characters) to keep related text together.
+    (paragraflar, cümleler, kelimeler, karakterler) bakarak metni özyinelemeli
+    olarak bölen Recursive Character Chunker.
     """
 
     def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
-        """Initialize Recursive Chunker.
+        """Recursive Chunker'ı başlatır.
 
         Args:
-            chunk_size: Maximum size of each chunk.
-            chunk_overlap: Number of overlapping characters between adjacent chunks.
+            chunk_size: Her parçanın maksimum boyutu.
+            chunk_overlap: Komşu parçalar arasındaki örtüşen karakter sayısı.
         """
-        # add_start_index tags each chunk's metadata with its character
-        # offset in the source text, which is what lets a chunk be mapped
-        # back to a page number via PageMap (see app.ai.documents.anchors).
+        # add_start_index her parçanın metadata'sını kaynak metindeki karakter
+        # ofsetiyle etiketler; bu da bir parçanın PageMap üzerinden bir sayfa
+        # numarasına eşlenmesini sağlar (bkz. app.ai.documents.anchors).
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size, chunk_overlap=chunk_overlap, add_start_index=True
         )
 
     async def split_text(self, text: str, **kwargs) -> List[Document]:
-        """Split text into chunks using RecursiveCharacterTextSplitter."""
+        """Metni RecursiveCharacterTextSplitter kullanarak parçalara böler."""
         return self.splitter.create_documents([text])

@@ -23,23 +23,24 @@ from app.infrastructure.cache.redis import RedisCache
 
 logger = logging.getLogger(__name__)
 
-#: Group size ceiling -- a fan-out over the whole membership happens on
-#: every message send (one event/live-push per active recipient, see
-#: `ConversationMessageCreatedEvent`'s docstring) and on every participant
-#: listing; unbounded growth would turn both into an O(N) cost paid on
-#: every single message. Not enforced for a DM (always exactly 2 rows).
+#: Grup boyutu üst sınırı -- her mesaj gönderiminde tüm üyelik üzerinden
+#: bir fan-out olur (her aktif alıcı için bir event/canlı-push, bkz.
+#: `ConversationMessageCreatedEvent`'in docstring'i) ve her katılımcı
+#: listelemesinde de aynısı olur; sınırsız büyüme her ikisini de her tek
+#: mesajda ödenen bir O(N) maliyetine dönüştürür. DM için uygulanmaz
+#: (her zaman tam olarak 2 satır).
 MAX_GROUP_PARTICIPANTS = 50
 
 
 def messaging_channel_for(company_id: str, user_id: str) -> str:
-    """The Redis pub/sub channel one user's live message stream listens on.
+    """Bir kullanıcının canlı mesaj akışının dinlediği Redis pub/sub kanalı.
 
-    Distinct prefix from `app.domains.notifications.service.channel_for`
-    ("messaging:" vs "notifications:") -- a message push carries the full
-    `MessageResponse` payload for an open thread to render immediately,
-    while a notification push is a short unread-badge signal; conflating
-    the two channels would make the notification stream noisy with content
-    it has no use for.
+    `app.domains.notifications.service.channel_for`'dan farklı önek
+    ("messaging:" vs "notifications:") -- bir mesaj push'u açık bir
+    thread'in anında render edebilmesi için tam `MessageResponse`
+    payload'ını taşır, oysa bir bildirim push'u kısa bir okunmamış-rozet
+    sinyalidir; iki kanalı birleştirmek bildirim akışını hiç işine
+    yaramayacak içerikle gürültülü hale getirirdi.
     """
     return f"messaging:{company_id}:{user_id}"
 
@@ -49,18 +50,19 @@ def _dm_key(user_a: str, user_b: str) -> str:
 
 
 class ConversationService:
-    """Service for `conversations`/`conversation_participants`/
-    `conversation_messages` -- DM + group messaging.
+    """`conversations`/`conversation_participants`/`conversation_messages`
+    için servis -- DM + grup mesajlaşması.
 
-    Access to a conversation is never an ABAC decision: a
-    `ConversationParticipantModel` row is the grant itself (see that
-    model's own docstring, and `DraftShareService`'s for the same pattern
-    already established for `draft_shares`). Group *management* (rename,
-    add/remove someone else) is gated the same way `PoolService`/
-    `DraftShareService` gate their own polymorphic resources: the
-    conversation's own `owner`, or ADMIN/MANAGER/ROOT company-wide via
-    `bypasses_ownership` -- no new ABAC action was introduced for this,
-    deliberately, since the row-is-the-grant pattern already covers it.
+    Bir konuşmaya erişim asla bir ABAC kararı değildir: bir
+    `ConversationParticipantModel` satırı iznin kendisidir (bkz. o
+    modelin kendi docstring'i, ve `draft_shares` için zaten kurulmuş aynı
+    örüntü için `DraftShareService`'inki). Grup *yönetimi* (yeniden
+    adlandırma, başkasını ekleme/çıkarma), `PoolService`/
+    `DraftShareService`'in kendi polimorfik kaynaklarını kilitlediği
+    şekilde kilitlenir: konuşmanın kendi `owner`'ı veya
+    `bypasses_ownership` üzerinden şirket genelinde ADMIN/MANAGER/ROOT --
+    bunun için yeni bir ABAC aksiyonu bilinçli olarak eklenmedi, çünkü
+    satır-iznin-kendisidir örüntüsü bunu zaten kapsıyor.
     """
 
     def __init__(
@@ -79,8 +81,8 @@ class ConversationService:
 
     @staticmethod
     async def _publish(event) -> None:
-        """Publish a domain event without letting listener failures break
-        the request. Same pattern as `DraftShareService._publish`."""
+        """Dinleyici hatalarının isteği bozmasına izin vermeden bir domain
+        event'i yayınlar. `DraftShareService._publish` ile aynı örüntü."""
         try:
             await event_bus.publish(event)
         except Exception:
@@ -91,14 +93,16 @@ class ConversationService:
     async def open_dm(
         self, company_id: str, requester: UserModel, other_user_id: str
     ) -> ConversationModel:
-        """Open (or resolve to) the DM between `requester` and `other_user_id`.
+        """`requester` ile `other_user_id` arasındaki DM'i açar (veya
+        mevcut olana çözümler).
 
-        Idempotent: a second call with the same pair returns the existing
-        conversation (see `ConversationModel.dm_key`'s partial unique
-        index) -- callers never need to check first, and a concurrent open
-        from both sides at once still converges to one row (the loser of
-        the unique-index race gets an IntegrityError, which the caller
-        retries into `get_dm` finding what the winner just created).
+        İdempotenttir: aynı çift ile ikinci bir çağrı mevcut konuşmayı
+        döndürür (bkz. `ConversationModel.dm_key`'in kısmi unique
+        index'i) -- çağıranların önce kontrol etmesine hiç gerek yoktur,
+        ve iki taraftan aynı anda gelen eşzamanlı bir açma da yine tek
+        bir satıra yakınsar (unique-index yarışının kaybedeni bir
+        IntegrityError alır, çağıran bunu `get_dm`'e yeniden deneyerek
+        kazananın az önce oluşturduğunu bulur).
         """
         if other_user_id == requester.id:
             raise AuthorizationException(message="Kendinizle bir konuşma başlatamazsınız.")
@@ -144,8 +148,9 @@ class ConversationService:
     async def create_group(
         self, company_id: str, requester: UserModel, title: str, participant_ids: List[str]
     ) -> ConversationModel:
-        """Create a group conversation. `requester` becomes `owner`;
-        `participant_ids` (deduplicated, self excluded) become `member`."""
+        """Bir grup konuşması oluşturur. `requester` `owner` olur;
+        `participant_ids` (tekrarları çıkarılmış, kendisi hariç) `member`
+        olur."""
         unique_ids = {uid for uid in participant_ids if uid != requester.id}
         if not unique_ids:
             raise AuthorizationException(message="Grup için kendinizden başka en az bir üye gerekli.")
@@ -194,12 +199,12 @@ class ConversationService:
     async def _get_participant_or_403(
         self, conversation_id: str, company_id: str, user_id: str
     ) -> ConversationParticipantModel:
-        """The caller's own participant row, read-access variant -- a
-        former (left) participant still passes this, since they keep read
-        access to whatever history existed while they were in the
-        conversation (see `ConversationParticipantModel.left_at`'s
-        docstring). Write access needs an additional `left_at is None`
-        check at the call site."""
+        """Çağıranın kendi katılımcı satırı, okuma-erişimi varyantı --
+        eski (ayrılmış) bir katılımcı bunu yine de geçer, çünkü
+        konuşmadayken var olan geçmişe okuma erişimini korur (bkz.
+        `ConversationParticipantModel.left_at`'in docstring'i). Yazma
+        erişimi çağrı noktasında ek bir `left_at is None` kontrolü
+        gerektirir."""
         conversation = await self.conversation_repository.get_by_id(conversation_id, company_id)
         if conversation is None:
             raise NotFoundException(message="Konuşma bulunamadı.")
@@ -214,9 +219,9 @@ class ConversationService:
         participant: ConversationParticipantModel,
         requester: UserModel,
     ) -> None:
-        """Group-management gate (rename/archive, add/remove *other*
-        participants): the conversation's own `owner`, or ADMIN/MANAGER/
-        ROOT company-wide (`bypasses_ownership`)."""
+        """Grup-yönetimi kapısı (yeniden adlandırma/arşivleme, *diğer*
+        katılımcıları ekleme/çıkarma): konuşmanın kendi `owner`'ı veya
+        şirket genelinde ADMIN/MANAGER/ROOT (`bypasses_ownership`)."""
         if conversation.kind != "group":
             raise AuthorizationException(message="Bu işlem yalnızca grup konuşmaları için geçerli.")
         if participant.role_in_conversation == "owner" or bypasses_ownership(requester):
@@ -302,8 +307,9 @@ class ConversationService:
     async def remove_participant(
         self, conversation_id: str, company_id: str, requester: UserModel, target_user_id: str
     ) -> None:
-        """Self-leave: any participant may remove themselves at any time.
-        Removing someone else requires group-management rights."""
+        """Kendi kendine ayrılma: herhangi bir katılımcı her zaman
+        kendisini çıkarabilir. Başkasını çıkarmak grup-yönetimi hakları
+        gerektirir."""
         conversation, participant, _ = await self.get_conversation(conversation_id, company_id, requester)
         if conversation.kind != "group":
             raise AuthorizationException(message="Bire bir konuşmadan katılımcı çıkarılamaz.")
@@ -323,9 +329,9 @@ class ConversationService:
     async def send_text_message(
         self, conversation_id: str, company_id: str, sender: UserModel, body: str
     ) -> ConversationMessageModel:
-        """Post a plain text message. Requires an *active* participant --
-        a former (left) participant may still read history but not write
-        (see `ConversationParticipantModel.left_at`'s docstring)."""
+        """Düz metin bir mesaj gönderir. *Aktif* bir katılımcı gerektirir
+        -- eski (ayrılmış) bir katılımcı geçmişi okuyabilir ama yazamaz
+        (bkz. `ConversationParticipantModel.left_at`'in docstring'i)."""
         participant = await self._get_participant_or_403(conversation_id, company_id, sender.id)
         if participant.left_at is not None:
             raise AuthorizationException(message="Bu konuşmadan ayrıldınız, mesaj gönderemezsiniz.")
@@ -349,17 +355,19 @@ class ConversationService:
     async def post_artifact_message(
         self, conversation_id: str, company_id: str, sender: UserModel, artifact_transfer_id: str
     ) -> ConversationMessageModel:
-        """Post the `kind="artifact"` notice for one completed transfer.
+        """Tamamlanmış bir transfer için `kind="artifact"` bildirimini
+        gönderir.
 
-        Called only by `app.domains.transfers.ArtifactTransferService`,
-        after the transfer itself is already committed in the same
-        transaction -- `conversation_id` is expected to already have
-        `sender` as an active participant (the transfer service opens/
-        reuses the DM before calling this). `body` is deliberately empty:
-        an artifact message's card content (title, version, status) is
-        never cached here -- the frontend reads it live from
-        `artifact_transfer_id`, see `ConversationMessageModel`'s own
-        docstring for why.
+        Yalnızca `app.domains.transfers.ArtifactTransferService`
+        tarafından, transferin kendisi aynı transaction içinde zaten
+        commit edildikten sonra çağrılır -- `conversation_id`'nin
+        `sender`'ı zaten aktif bir katılımcı olarak barındırdığı
+        varsayılır (transfer servisi bunu çağırmadan önce DM'i açar/
+        yeniden kullanır). `body` bilinçli olarak boştur: bir artifact
+        mesajının kart içeriği (başlık, sürüm, durum) burada asla cache'
+        lenmez -- frontend bunu `artifact_transfer_id`'den canlı okur,
+        nedeni için `ConversationMessageModel`'in kendi docstring'ine
+        bakın.
         """
         message = await self.message_repository.create(
             ConversationMessageModel(
@@ -374,9 +382,10 @@ class ConversationService:
         )
         conversation = await self.conversation_repository.get_by_id(conversation_id, company_id)
         await self.conversation_repository.touch_last_message(conversation, message.created_at)
-        # No generic "new message" notification -- ArtifactTransferService
-        # publishes its own, more specific one (see `_notify_recipients`'
-        # own docstring for why `publish_event=False` here).
+        # Genel bir "yeni mesaj" bildirimi yok -- ArtifactTransferService
+        # kendi, daha spesifik olanını yayınlıyor (burada neden
+        # `publish_event=False` olduğu için `_notify_recipients`'ın kendi
+        # docstring'ine bakın).
         await self._notify_recipients(conversation_id, company_id, sender, message, publish_event=False)
         return message
 
@@ -389,17 +398,19 @@ class ConversationService:
         *,
         publish_event: bool = True,
     ) -> None:
-        """Live-push the new message to every active recipient other than
-        `sender`, and (unless `publish_event=False`) publish one
-        `ConversationMessageCreatedEvent` per recipient (see that event's
-        own docstring for why one-per-recipient, not one-with-a-list).
+        """Yeni mesajı `sender` dışındaki her aktif alıcıya canlı olarak
+        gönderir ve (`publish_event=False` olmadıkça) alıcı başına bir
+        `ConversationMessageCreatedEvent` yayınlar (neden alıcı-başına-bir
+        olduğu, tek-liste-ile-bir olmadığı için o event'in kendi
+        docstring'ine bakın).
 
-        `publish_event=False` is `post_artifact_message`'s own case: an
-        artifact transfer already gets its own, more specific notification
-        from `ArtifactTransferService` (see its docstring) -- publishing
-        the generic "new message" event here too would double it up. The
-        live SSE push still happens either way, so the thread itself still
-        updates in real time.
+        `publish_event=False`, `post_artifact_message`'ın kendi
+        durumudur: bir artifact transferi zaten `ArtifactTransferService`
+        'den kendi, daha spesifik bildirimini alır (bkz. onun
+        docstring'i) -- burada genel "yeni mesaj" event'ini de yayınlamak
+        onu ikiye katlardı. Canlı SSE push'u her iki durumda da yine
+        gerçekleşir, bu yüzden thread'in kendisi yine gerçek zamanlı
+        güncellenir.
         """
         participants = await self.participant_repository.list_for_conversation(
             conversation_id, company_id, active_only=True

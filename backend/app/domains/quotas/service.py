@@ -1,17 +1,18 @@
-"""Monthly usage quota enforcement.
+"""Aylık kullanım kotası uygulaması.
 
-Deliberately scoped to `"documents"` and `"drafts"` only, not
-`"llm_tokens"` -- despite `kachow_llm_tokens_total` (see `app.observability.
-ai_metrics`) existing as a *declared* Prometheus counter, that module's own
-docstring is explicit that token counts "aren't exposed by
-`BaseLLMClient.generate()` today" and the metric is "not wired up
-everywhere yet." Enforcing a token quota here would mean inventing a number
-to compare against a limit, which is worse than not having the feature --
-a quota that sometimes silently undercounts would let a company blow past
-what an admin thinks they configured. `"documents"` and `"drafts"` are
-counted at their own real creation choke points instead (`DocumentService.
-_register_document`, `DraftShareService`/`draft_recorder.record_draft`),
-which is an honest, already-accurate count.
+Bilerek yalnızca `"documents"` ve `"drafts"` ile sınırlandırılmıştır,
+`"llm_tokens"` ile değil -- `kachow_llm_tokens_total` (bkz.
+`app.observability.ai_metrics`) *bildirilmiş* bir Prometheus sayacı olarak
+var olmasına rağmen, o modülün kendi docstring'i token sayılarının "bugün
+`BaseLLMClient.generate()` tarafından açığa çıkarılmadığını" ve metriğin
+"henüz her yerde bağlanmadığını" açıkça belirtir. Burada bir token kotası
+uygulamak, bir limitle karşılaştırmak için bir sayı uydurmak anlamına
+gelirdi, ki bu özelliğin hiç olmamasından daha kötüdür -- bazen sessizce
+eksik sayan bir kota, bir şirketin bir yöneticinin yapılandırdığını
+düşündüğü şeyi aşmasına izin verirdi. `"documents"` ve `"drafts"` bunun
+yerine kendi gerçek oluşturma darboğaz noktalarında sayılır
+(`DocumentService._register_document`, `DraftShareService`/
+`draft_recorder.record_draft`), ki bu dürüst, zaten doğru bir sayımdır.
 """
 
 from datetime import datetime, timezone
@@ -20,18 +21,19 @@ from typing import Optional
 from app.api.exceptions.rate_limit import RateLimitException
 from app.domains.quotas.repository import CompanyQuotaRepository, UsageCounterRepository
 
-#: The only metrics this phase enforces quotas for -- see the module
-#: docstring for why "llm_tokens" is not among them yet.
+#: Bu fazın kota uyguladığı tek metrikler -- "llm_tokens"in henüz aralarında
+#: olmama sebebi için modül docstring'ine bakın.
 DOCUMENTS_METRIC = "documents"
 DRAFTS_METRIC = "drafts"
-#: Faz C3 (#187) -- one increment per `POST /companies/{id}/training-runs`
-#: call, honest since that endpoint is the only place a training run is
-#: ever created (no background/cron trigger exists yet, see #187's body).
+#: Faz C3 (#187) -- her `POST /companies/{id}/training-runs` çağrısı başına
+#: bir artış, dürüst çünkü bu endpoint bir eğitim koşusunun oluşturulduğu
+#: tek yerdir (henüz bir arka plan/cron tetikleyicisi yok, bkz. #187'nin
+#: gövdesi).
 TRAINING_RUNS_METRIC = "training_runs"
 
 
 def current_period(now: Optional[datetime] = None) -> str:
-    """The current calendar-month bucket, `"YYYY-MM"`."""
+    """Mevcut takvim ayı kovası, `"YYYY-MM"`."""
     moment = now or datetime.now(timezone.utc)
     return moment.strftime("%Y-%m")
 
@@ -53,21 +55,21 @@ class QuotaService:
         return None
 
     async def check_and_increment(self, company_id: str, metric: str, amount: int = 1) -> None:
-        """Raise if incrementing `metric` by `amount` would exceed
-        `company_id`'s configured limit for the current month; otherwise
-        record the usage.
+        """`metric`'i `amount` kadar artırmak, `company_id`'nin mevcut ay için
+        yapılandırılmış limitini aşacaksa hata fırlat; aksi halde kullanımı
+        kaydet.
 
-        A company with no `company_quotas` row at all (the default -- rows
-        are only created via `PATCH .../quota`) is unlimited: the check is
-        opt-in per company, not a default cap every company silently
-        inherits.
+        Hiç `company_quotas` satırı olmayan bir şirket (varsayılan --
+        satırlar yalnızca `PATCH .../quota` ile oluşturulur) sınırsızdır:
+        kontrol şirket başına opt-in'dir, her şirketin sessizce miras
+        aldığı bir varsayılan tavan değildir.
 
         Raises:
-            RateLimitException: If the limit is set and would be exceeded.
-                Reuses the existing 429 exception type rather than a new
-                one -- a quota is conceptually the same "too much, too
-                fast (or too much this period)" shape `app.api.rate_limit`
-                already models.
+            RateLimitException: Limit ayarlanmışsa ve aşılacaksa. Yeni bir
+                istisna türü yerine mevcut 429 istisna türünü yeniden
+                kullanır -- bir kota, kavramsal olarak `app.api.rate_limit`
+                zaten modellediği "çok fazla, çok hızlı (veya bu dönem çok
+                fazla)" şekliyle aynıdır.
         """
         quota = await self.quota_repository.get(company_id)
         limit = self._limit_for(quota, metric)
@@ -85,8 +87,8 @@ class QuotaService:
         await self.usage_repository.increment(company_id, metric, period, amount)
 
     async def usage_summary(self, company_id: str) -> dict:
-        """The current period's usage vs. limit for every enforced metric --
-        for `GET /companies/{id}/analytics/summary`."""
+        """Kota uygulanan her metrik için mevcut dönemin kullanımı ile
+        limiti -- `GET /companies/{id}/analytics/summary` içindir."""
         quota = await self.quota_repository.get(company_id)
         period = current_period()
         summary = {}

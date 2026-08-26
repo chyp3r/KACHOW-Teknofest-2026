@@ -1,24 +1,26 @@
-"""Live legislation lookup for the assistant, over MCP.
+"""Asistan için MCP üzerinden canlı mevzuat sorgusu.
 
-The committed corpus under `datasets/mevzuat/` holds seven laws and answers every
-scored requirement with no network at all. It cannot answer a question about the
-other several thousand, which is what this is for: a question the corpus does not
-cover reaches mevzuat.gov.tr instead of getting a confident wrong answer or a
-flat "bulunamadı".
+`datasets/mevzuat/` altındaki commit'lenmiş korpus yedi kanun tutar ve
+hiç ağ kullanmadan puanlanan her gerekliliği yanıtlar. Diğer birkaç bin
+tanesi hakkında bir soruyu yanıtlayamaz; bu, tam olarak bunun için var:
+korpusun kapsamadığı bir soru, kendinden emin yanlış bir yanıt almak veya
+düz bir "bulunamadı" yerine mevzuat.gov.tr'ye ulaşır.
 
-Three properties, all deliberate:
+Üç özellik, hepsi bilinçli:
 
-* **Additive only.** This never gates a compliance decision. `check_required_fields`
-  is set subtraction over a rule table with hard-coded article numbers, and the
-  analysis pipeline never calls this module -- that is what keeps the same evrak
-  producing byte-identical output on every run.
-* **Second, not first.** `search_legislation` (the local corpus) is registered
-  ahead of this one, so the model reaches for the offline path by default and this
-  is the escalation.
-* **Failure is an answer.** An unreachable government site returns the same
-  "not found" string the local tool returns, never an exception. A chat turn must
-  not 500 because a third-party site is down, and the tool description tells the
-  model the result is authoritative *when present* rather than promising it.
+* **Yalnızca eklemeli.** Bu, hiçbir zaman bir uygunluk kararını kilitlemez.
+  `check_required_fields`, sabit kodlanmış madde numaralarıyla bir kural
+  tablosu üzerinde küme çıkarmasıdır ve analiz pipeline'ı bu modülü asla
+  çağırmaz -- aynı evrakın her çalıştırmada bayt bayt aynı çıktıyı
+  üretmesini sağlayan şey budur.
+* **İkinci, birinci değil.** `search_legislation` (yerel korpus) bundan önce
+  kaydedilir, bu yüzden model varsayılan olarak çevrimdışı yola başvurur ve
+  bu, onun eskalasyonudur.
+* **Başarısızlık bir yanıttır.** Erişilemeyen bir devlet sitesi, yerel
+  aracın döndürdüğü aynı "bulunamadı" string'ini döndürür, asla bir hata
+  fırlatmaz. Bir sohbet turu, üçüncü taraf bir site çalışmadığı için 500
+  vermemelidir ve araç açıklaması modele sonucun onu vaat etmek yerine
+  *var olduğunda* yetkili olduğunu söyler.
 """
 
 import asyncio
@@ -36,8 +38,8 @@ logger = logging.getLogger(__name__)
 
 NOT_FOUND = "İlgili bir mevzuat maddesi bulunamadı."
 
-#: Characters of legislation text handed back to the model. A whole law can run to
-#: half a million characters (657 does), which would blow the context window.
+#: Modele geri verilen mevzuat metninin karakter sayısı. Bütün bir kanun yarım
+#: milyon karaktere kadar çıkabilir (657 çıkıyor), bu bağlam penceresini şişirir.
 EXCERPT_CHAR_LIMIT = 6000
 
 
@@ -53,27 +55,29 @@ class SearchLiveLegislationArgs(BaseModel):
 
 
 async def _lookup(query: str) -> str:
-    """Resolve a legislation name or number to its official text.
+    """Bir mevzuat adını veya numarasını resmî metnine çözümler.
 
     Args:
-        query: Legislation name or number.
+        query: Mevzuat adı veya numarası.
 
     Returns:
-        An excerpt of the official text, or `NOT_FOUND`.
+        Resmî metnin bir alıntısı, veya `NOT_FOUND`.
     """
-    # Numeric queries are the reliable path. Resolving by title returns the wrong
-    # document often enough to matter -- searching "Devlet Memurları Kanunu" puts
-    # law 7417, a 2022 act *amending* 657, at the top while 657 itself does not
-    # appear at all. Same trap `scripts/fetch_mevzuat_corpus.py` documents.
+    # Sayısal sorgular güvenilir yoldur. Başlığa göre çözümleme, önemli
+    # olacak kadar sık yanlış belge döndürür -- "Devlet Memurları Kanunu"
+    # araması, 657'yi *değiştiren* 2022 tarihli bir kanun olan 7417'yi en
+    # üste koyar; 657'nin kendisi ise hiç görünmez. `scripts/
+    # fetch_mevzuat_corpus.py`'nin belgelediği aynı tuzak.
     stripped = query.strip()
     if stripped.isdigit():
-        # KANUN first (cheaper, and what excludes 657's repealed companion
-        # outright), retrying unfiltered before giving up -- this tool's own
-        # description promises "kanun veya yönetmeliğin" and tells the model a
-        # numeric query is the reliable one, so a numbered yönetmelik, tüzük or
-        # KHK must not dead-end here just because the first attempt only asked
-        # for KANUN. resolve_and_fetch and the retriever in
-        # app.ai.retrieval.mcp_mevzuat share this exact resolution logic.
+        # Önce KANUN (daha ucuz ve 657'nin yürürlükten kaldırılmış eşini
+        # doğrudan dışlayan şey), vazgeçmeden önce filtresiz yeniden dener --
+        # bu aracın kendi açıklaması "kanun veya yönetmeliğin" vaat eder ve
+        # modele sayısal bir sorgunun güvenilir olan olduğunu söyler, bu
+        # yüzden numaralı bir yönetmelik, tüzük veya KHK, yalnızca ilk
+        # deneme sadece KANUN istediği için burada çıkmaza girmemelidir.
+        # resolve_and_fetch ve app.ai.retrieval.mcp_mevzuat'taki retriever
+        # tam olarak bu çözümleme mantığını paylaşır.
         resolved = await resolve_and_fetch(stripped, "KANUN")
     else:
         by_name = await mcp_manager.call_tool(
@@ -95,19 +99,20 @@ async def _lookup(query: str) -> str:
 
 
 def build_live_legislation_tools() -> list[ToolSpec]:
-    """Build the live legislation tool, when the MCP server is configured.
+    """MCP sunucusu yapılandırıldığında canlı mevzuat aracını inşa eder.
 
     Returns:
-        A single-element list when `MEVZUAT_MCP_ENABLED` is on and the server is
-        registered, otherwise an empty list -- so the model is never offered a
-        tool that cannot run.
+        `MEVZUAT_MCP_ENABLED` açık ve sunucu kayıtlıysa tek elemanlı bir
+        liste, aksi halde boş bir liste -- böylece modele asla çalışamayacak
+        bir araç sunulmaz.
     """
-    # Both conditions, not just registration: today `register_servers()` is the
-    # only caller of `mcp_manager.register_server`, and it already gates on this
-    # same flag, so checking is_registered() alone happens to agree with the
-    # flag. Checking both directly here removes the dependency on that being the
-    # only registration path ever added, rather than leaving it as a fact a
-    # future caller could silently invalidate.
+    # Yalnızca kayıt değil, her iki koşul da: bugün `register_servers()`,
+    # `mcp_manager.register_server`'ın tek çağıranıdır ve zaten bu aynı
+    # bayrağa göre kapılanır, bu yüzden yalnızca is_registered()'ı kontrol
+    # etmek tesadüfen bayrakla uyuşur. Burada ikisini de doğrudan kontrol
+    # etmek, bunun eklenen tek kayıt yolu olduğu gerçeğine bağımlılığı
+    # ortadan kaldırır; bu gerçeği gelecekteki bir çağıranın sessizce
+    # geçersiz kılabileceği bir gerçek olarak bırakmak yerine.
     if not settings.MEVZUAT_MCP_ENABLED or not is_registered(MEVZUAT_SERVER):
         return []
 
@@ -124,8 +129,9 @@ def build_live_legislation_tools() -> list[ToolSpec]:
             )
             return NOT_FOUND
         except Exception:
-            # Degrades to the same string the local tool returns on failure: an
-            # unreachable government site is a "no result", not a broken chat.
+            # Yerel aracın hata durumunda döndürdüğü aynı string'e düşer:
+            # erişilemeyen bir devlet sitesi bozuk bir sohbet değil, "sonuç
+            # yok" demektir.
             logger.exception("Live legislation lookup failed for %r.", query)
             return NOT_FOUND
 

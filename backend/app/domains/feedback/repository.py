@@ -8,11 +8,11 @@ from app.domains.feedback.model.feedback_model import FeedbackModel
 
 
 class FeedbackRepository:
-    """Repository for `feedback` (see `FeedbackModel`).
+    """`feedback` için repository (bkz. `FeedbackModel`).
 
-    Every method takes an explicit `company_id`, same convention as every
-    other repository since the tenancy work -- RLS backs this up, it does
-    not replace it.
+    Her metot açık bir `company_id` alır; bu, tenancy çalışmasından beri
+    tüm diğer repository'lerle aynı kural -- RLS bunu destekler, yerini
+    almaz.
     """
 
     def __init__(self, db: AsyncSession):
@@ -31,11 +31,12 @@ class FeedbackRepository:
     async def find_existing_vote(
         self, company_id: str, user_id: str, target_kind: str, content_hash: str
     ) -> Optional[FeedbackModel]:
-        """The row a new vote on this exact text would collide with, if any
-        -- `FeedbackService.submit` upserts onto this instead of inserting a
-        duplicate. Soft-deleted rows are not returned: a user who withdrew a
-        vote and votes again on the same text should get a fresh row, not
-        resurrect the deleted one silently."""
+        """Bu tam metin üzerinde yeni bir oyun çakışacağı satır, varsa --
+        `FeedbackService.submit` yeni bir kayıt eklemek yerine bunun
+        üzerine upsert yapar. Soft-delete edilmiş satırlar döndürülmez:
+        bir oyunu geri çeken ve aynı metin üzerinde tekrar oy veren
+        kullanıcı, sessizce silinmiş kaydı diriltmek yerine yeni bir
+        satır almalıdır."""
         result = await self.db.execute(
             select(FeedbackModel).where(
                 FeedbackModel.company_id == company_id,
@@ -61,8 +62,9 @@ class FeedbackRepository:
         dimensions: Optional[dict],
         context: Optional[dict],
     ) -> FeedbackModel:
-        """Overwrite an existing vote in place -- re-voting on the same text
-        updates rather than duplicates (see `FeedbackModel`'s docstring)."""
+        """Mevcut bir oyu yerinde üzerine yazar -- aynı metne tekrar oy
+        vermek, çoğaltmak yerine günceller (bkz. `FeedbackModel`'ın
+        docstring'i)."""
         feedback.signal = signal
         feedback.comment = comment
         feedback.dimensions = dimensions
@@ -117,8 +119,8 @@ class FeedbackRepository:
         await self.db.flush()
 
     async def count_by_signal(self, company_id: str) -> dict:
-        """`{"like": N, "dislike": M}` -- the summary card
-        `GET /companies/{id}/feedback/stats` leads with."""
+        """`{"like": N, "dislike": M}` -- `GET /companies/{id}/feedback/stats`
+        uç noktasının başında yer alan özet kartı."""
         query = (
             select(FeedbackModel.signal, func.count(FeedbackModel.id))
             .where(FeedbackModel.company_id == company_id, FeedbackModel.is_deleted.is_(False))

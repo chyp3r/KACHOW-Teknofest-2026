@@ -8,32 +8,35 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class UnitMembershipModel(Base, TimestampMixin):
-    """The user <-> unit link the tenancy plan's role matrix relies on.
+    """Kiracılık (tenancy) planının rol matrisinin dayandığı kullanıcı <-> birim bağlantısı.
 
-    Faz 1-3 gave the system tenant isolation and authorization, but no way
-    to answer "who is in this unit" -- which the AI-suggested draft
-    recipients feature (`GET /units/{id}/suggested-recipients`) needs
-    directly: it maps `routing_graph`'s chosen unit *name* to a `units` row,
-    then this table's members are the suggestion.
+    Faz 1-3 sisteme kiracı izolasyonu ve yetkilendirme kazandırdı, ama
+    "bu birimde kim var" sorusunu yanıtlayacak bir yol yoktu -- ki
+    AI önerili taslak alıcıları özelliği (`GET /units/{id}/suggested-recipients`)
+    tam olarak buna ihtiyaç duyuyor: `routing_graph`'ın seçtiği birim *adını*
+    bir `units` satırıyla eşler, sonra bu tablonun üyeleri öneri olur.
 
-    A user may belong to several units (`role_in_unit` distinguishes a lead
-    from a member, free text like `units.description` is -- the routing
-    prompt's own looseness), but at most one may be marked `is_primary`
-    company-wide is not enforced here on purpose: primary-ness is scoped to
-    *this user*, not shared across the table, hence the partial unique index
-    below rather than a simple column-level flag.
+    Bir kullanıcı birden fazla birime ait olabilir (`role_in_unit` bir lider ile
+    üyeyi ayırt eder, `units.description` gibi serbest metindir -- yönlendirme
+    promptunun kendi gevşekliği), ama şirket genelinde en fazla bir tanesi
+    `is_primary` olarak işaretlenebilir; bu kasıtlı olarak burada zorlanmaz:
+    birincil olma durumu *bu kullanıcıya* özeldir, tablo genelinde paylaşılmaz,
+    bu yüzden basit bir kolon seviyesi bayrak yerine aşağıdaki kısmi (partial)
+    benzersiz indeks kullanılır.
     """
 
     __tablename__ = "unit_memberships"
     __table_args__ = (
         UniqueConstraint("unit_id", "user_id", name="uq_unit_memberships_unit_user"),
-        #: Partial unique index, not a `UniqueConstraint` -- Postgres has no
-        #: declarative "unique except when false" shape, so this is a plain
-        #: index scoped by `WHERE is_primary` instead. `text("is_primary")`
-        #: rather than referencing the mapped column object: the latter
-        #: would need `__table_args__` to be evaluated after `is_primary`
-        #: exists as a bound class attribute, which it isn't yet during a
-        #: single top-to-bottom class body execution.
+        #: Kısmi (partial) benzersiz indeks, bir `UniqueConstraint` değil --
+        #: Postgres'te bildirimsel "false iken hariç benzersiz" şekli yok,
+        #: bu yüzden bunun yerine `WHERE is_primary` ile kapsamlandırılmış
+        #: sade bir indeks kullanılıyor. Mapped kolon nesnesine referans
+        #: vermek yerine `text("is_primary")` kullanılıyor: ikincisi
+        #: `__table_args__`'ın `is_primary` bağlı bir sınıf özniteliği olarak
+        #: var olduktan sonra değerlendirilmesini gerektirirdi, ki tek
+        #: seferlik yukarıdan aşağıya sınıf gövdesi çalıştırması sırasında
+        #: henüz o değil.
         Index(
             "uq_unit_memberships_one_primary_per_user",
             "user_id",
@@ -48,12 +51,14 @@ class UnitMembershipModel(Base, TimestampMixin):
     )
     unit_id: Mapped[str] = mapped_column(String, ForeignKey("units.id"), nullable=False, index=True)
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
-    #: This member's default/home unit, for suggested-recipient ranking
-    #: (`is_primary` members are suggested ahead of plain members) and for
-    #: "which unit does this person's badge show" style UI reads. At most
-    #: one `is_primary=true` row per `user_id` (see the partial index above).
+    #: Bu üyenin varsayılan/ana birimi; önerilen alıcı sıralaması için
+    #: (`is_primary` üyeler sade üyelerden önce önerilir) ve "bu kişinin
+    #: rozeti hangi birimi gösteriyor" tarzı UI okumaları için kullanılır.
+    #: Her `user_id` için en fazla bir `is_primary=true` satırı olabilir
+    #: (yukarıdaki kısmi indekse bakınız).
     is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    #: Free text, same looseness as `units.description` and `drafts.
-    #: destination` -- "lead"/"member" today, never validated against a
-    #: closed set so a manager can label a role without a migration.
+    #: Serbest metin, `units.description` ve `drafts.destination` ile aynı
+    #: gevşeklikte -- bugün "lead"/"member", kapalı bir kümeye karşı hiç
+    #: doğrulanmaz, böylece bir yönetici migration yapmadan bir role etiket
+    #: koyabilir.
     role_in_unit: Mapped[Optional[str]] = mapped_column(String, nullable=True)

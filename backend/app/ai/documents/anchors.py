@@ -1,27 +1,28 @@
-"""Page-level addressing for extracted documents.
+"""Çıkarılan belgeler için sayfa düzeyinde adresleme.
 
-Extraction already produces per-page text (`ExtractedDocument.pages`), but
-until now it was flattened into one string and thrown away. `PageMap` keeps
-the mapping from a character offset in that flattened text back to the page
-it came from, so a chunk's `start_index` (see
-`app.ai.embeddings.chunking.recursive.RecursiveChunker`) can be labelled with
-a real page number instead of being an anonymous span.
+Çıkarma işlemi zaten sayfa başına metin üretiyor (`ExtractedDocument.pages`),
+ama şimdiye kadar bu, tek bir string'e düzleştirilip atılıyordu. `PageMap`,
+düzleştirilmiş metindeki bir karakter ofsetinden geldiği sayfaya geri
+haritalamayı tutar; böylece bir parçanın `start_index`'i (bkz.
+`app.ai.embeddings.chunking.recursive.RecursiveChunker`) anonim bir aralık
+yerine gerçek bir sayfa numarasıyla etiketlenebilir.
 """
 
 import dataclasses
 
-#: Matches how every extractor joins `ExtractedDocument.pages` into `.text`
-#: (see `app/infrastructure/extractors/*.py`) and how
-#: `app/domains/documents/service.py` re-joins the scrubbed pages.
+#: Her çıkarıcının `ExtractedDocument.pages`'i `.text`'e birleştirme şekliyle
+#: (bkz. `app/infrastructure/extractors/*.py`) ve
+#: `app/domains/documents/service.py`'nin temizlenmiş sayfaları yeniden
+#: birleştirme şekliyle eşleşir.
 PAGE_SEPARATOR = "\n\n"
 
 
 @dataclasses.dataclass(frozen=True)
 class PageMap:
-    """Maps character offsets in the joined document text to page numbers."""
+    """Birleştirilmiş belge metnindeki karakter ofsetlerini sayfa numaralarına eşler."""
 
-    #: Char offset each page starts at in the joined text; boundaries[i] is
-    #: where the (i + 1)-th, 1-based, page begins.
+    #: Her sayfanın birleştirilmiş metinde başladığı karakter ofseti;
+    #: boundaries[i], (i + 1)-inci (1'den başlayarak) sayfanın başladığı yerdir.
     boundaries: tuple[int, ...]
 
     @property
@@ -29,15 +30,15 @@ class PageMap:
         return len(self.boundaries)
 
     def page_for_offset(self, offset: int) -> int:
-        """The 1-based page a character offset in the joined text falls on.
+        """Birleştirilmiş metindeki bir karakter ofsetinin düştüğü, 1'den başlayan sayfa.
 
         Args:
-            offset: Character offset into the joined document text.
+            offset: Birleştirilmiş belge metnine göre karakter ofseti.
 
         Returns:
-            The 1-based page number. Defaults to page 1 when there is no
-            page information at all, and clamps to the last known page for
-            an offset past the end of the mapped text.
+            1'den başlayan sayfa numarası. Hiç sayfa bilgisi yoksa 1. sayfaya
+            varsayılan olarak döner; haritalanmış metnin sonunu aşan bir
+            ofset için de bilinen son sayfaya sabitlenir.
         """
         if not self.boundaries:
             return 1
@@ -50,15 +51,15 @@ class PageMap:
 
 
 def build_page_map(pages: list[str], separator: str = PAGE_SEPARATOR) -> PageMap:
-    """Build a `PageMap` from the same pages, joined the same way, as `.text`.
+    """`.text` ile aynı sayfalardan, aynı şekilde birleştirilerek bir `PageMap` inşa eder.
 
     Args:
-        pages: Per-page extracted text, in document order.
-        separator: The string the pages are joined with -- must match
-            whatever produced the joined text or offsets drift.
+        pages: Belge sırasına göre sayfa başına çıkarılmış metin.
+        separator: Sayfaların birleştirildiği string -- birleştirilmiş metni
+            üreten şeyle eşleşmezse ofsetler kayar.
 
     Returns:
-        A `PageMap` covering every page.
+        Her sayfayı kapsayan bir `PageMap`.
     """
     boundaries: list[int] = []
     cursor = 0
@@ -69,5 +70,5 @@ def build_page_map(pages: list[str], separator: str = PAGE_SEPARATOR) -> PageMap
 
 
 def format_anchor(page: int) -> str:
-    """Render a page number as the citation shown to the model and user."""
+    """Bir sayfa numarasını modele ve kullanıcıya gösterilen atıf biçiminde render eder."""
     return f"[s. {page}]"

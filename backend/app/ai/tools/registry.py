@@ -1,9 +1,9 @@
-"""Declarative tool specs and their LangChain binding.
+"""Deklaratif araç spesifikasyonları ve bunların LangChain bağlaması.
 
-Mirrors the ``STEP_SPECS``/``STEP_RUNNERS`` split in
-:mod:`app.ai.workflows.step_graph`: a ``ToolSpec`` is data (name, description,
-argument schema) plus the one callable that actually does the work, kept apart
-from how a specific LLM provider wants tools declared.
+:mod:`app.ai.workflows.step_graph`'taki ``STEP_SPECS``/``STEP_RUNNERS``
+ayrımını yansıtır: bir ``ToolSpec``, işi fiilen yapan tek callable'ın yanında
+veridir (ad, açıklama, argüman şeması); belirli bir LLM sağlayıcısının
+araçları nasıl beyan etmek istediğinden ayrı tutulur.
 """
 
 from dataclasses import dataclass
@@ -17,18 +17,19 @@ __all__ = ["ToolSpec", "to_langchain_tool"]
 
 @dataclass(frozen=True)
 class ToolSpec:
-    """One tool the assistant agent may call.
+    """Asistan ajanının çağırabileceği bir araç.
 
     Attributes:
-        name: Stable tool name, as the model will refer to it in a tool call.
-        description: What the tool does and when to call it -- this is the
-            only thing the model sees to decide whether it needs the tool, so
-            it has to describe the *result*, not the implementation.
-        args_schema: Pydantic model describing the tool's arguments.
-        handler: Async callable that performs the tool's work and returns the
-            text to feed back to the model. Invoked directly by the assistant
-            agent's own loop -- never by LangChain's tool executor, which only
-            ever sees :func:`to_langchain_tool`'s schema-only stand-in.
+        name: Modelin bir araç çağrısında atıfta bulunacağı kararlı araç adı.
+        description: Aracın ne yaptığı ve ne zaman çağrılacağı -- modelin
+            aracın gerekli olup olmadığına karar vermek için gördüğü tek şey
+            budur, bu yüzden uygulamayı değil *sonucu* tanımlamalıdır.
+        args_schema: Aracın argümanlarını tanımlayan Pydantic modeli.
+        handler: Aracın işini yapan ve modele geri beslenecek metni döndüren
+            async callable. Doğrudan asistan ajanının kendi döngüsü
+            tarafından çağrılır -- yalnızca :func:`to_langchain_tool`'un
+            yalnızca-şema temsilcisini gören LangChain'in kendi araç
+            yürütücüsü tarafından asla değil.
     """
 
     name: str
@@ -38,20 +39,21 @@ class ToolSpec:
 
 
 def to_langchain_tool(spec: ToolSpec) -> StructuredTool:
-    """Build the schema-only LangChain tool a provider's ``bind_tools`` needs.
+    """Bir sağlayıcının ``bind_tools``'unun ihtiyaç duyduğu, yalnızca-şema
+    LangChain aracını inşa eder.
 
-    The returned tool is never executed by LangChain itself -- the assistant
-    agent inspects ``AIMessage.tool_calls`` after a bound call and invokes
-    ``spec.handler`` directly, matching by name. This stand-in only exists
-    because ``bind_tools`` needs *something* bindable to derive the tool
-    schema (name, description, JSON schema for arguments) that gets sent to
-    the model.
+    Döndürülen araç LangChain'in kendisi tarafından asla yürütülmez --
+    asistan ajanı, bağlanmış bir çağrıdan sonra ``AIMessage.tool_calls``'u
+    inceler ve ``spec.handler``'ı ada göre eşleştirerek doğrudan çağırır. Bu
+    temsilci yalnızca ``bind_tools``'un modele gönderilen araç şemasını (ad,
+    açıklama, argümanlar için JSON şeması) türetmek için bağlanabilir
+    *bir şeye* ihtiyaç duyduğu için var.
 
     Args:
-        spec: The tool to bind.
+        spec: Bağlanacak araç.
 
     Returns:
-        A ``StructuredTool`` carrying ``spec``'s schema.
+        ``spec``'in şemasını taşıyan bir ``StructuredTool``.
     """
 
     async def _unused(**_kwargs: Any) -> str:

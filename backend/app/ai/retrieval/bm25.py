@@ -9,14 +9,14 @@ logger = logging.getLogger(__name__)
 
 
 def tokenize_turkish(text: str) -> List[str]:
-    """SOTA basic tokenizer optimized for Turkish language.
+    """Türkçe için optimize edilmiş basit tokenizer.
 
-    Converts text to lowercase with Turkish letter awareness and extracts tokens.
+    Metni Türkçe harf farkındalığıyla küçük harfe çevirir ve token'ları çıkarır.
     """
     if not text:
         return []
 
-    # Map uppercase Turkish letters to lowercase
+    # Büyük Türkçe harfleri küçük harfe eşle
     turkish_map = {
         "I": "ı",
         "İ": "i",
@@ -28,27 +28,27 @@ def tokenize_turkish(text: str) -> List[str]:
     }
     text_mapped = "".join(turkish_map.get(char, char.lower()) for char in text)
 
-    # Extract words/tokens using regex (alphanumeric sequences)
+    # Regex ile kelime/token çıkar (alfanümerik diziler)
     tokens = re.findall(r"\w+", text_mapped)
 
-    # Filter out short stop-word-like tokens
+    # Kısa, stop-word benzeri token'ları filtrele
     return [t for t in tokens if len(t) > 1]
 
 
 class BM25Retriever:
-    """Sparse keyword search retriever utilizing the BM25Okapi algorithm."""
+    """BM25Okapi algoritmasını kullanan seyrek (sparse) anahtar kelime arama retriever'ı."""
 
     def __init__(self):
-        """Initialize BM25 Retriever."""
+        """BM25 Retriever'ı başlat."""
         self.documents: List[Document] = []
         self.bm25: Optional[BM25Okapi] = None
         logger.info("Initialized BM25Retriever.")
 
     def index_documents(self, documents: List[Document]) -> None:
-        """Tokenize and build a BM25 index on a set of Document objects.
+        """Document nesneleri kümesini tokenize et ve bir BM25 indeksi oluştur.
 
         Args:
-            documents: List of Document objects containing the text corpus.
+            documents: Metin korpusunu içeren Document nesneleri listesi.
         """
         if not documents:
             logger.warning("BM25Retriever: Attempted to index empty list of documents.")
@@ -57,7 +57,7 @@ class BM25Retriever:
             return
 
         self.documents = documents
-        # Tokenize each document
+        # Her belgeyi tokenize et
         tokenized_corpus = [
             tokenize_turkish(doc.page_content) for doc in documents
         ]
@@ -65,37 +65,37 @@ class BM25Retriever:
         logger.info(f"BM25Retriever successfully indexed {len(documents)} documents.")
 
     async def retrieve(self, query: str, limit: int = 5) -> List[Document]:
-        """Perform sparse keyword search against the indexed corpus.
+        """İndekslenmiş korpus üzerinde seyrek anahtar kelime araması yap.
 
         Args:
-            query: User search query.
-            limit: Maximum documents to return.
+            query: Kullanıcının arama sorgusu.
+            limit: Döndürülecek maksimum belge sayısı.
         """
         if not self.bm25 or not self.documents or not query.strip():
             return []
 
         try:
-            # Tokenize query
+            # Sorguyu tokenize et
             tokenized_query = tokenize_turkish(query)
             if not tokenized_query:
                 return []
 
-            # Get scores for all documents in the corpus
+            # Korpustaki tüm belgeler için skorları al
             scores = self.bm25.get_scores(tokenized_query)
 
-            # Sort documents by score
+            # Belgeleri skora göre sırala
             doc_scores = list(zip(self.documents, scores))
-            # Filter out documents with zero or negative score
+            # Sıfır veya negatif skorlu belgeleri filtrele
             valid_doc_scores = [(doc, float(score)) for doc, score in doc_scores if score > 0.0]
             sorted_docs = sorted(valid_doc_scores, key=lambda x: x[1], reverse=True)
 
-            # Take top limit
+            # En üstteki limit kadarını al
             hits = sorted_docs[:limit]
 
-            # Format documents with score metadata
+            # Belgeleri skor metadata'sıyla biçimlendir
             formatted_docs = []
             for doc, score in hits:
-                # Copy document to avoid mutating original
+                # Orijinali değiştirmemek için belgeyi kopyala
                 new_doc = Document(
                     page_content=doc.page_content, metadata=doc.metadata.copy()
                 )

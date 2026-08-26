@@ -1,12 +1,12 @@
-"""A deterministic, LLM-free change log for a revision.
+"""Bir revizyon için deterministik, LLM kullanmayan bir değişiklik günlüğü.
 
-The user should be able to see *what actually changed* without reading the
-full before/after draft side by side. This is a plain paragraph-level diff
-(``difflib.SequenceMatcher``) between the draft before and after a revision
--- no model call, no interpretation, just what moved, what was added and
-what was removed. Attribution to the instruction's own directives (see
-``app.ai.revision.instruction``) is best-effort positional matching, shown
-as a hint, not a claim of certainty.
+Kullanıcı, önceki/sonraki taslağın tamamını yan yana okumadan *gerçekte
+neyin değiştiğini* görebilmelidir. Bu, revizyon öncesi ve sonrası taslak
+arasında düz bir paragraf düzeyinde diff'tir (``difflib.SequenceMatcher``)
+-- model çağrısı yok, yorumlama yok, sadece neyin taşındığı, neyin
+eklendiği ve neyin kaldırıldığı. Talimatın kendi direktiflerine (bkz.
+``app.ai.revision.instruction``) atıf, en iyi çaba pozisyonel eşleştirmedir;
+bir ipucu olarak gösterilir, kesinlik iddiası taşımaz.
 """
 
 import difflib
@@ -16,29 +16,29 @@ from pydantic import BaseModel, Field
 
 from app.ai.revision.instruction import EditDirective
 
-#: Before/after snippets are truncated to this length -- a changelog entry is
-#: meant to say "this paragraph changed", not reproduce the whole paragraph a
-#: second time.
+#: Önceki/sonraki kesitler bu uzunlukta kırpılır -- bir changelog girdisi
+#: "bu paragraf değişti" demek içindir, paragrafın tamamını ikinci kez
+#: yeniden üretmek için değil.
 _SNIPPET_LIMIT = 400
 
-#: `ChangeEntry.directive`'s own `max_length` -- kept as its own constant
-#: (rather than reusing `_SNIPPET_LIMIT`) so the truncation applied before
-#: construction and the field's own validation limit can never drift apart
-#: silently. `EditDirective.raw` (the source of this value on the
-#: whole-draft fallback path -- see `instruction.decompose_instruction`) is
-#: itself unbounded: it carries the user's entire revision instruction
-#: verbatim, unlike every other `EditDirective` field, which `_parse_one`
-#: derives from short, closed vocabularies. An instruction longer than this
-#: used to reach `ChangeEntry(...)` untruncated and raise a
-#: `pydantic.ValidationError` `audit_node` never caught -- discarding an
-#: already-successful revision over a changelog attribution failure (see
-#: `revise_graph.audit_node`'s own hardening for the other half of this
-#: fix).
+#: `ChangeEntry.directive`'in kendi `max_length` değeri -- (`_SNIPPET_LIMIT`'i
+#: yeniden kullanmak yerine) ayrı bir sabit olarak tutulur ki oluşturmadan
+#: önce uygulanan kırpma ile alanın kendi doğrulama sınırı sessizce
+#: birbirinden uzaklaşamasın. `EditDirective.raw` (tüm-taslak yedek yolunda
+#: bu değerin kaynağı -- bkz. `instruction.decompose_instruction`) kendisi
+#: sınırsızdır: `_parse_one`'ın kısa, kapalı kelime dağarcıklarından türettiği
+#: diğer tüm `EditDirective` alanlarının aksine, kullanıcının tüm revizyon
+#: talimatını olduğu gibi taşır. Bundan daha uzun bir talimat eskiden
+#: kırpılmadan `ChangeEntry(...)`'e ulaşır ve `audit_node`'un hiç yakalamadığı
+#: bir `pydantic.ValidationError` fırlatırdı -- bu, bir changelog atıf
+#: hatası yüzünden zaten başarılı olmuş bir revizyonun elden çıkarılması
+#: demekti (bu düzeltmenin diğer yarısı için `revise_graph.audit_node`'un
+#: kendi sağlamlaştırmasına bakın).
 _DIRECTIVE_LIMIT = 200
 
 
 class ChangeEntry(BaseModel):
-    """One paragraph-level change between two draft versions."""
+    """İki taslak sürümü arasındaki paragraf düzeyinde tek bir değişiklik."""
 
     directive: str = Field(
         default="", max_length=_DIRECTIVE_LIMIT,
@@ -51,7 +51,7 @@ class ChangeEntry(BaseModel):
 
 
 class RevisionChangelog(BaseModel):
-    """The full change log for one revision, oldest change first."""
+    """Bir revizyon için tam değişiklik günlüğü, en eski değişiklik önce."""
 
     entries: list[ChangeEntry] = Field(default_factory=list)
     summary: str = Field(default="")
@@ -89,20 +89,21 @@ def build_changelog(
     after: str,
     directives: Optional[Sequence[EditDirective]] = None,
 ) -> RevisionChangelog:
-    """Diff two draft versions at paragraph granularity.
+    """İki taslak sürümünü paragraf ayrıntı düzeyinde karşılaştırır (diff).
 
     Args:
-        before: The draft text before this revision.
-        after: The draft text after this revision.
-        directives: The instruction's own directives, in order, for
-            best-effort attribution -- the ``i``-th changed paragraph group
-            is labeled with the ``i``-th directive's ``raw`` text when one
-            exists, purely as a hint for the reader; no correctness is
-            claimed about which directive actually caused which change
-            (a single directive can touch several paragraphs, or none).
+        before: Bu revizyondan önceki taslak metni.
+        after: Bu revizyondan sonraki taslak metni.
+        directives: En iyi çaba atfı için talimatın kendi direktifleri,
+            sırasıyla -- ``i``-inci değişen paragraf grubu, varsa ``i``-inci
+            direktifin ``raw`` metniyle etiketlenir; bu yalnızca okuyucu
+            için bir ipucudur, hangi direktifin gerçekte hangi değişikliğe
+            neden olduğu konusunda bir doğruluk iddiası taşımaz (tek bir
+            direktif birden fazla paragrafa dokunabilir veya hiçbirine
+            dokunmayabilir).
 
     Returns:
-        The change log, oldest change first.
+        En eski değişiklik önce olacak şekilde değişiklik günlüğü.
     """
     before_paragraphs = _split_paragraphs(before)
     after_paragraphs = _split_paragraphs(after)

@@ -1,10 +1,11 @@
-"""Background indexing of source corpora into the vector store.
+"""Kaynak korpusların vektör deposuna arka planda indekslenmesi.
 
-Both indexers below treat their Qdrant collection as *derived state*: a
-committed dataset directory is the single source of truth. Because
-`QdrantStore.upsert_documents` mints a random UUID per point, re-running an
-index would duplicate every point and skew rank fusion, so each worker
-rebuilds its collection from scratch instead of trying to reconcile.
+Aşağıdaki her iki indeksleyici de Qdrant koleksiyonunu *türetilmiş durum*
+olarak ele alır: commit edilmiş bir veri seti dizini tek doğruluk kaynağıdır.
+`QdrantStore.upsert_documents` her nokta için rastgele bir UUID ürettiğinden,
+bir indeksi yeniden çalıştırmak her noktayı çoğaltır ve rank fusion'ı
+bozar; bu yüzden her worker, uzlaştırmaya çalışmak yerine koleksiyonunu
+sıfırdan yeniden oluşturur.
 """
 
 import logging
@@ -22,9 +23,10 @@ logger = logging.getLogger(__name__)
 
 DIMENSION_PROBE_TEXT = "boyut testi"
 
-#: Correspondence-type labels used only to build the embedded descriptor
-#: below -- kept local (rather than importing the workflow's Turkish-label
-#: table) so this module has no dependency on the draft workflow package.
+#: Yalnızca aşağıdaki gömülü tanımlayıcıyı oluşturmak için kullanılan
+#: yazışma-türü etiketleri -- workflow'un Türkçe-etiket tablosunu import
+#: etmek yerine yerel tutuldu, böylece bu modülün draft workflow paketine
+#: bağımlılığı yok.
 _TYPE_LABELS = {
     "cover_letter": "Üst yazı",
     "response_letter": "Cevap yazısı",
@@ -32,15 +34,16 @@ _TYPE_LABELS = {
     "other_official": "Diğer resmî yazışma",
 }
 
-#: How much of the full letter body feeds the embedded descriptor. The point
-#: payload always stores the full text (see below); only the *search key* is
-#: truncated, because a query is a short topic sentence and embedding the
-#: full body would bury that signal under boilerplate header/signature text.
+#: Tam mektup gövdesinin ne kadarının gömülü tanımlayıcıya besleneceği.
+#: Nokta payload'ı her zaman tam metni saklar (aşağıya bakın); yalnızca
+#: *arama anahtarı* kısaltılır, çünkü bir sorgu kısa bir konu cümlesidir ve
+#: tam gövdeyi gömmek bu sinyali standart başlık/imza metninin altına
+#: gömerdi.
 DESCRIPTOR_BODY_CHARS = 600
 
 
 class IndexingReport(BaseModel):
-    """Outcome of an indexing run."""
+    """Bir indeksleme çalışmasının sonucu."""
 
     collection_name: str = Field(description="İndekslenen koleksiyonun adı.")
     chunk_count: int = Field(description="Yüklenen parça sayısı.")
@@ -57,21 +60,21 @@ async def index_mevzuat_corpus(
     chunker: BaseChunker,
     recreate: bool = True,
 ) -> IndexingReport:
-    """Load, embed and upsert the legislation corpus.
+    """Mevzuat korpusunu yükler, gömer ve upsert eder.
 
     Args:
-        corpus_dir: Directory holding the legislation markdown files.
-        collection_name: Target vector-store collection.
-        embeddings_client: Client used to embed chunks and probe the vector size.
-        vector_store: Destination vector store.
-        chunker: Chunking strategy; must match the one used by the BM25 path.
-        recreate: Drop and recreate the collection before upserting.
+        corpus_dir: Mevzuat markdown dosyalarını barındıran dizin.
+        collection_name: Hedef vektör deposu koleksiyonu.
+        embeddings_client: Parçaları gömmek ve vektör boyutunu ölçmek için kullanılan istemci.
+        vector_store: Hedef vektör deposu.
+        chunker: Parçalama stratejisi; BM25 yolunda kullanılanla eşleşmelidir.
+        recreate: Upsert öncesi koleksiyonu silip yeniden oluşturur.
 
     Returns:
-        A report describing what was indexed.
+        Neyin indekslendiğini açıklayan bir rapor.
 
     Raises:
-        RuntimeError: If the corpus is empty or the vector store rejects the write.
+        RuntimeError: Korpus boşsa veya vektör deposu yazmayı reddederse.
     """
     documents = await load_mevzuat_corpus(corpus_dir, chunker)
     if not documents:
@@ -79,8 +82,9 @@ async def index_mevzuat_corpus(
             f"Mevzuat korpusu boş veya okunamadı: {corpus_dir}. İndeksleme yapılmadı."
         )
 
-    # Probe the dimension rather than configuring it, so switching the embedding
-    # model needs no code change and cannot silently disagree with a setting.
+    # Boyutu yapılandırmak yerine ölçüyoruz, böylece gömme modelini
+    # değiştirmek kod değişikliği gerektirmez ve bir ayarla sessizce
+    # çelişemez.
     probe = await embeddings_client.embed_query(DIMENSION_PROBE_TEXT)
     vector_size = len(probe)
     logger.info("Detected embedding dimension: %d", vector_size)
@@ -99,7 +103,7 @@ async def index_mevzuat_corpus(
     import os
     from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 
-    # Fit and save sparse encoder for hybrid search
+    # Hibrit arama için sparse encoder'ı eğit ve kaydet
     encoder = SparseBM25Encoder()
     encoder.fit(documents)
     vocab_path = os.path.join(corpus_dir, "sparse_vocab.json")
@@ -120,9 +124,10 @@ async def index_mevzuat_corpus(
             )
         )
 
-    # QdrantStore swallows exceptions and returns False. Without this check the
-    # script would report success over an empty collection -- for example after an
-    # embedding-model change leaves a stale collection with a different dimension.
+    # QdrantStore exception'ları yutar ve False döner. Bu kontrol olmasa
+    # script boş bir koleksiyon üzerinde başarı bildirir -- örneğin bir
+    # gömme-modeli değişikliği farklı boyutlu eski bir koleksiyon
+    # bıraktığında.
     stored = await vector_store.upsert_documents(
         collection_name=collection_name, chunks=chunks
     )
@@ -147,12 +152,12 @@ async def index_mevzuat_corpus(
 
 
 def _build_descriptor(record: dict) -> str:
-    """Build the short text a style example is embedded and sparse-encoded on.
+    """Bir stil örneğinin üzerinde gömüldüğü ve sparse-encode edildiği kısa metni oluşturur.
 
-    Deliberately not the full letter body: a retrieval query is a short topic
-    sentence (subject + user instructions), and embedding an entire letter
-    would let its boilerplate header/signature block dilute the one sentence
-    that actually distinguishes it from the other examples of the same type.
+    Bilinçli olarak mektubun tamamı değil: bir retrieval sorgusu kısa bir
+    konu cümlesidir (konu + kullanıcı talimatları) ve tüm mektubu gömmek,
+    onu aynı türdeki diğer örneklerden gerçekten ayıran tek cümlenin
+    standart başlık/imza bloğu tarafından sulandırılmasına yol açardı.
     """
     type_label = _TYPE_LABELS.get(record["correspondence_type"], record["correspondence_type"])
     return (
@@ -170,30 +175,29 @@ async def index_yazisma_examples(
     vector_store: BaseVectorStore,
     recreate: bool = True,
 ) -> IndexingReport:
-    """Embed and upsert the curated few-shot draft example corpus.
+    """Derlenmiş few-shot taslak örnek korpusunu gömer ve upsert eder.
 
-    Unlike ``index_mevzuat_corpus`` there is no chunking step: each JSONL
-    record produced by ``scripts/curate_yazisma_examples.py`` is already a
-    single full official letter, and a few-shot example has to stay whole to
-    teach a complete document structure. Only a short descriptor (see
-    ``_build_descriptor``) is embedded and sparse-encoded; the point payload
-    carries the full letter text, which is what the draft writer prompt
-    actually needs back.
+    ``index_mevzuat_corpus``'un aksine parçalama adımı yoktur:
+    ``scripts/curate_yazisma_examples.py``'nin ürettiği her JSONL kaydı
+    zaten tam ve bütün bir resmi mektuptur, ve bir few-shot örneği tam bir
+    belge yapısını öğretmek için bütün kalmalıdır. Yalnızca kısa bir
+    tanımlayıcı (bkz. ``_build_descriptor``) gömülür ve sparse-encode
+    edilir; nokta payload'ı, draft writer prompt'unun gerçekten geri
+    ihtiyaç duyduğu tam mektup metnini taşır.
 
     Args:
-        examples_path: Path to ``ornekler.jsonl``.
-        collection_name: Target vector-store collection.
-        embeddings_client: Client used to embed descriptors and probe the
-            vector size.
-        vector_store: Destination vector store.
-        recreate: Drop and recreate the collection before upserting.
+        examples_path: ``ornekler.jsonl`` dosyasının yolu.
+        collection_name: Hedef vektör deposu koleksiyonu.
+        embeddings_client: Tanımlayıcıları gömmek ve vektör boyutunu ölçmek
+            için kullanılan istemci.
+        vector_store: Hedef vektör deposu.
+        recreate: Upsert öncesi koleksiyonu silip yeniden oluşturur.
 
     Returns:
-        A report describing what was indexed.
+        Neyin indekslendiğini açıklayan bir rapor.
 
     Raises:
-        RuntimeError: If the corpus is empty or the vector store rejects the
-            write.
+        RuntimeError: Korpus boşsa veya vektör deposu yazmayı reddederse.
     """
     from langchain_core.documents import Document
 
@@ -250,9 +254,9 @@ async def index_yazisma_examples(
             )
         )
 
-    # Same rationale as index_mevzuat_corpus: QdrantStore swallows exceptions
-    # and returns False, so this check is what turns a dimension mismatch
-    # into a loud failure instead of a silently empty collection.
+    # index_mevzuat_corpus ile aynı gerekçe: QdrantStore exception'ları
+    # yutar ve False döner, bu yüzden bu kontrol bir boyut uyuşmazlığını
+    # sessizce boş bir koleksiyon yerine gürültülü bir hataya dönüştürür.
     stored = await vector_store.upsert_documents(
         collection_name=collection_name, chunks=chunks
     )

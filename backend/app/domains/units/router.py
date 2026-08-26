@@ -28,10 +28,11 @@ async def list_units(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """List every unit of the caller's company (active and inactive) -- the
-    AI's routing suggestions themselves only ever consider the active
-    subset (see ``app.domains.units.provider``); this endpoint returns both
-    so an admin UI can review and reactivate a disabled unit."""
+    """Çağıranın şirketindeki her birimi listeler (aktif ve pasif) -- yapay
+    zekanın yönlendirme önerilerinin kendisi yalnızca aktif alt kümeyi
+    dikkate alır (bkz. ``app.domains.units.provider``); bu uç nokta bir
+    yönetici arayüzünün pasif bir birimi inceleyip yeniden aktif
+    edebilmesi için ikisini de döndürür."""
     repository = UnitRepository(db)
     service = UnitService(repository)
     units = await service.list_units(current_user.company_id)
@@ -45,7 +46,7 @@ async def create_unit(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new routable unit within the caller's company (Admin/Manager only)."""
+    """Çağıranın şirketi içinde yönlendirilebilir yeni bir birim oluşturur (yalnızca Admin/Manager)."""
     repository = UnitRepository(db)
     service = UnitService(repository)
     unit = await service.create_unit(schema, current_user.company_id)
@@ -69,7 +70,7 @@ async def update_unit(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update a unit's name, description or active status (Admin/Manager only)."""
+    """Bir birimin adını, açıklamasını veya aktiflik durumunu günceller (yalnızca Admin/Manager)."""
     repository = UnitRepository(db)
     service = UnitService(repository)
     unit = await service.update_unit(unit_id, schema, current_user.company_id)
@@ -92,7 +93,7 @@ async def delete_unit(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Permanently delete a unit (Admin/Manager only)."""
+    """Bir birimi kalıcı olarak siler (yalnızca Admin/Manager)."""
     repository = UnitRepository(db)
     service = UnitService(repository)
     await service.delete_unit(unit_id, current_user.company_id)
@@ -135,7 +136,7 @@ async def add_unit_member(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Add a company user to a unit (Admin/Manager only)."""
+    """Bir şirket kullanıcısını bir birime ekler (yalnızca Admin/Manager)."""
     service = _membership_service(db)
     membership = await service.add_member(
         unit_id,
@@ -163,7 +164,7 @@ async def remove_unit_member(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Remove a user from a unit (Admin/Manager only)."""
+    """Bir kullanıcıyı bir birimden çıkarır (yalnızca Admin/Manager)."""
     service = _membership_service(db)
     await service.remove_member(unit_id, user_id, current_user.company_id)
     return SuccessResponse(data=None)
@@ -175,7 +176,7 @@ async def list_unit_members(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """List a unit's members, ranked (primary first, then leads, then the rest)."""
+    """Bir birimin üyelerini sıralanmış şekilde listeler (önce birincil, sonra sorumlular, sonra geri kalanlar)."""
     service = _membership_service(db)
     members = await service.list_members(unit_id, current_user.company_id)
     return SuccessResponse(data=_member_responses(members))
@@ -187,15 +188,17 @@ async def suggested_recipients(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """AI-suggested draft recipients: the members of the unit routing chose.
+    """Yapay zeka tarafından önerilen taslak alıcıları: yönlendirmenin
+    seçtiği birimin üyeleri.
 
-    Reuses the existing routing decision entirely -- no new AI call here.
-    The caller already has `unit_id` from the routed `destination` unit name
-    (`POST /documents/draft`'s response, or `POST /routing/suggest`) matched
-    against `GET /units`; this just ranks that unit's own membership the
-    same way `GET /units/{id}/members` does (primary, then leads, then
-    everyone else), which is exactly what "suggested recipients" means once
-    a unit has already been identified.
+    Mevcut yönlendirme kararını tamamen yeniden kullanır -- burada yeni bir
+    yapay zeka çağrısı yoktur. Çağıranın zaten `GET /units` ile eşleştirilmiş,
+    yönlendirilen `destination` birim adından (`POST /documents/draft`'ın
+    yanıtı veya `POST /routing/suggest`) gelen bir `unit_id`'si vardır; bu
+    yalnızca o birimin kendi üyeliğini `GET /units/{id}/members`'ın yaptığı
+    aynı şekilde sıralar (önce birincil, sonra sorumlular, sonra herkes),
+    ki bu da bir birim zaten belirlendikten sonra "önerilen alıcılar"ın tam
+    olarak ne anlama geldiğidir.
     """
     service = _membership_service(db)
     members = await service.list_members(unit_id, current_user.company_id)

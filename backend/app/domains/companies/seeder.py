@@ -1,12 +1,13 @@
-"""Best-effort bootstrap of one demo company.
+"""Bir demo şirketin en iyi çaba (best-effort) ile önyüklenmesi (bootstrap).
 
-Every other seeded row (root aside) needs a `company_id` to anchor to --
-`app.domains.users.seeder` and `app.domains.units.seeder` both depend on this
-running first (see `app.lifespan`'s seeding order). Idempotent by slug, same
-convention as `app.domains.units.seeder`.
+Seed edilen diğer her satır (root hariç) bağlanacağı bir `company_id`'ye
+ihtiyaç duyar -- `app.domains.users.seeder` ve `app.domains.units.seeder`
+ikisi de bunun önce çalışmasına bağımlıdır (bkz. `app.lifespan`'in seed
+sırası). `app.domains.units.seeder` ile aynı kural gereği slug'a göre
+idempotenttir.
 
-Swallows its own exceptions and only logs -- seeding must never be the
-reason the API fails to boot.
+Kendi istisnalarını yutar ve yalnızca loglar -- seeding hiçbir zaman
+API'nin ayağa kalkamamasının nedeni olmamalıdır.
 """
 
 import logging
@@ -23,15 +24,16 @@ logger = logging.getLogger(__name__)
 
 
 async def seed_demo_company() -> Optional[str]:
-    """Create the demo company if it doesn't already exist.
+    """Demo şirket henüz yoksa oluşturur.
 
-    A no-op (returns the existing id) when `settings.SEED_DEMO_COMPANY` is
-    off but the company already exists from a prior run -- callers
-    downstream (the user/unit seeders) still need the id either way.
+    `settings.SEED_DEMO_COMPANY` kapalı ama şirket önceki bir çalıştırmadan
+    zaten mevcutsa hiçbir şey yapmaz (mevcut id'yi döndürür) -- alt akıştaki
+    çağıranların (kullanıcı/birim seeder'ları) her halükarda id'ye ihtiyacı
+    vardır.
 
     Returns:
-        The demo company's id, or `None` if seeding is off and no demo
-        company exists yet.
+        Demo şirketin id'si, ya da seeding kapalıysa ve henüz demo şirket
+        yoksa `None`.
     """
     async with AsyncSessionLocal() as session:
         repository = CompanyRepository(session)
@@ -55,13 +57,14 @@ async def seed_demo_company() -> Optional[str]:
             await repository.create(company)
             await session.commit()
             logger.info("Seeded demo company '%s' (%s)", company.name, company.id)
-            # Without this, `app.domains.companies.provider._read_profile_
-            # from_db` had no configured `company_profile` to read for the
-            # demo company and fell back to its raw `CompanyModel.name` --
-            # the same fallback mechanism that let a *synthetic* company's
-            # name leak into "known info" as a confident fact elsewhere.
-            # The demo environment should exercise a genuinely configured
-            # profile, not rely on that fallback by accident.
+            # Bu olmadan, `app.domains.companies.provider._read_profile_
+            # from_db` demo şirket için okuyacağı yapılandırılmış bir
+            # `company_profile` bulamıyor ve ham `CompanyModel.name`'e geri
+            # düşüyordu -- başka bir yerde *sentetik* bir şirketin adının
+            # "bilinen bilgi" olarak kendinden emin bir gerçek gibi sızmasına
+            # yol açan aynı geri düşme (fallback) mekanizması. Demo ortamı,
+            # bu fallback'e kazara güvenmek yerine, gerçekten yapılandırılmış
+            # bir profili kullanmalıdır.
             try:
                 await company_provider.set_company_profile(
                     company.id,
@@ -74,3 +77,4 @@ async def seed_demo_company() -> Optional[str]:
         except Exception:
             logger.exception("Failed to seed demo company")
             return None
+

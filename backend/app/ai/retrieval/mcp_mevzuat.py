@@ -1,20 +1,20 @@
-"""MCP-first legislation retrieval for document analysis.
+"""Belge analizi için MCP-first mevzuat getirimi.
 
-`mevzuat-mcp` exposes a *catalog* search (`search_mevzuat`, by law number or
-title) and a full-text fetch (`get_mevzuat_content`) -- not a content/topic
-search. `_build_mevzuat_query` (document_analysis_graph.py) builds a
-keyword-dense *topic* string, which is the wrong shape for a catalog title
-search. So "MCP-first" here means: fetch the current text of the same small,
-curated set of laws the committed corpus already holds (by number, the
-reliable lookup path -- see `app.mcp.mevzuat_client`), then rank that live
-text with the same query the local retriever would have used, via an
-in-memory BM25 index built fresh from the fetch. `HybridRetriever` (Qdrant,
-dense+sparse) stays the local fallback and the only source when
-`MEVZUAT_SOURCE="local"`.
+`mevzuat-mcp`, bir *katalog* araması (`search_mevzuat`, kanun numarası veya
+başlığa göre) ve tam metin getirimi (`get_mevzuat_content`) sunar -- içerik/
+konu araması değil. `_build_mevzuat_query` (document_analysis_graph.py),
+anahtar kelime yoğun bir *konu* dizesi oluşturur; bu, katalog başlık araması
+için yanlış bir biçimdir. Dolayısıyla buradaki "MCP-first" şu anlama gelir:
+committed korpusun zaten barındırdığı aynı küçük, derlenmiş kanun kümesinin
+güncel metnini (numaraya göre, güvenilir arama yolu -- bkz.
+`app.mcp.mevzuat_client`) getir, sonra bu canlı metni yerel retriever'ın
+kullanacağı aynı sorguyla, getirimden taze oluşturulan bellek içi bir BM25
+indeksi üzerinden sırala. `HybridRetriever` (Qdrant, dense+sparse) yerel
+yedek olarak kalır ve `MEVZUAT_SOURCE="local"` iken tek kaynaktır.
 
-Never touches compliance. `check_required_fields` is set subtraction over a
-rule table with hard-coded article numbers; nothing in this module is on
-that path.
+Uyumluluğa (compliance) hiç dokunmaz. `check_required_fields`, sabit kodlu
+madde numaralarına sahip bir kural tablosu üzerinde küme çıkarmadır; bu
+modüldeki hiçbir şey o yol üzerinde değildir.
 """
 
 import asyncio
@@ -33,29 +33,29 @@ from app.mcp.registry import MEVZUAT_SERVER, is_registered
 
 logger = logging.getLogger(__name__)
 
-#: Sourced from ChunkingPolicy.mevzuat_* rather than a local literal --
-#: must match scripts/index_mevzuat.py's parameters for the local corpus.
-#: Not because the two indexes are ever compared directly (they are not;
-#: each source is ranked independently), but because a mismatch here would
-#: give the live path passages of a different granularity than the one
-#: suggest_mevzuat's excerpt budget and prompt were tuned against. See
-#: ChunkingPolicy's own docstring for why this pair is kept separate from
-#: the Document Q&A pair.
+#: Yerel bir literal yerine ChunkingPolicy.mevzuat_*'tan alınır --
+#: scripts/index_mevzuat.py'nin yerel korpus için kullandığı parametrelerle
+#: eşleşmelidir. Bunun nedeni iki indeksin doğrudan karşılaştırılması değil
+#: (asla karşılaştırılmazlar; her kaynak bağımsız sıralanır), buradaki bir
+#: uyumsuzluğun canlı yola, suggest_mevzuat'ın alıntı bütçesi ve prompt'unun
+#: ayarlandığı granülariteden farklı pasajlar vermesidir. Bu çiftin Document
+#: Q&A çiftinden neden ayrı tutulduğu için ChunkingPolicy'nin kendi
+#: docstring'ine bakın.
 CHUNK_SIZE = get_policy().chunking.mevzuat_chunk_size
 CHUNK_OVERLAP = get_policy().chunking.mevzuat_chunk_overlap
 
 
 @dataclass(frozen=True)
 class _LegislationRef:
-    """One curated law to keep fresh over MCP.
+    """MCP üzerinden güncel tutulacak derlenmiş bir kanun.
 
-    number/kind mirror scripts/fetch_mevzuat_corpus.py's CORPUS exactly (same
-    curation, same reason each entry was chosen -- see that file's docstring
-    and its per-entry `why`). Duplicated rather than imported: that script
-    lives at the repo root and reaches into the backend package via a
-    sys.path hack for a one-off dev-time fetch, and importing a runtime
-    module the other direction would make a bigger cross-boundary dependency
-    than either duplicate list.
+    number/kind, scripts/fetch_mevzuat_corpus.py'nin CORPUS'unu birebir
+    yansıtır (aynı derleme, her girdinin seçilme nedeni aynı -- bkz. o
+    dosyanın docstring'i ve her girdinin `why` alanı). İçe aktarmak yerine
+    tekrarlanmıştır: o betik repo kökünde yaşar ve tek seferlik dev-time
+    getirimi için sys.path hack'iyle backend paketine erişir; ters yönde bir
+    runtime modülü içe aktarmak, iki tekrar listeden daha büyük bir
+    sınır-ötesi bağımlılık yaratırdı.
     """
 
     number: str
@@ -78,17 +78,17 @@ CURATED_LEGISLATION: tuple[_LegislationRef, ...] = (
 
 
 class McpMevzuatRetriever:
-    """Legislation retrieval backed by live MCP fetches, ranked in memory.
+    """Canlı MCP getirimlerine dayanan, bellekte sıralanan mevzuat getirimi.
 
-    `retrieve()` never performs network I/O itself -- it only reads whatever
-    `warm_up()` last built. This is deliberate: `retrieve_mevzuat_node` runs
-    inside a per-request node budget (25s at balanced, 15s at fast -- see
-    `app.ai.policy.schema`), and a cold fetch of seven laws over a
-    playwright-backed MCP server has no guarantee of finishing inside that
-    window. Keeping the fetch entirely off the request path is what makes
-    this safe to default to; `warm_up()` is meant to be awaited once, from
-    the same best-effort startup path that already warms the LLM clients and
-    compiles the graphs (see `app.lifespan`).
+    `retrieve()` asla kendisi ağ G/Ç yapmaz -- yalnızca `warm_up()`'ın en son
+    oluşturduğunu okur. Bu bilinçli bir tercihtir: `retrieve_mevzuat_node`,
+    istek başına bir node bütçesi içinde çalışır (balanced'te 25s, fast'te
+    15s -- bkz. `app.ai.policy.schema`), ve playwright tabanlı bir MCP
+    sunucusu üzerinden yedi kanunun soğuk getirimi bu pencere içinde
+    bitmesi garanti değildir. Getirimi tamamen istek yolunun dışında tutmak
+    bunu varsayılan olarak güvenli kılar; `warm_up()`'ın, LLM istemcilerini
+    ısıtan ve grafikleri derleyen aynı best-effort başlangıç yolundan bir kez
+    await edilmesi amaçlanmıştır (bkz. `app.lifespan`).
     """
 
     def __init__(self) -> None:
@@ -96,17 +96,17 @@ class McpMevzuatRetriever:
 
     @property
     def is_warm(self) -> bool:
-        """Whether a usable index is currently loaded."""
+        """Şu anda kullanılabilir bir indeksin yüklü olup olmadığı."""
         return self._index is not None
 
     async def warm_up(self) -> None:
-        """Fetch every curated law and (re)build the in-memory index.
+        """Derlenmiş her kanunu getir ve bellek içi indeksi (yeniden) oluştur.
 
-        Best-effort per law: one law failing to resolve or fetch does not
-        block the others, and the index is rebuilt from whatever succeeded.
-        Only a complete failure (zero laws fetched) leaves no index -- in
-        which case `retrieve()` reports not-warm and the caller falls back to
-        the local corpus.
+        Kanun başına best-effort: bir kanunun çözümlenmesi veya getirilmesi
+        başarısız olursa diğerlerini engellemez ve indeks başarılı olanlardan
+        yeniden oluşturulur. Yalnızca tam bir başarısızlık (sıfır kanun
+        getirildi) indeksi boş bırakır -- bu durumda `retrieve()` warm
+        olmadığını bildirir ve çağıran yerel korpusa döner.
         """
         if not is_registered(MEVZUAT_SERVER):
             logger.info(
@@ -160,17 +160,18 @@ class McpMevzuatRetriever:
         )
 
     async def _fetch_one(self, ref: _LegislationRef) -> tuple[str, str]:
-        """Resolve and fetch one curated law, raising on any failure.
+        """Derlenmiş bir kanunu çözümle ve getir, herhangi bir hatada fırlat.
 
-        Bounded by the same per-lookup timeout the assistant's live tool
-        uses: all seven laws fetch concurrently, so without this bound one
-        hung call would hold the other six's results hostage for however
-        long asyncio.gather takes to notice (up to the whole startup warm-up
-        budget), instead of the usual single-lookup cap.
+        Asistanın canlı aracının kullandığı aynı arama başına zaman aşımıyla
+        sınırlıdır: yedi kanunun tamamı eş zamanlı getirilir, bu sınır
+        olmadan takılı kalan tek bir çağrı, diğer altısının sonuçlarını,
+        asyncio.gather'ın fark etmesi ne kadar sürerse (tüm başlangıç
+        warm-up bütçesine kadar) o kadar rehin tutardı; olağan tekli-arama
+        sınırı yerine.
 
         Raises:
-            RuntimeError: When the law could not be resolved or fetched.
-            asyncio.TimeoutError: When it did not finish in time.
+            RuntimeError: Kanun çözümlenemediğinde veya getirilemediğinde.
+            asyncio.TimeoutError: Zamanında bitmediğinde.
         """
         resolved = await asyncio.wait_for(
             resolve_and_fetch(ref.number, ref.kind),
@@ -181,16 +182,16 @@ class McpMevzuatRetriever:
         return resolved
 
     async def retrieve(self, query: str, limit: int = 5) -> list[Document]:
-        """Rank the warm in-memory index against a query.
+        """Warm bellek içi indeksi bir sorguya göre sırala.
 
         Args:
-            query: Search query (the same deterministic string the local
-                retriever would receive).
-            limit: Maximum documents to return.
+            query: Arama sorgusu (yerel retriever'ın alacağı aynı
+                deterministik dize).
+            limit: Döndürülecek maksimum belge sayısı.
 
         Returns:
-            Ranked excerpts, or an empty list when no index is warm yet --
-            never performs network I/O.
+            Sıralanmış alıntılar, veya henüz hiçbir indeks warm değilse
+            boş liste -- asla ağ G/Ç yapmaz.
         """
         if self._index is None:
             return []
@@ -198,19 +199,21 @@ class McpMevzuatRetriever:
 
 
 class FallbackMevzuatRetriever:
-    """Tries a primary retriever, falls back to a secondary on failure or emptiness.
+    """Önce bir birincil retriever'ı dener, hata veya boşluk durumunda ikincile döner.
 
-    Duck-types `HybridRetriever`'s `async retrieve(query, limit) ->
-    list[Document]` interface, so `retrieve_mevzuat_node` needs no changes at
-    all to use either source -- the strategy lives entirely here, at the
-    dependency-injection boundary (see `app.api.dependency.get_mevzuat_retriever`).
+    `HybridRetriever`'ın `async retrieve(query, limit) -> list[Document]`
+    arayüzünü duck-type eder, bu yüzden `retrieve_mevzuat_node`'un hangi
+    kaynağı kullanacağına dair hiçbir değişikliğe ihtiyacı yoktur -- strateji
+    tamamen burada, dependency-injection sınırında yaşar (bkz.
+    `app.api.dependency.get_mevzuat_retriever`).
 
-    An empty *successful* primary result also falls through to the
-    secondary, not just an exception: MCP-first ranks the same curated set of
-    laws the local corpus holds, over BM25 alone (no dense half, since
-    building a request-time embedding index would defeat the point of
-    staying off the network path) -- so a query the dense half of the local
-    retriever would have caught is exactly where falling through helps most.
+    Sadece bir istisna değil, boş bir *başarılı* birincil sonuç da ikincile
+    düşer: MCP-first, yerel korpusun sahip olduğu aynı derlenmiş kanun
+    kümesini yalnızca BM25 üzerinden sıralar (dense yarı yoktur, çünkü
+    istek zamanında bir embedding indeksi oluşturmak ağ yolunun dışında
+    kalma amacını boşa çıkarırdı) -- bu yüzden yerel retriever'ın dense
+    yarısının yakalayacağı bir sorgu, tam olarak bu düşüşün en çok
+    yardımcı olduğu yerdir.
     """
 
     def __init__(self, primary, fallback) -> None:
@@ -229,7 +232,7 @@ class FallbackMevzuatRetriever:
         return await self._fallback.retrieve(query, limit)
 
     async def warm_up(self) -> None:
-        """Best-effort passthrough to the primary's warm-up, if it has one."""
+        """Varsa, birincilin warm-up'ına best-effort geçiş."""
         warm_up = getattr(self._primary, "warm_up", None)
         if warm_up is None:
             return

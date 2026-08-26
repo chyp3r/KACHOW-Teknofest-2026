@@ -13,14 +13,14 @@ CORPUS_FILE_PATTERN = "*.md"
 
 
 def _read_title(text: str, fallback: str) -> str:
-    """Extract the human-readable regulation name from the first H1 line.
+    """İlk H1 satırından okunabilir mevzuat adını çıkar.
 
     Args:
-        text: Full file contents.
-        fallback: Value to use when no H1 heading is present.
+        text: Dosyanın tam içeriği.
+        fallback: H1 başlığı yoksa kullanılacak değer.
 
     Returns:
-        The regulation title used in citations.
+        Atıflarda kullanılan mevzuat başlığı.
     """
     for line in text.splitlines():
         stripped = line.strip()
@@ -32,23 +32,24 @@ def _read_title(text: str, fallback: str) -> str:
 async def load_mevzuat_corpus(
     corpus_dir: str, chunker: BaseChunker
 ) -> list[Document]:
-    """Read and chunk the legislation corpus from disk.
+    """Mevzuat korpusunu diskten oku ve parçalara ayır (chunk).
 
-    Shared deliberately by the indexing worker and the BM25 dependency. Both must
-    produce byte-identical chunks: `reciprocal_rank_fusion` de-duplicates on exact
-    `page_content`, so if the two paths chunked differently every passage found by
-    both retrievers would appear twice and quietly halve the usable context.
+    İndeksleme worker'ı ile BM25 bağımlılığı arasında bilerek paylaştırılmıştır.
+    İkisi de birebir aynı chunk'ları üretmelidir: `reciprocal_rank_fusion` tam
+    `page_content` üzerinden tekrarları eler, dolayısıyla iki yol farklı
+    chunk'lasaydı her iki retriever'ın da bulduğu her pasaj iki kez görünür ve
+    kullanılabilir bağlamı sessizce yarıya indirirdi.
 
-    Files are read in sorted order so chunk order — and therefore BM25 scoring — is
-    reproducible across runs.
+    Dosyalar sıralı okunur, böylece chunk sırası — ve dolayısıyla BM25 skorlaması —
+    çalıştırmalar arasında tekrarlanabilir olur.
 
     Args:
-        corpus_dir: Directory holding the legislation markdown files.
-        chunker: Chunking strategy; callers must pass identical parameters.
+        corpus_dir: Mevzuat markdown dosyalarını barındıran dizin.
+        chunker: Chunking stratejisi; çağıranlar aynı parametreleri geçirmelidir.
 
     Returns:
-        Chunked documents tagged with `source` and `mevzuat` metadata. Empty when
-        the directory is absent or holds no readable files.
+        `source` ve `mevzuat` metadata'sıyla etiketlenmiş chunk'lanmış belgeler.
+        Dizin yoksa veya okunabilir dosya içermiyorsa boş liste döner.
     """
     if not os.path.isdir(corpus_dir):
         logger.warning(
@@ -97,19 +98,18 @@ async def load_mevzuat_corpus(
 
 
 def load_yazisma_examples(examples_path: str) -> list[dict]:
-    """Read the curated few-shot draft examples JSONL.
+    """Derlenmiş few-shot taslak örnekleri JSONL dosyasını oku.
 
-    Unlike ``load_mevzuat_corpus`` this performs no chunking: each record is
-    already a single full official letter, produced by
-    ``scripts/curate_yazisma_examples.py``. One record becomes one Qdrant
-    point.
+    ``load_mevzuat_corpus``'un aksine burada chunking yapılmaz: her kayıt
+    zaten ``scripts/curate_yazisma_examples.py`` tarafından üretilmiş, tam
+    bir resmî yazının tamamıdır. Bir kayıt, bir Qdrant point'i olur.
 
     Args:
-        examples_path: Path to the ``ornekler.jsonl`` file.
+        examples_path: ``ornekler.jsonl`` dosyasının yolu.
 
     Returns:
-        The parsed records, in file order. Empty when the file is absent or
-        unreadable.
+        Dosya sırasına göre ayrıştırılmış kayıtlar. Dosya yoksa veya
+        okunamıyorsa boş liste döner.
     """
     if not os.path.isfile(examples_path):
         logger.warning(

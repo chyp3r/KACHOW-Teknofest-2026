@@ -2,19 +2,19 @@ from app.ai.agents.template_agent import TemplateAgent
 
 
 class ConflictAuditorAgent(TemplateAgent):
-    """Audits an already-applied revision for clashes with mevzuat/kaynak.
+    """Zaten uygulanmış bir revizyonu mevzuat/kaynak ile çelişki açısından denetler.
 
-    Runs on the fast tier, after the rewrite is already merged into the
-    draft -- it never runs before or instead of applying the user's
-    instruction (see app.ai.revision.conflict's module docstring). Its only
-    job is to report contradictions for a human to see, never to suppress
-    or soften the edit.
+    Yeniden yazım taslağa çoktan birleştirildikten sonra hızlı katmanda çalışır
+    -- kullanıcının talimatını uygulamadan önce veya onun yerine asla çalışmaz
+    (bkz. app.ai.revision.conflict modülünün docstring'i). Tek görevi, bir
+    insanın görmesi için çelişkileri raporlamaktır; incelediği düzenlemeyi asla
+    geri almaz veya yumuşatmaz.
     """
 
     TEMPLATE_NAME = "conflict_auditor"
     AGENT_NAME = "ConflictAuditorAgent"
     DESCRIPTION = (
-        "Reports contradictions between an already-applied user revision "
-        "instruction and the retrieved mevzuat/source document -- never "
-        "reverts or softens the edit it is reviewing."
+        "Zaten uygulanmış bir kullanıcı revizyon talimatı ile getirilen "
+        "mevzuat/kaynak belge arasındaki çelişkileri raporlar -- incelediği "
+        "düzenlemeyi asla geri almaz veya yumuşatmaz."
     )

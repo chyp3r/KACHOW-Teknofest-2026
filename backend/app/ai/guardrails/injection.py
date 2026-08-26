@@ -1,17 +1,19 @@
-"""Prompt-injection scrubbing at the document-text and generation boundaries.
+"""Belge metni ve üretim sınırlarında prompt-injection temizliği.
 
-OCR'd or directly extracted document text flows into agent prompts with no
-sanitisation. A submitted PDF is attacker-controlled input from the system's
-perspective -- anyone who can get a document in front of an employee can put
-text in it, including text shaped like an instruction to whichever model
-processes it ("önceki talimatları unut", "you are now..."). This module is
-the boundary check, applied once right after extraction (before the
-``char_count`` gate runs, so a scrubbed document is what actually gets
-measured) rather than repeated ad hoc at every prompt call site.
+OCR'lenmiş veya doğrudan çıkarılmış belge metni, herhangi bir arındırma
+yapılmadan agent prompt'larına akar. Gönderilen bir PDF, sistemin bakış
+açısından saldırgan kontrolündeki bir girdidir -- bir belgeyi bir
+çalışanın önüne koyabilen herkes, içine metin koyabilir; bu metin, işleyen
+modele bir talimat gibi görünen bir şey de olabilir ("önceki talimatları
+unut", "you are now..."). Bu modül, sınır kontrolüdür; her prompt çağrı
+noktasında ayrı ayrı tekrarlanmak yerine, çıkarımdan hemen sonra bir kez
+uygulanır (``char_count`` eşiği çalışmadan önce, böylece ölçülen şey
+temizlenmiş belgenin kendisidir).
 
-Deterministic and regex-based, matching the rest of this codebase's
-verification layer (``draft_verifier.py``, ``planner.py``): a classifier would
-need training data and adds a model call to a path that runs on every upload.
+Bu kod tabanının doğrulama katmanının geri kalanıyla (``draft_verifier.py``,
+``planner.py``) uyumlu olarak deterministik ve regex tabanlı: bir
+sınıflandırıcı eğitim verisi gerektirir ve her yüklemede çalışan bir yola
+bir model çağrısı ekler.
 """
 
 import re
@@ -26,20 +28,21 @@ _TURKISH_MAP = str.maketrans(
 
 
 class GuardrailViolation(Exception):
-    """Raised when a generated response looks like it leaked the system
-    prompt or obeyed embedded instructions instead of doing its actual job."""
+    """Üretilen bir yanıt, sistem promptunu sızdırmış veya gerçek işini
+    yapmak yerine gömülü talimatlara uymuş gibi göründüğünde fırlatılır."""
 
 
-#: Zero-width and bidi control characters (U+200B-U+200F, U+202A-U+202E,
-#: U+FEFF), used to hide text from a casual read while still being tokenised
-#: by the model.
+#: Sıfır genişlikli ve bidi kontrol karakterleri (U+200B-U+200F,
+#: U+202A-U+202E, U+FEFF); metni sıradan bir okumadan gizlerken model
+#: tarafından yine de tokenleştirilmesi için kullanılır.
 _INVISIBLE_CHARS = re.compile(
     "[​‌‍‎‏‪-‮﻿]"
 )
 
-#: Turkish and English instruction-override patterns, matched against folded
-#: (lowercased, diacritic-stripped) text so casing and Turkish characters
-#: can't be used to dodge the match.
+#: Türkçe ve İngilizce talimat geçersiz kılma kalıpları; büyük/küçük harf ve
+#: Türkçe karakterlerin eşleşmeyi atlatmak için kullanılamaması için
+#: katlanmış (küçük harfe çevrilmiş, aksan işaretleri kaldırılmış) metne
+#: karşı eşleştirilir.
 _INJECTION_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     re.compile(pattern, re.IGNORECASE)
     for pattern in (
@@ -57,27 +60,29 @@ _INJECTION_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
 
 
 def _fold(text: str) -> str:
-    """Fold Turkish text to lowercase ASCII for pattern matching."""
+    """Türkçe metni, kalıp eşleştirme için küçük harfli ASCII'ye katla."""
     translated = (text or "").translate(_TURKISH_MAP)
     normalized = unicodedata.normalize("NFKD", translated)
     return normalized.encode("ascii", "ignore").decode("ascii").lower()
 
 
 def scrub_extracted_text(text: str) -> tuple[str, list[str]]:
-    """Strip invisible characters and instruction-override lines from extracted text.
+    """Çıkarılan metinden görünmez karakterleri ve talimat geçersiz kılma
+    satırlarını kaldır.
 
-    Removing a line is a deliberate, coarse choice: partial redaction inside a
-    line risks leaving a truncated instruction that still parses as one, and
-    document text is line-oriented enough (header fields, one clause per
-    line) that dropping a whole line rarely costs real content.
+    Bir satırı tamamen kaldırmak bilinçli, kaba bir tercihtir: satır içinde
+    kısmi bir kırpma, hâlâ bir talimat gibi ayrıştırılabilecek kesilmiş bir
+    talimat bırakma riski taşır; belge metni yeterince satır odaklıdır
+    (başlık alanları, satır başına bir madde) ki tüm bir satırı düşürmek
+    nadiren gerçek içerik kaybına yol açar.
 
     Args:
-        text: Raw extracted/OCR'd document text.
+        text: Ham çıkarılmış/OCR'lenmiş belge metni.
 
     Returns:
-        The cleaned text, and a list of short Turkish markers describing what
-        was removed -- surfaced on the analysis response
-        (``extraction.scrubbed_markers``) so cleaning is reported, not silent.
+        Temizlenmiş metin ve neyin kaldırıldığını açıklayan kısa Türkçe
+        işaretlerin listesi -- analiz yanıtında (``extraction.scrubbed_markers``)
+        gösterilir, böylece temizlik sessizce değil, raporlanarak yapılır.
     """
     if not text:
         return text, []
@@ -101,18 +106,19 @@ def scrub_extracted_text(text: str) -> tuple[str, list[str]]:
     return "\n".join(kept_lines), markers
 
 
-#: This app's own prompt-scaffold section headers -- the numbered brief
-#: markers (``_build_brief`` in ``app.ai.workflows.revise_graph``/
-#: ``draft_graph``), the writer/reviser prompt's own section headings
-#: ("### GÖREV", "### BRIEF BELGESİ", ...). A smaller local model
-#: occasionally echoes fragments of its own instructions back as if they
-#: were content, especially under a heavily-numbered prompt like the revise
-#: repair prompt -- distinct from ``_INJECTION_PATTERNS`` above, which
-#: catches a user *trying* to hijack the model, not the model regurgitating
-#: its own scaffolding unprompted. Matched narrowly against this
-#: application's own literal section labels rather than a generic "looks
-#: like a prompt" heuristic, so a legitimate draft that happens to discuss
-#: e.g. "görev tanımı" in its own official prose is never caught by it.
+#: Bu uygulamanın kendi prompt-iskeleti bölüm başlıkları -- numaralı brief
+#: işaretleri (``app.ai.workflows.revise_graph``/``draft_graph`` içindeki
+#: ``_build_brief``), writer/reviser prompt'unun kendi bölüm başlıkları
+#: ("### GÖREV", "### BRIEF BELGESİ", ...). Daha küçük bir yerel model,
+#: özellikle revize onarım prompt'u gibi ağır şekilde numaralanmış bir
+#: prompt altında, kendi talimatlarının parçalarını zaman zaman sanki
+#: içerikmiş gibi geri yansıtır -- bu, kullanıcının modeli ele geçirmeye
+#: *çalıştığını* yakalayan yukarıdaki ``_INJECTION_PATTERNS``'den farklıdır,
+#: modelin kendi iskeletini istemsizce geri kusmasını yakalar. Genel bir
+#: "prompt gibi görünüyor" sezgisi yerine bu uygulamanın kendi gerçek bölüm
+#: etiketlerine dar bir şekilde eşleştirilir, böylece kendi resmi metninde
+#: örneğin "görev tanımı"ndan bahseden meşru bir taslak asla bununla
+#: yakalanmaz.
 _SCAFFOLD_ECHO_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     re.compile(pattern, re.IGNORECASE)
     for pattern in (
@@ -130,20 +136,20 @@ _SCAFFOLD_ECHO_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
 
 
 def assert_no_scaffold_echo(response: str) -> None:
-    """Validator: raise if a generated response echoes this app's own
-    prompt-scaffold headers (the numbered brief, the writer/reviser
-    prompt's section markers) instead of producing plain draft prose.
+    """Doğrulayıcı: üretilen bir yanıt, düz taslak metni üretmek yerine bu
+    uygulamanın kendi prompt-iskeleti başlıklarını (numaralı brief,
+    writer/reviser prompt'unun bölüm işaretleri) yansıtıyorsa fırlat.
 
-    Wired into the revise flow's ``rewrite_node`` (see
-    ``app.ai.workflows.revise_graph``), which builds prompts around a
-    heavily-structured numbered brief -- exactly the shape a smaller local
-    model is most prone to imitating in its own completion.
+    Ağır yapılandırılmış numaralı bir brief etrafında prompt'lar kuran
+    revize akışının ``rewrite_node``'una (bkz.
+    ``app.ai.workflows.revise_graph``) bağlıdır -- bu, daha küçük bir yerel
+    modelin kendi tamamlamasında taklit etmeye en meyilli olduğu şekildir.
 
     Args:
-        response: The agent's generated text.
+        response: Agent'ın ürettiği metin.
 
     Raises:
-        GuardrailViolation: If a scaffold-echo pattern is detected.
+        GuardrailViolation: Bir iskelet-yansıması kalıbı tespit edilirse.
     """
     folded = _fold(response or "")
     for pattern in _SCAFFOLD_ECHO_PATTERNS:
@@ -155,18 +161,19 @@ def assert_no_scaffold_echo(response: str) -> None:
 
 
 def assert_no_prompt_leak(response: str) -> None:
-    """Validator: raise if a generated response echoes an override instruction
-    or reads like a system-prompt leak rather than the agent's actual output.
+    """Doğrulayıcı: üretilen bir yanıt bir geçersiz kılma talimatını
+    yansıtıyorsa veya agent'ın gerçek çıktısı yerine bir sistem promptu
+    sızıntısı gibi okunuyorsa fırlat.
 
-    Wired into ``BaseAgent.validators`` for the writer/reviser/classifier
-    agents (see ``app/ai/agents/base.py``); a violation fails the current
-    attempt rather than being silently returned to the user.
+    Writer/reviser/classifier agent'ları için ``BaseAgent.validators``'a
+    bağlıdır (bkz. ``app/ai/agents/base.py``); bir ihlal, kullanıcıya
+    sessizce döndürülmek yerine mevcut denemeyi başarısız kılar.
 
     Args:
-        response: The agent's generated text.
+        response: Agent'ın ürettiği metin.
 
     Raises:
-        GuardrailViolation: If a leak pattern is detected.
+        GuardrailViolation: Bir sızıntı kalıbı tespit edilirse.
     """
     folded = _fold(response or "")
     for pattern in _INJECTION_PATTERNS:

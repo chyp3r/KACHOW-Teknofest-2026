@@ -13,13 +13,14 @@ logger = logging.getLogger(__name__)
 
 
 class FavoriteService:
-    """Service for `user_favorites`.
+    """`user_favorites` için servis.
 
-    Not symmetric and not company-managed: a favorite is one user's own
-    list of other users, scoped entirely to `owner_user_id` -- see
-    `UserFavoriteModel`'s docstring for why this exists (the AI-assisted
-    artifact transfer flow, Faz 4, will require the recipient to already be
-    a favorite before it may send anything on the user's behalf).
+    Simetrik değildir ve şirket tarafından yönetilmez: bir favori, bir
+    kullanıcının kendi diğer kullanıcılar listesidir, tamamen
+    `owner_user_id` kapsamındadır -- bunun neden var olduğu için
+    `UserFavoriteModel`'in docstring'ine bakınız (AI destekli belge/evrak
+    transfer akışı, Faz 4, kullanıcı adına herhangi bir şey gönderebilmeden
+    önce alıcının zaten favori olmasını gerektirecek).
     """
 
     def __init__(self, favorite_repository: UserFavoriteRepository, user_repository: UserRepository):

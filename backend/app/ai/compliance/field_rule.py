@@ -1,12 +1,13 @@
-"""Required-field rules for incoming official documents.
+"""Gelen resmi belgeler için zorunlu alan kuralları.
 
-The rules live in Python rather than a data file for three reasons: Pydantic
-validates them at import time, they are a closed developer-maintained set (unlike
-the legislation *text*, which is editable content under `datasets/mevzuat/`), and
-grep/IDE navigation keeps every citation next to the field it justifies.
+Kurallar bir veri dosyası yerine Python içinde tutulur, üç nedenle: Pydantic
+onları import zamanında doğrular, bunlar kapalı, geliştirici tarafından
+bakımı yapılan bir kümedir (`datasets/mevzuat/` altındaki düzenlenebilir
+içerik olan mevzuat *metninin* aksine) ve grep/IDE navigasyonu her atfı
+gerekçelendirdiği alanın hemen yanında tutar.
 
-Article numbers were taken from the official text of the Resmî Yazışmalarda
-Uygulanacak Usul ve Esaslar Hakkında Yönetmelik (published on mevzuat.gov.tr):
+Madde numaraları, Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında
+Yönetmelik'in resmi metninden (mevzuat.gov.tr'de yayımlanan) alınmıştır:
 Başlık m.10, Sayı m.11, Tarih m.12, Konu m.13, Muhatap m.14, İlgi m.15,
 Metin m.16, İmza m.17, Ek m.18, Gizlilik dereceli belgeler m.25.
 """
@@ -18,12 +19,12 @@ from app.core.enums.document_type import DocumentType
 SEVERITY_REQUIRED = "zorunlu"
 SEVERITY_ADVISORY = "onerilen"
 
-#: Regulation short names used in citations.
+#: Atıflarda kullanılan yönetmelik kısa adları.
 RYUEHY = "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik"
 LAW_3071 = "3071 sayılı Dilekçe Hakkının Kullanılmasına Dair Kanun"
 LAW_4982 = "4982 sayılı Bilgi Edinme Hakkı Kanunu"
 
-#: Turkish display names for each incoming document type.
+#: Her gelen belge türü için Türkçe görünen ad.
 DOCUMENT_TYPE_LABELS: dict[DocumentType, str] = {
     DocumentType.OFFICIAL_LETTER: "Resmî Yazı",
     DocumentType.PETITION: "Dilekçe",
@@ -37,22 +38,23 @@ DOCUMENT_TYPE_LABELS: dict[DocumentType, str] = {
     DocumentType.OTHER: "Diğer",
 }
 
-#: Vocabulary steering legislation retrieval, per document type.
+#: Her belge türü için mevzuat aramasını yönlendiren kelime dağarcığı.
 #:
-#: Separate from `REQUIRED_FIELD_RULES` on purpose, because the two answer
-#: different questions. The rule table answers *compliance* -- which absences make
-#: this document incomplete -- so its citations are the ones a missing field is
-#: reported against. This map answers *relevance*: which legislation a reader of
-#: this document would want quoted. A leave request is governed by 657 for its
-#: substance, but a missing 657 provision does not make the request incomplete, so
-#: 657 belongs here and not there.
+#: `REQUIRED_FIELD_RULES`'dan kasıtlı olarak ayrıdır, çünkü ikisi farklı
+#: sorulara cevap verir. Kural tablosu *uygunluğa* cevap verir -- hangi
+#: eksiklikler bu belgeyi tamamlanmamış yapar -- bu yüzden atıfları eksik bir
+#: alanın karşısında raporlanan atıflardır. Bu eşleme ise *ilgililiğe* cevap
+#: verir: bu belgenin bir okuyucusu hangi mevzuatın alıntılanmasını ister.
+#: Bir izin talebi içeriği bakımından 657'ye tabidir, ama eksik bir 657
+#: hükmü talebi tamamlanmamış yapmaz, bu yüzden 657 burada, orada değil yer
+#: alır.
 #:
-#: These terms are appended to the retrieval query because the BM25 half of the
-#: hybrid retriever matches literal tokens, and the corpus now holds seven laws
-#: rather than one. A single fixed suffix used to work when the only real target
-#: was the correspondence regulation; measured over the expanded corpus it put the
-#: regulation's vocabulary into every query and pulled leave requests and petitions
-#: away from the laws that actually govern them.
+#: Bu terimler arama sorgusuna eklenir çünkü hibrit alıcının BM25 yarısı
+#: harfiyen token'larla eşleşir ve külliyat artık bir yerine yedi kanun
+#: barındırıyor. Tek bir sabit ek, tek gerçek hedef yazışma yönetmeliğiyken
+#: işe yarıyordu; genişletilmiş külliyat üzerinde ölçüldüğünde yönetmeliğin
+#: kelime dağarcığını her sorguya koyuyor ve izin taleplerini ile
+#: dilekçeleri, onları gerçekte yöneten kanunlardan uzaklaştırıyordu.
 DOCUMENT_TYPE_QUERY_TERMS: dict[DocumentType, str] = {
     DocumentType.OFFICIAL_LETTER: "resmî yazışma usul esas sayı tarih konu ilgi imza",
     DocumentType.CIRCULAR: "resmî yazışma usul esas dağıtım sayı tarih konu imza",
@@ -68,7 +70,7 @@ DOCUMENT_TYPE_QUERY_TERMS: dict[DocumentType, str] = {
 
 
 class FieldRule(BaseModel):
-    """A single required-or-advisory field requirement for a document type."""
+    """Bir belge türü için tek bir zorunlu-veya-önerilen alan gerekliliği."""
 
     key: str = Field(description="EvrakField üzerindeki alan adı.")
     label: str = Field(description="Alanın Türkçe adı.")
@@ -80,24 +82,24 @@ class FieldRule(BaseModel):
 def _rule(
     key: str, label: str, mevzuat: str, reason: str, severity: str = SEVERITY_REQUIRED
 ) -> FieldRule:
-    """Build a `FieldRule` with a default severity of mandatory.
+    """Varsayılan önemi zorunlu olan bir `FieldRule` oluşturur.
 
     Args:
-        key: Field name on `EvrakField`.
-        label: Turkish display name.
-        mevzuat: Legislation citation.
-        reason: Short Turkish justification.
-        severity: Either `SEVERITY_REQUIRED` or `SEVERITY_ADVISORY`.
+        key: `EvrakField` üzerindeki alan adı.
+        label: Türkçe görünen ad.
+        mevzuat: Mevzuat atfı.
+        reason: Kısa Türkçe gerekçe.
+        severity: `SEVERITY_REQUIRED` veya `SEVERITY_ADVISORY`.
 
     Returns:
-        The constructed rule.
+        Oluşturulan kural.
     """
     return FieldRule(
         key=key, label=label, severity=severity, mevzuat=mevzuat, reason=reason
     )
 
 
-# ---------- Shared rule groups ----------
+# ---------- Ortak kural grupları ----------
 _OFFICIAL_HEADER_RULES: tuple[FieldRule, ...] = (
     _rule(
         "sayi",
@@ -286,8 +288,9 @@ REQUIRED_FIELD_RULES: dict[DocumentType, tuple[FieldRule, ...]] = {
             "Rapor, düzenleyen tarafından imzalanmalıdır.",
         ),
     ),
-    # An unrecognised document still gets the minimum identifying fields checked,
-    # so an unknown type never silently reports as fully compliant.
+    # Tanınmayan bir belge için bile en az kimlik belirleyici alanlar kontrol
+    # edilir, böylece bilinmeyen bir tür asla sessizce tam uygun olarak
+    # raporlanmaz.
     DocumentType.OTHER: (
         _rule(
             "konu",
@@ -306,10 +309,12 @@ REQUIRED_FIELD_RULES: dict[DocumentType, tuple[FieldRule, ...]] = {
 }
 
 
-#: Values a language model emits instead of null when a field is absent. Compared
-#: after Turkish-aware case folding, so every entry must already be in folded form
-#: (lower-case ASCII, punctuation collapsed). Punctuation-only placeholders such as
-#: "-" or "N/A" fold to "" and "n a" respectively, so they need no separate entry.
+#: Bir alan yokken bir dil modelinin null yerine ürettiği değerler. Türkçe
+#: duyarlı büyük/küçük harf indirgemesinden sonra karşılaştırılır, bu yüzden
+#: her giriş zaten indirgenmiş biçimde olmalıdır (küçük harf ASCII,
+#: noktalama sadeleştirilmiş). "-" veya "N/A" gibi sadece noktalamadan
+#: oluşan yer tutucular sırasıyla "" ve "n a"ya indirgenir, bu yüzden ayrı
+#: bir girişe ihtiyaç duymazlar.
 BLANK_VALUE_MARKER: frozenset[str] = frozenset(
     {
         "",

@@ -1,15 +1,16 @@
-"""System-wide constant values shared across the entire application.
+"""Uygulamanın tamamında paylaşılan sistem geneli sabit değerler.
 
-For environment-specific or deployment-configurable values, use core/config.py instead.
+Ortama özel veya dağıtımla yapılandırılabilir değerler için bunun yerine
+core/config.py kullanın.
 """
 
-# ---------- File Uploads ----------
+# ---------- Dosya Yüklemeleri ----------
 MAX_FILE_SIZE_BYTES: int = 50 * 1024 * 1024  # 50 MB
 ALLOWED_FILE_TYPES: list[str] = [
     "application/pdf",
     "text/plain",
     "application/msword",
-    # Photographed or scanned evrak arrive as images and must reach the OCR path.
+    # Fotoğraflanmış veya taranmış evrak görüntü olarak gelir ve OCR yoluna ulaşmalıdır.
     "image/png",
     "image/jpeg",
     "image/tiff",
@@ -25,115 +26,126 @@ ALLOWED_DOCUMENT_EXTENSIONS: list[str] = [
     "tiff",
 ]
 
-# ---------- Document Text Extraction ----------
-# Below this many characters an extraction result is treated as a failure and the
-# next extractor in the chain is tried (a scanned PDF yields almost no text).
+# ---------- Belge Metin Çıkarma ----------
+# Bu kadar karakterin altında bir çıkarma sonucu başarısızlık olarak ele
+# alınır ve zincirdeki bir sonraki çıkarıcı denenir (taranmış bir PDF
+# neredeyse hiç metin vermez).
 MIN_EXTRACTED_CHAR_COUNT: int = 200
-# Tesseract language pack used for Turkish OCR (`tesseract --list-langs`).
+# Türkçe OCR için kullanılan Tesseract dil paketi (`tesseract --list-langs`).
 OCR_LANGUAGE: str = "tur"
-# Rasterisation density for OCR; under-scaling is the main cause of poor
-# Turkish character recognition.
+# OCR için rasterizasyon yoğunluğu; düşük ölçeklendirme zayıf Türkçe
+# karakter tanımanın başlıca nedenidir.
 OCR_RENDER_DPI: int = 300
-# Below this share of word-length tokens an extraction is treated as unreadable
-# and the chain escalates. Character count alone cannot detect OCR garbage:
-# a degraded scan yields plenty of characters, just wrong ones.
+# Kelime uzunluğundaki jetonların bu oranının altında bir çıkarma
+# okunamaz olarak ele alınır ve zincir yükselir. Yalnızca karakter sayısı
+# OCR çöpünü tespit edemez: bozuk bir tarama bolca karakter verir, sadece
+# yanlış olanlarını.
 MIN_TEXT_QUALITY_RATIO: float = 0.6
-# Tesseract page segmentation mode 6 = assume a single uniform block of text,
-# which matches the block layout of official correspondence.
+# Tesseract sayfa segmentasyon modu 6 = tek biçimli bir metin bloğu
+# varsayılır, ki bu resmi yazışmanın blok düzenine uyar.
 OCR_PAGE_SEGMENTATION_MODE: int = 6
-# Minimum embedded-text characters (across the first few pages) for a PDF to
-# count as having a text layer at all, gating OpenDataLoaderExtractor and
-# PdfiumExtractor. Deliberately far below MIN_EXTRACTED_CHAR_COUNT: this is a
-# cheap "is there anything here" probe, not a quality bar -- a genuine scan
-# reads as ~0 characters (maybe a few from an embedded watermark), where any
-# born-digital page has real text almost immediately.
+# Bir PDF'in hiç metin katmanı olduğunu saymak için gereken minimum
+# gömülü metin karakteri (ilk birkaç sayfa boyunca), OpenDataLoaderExtractor
+# ve PdfiumExtractor'ı kapılar. Bilinçli olarak MIN_EXTRACTED_CHAR_COUNT'un
+# çok altında: bu bir kalite çıtası değil, ucuz bir "burada bir şey var mı"
+# sondasıdır -- gerçek bir tarama ~0 karakter okur (belki gömülü bir
+# filigrandan birkaç tane), oysa dijital doğan herhangi bir sayfada
+# neredeyse anında gerçek metin vardır.
 TEXT_LAYER_PROBE_MIN_CHARS: int = 20
-# How many leading pages the text-layer probe reads before deciding. A scan
-# has no text layer on any page, so checking the first few is enough to tell
-# it apart from a born-digital PDF even when the document runs much longer.
+# Metin katmanı sondasının karar vermeden önce okuduğu önde gelen sayfa
+# sayısı. Bir taramanın hiçbir sayfasında metin katmanı yoktur, bu yüzden
+# ilk birkaçını kontrol etmek, belge çok daha uzun sürse bile onu dijital
+# doğan bir PDF'den ayırt etmek için yeterlidir.
 TEXT_LAYER_PROBE_MAX_PAGES: int = 3
-# Fraction of a scanned first page's height treated as the "header band" for
-# OllamaVisionExtractor.transcribe_header_band -- covers the letterhead
-# through the Konu line on the corpus this was measured against (the 45
-# scanned CY-*.pdf under datasets/resmi_yazisma/00_gelen_kaynaklar/cevap_yazisi/).
-# No quality signal (header-noise density, quality_ratio) reliably predicts
-# which scans need this repair -- calibrating one against that full corpus
-# found essentially no correlation with actual outcome (Pearson r=0.036 once
-# known parser gaps were controlled for). Applied unconditionally to every
-# OCR result instead; a small crop keeps the always-paid cost bounded (~12.6s
-# measured, against ~26s for a full page through the same model).
+# OllamaVisionExtractor.transcribe_header_band için "başlık bandı" olarak
+# ele alınan taranmış ilk sayfanın yüksekliğinin oranı -- bunun ölçüldüğü
+# korpusta (datasets/resmi_yazisma/00_gelen_kaynaklar/cevap_yazisi/ altındaki
+# 45 taranmış CY-*.pdf) antetten Konu satırına kadar kapsar. Hiçbir kalite
+# sinyali (başlık-gürültü yoğunluğu, quality_ratio) bu onarıma hangi
+# taramaların ihtiyaç duyduğunu güvenilir biçimde tahmin edemez -- bunu tam
+# korpusa karşı kalibre etmek, bilinen ayrıştırıcı boşlukları kontrol
+# edildiğinde bile gerçek sonuçla temelde hiçbir korelasyon bulmadı
+# (Pearson r=0.036). Bunun yerine her OCR sonucuna koşulsuz uygulanır;
+# küçük bir kırpım her zaman ödenen maliyeti sınırlı tutar (~12.6s ölçüldü,
+# aynı model üzerinden tam bir sayfa için ~26s'ye karşı).
 HEADER_BAND_FRACTION: float = 0.28
-# How many leading lines of a page's OCR text the header band is assumed to
-# cover, for splicing the vision model's cleaner transcription back in. Text
-# has no pixel coordinates in this pipeline (ExtractedDocument.pages is a
-# flat list[str]), so this is the same line-count approximation used to
-# calibrate HEADER_BAND_FRACTION above, not a precise mapping.
+# Vision modelinin daha temiz transkripsiyonunu geri birleştirmek için,
+# bir sayfanın OCR metninin başlık bandının kapsadığı varsayılan önde
+# gelen satır sayısı. Bu boru hattında metnin piksel koordinatları yoktur
+# (ExtractedDocument.pages düz bir list[str]'dir), bu yüzden bu, yukarıdaki
+# HEADER_BAND_FRACTION'ı kalibre etmek için kullanılan aynı satır sayısı
+# yaklaşımıdır, kesin bir eşleme değil.
 HEADER_REPAIR_LINE_COUNT: int = 14
-# How many lines after the closing formula (Arz/Rica ederim, m.17)
-# `_parse_signature` searches forward for the name/title lines. A real
-# signature block sits immediately after the closing formula and is
-# followed by an antet footer (address, santral, fax, web) on real
-# letterhead templates -- the footer is what a *backward*-from-end-of-page
-# window used to catch instead, missing the signature entirely (measured
-# 0/23 on the real scanned corpus before this constant existed). Calibrated
-# against that same corpus (21 of 23 documents carry a closing formula; the
-# other 2 fall back to the no-formula tail path, unaffected by this
-# constant): the name line lands 0-3 lines after the closing formula, and
-# the title line 1-4 -- the widest case (CY-050, whose signature ink
-# partially obscures the name) puts the title at +4. 6 gives two lines of
-# slack over that observed maximum.
+# Kapanış formülünden (Arz/Rica ederim, m.17) sonra `_parse_signature`'ın
+# isim/unvan satırları için ileriye doğru kaç satır aradığı. Gerçek bir
+# imza bloğu kapanış formülünün hemen ardından oturur ve gerçek antetli
+# kaşe şablonlarında bir antet altbilgisi (adres, santral, faks, web)
+# tarafından takip edilir -- bu altbilgi, sayfa sonundan *geriye* doğru bir
+# pencerenin bunun yerine yakaladığı şeydir, imzayı tamamen kaçırarak (bu
+# sabit var olmadan önce gerçek taranmış korpusta 0/23 ölçüldü). Aynı
+# korpusa karşı kalibre edildi (23 belgeden 21'i bir kapanış formülü
+# taşır; diğer 2'si formül-yok kuyruk yoluna düşer, bu sabitten
+# etkilenmez): isim satırı kapanış formülünden 0-3 satır sonra, unvan
+# satırı ise 1-4 satır sonra iniyor -- en geniş durum (imza mürekkebi
+# ismi kısmen gizleyen CY-050), unvanı +4'e koyuyor. 6, o gözlemlenen
+# maksimumun üzerinde iki satır tolerans verir.
 #
-# The window is NOT guaranteed footer-free -- measured minimum gap between
-# the title line and the first footer line (Santral/Tel/Bilgi için/İnternet
-# Adresi) is 0 on this same corpus, so a size-6 window routinely includes
-# a line or two of footer. Harmless: `_parse_signature` takes the first
-# name-shaped candidate and the first title-hint match after it, both of
-# which always precede the footer in document order, so extra trailing
-# footer content in the window is never reached.
+# Pencerenin altbilgisiz olacağı GARANTİ EDİLMEZ -- unvan satırı ile ilk
+# altbilgi satırı (Santral/Tel/Bilgi için/İnternet Adresi) arasındaki
+# ölçülen minimum boşluk aynı korpusta 0'dır, bu yüzden 6-boyutlu bir
+# pencere rutin olarak bir veya iki satır altbilgi içerir. Zararsız:
+# `_parse_signature`, isim-şeklindeki ilk adayı ve ondan sonraki ilk
+# unvan-ipucu eşleşmesini alır, ikisi de belge sırasında her zaman
+# altbilgiden önce gelir, bu yüzden penceredeki fazladan sondaki altbilgi
+# içeriğine asla ulaşılmaz.
 SIGNATURE_WINDOW_LINES: int = 6
-# Minimum count of `count_header_fields` (out of 5: sayi/tarih/konu/muhatap/
-# gonderen_kurum) on an extraction's page 1 for FallbackDocumentExtractor to
-# accept it outright. `quality_ratio`/`char_count` alone cannot catch this
-# failure -- a document can read as fine Turkish prose overall while its
-# header block is corrupted or unparseable (observed on real CY-050: 0.85
-# quality_ratio, 3316 characters, zero of five header fields recovered).
-# Calibrated against the CEILING of what real documents can ever provide, not
-# an arbitrary target: parsing all 19 hand-labelled ground-truth documents'
-# clean_text through parse_labelled_fields gives a per-document field-count
-# distribution of {2: 2 docs, 4: 13, 5: 4} -- `tarih` alone is recoverable on
-# only 6 of 19 (many official letterhead templates simply carry no "Tarih"
-# label). Requiring more than 2 would force expensive OCR escalation on
-# documents whose extraction is already correct. 2 is the highest floor that
-# cannot reject a document whose text is genuinely fine.
+# FallbackDocumentExtractor'ın bir çıkarmayı doğrudan kabul etmesi için
+# çıkarmanın 1. sayfasındaki minimum `count_header_fields` sayısı (5
+# üzerinden: sayi/tarih/konu/muhatap/gonderen_kurum). Yalnızca
+# `quality_ratio`/`char_count` bu başarısızlığı yakalayamaz -- bir belge,
+# başlık bloğu bozuk veya ayrışamaz olsa bile genel olarak iyi Türkçe
+# düzyazı gibi okunabilir (gerçek CY-050'de gözlemlendi: 0.85
+# quality_ratio, 3316 karakter, beş başlık alanından sıfırı kurtarıldı).
+# Keyfi bir hedef değil, gerçek belgelerin sağlayabileceği TAVANA karşı
+# kalibre edildi: 19 elle etiketlenmiş ground-truth belgesinin hepsinin
+# clean_text'ini parse_labelled_fields'tan geçirmek, belge başına
+# {2: 2 belge, 4: 13, 5: 4} alan sayısı dağılımı verir -- `tarih` tek
+# başına yalnızca 19'da 6'sından kurtarılabilir (birçok resmi antet
+# şablonu basitçe hiç "Tarih" etiketi taşımaz). 2'den fazlasını istemek,
+# çıkarması zaten doğru olan belgeler üzerinde pahalı OCR yükselmesini
+# zorlardı. 2, metni gerçekten iyi olan bir belgeyi reddedemeyen en
+# yüksek tabandır.
 MIN_HEADER_FIELD_COUNT: int = 2
-# Page count above which FallbackDocumentExtractor skips the *full-page*
-# vision-model escalation (header-band repair still runs regardless of page
-# count -- it only ever touches page 1). Bounds the worst case of the new
-# field-triggered escalation at roughly one page's OCR time instead of
-# unbounded: a long attachment bundle should not pay full-document vision
-# cost to fix header fields that only ever live on page 1.
+# FallbackDocumentExtractor'ın *tam sayfa* vision-model yükselmesini
+# atladığı sayfa sayısı eşiği (başlık bandı onarımı sayfa sayısından
+# bağımsız olarak her zaman çalışır -- yalnızca 1. sayfaya dokunur). Yeni
+# alan-tetiklemeli yükselmenin en kötü durumunu, sınırsız yerine kabaca
+# bir sayfalık OCR süresiyle sınırlar: uzun bir ek paketi, yalnızca 1.
+# sayfada yaşayan başlık alanlarını düzeltmek için tam belge vision
+# maliyetini ödememelidir.
 MAX_OCR_PAGES: int = 3
-# Minimum share of a PDF page's area covered by a single embedded image
-# object for that page to be treated as image-dominated -- the discriminator
-# between a genuine born-digital page (real vector/text content, no
-# full-page image) and a page that is actually a scanned raster wrapped in a
-# PDF ("Class A": a scanner's own bundled OCR pass writes a junk embedded
-# text layer over a full-page image of the original scan, so
-# `has_pdf_text_layer` alone cannot tell it apart from a real text layer).
-# Measured across 86 real PDFs (50 corpus scans + 36 live uploads): every
-# text-layer page from this project's scanner pipeline (`PFUPDF Engine`)
-# lands at exactly 1.0 image coverage, and every genuinely born-digital page
-# (`ReportLab`) lands at exactly 0.0 -- no document falls between the two, so
-# no fine calibration was needed.
+# Bir PDF sayfasının görüntü-hakim olarak ele alınması için tek bir gömülü
+# görüntü nesnesinin kapladığı sayfa alanının minimum oranı -- gerçekten
+# dijital doğan bir sayfa (gerçek vektör/metin içeriği, tam sayfa görüntü
+# yok) ile aslında bir PDF'e sarılmış taranmış bir raster olan bir sayfa
+# ("Class A": bir tarayıcının kendi gömülü OCR geçişi, orijinal taramanın
+# tam sayfa bir görüntüsünün üzerine çöp bir gömülü metin katmanı yazar,
+# bu yüzden `has_pdf_text_layer` tek başına onu gerçek bir metin
+# katmanından ayırt edemez) arasındaki discriminator. 86 gerçek PDF
+# üzerinde ölçüldü (50 korpus taraması + 36 canlı yükleme): bu projenin
+# tarayıcı boru hattından (`PFUPDF Engine`) gelen her metin-katmanı
+# sayfası tam olarak 1.0 görüntü kapsamasına iner, ve gerçekten dijital
+# doğan her sayfa (`ReportLab`) tam olarak 0.0'a iner -- hiçbir belge
+# ikisi arasına düşmez, bu yüzden ince kalibrasyona gerek yoktu.
 FULL_PAGE_IMAGE_MIN_COVERAGE: float = 0.5
 
-# ---------- Pagination ----------
+# ---------- Sayfalama ----------
 DEFAULT_PAGE_SIZE: int = 20
 MAX_PAGE_SIZE: int = 100
 
-# ---------- AI Workflow ----------
-# AI_WORKFLOW_TIMEOUT_SECONDS lives in core/config.py (Settings) -- it is
-# deployment-configurable, unlike the constants in this file.
+# ---------- AI İş Akışı ----------
+# AI_WORKFLOW_TIMEOUT_SECONDS, core/config.py'de (Settings) yaşar -- bu
+# dosyadaki sabitlerin aksine dağıtımla yapılandırılabilir.
 MAX_RETRY_ATTEMPTS: int = 3
 
 # ---------- CORS ----------
@@ -142,5 +154,5 @@ CORS_ORIGINS: list[str] = [
     "http://localhost:5173",
 ]
 
-# ---------- Cache ----------
-CACHE_TTL_SECONDS: int = 60 * 60  # 1 hour
+# ---------- Önbellek ----------
+CACHE_TTL_SECONDS: int = 60 * 60  # 1 saat

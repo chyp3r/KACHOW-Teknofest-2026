@@ -1,53 +1,53 @@
-"""Deterministic structural signals used to inform document-type classification.
+"""Belge türü sınıflandırmasını bilgilendirmek için kullanılan deterministik yapısal sinyaller.
 
-An official institutional letter carries unmistakable structural markers -- the
-"T.C." header, a "Sayı:" field, a titled signature block -- that are cheap to
-detect with regular expressions and do not need model judgement. Feeding these as
-factual observations into the classifier prompt measurably reduces the harmful
-confusion between an institutional letter and a citizen petition, which matters
-because the document type selects the required-field rule table.
+Resmi bir kurum yazısı, düzenli ifadelerle ucuza tespit edilebilen ve model
+değerlendirmesi gerektirmeyen, hataya yer bırakmayan yapısal işaretler taşır --
+"T.C." başlığı, bir "Sayı:" alanı, unvanlı bir imza bloğu. Bunları sınıflandırıcı
+prompt'una olgusal gözlemler olarak beslemek, bir kurum yazısı ile bir vatandaş
+dilekçesi arasındaki zararlı karışıklığı ölçülebilir biçimde azaltır; bu önemlidir
+çünkü belge türü zorunlu alan kural tablosunu seçer.
 
-The signals inform the model; they never override it. Anything genuinely
-ambiguous stays the classifier's decision.
+Sinyaller modeli bilgilendirir; onu asla geçersiz kılmazlar. Gerçekten belirsiz
+olan her şey sınıflandırıcının kararında kalır.
 """
 
 import re
 
 from pydantic import BaseModel, Field
 
-# "T.C." possibly spaced or with the full phrase spelled out.
+# "T.C." aralarında boşluklu olabilir veya tam ifade yazılı olabilir.
 TC_HEADER_PATTERN = re.compile(
     r"(^|\n)\s*(T\s*\.?\s*C\s*\.?|TÜRKİYE CUMHURİYETİ)\s*($|\n)", re.IGNORECASE
 )
-# A "Sayı" side-heading, as opposed to the word appearing mid-sentence.
+# Cümle ortasında geçen kelimenin aksine bir "Sayı" yan başlığı.
 SAYI_FIELD_PATTERN = re.compile(r"(^|\n)\s*Sayı\s*:", re.IGNORECASE)
 KONU_FIELD_PATTERN = re.compile(r"(^|\n)\s*Konu\s*:", re.IGNORECASE)
 ILGI_FIELD_PATTERN = re.compile(r"(^|\n)\s*İlgi\s*:", re.IGNORECASE)
 DISTRIBUTION_PATTERN = re.compile(r"DAĞITIM\s*(YERLERİNE)?", re.IGNORECASE)
 
-# Institutional titles that appear under a signature. A citizen petition does not
-# carry these. Matched only within the signature block (see SIGNATURE_BLOCK_LINES),
-# because the same words occur in the addressee line of a petition -- "BELEDİYE
-# BAŞKANLIĞINA" would otherwise be reported as a titled signature, feeding the
-# classifier a false observation.
+# Bir imzanın altında görünen kurumsal unvanlar. Bir vatandaş dilekçesi bunları
+# taşımaz. Yalnızca imza bloğu içinde eşleştirilir (bkz. SIGNATURE_BLOCK_LINES),
+# çünkü aynı kelimeler bir dilekçenin muhatap satırında da geçer -- aksi halde
+# "BELEDİYE BAŞKANLIĞINA" unvanlı bir imza olarak raporlanır ve sınıflandırıcıya
+# sahte bir gözlem besler.
 SIGNATURE_TITLE_PATTERN = re.compile(
     r"(Genel Müdür|Daire Başkanı|Şube Müdürü|Müdür|Vali|Kaymakam|Başkan|"
     r"Bakan|Bakan Yardımcısı|Rektör|Dekan|Müsteşar|Amir|Şef|Koordinatör)"
-    # Reject the dative/directional suffixes that mark an addressee rather than a
-    # signature ("...BAŞKANLIĞINA", "...MÜDÜRLÜĞÜNE").
+    # İmza yerine bir muhatabı işaretleyen yönelme/yön eklerini reddet
+    # ("...BAŞKANLIĞINA", "...MÜDÜRLÜĞÜNE").
     r"(?!\w*(lığına|luguna|lığına|lüğüne|luğuna|liğine|na\b|ne\b))",
     re.IGNORECASE,
 )
-#: How many trailing lines count as the signature block.
+#: Kaç sondaki satırın imza bloğu sayılacağı.
 SIGNATURE_BLOCK_LINES = 6
-# An applicant's own contact block, typical of a petition.
+# Bir dilekçe için tipik olan, başvuranın kendi iletişim bloğu.
 APPLICANT_CONTACT_PATTERN = re.compile(
     r"(^|\n)\s*(Adres|T\.?C\.? Kimlik No|TCKN|Telefon|E-?posta)\s*:", re.IGNORECASE
 )
 
 
 class StructuralSignal(BaseModel):
-    """Regex-detected structural markers of an incoming document."""
+    """Gelen bir belgenin regex ile tespit edilen yapısal işaretleri."""
 
     has_institution_header: bool = Field(
         default=False, description="Belgede 'T.C.' kurum anteti var mı."
@@ -74,33 +74,33 @@ class StructuralSignal(BaseModel):
 
     @property
     def looks_institutional(self) -> bool:
-        """Whether the markers point to a document issued by an institution."""
+        """İşaretlerin bir kurum tarafından düzenlenen bir belgeye işaret edip etmediği."""
         return self.has_institution_header and (
             self.has_sayi_field or self.has_titled_signature
         )
 
 
 def _signature_block(text: str) -> str:
-    """Return the trailing lines of a document, where the signature sits.
+    """İmzanın oturduğu, bir belgenin sondaki satırlarını döndürür.
 
     Args:
-        text: The extracted document text.
+        text: Çıkarılan belge metni.
 
     Returns:
-        The last non-empty lines, joined.
+        Son boş olmayan satırlar, birleştirilmiş.
     """
     lines = [line for line in text.splitlines() if line.strip()]
     return "\n".join(lines[-SIGNATURE_BLOCK_LINES:])
 
 
 def detect_structural_signal(text: str) -> StructuralSignal:
-    """Detect structural markers in a document's text.
+    """Bir belgenin metnindeki yapısal işaretleri tespit eder.
 
     Args:
-        text: The extracted document text.
+        text: Çıkarılan belge metni.
 
     Returns:
-        The detected signals.
+        Tespit edilen sinyaller.
     """
     return StructuralSignal(
         has_institution_header=bool(TC_HEADER_PATTERN.search(text)),
@@ -116,13 +116,13 @@ def detect_structural_signal(text: str) -> StructuralSignal:
 
 
 def format_structural_signal(signal: StructuralSignal) -> str:
-    """Render the signals as a short Turkish observation block for a prompt.
+    """Sinyalleri bir prompt için kısa bir Türkçe gözlem bloğu olarak sunar.
 
     Args:
-        signal: The detected signals.
+        signal: Tespit edilen sinyaller.
 
     Returns:
-        A Turkish observation block, or an empty string when nothing was detected.
+        Bir Türkçe gözlem bloğu, veya hiçbir şey tespit edilmediyse boş bir string.
     """
     observations = []
     if signal.has_institution_header:

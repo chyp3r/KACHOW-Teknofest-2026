@@ -3,16 +3,18 @@ import logging
 import sys
 from datetime import datetime, timezone
 
-#: Every attribute a stock LogRecord carries. Anything else on a record is an
-#: application-supplied `extra={...}` field and belongs in the JSON output --
-#: without this set, StructuredLoggingMiddleware's extras (method, path,
-#: status, duration_ms, request_id) were invisible, silently absorbed into
-#: `message` as a pre-formatted f-string instead of structured fields.
+#: Standart bir LogRecord'un taşıdığı her attribute. Bir record üzerindeki
+#: bunların dışındaki her şey, uygulama tarafından sağlanan bir
+#: `extra={...}` alanıdır ve JSON çıktısında yer almalıdır -- bu küme
+#: olmadan, StructuredLoggingMiddleware'in extra alanları (method, path,
+#: status, duration_ms, request_id) görünmez oluyor, yapılandırılmış
+#: alanlar yerine `message` içine önceden biçimlendirilmiş bir f-string
+#: olarak sessizce yutuluyordu.
 _STANDARD_LOG_RECORD_ATTRS = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__)
 
 
 class JSONFormatter(logging.Formatter):
-    """Custom formatter to output logs in SOTA structured JSON format."""
+    """Logları son teknoloji, yapılandırılmış JSON formatında çıktılamak için özel formatter."""
 
     def format(self, record: logging.LogRecord) -> str:
         from app.api.middleware.correlation import get_request_id
@@ -32,20 +34,21 @@ class JSONFormatter(logging.Formatter):
             if key not in _STANDARD_LOG_RECORD_ATTRS and key not in log_data:
                 log_data[key] = value
 
-        # Add exception info if present
+        # Varsa exception bilgisini ekle
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)
 
         return json.dumps(log_data, default=str)
 
 def setup_logging(environment: str = "development") -> None:
-    """Configure system-wide SOTA logging formats.
-    
-    Uses JSON formatting in production and structured colored-like readable logs in development.
+    """Sistem genelinde son teknoloji logging formatlarını yapılandırır.
+
+    Production'da JSON formatlama, development'ta ise yapılandırılmış,
+    renkli benzeri okunabilir loglar kullanır.
     """
     root_logger = logging.getLogger()
-    
-    # Remove existing handlers to prevent duplicate logs
+
+    # Yinelenen logları önlemek için mevcut handler'ları kaldır
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
         
@@ -55,7 +58,7 @@ def setup_logging(environment: str = "development") -> None:
         handler.setFormatter(JSONFormatter())
         root_logger.setLevel(logging.INFO)
     else:
-        # Beautiful clean development format
+        # Sade ve okunaklı development formatı
         formatter = logging.Formatter(
             fmt="%(asctime)s [%(levelname)s] %(name)s (%(filename)s:%(lineno)d): %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S"
@@ -65,6 +68,6 @@ def setup_logging(environment: str = "development") -> None:
         
     root_logger.addHandler(handler)
     
-    # Silence third-party library verbose logs in development
+    # Development'ta üçüncü parti kütüphanelerin ayrıntılı loglarını sustur
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.error").setLevel(logging.INFO)

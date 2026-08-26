@@ -11,7 +11,7 @@ from app.core.enums.user_role import UserRole
 
 
 def _to_grant_view(row: PermissionGrantModel) -> GrantView:
-    """Convert a persisted row into the DB-independent shape ``engine.py`` consumes."""
+    """Kalıcı bir satırı ``engine.py``'nin tükettiği DB'den bağımsız biçime dönüştürür."""
     return GrantView(
         id=row.id,
         subject_type=row.subject_type,
@@ -26,11 +26,11 @@ def _to_grant_view(row: PermissionGrantModel) -> GrantView:
 
 
 class PermissionGrantRepository:
-    """Persistence for ``permission_grants`` -- the ABAC PDP's PAP store.
+    """``permission_grants`` için kalıcılık -- ABAC PDP'nin PAP deposu.
 
-    Every method takes an explicit `company_id` and filters on it, same
-    convention as every other repository since the tenancy work (see
-    `app.domains.units.repository.UnitRepository`'s docstring).
+    Her metot açık bir `company_id` alır ve buna göre filtreler, kiracılık
+    çalışmasından bu yana diğer her repository ile aynı kural
+    (bkz. `app.domains.units.repository.UnitRepository`'nin docstring'i).
     """
 
     def __init__(self, db: AsyncSession):
@@ -39,16 +39,17 @@ class PermissionGrantRepository:
     async def list_active_for_subject(
         self, company_id: str, role: UserRole, user_id: str, action: str
     ) -> List[GrantView]:
-        """Fetch every currently-active grant matching this subject and action.
+        """Bu özne ve eylemle eşleşen, şu anda etkin her yetkiyi getirir.
 
-        "Active" means: not revoked, and (no ``valid_from``/``valid_until``
-        window, or the window covers ``now``). Matches grants targeting
-        either ``subject_type="user"`` with this exact ``user_id``, or
-        ``subject_type="role"`` with this ``role`` -- a role-typed grant
-        applies to every member of that role, a user-typed grant to just
-        one person. ``action`` may itself be ``"*"`` on a stored row (a
-        blanket grant), so this also matches rows whose ``action`` column is
-        the literal wildcard.
+        "Etkin" şu anlama gelir: iptal edilmemiş, ve (``valid_from``/
+        ``valid_until`` penceresi yok, ya da pencere ``now``'u kapsıyor).
+        Ya tam olarak bu ``user_id`` ile ``subject_type="user"`` olan, ya da
+        bu ``role`` ile ``subject_type="role"`` olan yetkileri hedefleyen
+        yetkilerle eşleşir -- rol tipli bir yetki o rolün her üyesine
+        uygulanır, kullanıcı tipli bir yetki ise yalnızca bir kişiye.
+        Saklanan bir satırda ``action``'ın kendisi de ``"*"`` olabilir
+        (genel bir yetki), bu yüzden bu, ``action`` sütunu gerçek joker
+        karakter olan satırlarla da eşleşir.
         """
         now = datetime.now(timezone.utc)
         stmt = select(PermissionGrantModel).where(
@@ -78,9 +79,9 @@ class PermissionGrantRepository:
         return [_to_grant_view(row) for row in result.scalars().all()]
 
     async def list_for_user(self, company_id: str, user_id: str) -> List[PermissionGrantModel]:
-        """Every non-revoked grant explicitly targeting ``user_id`` (role-typed grants excluded --
-        this is "what was granted to this person specifically", for the ``GET /users/{id}/permissions``
-        UI, not the full effective permission set)."""
+        """Açıkça ``user_id``'yi hedefleyen, iptal edilmemiş her yetki (rol tipli yetkiler hariç --
+        bu, ``GET /users/{id}/permissions`` arayüzü için "bu kişiye özel olarak ne verildi"dir,
+        tam etkin yetki kümesi değil)."""
         result = await self.db.execute(
             select(PermissionGrantModel).where(
                 PermissionGrantModel.company_id == company_id,
@@ -107,7 +108,7 @@ class PermissionGrantRepository:
         return grant
 
     async def revoke(self, grant_id: str, company_id: str) -> bool:
-        """Mark a grant revoked (kept as its own audit trail, not deleted)."""
+        """Bir yetkiyi iptal edilmiş olarak işaretler (silinmez, kendi denetim izi olarak kalır)."""
         grant = await self.get_by_id(grant_id, company_id)
         if grant is None or grant.revoked_at is not None:
             return False

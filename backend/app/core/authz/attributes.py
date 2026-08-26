@@ -1,9 +1,9 @@
-"""Attribute types the PDP reasons over: Subject, Resource, Environment, Action.
+"""PDP'nin akıl yürüttüğü öznitelik türleri: Subject, Resource, Environment, Action.
 
-Deliberately thin. ``Subject``/``Resource`` do not carry confidentiality
-clearance -- that stays ``app.core.permissions.role_checker``'s own,
-downstream concern (see ``engine.py``'s module docstring for why the two
-must not be folded together).
+Bilinçli olarak yalın. ``Subject``/``Resource`` gizlilik yetkisi taşımaz --
+bu, ``app.core.permissions.role_checker``'ın kendi, alt akış ilgisi olarak
+kalır (ikisinin neden birlikte katlanmaması gerektiği için
+``engine.py``'nin modül docstring'ine bakın).
 """
 
 from dataclasses import dataclass, field
@@ -15,13 +15,13 @@ from app.core.enums.user_role import UserRole
 
 @dataclass(frozen=True)
 class Subject:
-    """The authenticated caller a decision is being made about.
+    """Hakkında bir karar verilen kimliği doğrulanmış çağıran.
 
     Attributes:
-        user_id: The caller's ``UserModel.id``.
-        role: The caller's ``UserRole``.
-        company_id: The caller's tenant, or ``None`` for ``UserRole.ROOT``
-            (see ``UserModel.company_id``'s docstring).
+        user_id: Çağıranın ``UserModel.id``'si.
+        role: Çağıranın ``UserRole``'ü.
+        company_id: Çağıranın tenant'ı, veya ``UserRole.ROOT`` için ``None``
+            (bkz. ``UserModel.company_id``'nin docstring'i).
     """
 
     user_id: str
@@ -31,21 +31,22 @@ class Subject:
 
 @dataclass(frozen=True)
 class Resource:
-    """The thing an action is being attempted against.
+    """Bir eylemin karşısında denendiği şey.
 
     Attributes:
-        type: A short tag ("document", "draft", "unit", "user", ...) --
-            matched against ``permission_grants.resource_type`` and rule
-            actions' namespace prefix, not enforced as a closed set here.
-        id: The resource's primary key, when it already exists (absent for
-            a not-yet-created resource, e.g. a ``unit:manage`` check ahead
-            of ``POST /units``).
-        company_id: The resource's tenant. ``None`` only for tenant-less
-            resources (a ``companies`` row itself, or a ``system:*`` action
-            with no single-company target).
-        owner_id: The resource's owner, when ownership is a meaningful
-            concept for this resource type (documents, drafts). ``None``
-            otherwise.
+        type: Kısa bir etiket ("document", "draft", "unit", "user", ...) --
+            ``permission_grants.resource_type``'a ve kural eylemlerinin
+            namespace önekine karşı eşleştirilir, burada kapalı bir küme
+            olarak zorlanmaz.
+        id: Zaten var olduğunda kaynağın birincil anahtarı (henüz
+            oluşturulmamış bir kaynak için yoktur, örn. ``POST /units``'ten
+            önceki bir ``unit:manage`` kontrolü).
+        company_id: Kaynağın tenant'ı. Yalnızca tenant'sız kaynaklar için
+            (bir ``companies`` satırının kendisi, veya tek bir şirket
+            hedefi olmayan bir ``system:*`` eylemi) ``None``.
+        owner_id: Sahiplik bu kaynak türü için anlamlı bir kavram
+            olduğunda (belgeler, taslaklar) kaynağın sahibi. Aksi halde
+            ``None``.
     """
 
     type: str
@@ -56,15 +57,16 @@ class Resource:
 
 @dataclass(frozen=True)
 class Environment:
-    """Request-time context outside subject/resource/action.
+    """Özne/kaynak/eylem dışındaki istek zamanı bağlamı.
 
     Attributes:
-        now: Evaluation time, for ``permission_grants.valid_from``/
-            ``valid_until`` windows. Defaults to the current UTC time so
-            call sites that don't care about time-boxed grants can omit it.
-        company_scope: The company a ``UserRole.ROOT`` subject has
-            explicitly switched into (``X-Company-Scope`` header), if any.
-            Ignored for every other role.
+        now: ``permission_grants.valid_from``/``valid_until`` pencereleri
+            için değerlendirme zamanı. Zaman sınırlı izinleri
+            umursamayan çağrı yerlerinin bunu atlayabilmesi için
+            varsayılan olarak mevcut UTC zamanına ayarlanır.
+        company_scope: Bir ``UserRole.ROOT`` öznesinin varsa açıkça
+            içine geçtiği şirket (``X-Company-Scope`` başlığı). Diğer
+            her rol için yok sayılır.
     """
 
     now: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -72,35 +74,38 @@ class Environment:
 
 
 class Action:
-    """Namespaced action identifiers, ``"<resource_type>:<verb>"``.
+    """Namespace'lenmiş eylem tanımlayıcıları, ``"<resource_type>:<verb>"``.
 
-    A plain string namespace (not an enum) on purpose: ``permission_grants.
-    action`` is a free-text DB column so a future resource type can be
-    granted against without a code change, and the wildcard ``"*"`` (root's
-    built-in rule, and a delegated grant's own escape hatch) has to be a
-    valid value in the same space as every concrete action.
+    Bilinçli olarak bir enum değil düz bir dize namespace'i:
+    ``permission_grants.action``, kod değişikliği olmadan gelecekteki bir
+    kaynak türüne izin verilebilmesi için serbest metin bir DB sütunudur,
+    ve wildcard ``"*"`` (root'un yerleşik kuralı, ve devredilen bir iznin
+    kendi kaçış kapağı), her somut eylemle aynı uzayda geçerli bir değer
+    olmak zorundadır.
     """
 
     DOCUMENT_READ = "document:read"
     DOCUMENT_UPDATE = "document:update"
     DOCUMENT_DELETE = "document:delete"
     DRAFT_READ = "draft:read"
-    #: A draft's own routed unit only, today (see `drafts/router.py`'s
-    #: `PATCH /{draft_id}/destination`) -- the content itself is
-    #: append-only (a new version, never an edit-in-place), so this never
-    #: needs to widen beyond that one mutable field.
+    #: Bugün yalnızca bir taslağın kendi yönlendirilmiş birimi (bkz.
+    #: `drafts/router.py`'nin `PATCH /{draft_id}/destination`'ı) -- içeriğin
+    #: kendisi yalnızca-ekleme'dir (yeni bir sürüm, asla yerinde-düzenleme
+    #: değil), bu yüzden bunun o tek değiştirilebilir alanın ötesine
+    #: genişlemesi asla gerekmez.
     DRAFT_UPDATE = "draft:update"
     DRAFT_DELETE = "draft:delete"
     DRAFT_SEND = "draft:send"
-    #: Gates `ArtifactTransferService.execute` for *either* artifact kind
-    #: (draft or document) -- one action, not `draft:transfer`/`document:
-    #: transfer` split, since the decision itself ("may this subject move
-    #: this artifact to someone else") doesn't depend on which table the
-    #: artifact lives in. `DRAFT_SEND` is kept as its own, older action
-    #: (still gates nothing new -- `DraftShareService.send` now delegates
-    #: to this one instead) rather than merged into it, since removing an
-    #: `Action` value already referenced by existing `permission_grants`
-    #: rows would silently invalidate them.
+    #: `ArtifactTransferService.execute`'u *her iki* artifact türü için de
+    #: kapılar (taslak veya belge) -- `draft:transfer`/`document:transfer`
+    #: olarak bölünmüş değil, tek bir eylem, çünkü kararın kendisi ("bu
+    #: özne bu artifact'i başka birine taşıyabilir mi") artifact'in hangi
+    #: tabloda yaşadığına bağlı değildir. `DRAFT_SEND`, birleştirilmek
+    #: yerine kendi, daha eski eylemi olarak tutulur (hâlâ yeni hiçbir şeyi
+    #: kapılamaz -- `DraftShareService.send` artık bunun yerine buna
+    #: devrediyor), çünkü var olan `permission_grants` satırlarının zaten
+    #: referans verdiği bir `Action` değerini kaldırmak onları sessizce
+    #: geçersiz kılardı.
     ARTIFACT_TRANSFER = "artifact:transfer"
     UNIT_MANAGE = "unit:manage"
     USER_MANAGE = "user:manage"

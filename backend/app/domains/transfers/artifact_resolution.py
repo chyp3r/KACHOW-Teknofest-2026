@@ -1,30 +1,32 @@
-"""Deterministic, DB-backed "which artifact does 'gönder' refer to" resolution.
+"""Deterministik, DB tabanlı "gönder' hangi belgeye işaret ediyor" çözümlemesi.
 
-The AI channel's `propose_transfer` tool (`app.ai.tools.transfer_tools`,
-called by the assist step's own model) needs to answer "which draft" (or
-"which document") a message like "son taslağı Ahmet'e gönder" refers to --
-without relying on `SessionFocus.active_draft`, which is turn-scoped and
-self-clears after `ACTIVE_DRAFT_IDLE_LIMIT` idle turns (see
-`app.ai.session.focus`'s own docstring). A user who drafts, does several
-turns of unrelated work, and only later asks to send it must still resolve
-correctly -- this module is what makes that true, by going to the database
-instead of the in-memory focus channel.
+AI kanalının `propose_transfer` aracının (`app.ai.tools.transfer_tools`,
+assist adımının kendi modeli tarafından çağrılır) "son taslağı Ahmet'e
+gönder" gibi bir mesajın "hangi taslağa" (ya da "hangi evraka") işaret
+ettiğini yanıtlaması gerekir -- bunu, tur bazlı olan ve
+`ACTIVE_DRAFT_IDLE_LIMIT` boşta tur sonunda kendiliğinden temizlenen
+`SessionFocus.active_draft`'a güvenmeden yapmalıdır (bkz.
+`app.ai.session.focus`'un kendi docstring'i). Taslak oluşturan, birkaç tur
+alakasız iş yapan ve ancak sonra göndermek isteyen bir kullanıcı yine de
+doğru şekilde çözümlenebilmelidir -- bu modül, bellek içi focus kanalı
+yerine veritabanına giderek bunu sağlar.
 
-Ladder (plan §C2), draft and document each running the same three tiers:
+Merdiven (plan §C2), taslak ve evrak için aynı üç katmanı çalıştırır:
 
-1. An explicit reference already resolved by the caller (a real `drafts.id`/
-   document storage path -- never guessed from free text here; that would
-   just move the guessing into a different function).
-2. The thread's own most recent draft/document -- survives any number of
-   idle turns, since it is a plain `updated_at`/`created_at` query with no
-   idle-turn concept at all.
-3. The requesting user's own most recent drafts/documents company-wide, when
-   the thread has none -- covers a session that never drafted anything
-   itself (the user came from `/drafts` or `/documents` instead).
+1. Çağıran tarafından zaten çözümlenmiş açık bir referans (gerçek bir
+   `drafts.id`/evrak depolama yolu -- burada asla serbest metinden tahmin
+   edilmez; bu, tahmin işini sadece başka bir fonksiyona taşımak olurdu).
+2. Thread'in kendi en son taslağı/evrakı -- herhangi bir sayıda boşta tur
+   sonrasında bile geçerliliğini korur, çünkü boşta tur kavramı olmayan
+   düz bir `updated_at`/`created_at` sorgusudur.
+3. Thread'de hiçbir şey yoksa, isteği yapan kullanıcının şirket genelindeki
+   en son taslakları/evrakları -- kendisi hiç taslak oluşturmamış bir
+   oturumu kapsar (kullanıcı bunun yerine `/drafts` veya `/documents`'tan
+   gelmiştir).
 
-More than one candidate at any tier is `"ambiguous"`, never resolved by
-picking one -- the LLM does not choose here, same as
-`RecipientResolutionService`.
+Herhangi bir katmanda birden fazla aday varsa `"ambiguous"` olarak
+işaretlenir, birini seçerek asla çözümlenmez -- `RecipientResolutionService`
+ile aynı şekilde, LLM burada seçim yapmaz.
 """
 
 from dataclasses import dataclass
@@ -35,8 +37,9 @@ from app.domains.documents.repository import DocumentRepository
 from app.domains.drafts.model.draft_model import DraftModel
 from app.domains.drafts.repository import DraftRepository
 
-#: How many company-wide candidates tier 3 offers before giving up and
-#: asking the user to be more specific instead of rendering an unwieldy list.
+#: Kullanışsız uzun bir liste göstermek yerine kullanıcıdan daha spesifik
+#: olmasını istemeden önce, katman 3'ün şirket genelinde sunacağı azami
+#: aday sayısı.
 DEFAULT_CANDIDATE_LIMIT = 5
 
 Artifact = Union[DraftModel, DocumentModel]
@@ -44,15 +47,15 @@ Artifact = Union[DraftModel, DocumentModel]
 
 @dataclass(frozen=True)
 class ArtifactResolution:
-    """The outcome of resolving one artifact reference.
+    """Tek bir belge referansının çözümleme sonucu.
 
     Attributes:
-        status: `"resolved"` (exactly one candidate), `"ambiguous"` (more
-            than one -- the caller must disambiguate, never guess), or
-            `"unresolved"` (nothing found at any tier).
+        status: `"resolved"` (tam olarak bir aday), `"ambiguous"` (birden
+            fazla -- çağıran belirsizliği gidermelidir, asla tahmin
+            edilmez) ya da `"unresolved"` (hiçbir katmanda bulunamadı).
         artifact_kind: `"draft"` | `"document"`.
-        candidates: Empty for `"unresolved"`, exactly one for `"resolved"`,
-            two or more for `"ambiguous"`.
+        candidates: `"unresolved"` için boş, `"resolved"` için tam olarak
+            bir, `"ambiguous"` için iki veya daha fazla.
     """
 
     status: Literal["resolved", "ambiguous", "unresolved"]
@@ -74,21 +77,22 @@ class ArtifactResolutionService:
         explicit_draft_id: Optional[str] = None,
         candidate_limit: int = DEFAULT_CANDIDATE_LIMIT,
     ) -> ArtifactResolution:
-        """Resolve "the draft" the user means, per this module's ladder.
+        """Bu modülün merdivenine göre kullanıcının kastettiği "taslağı" çözümler.
 
         Args:
-            company_id: Tenant scope.
-            user_id: The requesting user -- tier 3 only ever looks at
-                *their own* drafts, never the company's.
-            thread_id: The chat session id (`DraftModel.session_id`'s
-                counterpart) -- tier 2's key. `draft_recorder.record_draft`
-                writes every chat-produced draft under this same id, so this
-                is exactly "what this conversation has produced so far".
-            explicit_draft_id: A reference the caller already resolved
-                (tier 1), e.g. from `SessionFocus.active_draft_id` when the
-                message reads as deictic ("bu taslağı"). `None` skips this
-                tier outright.
-            candidate_limit: Tier 3's cap.
+            company_id: Kiracı (tenant) kapsamı.
+            user_id: İsteği yapan kullanıcı -- katman 3 yalnızca *kendi*
+                taslaklarına bakar, şirketinkine asla bakmaz.
+            thread_id: Sohbet oturumu id'si (`DraftModel.session_id`'nin
+                karşılığı) -- katman 2'nin anahtarı. `draft_recorder.
+                record_draft` sohbette üretilen her taslağı bu aynı id
+                altında yazar, dolayısıyla bu tam olarak "bu konuşmanın
+                şimdiye kadar ürettikleri"dir.
+            explicit_draft_id: Çağıranın zaten çözümlediği bir referans
+                (katman 1), örn. mesaj işaret zamiri gibi okunduğunda
+                ("bu taslağı") `SessionFocus.active_draft_id`'den gelir.
+                `None` bu katmanı tamamen atlar.
+            candidate_limit: Katman 3'ün üst sınırı.
         """
         if explicit_draft_id:
             draft = await self.draft_repository.get_by_id(explicit_draft_id)
@@ -114,10 +118,10 @@ class ArtifactResolutionService:
         focus_document_id: Optional[str] = None,
         candidate_limit: int = DEFAULT_CANDIDATE_LIMIT,
     ) -> ArtifactResolution:
-        """Resolve "the document" the user means -- same ladder shape, tier 2
-        here is `SessionFocus.active_document_id` rather than a session
-        query, since documents are not versioned per-session the way drafts
-        are.
+        """Kullanıcının kastettiği "evrakı" çözümler -- aynı merdiven şekli,
+        ancak burada katman 2, bir oturum sorgusu yerine
+        `SessionFocus.active_document_id`'dir, çünkü evraklar taslaklar
+        gibi oturum bazında versiyonlanmaz.
         """
         for document_id in (explicit_document_id, focus_document_id):
             if not document_id:

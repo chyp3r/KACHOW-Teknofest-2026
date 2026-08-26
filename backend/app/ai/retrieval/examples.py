@@ -1,11 +1,10 @@
-"""Few-shot style-example retrieval for the draft writer.
+"""Taslak yazarı için few-shot üslup örneği getirimi.
 
-Wraps ``HybridRetriever`` with two rules a generic passage retriever has no
-reason to know about: an example of the wrong ``correspondence_type`` is
-worse than no example at all (it teaches the wrong letter shape), and two
-examples from the same institution teach the writer to imitate that
-institution's letterhead rather than the structure shared across all of
-them.
+``HybridRetriever``'ı, genel bir pasaj retriever'ının bilmesine gerek
+olmayan iki kuralla sarmalar: yanlış ``correspondence_type``'a ait bir
+örnek, hiç örnek olmamasından daha kötüdür (yanlış mektup biçimini öğretir)
+ve aynı kurumdan iki örnek, yazarı tüm örnekler arasında paylaşılan yapıyı
+değil o kurumun antetli kağıdını taklit etmeye yönlendirir.
 """
 
 import logging
@@ -15,15 +14,15 @@ from app.ai.retrieval.hybrid import HybridRetriever
 
 logger = logging.getLogger(__name__)
 
-#: Fetched candidates per requested example, before the institution-diversity
-#: filter narrows them down. Wide enough that a couple of same-kurum hits at
-#: the top of the ranking don't starve the final selection.
+#: Kurum çeşitliliği filtresi daraltmadan önce, istenen her örnek başına
+#: getirilen aday sayısı. Sıralamanın en üstünde aynı kurumdan birkaç
+#: sonucun nihai seçimi aç bırakmaması için yeterince geniş tutulur.
 _CANDIDATE_MULTIPLIER = 3
 
 
 @dataclass(frozen=True)
 class StyleExample:
-    """One retrieved official-letter example, for the writer/reviser prompt."""
+    """Yazar/revizör prompt'u için getirilmiş bir resmî yazı örneği."""
 
     text: str
     correspondence_type: str
@@ -33,7 +32,7 @@ class StyleExample:
 
 
 class ExampleRetriever:
-    """Retrieves style-reference examples for the draft writer."""
+    """Taslak yazarı için üslup referans örnekleri getirir."""
 
     def __init__(self, retriever: HybridRetriever):
         self._retriever = retriever
@@ -46,26 +45,27 @@ class ExampleRetriever:
         limit: int = 2,
         char_budget: int = 4000,
     ) -> list[StyleExample]:
-        """Fetch up to ``limit`` style examples for a given letter type.
+        """Verilen bir mektup türü için en fazla ``limit`` kadar üslup örneği getir.
 
-        Never raises: retrieval is an optional quality boost for the draft
-        writer, not a dependency, so any failure (Qdrant down, embedding
-        call failing, an empty corpus) degrades to an empty list rather than
-        propagating.
+        Asla hata fırlatmaz: getirim, taslak yazarı için opsiyonel bir
+        kalite artışıdır, bir bağımlılık değildir; bu yüzden herhangi bir
+        hata (Qdrant çökmesi, embedding çağrısının başarısız olması, boş
+        korpus) hatayı yaymak yerine boş listeye düşer.
 
         Args:
-            query: Short topic query -- typically subject + user
-                instructions, not the full brief.
-            correspondence_type: Hard filter; only examples of this exact
-                type are considered.
-            limit: Maximum examples to return.
-            char_budget: Ceiling on the combined character length of the
-                returned examples' text. The longest example is dropped
-                first when the combined text would exceed it.
+            query: Kısa konu sorgusu -- genelde tam brief değil, konu +
+                kullanıcı talimatları.
+            correspondence_type: Kesin filtre; yalnızca bu türe ait
+                örnekler değerlendirilir.
+            limit: Döndürülecek maksimum örnek sayısı.
+            char_budget: Döndürülen örneklerin metninin toplam karakter
+                uzunluğu için üst sınır. Toplam metin bu sınırı aşarsa
+                önce en uzun örnek çıkarılır.
 
         Returns:
-            Up to ``limit`` examples, ranked and diversified by institution,
-            within ``char_budget``. Empty on no match or on failure.
+            Kuruma göre sıralanmış ve çeşitlendirilmiş, ``char_budget``
+            içinde kalan, en fazla ``limit`` kadar örnek. Eşleşme yoksa
+            veya hata oluşursa boş liste.
         """
         if not query.strip() or not correspondence_type:
             return []
@@ -112,11 +112,11 @@ class ExampleRetriever:
 def _apply_char_budget(
     examples: list[StyleExample], char_budget: int
 ) -> list[StyleExample]:
-    """Drop the longest example first until the combined text fits the budget.
+    """Toplam metin bütçeye sığana kadar önce en uzun örneği çıkar.
 
-    Always keeps at least one example (even if it alone exceeds the budget)
-    -- one oversized example still beats zero, and DraftPolicy's budget
-    already leaves headroom in the writer's overall context window.
+    Her zaman en az bir örneği korur (tek başına bütçeyi aşsa bile) --
+    aşırı büyük tek bir örnek yine de sıfırdan iyidir ve DraftPolicy'nin
+    bütçesi yazarın genel bağlam penceresinde zaten pay bırakır.
     """
     kept = list(examples)
     while len(kept) > 1 and sum(len(example.text) for example in kept) > char_budget:

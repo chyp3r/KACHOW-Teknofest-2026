@@ -17,19 +17,20 @@ from app.infrastructure.storage.base import BaseStorage
 logger = logging.getLogger(__name__)
 
 class DraftService:
-    """Service for handling document drafting and department routing (Task 2).
+    """Evrak taslağı oluşturma ve birim yönlendirme işlemlerini yürüten servis (Task 2).
 
-    Only this direct `POST /documents/draft` path and `DraftShareService.
-    respond`'s accept-fork are quota-gated today, not chat-originated draft
-    generation -- see `QuotaService`'s module docstring for the token-quota
-    equivalent of this same honesty, and `docs/api/root.md`/`analytics.md`
-    for why: the chat flow only decides *whether* a turn drafts at all deep
-    inside the compiled `planning_graph`, and this codebase's own layering
-    rule (`app.ai.*` never imports `app.domains.*` -- see
-    `app.domains.units.provider`'s docstring) means a DB-backed quota check
-    cannot live at the point that decision is made without violating it,
-    the same reason confidentiality clearance is kept out of the ABAC engine
-    itself (see `app.core.authz.engine`'s module docstring).
+    Bugün yalnızca bu doğrudan `POST /documents/draft` yolu ve
+    `DraftShareService.respond`'un accept-fork'u kota kontrolüne tabidir;
+    sohbet kaynaklı taslak üretimi değil -- bu aynı dürüstlüğün token-kotası
+    karşılığı için `QuotaService`'in modül docstring'ine, nedeni için de
+    `docs/api/root.md`/`analytics.md`'ye bakın: sohbet akışı bir turun taslak
+    üretip üretmeyeceğine derlenmiş `planning_graph`'ın çok derininde karar
+    verir, ve bu kod tabanının kendi katmanlama kuralı (`app.ai.*` asla
+    `app.domains.*`'ı import etmez -- bkz. `app.domains.units.provider`'ın
+    docstring'i) bu kuralı ihlal etmeden DB destekli bir kota kontrolünün
+    kararın verildiği noktada yer alamayacağı anlamına gelir; gizlilik
+    yetkisinin ABAC motorunun kendisinin dışında tutulmasıyla aynı sebep
+    (bkz. `app.core.authz.engine`'in modül docstring'i).
     """
 
     def __init__(
@@ -49,21 +50,20 @@ class DraftService:
     async def generate_draft_and_route(
         self, request: DraftRequestSchema, user_id: str, company_id: str
     ) -> DraftResponseSchema:
-        """Execute the drafting and routing workflows sequentially.
+        """Taslak oluşturma ve yönlendirme iş akışlarını sırayla çalıştırır.
 
         Args:
-            request: The drafting request.
-            user_id: The authenticated caller's id -- attached to the
-                persisted draft version (see
-                ``app.domains.drafts.draft_recorder``).
-            company_id: The authenticated caller's company -- scopes the
-                unit list the routing workflow chooses from.
+            request: Taslak oluşturma isteği.
+            user_id: Kimliği doğrulanmış çağıranın id'si -- kalıcı taslak
+                sürümüne eklenir (bkz. ``app.domains.drafts.draft_recorder``).
+            company_id: Kimliği doğrulanmış çağıranın şirketi -- yönlendirme
+                iş akışının seçim yapacağı birim listesini kapsar.
         """
         if self.quota_service is not None:
             await self.quota_service.check_and_increment(company_id, DRAFTS_METRIC)
 
 
-        # 1. Fetch raw document and extract text
+        # 1. Ham evrakı getir ve metni çıkar
         try:
             content_bytes = await self.storage.get_file(request.storage_path)
         except Exception as e:
@@ -88,8 +88,8 @@ class DraftService:
                 details={"reason": str(e)}
             ) from e
 
-        # 2. Run drafting workflow
-        # Build context from mevzuat_references to inform the WriterAgent
+        # 2. Taslak oluşturma iş akışını çalıştır
+        # WriterAgent'ı bilgilendirmek için mevzuat_references'tan bağlam oluştur
         context_lines = [
             f"- {ref.mevzuat}: {ref.aciklama}"
             for ref in request.classification.mevzuat_references
@@ -97,9 +97,10 @@ class DraftService:
         ]
         context_str = "\n".join(context_lines) if context_lines else ""
 
-        # draft_graph's internal helpers (_build_brief, verify_draft, ...) treat
-        # classification as a plain dict; the typed DraftClassificationSchema is
-        # the boundary validation, not the graph's internal representation.
+        # draft_graph'ın iç yardımcıları (_build_brief, verify_draft, ...)
+        # classification'ı düz bir dict olarak ele alır; tipli
+        # DraftClassificationSchema sınır doğrulamasıdır, graph'ın iç
+        # temsili değildir.
         classification_dict = request.classification.model_dump(mode="json")
 
         draft_timeout = (
@@ -159,20 +160,20 @@ class DraftService:
             missing_information=missing_information,
             applied_rules=draft_state.get("applied_rules", []),
         )
-        # DraftModel.verification has no dedicated applied_rules column (a
-        # JSON blob already, no migration needed) -- folded in here so the
-        # persisted record carries the full auditable score breakdown, not
-        # just the response schema's own top-level field.
+        # DraftModel.verification'ın ayrı bir applied_rules sütunu yok (zaten
+        # bir JSON blob, migration gerekmiyor) -- kalıcı kayıt sadece yanıt
+        # şemasının üst düzey alanını değil, denetlenebilir tam puan
+        # dökümünü de taşısın diye burada birleştirildi.
         verification_for_storage = {
             **common_fields["verification"],
             "applied_rules": common_fields["applied_rules"],
         }
 
-        # This endpoint has no session/interrupt mechanism of its own (that's
-        # the chat path's job via /chat/resume) -- a draft still carrying
-        # unfilled placeholders is reported as-is rather than routed, since
-        # routing a demonstrably incomplete draft to a department is worse
-        # than not routing it at all.
+        # Bu endpoint'in kendi session/interrupt mekanizması yok (bu iş
+        # /chat/resume üzerinden sohbet yolunun görevi) -- doldurulmamış
+        # yer tutucular içeren bir taslak yönlendirilmek yerine olduğu gibi
+        # raporlanır; çünkü belirgin şekilde eksik bir taslağı bir birime
+        # yönlendirmek, hiç yönlendirmemekten daha kötüdür.
         if missing_information:
             draft_id = await draft_recorder.record_draft(
                 user_id=user_id,
@@ -200,7 +201,7 @@ class DraftService:
                 justification="Taslak eksik bilgi içeriyor; birim yönlendirmesi yapılmadı.",
             )
 
-        # 3. Run routing workflow
+        # 3. Yönlendirme iş akışını çalıştır
         try:
             routing_state = await asyncio.wait_for(
                 self.routing_graph.ainvoke(
@@ -226,11 +227,12 @@ class DraftService:
             ) from e
 
         destination = routing_state.get("final_destination") or ""
-        # Routing could not confidently assign a unit (empty draft, low
-        # score, an LLM failure, or a hallucinated unit name) -- same flag
-        # the draft-quality gate above already uses, OR'd in rather than
-        # overwritten, since either source is a legitimate reason a human
-        # needs to look at this draft before it goes anywhere.
+        # Yönlendirme bir birimi güvenle atayamadı (boş taslak, düşük skor,
+        # bir LLM hatası veya halüsinasyon bir birim adı) -- yukarıdaki
+        # taslak kalite kapısının zaten kullandığı aynı bayrak, üzerine
+        # yazılmak yerine OR'lanır; çünkü her iki kaynak da bu taslağın
+        # herhangi bir yere gitmeden önce bir insan tarafından incelenmesi
+        # için geçerli bir sebeptir.
         common_fields["requires_human_approval"] = common_fields[
             "requires_human_approval"
         ] or routing_state.get("requires_human_approval", False)
@@ -249,12 +251,12 @@ class DraftService:
             confidence_score=confidence,
             requires_human_approval=common_fields["requires_human_approval"],
             attempts=common_fields["attempts"],
-            # C29: this success branch computed verification_for_storage
-            # (applied_rules folded into the verification blob, same as the
-            # missing_information branch above) but never actually used it --
-            # every successfully routed draft persisted its verification
-            # without the auditable rule breakdown that made it into the
-            # response schema's own top-level applied_rules field.
+            # C29: bu başarı dalı verification_for_storage'ı hesaplıyordu
+            # (applied_rules, yukarıdaki missing_information dalıyla aynı
+            # şekilde verification blob'una katlanmış) ama hiç kullanmıyordu
+            # -- başarıyla yönlendirilen her taslak, yanıt şemasının üst
+            # düzey applied_rules alanına giren denetlenebilir kural
+            # dökümü olmadan verification'ını kalıcı hale getiriyordu.
             verification=verification_for_storage,
             judge=common_fields["judge"],
             missing_information=missing_information,

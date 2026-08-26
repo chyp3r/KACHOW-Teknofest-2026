@@ -8,22 +8,24 @@ logger = logging.getLogger(__name__)
 
 
 def init_tracing(app: FastAPI) -> None:
-    """Wire OpenTelemetry distributed tracing for HTTP/DB/Redis/outbound-httpx
-    spans.
+    """HTTP/DB/Redis/giden-httpx span'leri için OpenTelemetry dağıtık
+    tracing'i bağlar.
 
-    Complements Langfuse (`app.observability.tracer`), which only ever sees
-    LLM calls routed through a LangChain callback -- Postgres queries,
-    outbound `httpx` calls (Qdrant, Ollama) and the FastAPI request/response
-    cycle itself have no Langfuse span today, so a slow chat turn cannot be
-    attributed to model vs. database vs. vector store. OTel fills exactly
-    that gap; the two are not redundant, see docs/deployment/observability.md
-    for which question each one answers.
+    Langfuse'u (`app.observability.tracer`) tamamlar; o sadece bir LangChain
+    callback'i üzerinden yönlendirilen LLM çağrılarını görür -- Postgres
+    sorguları, giden `httpx` çağrıları (Qdrant, Ollama) ve FastAPI
+    request/response döngüsünün kendisi bugün hiçbir Langfuse span'ine
+    sahip değildir, bu yüzden yavaş bir sohbet turu model mi, veritabanı mı
+    yoksa vektör deposu mu diye atfedilemez. OTel tam olarak bu boşluğu
+    doldurur; ikisi birbirinin yerini tutmaz, her birinin hangi soruyu
+    yanıtladığı için docs/deployment/observability.md'ye bakın.
 
-    No-ops -- does not even import the SDK/instrumentation modules, which
-    would be pointless work with nowhere to send spans -- when
-    `OTEL_EXPORTER_OTLP_ENDPOINT` is unset, mirroring the Langfuse
-    absent-key degrade in `app.observability.tracer`: a missing collector
-    must never be the reason the API fails to boot.
+    `OTEL_EXPORTER_OTLP_ENDPOINT` ayarlanmadığında hiçbir şey yapmaz --
+    span gönderilecek yer olmadığında anlamsız bir iş olacağından SDK/
+    instrumentation modüllerini import bile etmez -- bu,
+    `app.observability.tracer`'daki Langfuse anahtar-yok bozulma
+    davranışını yansıtır: eksik bir collector, API'nin açılışının
+    başarısız olmasının nedeni olmamalıdır.
     """
     if not settings.OTEL_EXPORTER_OTLP_ENDPOINT:
         logger.info(
@@ -55,20 +57,21 @@ def init_tracing(app: FastAPI) -> None:
     HTTPXClientInstrumentor().instrument(tracer_provider=provider)
     RedisInstrumentor().instrument(tracer_provider=provider)
 
-    # SQLAlchemyInstrumentor().instrument() with no `engine=`/`engines=` only
-    # patches *future* create_engine/create_async_engine calls -- both of
-    # this app's engines (`app.infrastructure.database.session.engine`/
-    # `owner_engine`) are created at import time, before this function ever
-    # runs, so they must be instrumented explicitly. AsyncEngine wraps a
-    # sync Engine that actually emits the SQLAlchemy core events the
-    # instrumentor hooks into, hence `.sync_engine` rather than the
-    # AsyncEngine objects themselves. Both must go through a single
-    # `instrument()` call via `engines=[...]` -- BaseInstrumentor guards
-    # against being called twice on the same (singleton) instrumentor
-    # instance, so a second `instrument(engine=...)` call for the second
-    # engine would silently no-op (verified live: it logs "Attempting to
-    # instrument while already instrumented" and only the first engine ends
-    # up traced).
+    # `engine=`/`engines=` verilmeden SQLAlchemyInstrumentor().instrument()
+    # sadece *gelecekteki* create_engine/create_async_engine çağrılarını
+    # yamalar -- bu uygulamanın her iki engine'i de
+    # (`app.infrastructure.database.session.engine`/`owner_engine`) bu
+    # fonksiyon hiç çalışmadan önce, import zamanında oluşturulur, bu
+    # yüzden açıkça instrument edilmeleri gerekir. AsyncEngine, instrumentor'ın
+    # bağlandığı SQLAlchemy core event'lerini fiilen yayan bir sync Engine'i
+    # sarmalar, bu yüzden AsyncEngine nesnelerinin kendisi yerine
+    # `.sync_engine` kullanılır. Her ikisi de `engines=[...]` üzerinden tek
+    # bir `instrument()` çağrısından geçmelidir -- BaseInstrumentor aynı
+    # (singleton) instrumentor örneğinin iki kez çağrılmasına karşı korur,
+    # bu yüzden ikinci engine için ikinci bir `instrument(engine=...)`
+    # çağrısı sessizce hiçbir şey yapmaz (canlıda doğrulandı: "Attempting to
+    # instrument while already instrumented" logunu basar ve sadece ilk
+    # engine trace edilmiş olarak kalır).
     from app.infrastructure.database.session import engine, owner_engine
 
     SQLAlchemyInstrumentor().instrument(

@@ -11,9 +11,9 @@ logger = logging.getLogger(__name__)
 
 
 class SparseBM25Encoder:
-    """Mathematical BM25 sparse vector encoder that uses CRC32 hashing for vocabulary mapping.
+    """Sözcük dağarcığı eşlemesi için CRC32 hashleme kullanan matematiksel BM25 sparse vektör kodlayıcısı.
 
-    Produces Qdrant-compatible sparse vectors offline without heavy external deep learning models.
+    Ağır harici derin öğrenme modelleri olmadan çevrimdışı, Qdrant uyumlu sparse vektörler üretir.
     """
 
     def __init__(self, k1: float = 1.5, b: float = 0.75):
@@ -24,7 +24,7 @@ class SparseBM25Encoder:
         self.idf: Dict[str, float] = {}
 
     def fit(self, documents: List[Document]):
-        """Fit the BM25 parameters (IDF and average doc length) on the document corpus."""
+        """BM25 parametrelerini (IDF ve ortalama belge uzunluğu) belge korpusu üzerinde fit et."""
         self.total_docs = len(documents)
         if self.total_docs == 0:
             return
@@ -42,7 +42,7 @@ class SparseBM25Encoder:
         self.avg_doc_len = sum(doc_lens) / self.total_docs
 
         for token, freq in doc_freqs.items():
-            # Standard BM25 IDF formula
+            # Standart BM25 IDF formülü
             self.idf[token] = math.log(
                 (self.total_docs - freq + 0.5) / (freq + 0.5) + 1.0
             )
@@ -51,7 +51,7 @@ class SparseBM25Encoder:
         )
 
     def encode_document(self, text: str) -> Tuple[List[int], List[float]]:
-        """Encode document text into sparse indices and BM25 term weights."""
+        """Belge metnini sparse indekslere ve BM25 terim ağırlıklarına kodla."""
         tokens = tokenize_turkish(text)
         doc_len = len(tokens)
         if doc_len == 0:
@@ -65,14 +65,14 @@ class SparseBM25Encoder:
         values = []
 
         for token, tf in tf_dict.items():
-            # BM25 TF scaling
+            # BM25 TF ölçekleme
             num = tf * (self.k1 + 1)
             denom = tf + self.k1 * (
                 1.0 - self.b + self.b * (doc_len / (self.avg_doc_len or 1.0))
             )
             tf_scaled = num / denom
 
-            # Index is the crc32 hash of the token
+            # İndeks, token'ın crc32 hash'idir
             idx = zlib.crc32(token.encode("utf-8"))
             indices.append(idx)
             values.append(float(tf_scaled))
@@ -80,7 +80,7 @@ class SparseBM25Encoder:
         return indices, values
 
     def encode_query(self, query: str) -> Tuple[List[int], List[float]]:
-        """Encode query text using IDF weights as values and hashed indices."""
+        """Sorgu metnini, değer olarak IDF ağırlıkları ve hash'lenmiş indekslerle kodla."""
         tokens = tokenize_turkish(query)
         if not tokens:
             return [], []
@@ -91,7 +91,7 @@ class SparseBM25Encoder:
         unique_tokens = set(tokens)
         for token in unique_tokens:
             idx = zlib.crc32(token.encode("utf-8"))
-            # Query weight is its IDF value. Default to 1.0 for out-of-vocab tokens.
+            # Sorgu ağırlığı, IDF değeridir. Vocab dışı token'lar için varsayılan 1.0.
             val = self.idf.get(token, 1.0)
             indices.append(idx)
             values.append(float(val))
@@ -99,7 +99,7 @@ class SparseBM25Encoder:
         return indices, values
 
     def save(self, filepath: str):
-        """Save encoder parameters to a JSON file."""
+        """Kodlayıcı parametrelerini bir JSON dosyasına kaydet."""
         data = {
             "avg_doc_len": self.avg_doc_len,
             "total_docs": self.total_docs,
@@ -111,7 +111,7 @@ class SparseBM25Encoder:
         logger.info(f"Saved sparse vocabulary to {filepath}")
 
     def load(self, filepath: str) -> bool:
-        """Load encoder parameters from a JSON file."""
+        """Kodlayıcı parametrelerini bir JSON dosyasından yükle."""
         if not os.path.exists(filepath):
             logger.warning(f"Sparse vocabulary file not found at {filepath}")
             return False

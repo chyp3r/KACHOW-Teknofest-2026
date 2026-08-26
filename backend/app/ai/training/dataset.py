@@ -1,21 +1,21 @@
-"""Preference-pair compilation -- Faz C3 (#187).
+"""Tercih-çifti (preference-pair) derlemesi -- Faz C3 (#187).
 
-Pure functions only: turns already-resolved feedback rows into
-`PreferencePair`s. Deliberately has zero `app.domains` imports, same rule
-`app.ai.adapters.company_adapter` documents -- the actual `feedback`/
-`drafts` reads live in `app.domains.training.service`, which calls into
-this module with plain data, not ORM rows.
+Yalnızca saf fonksiyonlar: zaten çözümlenmiş feedback satırlarını
+`PreferencePair`lara dönüştürür. `app.ai.adapters.company_adapter`'ın
+belgelediği kuralla aynı şekilde bilerek sıfır `app.domains` import'u
+içerir -- asıl `feedback`/`drafts` okumaları `app.domains.training.service`
+içinde yaşar, o da bu modülü ORM satırlarıyla değil düz veriyle çağırır.
 
-Only `explicit_feedback` is compiled today (a 👍/👎 vote whose rated text
-could be resolved back to a `DraftModel.content`). The plan's "örtük
-sinyaller" (implicit HITL approve/reject/revise trail) are deliberately not
-compiled here yet -- see `TrainingSampleModel`'s docstring for why: today's
-`drafts.status` records workflow outcome, not a user accept/reject
-decision, and inventing a preference label from the wrong field would
-mislabel the very data a style adapter is trained from. Reusing the exact
-`app.domains.feedback.model.feedback_model.FeedbackModel` docstring's own
-rule here: "the model's own prediction is never used as a label" -- so is
-an ambiguous status.
+Bugün yalnızca `explicit_feedback` derleniyor (değerlendirilen metni bir
+`DraftModel.content`'e geri çözümlenebilen bir 👍/👎 oyu). Planın "örtük
+sinyaller"i (implicit HITL approve/reject/revise izi) burada kasıtlı olarak
+henüz derlenmiyor -- nedeni için `TrainingSampleModel`'in docstring'ine
+bakın: bugün `drafts.status` bir workflow sonucunu kaydeder, kullanıcının
+kabul/red kararını değil, ve yanlış alandan bir tercih etiketi uydurmak bir
+stil adaptörünün eğitildiği verinin ta kendisini yanlış etiketlemek olur.
+`app.domains.feedback.model.feedback_model.FeedbackModel` docstring'inin
+tam olarak aynı kuralını burada da tekrarlıyoruz: "modelin kendi tahmini
+asla bir etiket olarak kullanılmaz" -- belirsiz bir status da öyle.
 """
 
 import hashlib
@@ -25,15 +25,15 @@ from typing import Iterable, List, Optional
 
 @dataclass(frozen=True)
 class FeedbackRecord:
-    """One `feedback` vote, with its rated text already resolved (via
-    `draft_id` -> `DraftModel.content`, the only durable text store a vote
-    can point back to -- see `FeedbackModel`'s docstring on why the vote
-    itself never carries the raw text).
+    """Değerlendirilen metni zaten çözümlenmiş tek bir `feedback` oyu
+    (`draft_id` -> `DraftModel.content` üzerinden; bir oyun geri işaret
+    edebileceği tek kalıcı metin deposu -- oyun ham metni neden hiçbir
+    zaman kendisi taşımadığı için `FeedbackModel`'in docstring'ine bakın).
 
-    A vote whose text could not be resolved (no `draft_id`, or the draft
-    row is gone) is simply never turned into a `FeedbackRecord` by the
-    caller -- there is nothing this module can derive a pair from without
-    text.
+    Metni çözümlenemeyen bir oy (ne `draft_id` var ne de draft satırı
+    mevcut) çağıran tarafından hiçbir zaman bir `FeedbackRecord`'a
+    dönüştürülmez -- bu modülün metinsiz bir çift türetebileceği bir şey
+    yoktur.
     """
 
     feedback_id: str
@@ -46,11 +46,12 @@ class FeedbackRecord:
 
 @dataclass(frozen=True)
 class PreferencePair:
-    """One row `app.domains.training.service` upserts into
-    `TrainingSampleModel`. `chosen`/`rejected` are single-wing for every
-    source implemented so far -- one vote is one side of a pair, never
-    both (see `TrainingSampleModel`'s docstring); `rejected is None` for a
-    like, `chosen is None` for a dislike.
+    """`app.domains.training.service`'in `TrainingSampleModel`'e upsert
+    ettiği tek bir satır. Şu ana kadar uygulanan her kaynak için
+    `chosen`/`rejected` tek kanatlıdır -- bir oy bir çiftin yalnızca bir
+    tarafıdır, asla ikisi birden değil (bkz. `TrainingSampleModel`'in
+    docstring'i); bir like için `rejected is None`, bir dislike için
+    `chosen is None`.
     """
 
     source: str
@@ -67,12 +68,13 @@ EXPLICIT_FEEDBACK_SOURCE = "explicit_feedback"
 
 
 def pair_hash(company_id: str, source: str, identity: str) -> str:
-    """The identity a re-compile upserts onto. For `explicit_feedback`,
-    `identity` is the feedback row's own id: that row's identity is stable
-    for its whole lifetime even when its `signal` flips (re-voting updates
-    the same row in place, see `FeedbackModel`'s docstring), so recompiling
-    after a 👍->👎 flip correctly refreshes `chosen`/`rejected` on the same
-    `training_samples` row instead of leaving a stale duplicate behind.
+    """Yeniden derlemenin (re-compile) upsert edeceği kimlik. `explicit_feedback`
+    için `identity`, feedback satırının kendi id'sidir: bu satırın kimliği,
+    `signal`'i değişse bile (yeniden oylama aynı satırı yerinde günceller,
+    bkz. `FeedbackModel`'in docstring'i) tüm yaşam döngüsü boyunca sabittir,
+    böylece bir 👍->👎 değişikliğinden sonra yeniden derleme, eski bir
+    kopya bırakmak yerine aynı `training_samples` satırındaki
+    `chosen`/`rejected`'i doğru şekilde tazeler.
     """
     return hashlib.sha256(f"{company_id}:{source}:{identity}".encode("utf-8")).hexdigest()
 
@@ -89,7 +91,7 @@ def _prompt_context(record: FeedbackRecord) -> str:
 def compile_pairs_from_feedback(
     company_id: str, records: Iterable[FeedbackRecord]
 ) -> List[PreferencePair]:
-    """Turn resolved feedback votes into preference pairs, one per record."""
+    """Çözümlenmiş feedback oylarını, her kayıt için bir tane olmak üzere tercih çiftlerine dönüştürür."""
     pairs: List[PreferencePair] = []
     for record in records:
         content = record.content.strip()

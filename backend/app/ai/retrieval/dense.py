@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 
 
 class DenseRetriever:
-    """Retriever that performs semantic similarity search on Qdrant vector database
+    """Sorgu embedding'lerini kullanarak Qdrant vektör veritabanında
 
-    using query embeddings.
+    anlamsal benzerlik araması yapan retriever.
     """
 
     def __init__(
@@ -21,12 +21,12 @@ class DenseRetriever:
         embeddings_client: BaseEmbeddingsClient,
         collection_name: str = "documents",
     ):
-        """Initialize Dense Retriever.
+        """Dense Retriever'ı başlat.
 
         Args:
-            vector_store: BaseVectorStore client (e.g. QdrantStore).
-            embeddings_client: BaseEmbeddingsClient to generate query vector.
-            collection_name: Qdrant collection name to search.
+            vector_store: BaseVectorStore istemcisi (ör. QdrantStore).
+            embeddings_client: Sorgu vektörünü üretecek BaseEmbeddingsClient.
+            collection_name: Aranacak Qdrant koleksiyon adı.
         """
         self.vector_store = vector_store
         self.embeddings_client = embeddings_client
@@ -36,27 +36,27 @@ class DenseRetriever:
         )
 
     async def retrieve(self, query: str, limit: int = 5) -> List[Document]:
-        """Perform semantic search and return a list of LangChain Document objects.
+        """Anlamsal arama yap ve LangChain Document nesnelerinden oluşan bir liste döndür.
 
         Args:
-            query: User's question or search query.
-            limit: Maximum documents to retrieve.
+            query: Kullanıcının sorusu veya arama sorgusu.
+            limit: Getirilecek maksimum belge sayısı.
         """
         if not query.strip():
             return []
 
         try:
-            # 1. Embed query
+            # 1. Sorguyu embed et
             query_vector = await self.embeddings_client.embed_query(query)
 
-            # 2. Search Qdrant
+            # 2. Qdrant'ta ara
             hits = await self.vector_store.similarity_search(
                 collection_name=self.collection_name,
                 query_vector=query_vector,
                 limit=limit,
             )
 
-            # 3. Format hits into LangChain Document objects
+            # 3. Sonuçları LangChain Document nesnelerine dönüştür
             documents = []
             for hit in hits:
                 metadata = hit.get("metadata", {}).copy()

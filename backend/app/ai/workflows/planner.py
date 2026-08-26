@@ -1,69 +1,75 @@
-"""Intent resolution for the master workflow.
+"""Ana iş akışı için niyet (intent) çözümlemesi.
 
-The choice between the system's flows used to be a full structured LLM call
-against an orchestrator prompt, then an ordered keyword cascade, then a
-three-rung ladder (lexical score -> semantic prototype -> fast-tier model)
-where whichever rung answered first decided alone and the others were never
-consulted. The ladder fixed the cascade's "table order is the decision"
-failure, but introduced its own: the lexical layer's margin test gated
-*everything*, including messages an unambiguous imperative should have
-settled outright. "Cevap yaz." scores `draft=3.0` (an explicit request) against
-`assist=2.0` (the generic "short message with no document" structural hint) --
-a margin of 1.0, just under the old ladder's 1.2 threshold -- and fell through
-to a clarifying question a user should never have been asked. The margin test
-cannot tell an explicit imperative apart from a weak structural hint once both
-are already folded into the same per-intent sum; reordering the rungs does not
-fix that, the same way reordering the cascade never fixed *its* failure.
+Sistemin akışları arasındaki seçim eskiden bir orkestratör prompt'una karşı
+tam yapılandırılmış bir LLM çağrısıydı, ardından sıralı bir anahtar kelime
+kademesi (cascade), ardından da üç basamaklı bir merdiven (lexical skor ->
+semantik prototip -> hızlı katman modeli) oldu; burada hangi basamak önce
+cevap verirse tek başına karar veriyordu ve diğerlerine hiç danışılmıyordu.
+Merdiven, kademenin "tablo sırası kararı belirler" hatasını düzeltti, ama
+kendi hatasını getirdi: lexical katmanın marj testi *her şeyi* kapıda
+bekletiyordu, açık bir emir kipinin doğrudan sonuçlandırması gereken
+mesajlar dahil. "Cevap yaz." ifadesi `draft=3.0` (açık bir istek) puanını
+`assist=2.0` (belge eklenmemiş kısa mesaj yapısal ipucu) puanına karşı
+alıyor -- 1.0'lık bir marj, eski merdivenin 1.2 eşiğinin hemen altında --
+ve kullanıcıya asla sorulmaması gereken bir açıklayıcı soruya düşüyordu.
+Marj testi, ikisi de aynı niyet-başına toplama katıldıktan sonra açık bir
+emir kipini zayıf bir yapısal ipuçundan ayırt edemez; basamakları yeniden
+sıralamak bunu düzeltmez, tıpkı kademeyi yeniden sıralamanın *onun*
+hatasını hiç düzeltmemesi gibi.
 
-This module now keeps every signal source distinct (see
-:mod:`app.ai.workflows.router_features`) and combines them through a
-calibrated linear model (:mod:`app.ai.workflows.router_fusion`, coefficients
-in :mod:`app.ai.policy.router_weights`, fit offline by
-``scripts/fit_router.py``) instead of letting one rung's own internal test
-gate the others. The result is one probability per intent, and the decision
-policy is:
+Bu modül artık her sinyal kaynağını ayrı tutuyor (bkz.
+:mod:`app.ai.workflows.router_features`) ve bunları, bir basamağın kendi iç
+testinin diğerlerini kapıda bekletmesine izin vermek yerine, kalibre
+edilmiş doğrusal bir modelle (:mod:`app.ai.workflows.router_fusion`,
+katsayılar :mod:`app.ai.policy.router_weights` içinde, çevrimdışı olarak
+``scripts/fit_router.py`` tarafından uydurulmuş) birleştiriyor. Sonuç,
+niyet başına bir olasılıktır ve karar politikası şudur:
 
-* At or above ``tau_high``, **and** backed by more than a structural filler
-  (see ``_WEAK_EVIDENCE_IDS``) -- committed outright (``source="fused"`` /
-  ``"fused_semantic"``). A win supported only by "the message was short" or
-  "a document happens to be attached" is a win by default, not by evidence,
-  and is treated as contested instead.
-* Otherwise, whenever a fast-tier model is available -- asked to break the
-  tie (``source="model"``), now regardless of how low the fused probability
-  fell. A thin fused signal is exactly the case a model call earns its keep;
-  it stopped being a reason to skip the call once the ladder became a
-  fusion (skipping below ``tau_low`` was a leftover from the old rung-order
-  design, where a low *lexical* margin meant nothing else had run yet --
-  here every signal already has). The model's own ``unclear`` verdict is
-  only honored as a genuine tie -- and turned into a clarifying question --
-  when the fused top two are within ``clarify_margin`` of each other *and*
-  the fused top probability is itself below ``tau_low``; otherwise the
-  fused top intent wins the tie the model declined to break
-  (``source="model_unclear"``).
-* No model available at all (only in tests and matcher/LLM-less
-  deployments) -- ``tau_low`` still gates a direct clarify, unchanged from
-  before.
+* ``tau_high`` değerinde veya üzerinde, **ve** yalnızca yapısal bir
+  dolgudan fazlasına dayanıyorsa (bkz. ``_WEAK_EVIDENCE_IDS``) -- doğrudan
+  sonuçlandırılır (``source="fused"`` / ``"fused_semantic"``). Yalnızca
+  "mesaj kısaydı" veya "bir belge eklenmiş" ile desteklenen bir kazanım,
+  kanıtla değil varsayılan olarak kazanılmıştır ve tartışmalı sayılır.
+* Aksi halde, hızlı katman bir model kullanılabilir olduğunda -- artık
+  kaynaşmış (fused) olasılık ne kadar düşük olursa olsun beraberliği
+  bozması için çağrılır (``source="model"``). Zayıf bir kaynaşmış sinyal,
+  tam olarak bir model çağrısının hakkını verdiği durumdur; merdiven bir
+  kaynaşmaya dönüştüğünde çağrıyı atlamanın bir gerekçesi olmaktan çıktı
+  (``tau_low`` altında atlamak, eski basamak-sırası tasarımından kalan bir
+  artıktı; orada düşük bir *lexical* marj, henüz başka hiçbir şeyin
+  çalışmadığı anlamına geliyordu -- burada her sinyal zaten çalışmış
+  durumda). Modelin kendi ``unclear`` (belirsiz) kararı, yalnızca
+  kaynaşmış ilk iki niyet birbirine ``clarify_margin`` kadar yakınsa *ve*
+  kaynaşmış en yüksek olasılık kendisi ``tau_low`` altındaysa gerçek bir
+  beraberlik olarak kabul edilir -- ve bir açıklayıcı soruya dönüştürülür;
+  aksi halde kaynaşmış en yüksek niyet, modelin bozmayı reddettiği
+  beraberliği kazanır (``source="model_unclear"``).
+* Hiç model kullanılamıyorsa (yalnızca testlerde ve matcher/LLM'siz
+  dağıtımlarda) -- ``tau_low`` hâlâ doğrudan bir açıklama isteğini
+  eskisi gibi kapıda bekletir.
 
-One thing runs *after* fusion and can override any of it: the domain scope
-gate (:mod:`app.ai.workflows.scope`). Fusion answers which flow a message
-wants; it has no way to answer whether the message wants any flow at all,
-and every layer here would confidently route "Çiğköfte kampanyası için bir
-metin yaz" to ``draft`` because, as a matter of intent, that is exactly what
-it is. ``resolve_plan`` therefore resolves the intent first and admits it
-second -- see ``_apply_scope_gate``.
+Kaynaşmadan (fusion) *sonra* çalışan ve bunların hepsini geçersiz
+kılabilen tek bir şey vardır: alan kapsamı kapısı
+(:mod:`app.ai.workflows.scope`). Kaynaşma, mesajın hangi akışı istediğini
+yanıtlar; mesajın herhangi bir akış isteyip istemediğini yanıtlamanın bir
+yolu yoktur ve buradaki her katman "Çiğköfte kampanyası için bir metin
+yaz" ifadesini güvenle ``draft``'a yönlendirir, çünkü niyet açısından tam
+olarak budur. Bu yüzden ``resolve_plan`` önce niyeti çözer, sonra onu kabul
+eder -- bkz. ``_apply_scope_gate``.
 
-Two things do not go through fusion at all, on purpose:
+İki şey kasıtlı olarak kaynaşmadan hiç geçmez:
 
-* A **compound** request (both ``draft`` and ``analyze`` independently
-  well-attested) is checked on the raw additive lexical scores *before*
-  fusion runs. A softmax's classes compete for probability mass by
-  construction, so it cannot represent "both readings are independently
-  strong" -- see ``scripts/fit_router.py``'s module docstring for why
-  training even excludes these cases rather than trying to teach it to.
-* An **open clarifying question's answer** is resolved against the pending
-  question's own options, before the message is scored at all -- an
-  affirmative like "evet, hazırla" would otherwise be re-scored from
-  (almost) nothing.
+* Bir **bileşik (compound)** istek (hem ``draft`` hem ``analyze``
+  bağımsız olarak iyi kanıtlanmışsa), kaynaşma çalışmadan *önce* ham
+  toplamsal lexical skorlar üzerinden kontrol edilir. Bir softmax'ın
+  sınıfları, doğası gereği olasılık kütlesi için yarışır, dolayısıyla
+  "iki okuma da bağımsız olarak güçlü" durumunu temsil edemez -- eğitimin
+  bu durumları öğretmeye çalışmak yerine neden dışladığı için bkz.
+  ``scripts/fit_router.py``'nin modül docstring'i.
+* Bir **açık açıklayıcı sorunun cevabı**, mesaj hiç puanlanmadan önce,
+  bekleyen sorunun kendi seçeneklerine göre çözülür -- aksi halde "evet,
+  hazırla" gibi bir onay, (neredeyse) hiçbir şeyden yeniden puanlanmış
+  olurdu.
 """
 
 import logging
@@ -85,7 +91,7 @@ from app.ai.workflows.router_features import RouterSignals, extract_features
 from app.ai.workflows.router_fusion import predict_proba
 from app.ai.workflows.scope import ScopeVerdict, resolve_scope
 
-if TYPE_CHECKING:  # pragma: no cover - import cycle avoidance only
+if TYPE_CHECKING:  # pragma: no cover - yalnızca içe aktarma döngüsünden kaçınmak için
     from app.ai.semantic.prototype_matcher import PrototypeMatcher
 
 logger = logging.getLogger(__name__)
@@ -100,34 +106,36 @@ __all__ = [
     "resolve_plan",
 ]
 
-#: Step sequences per intent.
+#: Niyet başına adım dizileri.
 #:
-#: Note the absence of a separate ``rag`` step in the draft flow. The
-#: classification sub-graph already retrieves legislation for the document and
-#: puts it in ``mevzuat_documents``; running the RAG graph afterwards repeated
-#: the same retrieval behind an extra query-rewrite LLM call and threw the first
-#: result away.
+#: Draft akışında ayrı bir ``rag`` adımının bulunmadığına dikkat edin.
+#: Sınıflandırma alt grafiği zaten belge için mevzuatı getirip
+#: ``mevzuat_documents`` içine koyuyor; RAG grafiğini sonradan çalıştırmak
+#: aynı getirmeyi ekstra bir sorgu-yeniden-yazma LLM çağrısının arkasında
+#: tekrarlıyor ve ilk sonucu çöpe atıyordu.
 #:
-#: ``revise`` is deliberately its own single-step plan, not a variant of
-#: ``draft``: it never re-runs classification and never re-retrieves
-#: legislation, only the one LLM call that rewrites the targeted part of the
-#: already-active draft (see ``app.ai.workflows.revise``). ``clarify`` costs
-#: nothing at all -- it renders a question from ``PlanDecision.clarification``
-#: and ends the turn there.
-#: ``refuse`` is a single deterministic step that renders the capability
-#: manifest and ends the turn (see ``planning_graph._step_refuse``). It costs
-#: no model call on purpose -- a refusal must not be a generation, or the
-#: model that was just told not to write the off-topic text gets one more
-#: opportunity to write it anyway.
-#: `transfer` (Faz 4, #201) is deliberately NOT one of these -- it is never
-#: a resolvable top-level intent at all. It is a tool the assist step's own
-#: model may call mid-conversation (`app.ai.tools.transfer_tools.
-#: build_transfer_tools`, wired in `_run_assist`), the same way
-#: `search_document` is; the planner never routes a message to it directly.
-#: `transfer_execute` (the one step this can still lead to, once a human
-#: confirms) is appended to `plan_steps` dynamically by `_step_assist` when
-#: the tool actually produces a pending proposal -- see
-#: `step_graph.STEP_SPECS`'s own entry for it.
+#: ``revise``, kasıtlı olarak ``draft``'ın bir varyantı değil, kendi başına
+#: tek adımlı bir plandır: sınıflandırmayı asla yeniden çalıştırmaz ve
+#: mevzuatı asla yeniden getirmez, yalnızca zaten aktif olan taslağın
+#: hedeflenen kısmını yeniden yazan tek bir LLM çağrısı yapar (bkz.
+#: ``app.ai.workflows.revise``). ``clarify`` hiçbir şeye mal olmaz --
+#: ``PlanDecision.clarification``'dan bir soru render eder ve turu orada
+#: bitirir.
+#: ``refuse``, yetenek manifestosunu render edip turu bitiren tek
+#: deterministik bir adımdır (bkz. ``planning_graph._step_refuse``).
+#: Kasıtlı olarak hiçbir model çağrısına mal olmaz -- bir ret bir üretim
+#: (generation) olmamalıdır, yoksa konu dışı metni yazmaması az önce
+#: söylenen model, onu yine de yazmak için bir fırsat daha bulur.
+#: `transfer` (Faz 4, #201) kasıtlı olarak bunlardan biri DEĞİLDİR --
+#: hiçbir zaman çözülebilir bir üst düzey niyet değildir. Bu, assist
+#: adımının kendi modelinin konuşma sırasında çağırabileceği bir araçtır
+#: (`app.ai.tools.transfer_tools.build_transfer_tools`, `_run_assist`
+#: içinde bağlanmış), tıpkı `search_document` gibi; planlayıcı bir mesajı
+#: ona hiçbir zaman doğrudan yönlendirmez.
+#: `transfer_execute` (bunun hâlâ yol açabileceği tek adım, bir insan
+#: onayladıktan sonra), araç gerçekten bekleyen bir öneri ürettiğinde
+#: `_step_assist` tarafından `plan_steps`'e dinamik olarak eklenir -- bkz.
+#: bunun için `step_graph.STEP_SPECS`'in kendi girdisi.
 PLAN_BY_INTENT: dict[str, list[str]] = {
     "draft": ["classification", "brief", "draft", "routing"],
     "analyze": ["classification"],
@@ -146,9 +154,10 @@ REASONING_BY_INTENT: dict[str, str] = {
     "refuse": "İstek sistemin görev alanı dışında kaldığı için hiçbir üretim akışı çalıştırılmadı.",
 }
 
-#: Canonical execution order, used to merge two intents' step lists without
-#: letting the merge invent an ordering of its own. ``clarify`` is absent on
-#: purpose: it never appears in a compound plan (see ``COMPOUND_PAIR``).
+#: Kanonik çalıştırma sırası; iki niyetin adım listelerini birleştirirken
+#: birleştirmenin kendi sırasını uydurmasına izin vermemek için kullanılır.
+#: ``clarify`` kasıtlı olarak yoktur: bileşik bir planda asla görünmez
+#: (bkz. ``COMPOUND_PAIR``).
 STEP_ORDER: tuple[str, ...] = (
     "classification",
     "brief",
@@ -158,8 +167,9 @@ STEP_ORDER: tuple[str, ...] = (
     "assist",
 )
 
-#: Turkish description of each intent, used to phrase a clarifying question
-#: in terms a user recognizes rather than an internal name like "revise".
+#: Her niyetin Türkçe açıklaması; bir açıklayıcı soruyu "revise" gibi
+#: dahili bir isim yerine kullanıcının tanıyacağı terimlerle ifade etmek
+#: için kullanılır.
 _CLARIFY_LABELS: dict[str, str] = {
     "draft": "bir taslak hazırlama isteği",
     "revise": "mevcut taslakta bir revizyon isteği",
@@ -167,94 +177,101 @@ _CLARIFY_LABELS: dict[str, str] = {
     "assist": "genel bir soru veya sohbet",
 }
 
-#: A bare confirmation to a clarifying question selects its leading option --
-#: the same short-affirmative vocabulary the continuation rule already uses
-#: for confirming a *decisive* turn, reused here for confirming an
-#: *undecided* one.
+#: Açıklayıcı bir soruya çıplak bir onay, onun en önde gelen seçeneğini
+#: seçer -- devam kuralının *kararlı* bir turu onaylamak için zaten
+#: kullandığı aynı kısa-onay kelime dağarcığı, burada *kararsız* bir turu
+#: onaylamak için yeniden kullanılıyor.
 _AFFIRMATIVE_SURFACES = CONTINUATION_SURFACES
 
-#: The only pair worth running as one plan. ``draft`` already begins with
-#: ``classification``, so "incele ve cevap yaz" is a single pipeline rather than
-#: two. Every other contested pair is a genuine ambiguity and escalates instead
-#: -- merging ``assist`` into ``draft`` would answer conversationally *and*
-#: start a drafting run, which is not what either reading of the message asked
-#: for.
+#: Tek bir plan olarak çalıştırmaya değer tek çift. ``draft`` zaten
+#: ``classification`` ile başlıyor, dolayısıyla "incele ve cevap yaz" iki
+#: değil tek bir hattır. Tartışmalı diğer her çift gerçek bir belirsizliktir
+#: ve bunun yerine yükseltilir (escalate) -- ``assist``'i ``draft``'a
+#: birleştirmek hem konuşarak cevap verir *hem de* bir taslak hazırlama
+#: çalıştırması başlatır ki bu, mesajın ne şekilde okunursa okunsun
+#: istediği şey değildir.
 COMPOUND_PAIR = frozenset({"draft", "analyze"})
 
-#: Evidence ids that are structural fillers, not intent-specific signal --
-#: "a question landed while a document happens to be attached" describes the
-#: message's shape, not what it asked for, and says nothing about whether a
-#: *different* intent (e.g. `revise`, if a draft is also open) was the real
-#: one being asked about. See `intent_scorer.score_intents`'s
-#: `assist.question_with_document` rule. A fused decision whose winning
-#: intent is backed *only* by ids in this set is escalated to the model
-#: instead of committed outright -- see `_has_only_weak_evidence`.
+#: Niyete özgü sinyal değil, yapısal dolgu olan kanıt id'leri -- "bir
+#: belge eklenmişken bir soru geldi" ifadesi mesajın şeklini tarif eder,
+#: ne istediğini değil, ve *farklı* bir niyetin (örn. bir taslak da açıksa
+#: `revise`) gerçekte sorulan şey olup olmadığı hakkında hiçbir şey
+#: söylemez. Bkz. `intent_scorer.score_intents`'in
+#: `assist.question_with_document` kuralı. Kazanan niyeti *yalnızca* bu
+#: kümedeki id'lerle desteklenen kaynaşmış bir karar, doğrudan
+#: sonuçlandırılmak yerine modele yükseltilir -- bkz.
+#: `_has_only_weak_evidence`.
 #:
-#: `assist.short_message` is deliberately absent: it already can't fire
-#: while a draft is open (`intent_scorer.score_intents` gates it on
-#: `not has_active_draft`, which is the one case where its brevity used to
-#: outscore a genuine short revise instruction like "giriş kısmını
-#: yumuşat"). With no draft open and nothing else attached, a short message
-#: backed only by its own brevity -- a bare "Evet" after a non-continuable
-#: turn, say -- has no competing reading left to lose to, so there is
-#: nothing left for this gate to protect against; escalating it anyway would
-#: just turn an unambiguous "nothing else applies" default into an
-#: unnecessary question.
+#: `assist.short_message` kasıtlı olarak burada yok: bir taslak açıkken
+#: zaten tetiklenemiyor (`intent_scorer.score_intents` bunu
+#: `not has_active_draft` üzerinden kapıyor; kısalığının "giriş kısmını
+#: yumuşat" gibi gerçek bir kısa revizyon talimatından daha yüksek puan
+#: aldığı tek durum buydu). Açık bir taslak yokken ve başka hiçbir şey
+#: eklenmemişken, yalnızca kendi kısalığıyla desteklenen kısa bir mesaj --
+#: örneğin devam ettirilemeyen bir turdan sonra çıplak bir "Evet" --
+#: kaybedebileceği rakip bir okumaya sahip değildir, dolayısıyla bu
+#: kapının koruyacağı hiçbir şey kalmaz; yine de yükseltmek, belirsiz
+#: olmayan bir "başka hiçbir şey uygulanmıyor" varsayılanını gereksiz bir
+#: soruya çevirmekten başka bir işe yaramaz.
 _WEAK_EVIDENCE_IDS = frozenset({"assist.question_with_document"})
 
-#: Confidence reported for a model-broken tie and for the safe default used
-#: when the model call itself fails. Not the fusion layer's own
-#: `top_probability` (that number is fusion's uncertainty, the exact thing
-#: that made this a tie in the first place -- reporting it back out as the
-#: *model's* confidence would be circular) and not measured against real
-#: model output either, since that needs a live Ollama call the default,
-#: fully offline `make eval` deliberately never makes (see
-#: `evaluation.harness.intent_suite`'s module docstring). `make eval-llm`
-#: (`evaluation/harness/intent_suite.py::run_with_model`) is the optional,
-#: opt-in measurement this constant should eventually be replaced with.
+#: Model tarafından bozulan bir beraberlik için ve modelin kendi çağrısı
+#: başarısız olduğunda kullanılan güvenli varsayılan için raporlanan
+#: güven değeri. Kaynaşma katmanının kendi `top_probability`'si değil (o
+#: sayı kaynaşmanın belirsizliğidir, bunu ilk etapta bir beraberlik yapan
+#: tam olarak o şeydir -- onu *modelin* güveni olarak geri raporlamak
+#: döngüsel olurdu) ve gerçek model çıktısına karşı da ölçülmemiştir,
+#: çünkü bu, varsayılan, tamamen çevrimdışı `make eval`'in kasıtlı olarak
+#: hiç yapmadığı canlı bir Ollama çağrısı gerektirir (bkz.
+#: `evaluation.harness.intent_suite`'in modül docstring'i). `make eval-llm`
+#: (`evaluation/harness/intent_suite.py::run_with_model`) bu sabitin
+#: sonunda yerini alması gereken isteğe bağlı, opt-in ölçümdür.
 _MODEL_CONFIDENCE = 0.75
 
-#: Raw turns handed to the fast-tier model call, most recent last. Small on
-#: purpose -- this is a label call, not the assist step's own generation, so
-#: it only needs enough of the conversation's shape to disambiguate a short
-#: message ("selam" after a revise turn vs. after silence), not the full
-#: window the assist step budgets for.
+#: Hızlı katman model çağrısına verilen ham turlar, en yenisi sonda.
+#: Kasıtlı olarak küçük -- bu bir etiketleme çağrısıdır, assist adımının
+#: kendi üretimi değil, dolayısıyla yalnızca kısa bir mesajın
+#: belirsizliğini gidermeye yetecek kadar konuşma şekline ihtiyacı var
+#: ("selam" bir revizyon turundan sonra mı yoksa sessizlikten sonra mı),
+#: assist adımının bütçelediği tam pencereye değil.
 _MODEL_HISTORY_TURNS = 4
 
 
 class PlanDecision(NamedTuple):
-    """The resolved execution plan for one user message.
+    """Bir kullanıcı mesajı için çözümlenmiş çalıştırma planı.
 
     Attributes:
-        steps: The sub-workflows to run, in order.
-        intent: The resolved intent.
-        reasoning: Turkish rationale shown to the user.
-        source: Which mechanism decided. ``compound`` for a merged plan (see
-            ``COMPOUND_PAIR``), ``clarification_resolved`` when a pending
-            question's answer settled it, ``fused`` when the calibrated
-            fusion probability cleared ``tau_high`` on its own,
-            ``model``/``model_failed`` when it needed the fast-tier model to
-            break a tie, ``clarify`` when even that wasn't warranted or
-            available.
-        confidence: The decision's own confidence in [0, 1]. For ``fused`` and
-            ``clarify`` this is the fusion layer's own calibrated probability
-            for the winning/leading intent -- directly comparable across
-            every source now, unlike the three incompatible scales
-            (lexical margin, raw cosine similarity, a hardcoded 1.0) the
-            pre-fusion ladder reported under the same field.
-        evidence: Ids of the lexical rules that fired, when any did. Recorded
-            so a production decision can be explained after the fact.
-        alternatives: Runner-up intents with their fused probabilities,
-            highest first.
-        clarification: Set only when ``intent == "clarify"``: the question
-            and its options (``[{"intent", "label"}, ...]``), written into
-            ``SessionFocus.pending_clarification`` so the next turn's reply
-            can be resolved against the same options instead of re-scoring
-            from nothing (see ``_try_resolve_pending_clarification``).
-        scope_reason: Which domain-admission rule settled this turn (see
-            ``app.ai.workflows.scope.ScopeReason``). Recorded on *every*
-            decision, not only refusals, so "why did this run" is as
-            traceable as "why was this refused".
+        steps: Sırayla çalıştırılacak alt iş akışları.
+        intent: Çözümlenmiş niyet.
+        reasoning: Kullanıcıya gösterilen Türkçe gerekçe.
+        source: Hangi mekanizmanın karar verdiği. Birleştirilmiş bir plan
+            için ``compound`` (bkz. ``COMPOUND_PAIR``), bekleyen bir sorunun
+            cevabı bunu sonuçlandırdığında ``clarification_resolved``,
+            kalibre edilmiş kaynaşma olasılığı ``tau_high``'ı kendi başına
+            geçtiğinde ``fused``, beraberliği bozmak için hızlı katman
+            modeline ihtiyaç duyulduğunda ``model``/``model_failed``, bu
+            bile mümkün ya da gerekli olmadığında ``clarify``.
+        confidence: Kararın kendi güveni, [0, 1] aralığında. ``fused`` ve
+            ``clarify`` için bu, kaynaşma katmanının kazanan/önde giden
+            niyet için kendi kalibre edilmiş olasılığıdır -- kaynaşma
+            öncesi merdivenin aynı alan altında raporladığı üç uyumsuz
+            ölçekten (lexical marj, ham kosinüs benzerliği, sabit
+            kodlanmış bir 1.0) farklı olarak artık her kaynak arasında
+            doğrudan karşılaştırılabilir.
+        evidence: Tetiklenen lexical kuralların id'leri, varsa. Üretimdeki
+            bir kararın sonradan açıklanabilmesi için kaydedilir.
+        alternatives: Kaynaşmış olasılıklarıyla birlikte, en yükseği önde,
+            ikinci sıradaki niyetler.
+        clarification: Yalnızca ``intent == "clarify"`` iken ayarlanır: soru
+            ve seçenekleri (``[{"intent", "label"}, ...]``),
+            ``SessionFocus.pending_clarification`` içine yazılır ki bir
+            sonraki turun cevabı hiçbir şeyden yeniden puanlanmak yerine
+            aynı seçeneklere göre çözülebilsin (bkz.
+            ``_try_resolve_pending_clarification``).
+        scope_reason: Bu turu hangi alan-kabul kuralının sonuçlandırdığı
+            (bkz. ``app.ai.workflows.scope.ScopeReason``). Yalnızca
+            reddedilenlerde değil, *her* kararda kaydedilir, böylece "bu
+            neden çalıştı" da "bu neden reddedildi" kadar izlenebilir olur.
     """
 
     steps: list[str]
@@ -269,14 +286,14 @@ class PlanDecision(NamedTuple):
 
 
 class IntentOutput(BaseModel):
-    """Single-label intent classification, used only for genuinely contested messages.
+    """Tek etiketli niyet sınıflandırması, yalnızca gerçekten tartışmalı mesajlar için kullanılır.
 
-    Five labels, not four: ``unclear`` is a real, first-class answer, not an
-    error path. Before this the model had only ``draft``/``analyze``/``assist``
-    to choose from -- asked about a message the fusion layer already found
-    contested, it had no way to say "I'm not sure either" and had to force a
-    guess into one of three boxes, one of which (``revise``) it couldn't even
-    name.
+    Dört değil beş etiket: ``unclear`` gerçek, birinci sınıf bir cevaptır,
+    bir hata yolu değil. Bundan önce modelin seçebileceği yalnızca
+    ``draft``/``analyze``/``assist`` vardı -- kaynaşma katmanının zaten
+    tartışmalı bulduğu bir mesaj hakkında sorulduğunda "ben de emin
+    değilim" deme yolu yoktu ve tahminini üç kutudan birine zorlamak
+    zorundaydı, bunlardan birini (``revise``) adlandıramadığı halde bile.
     """
 
     intent: Literal["draft", "analyze", "assist", "revise", "unclear"] = Field(
@@ -292,40 +309,42 @@ class IntentOutput(BaseModel):
 
 
 def _merge_steps(intents: frozenset[str]) -> list[str]:
-    """Union two intents' step lists, keeping canonical execution order.
+    """İki niyetin adım listelerinin birleşimini alır, kanonik çalıştırma sırasını korur.
 
     Args:
-        intents: The intents to merge.
+        intents: Birleştirilecek niyetler.
 
     Returns:
-        The merged step list.
+        Birleştirilmiş adım listesi.
     """
     merged = {step for intent in intents for step in PLAN_BY_INTENT[intent]}
     return [step for step in STEP_ORDER if step in merged]
 
 
 def _has_only_weak_evidence(intent: str, lexical: IntentScores, has_active_draft: bool) -> bool:
-    """Whether ``intent``'s win rests on nothing but structural filler.
+    """``intent``'in kazanımının yalnızca yapısal dolguya mı dayandığı.
 
     Args:
-        intent: The fusion layer's winning intent.
-        lexical: The message's lexical evidence.
-        has_active_draft: Whether a draft is open this turn. The only reason
-            ``assist.question_with_document`` is worth distrusting is that it
-            might be drowning out a `revise` reading of the same message
-            ("Bu daha iyi mi görünüyor?" with both a document *and* an open
-            draft) -- without a draft open there is nothing else the message
-            could plausibly mean, so a bare document-question win is exempted
-            outright rather than sent on an escalation round trip with
-            nothing to resolve. Same reasoning `intent_scorer.score_intents`
-            already applies to `assist.short_message` by gating it on
-            ``not has_active_draft`` at the rule level instead.
+        intent: Kaynaşma katmanının kazanan niyeti.
+        lexical: Mesajın lexical kanıtı.
+        has_active_draft: Bu turda bir taslağın açık olup olmadığı.
+            ``assist.question_with_document``'a güvenmemenin tek sebebi,
+            aynı mesajın bir `revise` okumasını bastırıyor olabilmesidir
+            ("Bu daha iyi mi görünüyor?" hem bir belge *hem de* açık bir
+            taslakla) -- açık bir taslak yokken mesajın makul olarak
+            başka anlama gelebileceği bir şey yoktur, dolayısıyla çıplak
+            bir belge-sorusu kazanımı, çözülecek hiçbir şeyi olmayan bir
+            yükseltme gidiş-dönüşüne gönderilmek yerine doğrudan muaf
+            tutulur. `intent_scorer.score_intents` aynı gerekçeyi zaten
+            `assist.short_message`'a, bunun yerine kural düzeyinde
+            ``not has_active_draft`` üzerinden kapılayarak uyguluyor.
 
     Returns:
-        True when every lexical rule that fired *for this intent* is in
-        ``_WEAK_EVIDENCE_IDS`` -- including the case where none fired at all,
-        meaning the win came from the semantic layer or the fusion model's
-        prior alone, weaker still than a filler rule.
+        *Bu niyet için* tetiklenen her lexical kural ``_WEAK_EVIDENCE_IDS``
+        içindeyse True -- hiçbirinin tetiklenmediği durum dahil, yani
+        kazanımın yalnızca semantik katmandan veya kaynaşma modelinin
+        önselinden (prior) geldiği, bir dolgu kuralından bile daha zayıf
+        olduğu durum.
     """
     if intent == "assist" and not has_active_draft:
         return False
@@ -338,17 +357,18 @@ def _has_only_weak_evidence(intent: str, lexical: IntentScores, has_active_draft
 
 
 def _try_compound(lexical: IntentScores) -> Optional[PlanDecision]:
-    """Detect a compound draft+analyze request from the raw lexical scores.
+    """Ham lexical skorlardan bileşik bir draft+analyze isteğini tespit eder.
 
-    Checked before fusion runs at all -- see the module docstring for why a
-    softmax cannot represent this case the way an additive score can.
+    Kaynaşma hiç çalışmadan önce kontrol edilir -- bir softmax'ın bu
+    durumu neden toplamsal bir skorun temsil edebildiği şekilde temsil
+    edemediği için modül docstring'ine bakın.
 
     Args:
-        lexical: The message's lexical evidence, already scored.
+        lexical: Mesajın zaten puanlanmış lexical kanıtı.
 
     Returns:
-        A merged ``draft``+``analyze`` plan, or None when the message isn't
-        independently well-attested for both.
+        Birleştirilmiş bir ``draft``+``analyze`` planı, ya da mesaj her
+        ikisi için de bağımsız olarak iyi kanıtlanmamışsa None.
     """
     present = {intent: score for intent, score in lexical.ranked if score >= COMPOUND_FLOOR}
     if not COMPOUND_PAIR.issubset(present):
@@ -374,7 +394,7 @@ def _fused_decision(
     lexical: IntentScores,
     source: str,
 ) -> PlanDecision:
-    """Build a decision for an intent the fusion probability committed to."""
+    """Kaynaşma olasılığının sonuçlandırdığı bir niyet için karar oluşturur."""
     return PlanDecision(
         steps=list(PLAN_BY_INTENT[intent]),
         intent=intent,  # type: ignore[arg-type]
@@ -387,22 +407,24 @@ def _fused_decision(
 
 
 def _build_clarify_decision(ranked: list[tuple[str, float]]) -> PlanDecision:
-    """Build a clarifying question from the fused probabilities.
+    """Kaynaşmış olasılıklardan bir açıklayıcı soru oluşturur.
 
-    Called when the fused distribution is too flat to commit to (below
-    ``tau_low``) or was contested and no model was available to break the
-    tie (see ``resolve_plan``). Unlike the pre-fusion ladder's version of
-    this function, there is no "only one candidate exists" special case to
-    handle: softmax always produces a full distribution over all four
-    intents, so a runner-up is always available to offer as the question's
-    second option.
+    Kaynaşmış dağılım sonuçlandırmak için çok düz olduğunda (``tau_low``
+    altında) veya tartışmalıydı ve beraberliği bozacak bir model
+    kullanılamadığında çağrılır (bkz. ``resolve_plan``). Bu fonksiyonun
+    kaynaşma öncesi merdivendeki versiyonundan farklı olarak, ele alınacak
+    "yalnızca tek bir aday var" özel durumu yoktur: softmax her zaman dört
+    niyetin tamamı üzerinde tam bir dağılım üretir, dolayısıyla sorunun
+    ikinci seçeneği olarak sunulacak bir ikinci sıradaki her zaman
+    mevcuttur.
 
     Args:
-        ranked: Intents sorted by fused probability, highest first.
+        ranked: Kaynaşmış olasılığa göre sıralanmış niyetler, en yükseği
+            önde.
 
     Returns:
-        A ``clarify`` decision carrying the question and its options in
-        ``clarification``.
+        Soruyu ve seçeneklerini ``clarification`` içinde taşıyan bir
+        ``clarify`` kararı.
     """
     top_two = ranked[:2]
     options = [
@@ -429,22 +451,23 @@ def _build_clarify_decision(ranked: list[tuple[str, float]]) -> PlanDecision:
 def _try_resolve_pending_clarification(
     message: str, pending: Optional[dict[str, Any]]
 ) -> Optional[PlanDecision]:
-    """Resolve a reply against an open clarifying question, if it answers it.
+    """Bir cevabı, eğer soruyu yanıtlıyorsa, açık bir açıklayıcı soruya göre çözer.
 
-    Checked before the fusion decision runs at all: an explicit answer to
-    "taslak mı, revizyon mu?" must not be re-scored from nothing, where a
-    short reply could easily read as low-signal on its own.
+    Kaynaşma kararı hiç çalışmadan önce kontrol edilir: "taslak mı,
+    revizyon mu?" sorusuna verilen açık bir cevap hiçbir şeyden yeniden
+    puanlanmamalıdır; burada kısa bir cevap kendi başına kolayca
+    düşük-sinyalli olarak okunabilir.
 
     Args:
-        message: The user's new message.
-        pending: ``SessionFocus.pending_clarification``, or ``None``/empty
-            when there is nothing open.
+        message: Kullanıcının yeni mesajı.
+        pending: ``SessionFocus.pending_clarification``, ya da açık
+            hiçbir şey yoksa ``None``/boş.
 
     Returns:
-        A decision for whichever option the reply selected, or ``None`` when
-        the message doesn't clearly answer the question -- the caller then
-        falls through to the normal decision, and the stale clarification is
-        superseded rather than forced onto an unrelated new message.
+        Cevabın seçtiği seçenek için bir karar, ya da mesaj soruyu açıkça
+        yanıtlamıyorsa ``None`` -- çağıran daha sonra normal karara düşer
+        ve eskimiş açıklama, alakasız yeni bir mesaja zorlanmak yerine
+        geçersiz kılınır.
     """
     if not pending:
         return None
@@ -463,10 +486,11 @@ def _try_resolve_pending_clarification(
         selected = options[0]["intent"]
         via_affirmative = True
     else:
-        # Matched against the Turkish label a user could plausibly echo back
-        # ("Bir taslak hazırlama isteği."), not the internal English intent
-        # name -- that never appears in a Turkish reply, so checking for it
-        # only ever produced a false sense of an extra fallback.
+        # Kullanıcının makul biçimde geri yansıtabileceği Türkçe etikete
+        # göre eşleştirilir ("Bir taslak hazırlama isteği."), dahili
+        # İngilizce niyet adına göre değil -- bu bir Türkçe cevapta hiç
+        # görünmez, dolayısıyla onu kontrol etmek yalnızca fazladan bir
+        # yedek varmış gibi yanlış bir izlenim veriyordu.
         for option in options:
             label = option.get("label") or ""
             if label and normalize(label) in normalized:
@@ -502,39 +526,41 @@ async def classify_intent_with_model(
     previous_intent: Optional[str] = None,
     history: Optional[list[dict[str, str]]] = None,
 ) -> str:
-    """Break a fusion tie with a one-label model call.
+    """Tek etiketli bir model çağrısıyla bir kaynaşma beraberliğini bozar.
 
     Args:
-        llm_client: Fast-tier LLM client.
-        message: The user's message.
-        document_id: Storage path of an attached document, when present.
-        focus: The session's persistent focus, when known -- supplies whether
-            a draft is already open and what kind (plus an excerpt of its
-            text and the session's accumulated objective), context a bare
-            label call otherwise has no way to see. The fusion layer sees
-            `has_active_draft` too, as a feature value, but this prompt has
-            to spell the same fact out in words -- and, unlike the fusion
-            layer, can also show *what* the draft says, which is exactly
-            what a message like "son cümle bana biraz sert geldi" needs to
-            resolve against.
-        previous_intent: The intent resolved for the previous turn, when
-            known.
-        history: The last few raw turns of this conversation, oldest first,
-            when known. Now that this call is the fallback for *every*
-            fusion-contested message rather than a narrow middle band, it
-            needs the same kind of conversational grounding the assist step
-            already gets -- a bare "selam" or "yarın devam ederiz" only reads
-            as small talk in light of what the turn before it was.
+        llm_client: Hızlı katman LLM istemcisi.
+        message: Kullanıcının mesajı.
+        document_id: Eklenmiş bir belge varsa onun depolama yolu.
+        focus: Bilindiğinde oturumun kalıcı odağı -- zaten açık bir
+            taslak olup olmadığını ve türünü (artı metninden bir alıntı
+            ve oturumun birikmiş amacını) sağlar; bu, çıplak bir
+            etiketleme çağrısının başka türlü göremeyeceği bir bağlamdır.
+            Kaynaşma katmanı da `has_active_draft`'ı bir özellik değeri
+            olarak görür, ama bu prompt aynı gerçeği kelimelerle açıkça
+            yazmak zorundadır -- ve kaynaşma katmanından farklı olarak
+            taslağın *ne dediğini* de gösterebilir, ki bu tam olarak "son
+            cümle bana biraz sert geldi" gibi bir mesajın karşısında
+            çözülmesi gereken şeydir.
+        previous_intent: Bilindiğinde önceki tur için çözümlenmiş niyet.
+        history: Bilindiğinde bu konuşmanın son birkaç ham turu, en
+            eskisi önde. Bu çağrı artık dar bir orta bant yerine
+            kaynaşmayla tartışmalı bulunan *her* mesaj için yedek yol
+            olduğundan, assist adımının zaten aldığı türden aynı
+            konuşmasal temellendirmeye ihtiyaç duyar -- çıplak bir
+            "selam" veya "yarın devam ederiz" ancak kendinden önceki
+            tur ışığında sohbet olarak okunur.
 
     Returns:
-        One of ``PLAN_BY_INTENT``'s keys, or ``"unclear"``/``"model_failed"``
-        -- two distinct non-intents the caller must handle before treating the
-        result as a plan: ``"unclear"`` is the model's own considered
-        judgement that it doesn't know either (see ``IntentOutput``);
-        ``"model_failed"`` means the call itself broke (timeout, malformed
-        output, retries exhausted) and never produced a judgement at all.
-        Conflating the two would hide a real outage behind the same label a
-        model's honest uncertainty produces.
+        ``PLAN_BY_INTENT``'in anahtarlarından biri, ya da
+        ``"unclear"``/``"model_failed"`` -- çağıranın sonucu bir plan
+        olarak ele almadan önce işlemesi gereken iki ayrı niyet-olmayan
+        değer: ``"unclear"`` modelin kendi bilinçli yargısıyla o da
+        bilmediğidir (bkz. ``IntentOutput``); ``"model_failed"`` çağrının
+        kendisinin bozulduğu (zaman aşımı, hatalı biçimli çıktı, denemeler
+        tükendi) ve hiçbir zaman bir yargı üretmediği anlamına gelir. İkisini
+        birbirine karıştırmak, gerçek bir kesintiyi modelin dürüst
+        belirsizliğinin ürettiği aynı etiketin arkasına gizlerdi.
     """
     from app.ai.agents.base import BaseAgent
 
@@ -601,25 +627,27 @@ def _clarify_or_fallback(
     lexical: IntentScores,
     focus: Optional[SessionFocus],
 ) -> PlanDecision:
-    """Ask a clarifying question, unless the previous turn already asked one.
+    """Önceki tur zaten bir soru sormadıysa bir açıklayıcı soru sorar.
 
-    A user who didn't answer the last clarifying question clearly (see
-    ``_try_resolve_pending_clarification``) and then sent another message the
-    decision layer also finds ambiguous would otherwise be asked a second
-    question in a row -- annoying on its own, and indistinguishable to the
-    user from the system having ignored their first answer. Committing to the
-    fused top intent is the better failure mode: wrong sometimes, but never a
-    conversation that only ever asks.
+    Son açıklayıcı soruyu açıkça yanıtlamamış (bkz.
+    ``_try_resolve_pending_clarification``) ve ardından karar katmanının
+    da belirsiz bulduğu başka bir mesaj gönderen bir kullanıcıya, aksi
+    halde art arda ikinci bir soru sorulurdu -- bu kendi başına can
+    sıkıcıdır ve kullanıcı için sistemin ilk cevabını görmezden gelmesinden
+    ayırt edilemez. Kaynaşmış en yüksek niyeti sonuçlandırmak daha iyi bir
+    başarısızlık türüdür: bazen yanlış, ama asla yalnızca soru soran bir
+    konuşma değil.
 
     Args:
-        ranked: Intents sorted by fused probability, highest first.
-        probs: The fused probability for every intent.
-        lexical: The message's lexical evidence.
-        focus: The session's persistent focus, when known.
+        ranked: Kaynaşmış olasılığa göre sıralanmış niyetler, en yükseği
+            önde.
+        probs: Her niyet için kaynaşmış olasılık.
+        lexical: Mesajın lexical kanıtı.
+        focus: Bilindiğinde oturumun kalıcı odağı.
 
     Returns:
-        A clarifying decision, or a committed decision for the fused top
-        intent when the previous turn was already a clarify.
+        Bir açıklayıcı karar, ya da önceki tur zaten bir clarify ise
+        kaynaşmış en yüksek niyet için sonuçlandırılmış bir karar.
     """
     if focus is not None and focus.last_intent == "clarify":
         top_intent, _ = ranked[0]
@@ -633,18 +661,19 @@ def _clarify_or_fallback(
 
 
 def _apply_scope_gate(decision: PlanDecision, verdict: ScopeVerdict) -> PlanDecision:
-    """Fold a scope verdict into an already-resolved plan.
+    """Bir kapsam kararını zaten çözümlenmiş bir plana katar.
 
     Args:
-        decision: The intent-resolved plan.
-        verdict: The domain-admission verdict for the same message.
+        decision: Niyeti çözümlenmiş plan.
+        verdict: Aynı mesaj için alan-kabul kararı.
 
     Returns:
-        ``decision`` with ``scope_reason`` recorded when admitted; a
-        single-step ``refuse`` plan when not. The original intent is kept in
-        ``evidence`` (``scope.refused_intent:<name>``) rather than discarded
-        -- a refusal that loses what it refused is unreviewable, and the
-        offline harness scores refusals against the intent they replaced.
+        Kabul edildiğinde ``scope_reason`` kaydedilmiş ``decision``;
+        edilmediğinde tek adımlı bir ``refuse`` planı. Orijinal niyet,
+        atılmak yerine ``evidence`` içinde tutulur
+        (``scope.refused_intent:<name>``) -- neyi reddettiğini kaybeden bir
+        ret gözden geçirilemez, ve çevrimdışı test düzeneği retleri,
+        yerini aldıkları niyete göre puanlar.
     """
     if verdict.in_scope:
         return decision._replace(scope_reason=verdict.reason)
@@ -670,19 +699,20 @@ async def resolve_plan(
     focus: Optional[SessionFocus] = None,
     history: Optional[list[dict[str, str]]] = None,
 ) -> PlanDecision:
-    """Resolve the execution plan, then admit it (or refuse it) by scope.
+    """Çalıştırma planını çözer, ardından kapsamına göre kabul eder (ya da reddeder).
 
-    Intent resolution (``_resolve_intent``) and domain admission
-    (``app.ai.workflows.scope``) are deliberately two passes over the same
-    message rather than one enlarged classifier: "which flow does this want"
-    and "does this want any flow" have different evidence, different failure
-    modes, and different costs to get wrong. Merging them is what a fifth
-    intent label would do, and a fifth label competes for softmax mass with
-    the four real ones instead of vetoing them.
+    Niyet çözümlemesi (``_resolve_intent``) ve alan kabulü
+    (``app.ai.workflows.scope``), tek bir büyütülmüş sınıflandırıcı yerine
+    kasıtlı olarak aynı mesaj üzerinden iki ayrı geçiştir: "bu hangi akışı
+    istiyor" ve "bu herhangi bir akış istiyor mu" farklı kanıtlara, farklı
+    başarısızlık türlerine ve yanlış yapıldığında farklı maliyetlere
+    sahiptir. Bunları birleştirmek, beşinci bir niyet etiketinin yapacağı
+    şeydir, ve beşinci bir etiket, dört gerçek etiketi veto etmek yerine
+    onlarla softmax kütlesi için yarışır.
 
-    Args and Returns are as ``_resolve_intent``'s, with one addition: the
-    returned decision may be a ``refuse`` plan regardless of what the intent
-    layer concluded.
+    Args ve Returns, ``_resolve_intent``'inkiyle aynıdır, tek bir ekleme
+    ile birlikte: döndürülen karar, niyet katmanının vardığı sonuçtan bağımsız
+    olarak bir ``refuse`` planı olabilir.
     """
     decision = await _resolve_intent(
         message,
@@ -694,9 +724,9 @@ async def resolve_plan(
         history=history,
     )
 
-    # A resolved clarifying question is the user answering *us*; re-admitting
-    # it would re-litigate a turn whose scope was already settled when the
-    # question was asked.
+    # Çözümlenmiş bir açıklayıcı soru, kullanıcının *bize* cevap vermesidir;
+    # onu yeniden kabul etmek, sorunun sorulduğu anda kapsamı zaten
+    # kararlaştırılmış bir turu yeniden tartışmaya açmak olurdu.
     if decision.source == "clarification_resolved":
         return decision._replace(scope_reason="clarification_resolved")
 
@@ -729,32 +759,35 @@ async def _resolve_intent(
     focus: Optional[SessionFocus] = None,
     history: Optional[list[dict[str, str]]] = None,
 ) -> PlanDecision:
-    """Resolve which of the system's flows a message wants.
+    """Bir mesajın sistemin akışlarından hangisini istediğini çözer.
 
     Args:
-        message: The user's message.
-        document_id: Storage path of an attached document, when present.
-        llm_client: Fast-tier client consulted whenever fusion doesn't commit
-            outright (``tau_high`` and, since a filler-only win isn't enough
-            on its own, the evidence check next to it). When omitted, that
-            same case falls to a clarifying question instead of a model call.
-        previous_intent: The intent resolved for this thread's previous turn,
-            when known -- enables the short-affirmative continuation rule and
-            feeds the fusion layer's ``prev_*`` features.
-        matcher: Prototype matcher supplying per-label semantic similarity.
-            Omitted or unavailable means fusion simply runs without those
-            features, exactly as before the semantic layer existed.
-        focus: The session's persistent focus. Supplies whether a draft is
-            active (gates ``revise``) and any open clarifying question
-            (checked first, before fusion runs at all).
-        history: This thread's raw prior turns, oldest first, when known --
-            forwarded to ``classify_intent_with_model`` unchanged. Fusion
-            itself never reads it (only ``previous_intent`` feeds the fused
-            features); it exists solely so the model call escalation has the
-            same conversational grounding the assist step gets.
+        message: Kullanıcının mesajı.
+        document_id: Eklenmiş bir belge varsa onun depolama yolu.
+        llm_client: Kaynaşma doğrudan sonuçlandırmadığında (``tau_high`` ve,
+            yalnızca dolguyla kazanmak kendi başına yeterli olmadığından,
+            yanındaki kanıt kontrolü) danışılan hızlı katman istemcisi.
+            Verilmediğinde aynı durum, bir model çağrısı yerine bir
+            açıklayıcı soruya düşer.
+        previous_intent: Bilindiğinde bu iş parçacığının önceki turu için
+            çözümlenmiş niyet -- kısa-onay devam kuralını etkinleştirir ve
+            kaynaşma katmanının ``prev_*`` özelliklerini besler.
+        matcher: Etiket başına semantik benzerlik sağlayan prototip
+            eşleştirici. Verilmediğinde veya kullanılamadığında, kaynaşma
+            semantik katman var olmadan önceki gibi bu özellikler olmadan
+            çalışır.
+        focus: Oturumun kalıcı odağı. Bir taslağın aktif olup olmadığını
+            (``revise``'ı kapılar) ve açık herhangi bir açıklayıcı soruyu
+            (kaynaşma hiç çalışmadan önce ilk kontrol edilir) sağlar.
+        history: Bilindiğinde bu iş parçacığının ham önceki turları, en
+            eskisi önde -- değiştirilmeden ``classify_intent_with_model``'a
+            iletilir. Kaynaşmanın kendisi bunu hiç okumaz (kaynaşmış
+            özellikleri yalnızca ``previous_intent`` besler); yalnızca model
+            çağrısı yükseltmesinin assist adımının aldığı aynı konuşmasal
+            temellendirmeye sahip olması için vardır.
 
     Returns:
-        The execution plan and the rationale shown to the user.
+        Çalıştırma planı ve kullanıcıya gösterilen gerekçe.
     """
     if focus is not None and focus.pending_clarification:
         resolved = _try_resolve_pending_clarification(
@@ -791,9 +824,9 @@ async def _resolve_intent(
         ranked = sorted(probs.items(), key=lambda item: (-item[1], item[0]))
         return probs, ranked
 
-    # Lexical-only fusion first, exactly like the old ladder's cheapest rung:
-    # a message the lexical evidence alone already commits to must not pay
-    # for an embedding call it doesn't need.
+    # Önce yalnızca-lexical kaynaşma, tıpkı eski merdivenin en ucuz basamağı
+    # gibi: yalnızca lexical kanıtın zaten sonuçlandırdığı bir mesaj,
+    # ihtiyacı olmayan bir embedding çağrısının bedelini ödememeli.
     probs, ranked = _fuse(None)
     top_intent, top_probability = ranked[0]
     source = "fused"
@@ -809,11 +842,12 @@ async def _resolve_intent(
             top_intent, top_probability = ranked[0]
             source = "fused_semantic"
 
-    # The weak-evidence gate only applies to a lexical-only commit: once the
-    # semantic pass has run and moved the needle (`source == "fused_semantic"`),
-    # the embedding similarity *is* the real signal a filler rule is a stand-in
-    # for elsewhere, and second-guessing it here would just be a slower way of
-    # ignoring the semantic layer's own vote.
+    # Zayıf kanıt kapısı yalnızca sadece-lexical bir sonuçlandırmaya
+    # uygulanır: semantik geçiş çalışıp ibreyi oynattıktan sonra
+    # (`source == "fused_semantic"`), embedding benzerliği, bir dolgu
+    # kuralının başka yerlerde yerini tuttuğu gerçek sinyalin ta kendisidir,
+    # ve burada onu yeniden sorgulamak, semantik katmanın kendi oyunu
+    # görmezden gelmenin daha yavaş bir yolundan başka bir şey olmazdı.
     weak = source == "fused" and _has_only_weak_evidence(top_intent, lexical, has_active_draft)
     if top_probability >= policy.tau_high and not weak:
         logger.info(

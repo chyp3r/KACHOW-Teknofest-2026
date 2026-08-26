@@ -8,29 +8,32 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class GuardrailEventModel(Base, TimestampMixin):
-    """One input or output guardrail decision, kept for audit.
+    """Denetim için tutulan tek bir input veya output guardrail kararı.
 
-    Sibling to ``RunModel``/``RunStepModel`` (``app.observability.model.
-    run_model``): the same "always-on, first-party audit trail, independent
-    of the optional Langfuse tracer" role, for guardrail decisions
-    specifically. A user reporting "the assistant told me something it
-    shouldn't have" needs an answer to "what did the guardrail see, and what
-    did it decide" that outlives the request and doesn't depend on a
-    third-party tracing account being configured.
+    ``RunModel``/``RunStepModel`` (``app.observability.model.
+    run_model``) ile kardeş: isteğe bağlı Langfuse tracer'dan bağımsız,
+    "her zaman açık, birinci taraf denetim kaydı" rolünün, özellikle
+    guardrail kararları için karşılığı. "Asistan söylememesi gereken bir
+    şey söyledi" diyen bir kullanıcının "guardrail ne gördü ve ne karar
+    verdi" sorusuna, isteğin ömrünü aşan ve üçüncü taraf bir tracing
+    hesabının yapılandırılmış olmasına bağlı olmayan bir yanıta ihtiyacı
+    vardır.
 
-    ``run_id``/``document_id`` are both nullable and independent: an
-    upload-time PII/sensitivity finding has a ``document_id`` and no
-    ``run_id`` yet (the chat turn that reads it comes later, if ever); an
-    output-gate decision on an assist reply has a ``run_id`` and whatever
-    ``related_document_ids`` it actually drew on.
+    ``run_id``/``document_id`` her ikisi de nullable ve birbirinden
+    bağımsızdır: yükleme anındaki bir PII/hassasiyet bulgusunun bir
+    ``document_id``'si vardır ama henüz ``run_id``'si yoktur (onu okuyan
+    sohbet turu -eğer olursa- daha sonra gelir); bir assist yanıtındaki
+    output-gate kararının bir ``run_id``'si ve fiilen yararlandığı
+    ``related_document_ids`` listesi vardır.
     """
 
     __tablename__ = "guardrail_events"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    #: NOT NULL since migration `0016_recorder_tables_rls` -- populated by
-    #: every call site, including graph-internal ones via `PlanningState.
-    #: company_id` (see `RunModel.company_id`'s docstring).
+    #: `0016_recorder_tables_rls` migration'ından beri NOT NULL -- graph
+    #: içindekiler dahil `PlanningState.company_id` üzerinden her çağrı
+    #: noktası tarafından doldurulur (bkz. `RunModel.company_id`'nin
+    #: docstring'i).
     company_id: Mapped[str] = mapped_column(
         String, ForeignKey("companies.id"), nullable=False, index=True
     )
@@ -47,22 +50,24 @@ class GuardrailEventModel(Base, TimestampMixin):
     #: "passed" | "flagged" | "blocked" | "redacted" | "needs_review".
     decision: Mapped[str] = mapped_column(String, nullable=False, index=True)
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
-    #: Short, human-readable reason strings -- never the raw sensitive value
-    #: that triggered the decision (see ``app.ai.guardrails.pii.PiiFinding``,
-    #: which carries only a redacted preview for this exact reason).
+    #: Kısa, insan tarafından okunabilir sebep metinleri -- kararı tetikleyen
+    #: ham hassas değer asla değil (bkz. tam olarak bu sebeple sadece
+    #: sansürlenmiş bir önizleme taşıyan ``app.ai.guardrails.pii.PiiFinding``).
     reasons: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
-    #: Who was asking, and at what clearance -- the questions an audit of a
-    #: leakage-prevention block actually needs answered.
+    #: Kim soruyordu ve hangi yetki seviyesindeydi -- bir sızıntı önleme
+    #: engelinin denetiminin fiilen yanıtlanmasını gerektirdiği sorular.
     requester_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     requester_role: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     effective_clearance: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    #: A response can draw on several documents in one turn; this stays a
-    #: list even when only one applies, so the shape never has to change.
+    #: Bir yanıt tek turda birden fazla dokümandan yararlanabilir; sadece
+    #: biri geçerli olsa bile bu alan liste olarak kalır, böylece şekli
+    #: hiç değişmek zorunda kalmaz.
     related_document_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    #: The Ollama model tag actually used for this decision (e.g. from
-    #: ``settings.OLLAMA_MODEL``), and which on-disk revision of the prompt
-    #: template produced it (``PromptManager``'s per-template version) --
-    #: together, "would this decision reproduce today."
+    #: Bu karar için fiilen kullanılan Ollama model etiketi (ör.
+    #: ``settings.OLLAMA_MODEL``'den) ve bunu üreten prompt şablonunun
+    #: diskteki hangi revizyonu (``PromptManager``'ın şablon başına
+    #: versiyonu) -- birlikte, "bu karar bugün tekrar üretilir miydi"
+    #: sorusunu yanıtlar.
     llm_model_version: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     prompt_template_version: Mapped[Optional[str]] = mapped_column(String, nullable=True)

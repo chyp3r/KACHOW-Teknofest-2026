@@ -1,20 +1,20 @@
-"""Turns a message plus its context into the fusion layer's feature vector.
+"""Bir mesajı ve bağlamını füzyon katmanının özellik vektörüne dönüştürür.
 
-The old ladder let whichever rung answered first decide alone: the lexical
-layer's margin gated everything, and the semantic rung only ever got a look
-when the lexical layer had already abstained. That is why a message carrying
-one explicit imperative and one structural hint (see the K2 regression --
-"Cevap yaz." scoring `draft=3.0` against a `assist=2.0` hint from
-`assist.short_message`, margin ``1.0 < 1.2``) fell through to a clarifying
-question instead of resolving: the margin test cannot tell an explicit
-imperative apart from a weak structural hint, because both are already
-folded into the same per-intent sum.
+Eski merdiven, ilk cevap veren basamağın tek başına karar vermesine izin
+veriyordu: sözcüksel katmanın marjı her şeyi kapı gibi kontrol ediyordu, ve
+anlamsal basamak yalnızca sözcüksel katman zaten çekimser kaldığında devreye
+giriyordu. Bir açık emir kipi ile bir yapısal ipucu taşıyan bir mesajın (bkz.
+K2 regresyonu -- "Cevap yaz." `assist.short_message`'tan gelen `assist=2.0`
+ipucuna karşı `draft=3.0` puanı alıyor, marj ``1.0 < 1.2``) çözülmek yerine
+bir açıklayıcı soruya düşmesinin nedeni budur: marj testi açık bir emir
+kipini zayıf bir yapısal ipucundan ayırt edemez, çünkü ikisi de zaten aynı
+niyet başına toplamın içine katlanmıştır.
 
-This module keeps every signal source distinct instead of pre-summing them,
-so ``router_fusion``'s calibrated weights can learn how much each one is
-worth relative to the others -- an explicit lexical hit should outweigh a
-structural hint by a learned amount, not by whatever the hand-picked
-``WEIGHT_EXPLICIT``/``WEIGHT_HINT`` constants happened to produce.
+Bu modül, her sinyal kaynağını önceden toplamak yerine ayrı tutar; böylece
+``router_fusion``'ın kalibre ağırlıkları her birinin diğerlerine göre ne
+kadar değerli olduğunu öğrenebilir -- açık bir sözcüksel isabet, elle seçilen
+``WEIGHT_EXPLICIT``/``WEIGHT_HINT`` sabitlerinin tesadüfen ürettiği bir
+miktarla değil, öğrenilmiş bir miktarla yapısal bir ipucundan ağır basmalıdır.
 """
 
 from dataclasses import dataclass
@@ -25,15 +25,18 @@ from app.ai.workflows.intent_scorer import IntentScores, looks_like_question, no
 
 __all__ = ["FEATURE_NAMES", "extract_features"]
 
-#: The four intents the fusion layer decides between. `clarify` is not one
-#: of them -- it is what the decision *policy* falls back to when no intent's
-#: fused probability clears the low threshold, not a class the model predicts.
+#: Füzyon katmanının arasında karar verdiği dört niyet. `clarify` bunlardan
+#: biri değildir -- bu, hiçbir niyetin füzyonlanmış olasılığı düşük eşiği
+#: geçemediğinde karar *politikasının* düştüğü bir yedektir, modelin
+#: tahmin ettiği bir sınıf değildir.
 _INTENTS: tuple[Intent, ...] = ("draft", "analyze", "assist", "revise")
 
-#: Fixed feature order. `router_fusion.predict_proba` and `scripts/fit_router.py`
-#: both iterate this tuple, so a feature can be added here without touching
-#: either -- the weights dataclass just needs a matching entry, checked by
-#: `RouterWeights.__post_init__` (see `app.ai.policy.router_weights`).
+#: Sabit özellik sırası. `router_fusion.predict_proba` ve
+#: `scripts/fit_router.py` ikisi de bu tuple üzerinde döner, bu yüzden bir
+#: özellik ikisine de dokunmadan buraya eklenebilir -- ağırlık dataclass'ının
+#: sadece eşleşen bir girişe ihtiyacı vardır, bu da
+#: `RouterWeights.__post_init__` tarafından kontrol edilir (bkz.
+#: `app.ai.policy.router_weights`).
 FEATURE_NAMES: tuple[str, ...] = (
     "lex_draft",
     "lex_analyze",
@@ -56,11 +59,12 @@ FEATURE_NAMES: tuple[str, ...] = (
 
 @dataclass(frozen=True)
 class RouterSignals:
-    """The raw evidence `extract_features` turns into a feature vector.
+    """`extract_features`'ın bir özellik vektörüne dönüştürdüğü ham kanıt.
 
-    Kept as a named, inspectable bundle (rather than passing five loose
-    arguments) so a caller building it up in stages -- lexical always, semantic
-    only when the matcher is available -- has one object to hand off.
+    Beş ayrı bağımsız değişken geçmek yerine adlandırılmış, incelenebilir
+    bir demet olarak tutulur; böylece bunu aşamalı olarak oluşturan bir
+    çağıranın -- sözcüksel her zaman, anlamsal yalnızca eşleştirici
+    mevcutken -- teslim edecek tek bir nesnesi olur.
     """
 
     lexical: IntentScores
@@ -71,16 +75,16 @@ class RouterSignals:
 
 
 def extract_features(message: str, signals: RouterSignals) -> dict[str, float]:
-    """Build the fusion layer's feature vector for one message.
+    """Bir mesaj için füzyon katmanının özellik vektörünü oluşturur.
 
     Args:
-        message: The user's raw message (used for word count and the
-            question-shape heuristic; matching itself was already done to
-            produce ``signals.lexical``).
-        signals: Every piece of evidence already gathered for this turn.
+        message: Kullanıcının ham mesajı (kelime sayısı ve soru-şekli
+            sezgisel yöntemi için kullanılır; eşleştirmenin kendisi zaten
+            ``signals.lexical``'ı üretmek için yapılmıştı).
+        signals: Bu tur için zaten toplanmış her kanıt parçası.
 
     Returns:
-        Feature name -> value, keyed exactly by ``FEATURE_NAMES``.
+        Tam olarak ``FEATURE_NAMES`` ile anahtarlanmış özellik adı -> değer.
     """
     normalized = normalize(message)
     words = normalized.split()
@@ -98,8 +102,9 @@ def extract_features(message: str, signals: RouterSignals) -> dict[str, float]:
     features["has_document"] = 1.0 if signals.has_document else 0.0
     features["has_active_draft"] = 1.0 if signals.has_active_draft else 0.0
     features["is_question"] = 1.0 if looks_like_question(message, normalized) else 0.0
-    # Capped rather than raw: a 4-word and a 40-word message should not be
-    # ten times apart on a feature a linear model weighs alongside 0/1 flags.
+    # Ham değil sınırlandırılmış: 4 kelimelik bir mesaj ile 40 kelimelik bir
+    # mesaj, doğrusal bir modelin 0/1 bayraklarıyla birlikte ağırlıklandırdığı
+    # bir özellikte on kat farklı olmamalıdır.
     features["word_count_norm"] = min(len(words), 10) / 10.0
 
     if signals.previous_intent == "draft":

@@ -1,16 +1,18 @@
-"""Fitted coefficients for the router's calibrated fusion layer.
+"""Yönlendiricinin kalibre edilmiş füzyon katmanı için uydurulmuş (fitted) katsayılar.
 
-GENERATED FILE -- do not hand-edit. Produced by ``scripts/fit_router.py`` from
-``evaluation/datasets/intents.jsonl``. Rerun that script (and commit the
-result) after changing the training-relevant slice of the gold set, the
-feature set in ``app.ai.workflows.router_features``, or ``POLICY_VERSION``.
+ÜRETİLMİŞ DOSYA -- elle düzenlemeyin. ``evaluation/datasets/intents.jsonl``
+kullanılarak ``scripts/fit_router.py`` tarafından üretilmiştir. Altın verinin
+(gold set) eğitimle ilgili dilimini, ``app.ai.workflows.router_features``
+içindeki özellik kümesini veya ``POLICY_VERSION``'ı değiştirdikten sonra bu
+betiği yeniden çalıştırın (ve sonucu commit'leyin).
 
-Fitted 2026-08-14T21:03:59Z against 127 training rows (see
-``scripts/fit_router.py``'s module docstring for which gold-set categories
-are excluded and why). 5-fold cross-validation accuracy at fit time:
-1.0000 -- the number to compare a refit against, not training
-accuracy, which a model this size will always overfit toward on a few
-hundred rows.
+2026-08-14T21:03:59Z tarihinde 127 eğitim satırına karşı uydurulmuştur
+(altın verideki hangi kategorilerin neden hariç tutulduğu için
+``scripts/fit_router.py``'nin modül docstring'ine bakın). Uydurma anındaki
+5 katlı çapraz doğrulama doğruluğu: 1.0000 -- bu, bir yeniden uydurmayı
+karşılaştırmak için bakılacak sayıdır, eğitim doğruluğu değil; bu boyuttaki
+bir model birkaç yüz satırda her zaman aşırı öğrenmeye (overfit) meyilli
+olacaktır.
 """
 
 import logging
@@ -29,22 +31,23 @@ __all__ = ["RouterWeights", "ROUTER_WEIGHTS"]
 
 @dataclass(frozen=True)
 class RouterWeights:
-    """The fusion layer's fitted linear coefficients, one set per intent.
+    """Füzyon katmanının uydurulmuş doğrusal katsayıları, niyet başına bir set.
 
     Attributes:
-        version: The ``POLICY_VERSION`` this fit was produced under. Checked
-            against the running policy below (a warning, not a hard failure --
-            unlike a stale semantic-prototype file, there is no fallback state
-            for the router to degrade to if these coefficients were refused:
-            fusion *is* the decision mechanism now, not an optional layer a
-            missing file can simply skip).
-        feature_names: The exact feature order these coefficients were fit
-            against. Validated against ``router_features.FEATURE_NAMES`` at
-            import time -- a genuine structural mismatch here, unlike a stale
-            version stamp, would make every score silently wrong, so this one
-            *is* fatal.
-        bias: Intent -> per-class bias term.
-        coefficients: Intent -> feature name -> weight.
+        version: Bu uydurmanın üretildiği ``POLICY_VERSION``. Aşağıda çalışan
+            politikaya karşı kontrol edilir (bir uyarıdır, katı bir hata
+            değil -- eskimiş bir anlamsal-prototip dosyasının aksine,
+            bu katsayılar reddedilirse yönlendiricinin geri düşebileceği bir
+            yedek durum yoktur: füzyon artık isteğe bağlı, eksik bir dosyanın
+            basitçe atlanabileceği bir katman değil, karar mekanizmasının
+            kendisidir).
+        feature_names: Bu katsayıların uydurulduğu tam özellik sırası. İçe
+            aktarma (import) anında ``router_features.FEATURE_NAMES``'e karşı
+            doğrulanır -- eskimiş bir sürüm damgasının aksine, buradaki
+            gerçek bir yapısal uyuşmazlık her skoru sessizce yanlış yapardı,
+            bu yüzden bu kontrol gerçekten ölümcüldür (fatal).
+        bias: Niyet -> sınıf başına sapma (bias) terimi.
+        coefficients: Niyet -> özellik adı -> ağırlık.
     """
 
     version: str

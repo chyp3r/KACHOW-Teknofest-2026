@@ -11,28 +11,28 @@ logger = logging.getLogger(__name__)
 
 
 class BaseEmbeddingsClient(ABC):
-    """Abstract base class for all embedding clients."""
+    """Tüm embedding istemcileri için soyut temel sınıf."""
 
     @abstractmethod
     async def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Generate embedding vectors for a list of document texts."""
+        """Bir belge metni listesi için embedding vektörleri üretir."""
         pass
 
     @abstractmethod
     async def embed_query(self, text: str) -> List[float]:
-        """Generate embedding vector for a single query text."""
+        """Tek bir sorgu metni için embedding vektörü üretir."""
         pass
 
 
 class OllamaEmbeddingsClient(BaseEmbeddingsClient):
-    """Ollama implementation for embedding generation."""
+    """Embedding üretimi için Ollama uygulaması."""
 
     def __init__(self, base_url: str, model: str):
-        """Initialize Ollama Embeddings client.
+        """Ollama Embeddings istemcisini başlatır.
 
         Args:
-            base_url: The URL where the Ollama service is running.
-            model: The name of the embedding model (e.g. "nomic-embed-text:latest").
+            base_url: Ollama servisinin çalıştığı URL.
+            model: Embedding modelinin adı (ör. "nomic-embed-text:latest").
         """
         self.base_url = base_url
         self.model_name = model
@@ -42,7 +42,7 @@ class OllamaEmbeddingsClient(BaseEmbeddingsClient):
         )
 
     async def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings for documents asynchronously."""
+        """Belgeler için embedding'leri asenkron olarak üretir."""
         try:
             return await self._embeddings.aembed_documents(texts)
         except Exception as e:
@@ -53,7 +53,7 @@ class OllamaEmbeddingsClient(BaseEmbeddingsClient):
             raise
 
     async def embed_query(self, text: str) -> List[float]:
-        """Generate embedding for query asynchronously."""
+        """Sorgu için embedding'i asenkron olarak üretir."""
         try:
             return await self._embeddings.aembed_query(text)
         except Exception as e:
@@ -65,15 +65,15 @@ class OllamaEmbeddingsClient(BaseEmbeddingsClient):
 
 
 class EvrenEmbeddingsClient(BaseEmbeddingsClient):
-    """Evren (TEKNOFEST hosted inference) implementation for embedding generation."""
+    """Embedding üretimi için Evren (TEKNOFEST barındırmalı çıkarım) uygulaması."""
 
     def __init__(self, base_url: str, api_key: Optional[str], model: str):
-        """Initialize Evren Embeddings client.
+        """Evren Embeddings istemcisini başlatır.
 
         Args:
-            base_url: Evren's OpenAI-compatible API root.
-            api_key: Team bearer token.
-            model: The name of the embedding model (e.g. "bge-m3-embed").
+            base_url: Evren'in OpenAI uyumlu API kök adresi.
+            api_key: Takım bearer token'ı.
+            model: Embedding modelinin adı (ör. "bge-m3-embed").
         """
         self.base_url = base_url
         self.model_name = model
@@ -83,7 +83,7 @@ class EvrenEmbeddingsClient(BaseEmbeddingsClient):
         )
 
     async def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings for documents asynchronously."""
+        """Belgeler için embedding'leri asenkron olarak üretir."""
         try:
             return await self._embeddings.aembed_documents(texts)
         except Exception as e:
@@ -94,7 +94,7 @@ class EvrenEmbeddingsClient(BaseEmbeddingsClient):
             raise
 
     async def embed_query(self, text: str) -> List[float]:
-        """Generate embedding for query asynchronously."""
+        """Sorgu için embedding'i asenkron olarak üretir."""
         try:
             return await self._embeddings.aembed_query(text)
         except Exception as e:
@@ -110,13 +110,13 @@ def get_embeddings_client(
     base_url: Optional[str] = None,
     model: Optional[str] = None,
 ) -> BaseEmbeddingsClient:
-    """Factory function to get the appropriate embeddings client.
+    """Uygun embedding istemcisini döndüren factory fonksiyonu.
 
     Args:
-        provider: Provider type ("ollama" or "evren"). Defaults to
-            ``settings.LOCAL_MODE``'s resolved provider.
-        base_url: Base URL override.
-        model: Model name override.
+        provider: Sağlayıcı tipi ("ollama" veya "evren"). Varsayılan olarak
+            ``settings.LOCAL_MODE``'un çözümlediği sağlayıcı kullanılır.
+        base_url: Base URL geçersiz kılma.
+        model: Model adı geçersiz kılma.
     """
     provider_lower = (
         provider.lower() if provider else ("ollama" if settings.LOCAL_MODE else "evren")

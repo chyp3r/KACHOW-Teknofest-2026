@@ -24,37 +24,40 @@ except ImportError:  # pragma: no cover
 
 PDF_EXTENSIONS = {"pdf"}
 
-#: Matches a leading ATX heading marker ("#" through "######" followed by
-#: whitespace) at the start of a line, and nothing else -- table pipes and a
-#: '#' inside body text are untouched.
+#: Bir satırın başındaki öncü ATX başlık işaretini ("#" ile "######" arası,
+#: ardından boşluk) eşleştirir ve başka hiçbir şeyi -- tablo çubukları ve
+#: gövde metni içindeki bir '#' dokunulmadan bırakılır.
 #:
-#: `output_format="markdown"` injects this syntax onto ordinary header lines
-#: (observed: "##### TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA" and
-#: "### Konu : Soru Önergesi" on real CY-034/ANKARA_BSB documents), which then
-#: leaks verbatim into a parsed field value -- the parser's own anchors
-#: (`(?:^|\n)\s*Konu`) also cannot cross the marker, so a heading-prefixed
-#: line can silently prevent a field from parsing at all. It is this
-#: extractor's own formatting choice, not a property of the document, so it
-#: is stripped here rather than in the parser -- cleaning the text once for
-#: every downstream consumer (parser, classifier prompt, Q&A chunking,
-#: detailed summary, the text-view UI) instead of leaving '#'s visible in
-#: whichever one a person or another model reads first.
+#: `output_format="markdown"`, bu sözdizimini sıradan başlık satırlarına
+#: enjekte eder (gözlemlenen: gerçek CY-034/ANKARA_BSB belgelerinde
+#: "##### TÜRKİYE BÜYÜK MİLLET MECLİSİ BAŞKANLIĞINA" ve "### Konu : Soru
+#: Önergesi"), ve bu daha sonra ayrıştırılmış bir alan değerine olduğu
+#: gibi sızar -- parser'ın kendi çapaları (`(?:^|\n)\s*Konu`) da bu
+#: işareti geçemez, bu yüzden başlık önekli bir satır bir alanın hiç
+#: ayrıştırılmamasına sessizce sebep olabilir. Bu, belgenin bir özelliği
+#: değil, bu extractor'ın kendi biçimlendirme seçimidir, bu yüzden
+#: parser'da değil burada temizlenir -- metni her downstream tüketicisi
+#: (parser, sınıflandırıcı prompt'u, Soru-Cevap parçalama, ayrıntılı özet,
+#: metin görünümü arayüzü) için bir kez temizlemek, bir kişi veya başka
+#: bir modelin ilk okuduğu sürümde '#' işaretlerini görünür bırakmak
+#: yerine tercih edilir.
 _MARKDOWN_HEADING = re.compile(r"^[ \t]{0,3}#{1,6}[ \t]+", re.MULTILINE)
 
 
 @contextlib.contextmanager
 def _temporary_pdf_path(content: bytes) -> Iterator[str]:
-    """Materialise PDF bytes on disk inside a scratch directory.
+    """PDF byte'larını geçici bir dizin içinde diske yazar.
 
-    OpenDataLoader wraps a Java CLI that requires a real file and may write
-    sibling artefacts next to it. Keeping the input and any output inside one
-    `TemporaryDirectory` makes cleanup a single operation with no bookkeeping.
+    OpenDataLoader, gerçek bir dosya gerektiren ve yanına kardeş çıktı
+    dosyaları yazabilen bir Java CLI'ını sarar. Girdiyi ve her türlü
+    çıktıyı tek bir `TemporaryDirectory` içinde tutmak, temizliği hiçbir
+    ek takip gerektirmeyen tek bir işlem haline getirir.
 
     Args:
-        content: The raw PDF bytes.
+        content: Ham PDF byte'ları.
 
     Yields:
-        Absolute path of the materialised PDF file.
+        Yazılan PDF dosyasının mutlak yolu.
     """
     with tempfile.TemporaryDirectory(prefix="odl_") as work_dir:
         pdf_path = os.path.join(work_dir, "input.pdf")
@@ -64,23 +67,24 @@ def _temporary_pdf_path(content: bytes) -> Iterator[str]:
 
 
 class OpenDataLoaderExtractor(BaseDocumentExtractor):
-    """Layout-aware PDF extractor backed by OpenDataLoader PDF (Apache-2.0).
+    """OpenDataLoader PDF (Apache-2.0) tabanlı, yerleşim düzenine duyarlı PDF extractor'ı.
 
-    Preferred extractor for born-digital PDFs because it recovers reading order
-    for multi-column layouts, preserves table structure and emits headings, all
-    of which help locate the header block of an official document. Requires a
-    Java 11+ runtime on PATH; when Java or the package is absent the chain falls
-    through to the pure-Python extractors.
+    Doğuştan dijital PDF'ler için tercih edilen extractor'dır, çünkü çok
+    sütunlu yerleşimler için okuma sırasını geri kazanır, tablo yapısını
+    korur ve başlıkları çıkarır; bunların hepsi resmi bir belgenin başlık
+    bloğunu bulmaya yardımcı olur. PATH üzerinde Java 11+ çalışma zamanı
+    gerektirir; Java veya paket yoksa zincir saf-Python extractor'lara
+    düşer.
     """
 
     name = "opendataloader"
 
     def __init__(self, output_format: str = "markdown") -> None:
-        """Initialise the extractor.
+        """Extractor'ı başlatır.
 
         Args:
-            output_format: OpenDataLoader output format; "markdown" retains
-                headings and tables, "text" yields a flat transcript.
+            output_format: OpenDataLoader çıktı biçimi; "markdown" başlık
+                ve tabloları korur, "text" düz bir transkript üretir.
         """
         self.output_format = output_format
 
@@ -92,20 +96,20 @@ class OpenDataLoaderExtractor(BaseDocumentExtractor):
         mime_type: Optional[str] = None,
         raster_cache: Optional[dict] = None,
     ) -> ExtractedDocument:
-        """Parse a PDF into per-page text using OpenDataLoader.
+        """OpenDataLoader kullanarak bir PDF'i sayfa başına metne ayrıştırır.
 
         Args:
-            content: The raw PDF bytes.
-            file_name: Original file name (unused).
-            mime_type: Declared content type (unused).
-            raster_cache: Unused; this extractor reads the PDF's own text
-                layer and never rasterises anything.
+            content: Ham PDF byte'ları.
+            file_name: Orijinal dosya adı (kullanılmıyor).
+            mime_type: Bildirilen içerik türü (kullanılmıyor).
+            raster_cache: Kullanılmıyor; bu extractor PDF'in kendi metin
+                katmanını okur ve hiçbir şeyi rasterize etmez.
 
         Returns:
-            The extracted text with one entry per page.
+            Sayfa başına bir girdi içeren çıkarılmış metin.
 
         Raises:
-            DocumentExtractionError: If the package is unavailable or parsing fails.
+            DocumentExtractionError: Paket kullanılamıyorsa veya ayrıştırma başarısız olursa.
         """
         if OpenDataLoaderPDFLoader is None:
             raise DocumentExtractionError(
@@ -136,24 +140,25 @@ class OpenDataLoaderExtractor(BaseDocumentExtractor):
         )
 
     def _load_pages(self, content: bytes) -> list[str]:
-        """Run the blocking loader against a temporary file and collect page text.
+        """Bloklayan loader'ı geçici bir dosyaya karşı çalıştırır ve sayfa metnini toplar.
 
         Args:
-            content: The raw PDF bytes.
+            content: Ham PDF byte'ları.
 
         Returns:
-            Page text in document order.
+            Belge sırasına göre sayfa metni.
         """
         with _temporary_pdf_path(content) as pdf_path:
             loader = OpenDataLoaderPDFLoader(
                 file_path=pdf_path,
                 format=self.output_format,
                 split_pages=True,
-                # Line structure in an official document header is semantically
-                # load-bearing: "Sayı" and "Tarih" share a line, "Konu" sits below,
-                # and the signature block is name-then-title. With the default
-                # collapsing, field extraction misses tarih/konu outright and
-                # misassigns the signer to unrelated fields.
+                # Resmi bir belge başlığındaki satır yapısı anlamsal olarak
+                # kritiktir: "Sayı" ve "Tarih" aynı satırı paylaşır, "Konu"
+                # altına yerleşir ve imza bloğu isim-sonra-unvan şeklindedir.
+                # Varsayılan birleştirmede, alan çıkarma tarih/konu'yu
+                # tamamen kaçırır ve imzalayanı ilgisiz alanlara yanlış
+                # atar.
                 keep_line_breaks=True,
                 quiet=True,
             )
@@ -169,13 +174,13 @@ class OpenDataLoaderExtractor(BaseDocumentExtractor):
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
     ) -> bool:
-        """Accept PDFs with a text layer; reject genuine scans outright.
+        """Metin katmanı olan PDF'leri kabul eder; gerçek taramaları doğrudan reddeder.
 
-        A scanned PDF has nothing for this extractor to find -- it always
-        rejects, but not before paying OpenDataLoader's JVM startup cost to
-        find that out. `has_pdf_text_layer` is a cheap, no-JVM probe that
-        catches this ahead of time so a scan skips straight to the OCR
-        extractors instead.
+        Taranmış bir PDF'te bu extractor'ın bulacağı hiçbir şey yoktur --
+        her zaman reddeder, ancak bunu öğrenmeden önce OpenDataLoader'ın
+        JVM başlatma maliyetini ödemeden. `has_pdf_text_layer`, bunu önceden
+        yakalayan, JVM gerektirmeyen ucuz bir sondadır; böylece bir tarama
+        bunun yerine doğrudan OCR extractor'larına geçer.
         """
         is_pdf = (
             has_pdf_magic_bytes(content)

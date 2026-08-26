@@ -1,168 +1,176 @@
-"""Session-scoped state that survives across turns.
+"""Turlar boyunca hayatta kalan, oturum kapsamlı durum.
 
-``PlanningState``'s other fields are turn-scoped -- ``planning_node`` resets
-every ``*_result`` key at the start of each turn (see
-``app.ai.workflows.planning_graph``). ``SessionFocus`` is the deliberate
-exception: a LangGraph channel that is never reset, carrying whatever a task
-needs to survive from one message to the next -- which draft is "the" draft
-right now, what the user is trying to accomplish across a multi-turn
-negotiation, and (once later phases add the flows that consume them) an
-open clarification question and the document location the user last
-referred to.
+``PlanningState``'in diğer alanları tur kapsamlıdır -- ``planning_node`` her
+turun başında her ``*_result`` anahtarını sıfırlar (bkz.
+``app.ai.workflows.planning_graph``). ``SessionFocus`` bilinçli bir
+istisnadır: asla sıfırlanmayan, bir görevin bir mesajdan diğerine hayatta
+kalması gereken her şeyi taşıyan bir LangGraph kanalıdır -- şu an "asıl"
+taslak hangisi, kullanıcı çok turlu bir görüşme boyunca neyi başarmaya
+çalışıyor ve (sonraki fazlar bunları tüketen akışları ekleyince) açık bir
+netleştirme sorusu ile kullanıcının en son bahsettiği belge konumu.
 
-Without this, a system built entirely from turn-scoped state has no concept
-of "what are we working on" -- every message is answered as if it were the
-first, which is exactly why a conversational revision ("3. paragrafı daha
-resmi yap") had nowhere to attach to before this existed.
+Bu olmadan, tamamen tur kapsamlı durumdan inşa edilmiş bir sistemin "şu an
+ne üzerinde çalışıyoruz" diye bir kavramı yoktur -- her mesaj sanki ilkiymiş
+gibi cevaplanır, ki bu tam olarak konuşma içi bir revizyonun ("3. paragrafı
+daha resmi yap") bu var olmadan önce tutunacak hiçbir yerinin olmamasının
+sebebidir.
 """
 
 import dataclasses
 from typing import Any, Literal, Optional
 
-#: draft_result statuses that represent a real, user-visible draft text --
-#: worth recording as a version. FAILED is excluded: it carries no new text.
-#: REVISE_REQUESTED is included -- unintuitively, since it sounds like "no
-#: text yet" -- because the only way it reaches this function as a *turn's
-#: final* status is the human approval gate's revision-round cap being hit
-#: (see planning_graph.route_after_gate/gate_revise_node): by construction,
-#: every "revizyon iste" click that still has rounds left is immediately
-#: superseded by a real gate_revise_node result before the turn can end, so
-#: a REVISE_REQUESTED status reaching here always carries the *last actually
-#: produced* revision's text, just capped from trying one more round -- not
-#: a request with nothing behind it yet.
+#: Gerçek, kullanıcıya görünür bir taslak metni temsil eden -- versiyon olarak
+#: kaydedilmeye değer -- draft_result durumları. FAILED hariç tutulur: yeni
+#: bir metin taşımaz. REVISE_REQUESTED dahildir -- "henüz metin yok" gibi
+#: duyulsa da sezgiye aykırı bir şekilde -- çünkü bunun bu fonksiyona bir
+#: *turun nihai* durumu olarak ulaşmasının tek yolu, insan onay kapısının
+#: revizyon turu üst sınırına ulaşılmasıdır (bkz.
+#: planning_graph.route_after_gate/gate_revise_node): yapısı gereği, hâlâ
+#: turu kalan her "revizyon iste" tıklaması, tur bitmeden önce gerçek bir
+#: gate_revise_node sonucuyla hemen değiştirilir, bu yüzden buraya ulaşan bir
+#: REVISE_REQUESTED durumu her zaman *gerçekten üretilmiş son* revizyonun
+#: metnini taşır, sadece bir tur daha denemekten men edilmiştir -- arkasında
+#: hiçbir şey olmayan bir istek değildir.
 _VERSIONABLE_DRAFT_STATUSES = frozenset(
     {"COMPLETED", "NEEDS_HUMAN_APPROVAL", "NEEDS_INPUT", "APPROVED", "REVISE_REQUESTED"}
 )
 
-#: draft_result statuses that record a verdict on the text without treating
-#: it as a fresh, accepted version (see compute_focus_update's rejection
-#: branch). REJECTED is the only one. A rejection does NOT clear
-#: active_draft to None -- the rejected text stays "the" active draft,
-#: revisable in the next turn, exactly like an approved one. The only way to
-#: truly abandon it is an explicit RESET_SURFACES phrase. This was not
-#: always true: an earlier version of this branch archived the *prior*
-#: turn's version (discarding whatever new text this turn's revision
-#: actually produced) and then cleared active_draft to None, which silently
-#: dropped a user's own accepted edits the moment they rejected the
-#: remaining, unrelated complaint in the same round.
+#: Metni yeni, kabul edilmiş bir versiyon olarak ele almadan üzerine bir
+#: hüküm kaydeden draft_result durumları (bkz. compute_focus_update'in
+#: reddetme dalı). Tek örneği REJECTED'dir. Bir reddetme active_draft'ı
+#: None'a TEMİZLEMEZ -- reddedilen metin, onaylanmış biriyle tamamen aynı
+#: şekilde, bir sonraki turda revize edilebilir "asıl" aktif taslak olarak
+#: kalır. Ondan gerçekten vazgeçmenin tek yolu açık bir RESET_SURFACES
+#: ifadesidir. Bu her zaman böyle değildi: bu dalın daha önceki bir sürümü
+#: *önceki* turun versiyonunu arşivliyor (bu turun revizyonunun gerçekte
+#: ürettiği yeni metni her ne ise atarak) ve ardından active_draft'ı None'a
+#: temizliyordu; bu da kullanıcının aynı turda kalan, alakasız bir şikayeti
+#: reddettiği anda kendi kabul ettiği düzenlemelerini sessizce
+#: kaybettiriyordu.
 _ARCHIVE_ONLY_DRAFT_STATUSES = frozenset({"REJECTED"})
 
-#: Intents whose message is worth folding into the session's objective.
-#: A greeting or a document question isn't part of "what the user wants
-#: built"; a draft/analyze/revise request is.
+#: Mesajı oturumun hedefine katmaya değer intent'ler. Bir selamlama ya da bir
+#: belge sorusu "kullanıcının ne inşa edilmesini istediği"nin parçası değil;
+#: bir draft/analyze/revise isteği ise öyle.
 _OBJECTIVE_INTENTS = frozenset({"draft", "analyze", "revise"})
 
-#: Intents that count as the user actively working on the open draft, as
-#: opposed to merely coexisting with one. Distinct from `_OBJECTIVE_INTENTS`
-#: above: `analyze` folds into the session's stated objective just as much as
-#: `draft`/`revise` do, but inspecting some other document is not evidence
-#: the active draft is still what the user is doing right now.
+#: Kullanıcının açık taslakla yalnızca bir arada var olmak yerine üzerinde
+#: aktif olarak çalıştığı sayılan intent'ler. Yukarıdaki `_OBJECTIVE_INTENTS`'ten
+#: farklıdır: `analyze` de tıpkı `draft`/`revise` gibi oturumun beyan edilmiş
+#: hedefine katılır, ama başka bir belgeyi incelemek, aktif taslağın hâlâ
+#: kullanıcının şu an yaptığı şey olduğuna dair bir kanıt değildir.
 _DRAFT_TOUCHING_INTENTS = frozenset({"draft", "revise"})
 
-#: `objective`'s upper bound. A handful of short turns' worth -- enough for
-#: "taslak hazırla" + "kime" + "Valiliğe'ye" to all still be present, not so
-#: much that a long session's objective grows without bound.
+#: `objective`'in üst sınırı. Birkaç kısa tur kadar -- "taslak hazırla" +
+#: "kime" + "Valiliğe'ye" ifadelerinin hepsinin hâlâ mevcut olması için
+#: yeterli, ama uzun bir oturumun hedefinin sınırsız büyümesine izin
+#: vermeyecek kadar az.
 OBJECTIVE_CHAR_CAP = 500
 
-#: `draft_history`'s upper bound (C24) -- every neighbouring channel on this
-#: same object is already bounded (`history`'s own window, `objective`'s
-#: char cap), but `draft_history` grew without one: a long-running,
-#: many-times-revised session's checkpoint carried every version ever
-#: produced, forever, each with its *own* copy of `source_document` and
-#: `classification` (needed by revise's own grounding, see
-#: `DraftVersion`'s docstring) -- a document-heavy session's checkpoint size
-#: grew roughly with turn count times document size, not just turn count.
-#: The oldest entries are the ones a live session needs least: `active_draft`
-#: (always the newest) is what every reader that matters -- revise's own
-#: brief, the approval gate, a transfer proposal -- actually consults;
-#: anything older is audit trail. `DraftRepository`'s own `drafts` table
-#: already persists the complete, unbounded chain to the database on every
-#: version (see `chat_service._maybe_record_draft`); this cap only trims the
-#: in-memory/checkpointed copy, never the durable record.
+#: `draft_history`'nin üst sınırı (C24) -- bu aynı nesnedeki her komşu kanal
+#: zaten sınırlıydı (`history`'nin kendi penceresi, `objective`'in karakter
+#: sınırı), ama `draft_history`'nin sınırı yoktu: uzun süredir çalışan, çok
+#: kez revize edilmiş bir oturumun checkpoint'i üretilen her versiyonu
+#: sonsuza dek, her biri kendi `source_document` ve `classification`
+#: kopyasıyla (revize'nin kendi temellendirmesi için gerekli, bkz.
+#: `DraftVersion`'ın docstring'i) taşıyordu -- belge ağırlıklı bir oturumun
+#: checkpoint boyutu sadece tur sayısıyla değil, tur sayısı çarpı belge
+#: boyutuyla büyüyordu. En eski girdiler, canlı bir oturumun en az ihtiyaç
+#: duyduğu girdilerdir: `active_draft` (her zaman en yenisi) önemli olan her
+#: okuyucunun -- revize'nin kendi brief'i, onay kapısı, bir devir teklifi --
+#: gerçekten başvurduğu şeydir; daha eskisi denetim izidir. `DraftRepository`'nin
+#: kendi `drafts` tablosu, her versiyonda tam, sınırsız zinciri zaten
+#: veritabanına kalıcı olarak yazar (bkz. `chat_service._maybe_record_draft`);
+#: bu sınır yalnızca bellek içi/checkpoint'lenmiş kopyayı kırpar, kalıcı
+#: kaydı asla.
 DRAFT_HISTORY_CAP = 20
 
-#: Turns an active draft may sit untouched by a draft/revise turn before it
-#: is treated as abandoned. Without this, `active_draft` -- once set --
-#: never clears itself (nothing else in this module writes `None` to it),
-#: so `has_active_draft` stays permanently true for the rest of the thread
-#: and every `REVISE_RULES` surface keeps firing long after the
-#: conversation moved on to something unrelated.
+#: Bir aktif taslağın, terk edilmiş sayılmadan önce bir draft/revise turu
+#: tarafından dokunulmadan kalabileceği tur sayısı. Bu olmasaydı,
+#: `active_draft` -- bir kez ayarlandıktan sonra -- asla kendini temizlemez
+#: (bu modülde başka hiçbir şey ona `None` yazmaz), böylece `has_active_draft`
+#: thread'in geri kalanı boyunca kalıcı olarak true kalır ve her
+#: `REVISE_RULES` yüzeyi, konuşma alakasız bir şeye geçtikten çok sonra bile
+#: tetiklenmeye devam eder.
 ACTIVE_DRAFT_IDLE_LIMIT = 10
 
 
 @dataclasses.dataclass(frozen=True)
 class DraftVersion:
-    """One settled state of the active draft.
+    """Aktif taslağın bir noktada oturmuş (settled) hâli.
 
     Attributes:
-        version: 1-based, increases by one each time a new version replaces
-            the previous one. Never reused.
-        text: The draft text at this version.
-        correspondence_type: The resolved correspondence type it was
-            written under.
-        confidence_score: The verifier's combined score at this version.
-        created_from: How this version came to exist.
-        classification: The document analysis this version was grounded in.
-            Carried forward so a later `revise` turn can rebuild the same
-            grounding brief without re-running classification -- revise
-            never re-classifies (see `app.ai.workflows.revise`).
-        context: The verified legislation excerpts this version was grounded
-            in, for the same reason.
-        source_document: The incoming document text this version responds
-            to, for the same reason -- without it, a revise turn's
-            groundedness check has strictly less material to match claims
-            against than the original draft's did.
-        style_examples: The few-shot style-example texts this version was
-            written with (see ``retrieve_examples_node``), carried forward
-            so a later `revise` turn's verifier can run the same
-            ``ornek_sizintisi`` leak check the original draft got --
-            without this a revision's verify pass had strictly weaker
-            grounding checks than the draft it revised.
-        source_chunks: Verbatim document excerpts this version was written
-            with (see ``retrieve_source_chunks_node``), carried forward for
-            the same reason ``style_examples`` is -- without it, a fact
-            genuinely copied from a retrieved chunk in the original draft
-            could get flagged ``dayanaksiz_iddia`` the moment the draft is
-            revised, since ``revise_graph`` had no way to fold these back
-            into its own ``verify_draft`` call.
-        correspondence_type_source: Whether ``correspondence_type`` was
-            resolved from an explicit signal or guessed (``"fallback"``,
-            see ``resolve_correspondence_type``). Carried forward so a
-            revise turn's approval gate applies the same "a guessed type
-            needs a human" rule ``draft_graph.verify_node`` always has.
-        correspondence_sub_genre: A free-text genre label ("itiraz
-            dilekçesi") when this version targets a specific genre outside
-            the four spec'd CorrespondenceType values -- empty for a core
-            type. Carried forward so a later `revise` turn keeps writing in
-            the same genre instead of drifting back to generic
-            "diğer resmî yazışma" phrasing (see ``resolve_correspondence_type``).
-        status: The ``draft_result`` status this version was recorded
-            under (e.g. ``"COMPLETED"``, ``"NEEDS_HUMAN_APPROVAL"``,
-            ``"REJECTED"``). Informational -- nothing here re-derives
-            behaviour from it, it is for a caller (a history view, a log)
-            that wants to show what happened without re-deriving it from
-            ``created_from``/``rejection_reason``.
-        rejection_reason: Why this version was rejected, when
-            ``created_from == "rejected"``. Empty otherwise.
-        conflicts: This version's own instruction-vs-mevzuat/source
-            conflict findings, when it was produced by a revision (see
-            ``app.ai.revision.conflict``). Empty for a fresh draft.
-        changelog: This version's own change log against the version it
-            replaced, when it was produced by a revision (see
-            ``app.ai.revision.changelog``). Empty for a fresh draft.
-        supersedes: The ``version`` number of the ``DraftVersion`` this one
-            was written to replace, or ``0`` when there was none (the first
-            draft of a session, or an unrelated fresh draft request that
-            happened to arrive while some other draft was still active).
-            Set only when this version was actually produced by revising
-            ``focus.active_draft`` (``created_from`` is ``"revise"`` or
-            ``"gate_revise"``) -- never inferred from "a draft happened to
-            exist", which would mislabel an unrelated draft as continuing
-            one it has nothing to do with. This is what lets a later
-            consumer (see the feedback/training pipeline) walk a real
-            edit chain -- including a rejected version followed by the
-            revision that actually fixed it -- without guessing from text
-            similarity.
+        version: 1'den başlar, yeni bir versiyon öncekinin yerini her
+            aldığında birer birer artar. Asla tekrar kullanılmaz.
+        text: Bu versiyondaki taslak metni.
+        correspondence_type: Yazının altında yazıldığı, çözümlenmiş yazışma
+            türü.
+        confidence_score: Bu versiyondaki doğrulayıcının bileşik skoru.
+        created_from: Bu versiyonun nasıl ortaya çıktığı.
+        classification: Bu versiyonun temellendirildiği belge analizi.
+            Sonraki bir `revise` turunun sınıflandırmayı yeniden çalıştırmadan
+            aynı temellendirme brief'ini yeniden kurabilmesi için taşınır --
+            revise asla yeniden sınıflandırma yapmaz (bkz.
+            `app.ai.workflows.revise`).
+        context: Bu versiyonun temellendirildiği, doğrulanmış mevzuat
+            alıntıları; aynı sebeple.
+        source_document: Bu versiyonun cevap verdiği gelen belge metni; aynı
+            sebeple -- bu olmadan, bir revize turunun temellendirme
+            kontrolünün, orijinal taslağınkine kıyasla iddiaları
+            eşleştirecek kesinlikle daha az malzemesi olur.
+        style_examples: Bu versiyonun yazıldığı few-shot üslup örneği
+            metinleri (bkz. ``retrieve_examples_node``); sonraki bir
+            `revise` turunun doğrulayıcısının, orijinal taslağın geçtiği
+            aynı ``ornek_sizintisi`` sızıntı kontrolünü çalıştırabilmesi
+            için taşınır -- bu olmadan bir revizyonun doğrulama geçişi,
+            revize ettiği taslağa kıyasla kesinlikle daha zayıf
+            temellendirme kontrollerine sahip olurdu.
+        source_chunks: Bu versiyonun yazıldığı, kelimesi kelimesine belge
+            alıntıları (bkz. ``retrieve_source_chunks_node``);
+            ``style_examples`` ile aynı sebeple taşınır -- bu olmadan,
+            orijinal taslakta gerçekten getirilen bir parçadan kopyalanmış
+            bir gerçek, taslak revize edildiği anda ``dayanaksiz_iddia``
+            olarak işaretlenebilirdi, çünkü ``revise_graph``'ın bunları
+            kendi ``verify_draft`` çağrısına geri katmanın bir yolu yoktu.
+        correspondence_type_source: ``correspondence_type``'ın açık bir
+            sinyalden mi çözümlendiği yoksa tahmin mi edildiği
+            (``"fallback"``, bkz. ``resolve_correspondence_type``).
+            Sonraki bir revize turunun onay kapısının, ``draft_graph.
+            verify_node``'un her zaman uyguladığı "tahmin edilmiş bir tür
+            insan gerektirir" kuralını uygulayabilmesi için taşınır.
+        correspondence_sub_genre: Bu versiyon, dört tanımlı CorrespondenceType
+            değerinin dışında belirli bir türü ("itiraz dilekçesi") hedefliyorsa
+            serbest metin bir tür etiketi -- temel bir tür için boş. Sonraki bir
+            `revise` turunun genel "diğer resmî yazışma" ifadesine geri
+            kaymak yerine aynı türde yazmaya devam etmesi için taşınır (bkz.
+            ``resolve_correspondence_type``).
+        status: Bu versiyonun altında kaydedildiği ``draft_result`` durumu
+            (ör. ``"COMPLETED"``, ``"NEEDS_HUMAN_APPROVAL"``,
+            ``"REJECTED"``). Bilgilendirme amaçlıdır -- burada hiçbir şey
+            ondan davranış türetmez; ``created_from``/``rejection_reason``'dan
+            yeniden türetmeden ne olduğunu göstermek isteyen bir çağıran
+            (bir geçmiş görünümü, bir log) içindir.
+        rejection_reason: ``created_from == "rejected"`` olduğunda bu
+            versiyonun neden reddedildiği. Aksi halde boş.
+        conflicts: Bir revizyon tarafından üretildiğinde bu versiyonun
+            kendi talimat-vs-mevzuat/kaynak çatışma bulguları (bkz.
+            ``app.ai.revision.conflict``). Taze bir taslak için boş.
+        changelog: Bir revizyon tarafından üretildiğinde bu versiyonun
+            yerini aldığı versiyona karşı kendi değişiklik günlüğü (bkz.
+            ``app.ai.revision.changelog``). Taze bir taslak için boş.
+        supersedes: Bu versiyonun yerini almak üzere yazıldığı
+            ``DraftVersion``'ın ``version`` numarası, ya da böyle biri
+            yoksa (oturumun ilk taslağı, ya da başka bir taslak hâlâ
+            aktifken gelen alakasız bir taze taslak isteği) ``0``. Yalnızca
+            bu versiyon gerçekten ``focus.active_draft``'ı revize ederek
+            üretildiyse (``created_from`` ``"revise"`` ya da
+            ``"gate_revise"``) ayarlanır -- asla "zaten bir taslak vardı"
+            varsayımından çıkarılmaz, bu da alakasız bir taslağı hiç ilgisi
+            olmayan birinin devamı olarak yanlış etiketlerdi. Bu, sonraki
+            bir tüketicinin (bkz. geri bildirim/eğitim hattı) metin
+            benzerliğinden tahmin etmeden -- reddedilen bir versiyonun
+            ardından onu gerçekten düzelten revizyon dahil -- gerçek bir
+            düzenleme zincirini takip edebilmesini sağlayan şeydir.
     """
 
     version: int
@@ -178,13 +186,13 @@ class DraftVersion:
     source_chunks: tuple[str, ...] = ()
     correspondence_type_source: str = ""
     correspondence_sub_genre: str = ""
-    #: The pre-draft writing brief this version was written under (see
-    #: app.ai.workflows.writing_brief) -- who's writing, who it's going to,
-    #: anlatım/kapanış. Carried forward for the same reason
-    #: classification/context/source_document are: a later `revise` turn
-    #: rebuilds the same grounding brief without re-resolving it, and must
-    #: not drift back to an unstated direction the way the original
-    #: "KACMAK ekibi olarak" bug did.
+    #: Bu versiyonun altında yazıldığı, taslak öncesi yazım brief'i (bkz.
+    #: app.ai.workflows.writing_brief) -- kim yazıyor, kime gidiyor,
+    #: anlatım/kapanış. classification/context/source_document ile aynı
+    #: sebeple taşınır: sonraki bir `revise` turu, yeniden çözümlemeden aynı
+    #: temellendirme brief'ini yeniden kurar ve orijinal "KACMAK ekibi
+    #: olarak" hatasının yaptığı gibi belirtilmemiş bir yöne geri
+    #: kaymamalıdır.
     writing_brief: dict[str, Any] = dataclasses.field(default_factory=dict)
     status: str = ""
     rejection_reason: str = ""
@@ -194,89 +202,97 @@ class DraftVersion:
 
 @dataclasses.dataclass(frozen=True)
 class SessionFocus:
-    """Task-level state that persists across turns on the same thread.
+    """Aynı thread üzerinde turlar boyunca kalıcı olan görev düzeyi durum.
 
     Attributes:
-        active_document_id: Storage path of the document the session is
-            currently working with.
-        active_draft: The draft version currently open for revision or
-            approval, or ``None`` while there is no in-progress draft. Stays
-            set (with ``status == "REJECTED"``) after a rejection -- a
-            reject is a verdict on the text, not an instruction to forget
-            it, so the next turn's "üslubunu düzelt" still has something to
-            attach to. Only an explicit ``RESET_SURFACES`` phrase or
-            ``ACTIVE_DRAFT_IDLE_LIMIT`` idle turns clears it to ``None``.
-        draft_history: The most recent settled versions, oldest first,
-            capped at ``DRAFT_HISTORY_CAP`` (``active_draft`` is always
-            ``draft_history[-1]`` when set) -- the complete, uncapped chain
-            is what the ``drafts`` database table is for (see
-            ``app.domains.drafts.repository.DraftRepository``); this is a
-            working set for the live session, not the durable record.
-        objective: A short, accumulated statement of what the user is
-            trying to accomplish across a multi-turn negotiation. Bounded
-            (see ``OBJECTIVE_CHAR_CAP``) rather than an unbounded log.
-        pending_clarification: Set when the system asked a clarifying
-            question and is waiting on the answer. Reserved for the
-            ``clarify`` flow; unused until it exists.
-        last_referenced_anchor: The document location a deictic reference
-            ("bu madde", "burası") should resolve to. Reserved for document
-            addressing; unused until it exists.
-        last_intent: The most recently resolved intent. ``PlanningState``'s
-            own ``plan_intent`` channel already carries this turn-to-turn
-            (nothing resets it), but it lives among fields that mean
-            "this turn's result" -- this is the same value read from the
-            place that means "the session's state", for a future consumer
-            that shouldn't have to know the distinction.
-        active_draft_idle_turns: Turns since ``active_draft`` was last
-            produced or worked on (see ``_DRAFT_TOUCHING_INTENTS``). Reset to
-            0 whenever the user is actively drafting or revising; once it
-            reaches ``ACTIVE_DRAFT_IDLE_LIMIT``, ``active_draft`` clears
-            itself. Meaningless while ``active_draft`` is ``None``.
-        last_rejection: The most recently rejected version's own summary
-            (``{"version", "reason", "draft"}``), set whenever a
-            ``REJECTED`` draft_result archives the active draft (see
-            ``compute_focus_update``). Lets a reply or a later turn
-            reference "the draft you just rejected" without walking
-            ``draft_history`` to find it.
-        writing_brief: Answers from the pre-draft writing-brief gate (see
-            ``app.ai.workflows.writing_brief``), carried across turns so a
-            second draft/revise turn in the same session doesn't re-ask who
-            is writing to whom. Cleared whenever ``active_draft`` is reset
-            (see ``compute_focus_update``'s ``reset_requested`` branch) --
-            otherwise "yeni bir taslak yazalım" would silently inherit the
-            previous letter's addressee.
-        active_draft_id: The persisted ``drafts.id`` of ``active_draft``,
-            when the graph turn that produced it was also recorded to the
-            database (see ``app.domains.chat.chat_service.ChatService.
-            _maybe_record_draft``, the only writer). ``active_draft`` itself
-            never carries a database id -- ``DraftVersion`` is a pure
-            in-memory snapshot the graph builds before any DB write happens
-            (see its own docstring) -- so this is the one place the
-            ``propose_transfer`` tool (``app.ai.tools.transfer_tools``) can
-            find a real, transferable id without re-deriving it. A
-            convenience hint only, per the plan's
-            §C2: never the sole source a resolution ladder trusts, since it
-            can go stale (an idle-cleared ``active_draft``, a
-            ``record_draft`` call that failed) in ways
-            ``DraftRepository.get_latest_for_session`` cannot -- that lookup
-            is what actually backs "which draft" resolution; this field only
-            helps a *deictic* reference ("bu taslağı gönder") skip straight
-            to the same answer instead of re-deriving it. Deliberately never
-            cleared by ``compute_focus_update`` the way ``active_draft`` is
-            (idle limit, explicit reset) -- a stale id here is harmless,
-            since every reader treats it as one candidate to verify, not a
-            trusted pointer.
+        active_document_id: Oturumun şu anda üzerinde çalıştığı belgenin
+            depolama yolu.
+        active_draft: Şu anda revizyon veya onay için açık olan taslak
+            versiyonu, ya da sürmekte olan bir taslak yoksa ``None``. Bir
+            reddetmeden sonra bile ayarlı kalır (``status == "REJECTED"``
+            ile) -- bir reddetme metin üzerine bir hükümdür, onu unutma
+            talimatı değildir, bu yüzden sonraki turun "üslubunu düzelt"
+            ifadesinin hâlâ tutunacak bir şeyi olur. Yalnızca açık bir
+            ``RESET_SURFACES`` ifadesi ya da ``ACTIVE_DRAFT_IDLE_LIMIT``
+            kadar boşta kalan tur, onu ``None``'a temizler.
+        draft_history: En son oturmuş versiyonlar, en eskiden başlayarak,
+            ``DRAFT_HISTORY_CAP``'e sınırlı (ayarlıyken ``active_draft``
+            her zaman ``draft_history[-1]``'dir) -- tam, sınırsız zincir
+            ``drafts`` veritabanı tablosunun işidir (bkz.
+            ``app.domains.drafts.repository.DraftRepository``); bu, canlı
+            oturum için bir çalışma kümesidir, kalıcı kayıt değil.
+        objective: Kullanıcının çok turlu bir görüşme boyunca neyi
+            başarmaya çalıştığına dair kısa, birikimli bir ifade.
+            Sınırsız bir günlük yerine sınırlıdır (bkz.
+            ``OBJECTIVE_CHAR_CAP``).
+        pending_clarification: Sistem netleştirici bir soru sorduğunda ve
+            cevabı beklerken ayarlanır. ``clarify`` akışı için ayrılmıştır;
+            o var olana kadar kullanılmaz.
+        last_referenced_anchor: Bir işaret zamiri referansının ("bu madde",
+            "burası") çözümlenmesi gereken belge konumu. Belge adresleme
+            için ayrılmıştır; o var olana kadar kullanılmaz.
+        last_intent: En son çözümlenen intent. ``PlanningState``'in kendi
+            ``plan_intent`` kanalı bunu zaten turdan tura taşır (hiçbir şey
+            onu sıfırlamaz), ama o "bu turun sonucu" anlamına gelen alanlar
+            arasında yaşar -- bu, "oturumun durumu" anlamına gelen yerden
+            okunan aynı değerdir; bu ayrımı bilmesi gerekmeyen gelecekteki
+            bir tüketici içindir.
+        active_draft_idle_turns: ``active_draft``'ın en son üretildiği ya da
+            üzerinde çalışıldığı andan bu yana geçen tur sayısı (bkz.
+            ``_DRAFT_TOUCHING_INTENTS``). Kullanıcı aktif olarak taslak
+            hazırlarken ya da revize ederken 0'a sıfırlanır;
+            ``ACTIVE_DRAFT_IDLE_LIMIT``'e ulaştığında ``active_draft``
+            kendini temizler. ``active_draft`` ``None`` iken anlamsızdır.
+        last_rejection: Bir ``REJECTED`` draft_result aktif taslağı
+            arşivlediğinde ayarlanan, en son reddedilen versiyonun kendi
+            özeti (``{"version", "reason", "draft"}``) (bkz.
+            ``compute_focus_update``). Bir cevabın ya da sonraki bir turun,
+            onu bulmak için ``draft_history``'de dolaşmadan "az önce
+            reddettiğin taslağa" atıfta bulunmasını sağlar.
+        writing_brief: Taslak öncesi yazım-brief'i kapısından gelen
+            cevaplar (bkz. ``app.ai.workflows.writing_brief``); aynı
+            oturumdaki ikinci bir draft/revise turunun kime yazıldığını
+            tekrar sormaması için turlar boyunca taşınır. ``active_draft``
+            sıfırlandığında temizlenir (bkz. ``compute_focus_update``'in
+            ``reset_requested`` dalı) -- aksi halde "yeni bir taslak
+            yazalım" sessizce önceki mektubun alıcısını devralırdı.
+        active_draft_id: ``active_draft``'ı üreten graph turu aynı zamanda
+            veritabanına da kaydedildiyse, onun kalıcı ``drafts.id``'si
+            (bkz. ``app.domains.chat.chat_service.ChatService.
+            _maybe_record_draft``, tek yazıcı). ``active_draft``'ın
+            kendisi asla bir veritabanı id'si taşımaz -- ``DraftVersion``,
+            herhangi bir DB yazımı gerçekleşmeden önce graph'ın inşa
+            ettiği saf, bellek içi bir anlık görüntüdür (bkz. kendi
+            docstring'i) -- bu yüzden burası, ``propose_transfer``
+            aracının (``app.ai.tools.transfer_tools``) yeniden türetmeden
+            gerçek, aktarılabilir bir id bulabileceği tek yerdir. Yalnızca
+            bir kolaylık ipucudur, plandaki §C2'ye göre: bir çözümleme
+            merdiveninin güvendiği tek kaynak asla değildir, çünkü
+            ``DraftRepository.get_latest_for_session``'ın
+            bayatlayamayacağı şekillerde (boşta kalınca temizlenmiş bir
+            ``active_draft``, başarısız olmuş bir ``record_draft``
+            çağrısı) bayatlayabilir -- "hangi taslak" çözümlemesini
+            gerçekten destekleyen o sorgudur; bu alan yalnızca *işaret
+            zamiri* bir referansın ("bu taslağı gönder") yeniden
+            türetmeden doğrudan aynı cevaba atlamasına yardımcı olur.
+            ``active_draft``'ın temizlendiği şekilde (boşta kalma sınırı,
+            açık sıfırlama) ``compute_focus_update`` tarafından bilinçli
+            olarak asla temizlenmez -- buradaki bayat bir id zararsızdır,
+            çünkü her okuyucu onu güvenilir bir işaretçi değil, doğrulanacak
+            bir aday olarak ele alır.
     """
 
     active_document_id: Optional[str] = None
     active_draft: Optional[DraftVersion] = None
     draft_history: tuple[DraftVersion, ...] = ()
-    #: The next version number to assign, independent of `len(draft_history)`
-    #: (C24): once `draft_history` is capped (see `DRAFT_HISTORY_CAP`), its
-    #: length stops being "how many versions this session has ever had" --
-    #: deriving the next version from it would start reissuing numbers
-    #: already used by trimmed-away entries. Monotonically increasing,
-    #: never trimmed itself (a bare int costs nothing to keep forever).
+    #: Atanacak bir sonraki versiyon numarası, `len(draft_history)`'den
+    #: bağımsız (C24): `draft_history` sınırlandıktan sonra (bkz.
+    #: `DRAFT_HISTORY_CAP`), uzunluğu artık "bu oturumun şimdiye kadar
+    #: kaç versiyonu oldu" anlamına gelmez -- bir sonraki versiyonu
+    #: bundan türetmek, kırpılıp atılmış girdilerin zaten kullandığı
+    #: numaraları yeniden vermeye başlardı. Monotonik olarak artar,
+    #: kendisi asla kırpılmaz (çıplak bir int'i sonsuza dek tutmanın
+    #: hiçbir maliyeti yoktur).
     draft_version_counter: int = 0
     objective: str = ""
     pending_clarification: Optional[dict[str, Any]] = None
@@ -289,16 +305,16 @@ class SessionFocus:
 
 
 def _accumulate_objective(existing: str, addition: str) -> str:
-    """Append a new fragment to ``existing``, dropping the oldest overflow.
+    """``existing``'e yeni bir parça ekler, en eski taşan kısmı düşürür.
 
     Args:
-        existing: The session's current objective text.
-        addition: The new turn's contribution.
+        existing: Oturumun mevcut hedef metni.
+        addition: Yeni turun katkısı.
 
     Returns:
-        The combined objective, capped to ``OBJECTIVE_CHAR_CAP`` characters
-        by dropping from the front -- the newest fragment is always kept
-        whole rather than being the one cut off mid-sentence.
+        Baştan düşürülerek ``OBJECTIVE_CHAR_CAP`` karaktere sınırlanmış
+        birleşik hedef -- en yeni parça, cümle ortasından kesilen kısım
+        olmak yerine her zaman bütün olarak korunur.
     """
     addition = addition.strip()
     if not addition:
@@ -312,13 +328,13 @@ def _accumulate_objective(existing: str, addition: str) -> str:
 def _revision_origin(
     plan_intent: Optional[str], draft_result: dict[str, Any]
 ) -> Literal["draft", "revise", "gate_revise"]:
-    """How this turn's settled draft text came to exist.
+    """Bu turun oturmuş taslak metninin nasıl ortaya çıktığı.
 
-    Shared by the ordinary versioning branch and the rejection branch of
-    ``compute_focus_update`` -- both need the same distinction (a fresh,
-    unrelated draft vs. an actual revision of what was already active) for
-    the same reason: ``created_from``/``supersedes`` must reflect what
-    really happened, not "a draft happened to already exist".
+    ``compute_focus_update``'in olağan versiyonlama dalı ve reddetme dalı
+    tarafından paylaşılır -- ikisi de aynı sebeple aynı ayrıma (taze,
+    alakasız bir taslak mı yoksa zaten aktif olanın gerçek bir revizyonu
+    mu) ihtiyaç duyar: ``created_from``/``supersedes``, "zaten bir taslak
+    vardı" değil, gerçekte ne olduğunu yansıtmalıdır.
     """
     if draft_result.get("instruction_origin") == "human_gate":
         return "gate_revise"
@@ -330,11 +346,11 @@ def _revision_origin(
 def _append_history(
     history: tuple[DraftVersion, ...], entry: DraftVersion
 ) -> tuple[DraftVersion, ...]:
-    """Append one version, capped to `DRAFT_HISTORY_CAP` (C24).
+    """`DRAFT_HISTORY_CAP`'e sınırlı bir versiyon ekler (C24).
 
-    Trims from the *front* -- the oldest entries are what a live session
-    needs least (see `DRAFT_HISTORY_CAP`'s own docstring); the newest
-    (`entry` itself, which becomes `active_draft`) is always kept.
+    *Baştan* kırpar -- en eski girdiler canlı bir oturumun en az ihtiyaç
+    duyduğu şeylerdir (bkz. `DRAFT_HISTORY_CAP`'in kendi docstring'i); en
+    yenisi (`active_draft` olan `entry`'nin kendisi) her zaman korunur.
     """
     return (*history, entry)[-DRAFT_HISTORY_CAP:]
 
@@ -343,12 +359,12 @@ def _supersedes_of(
     created_from: Literal["draft", "revise", "gate_revise"],
     active_draft: Optional["DraftVersion"],
 ) -> int:
-    """The version number a revision replaces, or 0 when there isn't one.
+    """Bir revizyonun yerini aldığı versiyon numarası, ya da yoksa 0.
 
-    Only set for an actual revision of ``active_draft`` (see
-    ``DraftVersion.supersedes``) -- a fresh, unrelated draft request that
-    happens to arrive while some other draft is still open must not claim
-    to supersede it.
+    Yalnızca ``active_draft``'ın gerçek bir revizyonu için ayarlanır (bkz.
+    ``DraftVersion.supersedes``) -- başka bir taslak hâlâ açıkken gelen
+    taze, alakasız bir taslak isteği, onun yerini aldığını iddia
+    etmemelidir.
     """
     if created_from in ("revise", "gate_revise") and active_draft is not None:
         return active_draft.version
@@ -363,12 +379,12 @@ def _draft_version_from_result(
     rejection_reason: str = "",
     supersedes: int = 0,
 ) -> DraftVersion:
-    """Build a ``DraftVersion`` straight from a settled ``draft_result``.
+    """Oturmuş bir ``draft_result``'tan doğrudan bir ``DraftVersion`` inşa eder.
 
-    Shared by the ordinary versioning branch and the rejection branch of
-    ``compute_focus_update`` -- both start from the same raw material, they
-    only differ in ``created_from``, ``supersedes`` and (for a rejection)
-    the reason.
+    ``compute_focus_update``'in olağan versiyonlama dalı ve reddetme dalı
+    tarafından paylaşılır -- ikisi de aynı ham malzemeden başlar, yalnızca
+    ``created_from``, ``supersedes`` ve (bir reddetme için) sebep
+    bakımından farklılık gösterirler.
     """
     return DraftVersion(
         version=version,

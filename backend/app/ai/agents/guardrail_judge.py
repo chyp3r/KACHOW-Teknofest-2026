@@ -2,18 +2,18 @@ from app.ai.agents.template_agent import TemplateAgent
 
 
 class GuardrailJudgeAgent(TemplateAgent):
-    """Judges meaning-level sensitivity/leakage the deterministic patterns can't see.
+    """Deterministik desenlerin göremediği anlam düzeyindeki hassasiyeti/sızıntıyı değerlendirir.
 
-    Runs on the fast tier, same shape as ``JudgeAgent``: it emits a small
-    structured verdict, never the judged content itself, so its cost is a
-    label-sized generation. Used for two tasks (input document sensitivity,
-    output reply leakage) selected by the calling prompt -- see
-    ``app.ai.guardrails.llm_nuance``.
+    Hızlı katmanda, ``JudgeAgent`` ile aynı biçimde çalışır: küçük,
+    yapılandırılmış bir karar üretir, asla değerlendirilen içeriğin kendisini
+    değil; bu yüzden maliyeti etiket boyutunda bir üretimdir. Çağıran prompt
+    tarafından seçilen iki görev için kullanılır (girdi belgesi hassasiyeti,
+    çıktı yanıtı sızıntısı) -- bkz. ``app.ai.guardrails.llm_nuance``.
     """
 
     TEMPLATE_NAME = "guardrail_judge"
     AGENT_NAME = "GuardrailJudgeAgent"
     DESCRIPTION = (
-        "Judges whether a document or reply is sensitive/leaky in meaning "
-        "rather than pattern -- the nuance a regex cannot see."
+        "Bir belgenin veya yanıtın desen değil anlam düzeyinde hassas/sızdırıcı "
+        "olup olmadığını değerlendirir -- regex'in göremeyeceği inceliği yakalar."
     )

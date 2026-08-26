@@ -10,204 +10,221 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     SECRET_KEY: str = "supersecretkeychangeinproduction"
 
-    #: IANA zone used to resolve "today" for a generated draft's own
-    #: Tarih field (see app.ai.workflows.dates.today_tr) -- the user is
-    #: never asked for this date, so the server's own clock, resolved in
-    #: this zone, is the single source of truth for it.
+    #: Üretilen bir taslağın kendi Tarih alanı için "bugün"ü çözmekte
+    #: kullanılan IANA bölgesi (bkz. app.ai.workflows.dates.today_tr) --
+    #: kullanıcıdan bu tarih asla istenmez, bu yüzden bu bölgede çözülen
+    #: sunucunun kendi saati, bunun için tek gerçek kaynaktır.
     APP_TIMEZONE: str = "Europe/Istanbul"
 
-    # Database Configuration
-    #: The app's own runtime connection. From Faz 3 (Postgres RLS) onward
-    #: this is expected to be a restricted, non-owner role (``kachow_app`` --
-    #: see migration ``0013_rls``): row-level security is only a real
-    #: defense when the connection making the request cannot bypass it by
-    #: virtue of owning the tables, which a superuser/owner connection
-    #: always can regardless of any `ENABLE ROW LEVEL SECURITY` statement.
+    # Veritabanı Yapılandırması
+    #: Uygulamanın kendi çalışma zamanı bağlantısı. Faz 3'ten (Postgres RLS)
+    #: itibaren bunun kısıtlı, owner olmayan bir rol (``kachow_app`` -- bkz.
+    #: migration ``0013_rls``) olması beklenir: satır düzeyi güvenlik,
+    #: yalnızca isteği yapan bağlantı tabloların sahibi olma erdemiyle onu
+    #: atlayamadığında gerçek bir savunmadır; bir superuser/owner bağlantısı
+    #: herhangi bir `ENABLE ROW LEVEL SECURITY` ifadesinden bağımsız olarak
+    #: bunu her zaman yapabilir.
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
-    #: The schema-owner connection: Alembic migrations (DDL), and the
-    #: narrow set of pre-tenant identity lookups (login, token refresh,
-    #: invite-gated registration) that must search `users`/`invited_emails`
-    #: by a globally-unique `username`/`email` *before* any company context
-    #: exists to scope a row-level-security policy by -- see
-    #: `app.infrastructure.database.session.get_owner_db`. Empty by default,
-    #: which makes `effective_alembic_database_url` fall back to
-    #: `DATABASE_URL` -- so a deployment that hasn't adopted the Faz 3 role
-    #: split yet (both settings pointing at the same owner connection) keeps
-    #: working exactly as before.
+    #: Şema sahibi bağlantısı: Alembic migration'ları (DDL), ve bir satır
+    #: düzeyi güvenlik politikasının kapsayacağı herhangi bir şirket bağlamı
+    #: var olmadan *önce* `users`/`invited_emails`'i küresel olarak
+    #: benzersiz bir `username`/`email` ile aramak zorunda olan dar
+    #: tenant-öncesi kimlik arama seti (giriş, token yenileme, davet ile
+    #: kapılı kayıt) -- bkz.
+    #: `app.infrastructure.database.session.get_owner_db`. Varsayılan
+    #: olarak boş, bu da `effective_alembic_database_url`'in
+    #: `DATABASE_URL`'e düşmesini sağlar -- böylece Faz 3 rol ayrımını
+    #: henüz benimsememiş bir dağıtım (her iki ayar da aynı owner
+    #: bağlantısını gösterir) tam olarak önceki gibi çalışmaya devam eder.
     ALEMBIC_DATABASE_URL: str = ""
-    #: Password for the restricted `kachow_app` Postgres role migration
-    #: `0013_rls` creates. Dev-only default, matching this repo's existing
-    #: `POSTGRES_PASSWORD=postgres` convention (see `compose.yml`) -- never
-    #: meant to be this value in a real deployment.
+    #: Migration `0013_rls`'in oluşturduğu kısıtlı `kachow_app` Postgres
+    #: rolü için parola. Bu deponun mevcut `POSTGRES_PASSWORD=postgres`
+    #: kuralıyla eşleşen yalnızca geliştirme varsayılanı (bkz. `compose.yml`)
+    #: -- gerçek bir dağıtımda asla bu değer olması amaçlanmamıştır.
     KACHOW_APP_DB_PASSWORD: str = "kachow_app_dev_only"
 
-    #: LangGraph's AsyncPostgresSaver, backing HITL (missing-info requests) on
-    #: the planning graph. Best-effort at startup: when False or when
-    #: Postgres is unreachable, graphs compile without a checkpointer and
-    #: everything except HITL keeps working.
+    #: LangGraph'ın AsyncPostgresSaver'ı, planlama grafiğinde HITL'i (eksik
+    #: bilgi istekleri) destekler. Başlangıçta en iyi çaba: False
+    #: olduğunda veya Postgres ulaşılamaz olduğunda, grafikler bir
+    #: checkpointer olmadan derlenir ve HITL dışında her şey çalışmaya
+    #: devam eder.
     CHECKPOINTER_ENABLED: bool = True
 
-    #: Gate the pre-draft writing-brief interrupt (who's writing, who it's
-    #: going to, closing formula -- see app.ai.workflows.writing_brief)
-    #: separately from the post-draft approval gate above. Smart-skip means
-    #: this only ever pauses a turn when a slot is genuinely unresolved, but
-    #: a demo that wants zero pauses can still disable it outright.
+    #: Taslak öncesi yazma özeti kesintisini (kim yazıyor, kime gidiyor,
+    #: kapanış formülü -- bkz. app.ai.workflows.writing_brief) yukarıdaki
+    #: taslak sonrası onay kapısından ayrı olarak kapılar. Akıllı-atlama,
+    #: bunun yalnızca bir slot gerçekten çözülmemişken bir turu duraklattığı
+    #: anlamına gelir, ama sıfır duraklama isteyen bir demo bunu tamamen
+    #: devre dışı bırakabilir.
     HITL_BRIEF_GATE_ENABLED: bool = True
 
-    #: How many times the missing-information gate's own "revizyon iste"
-    #: escape hatch (see planning_graph.human_gate_node's "missing_information"
-    #: branch) may send the draft back through the revise sub-graph within
-    #: the same run before the gate stops offering it (see
-    #: planning_graph.gate_revise_node/route_after_gate). Bounds worst-case
-    #: latency per turn -- without a cap, a human clicking "revizyon iste"
-    #: repeatedly on a stubborn draft pays for an unbounded number of LLM
-    #: calls in one request.
+    #: Eksik bilgi kapısının kendi "revizyon iste" kaçış kapağının (bkz.
+    #: planning_graph.human_gate_node'un "missing_information" dalı)
+    #: kapının bunu sunmayı bırakmadan önce, aynı çalıştırma içinde
+    #: taslağı revize alt grafiğinden kaç kez geri gönderebileceği (bkz.
+    #: planning_graph.gate_revise_node/route_after_gate). Tur başına en
+    #: kötü durum gecikmesini sınırlar -- bir üst sınır olmadan, inatçı bir
+    #: taslakta tekrar tekrar "revizyon iste"ye tıklayan bir insan, tek bir
+    #: istekte sınırsız sayıda LLM çağrısına mal olur.
     HITL_MAX_GATE_REVISIONS: int = 2
 
-    #: Gate the assist step's `propose_transfer` tool (Faz 4, #201): "son
-    #: taslağı Ahmet'e gönder" resolved and executed through the AI channel,
-    #: behind a mandatory `transfer_gate` confirmation. Same reasoning
-    #: `HITL_BRIEF_GATE_ENABLED` documents for its own gate. When False,
-    #: `planning_graph._run_assist` never builds/offers the tool at all
-    #: (see `app.ai.tools.transfer_tools.build_transfer_tools`), so the
-    #: model has nothing to call and a message like "taslağı gönder" is
-    #: answered like any other conversational turn.
+    #: Asist adımının `propose_transfer` aracını kapılar (Faz 4, #201):
+    #: "son taslağı Ahmet'e gönder", zorunlu bir `transfer_gate`
+    #: onayının arkasında AI kanalı üzerinden çözülür ve yürütülür.
+    #: `HITL_BRIEF_GATE_ENABLED`'in kendi kapısı için belgelediği aynı
+    #: gerekçe. False olduğunda, `planning_graph._run_assist` aracı hiç
+    #: inşa etmez/sunmaz (bkz.
+    #: `app.ai.tools.transfer_tools.build_transfer_tools`), bu yüzden
+    #: modelin çağıracak bir şeyi yoktur ve "taslağı gönder" gibi bir mesaj
+    #: diğer herhangi bir konuşma turu gibi yanıtlanır.
     AI_TRANSFER_ENABLED: bool = True
 
-    #: How long an `artifact_transfer_intents` row may sit in
-    #: `AWAITING_CONFIRMATION` before `TransferIntentService.confirm`
-    #: refuses it and cancels the intent instead (see the plan's §I). Ten
-    #: minutes -- long enough for a human to actually read the confirmation
-    #: card, short enough that a policy re-check at confirm time (favorite
-    #: removed, clearance changed) stays a real TOCTOU guard rather than a
-    #: theoretical one against an intent that could otherwise live forever.
+    #: Bir `artifact_transfer_intents` satırının, `TransferIntentService.
+    #: confirm`'ün onu reddedip niyeti iptal etmesinden önce
+    #: `AWAITING_CONFIRMATION`'da ne kadar süre bekleyebileceği (bkz.
+    #: planın §I'i). On dakika -- bir insanın onay kartını gerçekten
+    #: okuyabileceği kadar uzun, onay anındaki bir politika yeniden
+    #: kontrolünün (favori kaldırıldı, yetki değişti) aksi halde sonsuza
+    #: kadar yaşayabilecek bir niyete karşı teorik değil gerçek bir TOCTOU
+    #: koruması kalması için yeterince kısa.
     TRANSFER_CONFIRMATION_TTL_SECONDS: int = 600
 
-    #: Whether a revision checks the user's own instruction against the
-    #: retrieved mevzuat/source document for contradictions (see
-    #: app.ai.revision.conflict). The deterministic layer always runs;
-    #: this only gates the additional fast-tier LLM pass. Off does not mean
-    #: "no warning" -- see the deterministic layer's own findings -- it means
-    #: no second, reasoning-based opinion on top of them.
+    #: Bir revizyonun, kullanıcının kendi talimatını alınan mevzuat/kaynak
+    #: belgeye karşı çelişkiler açısından kontrol edip etmediği (bkz.
+    #: app.ai.revision.conflict). Deterministik katman her zaman çalışır;
+    #: bu yalnızca ek hızlı katman LLM geçişini kapılar. Kapalı olmak
+    #: "uyarı yok" anlamına gelmez -- deterministik katmanın kendi
+    #: bulgularına bakın -- bunların üzerinde ikinci, akıl yürütme tabanlı
+    #: bir görüş olmadığı anlamına gelir.
     REVISION_CONFLICT_AUDIT_ENABLED: bool = True
 
-    #: Whether a revision whose instruction introduces new normative content
-    #: (a law/article citation, an institution, a date) re-retrieves
-    #: legislation before rewriting, instead of relying solely on the
-    #: frozen context carried over from when the draft was first written.
-    #: See app.ai.revision.retrieval.maybe_extend_context.
+    #: Talimatı yeni normatif içerik tanıtan (bir kanun/madde ataması, bir
+    #: kurum, bir tarih) bir revizyonun, taslak ilk yazıldığında taşınan
+    #: dondurulmuş bağlama tamamen güvenmek yerine yeniden yazmadan önce
+    #: mevzuatı yeniden alıp almadığı. Bkz.
+    #: app.ai.revision.retrieval.maybe_extend_context.
     REVISION_RERETRIEVAL_ENABLED: bool = True
 
-    #: Hard ceiling on the conditional re-retrieval call so one slow Qdrant
-    #: query cannot stall a revision -- degrades to the frozen context on
-    #: timeout rather than blocking.
+    #: Koşullu yeniden alma çağrısı üzerinde sert bir tavan, böylece yavaş
+    #: bir Qdrant sorgusu bir revizyonu durduramaz -- zaman aşımında
+    #: engellemek yerine dondurulmuş bağlama düşer.
     REVISION_RERETRIEVAL_TIMEOUT_SECONDS: float = 10.0
 
-    #: Ceiling on a single planning-graph run (chat, draft generation,
-    #: routing). Env-configurable so a local run against a slow/CPU-only
-    #: Ollama model can be given more headroom without a code change; the
-    #: orchestrated chat flow multiplies this (see
+    #: Tek bir planlama grafiği çalıştırmasının (sohbet, taslak üretimi,
+    #: yönlendirme) tavanı. Env ile yapılandırılabilir, böylece yavaş/yalnız
+    #: CPU'lu bir Ollama modeline karşı yerel bir çalıştırma, kod değişikliği
+    #: olmadan daha fazla pay verilebilir; orkestre edilmiş sohbet akışı
+    #: bunu çarpar (bkz.
     #: app.domains.chat.chat_service.ORCHESTRATION_TIMEOUT_SECONDS).
     AI_WORKFLOW_TIMEOUT_SECONDS: int = 480
 
-    #: Ceiling on DocumentService.analyze_document's call to
-    #: self.extractor.extract(...) -- previously unbounded. The field-aware
-    #: extraction-acceptance criterion (see
-    #: FallbackDocumentExtractor._has_enough_header_fields) makes the last
-    #: rung of the chain, full-page vision OCR, a genuinely reachable path on
-    #: the upload critical path now, not just a rare fallback for documents
-    #: with no text layer at all -- so this path needs its own ceiling the
-    #: way AI_WORKFLOW_TIMEOUT_SECONDS already bounds the analysis graph.
-    #: 300s covers a multi-page document through glm-ocr at the measured
-    #: worst case (~83s/document average, MAX_OCR_PAGES capping how many
-    #: pages a single escalation can be asked to transcribe). A timeout here
-    #: surfaces as a normal ValidationException (400-class, retryable),
-    #: mirroring how DocumentExtractionError is already translated just
-    #: below it, rather than hanging the request indefinitely.
+    #: DocumentService.analyze_document'ın self.extractor.extract(...)
+    #: çağrısı üzerinde bir tavan -- önceden sınırsızdı. Alan-farkında
+    #: çıkarma-kabul kriteri (bkz.
+    #: FallbackDocumentExtractor._has_enough_header_fields), zincirin son
+    #: basamağı olan tam sayfa vision OCR'ı artık yükleme kritik yolunda
+    #: gerçekten ulaşılabilir bir yol yapar, hiç metin katmanı olmayan
+    #: belgeler için nadir bir yedek değil -- bu yüzden bu yol,
+    #: AI_WORKFLOW_TIMEOUT_SECONDS'ın analiz grafiğini zaten sınırladığı
+    #: şekilde kendi tavanına ihtiyaç duyar. 300s, ölçülen en kötü durumda
+    #: (~83s/belge ortalama, MAX_OCR_PAGES tek bir yükselmenin kaç sayfayı
+    #: transkribe etmesi istenebileceğini sınırlar) glm-ocr üzerinden çok
+    #: sayfalı bir belgeyi kapsar. Buradaki bir zaman aşımı, isteği
+    #: süresiz olarak asmak yerine, DocumentExtractionError'ın hemen
+    #: altında zaten çevrildiği gibi normal bir ValidationException (400
+    #: sınıfı, yeniden denenebilir) olarak yüzeye çıkar.
     EXTRACTION_TIMEOUT_SECONDS: float = 300.0
 
-    #: Ceiling on DocumentService.generate_detailed_summary's on-demand
-    #: build_detailed_summary call -- not a BudgetPolicy.node_seconds entry,
-    #: since this runs outside the analysis graph entirely (see
-    #: create_document_analysis_graph's own docstring for why). A long
-    #: document's map-reduce summary is several SummarizerAgent calls run
-    #: sequentially against Ollama's one generation slot (see
-    #: app.ai.summarization.SUMMARY_MAX_MAP_CHUNKS's own comment for why
-    #: sequential, not concurrent, and the real per-call numbers this is
-    #: based on). Worst case at that cap is 4 sequential calls (3 map + 1
-    #: reduce); observed individual calls ranged 20-185s on this project's
-    #: hardware, so 4 calls in a genuinely bad case could approach 400s. A
-    #: timeout here degrades to the short summary rather than failing the
-    #: request, so a document that genuinely needs the full budget isn't cut
-    #: off mid-map for no benefit.
+    #: DocumentService.generate_detailed_summary'nin talep üzerine
+    #: build_detailed_summary çağrısı üzerinde tavan -- bir
+    #: BudgetPolicy.node_seconds girdisi değil, çünkü bu tamamen analiz
+    #: grafiğinin dışında çalışır (bunun nedeni için
+    #: create_document_analysis_graph'ın kendi docstring'ine bakın). Uzun
+    #: bir belgenin map-reduce özeti, Ollama'nın tek üretim yuvasına karşı
+    #: sıralı çalıştırılan birkaç SummarizerAgent çağrısıdır (neden sıralı,
+    #: eşzamanlı değil, olduğu ve buna dayanan gerçek çağrı başına
+    #: rakamlar için app.ai.summarization.SUMMARY_MAX_MAP_CHUNKS'ın kendi
+    #: yorumuna bakın). Bu tavanda en kötü durum 4 sıralı çağrıdır (3 map +
+    #: 1 reduce); bu projenin donanımında gözlemlenen tekil çağrılar
+    #: 20-185s arasında değişti, bu yüzden gerçekten kötü bir durumda 4
+    #: çağrı 400s'ye yaklaşabilir. Buradaki bir zaman aşımı, isteği
+    #: başarısız kılmak yerine kısa özete düşer, bu yüzden gerçekten tam
+    #: bütçeye ihtiyaç duyan bir belge hiçbir faydası olmadan map ortasında
+    #: kesilmez.
     DETAILED_SUMMARY_TIMEOUT_SECONDS: float = 400.0
 
-    #: Mandatory as of the multi-tenancy work: every request to every
-    #: router requires a JWT bearer token, and every row in the system now
-    #: carries a `company_id` -- there is no longer an "unauthenticated
-    #: demo/dev path" for a request to fall back to, since there would be
-    #: no company to scope its reads/writes to. Kept as a settable flag
-    #: only so `_require_auth_in_production` (app.lifespan) can still
-    #: refuse to boot a misconfigured deployment; flipping it to False is
-    #: not a supported mode and most routes will simply reject every
-    #: request without one.
+    #: Çoklu-kiracılık çalışmasından itibaren zorunlu: her router'a giden
+    #: her istek bir JWT bearer token gerektirir, ve sistemdeki her satır
+    #: artık bir `company_id` taşır -- bir isteğin düşebileceği bir
+    #: "kimlik doğrulamasız demo/dev yolu" artık yoktur, çünkü
+    #: okuma/yazmalarını kapsayacak bir şirket olmazdı. Yalnızca
+    #: `_require_auth_in_production`'ın (app.lifespan) yanlış
+    #: yapılandırılmış bir dağıtımı başlatmayı reddedebilmesi için
+    #: ayarlanabilir bir bayrak olarak tutulur; bunu False'a çevirmek
+    #: desteklenen bir mod değildir ve çoğu rota basitçe onsuz her isteği
+    #: reddeder.
     REQUIRE_AUTH: bool = True
 
-    #: Off by default. `rate_limit()` (app.api.rate_limit) keys its Redis
-    #: counter on the caller's IP, read from the `X-Forwarded-For` header when
-    #: this is on, or from `request.client.host` (the actual TCP peer, which a
-    #: client cannot spoof) when it is off. Trusting X-Forwarded-For with no
-    #: reverse proxy in front of the app lets every request carry its own
-    #: fabricated IP, so each one lands in its own Redis key and the limiter
-    #: never accumulates a count -- unlimited login attempts, unlimited
-    #: uploads. Set to True only when the app sits behind a proxy that
-    #: overwrites (not merely appends to) this header before it reaches here.
+    #: Varsayılan olarak kapalı. `rate_limit()` (app.api.rate_limit), bu
+    #: açıkken `X-Forwarded-For` başlığından, kapalıyken
+    #: `request.client.host`'tan (istemcinin sahtelenemeyeceği gerçek TCP
+    #: eşi) okunan çağıranın IP'sine göre Redis sayacını anahtarlar. Önünde
+    #: bir ters proxy olmadan X-Forwarded-For'a güvenmek, her isteğin kendi
+    #: uydurma IP'sini taşımasına izin verir, bu yüzden her biri kendi
+    #: Redis anahtarına düşer ve sınırlayıcı asla bir sayı biriktirmez --
+    #: sınırsız giriş denemesi, sınırsız yükleme. Yalnızca uygulama, bu
+    #: başlığı buraya ulaşmadan önce üzerine yazan (yalnızca eklemeyen) bir
+    #: proxy'nin arkasında otururken True yapın.
     TRUST_PROXY_HEADERS: bool = False
 
-    #: Persist each planning-graph run's decision trail to Postgres (see
-    #: app.observability.run_recorder). On by default in every real
-    #: deployment; tests flip it off globally (see conftest.py's
-    #: `_disable_run_recording` autouse fixture) so the hundreds of unit
-    #: tests that exercise the graph for unrelated reasons don't each also
-    #: attempt a real database write.
+    #: Her planlama grafiği çalıştırmasının karar izini Postgres'e
+    #: kalıcılaştır (bkz. app.observability.run_recorder). Her gerçek
+    #: dağıtımda varsayılan olarak açık; testler bunu genel olarak kapatır
+    #: (bkz. conftest.py'nin `_disable_run_recording` autouse fixture'ı),
+    #: böylece ilgisiz nedenlerle grafiği çalıştıran yüzlerce birim testi
+    #: her biri de gerçek bir veritabanı yazımı denemez.
     RUN_RECORDING_ENABLED: bool = True
 
-    #: Persist each chat turn (user message + assistant reply) to
-    #: chat_sessions/chat_messages (see app.domains.chat.chat_recorder). Same
-    #: best-effort, test-disabled convention as RUN_RECORDING_ENABLED.
+    #: Her sohbet turunu (kullanıcı mesajı + asistan yanıtı)
+    #: chat_sessions/chat_messages'a kalıcılaştır (bkz.
+    #: app.domains.chat.chat_recorder). RUN_RECORDING_ENABLED ile aynı en
+    #: iyi çaba, testte-devre-dışı kuralı.
     CHAT_HISTORY_ENABLED: bool = True
 
-    #: Persist each generated/revised draft to the `drafts` version chain
-    #: (see app.domains.drafts.draft_recorder). Same best-effort,
-    #: test-disabled convention as RUN_RECORDING_ENABLED.
+    #: Her üretilen/revize edilen taslağı `drafts` sürüm zincirine
+    #: kalıcılaştır (bkz. app.domains.drafts.draft_recorder).
+    #: RUN_RECORDING_ENABLED ile aynı en iyi çaba, testte-devre-dışı kuralı.
     DRAFT_HISTORY_ENABLED: bool = True
 
-    #: Create one demo company on startup if it doesn't already exist (see
-    #: app.domains.companies.seeder) -- the tenant every other seeded row
-    #: below is anchored to, so this must run first. Same idempotent,
-    #: best-effort, test-disabled convention as the other SEED_* flags.
+    #: Henüz yoksa başlangıçta bir demo şirket oluştur (bkz.
+    #: app.domains.companies.seeder) -- aşağıdaki seed'lenen diğer her
+    #: satırın bağlı olduğu tenant, bu yüzden bu önce çalışmalıdır. Diğer
+    #: SEED_* bayrakları gibi aynı idempotent, en iyi çaba,
+    #: testte-devre-dışı kural.
     SEED_DEMO_COMPANY: bool = True
     SEED_DEMO_COMPANY_SLUG: str = "demo"
     SEED_DEMO_COMPANY_NAME: str = "Demo Kurum"
 
-    #: Create one ROOT, one ADMIN, one MANAGER and one EMPLOYEE account on
-    #: startup if they don't already exist (see app.domains.users.seeder).
-    #: ROOT has no company (see UserModel.company_id); the other three are
-    #: bound to the seeded demo company. Idempotent and best-effort like
-    #: RUN_RECORDING_ENABLED; tests disable it globally (conftest.py's
-    #: `_disable_default_user_seeding`) so a full-lifespan test doesn't
-    #: also attempt real database writes. The passwords below are
-    #: development/demo defaults -- override every SEED_* value for any
-    #: deployment reachable outside a trusted demo environment.
+    #: Henüz yoksa başlangıçta bir ROOT, bir ADMIN, bir MANAGER ve bir
+    #: EMPLOYEE hesabı oluştur (bkz. app.domains.users.seeder). ROOT'un
+    #: hiç şirketi yoktur (bkz. UserModel.company_id); diğer üçü
+    #: seed'lenen demo şirkete bağlıdır. RUN_RECORDING_ENABLED gibi
+    #: idempotent ve en iyi çaba; testler bunu genel olarak devre dışı
+    #: bırakır (conftest.py'nin `_disable_default_user_seeding`'i),
+    #: böylece tam yaşam döngülü bir test de gerçek veritabanı yazımları
+    #: denemez. Aşağıdaki parolalar geliştirme/demo varsayılanlarıdır --
+    #: güvenilir bir demo ortamı dışında ulaşılabilir herhangi bir dağıtım
+    #: için her SEED_* değerini geçersiz kılın.
     #:
-    #: Domain is `.example` (RFC 2606, reserved for documentation), not
-    #: `.local` -- `.local` is on `email_validator`'s SPECIAL_USE_DOMAIN_NAMES
-    #: block-list (it's an mDNS reserved TLD, RFC 6762), so every
-    #: `UserResponse` a seeded account round-trips through (e.g. `GET /users/
-    #: me`) fails Pydantic's `EmailStr` validation with a 500 the instant a
-    #: real HTTP request exercises it -- unit tests never caught this because
-    #: they mock the service layer and never construct a real `UserResponse`
-    #: from a seeded row.
+    #: Alan adı `.local` değil (RFC 2606, dokümantasyon için ayrılmış)
+    #: `.example`'dır -- `.local`, `email_validator`'ın
+    #: SPECIAL_USE_DOMAIN_NAMES kara listesindedir (mDNS'e ayrılmış bir
+    #: TLD, RFC 6762), bu yüzden seed'lenen bir hesabın gidip geldiği her
+    #: `UserResponse` (örn. `GET /users/me`), gerçek bir HTTP isteği onu
+    #: çalıştırdığı anda Pydantic'in `EmailStr` doğrulamasını 500 ile
+    #: başarısız kılar -- birim testleri bunu asla yakalamadı çünkü servis
+    #: katmanını mock'lar ve seed'lenen bir satırdan asla gerçek bir
+    #: `UserResponse` inşa etmezler.
     SEED_DEFAULT_USERS: bool = True
     SEED_ROOT_EMAIL: str = "root@kachow.example"
     SEED_ROOT_PASSWORD: str = "Root123!"
@@ -218,244 +235,264 @@ class Settings(BaseSettings):
     SEED_EMPLOYEE_EMAIL: str = "employee@kachow.example"
     SEED_EMPLOYEE_PASSWORD: str = "Employee123!"
 
-    #: Create the default routable units on startup, within the demo
-    #: company, if it has none yet (see app.domains.units.seeder). Same
-    #: idempotent, best-effort, test-disabled convention as
-    #: SEED_DEFAULT_USERS -- without it a fresh environment has no units to
-    #: route to until an admin creates one through `POST /units`.
+    #: Henüz hiçbiri yoksa başlangıçta demo şirket içinde varsayılan
+    #: yönlendirilebilir birimleri oluştur (bkz.
+    #: app.domains.units.seeder). SEED_DEFAULT_USERS ile aynı idempotent,
+    #: en iyi çaba, testte-devre-dışı kural -- bu olmadan yeni bir ortamın,
+    #: bir admin `POST /units` aracılığıyla bir tane oluşturana kadar
+    #: yönlendirilecek hiçbir birimi olmaz.
     SEED_DEFAULT_UNITS: bool = True
 
-    #: Single switch selecting the AI provider stack for the whole system:
-    #: True -> local Ollama + local Qdrant (default, no external dependency).
-    #: False -> Evren (the TEKNOFEST-provided hosted inference API) + Evren's
-    #: dedicated Qdrant cluster. Read by `get_llm_client`/`get_fast_llm_client`
-    #: (app.ai.llms), `get_embeddings_client` (app.ai.embeddings.models), and
-    #: `get_vector_store` (app.infrastructure.vectorstore) to pick their
-    #: default provider -- no call site needs to pass `provider=` explicitly.
+    #: Tüm sistem için AI sağlayıcı yığınını seçen tek anahtar: True ->
+    #: yerel Ollama + yerel Qdrant (varsayılan, harici bağımlılık yok).
+    #: False -> Evren (TEKNOFEST tarafından sağlanan barındırılan çıkarım
+    #: API'si) + Evren'in özel Qdrant kümesi. `get_llm_client`/
+    #: `get_fast_llm_client` (app.ai.llms), `get_embeddings_client`
+    #: (app.ai.embeddings.models), ve `get_vector_store`
+    #: (app.infrastructure.vectorstore) tarafından varsayılan
+    #: sağlayıcılarını seçmek için okunur -- hiçbir çağrı noktasının
+    #: açıkça `provider=` geçirmesi gerekmez.
     LOCAL_MODE: bool = True
 
-    # Ollama Configuration
-    # Note: When running inside Docker, set OLLAMA_BASE_URL to http://host.docker.internal:11434
+    # Ollama Yapılandırması
+    # Not: Docker içinde çalışırken, OLLAMA_BASE_URL'i
+    # http://host.docker.internal:11434 olarak ayarlayın
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen3.5:9b"
     OLLAMA_TEMPERATURE: float = 0.7
-    # Vision-language model used to OCR degraded scans (see extractors/vision.py
-    # for the measurements behind this choice). Coupled to that module's
-    # DEFAULT_PROMPT: some vision models return nothing under a Turkish
-    # transcription prompt, so the two must move together.
+    # Bozuk taramaları OCR'lamak için kullanılan görsel dil modeli (bu
+    # seçimin arkasındaki ölçümler için extractors/vision.py'ye bakın). O
+    # modülün DEFAULT_PROMPT'una bağlıdır: bazı vision modelleri Türkçe bir
+    # transkripsiyon prompt'u altında hiçbir şey döndürmez, bu yüzden ikisi
+    # birlikte hareket etmelidir.
     OLLAMA_VISION_MODEL: str = "glm-ocr:latest"
     OLLAMA_REASONING: bool = False
 
-    #: Generation budget. The previous value of 1024 truncated official drafts
-    #: mid-sentence and cut off the editor's structured JSON, which then failed
-    #: Pydantic validation and burned three retries before failing outright.
+    #: Üretim bütçesi. Önceki 1024 değeri resmi taslakları cümle ortasında
+    #: kırpıyor ve editörün yapılandırılmış JSON'ını kesiyordu, bu da
+    #: Pydantic doğrulamasını başarısız kılıyor ve tamamen başarısız
+    #: olmadan önce üç yeniden deneme harcıyordu.
     OLLAMA_MAX_TOKENS: int = 4096
 
-    #: Context window. Ollama defaults to 2048 and truncates *from the start* --
-    #: silently dropping the system prompt or the document header, which is
-    #: exactly where sayı/tarih/konu/muhatap live. Must be set globally, not
-    #: per-node.
+    #: Bağlam penceresi. Ollama varsayılan olarak 2048'dir ve *baştan
+    #: itibaren* kırpar -- tam olarak sayı/tarih/konu/muhatabın yaşadığı
+    #: sistem prompt'unu veya belge başlığını sessizce düşürür. Düğüm
+    #: başına değil, genel olarak ayarlanmalıdır.
     OLLAMA_NUM_CTX: int = 8192
 
-    #: How long Ollama keeps a model resident after a request. Without this the
-    #: model is evicted between pipeline steps and every step pays the reload.
+    #: Ollama'nın bir isteğin ardından bir modeli ne kadar süre bellekte
+    #: tuttuğu. Bu olmadan model boru hattı adımları arasında tahliye edilir
+    #: ve her adım yeniden yükleme maliyetini öder.
     OLLAMA_KEEP_ALIVE: str = "30m"
 
-    #: Optional small model for cheap, low-token decisions (intent, routing,
-    #: query classification). Falls back to OLLAMA_MODEL when unset, so an
-    #: environment that has not pulled a second model keeps working.
+    #: Ucuz, düşük token'lı kararlar (niyet, yönlendirme, sorgu
+    #: sınıflandırma) için isteğe bağlı küçük model. Ayarlanmadığında
+    #: OLLAMA_MODEL'e düşer, böylece ikinci bir modeli çekmemiş bir ortam
+    #: çalışmaya devam eder.
     OLLAMA_FAST_MODEL: str | None = None
 
-    #: Generation budget for the fast model. Intent and routing outputs are a
-    #: label plus one sentence; anything larger is the model rambling.
+    #: Hızlı model için üretim bütçesi. Niyet ve yönlendirme çıktıları bir
+    #: etiket artı bir cümledir; daha büyük olan her şey modelin
+    #: gevezelik yapmasıdır.
     OLLAMA_FAST_MAX_TOKENS: int = 512
 
-    #: Warm both models on startup so the first user request does not pay the
-    #: cold-load cost (several seconds on Apple Silicon).
+    #: İlk kullanıcı isteğinin soğuk yükleme maliyetini ödememesi için
+    #: başlangıçta her iki modeli de ısıt (Apple Silicon'da birkaç saniye).
     OLLAMA_WARMUP_ON_STARTUP: bool = True
 
-    #: Escape hatch for the hybrid draft quality gate's LLM judge leg (fast
-    #: tier, ~5-7s per draft). Flip off on a thermally throttled demo machine
-    #: without a code change; the deterministic verifier still runs either way.
+    #: Hibrit taslak kalite kapısının LLM yargıcı bacağı için kaçış kapağı
+    #: (hızlı katman, taslak başına ~5-7s). Kod değişikliği olmadan
+    #: termal olarak kısıtlanmış bir demo makinesinde kapatın; deterministik
+    #: doğrulayıcı her iki durumda da çalışmaya devam eder.
     DRAFT_JUDGE_ENABLED: bool = True
 
-    #: Hard ceiling on the judge call so one slow generation cannot blow the
-    #: ~90s draft latency budget.
+    #: Yargıç çağrısı üzerinde sert bir tavan, böylece tek bir yavaş üretim
+    #: ~90s taslak gecikme bütçesini patlatamaz.
     DRAFT_JUDGE_TIMEOUT_SECONDS: float = 30.0
 
-    #: Escape hatch for the guardrail nuance layer's LLM judge (fast tier) --
-    #: same role as DRAFT_JUDGE_ENABLED, for the input sensitivity/output
-    #: leakage judgements the deterministic pattern layer can't see. The
-    #: deterministic guardrail checks (PII regex, gizlilik_derecesi mapping,
-    #: groundedness) still run either way; this only degrades to
-    #: deterministic-only, never removes a check.
+    #: Guardrail nüans katmanının LLM yargıcı (hızlı katman) için kaçış
+    #: kapağı -- deterministik desen katmanının göremediği girdi
+    #: hassasiyeti/çıktı sızıntısı yargıları için DRAFT_JUDGE_ENABLED ile
+    #: aynı rol. Deterministik guardrail kontrolleri (PII regex,
+    #: gizlilik_derecesi eşlemesi, temellendirme) her iki durumda da
+    #: çalışmaya devam eder; bu yalnızca yalnızca-deterministiğe düşer,
+    #: asla bir kontrolü kaldırmaz.
     GUARDRAIL_JUDGE_ENABLED: bool = True
 
-    #: Hard ceiling on the guardrail judge call. Fails open (deterministic-
-    #: only) on timeout rather than blocking the request -- see
-    #: app.ai.guardrails.llm_nuance's module docstring.
+    #: Guardrail yargıç çağrısı üzerinde sert bir tavan. İsteği
+    #: engellemek yerine zaman aşımında açık başarısız olur
+    #: (yalnızca-deterministik) -- bkz.
+    #: app.ai.guardrails.llm_nuance'ın modül docstring'i.
     GUARDRAIL_JUDGE_TIMEOUT_SECONDS: float = 15.0
 
-    # Embedding Configuration
+    # Embedding Yapılandırması
     OLLAMA_EMBEDDING_MODEL: str = "nomic-embed-text:latest"
 
-    # --- Evren (TEKNOFEST hosted inference) Configuration ------------------
-    # OpenAI-compatible API on shared H200s, selected instead of Ollama when
-    # LOCAL_MODE=False. Model aliases below are Evren's own, documented at
-    # https://evren-teknofest.ssyz.org.tr/model-kartlari -- not arbitrary
-    # names, they must match exactly what Evren serves.
+    # --- Evren (TEKNOFEST barındırılan çıkarım) Yapılandırması ------------------
+    # LOCAL_MODE=False olduğunda Ollama yerine seçilen, paylaşımlı H200'ler
+    # üzerinde OpenAI uyumlu API. Aşağıdaki model takma adları Evren'in kendi
+    # takma adlarıdır, https://evren-teknofest.ssyz.org.tr/model-kartlari
+    # adresinde belgelenmiştir -- keyfi isimler değil, Evren'in sunduğuyla
+    # tam olarak eşleşmelidir.
     EVREN_BASE_URL: str = "https://evren-llmapi.ssyz.org.tr/v1"
-    #: Team-specific bearer token, provided by Evren via email. Required
-    #: whenever LOCAL_MODE=False.
+    #: Evren tarafından e-posta ile sağlanan takıma özel bearer token.
+    #: LOCAL_MODE=False olduğunda gereklidir.
     EVREN_API_KEY: str | None = None
-    #: Quality tier (Qwen3.5-122B-A10B) -- Evren's counterpart to OLLAMA_MODEL.
+    #: Kalite katmanı (Qwen3.5-122B-A10B) -- Evren'in OLLAMA_MODEL karşılığı.
     EVREN_LLM_LARGE_MODEL: str = "llm-large"
-    #: Fast tier (Qwen3.6-35B-A3B, ~0.91s median latency) -- Evren's
-    #: counterpart to OLLAMA_FAST_MODEL, always available (unlike the Ollama
-    #: fast tier, never falls back to the large model when unset).
+    #: Hızlı katman (Qwen3.6-35B-A3B, ~0.91s medyan gecikme) -- Evren'in
+    #: OLLAMA_FAST_MODEL karşılığı, her zaman kullanılabilir (Ollama hızlı
+    #: katmanının aksine, ayarlanmadığında asla büyük modele düşmez).
     EVREN_LLM_FAST_MODEL: str = "llm-fast"
-    #: Dedicated safety-classification model (Qwen3Guard-Gen-4B) for the
-    #: guardrail judge (see app.ai.guardrails.llm_nuance). Local mode keeps
-    #: reusing the fast-tier chat client for this instead -- see
-    #: get_guard_llm_client.
+    #: Guardrail yargıcı için özel güvenlik sınıflandırma modeli
+    #: (Qwen3Guard-Gen-4B) (bkz. app.ai.guardrails.llm_nuance). Yerel mod
+    #: bunun yerine bunun için hızlı katman chat istemcisini yeniden
+    #: kullanmaya devam eder -- bkz. get_guard_llm_client.
     EVREN_GUARD_MODEL: str = "guard"
-    #: Dedicated lightweight routing model (Qwen3-8B) for RouterAgent. Local
-    #: mode keeps reusing the fast-tier chat client instead -- see
-    #: get_router_llm_client.
+    #: RouterAgent için özel hafif yönlendirme modeli (Qwen3-8B). Yerel mod
+    #: bunun yerine hızlı katman chat istemcisini yeniden kullanmaya devam
+    #: eder -- bkz. get_router_llm_client.
     EVREN_ROUTER_MODEL: str = "router"
-    #: Dense embedding model (BAAI/bge-m3, 1024 dims) -- NOT interchangeable
-    #: with OLLAMA_EMBEDDING_MODEL's nomic-embed-text (768 dims). Vectors
-    #: from one provider are meaningless in a collection built with the
-    #: other; this is safe only because Evren's Qdrant (EVREN_QDRANT_URL) is
-    #: a wholly separate server from the local one, so each mode's
-    #: collections never mix.
+    #: Yoğun embedding modeli (BAAI/bge-m3, 1024 boyut) -- OLLAMA_EMBEDDING_
+    #: MODEL'in nomic-embed-text'i (768 boyut) ile DEĞİŞTİRİLEMEZ. Bir
+    #: sağlayıcıdan gelen vektörler, diğeriyle inşa edilmiş bir
+    #: koleksiyonda anlamsızdır; bu yalnızca Evren'in Qdrant'ı
+    #: (EVREN_QDRANT_URL) yerel olandan tamamen ayrı bir sunucu olduğu için
+    #: güvenlidir, bu yüzden her modun koleksiyonları asla karışmaz.
     EVREN_EMBED_MODEL: str = "bge-m3-embed"
-    #: Evren's own documented client-timeout recommendation -- long-running
-    #: generations on shared hardware can take up to 1800s.
+    #: Evren'in kendi belgelenmiş istemci-zaman-aşımı önerisi -- paylaşımlı
+    #: donanımda uzun süren üretimler 1800s'ye kadar sürebilir.
     EVREN_REQUEST_TIMEOUT_SECONDS: float = 1800.0
 
-    #: Evren's dedicated Qdrant cluster (evren-vektor.ssyz.org.tr), isolated
-    #: per team. Used instead of QDRANT_URL when LOCAL_MODE=False.
+    #: Takım başına izole edilmiş, Evren'in özel Qdrant kümesi
+    #: (evren-vektor.ssyz.org.tr). LOCAL_MODE=False olduğunda QDRANT_URL
+    #: yerine kullanılır.
     EVREN_QDRANT_URL: str | None = None
-    #: Team-specific Qdrant API key ("qdr-teamNN-..."), provided by Evren.
+    #: Evren tarafından sağlanan takıma özel Qdrant API anahtarı ("qdr-teamNN-...").
     EVREN_QDRANT_API_KEY: str | None = None
 
-    # Redis Configuration
+    # Redis Yapılandırması
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # Qdrant Vector DB Configuration (local mode only -- see EVREN_QDRANT_URL)
+    # Qdrant Vektör DB Yapılandırması (yalnızca yerel mod -- bkz. EVREN_QDRANT_URL)
     QDRANT_URL: str = "http://localhost:6333"
 
-    # Storage Configuration
-    STORAGE_TYPE: str = "local"  # "local" or "s3"
+    # Depolama Yapılandırması
+    STORAGE_TYPE: str = "local"  # "local" veya "s3"
     LOCAL_STORAGE_DIR: str = "./storage_data"
     S3_BUCKET_NAME: str = "kachow-bucket"
     S3_ENDPOINT_URL: str = "http://localhost:9000"
     S3_ACCESS_KEY: str = "minioadmin"
     S3_SECRET_KEY: str = "minioadmin"
-    #: SFT/DPO JSONL exports + LoRA adapter weights, one subdirectory per
-    #: `{company_slug}/{run_id}` (Faz C3 Aşama 3, #191). Only ever written by
-    #: the training worker (`app.workers.training`), never the main backend
-    #: process -- kept as its own setting rather than reusing
-    #: LOCAL_STORAGE_DIR since these are large, disposable training
-    #: artifacts, not user-facing document storage.
+    #: SFT/DPO JSONL dışa aktarımları + LoRA adaptör ağırlıkları, her
+    #: `{company_slug}/{run_id}` için bir alt dizin (Faz C3 Aşama 3, #191).
+    #: Yalnızca eğitim worker'ı (`app.workers.training`) tarafından yazılır,
+    #: asla ana backend süreci tarafından değil -- LOCAL_STORAGE_DIR'i
+    #: yeniden kullanmak yerine kendi ayarı olarak tutulur, çünkü bunlar
+    #: büyük, atılabilir eğitim çıktılarıdır, kullanıcıya yönelik belge
+    #: depolaması değil.
     TRAINING_ARTIFACTS_DIR: str = "./artifacts/training"
 
-    # Langfuse Configuration
+    # Langfuse Yapılandırması
     LANGFUSE_PUBLIC_KEY: str | None = None
     LANGFUSE_SECRET_KEY: str | None = None
-    #: The backend's own API endpoint -- in `compose.yml` this is the
-    #: internal Docker service hostname (`http://langfuse:3000`), reachable
-    #: from this container but *not* from a browser. Do not reuse this for
-    #: a link a human is meant to click; see `LANGFUSE_PUBLIC_URL` below.
+    #: Backend'in kendi API uç noktası -- `compose.yml`'de bu, bu
+    #: konteynerden erişilebilir ama bir tarayıcıdan *değil*, dahili
+    #: Docker servis ana bilgisayar adıdır (`http://langfuse:3000`). Bunu
+    #: bir insanın tıklaması amaçlanan bir bağlantı için yeniden
+    #: kullanmayın; aşağıdaki `LANGFUSE_PUBLIC_URL`'e bakın.
     LANGFUSE_HOST: str = "http://localhost:3000"
 
-    #: The browser-reachable URL for the same Langfuse instance -- used only
-    #: by `GET /companies/{id}/analytics/links`'s deep link. Defaults to the
-    #: same value as `LANGFUSE_HOST` for a non-Docker/local run where the two
-    #: really are identical; `compose.yml` overrides only `LANGFUSE_HOST`
-    #: (to the internal hostname), so this keeps its `localhost` default
-    #: there and the two intentionally diverge under Docker.
+    #: Aynı Langfuse örneği için tarayıcıdan erişilebilir URL -- yalnızca
+    #: `GET /companies/{id}/analytics/links`'in derin bağlantısı tarafından
+    #: kullanılır. İkisinin gerçekten aynı olduğu Docker-dışı/yerel bir
+    #: çalıştırma için `LANGFUSE_HOST` ile aynı değere varsayılan olarak
+    #: ayarlanır; `compose.yml` yalnızca `LANGFUSE_HOST`'u geçersiz kılar
+    #: (dahili ana bilgisayar adına), bu yüzden bu, orada `localhost`
+    #: varsayılanını korur ve ikisi Docker altında kasıtlı olarak ayrışır.
     LANGFUSE_PUBLIC_URL: str = "http://localhost:3000"
 
-    #: Base URL for `GET /companies/{id}/analytics/links`'s deep link --
-    #: `compose.yml`'s `grafana` service publishes on 3001 (Prometheus/
-    #: Postgres already use 3000/5432, hence not the Grafana default port).
-    #: The `company` dashboard template variable (see `monitoring/
-    #: dashboards/company_dashboard.json`) is appended by the analytics
-    #: service, not baked in here, since it varies per company.
+    #: `GET /companies/{id}/analytics/links`'in derin bağlantısı için taban
+    #: URL -- `compose.yml`'nin `grafana` servisi 3001'de yayınlar
+    #: (Prometheus/Postgres zaten 3000/5432 kullanıyor, bu yüzden Grafana
+    #: varsayılan portu değil). `company` dashboard şablon değişkeni (bkz.
+    #: `monitoring/dashboards/company_dashboard.json`), şirkete göre
+    #: değiştiği için burada gömülü değil, analitik servisi tarafından eklenir.
     GRAFANA_URL: str = "http://localhost:3001"
 
-    #: OTLP/gRPC collector endpoint (e.g. `http://jaeger:4317`) for
-    #: infrastructure-level tracing -- see `app/observability/otel.py`. `None`
-    #: (the default) disables OpenTelemetry entirely: no SDK import, no
-    #: exporter, no instrumentation patching. Complements, not replaces,
-    #: `LANGFUSE_*` above -- see docs/deployment/observability.md for which
-    #: question each answers.
+    #: Altyapı düzeyi izleme için OTLP/gRPC toplayıcı uç noktası (örn.
+    #: `http://jaeger:4317`) -- bkz. `app/observability/otel.py`. `None`
+    #: (varsayılan) OpenTelemetry'yi tamamen devre dışı bırakır: SDK
+    #: import'u yok, exporter yok, enstrümantasyon yaması yok. Yukarıdaki
+    #: `LANGFUSE_*`'ı tamamlar, onun yerine geçmez -- her birinin hangi
+    #: soruyu yanıtladığı için docs/deployment/observability.md'ye bakın.
     OTEL_EXPORTER_OTLP_ENDPOINT: str | None = None
 
-    # Semantic prototype vectors, written by scripts/build_prototypes.py.
-    # Same relative-to-working-directory convention as the corpus below, which
-    # is what makes it resolve identically in the container (/workspace) and in
-    # a host run from the repo root.
+    # scripts/build_prototypes.py tarafından yazılan anlamsal prototip
+    # vektörleri. Aşağıdaki korpusla aynı çalışma-dizinine-göreli kural,
+    # bu da onu konteynerde (/workspace) ve depo kökünden bir host
+    # çalıştırmasında aynı şekilde çözmesini sağlayan şeydir.
     PROTOTYPE_DIR: str = "./datasets/prototypes"
 
-    # Legislation (Mevzuat) Corpus Configuration
+    # Mevzuat Korpusu Yapılandırması
     MEVZUAT_CORPUS_DIR: str = "./datasets/mevzuat"
     MEVZUAT_COLLECTION_NAME: str = "mevzuat"
 
-    # Draft few-shot style examples, curated by
-    # scripts/curate_yazisma_examples.py from datasets/resmi_yazisma. Indexed
-    # unchunked (one official letter = one point) -- see
-    # scripts/index_yazisma_examples.py.
+    # scripts/curate_yazisma_examples.py tarafından datasets/resmi_yazisma'dan
+    # derlenmiş taslak few-shot stil örnekleri. Parçalanmadan indekslenir
+    # (bir resmi mektup = bir nokta) -- bkz. scripts/index_yazisma_examples.py.
     RESMI_YAZISMA_EXAMPLES_PATH: str = "./datasets/resmi_yazisma/ornekler.jsonl"
     RESMI_YAZISMA_COLLECTION_NAME: str = "resmi_yazisma_ornek"
 
-    # Live legislation lookup over MCP (github.com/saidsurucu/mevzuat-mcp, MIT),
-    # querying mevzuat.gov.tr directly.
+    # MCP üzerinden canlı mevzuat araması (github.com/saidsurucu/mevzuat-mcp,
+    # MIT), doğrudan mevzuat.gov.tr'yi sorgular.
     #
-    # Two independent switches read this same server:
+    # Aynı sunucuyu okuyan iki bağımsız anahtar:
     #
-    # * MEVZUAT_SOURCE decides where document analysis's legislation retrieval
-    #   (app.ai.retrieval.mcp_mevzuat) reads from. "mcp" (default) fetches the
-    #   curated corpus's current official text live and falls back to the
-    #   committed corpus under MEVZUAT_CORPUS_DIR on any failure; "local" skips
-    #   MCP entirely and always uses the committed corpus, exactly as before
-    #   this setting existed. Neither value ever touches compliance:
-    #   check_required_fields is set subtraction over a rule table with
-    #   hard-coded article numbers, and no source switch reaches that code.
-    # * MEVZUAT_MCP_ENABLED (default off) is the assistant's own switch,
-    #   offering search_legislation_live as an escalation when the local
-    #   corpus tool finds nothing. Independent of MEVZUAT_SOURCE on purpose --
-    #   a deployment can run document analysis against live legislation
-    #   without also handing the chat model a live government-site tool, or
-    #   the reverse.
+    # * MEVZUAT_SOURCE, belge analizinin mevzuat almasının
+    #   (app.ai.retrieval.mcp_mevzuat) nereden okuduğuna karar verir.
+    #   "mcp" (varsayılan) derlenmiş korpusun mevcut resmi metnini canlı
+    #   getirir ve herhangi bir başarısızlıkta MEVZUAT_CORPUS_DIR altındaki
+    #   commit'lenmiş korpusa düşer; "local" MCP'yi tamamen atlar ve her
+    #   zaman commit'lenmiş korpusu kullanır, tam olarak bu ayar var
+    #   olmadan önceki gibi. Hiçbir değer uyum kontrolüne dokunmaz:
+    #   check_required_fields, sabit kodlanmış madde numaraları olan bir
+    #   kural tablosu üzerinde küme çıkarmadır, ve hiçbir kaynak anahtarı
+    #   o koda ulaşmaz.
+    # * MEVZUAT_MCP_ENABLED (varsayılan kapalı), asistanın kendi anahtarıdır,
+    #   yerel korpus aracı hiçbir şey bulamadığında bir yükselme olarak
+    #   search_legislation_live sunar. Bilinçli olarak MEVZUAT_SOURCE'tan
+    #   bağımsız -- bir dağıtım, sohbet modeline canlı bir devlet sitesi
+    #   aracı vermeden canlı mevzuata karşı belge analizi çalıştırabilir,
+    #   veya tersi.
     #
-    # register_servers() registers the server whenever *either* switch wants
-    # it, so the documented default (MEVZUAT_SOURCE="mcp",
-    # MEVZUAT_MCP_ENABLED=False) still actually reaches the server instead of
-    # silently registering nothing.
+    # register_servers(), *her iki* anahtar da onu istediğinde sunucuyu
+    # kaydeder, bu yüzden belgelenen varsayılan (MEVZUAT_SOURCE="mcp",
+    # MEVZUAT_MCP_ENABLED=False) hâlâ gerçekten sunucuya ulaşır, sessizce
+    # hiçbir şey kaydetmek yerine.
     #
-    # The server is not in the backend image -- its dependency tree pins
-    # playwright and pulls a browser binary -- so either switch needs the
-    # command below to point at an installed copy (an isolated venv locally,
-    # or a sidecar container). Command and args live here rather than in code
-    # so that swap is configuration.
+    # Sunucu backend imajında değildir -- bağımlılık ağacı playwright'ı
+    # sabitler ve bir tarayıcı ikilisi çeker -- bu yüzden her iki anahtar
+    # da aşağıdaki komutun kurulu bir kopyaya (yerel olarak izole bir venv,
+    # veya bir sidecar konteyner) işaret etmesine ihtiyaç duyar. Komut ve
+    # argümanlar kodda değil burada yaşar, böylece o değişim yapılandırma olur.
     MEVZUAT_SOURCE: Literal["mcp", "local"] = "mcp"
     MEVZUAT_MCP_ENABLED: bool = False
     MEVZUAT_MCP_COMMAND: str = "mevzuat-mcp"
-    #: Space-separated, not a list. pydantic-settings JSON-decodes any env var
-    #: bound to a structured type (list, dict, ...) *before* the model's own
-    #: validators ever run, so a plain `list[str]` field made
-    #: `MEVZUAT_MCP_ARGS="--transport stdio"` -- the obvious shell-style value
-    #: -- a hard crash at `Settings()` construction: "error parsing value for
-    #: field ... from source EnvSettingsSource", with no mention of JSON and no
-    #: chance to fix it in a validator. A plain `str` field is read as a raw
-    #: string, so this type is what actually avoids the crash; use
-    #: `mevzuat_mcp_args` below to get the parsed list.
+    #: Boşlukla ayrılmış, bir liste değil. pydantic-settings, yapılandırılmış
+    #: bir türe (liste, sözlük, ...) bağlı herhangi bir env değişkenini
+    #: modelin kendi doğrulayıcıları hiç çalışmadan *önce* JSON olarak
+    #: çözer, bu yüzden düz bir `list[str]` alanı,
+    #: `MEVZUAT_MCP_ARGS="--transport stdio"`'yı -- bariz kabuk-stili değeri
+    #: -- `Settings()` inşasında sert bir çökmeye dönüştürdü: "error
+    #: parsing value for field ... from source EnvSettingsSource", JSON'dan
+    #: hiç bahsetmeden ve bir doğrulayıcıda düzeltme şansı olmadan. Düz bir
+    #: `str` alanı ham bir dize olarak okunur, bu yüzden bu tür çökmeyi
+    #: gerçekten önleyen şeydir; ayrıştırılmış listeyi almak için aşağıdaki
+    #: `mevzuat_mcp_args`'ı kullanın.
     MEVZUAT_MCP_ARGS: str = ""
-    #: Cap on one lookup. The government site publishes no rate limit and the
-    #: assistant must not stall a chat turn waiting on it.
+    #: Bir arama üzerinde tavan. Devlet sitesi hiçbir hız sınırı yayınlamaz
+    #: ve asistan onu bekleyerek bir sohbet turunu durduramaz.
     MEVZUAT_MCP_TIMEOUT_SECONDS: float = 25.0
 
     model_config = SettingsConfigDict(
@@ -464,43 +501,45 @@ class Settings(BaseSettings):
 
     @property
     def effective_alembic_database_url(self) -> str:
-        """``ALEMBIC_DATABASE_URL``, or ``DATABASE_URL`` when unset.
+        """``ALEMBIC_DATABASE_URL``, veya ayarlanmadığında ``DATABASE_URL``.
 
-        The one place that resolves the fallback -- every other reader
-        (``alembic/env.py``, ``checkpointer_dsn`` below, ``app.infrastructure.
-        database.session.get_owner_db``) uses this property, never the raw
-        setting, so the fallback logic exists in exactly one place.
+        Yedeği çözen tek yer -- diğer her okuyucu (``alembic/env.py``,
+        aşağıdaki ``checkpointer_dsn``, ``app.infrastructure.
+        database.session.get_owner_db``) ham ayarı değil, bu özelliği
+        kullanır, bu yüzden yedek mantığı tam olarak tek bir yerde var olur.
         """
         return self.ALEMBIC_DATABASE_URL or self.DATABASE_URL
 
     @property
     def checkpointer_dsn(self) -> str:
-        """The schema-owner connection, adapted for psycopg3, the checkpointer's driver.
+        """psycopg3, checkpointer'ın sürücüsü için uyarlanmış şema sahibi bağlantısı.
 
-        Deliberately ``effective_alembic_database_url``, not ``DATABASE_URL``:
-        ``AsyncPostgresSaver.setup()`` runs ``CREATE TABLE IF NOT EXISTS`` for
-        its own checkpoint tables on every boot, which a restricted,
-        non-owner ``DATABASE_URL`` role (see that setting's own docstring)
-        has no privilege to do. The checkpoint tables are already excluded
-        from Alembic/RLS entirely (see ``alembic/env.py``'s
-        ``_CHECKPOINT_TABLE_PREFIX`` exclusion) -- they were always meant to
-        be self-managed outside the tenancy model, so owning their own
-        connection independent of the app's row-level-security posture is
-        consistent, not a workaround.
+        Bilinçli olarak ``DATABASE_URL`` değil, ``effective_alembic_database_url``:
+        ``AsyncPostgresSaver.setup()``, her başlangıçta kendi checkpoint
+        tabloları için ``CREATE TABLE IF NOT EXISTS`` çalıştırır, ki
+        kısıtlı, owner olmayan bir ``DATABASE_URL`` rolünün (o ayarın kendi
+        docstring'ine bakın) bunu yapmaya ayrıcalığı yoktur. Checkpoint
+        tabloları zaten Alembic/RLS'den tamamen dışlanmıştır (bkz.
+        ``alembic/env.py``'nin ``_CHECKPOINT_TABLE_PREFIX`` dışlaması) --
+        her zaman kiracılık modelinin dışında kendi kendini yönetmesi
+        amaçlanmıştı, bu yüzden uygulamanın satır düzeyi güvenlik
+        duruşundan bağımsız kendi bağlantısına sahip olmak bir geçici
+        çözüm değil, tutarlıdır.
 
-        SQLAlchemy's asyncpg URL scheme (``postgresql+asyncpg://``) isn't a
-        driver psycopg recognises; stripping the suffix lets both drivers
-        share one connection string instead of keeping two in sync.
+        SQLAlchemy'nin asyncpg URL şeması (``postgresql+asyncpg://``),
+        psycopg'nin tanıdığı bir sürücü değildir; soneki kaldırmak, her
+        iki sürücünün de iki tanesini senkronize tutmak yerine tek bir
+        bağlantı dizesini paylaşmasını sağlar.
         """
         return self.effective_alembic_database_url.replace("postgresql+asyncpg://", "postgresql://")
 
     @property
     def mevzuat_mcp_args(self) -> list[str]:
-        """``MEVZUAT_MCP_ARGS`` split into an argv list for `subprocess`/MCP.
+        """``MEVZUAT_MCP_ARGS``'ı `subprocess`/MCP için bir argv listesine böl.
 
-        `shlex.split`, not `str.split`: an arg containing a space (a quoted
-        path with spaces, say) must survive as one argument rather than being
-        cut in two.
+        `str.split` değil `shlex.split`: içinde boşluk olan bir argüman
+        (diyelim ki boşluklu tırnaklı bir yol), ikiye kesilmek yerine tek
+        bir argüman olarak hayatta kalmalıdır.
         """
         return shlex.split(self.MEVZUAT_MCP_ARGS)
 

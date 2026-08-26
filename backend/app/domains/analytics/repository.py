@@ -1,8 +1,8 @@
-"""Plain SQLAlchemy aggregate queries over already-existing tables -- no new
-pipeline, no materialized view or rollup table (see the tenancy plan's own
-§6.1: "demo ölçeğinde gerekçesi yok, kiracılığın zorlanacağı üçüncü bir yer
-olurdu"). `AnalyticsService` is what caches these behind Redis; this module
-only ever runs a query.
+"""Halihazırda var olan tablolar üzerinde düz SQLAlchemy toplama (aggregate)
+sorguları -- yeni bir pipeline, materialized view ya da rollup tablosu yok
+(bkz. kiracılık planının kendi §6.1'i: "demo ölçeğinde gerekçesi yok,
+kiracılığın zorlanacağı üçüncü bir yer olurdu"). Bunları Redis arkasında
+önbelleğe alan `AnalyticsService`'tir; bu modül sadece sorgu çalıştırır.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -28,10 +28,10 @@ class AnalyticsRepository:
         return result.scalar_one()
 
     async def draft_stats(self, company_id: str) -> dict:
-        """Every draft *version* (not the session-collapsed listing
-        `DraftRepository.list_drafts` shows) -- for a volume/quality
-        analytics summary, each revision is a real unit of work, not
-        something to hide."""
+        """Her taslak *versiyonu* (`DraftRepository.list_drafts`'ın gösterdiği
+        oturuma göre daraltılmış liste değil) -- bir hacim/kalite analitik
+        özeti için her revizyon gerçek bir iş birimidir, gizlenecek bir şey
+        değil."""
         result = await self.db.execute(
             select(
                 func.count(DraftModel.id),
@@ -60,7 +60,7 @@ class AnalyticsRepository:
         date_from: Optional[datetime] = None,
         date_to: Optional[datetime] = None,
     ) -> List[Tuple[str, str, str, int]]:
-        """`(stage, kind, decision, count)`, optionally windowed."""
+        """`(stage, kind, decision, count)`, isteğe bağlı olarak tarih aralığıyla sınırlandırılmış."""
         query = select(
             GuardrailEventModel.stage,
             GuardrailEventModel.kind,
@@ -78,12 +78,13 @@ class AnalyticsRepository:
         return list(result.all())
 
     async def unit_volume(self, company_id: str) -> List[Tuple[Optional[str], int]]:
-        """Draft count grouped by `destination` -- the AI's routing
-        decision, a free-text unit name (see `DraftModel.destination`'s own
-        docstring). Not joined against `units` here; the router endpoint
-        matches names against the caller's own `GET /units` listing, same
-        as `GET /units/{id}/suggested-recipients` already documents doing
-        for its own unit-name resolution."""
+        """`destination`'a göre gruplanmış taslak sayısı -- yapay zekânın
+        yönlendirme kararı, serbest metin bir birim adı (bkz.
+        `DraftModel.destination`'ın kendi docstring'i). Burada `units` ile
+        join yapılmıyor; router endpoint'i adları çağıranın kendi
+        `GET /units` listesiyle eşleştiriyor, tıpkı `GET
+        /units/{id}/suggested-recipients`'in kendi birim-adı çözümlemesi
+        için zaten belgelediği gibi."""
         result = await self.db.execute(
             select(DraftModel.destination, func.count(DraftModel.id))
             .where(DraftModel.company_id == company_id, DraftModel.is_deleted.is_(False))
@@ -93,11 +94,12 @@ class AnalyticsRepository:
         return list(result.all())
 
     async def active_user_count(self, company_id: str, days: int = 7) -> int:
-        """Distinct users with at least one `runs` row (a chat turn) in the
-        last `days` days -- the honest proxy available today, since no
-        login-timestamp is tracked anywhere in this codebase (see
-        `AnalyticsService.summary`'s own docstring for why this isn't
-        `users.last_login_at`, which does not exist)."""
+        """Son `days` gün içinde en az bir `runs` satırı (bir sohbet turu)
+        olan tekil (distinct) kullanıcılar -- bugün elde mevcut dürüst vekil
+        (proxy) metrik, çünkü bu kod tabanında hiçbir yerde giriş
+        zaman damgası tutulmuyor (var olmayan `users.last_login_at` yerine
+        bunun neden kullanıldığına dair `AnalyticsService.summary`'nin
+        kendi docstring'ine bakın)."""
         since = datetime.now(timezone.utc) - timedelta(days=days)
         result = await self.db.execute(
             select(func.count(func.distinct(RunModel.user_id))).where(
@@ -116,12 +118,13 @@ class AnalyticsRepository:
         date_to: datetime,
         bucket: str = "day",
     ) -> List[Tuple[datetime, int]]:
-        """`[(bucket_start, count), ...]` for one metric, `date_trunc`-bucketed.
+        """Bir metrik için `[(bucket_start, count), ...]`, `date_trunc` ile kovalanmış (bucketed).
 
-        `bucket` is `"day"` or `"week"` -- passed straight to Postgres'
-        `date_trunc`, which only accepts a small fixed vocabulary; the
-        router validates it against exactly that set before it ever reaches
-        here (never interpolated from a wider-open value).
+        `bucket` `"day"` veya `"week"` -- doğrudan Postgres'in `date_trunc`'ına
+        veriliyor, o da yalnızca küçük sabit bir kelime dağarcığını kabul
+        ediyor; router bunu buraya ulaşmadan önce tam olarak o küme
+        karşısında doğruluyor (asla daha geniş açık bir değerden
+        enterpole edilmiyor).
         """
         model, date_column, extra_filter = {
             "documents": (DocumentModel, DocumentModel.created_at, None),

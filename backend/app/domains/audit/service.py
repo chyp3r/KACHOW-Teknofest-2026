@@ -1,13 +1,14 @@
-"""`AuditService` -- the write side (`record`) is best-effort and
-deliberately decoupled from the caller's own request-scoped session, the
-same convention `app.domains.drafts.draft_recorder`/`app.observability.
-run_recorder` already established: a bug or a transient DB error while
-writing an audit row must never roll back, block, or fail the actual admin
-action it is describing (a company was still created; the fact that
-recording that in the audit trail failed is a monitoring gap, not a reason
-to also fail the create). Callers invoke `record()` *after* their own
-service call has already committed, exactly the ordering those recorders
-use.
+"""`AuditService` -- yazma tarafı (`record`) en iyi çaba (best-effort)
+prensibiyle çalışır ve bilinçli olarak çağıranın kendi istek kapsamlı
+session'ından ayrıştırılmıştır; `app.domains.drafts.draft_recorder`/
+`app.observability.run_recorder`'ın zaten yerleştirdiği aynı kural: bir
+audit satırı yazılırken oluşan bir hata veya geçici bir DB hatası, tarif
+ettiği asıl yönetici eylemini asla geri almamalı, engellememeli veya
+başarısız kılmamalıdır (şirket yine de oluşturuldu; bunu audit izinde
+kaydetmenin başarısız olması bir izleme (monitoring) eksikliğidir,
+oluşturmayı da başarısız saymak için bir neden değildir). Çağıranlar
+`record()`'u kendi servis çağrıları zaten commit edildikten *sonra*
+çağırır, tam olarak o recorder'ların kullandığı sırayla.
 """
 
 import logging
@@ -23,16 +24,18 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ChainVerificationResult:
-    """The outcome of walking one chain end to end.
+    """Bir zinciri baştan sona gezmenin sonucu.
 
     Attributes:
-        valid: True iff every row's `hash` matches its recomputed value and
-            every row's `prev_hash` matches the previous row's `hash`.
-        rows_checked: How many rows were walked (0 for an empty/nonexistent
-            chain -- vacuously valid).
-        broken_at_seq: The `seq` of the first row that failed either check,
-            or `None` if `valid`.
-        reason: A short description of what failed, or `None` if `valid`.
+        valid: Yalnızca ve yalnızca her satırın `hash`'i yeniden hesaplanan
+            değeriyle ve her satırın `prev_hash`'i önceki satırın `hash`'iyle
+            eşleşiyorsa True.
+        rows_checked: Kaç satırın gezildiği (boş/var olmayan bir zincir için
+            0 -- anlamsız biçimde geçerli).
+        broken_at_seq: İki kontrolden birini geçemeyen ilk satırın `seq`'i,
+            ya da `valid` ise `None`.
+        reason: Neyin başarısız olduğuna dair kısa bir açıklama, ya da
+            `valid` ise `None`.
     """
 
     valid: bool
@@ -62,11 +65,11 @@ class AuditService:
         correlation_id: Optional[str] = None,
         acting_as_company_id: Optional[str] = None,
     ) -> None:
-        """Append one row, on its own session, swallowing any failure.
+        """Kendi session'ında bir satır ekle, oluşan her hatayı yut.
 
-        `is_root=True` only for the `company_id is None` (system-wide) chain
-        -- a company-scoped row still goes through the normal tenant GUC, RLS
-        included, same as every other write.
+        `is_root=True` yalnızca `company_id is None` (sistem geneli) zinciri
+        için -- şirket kapsamlı bir satır yine de normal kiracı GUC'undan
+        geçer, RLS dahil, diğer her yazma işlemiyle aynı şekilde.
         """
         try:
             async with tenant_session(company_id, is_root=company_id is None) as session:
@@ -111,13 +114,13 @@ class AuditService:
         return await self.repository.count_filtered(company_id, actor_user_id, action, resource_type)
 
     async def verify_chain(self, company_id: Optional[str]) -> ChainVerificationResult:
-        """Walk `company_id`'s chain in `seq` order, recomputing every hash.
+        """`company_id`'nin zincirini `seq` sırasında gez, her hash'i yeniden hesapla.
 
-        Two independent checks per row: its own `hash` must equal
-        `compute_hash(prev_hash_it_recorded, its_own_fields)`, and its
-        recorded `prev_hash` must equal the *previous* row's actual `hash`
-        (catching a row deleted or reordered out from the middle of the
-        chain, which the first check alone would miss).
+        Satır başına iki bağımsız kontrol: kendi `hash`'i
+        `compute_hash(prev_hash_it_recorded, its_own_fields)`'e eşit olmalı,
+        ve kaydedilmiş `prev_hash`'i *önceki* satırın gerçek `hash`'ine eşit
+        olmalı (zincirin ortasından silinmiş veya sırası değiştirilmiş bir
+        satırı yakalar, ki bunu tek başına ilk kontrol kaçırırdı).
         """
         rows = await self.repository.list_chain(company_id)
         expected_prev = GENESIS_HASH

@@ -1,15 +1,17 @@
-"""Turns a company's compiled preference pairs into a `CompanyAdapter`'s
-`style_rules`/`avoided_patterns` -- Faz C3 (#187), Aşama 2 of the plan.
+"""Bir kurumun derlenmiş tercih çiftlerini bir `CompanyAdapter`'ın
+`style_rules`/`avoided_patterns`'ına dönüştürür -- Faz C3 (#187), planın
+Aşama 2'si.
 
-One training run makes **one** LLM call, never one per sample or per
-message (see the plan's own A6 note on why a third "nano" model layer
-was rejected and `fast_llm_client` load was measured instead) -- the
-deterministic diff signals below do the heavy lifting; the LLM call only
-turns already-computed statistics plus a small capped sample of the actual
-texts into Turkish prose rules.
+Bir eğitim koşusu **tek** bir LLM çağrısı yapar, örnek başına veya mesaj
+başına asla değil (üçüncü bir "nano" model katmanının neden reddedildiği
+ve bunun yerine `fast_llm_client` yükünün ölçüldüğü için planın kendi A6
+notuna bakın) -- ağır işi aşağıdaki deterministik diff sinyalleri yapar;
+LLM çağrısı yalnızca zaten hesaplanmış istatistikleri, gerçek metinlerin
+küçük ve sınırlı bir örneğiyle birlikte Türkçe düzyazı kurallara çevirir.
 
-No `app.domains` import here either, same rule as `dataset.py`: the caller
-(`app.domains.training.service`) resolves `pairs` and hands them in.
+`dataset.py` ile aynı kural gereği burada da `app.domains` import'u yok:
+çağıran (`app.domains.training.service`) `pairs`'i çözümler ve buraya
+aktarır.
 """
 
 from dataclasses import dataclass
@@ -21,14 +23,14 @@ from pydantic import BaseModel, Field
 from app.ai.llms.base import BaseLLMClient
 from app.ai.training.dataset import PreferencePair
 
-#: Below this many compiled pairs, mining is skipped rather than run on too
-#: little signal to be more than noise -- `app.domains.training.service`
-#: checks this before calling `mine_style` and records the run as
-#: `"skipped"`, not `"failed"`.
+#: Bu sayının altındaki derlenmiş çiftlerde, gürültüden fazlası olamayacak
+#: kadar az sinyal üzerinde çalıştırmak yerine mining atlanır --
+#: `app.domains.training.service`, `mine_style`'ı çağırmadan önce bunu
+#: kontrol eder ve koşuyu `"failed"` değil `"skipped"` olarak kaydeder.
 MIN_FEEDBACK_SAMPLES = 50
 
-#: Style rules / avoided patterns lists are capped the same way
-#: `CompanyAdapterUpdate` caps hand-authored ones (see `company_schema.py`).
+#: Style rules / avoided patterns listeleri, `CompanyAdapterUpdate`'in
+#: elle yazılanları sınırladığı aynı şekilde sınırlanır (bkz. `company_schema.py`).
 _MAX_RULES = 10
 _MAX_EXAMPLES_PER_SIDE = 6
 _MAX_EXAMPLE_CHARS = 600
@@ -47,10 +49,10 @@ class _StyleMiningResult(BaseModel):
 
 
 def _deterministic_signals(pairs: List[PreferencePair]) -> dict:
-    """Cheap, LLM-free diff stats between liked and disliked text -- fed
-    into the single LLM call's prompt as grounding, not a replacement for
-    it (average length alone cannot express "hitap biçimi" or "kapanış
-    kalıbı")."""
+    """Beğenilen ve beğenilmeyen metin arasında ucuz, LLM'siz diff
+    istatistikleri -- tek LLM çağrısının promptuna dayanak (grounding)
+    olarak beslenir, onun yerine geçmez (yalnızca ortalama uzunluk "hitap
+    biçimi" veya "kapanış kalıbı"nı ifade edemez)."""
     liked = [p.chosen for p in pairs if p.chosen]
     disliked = [p.rejected for p in pairs if p.rejected]
     signals = {"liked_count": len(liked), "disliked_count": len(disliked)}
@@ -102,8 +104,8 @@ def _build_prompt(signals: dict, pairs: List[PreferencePair]) -> List[dict]:
 async def mine_style(
     llm_client: BaseLLMClient, pairs: List[PreferencePair]
 ) -> Optional[MinedStyle]:
-    """Returns `None` when there are fewer than `MIN_FEEDBACK_SAMPLES`
-    pairs -- the caller treats that as "skip," not an error."""
+    """`MIN_FEEDBACK_SAMPLES`'dan az çift olduğunda `None` döner -- çağıran
+    bunu bir hata değil, "atla" olarak ele alır."""
     if len(pairs) < MIN_FEEDBACK_SAMPLES:
         return None
 

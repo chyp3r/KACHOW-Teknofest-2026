@@ -11,30 +11,30 @@ from app.core.constants import (
 )
 from app.infrastructure.extractors.marks import DetectedMark
 
-try:  # pragma: no cover - exercised via patching in tests
+try:  # pragma: no cover - testlerde patch ile çalıştırılır
     import pypdfium2 as pdfium
 except ImportError:  # pragma: no cover
     pdfium = None
 
 PDF_MAGIC_BYTES = b"%PDF"
 
-#: Word-ish token: letters and digits, Turkish characters included.
+#: Kelime-benzeri jeton: harf ve rakamlar, Türkçe karakterler dahil.
 _TOKEN_PATTERN = re.compile(r"[0-9A-Za-zÇĞİÖŞÜçğıöşü]+")
-#: Tokens this long or longer are treated as real words rather than OCR noise.
+#: Bu uzunlukta veya daha uzun jetonlar OCR gürültüsü değil gerçek kelime kabul edilir.
 _WORD_MIN_LENGTH = 3
 
 
 class DocumentExtractionError(Exception):
-    """Raised when a document's text cannot be extracted.
+    """Bir belgenin metni çıkarılamadığında fırlatılır.
 
-    Deliberately a plain exception rather than an `app.api.exceptions` subclass so
-    the infrastructure layer stays independent of the HTTP layer. The domain
-    service is responsible for translating it into an API exception.
+    Bilinçli olarak `app.api.exceptions` alt sınıfı yerine düz bir exception --
+    böylece infrastructure katmanı HTTP katmanından bağımsız kalır. Bunu bir API
+    exception'ına çevirmek domain servisinin sorumluluğundadır.
     """
 
 
 class ExtractedDocument(BaseModel):
-    """Text and provenance of a document parsed out of raw uploaded bytes."""
+    """Ham yüklenen byte'lardan ayrıştırılan bir belgenin metni ve kaynağı."""
 
     text: str = Field(description="Belgeden çıkarılan tam metin.")
     pages: list[str] = Field(
@@ -61,22 +61,23 @@ class ExtractedDocument(BaseModel):
 
     @property
     def char_count(self) -> int:
-        """Number of non-whitespace-stripped characters in the extracted text."""
+        """Çıkarılan metindeki, baştaki/sondaki boşluklar kırpılmış karakter sayısı."""
         return len(self.text.strip())
 
     @property
     def quality_ratio(self) -> float:
-        """Fraction of tokens long enough to be real words rather than OCR noise.
+        """OCR gürültüsü değil gerçek kelime sayılacak kadar uzun jetonların oranı.
 
-        Character count alone cannot tell a good result from a bad one: OCR run on
-        a degraded scan happily returns hundreds of characters of nonsense, which
-        clears any length threshold. Failed recognition fragments text into one and
-        two character pieces, so the share of word-length tokens separates the two
-        cleanly -- measured on this project's corpus, readable Turkish scores about
-        0.80 and unusable output about 0.39.
+        Yalnızca karakter sayısı iyi bir sonucu kötüden ayırt edemez: bozuk bir
+        taramada çalıştırılan OCR, herhangi bir uzunluk eşiğini geçen yüzlerce
+        karakterlik anlamsız metni mutlulukla döndürür. Başarısız tanıma metni
+        bir-iki karakterlik parçalara böler, bu yüzden kelime uzunluğundaki
+        jetonların payı ikisini net biçimde ayırır -- bu projenin korpusunda
+        ölçüldüğünde, okunabilir Türkçe yaklaşık 0.80, kullanılamaz çıktı ise
+        yaklaşık 0.39 skorlar.
 
         Returns:
-            Ratio between 0.0 and 1.0; 0.0 when there is no text at all.
+            0.0 ile 1.0 arası oran; hiç metin yoksa 0.0.
         """
         tokens = _TOKEN_PATTERN.findall(self.text)
         if not tokens:
@@ -86,15 +87,15 @@ class ExtractedDocument(BaseModel):
 
 
 class BaseDocumentExtractor(ABC):
-    """Abstract text extractor turning raw document bytes into `ExtractedDocument`.
+    """Ham belge byte'larını `ExtractedDocument`'e çeviren soyut metin çıkarıcı.
 
-    Takes bytes rather than a path on purpose: both callers already hold bytes
-    (`UploadFile.read()` and `BaseStorage.get_file()`), and the S3 storage backend
-    has no local path at all. Adapters that wrap a path-based or file-based tool
-    are responsible for their own temporary files.
+    Bilinçli olarak yol yerine byte alır: her iki çağıran da zaten byte tutar
+    (`UploadFile.read()` ve `BaseStorage.get_file()`), S3 storage backend'inin
+    ise hiç yerel yolu yoktur. Yol tabanlı veya dosya tabanlı bir aracı saran
+    adaptörler kendi geçici dosyalarından kendileri sorumludur.
     """
 
-    #: Short identifier recorded in `ExtractedDocument.extractor`.
+    #: `ExtractedDocument.extractor` içinde kaydedilen kısa tanımlayıcı.
     name: str = "base"
 
     @abstractmethod
@@ -106,28 +107,29 @@ class BaseDocumentExtractor(ABC):
         mime_type: Optional[str] = None,
         raster_cache: Optional[dict] = None,
     ) -> ExtractedDocument:
-        """Extract text from raw document bytes.
+        """Ham belge byte'larından metin çıkar.
 
         Args:
-            content: The raw document bytes.
-            file_name: Original file name, used for extension-based dispatch.
-            mime_type: Declared content type, used for dispatch.
-            raster_cache: Optional shared cache of already-rasterised PDF
-                pages for this one document, keyed by DPI. A scanned PDF is
-                rendered by whichever OCR extractor `FallbackDocumentExtractor`
-                tries first; if that result is rejected and the chain
-                escalates to the next OCR extractor, this is what lets it
-                reuse the same rendered pages instead of paying pdfium's
-                render cost again. `FallbackDocumentExtractor` creates one
-                per top-level `extract()` call and passes it down; extractors
-                that never rasterise (`PlainTextExtractor`,
-                `OpenDataLoaderExtractor`) ignore it.
+            content: Ham belge byte'ları.
+            file_name: Uzantı bazlı yönlendirme için kullanılan orijinal dosya adı.
+            mime_type: Yönlendirme için kullanılan bildirilen içerik türü.
+            raster_cache: Bu tek belge için DPI'ya göre anahtarlanmış, zaten
+                rasterize edilmiş PDF sayfalarının isteğe bağlı paylaşılan
+                önbelleği. Taranmış bir PDF, `FallbackDocumentExtractor`'ın
+                önce denediği hangi OCR çıkarıcıysa onun tarafından render
+                edilir; o sonuç reddedilip zincir bir sonraki OCR çıkarıcıya
+                yükseldiğinde, bu önbellek pdfium'un render maliyetini tekrar
+                ödemeden aynı render edilmiş sayfaların yeniden kullanılmasını
+                sağlar. `FallbackDocumentExtractor` her üst düzey `extract()`
+                çağrısı için bir tane oluşturur ve aşağı aktarır; hiç
+                rasterize etmeyen çıkarıcılar (`PlainTextExtractor`,
+                `OpenDataLoaderExtractor`) bunu yok sayar.
 
         Returns:
-            The extracted text along with page breakdown and provenance.
+            Sayfa dökümü ve kaynak bilgisiyle birlikte çıkarılan metin.
 
         Raises:
-            DocumentExtractionError: If this extractor cannot parse the input.
+            DocumentExtractionError: Bu çıkarıcı girdiyi ayrıştıramazsa.
         """
 
     def supports(
@@ -137,55 +139,56 @@ class BaseDocumentExtractor(ABC):
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
     ) -> bool:
-        """Report whether this extractor should be attempted for the given input.
+        """Bu çıkarıcının verilen girdi için denenip denenmeyeceğini bildirir.
 
-        Guarding the chain matters: without it a plain-text extractor would decode
-        PDF bytes into a large blob of replacement characters, clear the minimum
-        character threshold, and win over the extractor that can actually read it.
+        Zinciri korumak önemlidir: bu olmadan düz metin çıkarıcı, PDF
+        byte'larını büyük bir replacement-character bloğuna çözer, minimum
+        karakter eşiğini geçer ve aslında onu okuyabilecek çıkarıcının önüne
+        geçebilir.
 
         Args:
-            content: The raw document bytes.
-            file_name: Original file name.
-            mime_type: Declared content type.
+            content: Ham belge byte'ları.
+            file_name: Orijinal dosya adı.
+            mime_type: Bildirilen içerik türü.
 
         Returns:
-            True when this extractor is applicable to the input.
+            Bu çıkarıcı girdiye uygulanabilirse True.
         """
         return True
 
 
 def has_pdf_magic_bytes(content: bytes) -> bool:
-    """Report whether the buffer starts with the PDF file signature.
+    """Buffer'ın PDF dosya imzasıyla başlayıp başlamadığını bildirir.
 
     Args:
-        content: The raw document bytes.
+        content: Ham belge byte'ları.
 
     Returns:
-        True when the content is a PDF regardless of the declared MIME type.
+        Bildirilen MIME türünden bağımsız olarak içerik bir PDF ise True.
     """
     return content[:4] == PDF_MAGIC_BYTES
 
 
 def has_pdf_text_layer(content: bytes) -> bool:
-    """Cheaply report whether a PDF has any meaningful embedded text layer.
+    """Bir PDF'in anlamlı bir gömülü metin katmanı olup olmadığını ucuz biçimde bildirir.
 
-    Reads pdfium's native text stream directly -- no OCR, no JVM -- so this
-    is fast enough to run before deciding whether `OpenDataLoaderExtractor`
-    or `PdfiumExtractor` are worth trying at all. A genuine scan has no text
-    layer on any page; a born-digital PDF has real text almost immediately,
-    so checking the first few pages tells them apart cheaply even on a long
-    document.
+    pdfium'un yerel metin akışını doğrudan okur -- OCR yok, JVM yok -- bu
+    yüzden `OpenDataLoaderExtractor` ya da `PdfiumExtractor`'ın denemeye
+    değip değmediğine karar vermeden önce çalıştırılacak kadar hızlıdır.
+    Gerçek bir taramanın hiçbir sayfasında metin katmanı yoktur; dijital
+    doğan bir PDF'in ise neredeyse anında gerçek metni vardır, bu yüzden ilk
+    birkaç sayfayı kontrol etmek uzun bir belgede bile ikisini ucuza ayırt eder.
 
     Args:
-        content: The raw PDF bytes.
+        content: Ham PDF byte'ları.
 
     Returns:
-        True when pdfium finds enough embedded text, or when the probe
-        itself cannot run at all (pdfium missing, or the PDF fails to open).
-        Failing open is deliberate: this function exists purely to skip
-        extractors that would waste time on a scan, and a probe that can't
-        even open the file is far more informative as "let the real
-        extractors report the failure" than as a silent skip.
+        pdfium yeterince gömülü metin bulursa, ya da sondanın kendisi hiç
+        çalışamazsa (pdfium eksik, veya PDF açılamıyor) True. Açık başarısız
+        olmak bilinçlidir: bu fonksiyon sadece bir taramada zaman
+        harcayacak çıkarıcıları atlamak için var, ve dosyayı açamayan bir
+        sonda, sessiz bir atlamadan çok "gerçek çıkarıcılar hatayı bildirsin"
+        olarak çok daha bilgilendiricidir.
     """
     if pdfium is None:
         return True
@@ -213,34 +216,35 @@ def has_pdf_text_layer(content: bytes) -> bool:
 
 
 def has_full_page_image(content: bytes) -> bool:
-    """Report whether a PDF's first page is dominated by a single embedded image.
+    """Bir PDF'in ilk sayfasının tek bir gömülü görüntüye hakim olup olmadığını bildirir.
 
-    The second half of the discriminator that tells a genuinely born-digital
-    page apart from a page that merely *carries* a text layer because a
-    scanner's own bundled OCR pass wrote one over a full-page raster of the
-    original scan ("Class A" -- see `is_scanned_text_layer`).
-    `has_pdf_text_layer` alone cannot separate the two; both report real
-    text. Measured across 86 real PDFs from this project's own corpus and
-    live uploads, this probe's largest-image coverage lands at exactly 1.0
-    for every Class-A/scanned page and exactly 0.0 for every genuinely
-    born-digital page -- no document falls between the two, so
-    `FULL_PAGE_IMAGE_MIN_COVERAGE` needed no fine calibration.
+    Gerçekten dijital doğan bir sayfayı, yalnızca bir tarayıcının kendi gömülü
+    OCR geçişinin orijinal taramanın tam sayfa bir rasterinin üzerine metin
+    katmanı yazdığı için metin katmanı *taşıyan* bir sayfadan ("Class A" --
+    bkz. `is_scanned_text_layer`) ayırt eden discriminator'ın ikinci yarısı.
+    `has_pdf_text_layer` tek başına ikisini ayıramaz; ikisi de gerçek metin
+    bildirir. Bu projenin kendi korpusundaki 86 gerçek PDF ve canlı
+    yüklemeler üzerinde ölçüldüğünde, bu sonda her Class-A/taranmış sayfa
+    için en büyük görüntü kapsamasını tam olarak 1.0, gerçekten dijital doğan
+    her sayfa için ise tam olarak 0.0 olarak bulur -- hiçbir belge ikisi
+    arasına düşmez, bu yüzden `FULL_PAGE_IMAGE_MIN_COVERAGE`'ın ince
+    kalibrasyona ihtiyacı olmadı.
 
     Args:
-        content: The raw PDF bytes.
+        content: Ham PDF byte'ları.
 
     Returns:
-        True when the largest embedded image object on page 1 covers at
-        least `FULL_PAGE_IMAGE_MIN_COVERAGE` of the page area. False
-        whenever the probe cannot run at all -- pdfium missing, the PDF
-        won't open, or it has no pages. This is the inverse of
-        `has_pdf_text_layer`'s fail-open: that probe exists to *skip*
-        extractors, so failing open just means "let the real extractor
-        report the failure". This probe instead *widens* what gets treated
-        as OCR-worthy (see `is_scanned_text_layer`'s only caller,
-        `FallbackDocumentExtractor._maybe_repair_header`), so failing closed
-        means a file this probe cannot even inspect never spends the extra
-        vision-model budget it exists to gate.
+        1. sayfadaki en büyük gömülü görüntü nesnesi sayfa alanının en az
+        `FULL_PAGE_IMAGE_MIN_COVERAGE`'ını kaplıyorsa True. Sonda hiç
+        çalışamıyorsa -- pdfium eksik, PDF açılmıyor, ya da hiç sayfası
+        yoksa -- False. Bu, `has_pdf_text_layer`'ın açık başarısız olma
+        davranışının tersidir: o sonda çıkarıcıları *atlamak* için var,
+        bu yüzden açık başarısız olmak sadece "gerçek çıkarıcı hatayı
+        bildirsin" demektir. Bu sonda ise (bkz. `is_scanned_text_layer`'ın
+        tek çağıranı, `FallbackDocumentExtractor._maybe_repair_header`)
+        OCR'a değer olarak neyin sayıldığını *genişletir*, bu yüzden kapalı
+        başarısız olmak, bu sondanın inceleyemediği bir dosyanın fazladan
+        vision modeli bütçesini asla harcamaması anlamına gelir.
     """
     if pdfium is None:
         return False
@@ -276,35 +280,35 @@ def has_full_page_image(content: bytes) -> bool:
 
 
 def is_scanned_text_layer(content: bytes) -> bool:
-    """Report whether a PDF's embedded text layer is scanner-origin junk.
+    """Bir PDF'in gömülü metin katmanının tarayıcı kaynaklı çöp olup olmadığını bildirir.
 
-    Combines both halves of the Class-A discriminator: a real text layer
-    (`has_pdf_text_layer`) sitting over a full-page raster
-    (`has_full_page_image`). Either signal alone is insufficient -- a real
-    text layer without a full-page image is an ordinary born-digital PDF,
-    and a full-page image without a text layer is just a genuine scan with
-    no OCR text at all (already routed to the OCR extractors by
-    `has_pdf_text_layer` returning False on its own).
+    Class-A discriminator'ının her iki yarısını birleştirir: tam sayfa bir
+    rasterin (`has_full_page_image`) üzerine oturan gerçek bir metin katmanı
+    (`has_pdf_text_layer`). Sinyallerden yalnızca biri yetersizdir -- tam
+    sayfa görüntüsü olmayan gerçek bir metin katmanı sıradan dijital doğan
+    bir PDF'dir, metin katmanı olmayan tam sayfa görüntü ise hiç OCR metni
+    olmayan gerçek bir tarama (zaten `has_pdf_text_layer`'ın kendi başına
+    False dönmesiyle OCR çıkarıcılarına yönlendirilmiştir).
 
     Args:
-        content: The raw PDF bytes.
+        content: Ham PDF byte'ları.
 
     Returns:
-        True only when both signals agree the page carries scanner-origin
-        text over a full-page scan image.
+        Yalnızca her iki sinyal de sayfanın tam sayfa bir tarama görüntüsü
+        üzerinde tarayıcı kaynaklı metin taşıdığında hemfikir olursa True.
     """
     return has_pdf_text_layer(content) and has_full_page_image(content)
 
 
 def matches_extension(file_name: Optional[str], extensions: set[str]) -> bool:
-    """Report whether a file name ends with one of the given extensions.
+    """Bir dosya adının verilen uzantılardan biriyle bitip bitmediğini bildirir.
 
     Args:
-        file_name: File name to inspect; may be None.
-        extensions: Lower-case extensions without a leading dot.
+        file_name: İncelenecek dosya adı; None olabilir.
+        extensions: Baştaki nokta olmadan küçük harfli uzantılar.
 
     Returns:
-        True when the file name carries one of the extensions.
+        Dosya adı uzantılardan birini taşıyorsa True.
     """
     if not file_name or "." not in file_name:
         return False

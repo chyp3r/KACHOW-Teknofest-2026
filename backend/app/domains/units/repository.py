@@ -9,32 +9,32 @@ from app.domains.users.model.user_model import UserModel
 
 
 class UnitRepository:
-    """SOTA Repository for SQLAlchemy database transactions regarding Units.
+    """Birimler ile ilgili SQLAlchemy veritabanı işlemleri için SOTA Repository.
 
-    Every method takes an explicit `company_id` and filters on it -- see
-    `app.domains.documents.repository.DocumentRepository`'s docstring for
-    the same convention and reasoning.
+    Her metot açık bir `company_id` alır ve buna göre filtreler -- aynı
+    kural ve gerekçe için `app.domains.documents.repository.
+    DocumentRepository`'nin docstring'ine bakınız.
     """
 
     def __init__(self, db: AsyncSession):
         self.db = db
 
     async def get_by_id(self, unit_id: str, company_id: str) -> Optional[UnitModel]:
-        """Fetch a unit by primary key ID, scoped to `company_id`."""
+        """`company_id` kapsamında, birincil anahtar ID'sine göre bir birim getirir."""
         result = await self.db.execute(
             select(UnitModel).where(UnitModel.id == unit_id, UnitModel.company_id == company_id)
         )
         return result.scalar_one_or_none()
 
     async def get_by_name(self, name: str, company_id: str) -> Optional[UnitModel]:
-        """Fetch a unit by name within `company_id` (uniqueness is per-company, not global)."""
+        """`company_id` içinde ada göre bir birim getirir (benzersizlik şirket başına, global değil)."""
         result = await self.db.execute(
             select(UnitModel).where(UnitModel.name == name, UnitModel.company_id == company_id)
         )
         return result.scalar_one_or_none()
 
     async def list_all(self, company_id: str) -> List[UnitModel]:
-        """Fetch every unit of `company_id`, active or not, ordered by name."""
+        """`company_id`'nin aktif olsun olmasın her birimini, ada göre sıralı getirir."""
         result = await self.db.execute(
             select(UnitModel)
             .where(UnitModel.company_id == company_id)
@@ -43,7 +43,7 @@ class UnitRepository:
         return list(result.scalars().all())
 
     async def list_active(self, company_id: str) -> List[UnitModel]:
-        """Fetch only `company_id`'s units currently eligible for routing suggestions."""
+        """Sadece `company_id`'nin şu anda yönlendirme önerilerine uygun birimlerini getirir."""
         result = await self.db.execute(
             select(UnitModel)
             .where(UnitModel.company_id == company_id, UnitModel.is_active == True)  # noqa: E712
@@ -52,13 +52,13 @@ class UnitRepository:
         return list(result.scalars().all())
 
     async def create(self, unit: UnitModel) -> UnitModel:
-        """Persist a new unit record in the database."""
+        """Yeni bir birim kaydını veritabanına kalıcı olarak yazar."""
         self.db.add(unit)
         await self.db.flush()
         return unit
 
     async def update(self, unit: UnitModel, update_data: dict) -> UnitModel:
-        """Update attributes of a unit model and flush."""
+        """Bir birim modelinin özniteliklerini günceller ve flush eder."""
         for field, value in update_data.items():
             if hasattr(unit, field) and value is not None:
                 setattr(unit, field, value)
@@ -66,7 +66,7 @@ class UnitRepository:
         return unit
 
     async def delete(self, unit_id: str, company_id: str) -> bool:
-        """Permanently remove a unit record from the database, scoped to `company_id`."""
+        """`company_id` kapsamında bir birim kaydını veritabanından kalıcı olarak kaldırır."""
         result = await self.db.execute(
             delete(UnitModel).where(UnitModel.id == unit_id, UnitModel.company_id == company_id)
         )
@@ -75,10 +75,10 @@ class UnitRepository:
 
 
 class UnitMembershipRepository:
-    """Repository for the user <-> unit link (see `UnitMembershipModel`).
+    """Kullanıcı <-> birim bağlantısı için repository (bkz. `UnitMembershipModel`).
 
-    Every method takes an explicit `company_id`, same convention as
-    `UnitRepository` above.
+    Her metot açık bir `company_id` alır, yukarıdaki `UnitRepository` ile
+    aynı kural.
     """
 
     def __init__(self, db: AsyncSession):
@@ -95,8 +95,8 @@ class UnitMembershipRepository:
         return result.scalar_one_or_none()
 
     async def list_for_unit(self, unit_id: str, company_id: str) -> List[Tuple[UnitMembershipModel, UserModel]]:
-        """Every member of `unit_id`, joined with their identity, ranked for suggestion:
-        primary members first, then "lead"s, then everyone else, alphabetically."""
+        """`unit_id`'nin kimlikleriyle birleştirilmiş her üyesi, öneri için sıralanmış:
+        önce birincil üyeler, sonra "lead"ler, sonra alfabetik olarak diğer herkes."""
         result = await self.db.execute(
             select(UnitMembershipModel, UserModel)
             .join(UserModel, UserModel.id == UnitMembershipModel.user_id)
@@ -112,13 +112,13 @@ class UnitMembershipRepository:
     async def get_primary_for_user(
         self, user_id: str, company_id: str
     ) -> Optional[UnitMembershipModel]:
-        """The one `is_primary=true` membership for `user_id`, if any.
+        """`user_id` için (varsa) tek `is_primary=true` üyeliği.
 
-        Used by `TransferPolicy`'s cross-unit check: a recipient with no
-        primary unit at all is not itself a policy failure (cross_unit
-        simply can't be computed and defaults to `False`, see
-        `TransferPolicy.evaluate`'s own docstring), just an honestly
-        incomplete signal.
+        `TransferPolicy`'nin çapraz-birim (cross-unit) kontrolünde kullanılır:
+        hiç birincil birimi olmayan bir alıcı, tek başına bir politika
+        başarısızlığı değildir (cross_unit hesaplanamaz ve varsayılan olarak
+        `False` olur, bkz. `TransferPolicy.evaluate`'in kendi docstring'i),
+        sadece dürüstçe eksik bir sinyaldir.
         """
         result = await self.db.execute(
             select(UnitMembershipModel).where(
@@ -130,12 +130,12 @@ class UnitMembershipRepository:
         return result.scalar_one_or_none()
 
     async def clear_primary_for_user(self, user_id: str, company_id: str) -> None:
-        """Unset any existing `is_primary` membership for `user_id`.
+        """`user_id` için var olan `is_primary` üyeliğin işaretini kaldırır.
 
-        Called before setting a new one -- the partial unique index
-        (`uq_unit_memberships_one_primary_per_user`) allows at most one
-        `is_primary=true` row per user, so promoting a second unit to
-        primary must first demote whichever one currently holds it.
+        Yeni bir tanesini ayarlamadan önce çağrılır -- kısmi benzersiz indeks
+        (`uq_unit_memberships_one_primary_per_user`) kullanıcı başına en
+        fazla bir `is_primary=true` satırına izin verir, bu yüzden ikinci
+        bir birimi birincil yapmak önce mevcut olanı düşürmeyi gerektirir.
         """
         result = await self.db.execute(
             select(UnitMembershipModel).where(

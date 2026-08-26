@@ -14,16 +14,17 @@ logger = logging.getLogger(__name__)
 
 
 class OllamaClient(BaseLLMClient):
-    """Client for interacting with a local Ollama instance using LangChain.
+    """LangChain kullanarak yerel bir Ollama örneğiyle etkileşim kuran istemci.
 
-    Two properties matter for local inference and both were previously missing:
+    Yerel çıkarım için iki özellik önemlidir ve ikisi de daha önce eksikti:
 
-    1. ``num_ctx`` is set on every call. Ollama's default context window is 2048
-       tokens and it truncates *from the beginning* without warning -- which
-       silently deletes the system prompt or the document header. Setting this
-       per-node (as the code used to) leaves every other node broken.
-    2. ``ChatOllama`` instances are cached. Building one per call discarded the
-       underlying HTTP connection pool on every request.
+    1. ``num_ctx`` her çağrıda ayarlanır. Ollama'nın varsayılan bağlam
+       penceresi 2048 token'dır ve uyarı vermeden *baştan itibaren* kırpar --
+       bu da sistem prompt'unu veya belge başlığını sessizce siler. Bunu
+       düğüm başına ayarlamak (kodun eskiden yaptığı gibi), diğer her
+       düğümü bozuk bırakır.
+    2. ``ChatOllama`` örnekleri önbelleklenir. Çağrı başına bir tane
+       oluşturmak, her istekte altta yatan HTTP bağlantı havuzunu atardı.
     """
 
     def __init__(
@@ -36,16 +37,16 @@ class OllamaClient(BaseLLMClient):
         num_ctx: int | None = None,
         keep_alive: str | None = None,
     ):
-        """Initialize the Ollama client.
+        """Ollama istemcisini başlat.
 
         Args:
-            base_url: The URL where the local Ollama instance is running.
-            model: The name of the model to use.
-            temperature: Default temperature for generation.
-            reasoning: Whether the model should use its thinking mode.
-            max_tokens: Default maximum number of generated tokens.
-            num_ctx: Context window size. Defaults to ``settings.OLLAMA_NUM_CTX``.
-            keep_alive: How long Ollama keeps the model resident between calls.
+            base_url: Yerel Ollama örneğinin çalıştığı URL.
+            model: Kullanılacak modelin adı.
+            temperature: Üretim için varsayılan sıcaklık.
+            reasoning: Modelin düşünme modunu kullanıp kullanmayacağı.
+            max_tokens: Varsayılan maksimum üretilen token sayısı.
+            num_ctx: Bağlam penceresi boyutu. Varsayılan ``settings.OLLAMA_NUM_CTX``.
+            keep_alive: Ollama'nın modeli çağrılar arasında bellekte ne kadar süre tuttuğu.
         """
         self.base_url = base_url
         self.model_name = model
@@ -75,16 +76,17 @@ class OllamaClient(BaseLLMClient):
         max_tokens: int | None = None,
         **kwargs: Any,
     ) -> ChatOllama:
-        """Return a configured Ollama client, reusing one per parameter set.
+        """Yapılandırılmış bir Ollama istemcisi döndür, parametre seti başına bir tane yeniden kullanarak.
 
         Args:
-            temperature: Sampling temperature for this call.
-            max_tokens: Generation budget, falling back to the client default.
-            **kwargs: Extra ChatOllama options. ``reasoning``, ``num_predict``
-                and ``num_ctx`` are consumed here; anything else is forwarded.
+            temperature: Bu çağrı için örnekleme sıcaklığı.
+            max_tokens: Üretim bütçesi; istemci varsayılanına düşer.
+            **kwargs: Ekstra ChatOllama seçenekleri. ``reasoning``,
+                ``num_predict`` ve ``num_ctx`` burada tüketilir; geri kalan
+                her şey iletilir.
 
         Returns:
-            A cached or newly built ``ChatOllama``.
+            Önbelleklenmiş veya yeni oluşturulmuş bir ``ChatOllama``.
         """
         reasoning = kwargs.pop("reasoning", self.reasoning)
         num_predict = kwargs.pop(
@@ -93,8 +95,9 @@ class OllamaClient(BaseLLMClient):
         )
         num_ctx = kwargs.pop("num_ctx", self.num_ctx)
 
-        # Only hashable extras may participate in the cache key; anything else
-        # forces a fresh client rather than silently sharing the wrong config.
+        # Yalnızca hashlenebilir ekstralar önbellek anahtarına katılabilir;
+        # diğer her şey, yanlış yapılandırmayı sessizce paylaşmak yerine
+        # yeni bir istemci zorlar.
         try:
             extra_key = tuple(sorted(kwargs.items()))
             cacheable = True
@@ -127,7 +130,7 @@ class OllamaClient(BaseLLMClient):
         max_tokens: int | None = None,
         **kwargs: Any,
     ) -> str:
-        """Generate response from a list of messages using local Ollama."""
+        """Yerel Ollama kullanarak bir mesaj listesinden yanıt üret."""
         temp = temperature if temperature is not None else self.temperature
 
         client = self._build_client(temp, max_tokens, **kwargs)
@@ -154,7 +157,7 @@ class OllamaClient(BaseLLMClient):
         max_tokens: int | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
-        """Stream response chunk-by-chunk using local Ollama."""
+        """Yerel Ollama kullanarak yanıtı parça parça akıt."""
         temp = temperature if temperature is not None else self.temperature
 
         client = self._build_client(temp, max_tokens, **kwargs)
@@ -176,24 +179,24 @@ class OllamaClient(BaseLLMClient):
         temperature: float | None = None,
         **kwargs: Any,
     ) -> Any:
-        """Generate structured output validated against a Pydantic model.
+        """Bir Pydantic modeline karşı doğrulanmış yapılandırılmış çıktı üret.
 
-        Thinking mode is forced off: reasoning tokens are emitted before the JSON
-        body, consume the ``num_predict`` budget and routinely truncate the
-        object being validated.
+        Düşünme modu zorla kapatılır: reasoning token'ları JSON gövdesinden
+        önce yayılır, ``num_predict`` bütçesini tüketir ve doğrulanan
+        nesneyi rutin olarak kırpar.
 
-        ``method="function_calling"`` is pinned rather than the library's
-        ``"json_schema"`` default. The latter maps to Ollama's native
-        ``format=<schema>`` grammar-constrained decoding -- but that path is
-        silently a no-op for models running on a custom Ollama
-        renderer/parser engine (e.g. ``qwen3.5``, whose ``ollama show``
-        template is a bare ``{{ .Prompt }}`` passthrough): verified directly
-        against the Ollama API that ``format`` (both the plain ``"json"``
-        string and a full JSON-schema object) was ignored outright, while a
-        request built with these same models' ``tools`` array was honoured
-        exactly, including nested/optional fields and enum values. Native
-        tool-calling is the structured-output path this engine actually
-        implements.
+        Kütüphanenin ``"json_schema"`` varsayılanı yerine
+        ``method="function_calling"`` sabitlenir. İkincisi Ollama'nın yerel
+        ``format=<schema>`` gramer-kısıtlı çözümlemesine eşlenir -- ama bu
+        yol, özel bir Ollama render/ayrıştırıcı motoru üzerinde çalışan
+        modeller için (örn. ``ollama show`` şablonu düz bir ``{{ .Prompt }}``
+        geçişi olan ``qwen3.5``) sessizce hiçbir etki yapmaz: Ollama API'sine
+        karşı doğrudan doğrulandı ki ``format`` (hem düz ``"json"`` dizesi
+        hem de tam bir JSON-schema nesnesi) tamamen görmezden gelindi, aynı
+        modellerin ``tools`` dizisiyle oluşturulan bir istek ise iç
+        içe/isteğe bağlı alanlar ve enum değerleri dahil tam olarak
+        onurlandırıldı. Yerel araç çağırma, bu motorun gerçekten
+        uyguladığı yapılandırılmış çıktı yoludur.
         """
         temp = temperature if temperature is not None else self.temperature
         max_tokens = kwargs.pop("max_tokens", None)
@@ -228,14 +231,15 @@ class OllamaClient(BaseLLMClient):
         max_tokens: int | None = None,
         **kwargs: Any,
     ) -> ToolCallResponse:
-        """Generate one turn of a tool-calling exchange via ``bind_tools``.
+        """``bind_tools`` aracılığıyla bir araç çağırma alışverişinin bir turunu üret.
 
-        Uses the same native tool-calling path ``generate_structured`` pins via
-        ``method="function_calling"`` -- verified directly against the Ollama
-        API to be honoured exactly on custom-renderer models (e.g. qwen3.5)
-        where ``format=<schema>`` is a silent no-op. Thinking mode is forced
-        off for the same reason it is there: reasoning tokens would precede
-        the tool-call payload and can consume the generation budget before it.
+        `generate_structured`'ın ``method="function_calling"`` ile
+        sabitlediği aynı yerel araç çağırma yolunu kullanır -- Ollama
+        API'sine karşı doğrudan doğrulandı ki ``format=<schema>``'nin
+        sessizce hiçbir etki yapmadığı özel-render'lı modellerde (örn.
+        qwen3.5) tam olarak onurlandırılıyor. Düşünme modu, orada olduğu
+        aynı nedenle zorla kapatılır: reasoning token'ları araç çağrısı
+        yükünden önce gelir ve ondan önce üretim bütçesini tüketebilir.
         """
         temp = temperature if temperature is not None else self.temperature
         kwargs.setdefault("reasoning", False)
@@ -269,10 +273,10 @@ class OllamaClient(BaseLLMClient):
         )
 
     async def warm_up(self) -> bool:
-        """Load the model into memory so the first real request is not cold.
+        """Modeli belleğe yükle, böylece ilk gerçek istek soğuk olmaz.
 
         Returns:
-            True when the model responded, False when Ollama was unreachable.
+            Model yanıt verdiyse True, Ollama'ya ulaşılamadıysa False.
         """
         try:
             await self._build_client(0.0, 1).ainvoke(

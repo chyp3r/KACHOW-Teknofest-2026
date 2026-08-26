@@ -31,36 +31,37 @@ from app.domains.users.model.user_model import UserModel
 from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 from app.shared.validator.storage_path_validator import validate_storage_path
 
-# dependencies=[...] applies to every route in this router -- authentication
-# is mandatory (see require_auth_if_enabled), so every request here carries
-# a real, tenant-bound current_user.
+# dependencies=[...] bu router'daki her rotaya uygulanır -- kimlik doğrulama
+# zorunludur (bkz. require_auth_if_enabled), bu yüzden buradaki her istek
+# gerçek, kiracıya bağlı bir current_user taşır.
 router = APIRouter(
     prefix="/documents", tags=["documents"], dependencies=[Depends(require_auth_if_enabled)]
 )
 
-#: Read in 1 MiB chunks so the running total can be checked against the limit
-#: before the next chunk is even requested from the client.
+#: 1 MiB'lik parçalar halinde okunur, böylece toplam, istemciden bir sonraki
+#: parça istenmeden önce sınıra karşı kontrol edilebilir.
 _READ_CHUNK_BYTES = 1 << 20
 
 
 async def _read_bounded(file: UploadFile, limit: int) -> bytes:
-    """Read an UploadFile's body without ever materialising more than ``limit``.
+    """Bir UploadFile'ın gövdesini asla ``limit``'ten fazlasını belleğe almadan okur.
 
-    ``await file.read()`` reads the entire body into memory before any size
-    check can run -- a 2GB upload allocates 2GB regardless of the configured
-    50MB limit, since the limit was only ever checked afterwards. This raises
-    the moment the running total crosses ``limit``, so worst-case memory stays
-    bounded by ``limit + _READ_CHUNK_BYTES``.
+    ``await file.read()``, herhangi bir boyut kontrolü çalışmadan önce
+    gövdenin tamamını belleğe okur -- yapılandırılmış 50MB sınırından
+    bağımsız olarak 2GB'lık bir yükleme 2GB ayırır, çünkü sınır yalnızca
+    sonradan kontrol ediliyordu. Bu fonksiyon, toplam ``limit``'i geçtiği
+    anda hata fırlatır, bu yüzden en kötü durumda bellek kullanımı
+    ``limit + _READ_CHUNK_BYTES`` ile sınırlı kalır.
 
     Args:
-        file: The incoming upload.
-        limit: Maximum allowed size in bytes.
+        file: Gelen yükleme.
+        limit: Bayt cinsinden izin verilen azami boyut.
 
     Returns:
-        The full file content, guaranteed to be at most ``limit`` bytes.
+        En fazla ``limit`` bayt olması garanti edilen tam dosya içeriği.
 
     Raises:
-        ValidationException: If the body exceeds ``limit``.
+        ValidationException: Gövde ``limit``'i aşarsa.
     """
     total = 0
     chunks: list[bytes] = []
@@ -79,20 +80,22 @@ async def _read_bounded(file: UploadFile, limit: int) -> bytes:
 
 
 def _authorize_document(current_user: UserModel, document: DocumentModel, action: str) -> None:
-    """Single ABAC decision replacing the ``owner_id``/``bypasses_ownership``
-    check every route below used to repeat inline.
+    """Aşağıdaki her rotanın satır içinde tekrarladığı
+    ``owner_id``/``bypasses_ownership`` kontrolünün yerine geçen tek bir
+    ABAC kararı.
 
-    Calls the bare, grant-less ``engine.authorize`` (built-in role rules
-    only) rather than the DB-backed ``AuthzService``: reproduces
-    ``bypasses_ownership``'s exact prior semantics (ADMIN/MANAGER/ROOT see
-    every document company-wide, EMPLOYEE only its own), with zero new
-    per-request DB/Redis round trips on this hot path. Consulting
-    ``permission_grants`` here too is a natural follow-up once a caller
-    actually needs to delegate document access beyond role, not a gap in
-    this change -- see the Faz 2 issue.
+    DB destekli ``AuthzService`` yerine yalın, izinsiz ``engine.authorize``
+    (yalnızca yerleşik rol kuralları) çağrılır: ``bypasses_ownership``'in
+    önceki tam semantiğini yeniden üretir (ADMIN/MANAGER/ROOT şirket
+    genelinde her evrakı görür, EMPLOYEE yalnızca kendisininkini), bu sık
+    kullanılan yol üzerinde yeni bir istek başına DB/Redis gidiş-dönüşü
+    olmadan. Burada ``permission_grants``'a da başvurmak, bu değişiklikte
+    bir eksiklik değil, bir çağıranın rolün ötesinde evrak erişimini
+    fiilen devretmesi gerektiğinde doğal bir takip adımıdır -- bkz. Faz 2
+    sorunu.
 
     Raises:
-        AuthorizationException: If ``authorize()`` denies.
+        AuthorizationException: ``authorize()`` reddederse.
     """
     resource = Resource(
         type="document", id=document.id, company_id=document.company_id, owner_id=document.owner_id
@@ -110,23 +113,23 @@ async def analyze_document(
     current_user: UserModel = Depends(require_auth_if_enabled),
     _: None = Depends(rate_limit(max_requests=10, window_seconds=60, key_prefix="documents:analyze")),
 ):
-    """Perform the first review (ön inceleme) of an incoming official document.
+    """Gelen bir resmi evrakın ilk incelemesini (ön inceleme) yapar.
 
-    Reads the document via direct text extraction or OCR, determines its type,
-    extracts its header fields, reports required-but-missing information with the
-    relevant legislation, and returns a short summary.
+    Evrakı doğrudan metin çıkarımı veya OCR ile okur, türünü belirler,
+    başlık alanlarını çıkarır, gerekli ama eksik bilgileri ilgili
+    mevzuatla birlikte bildirir ve kısa bir özet döndürür.
 
     Args:
-        http_request: The raw request, checked for a declared Content-Length
-            before the body is read at all.
-        file: The uploaded document.
-        service: Injected document analysis service.
-        current_user: The authenticated caller -- registered as the
-            document's owner and company so later reads can be restricted
-            to them.
+        http_request: Gövde hiç okunmadan önce beyan edilmiş bir
+            Content-Length için kontrol edilen ham istek.
+        file: Yüklenen evrak.
+        service: Enjekte edilmiş evrak analiz servisi.
+        current_user: Kimliği doğrulanmış çağıran -- daha sonraki okumaların
+            kendisiyle sınırlandırılabilmesi için evrakın sahibi ve şirketi
+            olarak kaydedilir.
 
     Returns:
-        The analysis result inside the unified success envelope.
+        Analiz sonucu, birleşik başarı zarfının içinde.
     """
     declared_length = http_request.headers.get("content-length")
     if declared_length is not None and declared_length.isdigit():
@@ -144,8 +147,8 @@ async def analyze_document(
         owner_id=current_user.id,
         company_id=current_user.company_id,
     )
-    # mode="json" is required: the response envelope is serialised with json.dumps,
-    # which cannot handle nested Pydantic models or enum members.
+    # mode="json" zorunludur: yanıt zarfı, iç içe Pydantic modellerini veya
+    # enum üyelerini işleyemeyen json.dumps ile serileştirilir.
     return SuccessResponse(data=result.model_dump(mode="json"))
 
 
@@ -156,22 +159,22 @@ async def generate_draft(
     document_repository: DocumentRepository = Depends(get_document_repository),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """Generate an official draft and department routing suggestion (Task 2).
+    """Resmi bir taslak ve birim yönlendirme önerisi üretir (Görev 2).
 
-    Uses the output from the first review (Görev 1) to determine the correct
-    correspondence type, draft the text, and route it to the appropriate department.
+    Doğru yazışma türünü belirlemek, metni yazmak ve uygun birime
+    yönlendirmek için ilk incelemenin (Görev 1) çıktısını kullanır.
 
-    ``DraftService`` reads the source document straight from storage by
-    ``storage_path`` -- unlike ``GET /documents/{storage_path}``, it has no
-    ownership/clearance concept of its own, so that check belongs here, at
-    the router boundary, before the raw file content ever reaches the
-    drafting graph.
+    ``DraftService``, kaynak evrakı doğrudan depodan ``storage_path`` ile
+    okur -- ``GET /documents/{storage_path}``'ın aksine, kendi
+    sahiplik/yetki kavramı yoktur, bu yüzden bu kontrol burada, router
+    sınırında, ham dosya içeriği taslak yazım grafiğine ulaşmadan önce
+    yapılmalıdır.
 
     Raises:
-        AuthorizationException: If the document belongs to a different
-            company, or a different owner than ``current_user`` (and it
-            isn't ADMIN/MANAGER/ROOT), or ``current_user``'s clearance
-            doesn't cover the document's confidentiality level.
+        AuthorizationException: Evrak farklı bir şirkete aitse, veya
+            ``current_user``'dan farklı bir sahibe aitse (ve ADMIN/MANAGER/
+            ROOT değilse), veya ``current_user``'ın yetkisi evrakın gizlilik
+            seviyesini karşılamıyorsa.
     """
     document = await document_repository.get_by_id(request.storage_path, current_user.company_id)
     if document is None:
@@ -195,19 +198,19 @@ async def list_documents(
     document_repository: DocumentRepository = Depends(get_document_repository),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """List uploaded documents with their summary metadata, newest first.
+    """Yüklenen evrakları özet meta verileriyle birlikte en yeniden en eskiye listeler.
 
     Args:
-        pagination: Page/size query parameters.
-        document_repository: Ownership/listing registry.
-        current_user: The authenticated caller -- the list is restricted to
-            documents it owns, unless it is ADMIN/MANAGER/ROOT (see
-            ``bypasses_ownership``), who see every document company-wide.
-            Never cross-company regardless of role.
+        pagination: Sayfa/boyut sorgu parametreleri.
+        document_repository: Sahiplik/listeleme kaydı.
+        current_user: Kimliği doğrulanmış çağıran -- liste, ADMIN/MANAGER/
+            ROOT (bkz. ``bypasses_ownership``) olmadığı sürece sahip olduğu
+            evraklarla sınırlıdır; bunlar şirket genelinde her evrakı görür.
+            Rolden bağımsız olarak asla şirketler arası değildir.
 
     Returns:
-        A paginated envelope over the 7-field library projection (see
-        ``GET /documents/{storage_path}`` for the full analysis).
+        7 alanlı kütüphane izdüşümü üzerinde sayfalanmış bir zarf (tam
+        analiz için bkz. ``GET /documents/{storage_path}``).
     """
     owner_id = None if bypasses_ownership(current_user) else current_user.id
     documents = await document_repository.list_for_owner(
@@ -242,11 +245,11 @@ async def list_documents(
 
 @router.get("/correspondence-types", response_model=None)
 async def list_correspondence_types():
-    """List the supported outbound correspondence types and their Turkish labels.
+    """Desteklenen giden yazışma türlerini ve Türkçe etiketlerini listeler.
 
-    Single source of truth for the frontend's type selector, instead of the
-    labels being retyped in TypeScript and drifting from
-    ``app.ai.workflows.correspondence.CORRESPONDENCE_TYPE_LABELS``.
+    Etiketlerin TypeScript'te yeniden yazılıp
+    ``app.ai.workflows.correspondence.CORRESPONDENCE_TYPE_LABELS``'tan
+    sapması yerine, ön yüzün tür seçicisi için tek doğruluk kaynağıdır.
     """
     return SuccessResponse(
         data=[
@@ -262,36 +265,38 @@ async def get_corpus_graph(
     current_user: UserModel = Depends(require_auth_if_enabled),
     _: None = Depends(rate_limit(max_requests=30, window_seconds=60, key_prefix="documents:graph")),
 ):
-    """The compliance knowledge graph over every document the caller may see.
+    """Çağıranın görebileceği her evrak üzerindeki uyumluluk bilgi grafiği.
 
-    Declared here, above every ``/{storage_path:path}`` route below --
-    FastAPI matches routes in registration order, and ``:path`` converters
-    swallow slashes, so a literal ``/graph`` registered after the catch-all
-    ``GET /{storage_path:path}`` would never be reached; every request would
-    match the catch-all first, with ``storage_path="graph"``.
+    Aşağıdaki her ``/{storage_path:path}`` rotasının üzerinde burada
+    tanımlanmıştır -- FastAPI rotaları kayıt sırasına göre eşleştirir ve
+    ``:path`` dönüştürücüleri eğik çizgileri yutar, bu yüzden yakalayıcı
+    ``GET /{storage_path:path}``'dan sonra kaydedilen düz bir ``/graph``
+    asla ulaşılamaz olurdu; her istek önce ``storage_path="graph"`` ile
+    yakalayıcıyla eşleşirdi.
 
-    Unlike every other route in this file, a document above the caller's
-    clearance is not a 403 for the whole graph -- it is silently excluded
-    (see ``DocumentService.build_corpus_graph``'s own docstring), and only
-    its count is reported back as ``hidden_document_count``. Revealing that
-    a hidden document *exists* would defeat the point of hiding it.
+    Bu dosyadaki diğer her rotanın aksine, çağıranın yetkisinin üzerindeki
+    bir evrak tüm grafik için 403 değildir -- sessizce hariç tutulur (bkz.
+    ``DocumentService.build_corpus_graph``'ın kendi docstring'i) ve yalnızca
+    sayısı ``hidden_document_count`` olarak geri bildirilir. Gizli bir
+    evrakın *var olduğunu* açığa çıkarmak, onu gizlemenin amacını boşa
+    çıkarırdı.
 
     Args:
-        service: Injected document analysis service.
-        current_user: The authenticated caller. Company-wide when
-            ADMIN/MANAGER/ROOT (see ``bypasses_ownership``), otherwise
-            scoped to the caller's own documents -- the same semantics
-            ``GET /documents`` already uses.
+        service: Enjekte edilmiş evrak analiz servisi.
+        current_user: Kimliği doğrulanmış çağıran. ADMIN/MANAGER/ROOT ise
+            şirket geneli (bkz. ``bypasses_ownership``), aksi halde
+            çağıranın kendi evraklarıyla sınırlı -- ``GET /documents``'in
+            zaten kullandığı aynı semantik.
 
     Returns:
-        ``{nodes, edges, insights, truncated, total_document_count,
-        hidden_document_count}`` inside the unified success envelope.
+        Birleşik başarı zarfı içinde ``{nodes, edges, insights, truncated,
+        total_document_count, hidden_document_count}``.
     """
     owner_id = None if bypasses_ownership(current_user) else current_user.id
-    # clearance_for returns None for an unrecognised role (see its own
-    # docstring: "unknown clearance clears nothing") -- fail secure to the
-    # lowest level rather than passing None into a comparison the service
-    # expects to always be a real SensitivityLevel.
+    # clearance_for, tanınmayan bir rol için None döner (bkz. kendi
+    # docstring'i: "bilinmeyen yetki hiçbir şeyi temizlemez") -- servisin
+    # her zaman gerçek bir SensitivityLevel beklediği bir karşılaştırmaya
+    # None geçirmek yerine, en düşük seviyeye güvenli şekilde düş.
     clearance = clearance_for(current_user) or SensitivityLevel.UNMARKED
     result = await service.build_corpus_graph(
         current_user.company_id, owner_id, clearance
@@ -307,31 +312,31 @@ async def update_document_fields(
     document_repository: DocumentRepository = Depends(get_document_repository),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """Manually correct a document's extracted fields.
+    """Bir evrakın çıkarılan alanlarını elle düzeltir.
 
-    UI-driven fix for fields the extraction missed or got wrong (see
-    ``DocumentAnalysisPanel`` -- previously read-only). Re-runs the same
-    deterministic compliance check the original analysis used
-    (``app.ai.compliance.checker.check_required_fields``, no LLM call), so
-    ``missing_fields``/``compliance_status`` reflect the correction
-    immediately instead of staying stuck at whatever the extraction found.
+    Çıkarımın kaçırdığı veya yanlış aldığı alanlar için arayüz odaklı bir
+    düzeltme (bkz. ``DocumentAnalysisPanel`` -- önceden salt okunurdu).
+    Orijinal analizin kullandığı aynı deterministik uyumluluk kontrolünü
+    (``app.ai.compliance.checker.check_required_fields``, LLM çağrısı yok)
+    yeniden çalıştırır, böylece ``missing_fields``/``compliance_status``,
+    çıkarımın bulduğu değerde takılı kalmak yerine düzeltmeyi hemen yansıtır.
 
     Args:
-        storage_path: The document's storage key.
-        payload: The full corrected field set.
-        service: Injected document analysis service.
-        document_repository: Ownership registry, checked before the update.
-        current_user: The authenticated caller.
+        storage_path: Evrakın depo anahtarı.
+        payload: Düzeltilmiş tam alan kümesi.
+        service: Enjekte edilmiş evrak analiz servisi.
+        document_repository: Güncellemeden önce kontrol edilen sahiplik kaydı.
+        current_user: Kimliği doğrulanmış çağıran.
 
     Returns:
-        The updated analysis, in the same shape as ``GET /documents/{storage_path}``.
+        ``GET /documents/{storage_path}`` ile aynı biçimde güncellenmiş analiz.
 
     Raises:
-        HTTPException: 400 if storage_path is malformed, 404 if no analysis
-            is cached for it.
-        AuthorizationException: 403 if the document belongs to a different
-            company or user, or the requester's clearance doesn't cover the
-            document's confidentiality level.
+        HTTPException: storage_path bozuksa 400, onun için önbelleğe
+            alınmış bir analiz yoksa 404.
+        AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya
+            aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini
+            karşılamıyorsa 403.
     """
     try:
         validate_storage_path(storage_path)
@@ -362,41 +367,43 @@ async def generate_detailed_summary(
         rate_limit(max_requests=5, window_seconds=60, key_prefix="documents:detailed-summary")
     ),
 ):
-    """Build (or return the already-built) detailed summary of a document.
+    """Bir evrakın ayrıntılı özetini oluşturur (veya zaten oluşturulmuşsa döndürür).
 
-    On-demand: the short ``summary`` `POST /documents/analyze` already
-    returns is enough for most documents, and building the detailed one is
-    expensive -- measured directly, 184-288s on real documents, several
-    sequential LLM calls (see ``app.ai.summarization``'s own module
-    docstring). This is why it is its own endpoint rather than part of the
-    eager analysis: a user pays that cost only when they actually want the
-    result, not on every upload.
+    Talep üzerine: `POST /documents/analyze`'ın zaten döndürdüğü kısa
+    ``summary`` çoğu evrak için yeterlidir, ve ayrıntılı olanı oluşturmak
+    maliyetlidir -- doğrudan ölçülmüştür, gerçek evraklarda 184-288sn,
+    birkaç ardışık LLM çağrısı (bkz. ``app.ai.summarization``'ın modül
+    docstring'i). Bu yüzden istekli analizin bir parçası yerine kendi başına
+    bir uç noktadır: bir kullanıcı bu maliyeti yalnızca sonucu gerçekten
+    istediğinde öder, her yüklemede değil.
 
-    Idempotent: a document whose detailed summary is already cached returns
-    it immediately, no model call. Rate-limited tighter than
-    ``POST /documents/analyze`` (5/60s vs 10/60s) precisely because each
-    call that does reach the model is this expensive.
+    İdempotent: ayrıntılı özeti zaten önbelleğe alınmış bir evrak, model
+    çağrısı olmadan onu hemen döndürür. Tam olarak modele ulaşan her
+    çağrının bu kadar pahalı olması nedeniyle
+    ``POST /documents/analyze``'den (5/60sn ve 10/60sn) daha sıkı hız
+    sınırlıdır.
 
     Args:
-        storage_path: The document's storage key.
-        service: Injected document analysis service.
-        document_repository: Ownership registry, checked before generating.
-        current_user: The authenticated caller.
+        storage_path: Evrakın depo anahtarı.
+        service: Enjekte edilmiş evrak analiz servisi.
+        document_repository: Üretmeden önce kontrol edilen sahiplik kaydı.
+        current_user: Kimliği doğrulanmış çağıran.
 
     Returns:
-        The full analysis with ``detailed_summary`` populated, in the same
-        shape as ``GET /documents/{storage_path}``.
+        ``detailed_summary`` doldurulmuş tam analiz, ``GET
+        /documents/{storage_path}`` ile aynı biçimde.
 
     Raises:
-        HTTPException: 400 if storage_path is malformed, 404 if no analysis
-            is cached for it.
-        AuthorizationException: 403 if the document belongs to a different
-            company or user, or the requester's clearance doesn't cover the
-            document's confidentiality level.
-        AIException: 502 if building the summary times out or the
-            underlying provider call fails (see
-            ``DocumentService.generate_detailed_summary``'s own docstring
-            for why this raises instead of degrading silently).
+        HTTPException: storage_path bozuksa 400, onun için önbelleğe
+            alınmış bir analiz yoksa 404.
+        AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya
+            aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini
+            karşılamıyorsa 403.
+        AIException: Özeti oluşturmak zaman aşımına uğrarsa veya alttaki
+            sağlayıcı çağrısı başarısız olursa 502 (bunun neden sessizce
+            bozulmak yerine hata fırlattığı için bkz.
+            ``DocumentService.generate_detailed_summary``'nin kendi
+            docstring'i).
     """
     try:
         validate_storage_path(storage_path)
@@ -424,33 +431,33 @@ async def get_document_graph(
     document_repository: DocumentRepository = Depends(get_document_repository),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """The single-document neighbourhood: one document and every madde/kanun
-    it touches.
+    """Tek evrak komşuluğu: bir evrak ve dokunduğu her madde/kanun.
 
-    Declared above the catch-all ``GET /{storage_path:path}`` below -- both
-    are GET routes matching the same path shape, so registration order is
-    the only thing that decides which one a request like
-    ``/documents/uploads/abc.pdf/graph`` reaches. Registered after it, this
-    route would never be hit; every such request would instead match the
-    catch-all with ``storage_path="uploads/abc.pdf/graph"``.
+    Aşağıdaki yakalayıcı ``GET /{storage_path:path}``'ın üzerinde
+    tanımlanmıştır -- ikisi de aynı yol biçimiyle eşleşen GET rotalarıdır,
+    bu yüzden ``/documents/uploads/abc.pdf/graph`` gibi bir isteğin
+    hangisine ulaşacağına yalnızca kayıt sırası karar verir. Ondan sonra
+    kaydedilseydi, bu rotaya asla ulaşılamazdı; her böyle bir istek bunun
+    yerine ``storage_path="uploads/abc.pdf/graph"`` ile yakalayıcıyla
+    eşleşirdi.
 
     Args:
-        storage_path: The document's storage key.
-        service: Injected document analysis service.
-        document_repository: Ownership registry, checked before returning
-            content.
-        current_user: The authenticated caller.
+        storage_path: Evrakın depo anahtarı.
+        service: Enjekte edilmiş evrak analiz servisi.
+        document_repository: İçeriği döndürmeden önce kontrol edilen
+            sahiplik kaydı.
+        current_user: Kimliği doğrulanmış çağıran.
 
     Returns:
-        The same envelope shape as ``GET /documents/graph``, scoped to this
-        one document.
+        ``GET /documents/graph`` ile aynı zarf biçimi, bu tek evrakla
+        sınırlı.
 
     Raises:
-        HTTPException: 400 if storage_path is malformed, 404 if no analysis
-            is cached for it.
-        AuthorizationException: 403 if the document belongs to a different
-            company or user, or the requester's clearance doesn't cover the
-            document's confidentiality level.
+        HTTPException: storage_path bozuksa 400, onun için önbelleğe
+            alınmış bir analiz yoksa 404.
+        AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya
+            aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini
+            karşılamıyorsa 403.
     """
     try:
         validate_storage_path(storage_path)
@@ -482,32 +489,32 @@ async def get_document_text(
     document_repository: DocumentRepository = Depends(get_document_repository),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """Return the extracted/OCR text of a previously analysed document.
+    """Daha önce analiz edilmiş bir evrakın çıkarılan/OCR metnini döndürür.
 
-    Backs the "Belge metni" panel section. Declared ABOVE the catch-all
-    ``GET /{storage_path:path}`` below on purpose: that route is greedy and
-    would otherwise swallow ``.../text`` as if it were itself a
-    ``storage_path``. The ``/fields`` and ``/detailed-summary`` routes get
-    away with sitting below it only because they use different HTTP
-    methods; a ``GET`` sub-route does not have that luxury.
+    "Belge metni" panel bölümünü destekler. Bilerek aşağıdaki yakalayıcı
+    ``GET /{storage_path:path}``'ın ÜZERİNDE tanımlanmıştır: o rota
+    açgözlüdür ve aksi halde ``.../text``'i sanki kendisi bir
+    ``storage_path``'mış gibi yutardı. ``/fields`` ve ``/detailed-summary``
+    rotaları yalnızca farklı HTTP yöntemleri kullandıkları için onun altında
+    durabiliyor; bir ``GET`` alt rotasının böyle bir lüksü yoktur.
 
     Args:
-        storage_path: The document's storage key.
-        service: Injected document analysis service.
-        document_repository: Ownership registry, checked before returning
-            content.
-        current_user: The authenticated caller.
+        storage_path: Evrakın depo anahtarı.
+        service: Enjekte edilmiş evrak analiz servisi.
+        document_repository: İçeriği döndürmeden önce kontrol edilen
+            sahiplik kaydı.
+        current_user: Kimliği doğrulanmış çağıran.
 
     Returns:
-        The cached pages/text plus extraction provenance, inside the
-        unified success envelope.
+        Önbelleğe alınmış sayfalar/metin artı çıkarım kaynağı, birleşik
+        başarı zarfının içinde.
 
     Raises:
-        HTTPException: 400 if storage_path is malformed, 404 if no analysis
-            is cached for it.
-        AuthorizationException: 403 if the document belongs to a different
-            company or user, or the requester's clearance doesn't cover the
-            document's confidentiality level.
+        HTTPException: storage_path bozuksa 400, onun için önbelleğe
+            alınmış bir analiz yoksa 404.
+        AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya
+            aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini
+            karşılamıyorsa 403.
     """
     try:
         validate_storage_path(storage_path)
@@ -543,36 +550,35 @@ async def update_document_text(
         rate_limit(max_requests=10, window_seconds=60, key_prefix="documents:text")
     ),
 ):
-    """Save hand-corrected OCR/extraction text.
+    """Elle düzeltilmiş OCR/çıkarım metnini kaydeder.
 
-    UI-driven fix for text the extraction pipeline still got wrong -- the
-    companion to the field-aware extraction-acceptance fix in
-    ``FallbackDocumentExtractor``: a document whose header still didn't
-    parse (or that never escalated because the automatic rule's floor
-    wasn't crossed) can be corrected directly. Re-derives ``fields``,
-    ``missing_fields``, ``compliance_status`` and ``guardrail``
-    deterministically from the corrected text -- no model call (see
-    ``DocumentService.update_document_text``'s own docstring).
+    Çıkarım hattının hâlâ yanlış aldığı metin için arayüz odaklı bir
+    düzeltme -- ``FallbackDocumentExtractor``'daki alan bilinçli çıkarım
+    kabul düzeltmesinin eşlikçisi: başlığı hâlâ ayrıştırılamayan (veya
+    otomatik kuralın eşiği aşılmadığı için hiç yükseltilmeyen) bir evrak
+    doğrudan düzeltilebilir. ``fields``, ``missing_fields``,
+    ``compliance_status`` ve ``guardrail``'ı düzeltilmiş metinden
+    deterministik olarak yeniden türetir -- model çağrısı yok (bkz.
+    ``DocumentService.update_document_text``'in kendi docstring'i).
 
     Args:
-        storage_path: The document's storage key.
-        payload: The corrected per-page text.
-        service: Injected document analysis service.
-        document_repository: Ownership registry, checked before the update.
-        current_user: The authenticated caller.
+        storage_path: Evrakın depo anahtarı.
+        payload: Düzeltilmiş sayfa bazlı metin.
+        service: Enjekte edilmiş evrak analiz servisi.
+        document_repository: Güncellemeden önce kontrol edilen sahiplik kaydı.
+        current_user: Kimliği doğrulanmış çağıran.
 
     Returns:
-        The updated analysis, in the same shape as
-        ``GET /documents/{storage_path}``.
+        ``GET /documents/{storage_path}`` ile aynı biçimde güncellenmiş analiz.
 
     Raises:
-        HTTPException: 400 if storage_path is malformed, 404 if no analysis
-            is cached for it.
-        AuthorizationException: 403 if the document belongs to a different
-            company or user, or the requester's clearance doesn't cover the
-            document's confidentiality level.
-        ValidationException: 422 if the submitted page count doesn't match
-            the cached document's.
+        HTTPException: storage_path bozuksa 400, onun için önbelleğe
+            alınmış bir analiz yoksa 404.
+        AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya
+            aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini
+            karşılamıyorsa 403.
+        ValidationException: Gönderilen sayfa sayısı önbelleğe alınmış
+            evrakınkiyle eşleşmiyorsa 422.
     """
     try:
         validate_storage_path(storage_path)
@@ -605,33 +611,34 @@ async def reextract_document_text(
         rate_limit(max_requests=2, window_seconds=60, key_prefix="documents:reextract")
     ),
 ):
-    """Re-run OCR with the vision model directly -- the manual override for
-    when the extraction chain's own automatic escalation didn't fire.
+    """OCR'ı doğrudan görü modeliyle yeniden çalıştırır -- çıkarım zincirinin
+    kendi otomatik yükseltmesi tetiklenmediğinde kullanılan manuel geçersiz kılma.
 
-    Bypasses ``get_document_extractor()``'s chain entirely and always pays
-    the full glm-ocr cost (see ``DocumentService.reextract_document_text``'s
-    own docstring) -- this is deliberately more expensive and more tightly
-    rate-limited than ``PUT .../text`` (2/60s vs 10/60s) or
-    ``POST .../detailed-summary`` (5/60s), matching how expensive the call
-    it triggers actually is.
+    ``get_document_extractor()``'ın zincirini tamamen atlar ve her zaman
+    tam glm-ocr maliyetini öder (bkz.
+    ``DocumentService.reextract_document_text``'in kendi docstring'i) --
+    bu, tetiklediği çağrının fiilen ne kadar pahalı olduğuyla uyumlu olarak
+    bilinçli şekilde ``PUT .../text``'ten (2/60sn ve 10/60sn) veya
+    ``POST .../detailed-summary``'den (5/60sn) daha pahalı ve daha sıkı
+    hız sınırlıdır.
 
     Args:
-        storage_path: The document's storage key.
-        service: Injected document analysis service.
-        document_repository: Ownership registry, checked before re-running.
-        current_user: The authenticated caller.
+        storage_path: Evrakın depo anahtarı.
+        service: Enjekte edilmiş evrak analiz servisi.
+        document_repository: Yeniden çalıştırmadan önce kontrol edilen
+            sahiplik kaydı.
+        current_user: Kimliği doğrulanmış çağıran.
 
     Returns:
-        The updated analysis, in the same shape as
-        ``GET /documents/{storage_path}``.
+        ``GET /documents/{storage_path}`` ile aynı biçimde güncellenmiş analiz.
 
     Raises:
-        HTTPException: 400 if storage_path is malformed, 404 if no analysis
-            is cached for it.
-        AuthorizationException: 403 if the document belongs to a different
-            company or user, or the requester's clearance doesn't cover the
-            document's confidentiality level.
-        ValidationException: 422 if the vision model call itself fails.
+        HTTPException: storage_path bozuksa 400, onun için önbelleğe
+            alınmış bir analiz yoksa 404.
+        AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya
+            aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini
+            karşılamıyorsa 403.
+        ValidationException: Görü modeli çağrısının kendisi başarısız olursa 422.
     """
     try:
         validate_storage_path(storage_path)
@@ -664,32 +671,32 @@ async def get_document_analysis(
     document_repository: DocumentRepository = Depends(get_document_repository),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """Return a previously computed analysis in full.
+    """Daha önce hesaplanmış bir analizi tam olarak döndürür.
 
-    ``GET /documents`` only ever returns the 7-field library projection
-    (document_type_label, compliance_status, summary, ...); re-selecting a
-    document from that list lost ``missing_fields`` and
-    ``mevzuat_references`` entirely because nothing exposed the cached
-    analysis this reads back.
+    ``GET /documents`` her zaman yalnızca 7 alanlı kütüphane izdüşümünü
+    döndürür (document_type_label, compliance_status, summary, ...); o
+    listeden bir evrakı yeniden seçmek, bu uç noktanın geri okuduğu
+    önbelleğe alınmış analizi hiçbir şey açığa çıkarmadığından
+    ``missing_fields`` ve ``mevzuat_references``'ı tamamen kaybediyordu.
 
     Args:
-        storage_path: The document's storage key (as returned by
-            ``POST /documents/analyze``).
-        service: Injected document analysis service.
-        document_repository: Ownership registry, checked before returning
-            content.
-        current_user: The authenticated caller.
+        storage_path: Evrakın depo anahtarı (``POST /documents/analyze``'ın
+            döndürdüğü şekilde).
+        service: Enjekte edilmiş evrak analiz servisi.
+        document_repository: İçeriği döndürmeden önce kontrol edilen
+            sahiplik kaydı.
+        current_user: Kimliği doğrulanmış çağıran.
 
     Returns:
-        The full analysis inside the unified success envelope.
+        Tam analiz, birleşik başarı zarfının içinde.
 
     Raises:
-        HTTPException: 400 if storage_path is malformed, 404 if no analysis
-            is cached for it.
-        AuthorizationException: 403 if the document belongs to a different
-            company, or a different user than the one making the request
-            (and it isn't ADMIN/MANAGER/ROOT), or the requester's clearance
-            doesn't cover the document's confidentiality level.
+        HTTPException: storage_path bozuksa 400, onun için önbelleğe
+            alınmış bir analiz yoksa 404.
+        AuthorizationException: Evrak farklı bir şirkete, veya isteği
+            yapandan farklı bir kullanıcıya aitse (ve ADMIN/MANAGER/ROOT
+            değilse), veya isteği yapanın yetkisi evrakın gizlilik
+            seviyesini karşılamıyorsa 403.
     """
     try:
         validate_storage_path(storage_path)
@@ -717,26 +724,26 @@ async def delete_document(
     document_repository: DocumentRepository = Depends(get_document_repository),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """Permanently delete a document: registry row, raw file, analysis
-    cache, and any indexed Q&A chunks.
+    """Bir evrakı kalıcı olarak siler: kayıt satırı, ham dosya, analiz
+    önbelleği ve indekslenmiş her Soru-Cevap parçası.
 
     Args:
-        storage_path: The document's storage key.
-        service: Injected document analysis service.
-        document_repository: Ownership/listing registry, checked before the
-            delete.
-        current_user: The authenticated caller.
+        storage_path: Evrakın depo anahtarı.
+        service: Enjekte edilmiş evrak analiz servisi.
+        document_repository: Silmeden önce kontrol edilen sahiplik/listeleme
+            kaydı.
+        current_user: Kimliği doğrulanmış çağıran.
 
     Returns:
-        ``{"deleted": true}`` inside the unified success envelope. Succeeds
-        even if ``storage_path`` was already gone -- delete is idempotent.
+        Birleşik başarı zarfı içinde ``{"deleted": true}``. ``storage_path``
+        zaten yoksa bile başarılı olur -- silme idempotenttir.
 
     Raises:
-        HTTPException: 400 if storage_path is malformed.
-        AuthorizationException: 403 if the document belongs to a different
-            company, or a different user than ``current_user`` (and it
-            isn't ADMIN/MANAGER/ROOT), or ``current_user``'s clearance
-            doesn't cover the document's confidentiality level.
+        HTTPException: storage_path bozuksa 400.
+        AuthorizationException: Evrak farklı bir şirkete, veya
+            ``current_user``'dan farklı bir kullanıcıya aitse (ve
+            ADMIN/MANAGER/ROOT değilse), veya ``current_user``'ın yetkisi
+            evrakın gizlilik seviyesini karşılamıyorsa 403.
     """
     try:
         validate_storage_path(storage_path)

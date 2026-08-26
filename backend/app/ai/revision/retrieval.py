@@ -1,16 +1,17 @@
-"""Conditional legislation re-retrieval for a revision.
+"""Bir revizyon için koşullu mevzuat yeniden çekme.
 
-``run_revise`` never re-classifies (see ``app.ai.workflows.revise``'s module
-docstring) and, by default, never re-retrieves legislation either -- it
-reuses ``active_draft.context``, frozen from when the draft was first
-written. That is correct for a tone/length edit, which needs no new
-grounding, but wrong for an instruction that asks the draft to reference a
-law, article or institution the frozen context never covered.
+``run_revise`` asla yeniden sınıflandırma yapmaz (bkz.
+``app.ai.workflows.revise``'in modül docstring'i) ve varsayılan olarak
+mevzuatı da asla yeniden çekmez -- taslak ilk yazıldığında dondurulmuş olan
+``active_draft.context``'i yeniden kullanır. Bu, yeni bir dayanağa ihtiyaç
+duymayan bir ton/uzunluk düzenlemesi için doğrudur, ama donmuş bağlamın hiç
+kapsamadığı bir kanun, madde veya kuruma atıfta bulunmasını isteyen bir
+talimat için yanlıştır.
 
-``maybe_extend_context`` is the single deliberate exception: it runs only
-when ``needs_reretrieval`` says the instruction actually introduces
-normative content, degrades to the frozen context on any failure or
-timeout, and never raises.
+``maybe_extend_context``, bilinçli olarak tek istisnadır: yalnızca
+``needs_reretrieval`` talimatın gerçekten normatif içerik tanıttığını
+söylediğinde çalışır, herhangi bir hata veya zaman aşımında donmuş bağlama
+düşer ve asla hata fırlatmaz.
 """
 
 import asyncio
@@ -25,9 +26,9 @@ from app.observability.ai_metrics import REVISION_RETRIEVAL
 
 logger = logging.getLogger(__name__)
 
-#: Excerpts pulled per re-retrieval -- the same order of magnitude as
-#: document_analysis_graph's own MEVZUAT_RESULT_LIMIT, small enough that an
-#: extension does not dominate the frozen context it is appended to.
+#: Yeniden çekme başına çekilen alıntılar -- document_analysis_graph'ın
+#: kendi MEVZUAT_RESULT_LIMIT'i ile aynı büyüklük mertebesinde; bir
+#: genişletmenin eklendiği donmuş bağlama baskın gelmeyeceği kadar küçük.
 DEFAULT_RETRIEVAL_LIMIT = 5
 
 _ALINTI_MARKER = re.compile(r"\[ALINTI (\d+)\]")
@@ -41,10 +42,10 @@ def _coerce_fields(classification: dict[str, Any]) -> dict[str, Any]:
 
 
 def _build_query(instruction: RevisionInstruction, active_draft: DraftVersion) -> str:
-    """Compose the re-retrieval query from the instruction's own normative
-    tokens plus the draft's known subject -- the same "literal tokens the
-    corpus matches best" rationale as
-    ``document_analysis_graph._build_mevzuat_query``, not a model rewrite."""
+    """Yeniden çekme sorgusunu, talimatın kendi normatif token'ları ile
+    taslağın bilinen konusundan oluşturur --
+    ``document_analysis_graph._build_mevzuat_query`` ile aynı "korpusun en
+    iyi eşleştirdiği literal token'lar" gerekçesi, bir model yeniden yazımı değil."""
     fields = _coerce_fields(active_draft.classification)
     parts = [
         *instruction.normative_tokens,
@@ -61,12 +62,12 @@ def _next_index(frozen_context: str) -> int:
 
 
 def _render_new_excerpts(documents: list[Any], *, frozen_context: str, start_index: int) -> list[str]:
-    """Render only the excerpts not already present in the frozen context.
+    """Yalnızca donmuş bağlamda henüz bulunmayan alıntıları render eder.
 
-    Dedup is a plain substring check against the frozen context's rendered
-    text -- the frozen context was rendered from the same corpus by the same
-    function (``document_analysis_graph._render_mevzuat_excerpts``), so an
-    excerpt already present there appears verbatim.
+    Tekilleştirme, donmuş bağlamın render edilmiş metnine karşı düz bir alt
+    dize kontrolüdür -- donmuş bağlam aynı korpustan aynı fonksiyonla
+    (``document_analysis_graph._render_mevzuat_excerpts``) render edildi, bu
+    yüzden orada zaten bulunan bir alıntı kelimesi kelimesine görünür.
     """
     rendered: list[str] = []
     index = start_index
@@ -88,25 +89,26 @@ async def maybe_extend_context(
     limit: int = DEFAULT_RETRIEVAL_LIMIT,
     timeout_s: Optional[float] = None,
 ) -> tuple[str, dict[str, Any]]:
-    """Extend the draft's frozen legislation context if the instruction calls for it.
+    """Talimat gerektiriyorsa taslağın donmuş mevzuat bağlamını genişletir.
 
     Args:
-        instruction: The parsed revision instruction.
-        active_draft: The draft version being revised, whose ``context`` is
-            the frozen legislation excerpts from when it was first written.
-        retriever: A hybrid/mevzuat retriever exposing
-            ``async def retrieve(query, limit) -> list[Document]``, or None
-            to always skip (matches ``document_analysis_graph``'s own
-            "no retriever configured" convention).
-        limit: Excerpts to request.
-        timeout_s: Hard timeout; defaults to
+        instruction: Ayrıştırılmış revizyon talimatı.
+        active_draft: ``context``'i ilk yazıldığındaki donmuş mevzuat
+            alıntıları olan, revize edilmekte olan taslak sürümü.
+        retriever: ``async def retrieve(query, limit) -> list[Document]``
+            sunan bir hibrit/mevzuat retriever'ı, veya her zaman atlamak için
+            None (``document_analysis_graph``'ın kendi "yapılandırılmış
+            retriever yok" kuralıyla eşleşir).
+        limit: İstenecek alıntı sayısı.
+        timeout_s: Sert zaman aşımı; varsayılan olarak
             ``settings.REVISION_RERETRIEVAL_TIMEOUT_SECONDS``.
 
     Returns:
-        ``(context, meta)``. ``context`` is the frozen context unchanged
-        when re-retrieval is skipped, times out, or fails, or the frozen
-        context with newly found excerpts appended. ``meta`` describes what
-        happened: ``{"decision": "skipped"|"extended"|"failed", "query": str,
+        ``(context, meta)``. Yeniden çekme atlandığında, zaman aşımına
+        uğradığında veya başarısız olduğunda ``context`` donmuş bağlamla
+        değişmeden aynıdır, aksi halde yeni bulunan alıntılar eklenmiş
+        donmuş bağlamdır. ``meta``, ne olduğunu tanımlar:
+        ``{"decision": "skipped"|"extended"|"failed", "query": str,
         "added": int}``.
     """
     frozen_context = active_draft.context or ""

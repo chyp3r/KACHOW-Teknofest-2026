@@ -1,12 +1,12 @@
-"""Async orchestration wrapping the pure engine with the DB grant store and the Redis cache.
+"""Saf motoru DB yetki deposu ve Redis önbelleğiyle sarmalayan asenkron orkestrasyon.
 
-``engine.authorize`` alone only ever sees the built-in rules (see its own
-callers in ``documents/router.py``/``drafts/router.py``, which pass no
-``grants`` at all) -- this is the layer that actually resolves
-``permission_grants`` and makes them count. Anything that needs a
-``permission_grants`` row to matter (grant management itself, and any
-future resource whose access model is "role rules plus explicit
-delegation") goes through ``AuthzService``, not the bare engine function.
+``engine.authorize`` tek başına yalnızca yerleşik kuralları görür (bkz.
+kendi çağıranları ``documents/router.py``/``drafts/router.py``, ki bunlar
+hiç ``grants`` geçmez) -- ``permission_grants``'ı gerçekten çözümleyip
+etkili kılan katman burasıdır. Bir ``permission_grants`` satırının önemli
+olmasına ihtiyaç duyan her şey (yetki yönetiminin kendisi, ve erişim modeli
+"rol kuralları artı açık devir" olan gelecekteki her kaynak) çıplak motor
+fonksiyonu yerine ``AuthzService`` üzerinden geçer.
 """
 
 from typing import Optional
@@ -19,15 +19,16 @@ from app.core.authz.repository import PermissionGrantRepository
 
 
 class AuthzService:
-    """DB- and cache-backed ``authorize()``.
+    """DB ve önbellek destekli ``authorize()``.
 
     Args:
-        grant_repository: Resolves a subject's currently-active
-            ``permission_grants``.
-        decision_cache: Optional Redis-backed decision cache. ``None``
-            disables caching entirely (every call recomputes) -- used by
-            the test suite's autouse fixture (see ``tests/conftest.py``) so
-            unit tests never depend on Redis state leaking between them.
+        grant_repository: Bir öznenin şu anda etkin ``permission_grants``'ını
+            çözümler.
+        decision_cache: İsteğe bağlı Redis destekli karar önbelleği.
+            ``None``, önbelleklemeyi tamamen devre dışı bırakır (her çağrı
+            yeniden hesaplar) -- test paketinin autouse fixture'ı tarafından
+            kullanılır (bkz. ``tests/conftest.py``); böylece birim testleri
+            asla aralarında sızan Redis durumuna bağımlı olmaz.
     """
 
     def __init__(
@@ -45,14 +46,14 @@ class AuthzService:
         resource: Optional[Resource],
         env: Optional[Environment] = None,
     ) -> Decision:
-        """Resolve ``permission_grants`` (cache permitting) and decide.
+        """``permission_grants``'ı çözümler (önbellek izin verirse) ve karar verir.
 
-        ROOT subjects (``subject.company_id is None``) skip grant
-        resolution entirely -- ``permission_grants`` rows are always
-        company-scoped, so there is nothing to look up for a subject with
-        no company. A ROOT subject's decision comes from the tenant gate
-        and the built-in wildcard rule alone, same as
-        ``engine.authorize`` called with no grants.
+        ROOT özneler (``subject.company_id is None``) yetki çözümlemesini
+        tamamen atlar -- ``permission_grants`` satırları her zaman şirket
+        kapsamlıdır, bu yüzden şirketi olmayan bir özne için bakılacak
+        hiçbir şey yoktur. Bir ROOT öznenin kararı yalnızca kiracı kapısı
+        ve yerleşik joker karakter kuralından gelir, ``engine.authorize``'ın
+        hiç yetki olmadan çağrılmasıyla aynı.
         """
         env = env or Environment()
         resource_type = resource.type if resource is not None else "*"
@@ -81,13 +82,14 @@ class AuthzService:
         return decision
 
     async def invalidate_company(self, company_id: str) -> None:
-        """Bump the decision-cache epoch for ``company_id``.
+        """``company_id`` için karar-önbelleği epoch'unu artırır.
 
-        Call after any write to something a cached decision could depend
-        on -- creating or revoking a ``permission_grants`` row, today's only
-        writer (see ``users/router.py``'s grant-management endpoints). A
-        no-op when caching is disabled (``self._cache is None``, the test
-        default -- see ``tests/conftest.py``).
+        Önbelleklenmiş bir kararın bağlı olabileceği herhangi bir yazma
+        işleminden sonra çağırın -- bir ``permission_grants`` satırının
+        oluşturulması ya da iptali, bugünün tek yazarı (bkz.
+        ``users/router.py``'nin yetki-yönetimi endpoint'leri). Önbellekleme
+        devre dışıyken (``self._cache is None``, test varsayılanı -- bkz.
+        ``tests/conftest.py``) bir no-op'tur.
         """
         if self._cache is not None:
             await self._cache.bump_epoch(company_id)
@@ -99,7 +101,7 @@ class AuthzService:
         resource: Optional[Resource],
         env: Optional[Environment] = None,
     ) -> None:
-        """``authorize()``, raising ``AuthorizationException`` on a deny."""
+        """``authorize()``, red durumunda ``AuthorizationException`` fırlatır."""
         decision = await self.authorize(subject, action, resource, env)
         if not decision.permit:
             raise AuthorizationException(message="Bu işlem için yetkiniz yok.")

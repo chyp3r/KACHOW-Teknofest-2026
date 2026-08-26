@@ -1,13 +1,13 @@
-"""Detailed, unbounded-length Turkish document summarization.
+"""Ayrıntılı, sınırsız uzunlukta Türkçe belge özetleme.
 
-Deliberately independent of `document_analysis_graph.py`'s `analyze_node`, which
-produces its own short summary as a byproduct of a call tuned for field
-extraction (see `SummaryOutput`'s own docstring for the full reasoning). This
-module holds the logic behind that separate call so it can run on-demand --
-triggered by `DocumentService.generate_detailed_summary`, not eagerly inside
-every `analyze_document` call -- since it is, measured directly, the single
-slowest operation in this project's document pipeline (184-288s on real
-documents, against `analyze_node`'s own 26-93s).
+`document_analysis_graph.py`'nin `analyze_node`'undan bilinçli olarak bağımsız;
+o, alan çıkarımına ayarlanmış bir çağrının yan ürünü olarak kendi kısa özetini
+üretir (tam gerekçe için `SummaryOutput`'un kendi docstring'ine bakın). Bu
+modül, o ayrı çağrının arkasındaki mantığı tutar, böylece talep üzerine
+çalışabilir -- `DocumentService.generate_detailed_summary` tarafından
+tetiklenir, her `analyze_document` çağrısının içinde istekli biçimde değil --
+çünkü doğrudan ölçüldüğünde bu, bu projenin belge pipeline'ındaki en yavaş
+tek işlemdir (gerçek belgelerde 184-288s, `analyze_node`'un kendi 26-93s'ine karşı).
 """
 
 import logging
@@ -19,48 +19,50 @@ from app.ai.embeddings.chunking.recursive import RecursiveChunker
 
 logger = logging.getLogger(__name__)
 
-#: Own budget for the summarizer, deliberately separate from analyze_node's
-#: ANALYSIS_MAX_TOKENS: that budget is shared with document_type + ~14
-#: EvrakField values in the same call, so a detailed summary would only ever
-#: get whatever sliver was left over.
+#: Özetleyici için kendi bütçesi, analyze_node'un ANALYSIS_MAX_TOKENS'ından
+#: bilinçli olarak ayrı: o bütçe aynı çağrıda document_type + ~14 EvrakField
+#: değeriyle paylaşılır, bu yüzden ayrıntılı bir özet yalnızca artakalan
+#: küçük bir dilim alırdı.
 SUMMARY_MAX_TOKENS = 1024
-#: A document whose (untrimmed, unlike analyze_node's _trim_for_extraction)
-#: text fits in one chunk is summarised in a single call; longer documents go
-#: through map-reduce below so the whole document -- not just head+tail --
-#: informs the summary.
+#: (analyze_node'un _trim_for_extraction'ının aksine kırpılmamış) metni tek
+#: bir parçaya sığan bir belge tek bir çağrıda özetlenir; daha uzun belgeler
+#: aşağıdaki map-reduce'dan geçer, böylece yalnızca baş+kuyruk değil belgenin
+#: tamamı özeti bilgilendirir.
 #:
-#: Deliberately NOT sourced from app.ai.policy.schema.ChunkingPolicy: that
-#: policy governs retrieval chunking (Document Q&A, mevzuat corpus), a
-#: different concern with a different tuning goal (answer-span locality,
-#: not map-reduce call count). Keeping this pair local avoids coupling two
-#: unrelated tuning decisions to one shared value.
+#: Bilinçli olarak app.ai.policy.schema.ChunkingPolicy'den KAYNAKLANMAZ: o
+#: politika alma (retrieval) parçalamayı (Document Q&A, mevzuat korpusu)
+#: yönetir; farklı bir ayarlama hedefi (map-reduce çağrı sayısı değil, yanıt
+#: aralığı yerelliği) olan farklı bir konudur. Bu çifti yerel tutmak, iki
+#: ilgisiz ayarlama kararını tek bir paylaşılan değere bağlamayı önler.
 SUMMARY_CHUNK_SIZE = 4000
 SUMMARY_CHUNK_OVERLAP = 400
-#: Hard cap on map-stage calls. A 50-page document must not become 50 LLM
-#: calls; coverage past this cap is dropped and logged rather than silently
-#: truncated (see build_detailed_summary). Measured directly with isolated
-#: per-node timing (graph.astream(..., stream_mode="updates")) against two
-#: real documents once the map stage ran sequentially (see its own comment on
-#: why asyncio.gather() was wrong here): CY-010 (2 map chunks) needed 3 calls
-#: at 35-97s each; CY-049 (3 map chunks) needed 4 calls, individually as slow
-#: as 185s. On this project's hardware (qwen3.5:9b over Ollama, one
-#: generation slot) per-call latency is both high and highly variable --
-#: capped at 3, not higher, so the DETAILED_SUMMARY_TIMEOUT_SECONDS budget
-#: (see core.config) has a real chance of covering the worst case instead of
-#: being a number nobody checked against actual serialized latency.
+#: Map aşaması çağrıları üzerinde sert bir sınır. 50 sayfalık bir belge 50
+#: LLM çağrısı olmamalıdır; bu sınırın ötesindeki kapsam sessizce
+#: kırpılmak yerine düşürülür ve loglanır (bkz. build_detailed_summary). Map
+#: aşaması sıralı çalıştığında (asyncio.gather()'ın burada neden yanlış
+#: olduğuna dair kendi yorumuna bakın) iki gerçek belgeye karşı izole
+#: düğüm-başı zamanlamayla (graph.astream(..., stream_mode="updates"))
+#: doğrudan ölçüldü: CY-010 (2 map parçası) her biri 35-97s süren 3 çağrı
+#: gerektirdi; CY-049 (3 map parçası) tek tek 185s'e kadar yavaş olan 4 çağrı
+#: gerektirdi. Bu projenin donanımında (Ollama üzerinden qwen3.5:9b, tek bir
+#: üretim slotu) çağrı başına gecikme hem yüksek hem de oldukça değişken --
+#: daha yüksek değil 3'te sınırlandı, böylece DETAILED_SUMMARY_TIMEOUT_SECONDS
+#: bütçesinin (bkz. core.config), kimsenin gerçek serileştirilmiş gecikmeye
+#: karşı kontrol etmediği bir sayı olmak yerine en kötü durumu kapsamak için
+#: gerçek bir şansı var.
 SUMMARY_MAX_MAP_CHUNKS = 3
 
 
 class SummaryOutput(BaseModel):
-    """A detailed summary, of either the whole document or one chunk of it.
+    """Belgenin tamamının veya bir parçasının ayrıntılı bir özeti.
 
-    Deliberately carries no sentence-count cap in its description -- that is
-    the entire point of this schema existing separately from
-    DocumentClassificationOutput.summary / DocumentAnalysisOutput.summary
-    (document_analysis_graph.py), both of which are capped at "en çok 3
-    cümle" (see their own Field descriptions there). A regression test
-    (test_summary_output_field_carries_no_sentence_cap) asserts this
-    description never reintroduces that phrase.
+    Bilinçli olarak açıklamasında cümle sayısı sınırı taşımaz -- bu şemanın
+    DocumentClassificationOutput.summary / DocumentAnalysisOutput.summary'den
+    (document_analysis_graph.py) ayrı var olmasının tüm amacı budur; ikisi de
+    "en çok 3 cümle"ye sınırlandırılmıştır (oradaki kendi Field
+    açıklamalarına bakın). Bir regresyon testi
+    (test_summary_output_field_carries_no_sentence_cap), bu açıklamanın o
+    ifadeyi asla yeniden tanıtmadığını doğrular.
     """
 
     detailed_summary: str = Field(
@@ -74,13 +76,13 @@ class SummaryOutput(BaseModel):
 
 
 def ocr_warning(is_ocr_text: bool) -> str:
-    """Return a prompt note when the text came from OCR.
+    """Metin OCR'den geldiğinde bir prompt notu döndürür.
 
     Args:
-        is_ocr_text: Whether the source text was produced by OCR.
+        is_ocr_text: Kaynak metnin OCR ile üretilip üretilmediği.
 
     Returns:
-        A Turkish caution string, or an empty string.
+        Türkçe bir uyarı string'i, veya boş bir string.
     """
     if not is_ocr_text:
         return ""
@@ -93,7 +95,7 @@ def ocr_warning(is_ocr_text: bool) -> str:
 async def _summarize_chunk(
     summarizer_agent: SummarizerAgent, chunk_text: str, *, is_partial: bool, is_ocr_text: bool
 ) -> str:
-    """One SummarizerAgent call over either the whole document or one chunk of it."""
+    """Bütün belge veya bir parçası üzerinde tek bir SummarizerAgent çağrısı."""
     instruction = (
         "Aşağıdaki metin, bir evrakın YALNIZCA BİR PARÇASIDIR. Yalnızca bu "
         "parçadaki bilgiyi ayrıntılı biçimde özetle."
@@ -111,33 +113,35 @@ async def _summarize_chunk(
 
 
 async def _reduce_partial_summaries(summarizer_agent: SummarizerAgent, partials: list[str]) -> str:
-    """Combine per-chunk partial summaries into one coherent detailed summary.
+    """Parça başına kısmi özetleri tek, tutarlı bir ayrıntılı özette birleştirir.
 
-    The partials are already-clean model output, not raw OCR text, so this
-    call carries no ocr_warning -- unlike _summarize_chunk's callers.
+    Kısmi özetler zaten temiz model çıktısıdır, ham OCR metni değil, bu
+    yüzden bu çağrı -- _summarize_chunk'ın çağıranlarının aksine -- hiç
+    ocr_warning taşımaz.
 
-    Uses plain generation (SummarizerAgent.run), not structured output --
-    deliberately, not an oversight. Measured directly on two real documents
-    (CY-034, CY-049): with every map call already succeeded and the reduce
-    call the only thing left, run_structured's method="function_calling"
-    path (see OllamaClient.generate_structured's own docstring for why this
-    project pins that method at all) failed to get qwen3.5:9b to invoke the
-    SummaryOutput tool on the larger combined prompt, exhausting retries --
-    a real per-call reliability limit on this model/harness for this prompt
-    shape, not a one-off fluke, since it reproduced on both documents.
-    Reduce doesn't need a validated schema the way field extraction does; it
-    only needs free text, so run() sidesteps the whole failure mode by never
-    asking for a tool call in the first place.
+    Yapılandırılmış çıktı değil, düz üretim (SummarizerAgent.run) kullanır --
+    bilinçli olarak, bir gözden kaçırma değil. İki gerçek belge üzerinde
+    (CY-034, CY-049) doğrudan ölçüldü: her map çağrısı zaten başarılı olup
+    geriye yalnızca reduce çağrısı kaldığında, run_structured'ın
+    method="function_calling" yolu (bu projenin o metodu neden hiç sabitlediği
+    için bkz. OllamaClient.generate_structured'ın kendi docstring'i),
+    qwen3.5:9b'yi daha büyük birleştirilmiş prompt üzerinde SummaryOutput
+    aracını çağırmaya ikna edemedi, denemeleri tüketti -- bu, tek seferlik
+    bir tesadüf değil, her iki belgede de tekrarlandığından bu model/harness
+    için bu prompt şeklinde gerçek bir çağrı-başı güvenilirlik sınırıdır.
+    Reduce, alan çıkarımının ihtiyaç duyduğu gibi doğrulanmış bir şemaya
+    ihtiyaç duymaz; yalnızca serbest metne ihtiyaç duyar, bu yüzden run()
+    hiç araç çağrısı istemeyerek tüm başarısızlık modunu atlar.
 
-    On failure even so, falls back to the partials themselves, joined
-    WITHOUT their internal "Parça N:" labels -- those exist only to help the
-    model understand it is combining separate sections, and were never meant
-    to reach a user's screen verbatim (an earlier version of this fallback
-    leaked them straight through). Falling back at all, rather than raising,
-    matters on its own: a document that made it through the expensive map
-    stage should keep what it earned instead of the caller's outer
-    try/except degrading all the way to analyze_node's generic
-    three-sentence summary.
+    Yine de başarısızlıkta, kendi iç "Parça N:" etiketleri OLMADAN
+    birleştirilmiş kısmi özetlere düşer -- bunlar yalnızca modelin ayrı
+    bölümleri birleştirdiğini anlamasına yardımcı olmak için var ve asla
+    bir kullanıcının ekranına kelimesi kelimesine ulaşması amaçlanmamıştı
+    (bu yedeğin daha eski bir sürümü onları doğrudan sızdırıyordu). Hata
+    fırlatmak yerine hiç yedeğe düşmek başlı başına önemlidir: pahalı map
+    aşamasını geçen bir belge, çağıranın dış try/except'inin
+    analyze_node'un genel üç cümlelik özetine kadar düşürmesi yerine
+    kazandığını korumalıdır.
     """
     labelled = "\n\n".join(
         f"Parça {index + 1}: {partial}" for index, partial in enumerate(partials)
@@ -164,30 +168,32 @@ async def _reduce_partial_summaries(summarizer_agent: SummarizerAgent, partials:
 async def build_detailed_summary(
     summarizer_agent: SummarizerAgent, text: str, *, is_ocr_text: bool
 ) -> str:
-    """Produce a detailed Turkish summary of a full document.
+    """Bir tam belgenin ayrıntılı Türkçe özetini üretir.
 
-    Short documents: one call over the full (untrimmed -- unlike
-    analyze_node's _trim_for_extraction) text. Long documents: map-reduce
-    over RecursiveChunker's chunks, capped at SUMMARY_MAX_MAP_CHUNKS (see
-    that constant's own docstring for why coverage past the cap is dropped
-    rather than silently included).
+    Kısa belgeler: tam (kırpılmamış -- analyze_node'un
+    _trim_for_extraction'ının aksine) metin üzerinde tek bir çağrı. Uzun
+    belgeler: RecursiveChunker'ın parçaları üzerinde, SUMMARY_MAX_MAP_CHUNKS
+    ile sınırlandırılmış map-reduce (sınırın ötesindeki kapsamın neden
+    sessizce dahil edilmek yerine düşürüldüğü için o sabitin kendi
+    docstring'ine bakın).
 
     Args:
-        summarizer_agent: The agent making the underlying LLM calls.
-        text: The full document text (already extracted and scrubbed).
-        is_ocr_text: Whether the source text came from OCR, to add a caution
-            note to the prompt.
+        summarizer_agent: Alttaki LLM çağrılarını yapan ajan.
+        text: Tam belge metni (zaten çıkarılmış ve temizlenmiş).
+        is_ocr_text: Kaynak metnin OCR'den gelip gelmediği; promptu bir
+            uyarı notuyla eklemek için.
 
     Returns:
-        The detailed summary text.
+        Ayrıntılı özet metni.
 
     Raises:
-        Exception: Whatever the underlying provider call raised, on the
-            single-call path or the map stage -- callers are expected to
-            bound this with their own timeout and degrade to a short summary
-            on failure, mirroring the design this module's docstring
-            describes. (The reduce stage degrades internally instead; see
-            _reduce_partial_summaries's own docstring for why.)
+        Exception: Tek-çağrı yolunda veya map aşamasında alttaki sağlayıcı
+            çağrısının fırlattığı her ne ise -- çağıranların bunu kendi
+            zaman aşımlarıyla sınırlaması ve bu modülün docstring'inin
+            tanımladığı tasarımı yansıtarak hata durumunda kısa bir özete
+            düşmesi beklenir. (Reduce aşaması bunun yerine dahili olarak
+            düşer; nedeni için _reduce_partial_summaries'in kendi
+            docstring'ine bakın.)
     """
     if len(text) <= SUMMARY_CHUNK_SIZE:
         return await _summarize_chunk(summarizer_agent, text, is_partial=False, is_ocr_text=is_ocr_text)
@@ -203,16 +209,17 @@ async def build_detailed_summary(
         )
         chunks = chunks[:SUMMARY_MAX_MAP_CHUNKS]
 
-    # Sequential, not asyncio.gather(): Ollama serialises generation against
-    # one model regardless of client-side concurrency (see vision.py's own
-    # documented finding on this exact point). Firing every map call at once
-    # bought nothing and made it worse -- verified directly against CY-049,
-    # where a call's own completion log line appeared *after* the caller had
-    # already timed out and returned, because the outer wait_for's
-    # cancellation abandons the Python-level await but does not stop
-    # requests already queued server-side. A sequential loop means a timeout
-    # only ever leaves one call orphaned, not up to SUMMARY_MAX_MAP_CHUNKS of
-    # them.
+    # asyncio.gather() değil, sıralı: Ollama, istemci tarafı eşzamanlılıktan
+    # bağımsız olarak üretimi tek bir modele karşı serileştirir (bkz.
+    # vision.py'nin tam olarak bu nokta üzerine kendi belgelenmiş bulgusu).
+    # Her map çağrısını aynı anda ateşlemek hiçbir şey kazandırmadı ve
+    # durumu kötüleştirdi -- CY-049'a karşı doğrudan doğrulandı; burada bir
+    # çağrının kendi tamamlanma log satırı, çağıranın zaten zaman aşımına
+    # uğrayıp döndüğünden *sonra* göründü, çünkü dıştaki wait_for'un iptali
+    # Python seviyesindeki await'i terk eder ama sunucu tarafında zaten
+    # kuyruğa alınmış istekleri durdurmaz. Sıralı bir döngü, bir zaman
+    # aşımının SUMMARY_MAX_MAP_CHUNKS kadarını değil yalnızca bir çağrıyı
+    # yetim bırakması anlamına gelir.
     partials = [
         await _summarize_chunk(summarizer_agent, chunk.page_content, is_partial=True, is_ocr_text=is_ocr_text)
         for chunk in chunks

@@ -8,30 +8,32 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class RunModel(Base, TimestampMixin):
-    """One planning-graph invocation (one chat turn) and the decision that
-    shaped it.
+    """Tek bir planning-graph çağrısı (bir sohbet turu) ve onu şekillendiren karar.
 
-    Prometheus (``app.observability.ai_metrics``) answers "how is the system
-    doing in aggregate"; this answers "what happened on this specific
-    request" -- the question that actually comes up when a user reports a
-    bad answer ("what did it decide, and why"). ``intent``/``source``/
-    ``confidence``/``evidence``/``alternatives``/``clarification`` are every
-    field of the ``PlanDecision`` the router resolved for this turn (see
-    ``app.ai.workflows.planner.PlanDecision``) -- nothing computed twice,
-    just persisted where it can outlive the request.
+    Prometheus (``app.observability.ai_metrics``) "sistem toplamda nasıl
+    gidiyor" sorusunu yanıtlar; bu ise "bu spesifik istekte ne oldu"
+    sorusunu yanıtlar -- bir kullanıcı kötü bir yanıt bildirdiğinde
+    ("ne karar verdi ve neden") fiilen gündeme gelen soru.
+    ``intent``/``source``/``confidence``/``evidence``/``alternatives``/
+    ``clarification``, router'ın bu tur için çözdüğü ``PlanDecision``'ın
+    her alanıdır (bkz. ``app.ai.workflows.planner.PlanDecision``) -- hiçbir
+    şey iki kez hesaplanmaz, sadece isteğin ömrünü aşabileceği bir yerde
+    kalıcı hale getirilir.
 
-    Does not replace Langfuse tracing (``app.observability.tracer``), which
-    is optional and captures LLM-call-level spans; this is the product's own
-    audit trail, always on, and queryable without a third-party account.
+    Langfuse tracing'in (``app.observability.tracer``) yerini almaz; o
+    isteğe bağlıdır ve LLM-çağrısı seviyesinde span'ler yakalar. Bu ise
+    ürünün kendi denetim kaydıdır, her zaman açıktır ve üçüncü taraf bir
+    hesap olmadan sorgulanabilir.
     """
 
     __tablename__ = "runs"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    #: NOT NULL since migration `0016_recorder_tables_rls` -- written from
-    #: `PlanningState.company_id` (see `app.observability.run_recorder.
-    #: start_run`), threaded through the planning graph's state alongside
-    #: `user_id`. Under row-level security (that same migration).
+    #: `0016_recorder_tables_rls` migration'ından beri NOT NULL --
+    #: `PlanningState.company_id`'den yazılır (bkz.
+    #: `app.observability.run_recorder.start_run`), planning graph'ın
+    #: state'i boyunca `user_id` ile birlikte taşınır. Row-level security
+    #: altındadır (aynı migration).
     company_id: Mapped[str] = mapped_column(
         String, ForeignKey("companies.id"), nullable=False, index=True
     )
@@ -46,27 +48,27 @@ class RunModel(Base, TimestampMixin):
     evidence: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     alternatives: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     clarification: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    #: "running" | "completed" | "failed". Stays "running" for a run that
-    #: paused at the human-in-the-loop gate and was never resumed -- an
-    #: honest reflection of an abandoned run, not swept or timed out here.
+    #: "running" | "completed" | "failed". Human-in-the-loop kapısında
+    #: duraklayan ve bir daha devam ettirilmeyen bir run için "running"
+    #: olarak kalır -- burada süpürülmeyen veya zaman aşımına
+    #: uğratılmayan, terk edilmiş bir run'ın dürüst bir yansımasıdır.
     status: Mapped[str] = mapped_column(String, nullable=False, default="running")
 
 
 class RunStepModel(Base, TimestampMixin):
-    """One plan step's outcome within a run (see ``RunModel``).
+    """Bir run içindeki tek bir plan adımının sonucu (bkz. ``RunModel``).
 
-    One row per ``STEP_RUNNERS`` dispatch in
-    ``app.ai.workflows.planning_graph._execute_one_step`` -- the same
-    ``status``/duration this codebase already turns into a Prometheus
-    observation (``NODE_DURATION``), just also kept per-run rather than only
-    aggregated.
+    ``app.ai.workflows.planning_graph._execute_one_step`` içindeki her
+    ``STEP_RUNNERS`` dispatch'i için bir satır -- bu kod tabanının zaten
+    bir Prometheus gözlemine (``NODE_DURATION``) dönüştürdüğü aynı
+    ``status``/süre, sadece toplu değil, run başına da tutulur.
     """
 
     __tablename__ = "run_steps"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    #: Denormalized from the parent run; NOT NULL since `0016_recorder_
-    #: tables_rls` -- see `RunModel.company_id`.
+    #: Üst run'dan denormalize edilmiştir; `0016_recorder_
+    #: tables_rls`'den beri NOT NULL -- bkz. `RunModel.company_id`.
     company_id: Mapped[str] = mapped_column(
         String, ForeignKey("companies.id"), nullable=False, index=True
     )

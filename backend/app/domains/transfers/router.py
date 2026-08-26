@@ -24,8 +24,8 @@ from app.domains.users.model.user_model import UserModel
 from app.domains.users.repository import UserFavoriteRepository
 from app.infrastructure.database.session import get_db
 
-# Authentication is mandatory (see require_auth_if_enabled) -- every route in
-# this router carries a real, tenant-bound current_user.
+# Kimlik doğrulama zorunludur (bkz. require_auth_if_enabled) -- bu router'daki
+# her rota gerçek, kiracıya bağlı bir current_user taşır.
 router = APIRouter(
     prefix="/transfers", tags=["transfers"], dependencies=[Depends(require_auth_if_enabled)]
 )
@@ -50,11 +50,12 @@ async def send_transfer(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Send one draft or document to one recipient -- the manual chat-
-    initiated path. `Action.ARTIFACT_TRANSFER`-gated: an EMPLOYEE may only
-    send an artifact it owns, ADMIN/MANAGER/ROOT may send any artifact
-    company-wide. Always ends up posting a `kind="artifact"` message into
-    the sender/recipient DM (opened if it didn't already exist)."""
+    """Bir taslağı veya evrakı tek bir alıcıya gönderir -- manuel, sohbet
+    üzerinden başlatılan yol. `Action.ARTIFACT_TRANSFER` ile korunur: bir
+    EMPLOYEE yalnızca sahibi olduğu bir artefaktı gönderebilir,
+    ADMIN/MANAGER/ROOT şirket genelinde herhangi bir artefaktı gönderebilir.
+    Her zaman gönderen/alıcı özel mesajına (yoksa açılarak)
+    `kind="artifact"` türünde bir mesaj gönderilmesiyle sonuçlanır."""
     service = build_transfer_service(db)
     transfer = await service.execute(
         TransferCommand(
@@ -77,10 +78,11 @@ async def send_group_transfer(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Send one draft or document to several recipients at once -- chat/
-    REST only (see `ArtifactTransferService.execute_group`'s own docstring
-    for why the AI channel never reaches this). Per-recipient partial
-    success: one recipient's denial/not-found never blocks the others."""
+    """Bir taslağı veya evrakı birden çok alıcıya aynı anda gönderir --
+    yalnızca sohbet/REST üzerinden (yapay zeka kanalının buraya neden hiç
+    ulaşmadığı için bkz. `ArtifactTransferService.execute_group`'un kendi
+    docstring'i). Alıcı bazında kısmi başarı: bir alıcının reddedilmesi/
+    bulunamaması diğerlerini asla engellemez."""
     service = build_transfer_service(db)
     results = await service.execute_group(
         GroupTransferCommand(
@@ -113,10 +115,10 @@ async def recommend_recipients(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Suggested recipients for `draft_id`, ranked from its own routed
-    unit's membership (favorites first). Empty, never an error, when the
-    draft has no routed unit or that unit is inactive -- a recommendation
-    is a hint, not a requirement."""
+    """`draft_id` için önerilen alıcılar, taslağın kendi yönlendirilmiş
+    biriminin üyeliğinden sıralanmış (favoriler önce). Taslağın yönlendirilmiş
+    bir birimi yoksa veya o birim pasifse boş döner, asla hata vermez --
+    bir öneri bir ipucudur, bir gereklilik değildir."""
     service = _recommendation_service(db)
     recommendations = await service.recommend_for_draft(
         draft_id, current_user.company_id, current_user.id, limit=limit
@@ -141,10 +143,10 @@ async def get_transfer(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Fetch one transfer -- the sender or recipient only (or Admin/
-    Manager/Root company-wide), same participation-is-the-grant shape
-    `draft_shares` already uses. Backs `ArtifactMessageCard`'s live read of
-    a `kind="artifact"` message's current status."""
+    """Tek bir transferi getirir -- yalnızca gönderen veya alıcı (veya şirket
+    genelinde Admin/Manager/Root), `draft_shares`'in zaten kullandığı
+    "katılım = yetki" biçimiyle aynı. `ArtifactMessageCard`'ın bir
+    `kind="artifact"` mesajının güncel durumunu canlı okumasını destekler."""
     transfer = await ArtifactTransferRepository(db).get_by_id(transfer_id, current_user.company_id)
     if transfer is None:
         raise NotFoundException(message="Transfer bulunamadı.")

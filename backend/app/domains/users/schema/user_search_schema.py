@@ -6,9 +6,9 @@ from app.core.enums.user_role import UserRole
 
 
 class UserSearchResult(BaseModel):
-    """One `GET /users/search` row -- `UserResponse` plus search-only
-    context (`unit_name`, `is_favorite`) that a plain user fetch has no
-    reason to carry."""
+    """Bir `GET /users/search` satırı -- `UserResponse` artı sade bir
+    kullanıcı getirmede taşınmasına gerek olmayan, sadece aramaya özel
+    bağlam (`unit_name`, `is_favorite`)."""
 
     id: str
     username: str

@@ -2,41 +2,41 @@ from abc import ABC, abstractmethod
 
 
 class BaseStorage(ABC):
-    """Abstract Base Class for all object/file storage clients."""
+    """Tüm nesne/dosya depolama istemcileri için soyut temel sınıf."""
 
     @abstractmethod
     async def put_file(self, file_path: str, content: bytes) -> str:
-        """Save a file's binary content to storage.
+        """Bir dosyanın ikili içeriğini depoya kaydet.
 
         Args:
-            file_path: The destination path/key in the storage.
-            content: The file content in bytes.
+            file_path: Depodaki hedef yol/anahtar.
+            content: Byte cinsinden dosya içeriği.
 
         Returns:
-            A string containing the reference path or URI of the saved file.
+            Kaydedilen dosyanın referans yolunu veya URI'sini içeren bir dize.
         """
         pass
 
     @abstractmethod
     async def get_file(self, file_path: str) -> bytes:
-        """Retrieve a file's content from storage.
+        """Depodan bir dosyanın içeriğini al.
 
         Args:
-            file_path: The path/key of the file.
+            file_path: Dosyanın yolu/anahtarı.
 
         Returns:
-            The file content in bytes.
+            Byte cinsinden dosya içeriği.
         """
         pass
 
     @abstractmethod
     async def delete_file(self, file_path: str) -> bool:
-        """Delete a file from storage.
+        """Depodan bir dosya sil.
 
         Args:
-            file_path: The path/key of the file.
+            file_path: Dosyanın yolu/anahtarı.
 
         Returns:
-            True if deletion was successful, False otherwise.
+            Silme başarılıysa True, aksi halde False.
         """
         pass

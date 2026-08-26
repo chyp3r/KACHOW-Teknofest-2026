@@ -1,27 +1,28 @@
-"""Instruction-vs-mevzuat/source conflict auditing for a revision.
+"""Bir revizyon için talimat-mevzuat/kaynak çelişkisi denetimi.
 
-The user's revision instruction is applied *verbatim and unconditionally* --
-see ``app.ai.workflows.revise_graph``'s ``rewrite`` node, which never
-consults this module before generating. This module runs strictly
-*afterward*, on the already-merged draft, and its only effect is to attach
-warnings and (for major/critical findings) force a human approval gate. It
-never blocks, reverts or softens an edit.
+Kullanıcının revizyon talimatı *olduğu gibi ve koşulsuz* uygulanır -- bkz.
+``app.ai.workflows.revise_graph``'ın ``rewrite`` düğümü, üretim öncesinde
+bu modüle hiç danışmaz. Bu modül kesinlikle *sonradan*, zaten birleştirilmiş
+taslak üzerinde çalışır ve tek etkisi uyarılar eklemek ve (majör/kritik
+bulgular için) bir insan onay kapısını zorunlu kılmaktır. Hiçbir zaman bir
+düzenlemeyi engellemez, geri almaz veya yumuşatmaz.
 
-``ConflictReport.applied_anyway`` is a hard invariant of this module, not a
-policy this module could ever be configured to flip: every finding this
-module can produce describes a defect in a change that has already
-happened, not a decision about whether it should happen.
+``ConflictReport.applied_anyway``, bu modülün asla değiştirilebilecek bir
+politikası değil, katı bir değişmezidir (invariant): bu modülün üretebileceği
+her bulgu, zaten gerçekleşmiş bir değişiklikteki bir kusuru tanımlar, o
+değişikliğin gerçekleşip gerçekleşmemesi gerektiğine dair bir karar değil.
 
-Two layers, same shape as the deterministic verifier + LLM judge pairing in
-``app.ai.verification``:
+``app.ai.verification`` içindeki deterministik doğrulayıcı + LLM hakem
+eşleşmesiyle aynı biçimde iki katman:
 
-- ``detect_conflicts_deterministic`` -- free, reproducible, regex/set-based.
-  Always runs.
-- ``assess_conflicts_llm`` -- one fast-tier structured call for the
-  contradictions a regex cannot see (a normative statement that
-  contradicts a mevzuat clause in meaning, not just in citation). Gated by
-  ``settings.REVISION_CONFLICT_AUDIT_ENABLED`` and the reasoning level's
-  judge switch; degrades to ``[]`` on any failure, same as ``judge_draft``.
+- ``detect_conflicts_deterministic`` -- ücretsiz, tekrarlanabilir,
+  regex/küme tabanlı. Her zaman çalışır.
+- ``assess_conflicts_llm`` -- bir regex'in göremediği çelişkiler için
+  (anlamca bir mevzuat maddesiyle çelişen, sadece atıfta değil, normatif
+  bir ifade) tek bir hızlı katman yapılandırılmış çağrısı.
+  ``settings.REVISION_CONFLICT_AUDIT_ENABLED`` ve akıl yürütme düzeyinin
+  hakem anahtarıyla kapılandırılmıştır; ``judge_draft`` ile aynı şekilde
+  herhangi bir hatada ``[]``'e düşer.
 """
 
 import asyncio
@@ -60,13 +61,14 @@ ConflictKind = Literal[
 ]
 Severity = Literal["critical", "major", "minor"]
 
-#: Length cap on every free-text field -- a conflict finding is a pointer to
-#: a problem, not a place to reproduce the draft or a large mevzuat excerpt.
+#: Her serbest metin alanı için uzunluk sınırı -- bir çelişki bulgusu bir
+#: soruna işaret eder, taslağı veya büyük bir mevzuat alıntısını yeniden
+#: üretecek bir yer değildir.
 _FIELD_LIMIT = 300
 
 
 class ConflictFinding(BaseModel):
-    """One concrete clash between the applied instruction and mevzuat/kaynak."""
+    """Uygulanan talimat ile mevzuat/kaynak arasındaki somut, tek bir çatışma."""
 
     kind: ConflictKind
     severity: Severity
@@ -77,19 +79,20 @@ class ConflictFinding(BaseModel):
 
 
 class ConflictReport(BaseModel):
-    """The merged outcome of both audit layers."""
+    """Her iki denetim katmanının birleştirilmiş sonucu."""
 
     conflicts: list[ConflictFinding] = Field(default_factory=list)
     requires_human_approval: bool = False
-    #: Invariant, not a decision: this module never suppresses or reverts an
-    #: edit, so this is always True. Kept as an explicit field (rather than
-    #: only documented) so a caller can assert on it directly.
+    #: Bir karar değil, değişmez (invariant): bu modül hiçbir zaman bir
+    #: düzenlemeyi bastırmaz veya geri almaz, dolayısıyla bu her zaman
+    #: True'dur. Bir çağıranın doğrudan bunu assert edebilmesi için (sadece
+    #: belgelemek yerine) açık bir alan olarak tutulur.
     applied_anyway: bool = True
     notes: str = ""
 
 
 class LlmConflictFinding(BaseModel):
-    """One LLM-reported conflict. No field may carry draft text."""
+    """LLM tarafından bildirilen tek bir çelişki. Hiçbir alan taslak metni taşıyamaz."""
 
     kind: ConflictKind
     severity: Severity
@@ -98,14 +101,14 @@ class LlmConflictFinding(BaseModel):
 
 
 class ConflictAssessment(BaseModel):
-    """The conflict auditor's structured response."""
+    """Çelişki denetleyicisinin yapılandırılmış yanıtı."""
 
     conflicts: list[LlmConflictFinding] = Field(default_factory=list, max_length=5)
     rationale: str = Field(default="", max_length=400)
 
 
-#: Phrases asking to remove a structural element, mapped to the
-#: STRUCTURE_CHECKS id it names (see draft_verifier.STRUCTURE_CHECKS).
+#: Yapısal bir unsurun kaldırılmasını isteyen ifadeler, adlandırdıkları
+#: STRUCTURE_CHECKS id'sine eşlenir (bkz. draft_verifier.STRUCTURE_CHECKS).
 _REMOVAL_HINTS: dict[str, str] = {
     "kapanisi kaldir": "kapanis",
     "kapanisi sil": "kapanis",
@@ -122,11 +125,12 @@ _REMOVAL_HINTS: dict[str, str] = {
     "tarihi sil": "tarih",
 }
 
-#: (pattern, canonical kind, Turkish label) triples checked for
-#: instruction-vs-source contradictions. Institution is deliberately
-#: excluded here -- names survive paraphrase (see draft_verifier's own
-#: token-overlap escape hatch), so a textual mismatch is weak evidence of
-#: an actual contradiction rather than a typed value with one true form.
+#: Talimat-kaynak çelişkileri için kontrol edilen (desen, kanonik tür,
+#: Türkçe etiket) üçlüleri. Kurum burada kasıtlı olarak dışlanmıştır --
+#: isimler parafraza dayanıklıdır (bkz. draft_verifier'ın kendi token
+#: örtüşme kaçış kapısı), dolayısıyla metinsel bir uyuşmazlık, tek bir
+#: gerçek biçimi olan tipli bir değere kıyasla gerçek bir çelişki için
+#: zayıf bir kanıttır.
 _TYPED_CONFLICT_CHECKS: tuple[tuple, ...] = (
     (DATE_PATTERN, "tarih", "tarih"),
     (DOCUMENT_NUMBER_PATTERN, "sayı", "sayı"),
@@ -135,7 +139,7 @@ _TYPED_CONFLICT_CHECKS: tuple[tuple, ...] = (
 
 
 def _canonical_values(pattern, kind: str, text: str) -> dict[str, str]:
-    """raw value -> canonical form, for every match that canonicalizes."""
+    """Kanonikleşen her eşleşme için ham değer -> kanonik form."""
     values: dict[str, str] = {}
     for raw_value in _findall(pattern, text):
         canonical = canonical_for_kind(kind, raw_value)
@@ -165,26 +169,25 @@ def detect_conflicts_deterministic(
     source_document: str,
     report: VerificationReport,
 ) -> list[ConflictFinding]:
-    """Free, reproducible checks for an applied instruction's contradictions.
+    """Uygulanmış bir talimatın çelişkileri için ücretsiz, tekrarlanabilir kontroller.
 
     Args:
-        instruction: The parsed revision instruction (already applied).
-        context: The (possibly re-retrieved) legislation context the
-            revision was grounded in.
-        source_document: The incoming document the draft responds to.
-        report: The deterministic verification report for the *revised*
-            draft -- used for its ``missing_structure`` and
-            ``instruction_only_claims``.
+        instruction: Ayrıştırılmış (zaten uygulanmış) revizyon talimatı.
+        context: Revizyonun dayandırıldığı (muhtemelen yeniden getirilmiş)
+            mevzuat bağlamı.
+        source_document: Taslağın yanıt verdiği gelen belge.
+        report: *Revize edilmiş* taslak için deterministik doğrulama
+            raporu -- ``missing_structure`` ve ``instruction_only_claims``
+            alanları için kullanılır.
 
     Returns:
-        Every deterministic finding, unordered.
+        Tüm deterministik bulgular, sırasız.
     """
     findings: list[ConflictFinding] = []
     raw = instruction.raw
     fragment = _fragment(raw)
 
-    # 1. mevzuat_dayanaksiz -- a law/article citation the mevzuat context
-    # does not contain.
+    # 1. mevzuat_dayanaksiz -- mevzuat bağlamının içermediği bir kanun/madde atfı.
     instruction_citations = _legislation_citations(raw)
     if instruction_citations:
         context_citations = _legislation_citations(context)
@@ -203,8 +206,8 @@ def detect_conflicts_deterministic(
                 )
             )
 
-    # 2. kaynak_celiskisi -- a typed value in the instruction that clashes
-    # with the source document's own value of the same kind.
+    # 2. kaynak_celiskisi -- talimattaki tipli bir değerin, kaynak belgedeki
+    # aynı türden kendi değeriyle çatışması.
     for pattern, kind, label in _TYPED_CONFLICT_CHECKS:
         instruction_values = _canonical_values(pattern, kind, raw)
         if not instruction_values:
@@ -231,8 +234,8 @@ def detect_conflicts_deterministic(
                 )
             )
 
-    # 3. yapisal_ihlal -- the instruction asked to remove a mandatory
-    # element and the revised draft actually lost it.
+    # 3. yapisal_ihlal -- talimat zorunlu bir unsurun kaldırılmasını istedi
+    # ve revize edilen taslak bunu gerçekten kaybetti.
     normalized = _fold(raw)
     missing = set(report.missing_structure)
     labels_by_id = {check_id: label for check_id, label, _pattern in STRUCTURE_CHECKS}
@@ -257,7 +260,7 @@ def detect_conflicts_deterministic(
                 )
             )
 
-    # 4. kisisel_veri -- the instruction itself carries personal data.
+    # 4. kisisel_veri -- talimatın kendisi kişisel veri taşıyor.
     floor = get_policy().guardrail.pii_confidence_floor
     for pii in find_pii(raw):
         if pii.confidence >= floor:
@@ -272,8 +275,8 @@ def detect_conflicts_deterministic(
                 )
             )
 
-    # 5. mevzuat_celiskisi (weak form) -- an instruction-only claim of a
-    # normative kind that neither source nor mevzuat backs.
+    # 5. mevzuat_celiskisi (zayıf biçim) -- ne kaynağın ne de mevzuatın
+    # desteklemediği, yalnızca talimata dayanan normatif türde bir iddia.
     for claim in report.instruction_only_claims:
         if claim.kind in {"mevzuat", "kurum"}:
             findings.append(
@@ -302,34 +305,37 @@ async def assess_conflicts_llm(
     source_document: str,
     timeout_s: Optional[float] = None,
 ) -> list[ConflictFinding]:
-    """Ask the fast-tier auditor for contradictions a regex cannot see.
+    """Bir regex'in göremediği çelişkiler için hızlı katman denetleyicisine sorar.
 
-    Never raises -- degrades to ``[]`` on timeout, a schema failure or any
-    provider error, exactly like ``judge_draft``.
+    Asla hata fırlatmaz -- ``judge_draft`` ile tamamen aynı şekilde zaman
+    aşımında, bir şema hatasında veya herhangi bir sağlayıcı hatasında
+    ``[]``'e düşer.
 
     Args:
-        agent: A constructed ``ConflictAuditorAgent`` (fast-tier client).
-        instruction: The user's revision instruction, already applied.
-        revised_draft: The draft after the instruction was merged in.
-        context: The legislation context the revision was grounded in.
-        source_document: The incoming document the draft responds to.
-        timeout_s: Hard timeout; defaults to
-            ``settings.DRAFT_JUDGE_TIMEOUT_SECONDS`` (the same budget the
-            draft judge uses -- this is a comparable single structured call).
+        agent: Oluşturulmuş bir ``ConflictAuditorAgent`` (hızlı katman istemcisi).
+        instruction: Kullanıcının, zaten uygulanmış revizyon talimatı.
+        revised_draft: Talimat birleştirildikten sonraki taslak.
+        context: Revizyonun dayandırıldığı mevzuat bağlamı.
+        source_document: Taslağın yanıt verdiği gelen belge.
+        timeout_s: Sabit zaman aşımı; varsayılan olarak
+            ``settings.DRAFT_JUDGE_TIMEOUT_SECONDS`` (taslak hakeminin
+            kullandığı aynı bütçe -- bu, karşılaştırılabilir tek bir
+            yapılandırılmış çağrıdır).
 
     Returns:
-        The LLM-sourced findings, or ``[]`` on any degradation.
+        LLM kaynaklı bulgular veya herhangi bir düşüşte ``[]``.
     """
     timeout = timeout_s if timeout_s is not None else settings.DRAFT_JUDGE_TIMEOUT_SECONDS
-    # source_document is already scrubbed of known injection patterns at
-    # extraction time (see app.ai.guardrails.injection.scrub_extracted_text's
-    # own docstring -- applied once, not repeated ad hoc at every prompt
-    # call site). The explicit "GÜVENİLMEYEN İÇERİK" framing here is a
-    # second, complementary layer for whatever that regex scrubber cannot
-    # catch: it costs nothing and this is the one call in this module that
-    # embeds a full document's raw text, unlike `instruction` (the user's
-    # own, already-applied word, trusted by this system's design) or
-    # `context` (retrieved, verified legislation).
+    # source_document, çıkarım (extraction) zamanında bilinen enjeksiyon
+    # kalıplarından zaten temizlenmiştir (bkz.
+    # app.ai.guardrails.injection.scrub_extracted_text'in kendi docstring'i --
+    # bir kez uygulanır, her prompt çağrı noktasında ad hoc olarak
+    # tekrarlanmaz). Buradaki açık "GÜVENİLMEYEN İÇERİK" çerçevelemesi, o
+    # regex temizleyicinin yakalayamadığı her şey için ikinci, tamamlayıcı
+    # bir katmandır: hiçbir maliyeti yoktur ve bu modülde bir belgenin ham
+    # metnini tamamen gömen tek çağrı budur -- `instruction` (kullanıcının
+    # kendi, zaten uygulanmış sözü, bu sistemin tasarımı gereği güvenilir)
+    # veya `context` (getirilmiş, doğrulanmış mevzuat) böyle değildir.
     prompt = (
         "### KULLANICI TALİMATI (ZATEN UYGULANDI):\n"
         f"{instruction}\n\n"
@@ -377,31 +383,31 @@ async def assess_conflicts_llm(
 def merge_conflicts(
     deterministic: list[ConflictFinding], llm: list[ConflictFinding]
 ) -> ConflictReport:
-    """Combine both layers into one report, deduped and Turkish-noted.
+    """Her iki katmanı tek bir raporda birleştirir, tekilleştirilmiş ve Türkçe notlu.
 
     Args:
-        deterministic: Findings from ``detect_conflicts_deterministic``.
-        llm: Findings from ``assess_conflicts_llm`` (``[]`` when skipped or
-            degraded).
+        deterministic: ``detect_conflicts_deterministic``'ten gelen bulgular.
+        llm: ``assess_conflicts_llm``'den gelen bulgular (atlandığında veya
+            düştüğünde ``[]``).
 
     Returns:
-        The merged report. ``applied_anyway`` is always True -- see the
-        module docstring.
+        Birleştirilmiş rapor. ``applied_anyway`` her zaman True'dur -- bkz.
+        modül docstring'i.
     """
     merged: dict[tuple[str, str], ConflictFinding] = {}
     _SEVERITY_RANK = {"minor": 0, "major": 1, "critical": 2}
 
     for finding in (*deterministic, *llm):
-        # C28: keyed on the finding's own detail, not instruction_fragment --
-        # every deterministic finding from one detect_conflicts_deterministic
-        # call shares the exact same instruction_fragment (it's computed
-        # once from the instruction, not per-finding, see that function's
-        # own `fragment = _fragment(raw)`), so two genuinely different
-        # conflicts of the same kind (a date conflict and a separate sayı
-        # conflict, both "kaynak_celiskisi") collapsed onto one dict key and
-        # silently discarded whichever wasn't kept -- the user found out
-        # about one contradiction and not the other. `detail` carries the
-        # specific label and value that actually distinguishes them.
+        # C28: instruction_fragment yerine bulgunun kendi detail'ine göre
+        # anahtarlanır -- tek bir detect_conflicts_deterministic çağrısındaki
+        # her deterministik bulgu tam olarak aynı instruction_fragment'ı
+        # paylaşır (bulgu başına değil, talimattan bir kez hesaplanır, bkz.
+        # o fonksiyonun kendi `fragment = _fragment(raw)` satırı); bu yüzden
+        # aynı türden gerçekten farklı iki çelişki (bir tarih çelişkisi ve
+        # ayrı bir sayı çelişkisi, ikisi de "kaynak_celiskisi") tek bir dict
+        # anahtarında çakışıp hangisi tutulmadıysa sessizce atılırdı --
+        # kullanıcı bir çelişkiden haberdar olur, diğerinden olmazdı.
+        # `detail`, bunları gerçekten ayırt eden belirli etiket ve değeri taşır.
         key = (finding.kind, _fold(finding.detail))
         existing = merged.get(key)
         if existing is None or _SEVERITY_RANK[finding.severity] > _SEVERITY_RANK[existing.severity]:

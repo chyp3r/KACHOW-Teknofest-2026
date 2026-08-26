@@ -7,7 +7,7 @@ from mcp.client.stdio import stdio_client
 logger = logging.getLogger(__name__)
 
 class MCPClient:
-    """SOTA Client connector for external Model Context Protocol (MCP) servers."""
+    """Harici Model Context Protocol (MCP) sunucuları için SOTA istemci bağlayıcısı."""
 
     def __init__(self, name: str, command: str, args: Optional[List[str]] = None, env: Optional[Dict[str, str]] = None):
         self.name = name
@@ -20,7 +20,7 @@ class MCPClient:
 
     @asynccontextmanager
     async def connect(self):
-        """Asynchronously connect to the MCP server and initialize a session."""
+        """MCP sunucusuna asenkron olarak bağlan ve bir oturum başlat."""
         logger.info(f"Connecting to MCP server '{self.name}' using command: {self.server_params.command}")
         try:
             async with stdio_client(self.server_params) as (read, write):

@@ -6,7 +6,7 @@ from starlette.responses import Response
 
 
 class ResponseTimeMiddleware(BaseHTTPMiddleware):
-    """SOTA Middleware that measures HTTP response processing time and appends it to response headers."""
+    """HTTP yanıt işleme süresini ölçen ve yanıt başlıklarına ekleyen SOTA middleware."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
         start_time = time.perf_counter()
@@ -16,7 +16,7 @@ class ResponseTimeMiddleware(BaseHTTPMiddleware):
         process_time = time.perf_counter() - start_time
         response_time_ms = round(process_time * 1000, 2)
 
-        # Store in request state for downstream logging/handlers
+        # Sonraki loglama/handler'lar için request state'e kaydet
         request.state.response_time_ms = response_time_ms
 
         response.headers["X-Response-Time-Ms"] = str(response_time_ms)

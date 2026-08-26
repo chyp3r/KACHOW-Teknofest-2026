@@ -1,30 +1,30 @@
-"""Document-relevance admission for the draft flow.
+"""Taslak akışı için belge-uygunluk (relevance) kabulü.
 
-``app.ai.workflows.scope`` answers whether a production request is anchored
-to *something* -- a document, an open draft, or the official-correspondence
-register. An attached document is treated there as sufficient anchoring on
-its own, which is the right call for scope (a document is evidence the turn
-is about *some* piece of business), but it is too generous for the draft
-step specifically: "Bu evraka çiğköfte kampanyası için bir metin yaz" has a
-document attached and would clear ``scope.resolve_scope`` outright, yet the
-requested text has nothing to do with that document either.
+``app.ai.workflows.scope``, bir üretim isteğinin *bir şeye* -- bir belgeye,
+açık bir taslağa ya da resmî yazışma kaydına -- bağlı olup olmadığını
+yanıtlar. Ekli bir belge orada tek başına yeterli bir dayanak olarak
+kabul edilir; bu, scope için doğru bir karardır (bir belge, turun *bir*
+iş kalemiyle ilgili olduğuna kanıttır), ama özellikle taslak adımı için
+fazla cömerttir: "Bu evraka çiğköfte kampanyası için bir metin yaz"
+isteğinde ekli bir belge vardır ve ``scope.resolve_scope``'u dosdoğru
+geçer, oysa istenen metnin o belgeyle hiçbir ilgisi yoktur.
 
-This module is the second, narrower check that catches exactly that gap.
-Where scope asks "is there an anchor at all", this asks "does the request
-actually concern *this* anchor" -- and it only ever runs once a document is
-attached and its classification (in particular ``summary``) is already
-available, which is why it is invoked from inside
-``planning_graph._step_draft`` rather than at plan-resolution time the way
-scope is: the summary it compares against does not exist until the
-classification step has run.
+Bu modül, tam olarak bu boşluğu yakalayan ikinci, daha dar bir kontroldür.
+Scope "herhangi bir dayanak var mı" diye sorarken, bu modül "istek
+gerçekten *bu* dayanakla mı ilgili" diye sorar -- ve yalnızca bir belge
+eklendikten ve sınıflandırması (özellikle ``summary``) zaten mevcut
+olduktan sonra çalışır; bu yüzden scope gibi plan-çözümleme anında değil,
+``planning_graph._step_draft`` içinden çağrılır: karşılaştırılacak özet,
+sınıflandırma adımı çalışana kadar mevcut değildir.
 
-Same two-layer shape as ``scope`` and as ``app.ai.revision.conflict``: a
-free deterministic pass settles the overwhelming majority of turns (a bare
-"taslak hazırla" carries no topic of its own to be irrelevant *about*; a
-request phrased in administrative register or that names something the
-document's own summary already mentions is presumptively on-topic), and
-only a request that clears neither test is escalated to a fast-tier model
-call, with the deterministic verdict standing if no model is configured.
+``scope`` ve ``app.ai.revision.conflict`` ile aynı iki katmanlı yapı:
+ücretsiz bir deterministik geçiş turların ezici çoğunluğunu çözer (yalın
+bir "taslak hazırla" kendine ait, ilgisiz olabilecek bir konu taşımaz;
+resmî yazışma diliyle ifade edilmiş ya da belgenin kendi özetinde zaten
+geçen bir şeyi adlandıran bir istek varsayılan olarak konuyla ilgilidir),
+ve yalnızca her iki testi de geçemeyen bir istek hızlı katmandaki bir
+modele yükseltilir; model yapılandırılmamışsa deterministik karar geçerli
+kalır.
 """
 
 import logging
@@ -59,13 +59,14 @@ RelevanceReason = Literal[
     "degraded",
 ]
 
-#: A message that explicitly points at the attached document ("bu belge",
-#: "bu kişinin", "yukarıdaki") is relevant by definition -- the user named
-#: their own anchor, so there is nothing left to classify. This is the fix
-#: for the CV-upload false refusal: "Bu kişinin ekibe katılımı ile ilgili
-#: bir bilgilendirme metni yaz" carries no word from `DOMAIN_SURFACES` and
-#: may share no vocabulary with the CV's own summary either, but "bu
-#: kişinin" is an unambiguous pointer at the uploaded document.
+#: Ekli belgeye açıkça işaret eden bir mesaj ("bu belge", "bu kişinin",
+#: "yukarıdaki") tanımı gereği ilgilidir -- kullanıcı kendi dayanağını
+#: adlandırmıştır, sınıflandıracak bir şey kalmamıştır. Bu, CV yükleme
+#: yanlış reddi için düzeltmedir: "Bu kişinin ekibe katılımı ile ilgili
+#: bir bilgilendirme metni yaz" `DOMAIN_SURFACES`'ten hiçbir kelime taşımaz
+#: ve CV'nin kendi özetiyle de hiç kelime paylaşmayabilir, ama "bu
+#: kişinin" yüklenen belgeye yönelik belirsizliğe yer bırakmayan bir
+#: işarettir.
 _DEICTIC_SURFACES: tuple[str, ...] = (
     "bu belge", "bu evrak", "bu dokuman", "bu kisi", "bu kisinin",
     "bu kisiyle", "bu cv", "bu ozgecmis", "bu basvuru", "bu basvurunun",
@@ -77,13 +78,14 @@ _DEICTIC_SURFACES: tuple[str, ...] = (
 
 @dataclass(frozen=True)
 class RelevanceVerdict:
-    """Whether a drafting instruction actually concerns the attached document.
+    """Bir taslak talimatının ekli belgeyle gerçekten ilgili olup olmadığı.
 
     Attributes:
-        relevant: False only when the draft step should refuse to run.
-        reason: Which rule settled it (see ``RelevanceReason``).
-        source: ``"deterministic"`` or ``"model"``.
-        detail: Turkish audit note, not shown to the user verbatim.
+        relevant: Yalnızca taslak adımının çalışmayı reddetmesi gerektiğinde
+            False.
+        reason: Kararı hangi kuralın verdiği (bkz. ``RelevanceReason``).
+        source: ``"deterministic"`` veya ``"model"``.
+        detail: Türkçe denetim notu, kullanıcıya harfiyen gösterilmez.
     """
 
     relevant: bool
@@ -93,7 +95,7 @@ class RelevanceVerdict:
 
 
 class RelevanceOutput(BaseModel):
-    """The fast-tier model's verdict on an unanchored-looking draft request."""
+    """Hızlı katmandaki modelin, dayanaksız görünen bir taslak isteği hakkındaki kararı."""
 
     relevant: bool = Field(
         description=(
@@ -116,11 +118,12 @@ class RelevanceOutput(BaseModel):
 
 
 def _coerce_fields(classification: dict[str, Any]) -> dict[str, Any]:
-    """Return the extracted header fields as a plain dict.
+    """Çıkarılan başlık alanlarını sade bir dict olarak döndürür.
 
-    Duplicated from ``draft_graph``/``writing_brief`` on purpose -- see
-    ``writing_brief._coerce_fields``'s own docstring on why a shared
-    four-line helper isn't worth a cross-module dependency here.
+    ``draft_graph``/``writing_brief``'ten bilerek çoğaltıldı -- burada
+    paylaşılan dört satırlık bir yardımcı fonksiyonun neden modüller
+    arası bir bağımlılığa değmediğine dair ``writing_brief._coerce_fields``
+    'in kendi docstring'ine bakın.
     """
     fields = (classification or {}).get("fields", {})
     if hasattr(fields, "model_dump"):
@@ -129,15 +132,16 @@ def _coerce_fields(classification: dict[str, Any]) -> dict[str, Any]:
 
 
 def _document_text(classification: dict[str, Any]) -> str:
-    """Every part of the classification a request could plausibly be *about*.
+    """Bir isteğin muhtemelen *hakkında* olabileceği sınıflandırmanın her
+    parçası.
 
-    Widened beyond the summary/type label alone (the original source of the
-    CV false-refusal: a request naming the CV's own subject -- "bu kişinin
-    ekibe katılımı" -- shares no vocabulary with a document-type summary
-    like "Özgeçmiş belgesi.") to also cover the extracted header fields
-    (konu/muhatap/gönderen kurum/imza sahibi) and any named entities the
-    analysis step found -- the concrete nouns a request about *this
-    specific document* is most likely to actually use.
+    CV yanlış reddinin asıl kaynağı olan yalnızca özet/tür etiketinin
+    ötesine genişletildi (belgenin kendi konusunu adlandıran bir istek --
+    "bu kişinin ekibe katılımı" -- "Özgeçmiş belgesi." gibi bir belge-türü
+    özetiyle hiçbir kelime paylaşmaz); artık çıkarılan başlık alanlarını
+    (konu/muhatap/gönderen kurum/imza sahibi) ve analiz adımının bulduğu
+    isimlendirilmiş varlıkları da kapsıyor -- *bu belirli belge* hakkındaki
+    bir isteğin fiilen kullanma olasılığı en yüksek somut isimler bunlar.
     """
     fields = _coerce_fields(classification)
     entities = classification.get("entities") or []
@@ -162,18 +166,18 @@ def _document_text(classification: dict[str, Any]) -> str:
 def assess_relevance_deterministic(
     instruction: str, classification: dict[str, Any]
 ) -> RelevanceVerdict:
-    """Settle relevance from the instruction and the document's own summary.
+    """Uygunluğu talimat ve belgenin kendi özetinden karara bağlar.
 
     Args:
-        instruction: The user's raw message this turn (not the composed
-            writer prompt -- that already has boilerplate wrapped around it).
-        classification: The turn's resolved classification, carrying
-            ``summary``/``document_type_label``.
+        instruction: Kullanıcının bu turdaki ham mesajı (zaten kalıp
+            metinle sarılmış olan oluşturulmuş writer prompt'u değil).
+        classification: Turun çözümlenmiş sınıflandırması,
+            ``summary``/``document_type_label`` taşır.
 
     Returns:
-        A verdict. ``relevant=False`` with reason ``"unrelated"`` is the one
-        outcome worth escalating to a model (see ``resolve_relevance``);
-        every other outcome is final.
+        Bir karar. ``"unrelated"`` nedenli ``relevant=False``, bir modele
+        yükseltmeye değer tek sonuçtur (bkz. ``resolve_relevance``); diğer
+        tüm sonuçlar nihaidir.
     """
     normalized = normalize(instruction)
     words = content_words(instruction)
@@ -215,18 +219,19 @@ def assess_relevance_deterministic(
 async def classify_relevance_with_model(
     llm_client: BaseLLMClient, instruction: str, classification: dict[str, Any]
 ) -> Optional[RelevanceOutput]:
-    """Ask the fast tier whether an unanchored-looking request fits the document.
+    """Dayanaksız görünen bir isteğin belgeye uyup uymadığını hızlı katmana
+    sorar.
 
     Args:
-        llm_client: Fast-tier client, the same one the router's own
-            tie-breaker and the scope gate use.
-        instruction: The user's message.
-        classification: The turn's resolved classification.
+        llm_client: Hızlı katman istemcisi; router'ın kendi
+            berabere-bozucusunun ve scope kapısının kullandığıyla aynı.
+        instruction: Kullanıcının mesajı.
+        classification: Turun çözümlenmiş sınıflandırması.
 
     Returns:
-        The model's structured verdict (relevance + confidence), or
-        ``None`` when the call failed -- distinct from a negative verdict
-        so a provider outage never reads as a refusal.
+        Modelin yapılandırılmış kararı (relevance + confidence), ya da
+        çağrı başarısız olduğunda ``None`` -- bir sağlayıcı kesintisinin
+        asla bir ret gibi okunmaması için olumsuz karardan ayrı tutulur.
     """
     from app.ai.agents.base import BaseAgent
 
@@ -264,12 +269,13 @@ async def classify_relevance_with_model(
         return None
 
 
-#: Below this confidence, a model's "unrelated" verdict is treated as "not
-#: sure enough to refuse" and the request is admitted instead. Refusing a
-#: legitimate request (the CV/"bu kişinin ekibe katılımı" false-refusal
-#: this guards against) is a worse failure mode than occasionally drafting
-#: something for a genuinely unrelated request, so the bar for a *negative*
-#: verdict is deliberately higher than the bar for a positive one.
+#: Bu güven düzeyinin altında, modelin "unrelated" kararı "reddetmek için
+#: yeterince emin değil" olarak ele alınır ve istek bunun yerine kabul
+#: edilir. Meşru bir isteği reddetmek (bunun karşı önlem olduğu CV/"bu
+#: kişinin ekibe katılımı" yanlış reddi), gerçekten ilgisiz bir istek için
+#: ara sıra bir şey taslak haline getirmekten daha kötü bir hata modudur,
+#: bu yüzden *olumsuz* bir karar için eşik, olumlu bir karar için olandan
+#: bilerek daha yüksek tutulur.
 _MODEL_REJECTION_CONFIDENCE_FLOOR = 0.7
 
 
@@ -278,19 +284,20 @@ async def resolve_relevance(
     classification: dict[str, Any],
     llm_client: Optional[BaseLLMClient] = None,
 ) -> RelevanceVerdict:
-    """Resolve relevance, escalating only the case a model call can improve.
+    """Uygunluğu çözer; yalnızca bir model çağrısının iyileştirebileceği
+    durumu yükseltir.
 
     Args:
-        instruction: The user's message.
-        classification: The turn's resolved classification.
-        llm_client: Fast-tier client. Omitted means the deterministic verdict
-            stands on its own -- stricter, not broken, matching
-            ``scope.resolve_scope``'s same no-model behaviour: an
-            unrelated-looking request is refused without a model getting a
-            chance to admit it.
+        instruction: Kullanıcının mesajı.
+        classification: Turun çözümlenmiş sınıflandırması.
+        llm_client: Hızlı katman istemcisi. Verilmemesi, deterministik
+            kararın tek başına geçerli kalması demektir -- ``scope.
+            resolve_scope``'un aynı model-yok davranışıyla eşleşerek daha
+            katı, ama bozuk değil: dayanaksız görünen bir istek, bir modele
+            kabul etme şansı verilmeden reddedilir.
 
     Returns:
-        The final verdict.
+        Nihai karar.
     """
     verdict = assess_relevance_deterministic(instruction, classification)
     if verdict.relevant or llm_client is None:
@@ -298,8 +305,8 @@ async def resolve_relevance(
 
     result = await classify_relevance_with_model(llm_client, instruction, classification)
     if result is None:
-        # A broken call, not a broken request -- see scope.resolve_scope's
-        # identical reasoning for "degraded".
+        # Bozuk olan çağrı, bozuk olan istek değil -- "degraded" için
+        # scope.resolve_scope'un aynı gerekçesine bakın.
         return RelevanceVerdict(
             True,
             "degraded",
@@ -311,7 +318,7 @@ async def resolve_relevance(
             True, "model_relevant", source="model", detail="Model belgeyle ilgili buldu."
         )
     if result.confidence < _MODEL_REJECTION_CONFIDENCE_FLOOR:
-        # Not confident enough to refuse -- see the floor's own docstring.
+        # Reddetmek için yeterince emin değil -- eşiğin kendi açıklamasına bakın.
         return RelevanceVerdict(
             True,
             "model_relevant",
@@ -330,14 +337,15 @@ async def resolve_relevance(
 
 
 def build_unrelated_reply(document_summary: str, document_type_label: str = "") -> str:
-    """Compose the "bu istek bu belgeyle ilgili değil" reply. Never generated.
+    """"Bu istek bu belgeyle ilgili değil" yanıtını oluşturur. Asla modelden
+    üretilmez, her zaman sabit metinden derlenir.
 
     Args:
-        document_summary: The attached document's summary.
-        document_type_label: The document's classified type, when known.
+        document_summary: Ekli belgenin özeti.
+        document_type_label: Bilinen ise belgenin sınıflandırılmış türü.
 
     Returns:
-        The Turkish reply.
+        Türkçe yanıt.
     """
     type_note = f" ({document_type_label})" if document_type_label else ""
     lines = [

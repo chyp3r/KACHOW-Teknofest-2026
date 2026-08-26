@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional
 
 
 class BaseAppException(Exception):
-    """Base application exception for all domain and system exceptions."""
+    """Tüm domain ve sistem istisnaları için temel uygulama istisnası."""
 
     def __init__(
         self,

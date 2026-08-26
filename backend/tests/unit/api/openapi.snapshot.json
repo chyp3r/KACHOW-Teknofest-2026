@@ -2,10 +2,10 @@
   "components": {
     "schemas": {
       "APIErrorDetail": {
-        "description": "Pydantic model representing structured error information in APIResponse.",
+        "description": "APIResponse içindeki yapılandırılmış hata bilgisini temsil eden Pydantic modeli.",
         "properties": {
           "code": {
-            "description": "Application-specific unique error code (e.g. NOT_FOUND, AI_EXECUTION_ERROR).",
+            "description": "Uygulamaya özgü benzersiz hata kodu (örn. NOT_FOUND, AI_EXECUTION_ERROR).",
             "title": "Code",
             "type": "string"
           },
@@ -19,11 +19,11 @@
                 "type": "null"
               }
             ],
-            "description": "Additional technical details or validation errors.",
+            "description": "Ek teknik detaylar veya doğrulama hataları.",
             "title": "Details"
           },
           "message": {
-            "description": "Human-readable error message for the user or developer.",
+            "description": "Kullanıcı veya geliştirici için okunabilir hata mesajı.",
             "title": "Message",
             "type": "string"
           }
@@ -46,7 +46,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -57,16 +57,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -88,7 +88,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -99,16 +99,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -130,7 +130,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -141,16 +141,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -172,7 +172,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -183,16 +183,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -214,7 +214,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -225,16 +225,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -256,7 +256,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -267,16 +267,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -298,7 +298,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -309,16 +309,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -340,7 +340,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -351,16 +351,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -382,7 +382,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -393,16 +393,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -424,7 +424,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -435,16 +435,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -466,7 +466,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -477,16 +477,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -508,7 +508,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -519,16 +519,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -553,7 +553,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation.",
+            "description": "Başarılı bir işlemde döndürülen payload.",
             "title": "Data"
           },
           "error": {
@@ -565,16 +565,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -599,7 +599,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation.",
+            "description": "Başarılı bir işlemde döndürülen payload.",
             "title": "Data"
           },
           "error": {
@@ -611,16 +611,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -645,7 +645,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation.",
+            "description": "Başarılı bir işlemde döndürülen payload.",
             "title": "Data"
           },
           "error": {
@@ -657,16 +657,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -691,7 +691,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation.",
+            "description": "Başarılı bir işlemde döndürülen payload.",
             "title": "Data"
           },
           "error": {
@@ -703,16 +703,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -737,7 +737,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation.",
+            "description": "Başarılı bir işlemde döndürülen payload.",
             "title": "Data"
           },
           "error": {
@@ -749,16 +749,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -772,7 +772,7 @@
       "APIResponse_NoneType_": {
         "properties": {
           "data": {
-            "description": "Payload returned on a successful operation.",
+            "description": "Başarılı bir işlemde döndürülen payload.",
             "title": "Data",
             "type": "null"
           },
@@ -785,16 +785,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -816,7 +816,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -827,16 +827,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -858,7 +858,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -869,16 +869,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -900,7 +900,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -911,16 +911,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -942,7 +942,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -953,16 +953,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -984,7 +984,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -995,16 +995,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -1026,7 +1026,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -1037,16 +1037,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -1068,7 +1068,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -1079,16 +1079,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -1110,7 +1110,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -1121,16 +1121,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -1152,7 +1152,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -1163,16 +1163,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -1194,7 +1194,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -1205,16 +1205,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -1236,7 +1236,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -1247,16 +1247,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -1278,7 +1278,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -1289,16 +1289,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -1320,7 +1320,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation."
+            "description": "Başarılı bir işlemde döndürülen payload."
           },
           "error": {
             "anyOf": [
@@ -1331,16 +1331,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -1363,7 +1363,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation.",
+            "description": "Başarılı bir işlemde döndürülen payload.",
             "title": "Data"
           },
           "error": {
@@ -1375,16 +1375,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -1407,7 +1407,7 @@
                 "type": "null"
               }
             ],
-            "description": "Payload returned on a successful operation.",
+            "description": "Başarılı bir işlemde döndürülen payload.",
             "title": "Data"
           },
           "error": {
@@ -1419,16 +1419,16 @@
                 "type": "null"
               }
             ],
-            "description": "Structured error details returned on failure."
+            "description": "Hata durumunda döndürülen yapılandırılmış hata bilgisi."
           },
           "meta": {
             "additionalProperties": true,
-            "description": "Response metadata (e.g., response time, timestamp).",
+            "description": "Yanıt meta verisi (örn. yanıt süresi, zaman damgası).",
             "title": "Meta",
             "type": "object"
           },
           "success": {
-            "description": "Indicates whether the operation was successful.",
+            "description": "İşlemin başarılı olup olmadığını belirtir.",
             "title": "Success",
             "type": "boolean"
           }
@@ -1506,7 +1506,7 @@
         "type": "object"
       },
       "AuditLogResponse": {
-        "description": "Pydantic schema for one `audit_log` row.",
+        "description": "Tek bir `audit_log` satırı için Pydantic şeması.",
         "properties": {
           "acting_as_company_id": {
             "anyOf": [
@@ -1668,7 +1668,7 @@
         "type": "object"
       },
       "ChainVerificationResponse": {
-        "description": "Pydantic schema for `GET /audit/verify`'s result.",
+        "description": "`GET /audit/verify`'ın sonucu için Pydantic şeması.",
         "properties": {
           "broken_at_seq": {
             "anyOf": [
@@ -1709,7 +1709,7 @@
         "type": "object"
       },
       "ChatMessageRequest": {
-        "description": "Client request for a new chat interaction.",
+        "description": "Yeni bir sohbet etkileşimi için istemci isteği.",
         "properties": {
           "document_id": {
             "anyOf": [
@@ -1771,7 +1771,7 @@
         "type": "object"
       },
       "ChatResumeRequest": {
-        "description": "Resume a chat run paused at the human-in-the-loop gate.\n\nTwo interrupt kinds share this one request shape: ``answer`` fills in a\ndraft's missing-information placeholders (Görev 2's \"eksik bilgi talep\netme\" requirement); ``approve``/``revise``/``reject`` resolve a draft\nthat needed a human's sign-off before proceeding to unit routing.",
+        "description": "İnsan-döngüde (human-in-the-loop) kapısında duraklatılmış bir sohbet çalışmasını devam ettirir.\n\nİki kesinti türü bu tek istek şeklini paylaşır: ``answer`` bir taslağın\neksik bilgi yer tutucularını doldurur (Görev 2'nin \"eksik bilgi talep\netme\" gereksinimi); ``approve``/``revise``/``reject``, birim yönlendirmeye\ngeçmeden önce bir insanın onayına ihtiyaç duyan bir taslağı çözümler.",
         "properties": {
           "action": {
             "description": "answer: eksik bilgi/yazım briefi cevapları. approve/revise/reject: taslak onay kararı. reject aynı zamanda yazım briefi kapısını da iptal eder. select: transfer akışında alıcı belirsizliğini çözen seçim (bkz. artifact_transfer_disambiguate, answers.recipient_id).",
@@ -1844,7 +1844,7 @@
         "type": "object"
       },
       "CompanyAdapterResponse": {
-        "description": "Pydantic schema for one company's current adapter -- mirrors\n``app.ai.adapters.company_adapter.CompanyAdapter`` field-for-field.",
+        "description": "Bir şirketin mevcut adaptörü için Pydantic şeması -- ``app.ai.\nadapters.company_adapter.CompanyAdapter`` ile alan alan birebir aynıdır.",
         "properties": {
           "avoided_patterns": {
             "items": {
@@ -1903,7 +1903,7 @@
         "type": "object"
       },
       "CompanyAdapterUpdate": {
-        "description": "Pydantic schema for hand-authoring a company's runtime style adapter\n(Faz C2) -- replaces the whole list per field, not an append.\n\nThere is no automated training pipeline yet (Faz C3); this is how an\nadmin configures a company's adapter until one exists.",
+        "description": "Bir şirketin çalışma zamanı stil adaptörünü elle oluşturmak için\nPydantic şeması (Faz C2) -- her alanı, eklemek yerine tüm listeyi\ndeğiştirir.\n\nHenüz otomatik bir eğitim pipeline'ı yok (Faz C3); böyle biri var\nolana kadar bir admin şirketin adaptörünü bu şekilde yapılandırır.",
         "properties": {
           "avoided_patterns": {
             "items": {
@@ -1934,7 +1934,7 @@
         "type": "object"
       },
       "CompanyAdminAssign": {
-        "description": "Pydantic schema for assigning an existing user as a company admin.",
+        "description": "Mevcut bir kullanıcıyı şirket admini olarak atamak için Pydantic şeması.",
         "properties": {
           "user_id": {
             "description": "Şirket admini yapılacak kullanıcının ID'si",
@@ -1949,7 +1949,7 @@
         "type": "object"
       },
       "CompanyCreate": {
-        "description": "Pydantic schema for creating a new company (root only).",
+        "description": "Yeni bir şirket oluşturmak için Pydantic şeması (yalnızca root).",
         "properties": {
           "name": {
             "description": "Şirket adı",
@@ -1988,7 +1988,7 @@
         "type": "object"
       },
       "CompanyProfileResponse": {
-        "description": "Pydantic schema for one company's current identity profile --\nmirrors ``app.ai.identity.company_profile.CompanyProfile`` field-for-field.",
+        "description": "Bir şirketin mevcut kimlik profili için Pydantic şeması -- ``app.ai.\nidentity.company_profile.CompanyProfile`` ile alan alan birebir aynıdır.",
         "properties": {
           "agent_name": {
             "title": "Agent Name",
@@ -2055,7 +2055,7 @@
         "type": "object"
       },
       "CompanyProfileUpdate": {
-        "description": "Pydantic schema for setting a company's identity profile -- the\nagent's own name and the company's letterhead/signer default a draft's\nheader/signature block falls back to when the writing brief leaves that\nslot unspecified. Every field replaces the profile's current value.",
+        "description": "Bir şirketin kimlik profilini ayarlamak için Pydantic şeması --\nasistanın kendi adı ve şirketin antet/imza sahibi varsayılanı, yazım\nbriefi o alanı belirtmeden bıraktığında bir taslağın başlık/imza\nbloğunun geri düştüğü değerlerdir. Her alan, profilin mevcut değerinin\nyerine geçer.",
         "properties": {
           "agent_name": {
             "default": "",
@@ -2113,7 +2113,7 @@
         "type": "object"
       },
       "CompanyResponse": {
-        "description": "Pydantic schema for company details output.",
+        "description": "Şirket detay çıktısı için Pydantic şeması.",
         "properties": {
           "id": {
             "description": "Şirket ID",
@@ -2164,7 +2164,7 @@
         "type": "object"
       },
       "CompanyRuleItem": {
-        "description": "Pydantic schema for one mandatory/recommended drafting rule.\n\n``id`` is optional on write: leave it unset for a new rule (the server\nassigns a stable ``Kx`` id) or supply the id an earlier read returned\nto edit that same rule in place -- see\n``app.domains.companies.provider.set_company_rules``.",
+        "description": "Zorunlu/önerilen bir yazım kuralı için Pydantic şeması.\n\n``id`` yazarken opsiyoneldir: yeni bir kural için boş bırakılır\n(sunucu kalıcı bir ``Kx`` id atar) ya da aynı kuralı yerinde\ndüzenlemek için önceki bir okumanın döndürdüğü id verilir -- bkz.\n``app.domains.companies.provider.set_company_rules``.",
         "properties": {
           "enabled": {
             "default": true,
@@ -2206,7 +2206,7 @@
         "type": "object"
       },
       "CompanyRulesResponse": {
-        "description": "Pydantic schema for one company's current mandatory rule set --\nmirrors ``app.ai.adapters.company_rules.CompanyRuleSet`` field-for-field.",
+        "description": "Bir şirketin mevcut zorunlu kural seti için Pydantic şeması --\n``app.ai.adapters.company_rules.CompanyRuleSet`` ile alan alan birebir\naynıdır.",
         "properties": {
           "company_id": {
             "title": "Company Id",
@@ -2244,7 +2244,7 @@
         "type": "object"
       },
       "CompanyRulesUpdate": {
-        "description": "Pydantic schema for replacing a company's full mandatory rule set.",
+        "description": "Bir şirketin tüm zorunlu kural setini değiştirmek için Pydantic şeması.",
         "properties": {
           "rules": {
             "items": {
@@ -2259,7 +2259,7 @@
         "type": "object"
       },
       "CompanyUpdate": {
-        "description": "Pydantic schema for updating an existing company. All fields optional.",
+        "description": "Mevcut bir şirketi güncellemek için Pydantic şeması. Tüm alanlar opsiyoneldir.",
         "properties": {
           "is_active": {
             "anyOf": [
@@ -2315,7 +2315,7 @@
         "type": "object"
       },
       "ConversationCreateRequest": {
-        "description": "`POST /messaging/conversations` body -- discriminated by `kind`.\n\nA DM sets `participant_id` only; a group sets `title` and\n`participant_ids` only. One endpoint, not two, because \"open or create\na conversation\" is a single concept to the caller -- the discriminator\njust picks which fields are relevant, the same way the frontend forms\nit maps to would.",
+        "description": "`POST /messaging/conversations` gövdesi -- `kind`'a göre ayrıştırılır.\n\nBir DM yalnızca `participant_id`'yi ayarlar; bir grup yalnızca\n`title` ve `participant_ids`'i ayarlar. İki değil tek bir endpoint,\nçünkü \"bir konuşmayı aç ya da oluştur\" çağıran için tek bir kavramdır\n-- ayrıştırıcı yalnızca hangi alanların ilgili olduğunu seçer,\neşlendiği frontend formlarının yapacağı gibi.",
         "properties": {
           "kind": {
             "enum": [
@@ -2374,7 +2374,7 @@
         "type": "object"
       },
       "ConversationUpdateRequest": {
-        "description": "Group-only: rename or archive. A DM has no editable fields.",
+        "description": "Yalnızca grup: yeniden adlandırma veya arşivleme. Bir DM'in\ndüzenlenebilir alanı yoktur.",
         "properties": {
           "is_archived": {
             "anyOf": [
@@ -2405,7 +2405,7 @@
         "type": "object"
       },
       "CorrespondenceType": {
-        "description": "Supported official correspondence outputs produced by the draft workflow.\n\nFixed at these four per spec. A user request for a specific genre that\nisn't one of them (an itiraz dilekçesi, a muvafakatname, ...) still\nresolves here -- to OTHER_OFFICIAL -- but carries the genre itself as a\nseparate free-text sub-genre alongside the type (see\n``app.ai.workflows.correspondence.resolve_correspondence_type``), so the\nwriter prompt still knows what to actually produce.",
+        "description": "Taslak iş akışının ürettiği desteklenen resmi yazışma çıktıları.\n\nSpesifikasyona göre bu dört tanede sabittir. Bunlardan biri olmayan\nbelirli bir tür için kullanıcı isteği (bir itiraz dilekçesi, bir\nmuvafakatname, ...) yine de buraya -- OTHER_OFFICIAL'a -- çözülür, ama\ntürün kendisini tür ile birlikte ayrı bir serbest metin alt-tür olarak\ntaşır (bkz.\n``app.ai.workflows.correspondence.resolve_correspondence_type``), bu\nyüzden writer prompt'u gerçekte ne üretileceğini yine de bilir.",
         "enum": [
           "cover_letter",
           "response_letter",
@@ -2416,7 +2416,7 @@
         "type": "string"
       },
       "DocumentFieldsUpdateSchema": {
-        "description": "Payload for manually correcting a document's extracted fields.\n\nThe full ``EvrakField`` set is replaced wholesale rather than patched\nkey-by-key -- the frontend form always round-trips every field it\nrendered (including ones already correctly detected), so a partial\npayload would have no way to distinguish \"leave this alone\" from \"the\nuser cleared it\".",
+        "description": "Bir evrakın çıkarılan alanlarını elle düzeltmek için gövde.\n\nTam ``EvrakField`` kümesi anahtar anahtar yamalanmak yerine bütünüyle\ndeğiştirilir -- ön yüz formu render ettiği her alanı (zaten doğru\ntespit edilenler dahil) her zaman geri gönderir, bu yüzden kısmi bir\ngövdenin \"buna dokunma\" ile \"kullanıcı temizledi\"yi ayırt etmesinin\nhiçbir yolu olmazdı.",
         "properties": {
           "fields": {
             "$ref": "#/components/schemas/EvrakField",
@@ -2430,7 +2430,7 @@
         "type": "object"
       },
       "DocumentPoolItemResponse": {
-        "description": "Pydantic schema for one pool item, joined with its document's file name.",
+        "description": "Evrakının dosya adıyla birleştirilmiş bir havuz öğesi için Pydantic şeması.",
         "properties": {
           "acknowledged_at": {
             "anyOf": [
@@ -2505,7 +2505,7 @@
         "type": "object"
       },
       "DocumentPoolResponse": {
-        "description": "Pydantic schema for a pool's own metadata.",
+        "description": "Bir havuzun kendi üstverisi için Pydantic şeması.",
         "properties": {
           "id": {
             "title": "Id",
@@ -2539,7 +2539,7 @@
         "type": "object"
       },
       "DocumentTextUpdateSchema": {
-        "description": "Payload for saving hand-corrected OCR/extracted text.\n\nCarries ``pages`` only, never a joined ``extracted_text`` -- the server\nalways re-derives the join from the submitted pages (see\n``DocumentService.update_document_text``). There is no lossless inverse\nof ``\"\\n\\n\".join(pages)`` (a double-spaced source page splits back\ninto far more fragments than it started with), so accepting a\nclient-submitted joined text would risk silently diverging from what\nthe pages actually say. The server separately rejects a page count that\ndoesn't match the cached document, since ``PageMap``,\n``get_document_outline``/``get_document_section`` and\n``signature.marks[].page`` all index by page number.",
+        "description": "Elle düzeltilmiş OCR/çıkarılan metni kaydetmek için gövde.\n\nYalnızca ``pages`` taşır, birleştirilmiş bir ``extracted_text`` asla\ntaşımaz -- sunucu birleşimi her zaman gönderilen sayfalardan yeniden\ntüretir (bkz. ``DocumentService.update_document_text``).\n``\"\\n\\n\".join(pages)``'in kayıpsız bir tersi yoktur (çift boşluklu bir\nkaynak sayfa geri bölündüğünde başladığından çok daha fazla parçaya\nayrılır), bu yüzden istemcinin gönderdiği birleştirilmiş metni kabul\netmek, sayfaların fiilen söylediğinden sessizce sapma riski taşırdı.\nSunucu ayrıca önbellekteki evrakla eşleşmeyen bir sayfa sayısını\nreddeder, çünkü ``PageMap``, ``get_document_outline``/\n``get_document_section`` ve ``signature.marks[].page`` hepsi sayfa\nnumarasına göre indekslenir.",
         "properties": {
           "pages": {
             "description": "Düzeltilmiş sayfa metinleri; sayfa sayısı önbellekteki belgeyle eşleşmelidir.",
@@ -2558,7 +2558,7 @@
         "type": "object"
       },
       "DocumentType": {
-        "description": "Types of incoming official documents (evrak) recognised at intake.\n\nThis taxonomy describes the document the institution *receives*. It is the\ncounterpart of `CorrespondenceType`, which describes the official reply the\ninstitution *produces*. Keeping the two separate lets the intake pipeline\nclassify an inbound petition while the drafting pipeline independently\ndecides that the answer should be a response letter.",
+        "description": "Girişte tanınan gelen resmi belge (evrak) türleri.\n\nBu taksonomi kurumun *aldığı* belgeyi tanımlar. Kurumun *ürettiği*\nresmi yanıtı tanımlayan `CorrespondenceType`'ın karşılığıdır. İkisini\nayrı tutmak, giriş boru hattının gelen bir dilekçeyi sınıflandırmasına\nizin verirken taslak boru hattının bağımsız olarak yanıtın bir yanıt\nmektubu olması gerektiğine karar vermesini sağlar.",
         "enum": [
           "official_letter",
           "petition",
@@ -2575,7 +2575,7 @@
         "type": "string"
       },
       "DraftClassificationSchema": {
-        "description": "The narrow slice of Görev 1's output the draft flow actually consumes.\n\nReplaces ``DraftRequestSchema.classification: dict`` (was a free-form,\nunvalidated dict fed straight into prompts -- a correctness hole and an\ninjection surface at once).",
+        "description": "Görev 1'in çıktısının taslak akışının fiilen tükettiği dar dilimi.\n\n``DraftRequestSchema.classification: dict``'in yerini alır (doğrudan\nprompt'lara beslenen serbest biçimli, doğrulanmamış bir dict idi --\naynı anda hem bir doğruluk açığı hem bir enjeksiyon yüzeyi).",
         "properties": {
           "document_type": {
             "$ref": "#/components/schemas/DocumentType",
@@ -2618,7 +2618,7 @@
         "type": "object"
       },
       "DraftDestinationUpdateRequest": {
-        "description": "Override a draft version's routed unit -- see\n`DraftService.update_destination`.",
+        "description": "Bir taslak versiyonunun yönlendirildiği birimi geçersiz kıl -- bkz.\n`DraftService.update_destination`.",
         "properties": {
           "destination": {
             "description": "Yeni birim adı. Şirketin tanımlı birimlerinden biri, ya da serbest metin (eşleşen bir birim yoksa yalnızca isim olarak saklanır).",
@@ -2635,7 +2635,7 @@
         "type": "object"
       },
       "DraftRequestSchema": {
-        "description": "Payload for initiating a drafting and routing workflow.",
+        "description": "Taslak oluşturma ve yönlendirme iş akışını başlatmak için gövde.",
         "properties": {
           "classification": {
             "$ref": "#/components/schemas/DraftClassificationSchema",
@@ -2680,7 +2680,7 @@
         "type": "object"
       },
       "DraftSendRequest": {
-        "description": "Pydantic schema for sending one draft version to one or more recipients.",
+        "description": "Bir taslak versiyonunu bir veya birden fazla alıcıya göndermek için Pydantic şeması.",
         "properties": {
           "message": {
             "anyOf": [
@@ -2711,7 +2711,7 @@
         "type": "object"
       },
       "DraftShareRespondRequest": {
-        "description": "Pydantic schema for accepting or rejecting a shared draft.",
+        "description": "Paylaşılan bir taslağı kabul etmek veya reddetmek için Pydantic şeması.",
         "properties": {
           "response_note": {
             "anyOf": [
@@ -2759,7 +2759,7 @@
         "type": "object"
       },
       "EvrakField": {
-        "description": "Structured header and signature fields of an incoming official document.\n\nEvery field is optional and defaults to None on purpose: missing-field\ndetection depends on the model reporting honest absence. A field given a\nmeaningful default (for example a \"Tasnif Dışı\" confidentiality grade) would\nmake every document look complete.",
+        "description": "Gelen bir resmi belgenin yapılandırılmış başlık ve imza alanları.\n\nHer alan isteğe bağlıdır ve varsayılan olarak bilerek None'dır: eksik alan\ntespiti, modelin gerçek yokluğu dürüstçe bildirmesine dayanır. Anlamlı bir\nvarsayılan değer verilen bir alan (örneğin \"Tasnif Dışı\" gizlilik derecesi)\nher belgeyi eksiksiz gösterirdi.",
         "properties": {
           "adres": {
             "anyOf": [
@@ -2960,7 +2960,7 @@
         "type": "object"
       },
       "FeedbackResponse": {
-        "description": "Pydantic schema for one feedback row.",
+        "description": "Tek bir geri bildirim satırı için Pydantic şeması.",
         "properties": {
           "comment": {
             "anyOf": [
@@ -3069,7 +3069,7 @@
         "type": "object"
       },
       "FeedbackStatsResponse": {
-        "description": "Pydantic schema for `GET /companies/{id}/feedback/stats`.",
+        "description": "`GET /companies/{id}/feedback/stats` için Pydantic şeması.",
         "properties": {
           "by_target_kind": {
             "additionalProperties": {
@@ -3101,7 +3101,7 @@
         "type": "object"
       },
       "FeedbackVoteRequest": {
-        "description": "Pydantic schema for casting (or re-casting) a vote.\n\n`content` is the exact rated text -- hashed server-side into\n`content_hash` and never itself persisted (see `FeedbackModel`'s\ndocstring). The frontend already has this text in hand (it is what is\non screen), so no extra fetch is needed to vote.",
+        "description": "Bir oy vermek (veya tekrar vermek) için Pydantic şeması.\n\n`content`, oylanan tam metindir -- sunucu tarafında `content_hash`'e\nhash'lenir ve kendisi asla kalıcı hale getirilmez (bkz. `FeedbackModel`'ın\ndocstring'i). Frontend bu metne zaten sahiptir (ekranda görünen odur),\nbu yüzden oy vermek için ekstra bir fetch gerekmez.",
         "properties": {
           "comment": {
             "anyOf": [
@@ -3208,7 +3208,7 @@
         "type": "object"
       },
       "GroupTransferSendRequest": {
-        "description": "`POST /transfers/send-group` body -- chat/REST-only fan-out to\nseveral recipients at once (Faz 5, #205). There is no AI-channel\nequivalent of this request; see `ArtifactTransferService.execute_group`'s\nown docstring.",
+        "description": "`POST /transfers/send-group` gövdesi -- yalnızca sohbet/REST üzerinden\nbirden fazla alıcıya aynı anda dağıtım (Faz 5, #205). Bu isteğin\nAI kanalı karşılığı yoktur; bkz.\n`ArtifactTransferService.execute_group`'un kendi docstring'i.",
         "properties": {
           "artifact_kind": {
             "enum": [
@@ -3279,10 +3279,10 @@
         "type": "object"
       },
       "InvitedEmailCreate": {
-        "description": "Pydantic schema to whitelist/invite an email.",
+        "description": "Bir e-postayı beyaz listeye alma/davet etme için Pydantic şeması.",
         "properties": {
           "email": {
-            "description": "Invited email address",
+            "description": "Davet edilen e-posta adresi",
             "format": "email",
             "title": "Email",
             "type": "string"
@@ -3290,7 +3290,7 @@
           "role": {
             "$ref": "#/components/schemas/UserRole",
             "default": "employee",
-            "description": "Pre-assigned role for the invitee"
+            "description": "Davet edilen kişiye önceden atanmış rol"
           }
         },
         "required": [
@@ -3300,32 +3300,32 @@
         "type": "object"
       },
       "InvitedEmailResponse": {
-        "description": "Pydantic schema returning whitelisted/invited email details.",
+        "description": "Beyaz listeye alınmış/davet edilmiş e-posta detaylarını döndüren Pydantic şeması.",
         "properties": {
           "company_id": {
-            "description": "Company the invitee will join upon registration",
+            "description": "Davet edilen kişinin kayıt sonrası katılacağı şirket",
             "title": "Company Id",
             "type": "string"
           },
           "email": {
-            "description": "Invited email address",
+            "description": "Davet edilen e-posta adresi",
             "format": "email",
             "title": "Email",
             "type": "string"
           },
           "id": {
-            "description": "Unique invitation ID",
+            "description": "Benzersiz davet ID'si",
             "title": "Id",
             "type": "string"
           },
           "is_used": {
-            "description": "Invitation utilization status",
+            "description": "Davetin kullanım durumu",
             "title": "Is Used",
             "type": "boolean"
           },
           "role": {
             "$ref": "#/components/schemas/UserRole",
-            "description": "Pre-assigned role"
+            "description": "Önceden atanmış rol"
           }
         },
         "required": [
@@ -3339,15 +3339,15 @@
         "type": "object"
       },
       "LoginRequest": {
-        "description": "Pydantic schema for credentials validation on login.",
+        "description": "Giriş sırasında kimlik bilgilerini doğrulamak için Pydantic şeması.",
         "properties": {
           "password": {
-            "description": "Raw account password",
+            "description": "Ham hesap şifresi",
             "title": "Password",
             "type": "string"
           },
           "username": {
-            "description": "Username or Email address of user",
+            "description": "Kullanıcının kullanıcı adı veya e-posta adresi",
             "title": "Username",
             "type": "string"
           }
@@ -3392,7 +3392,7 @@
         "type": "object"
       },
       "MevzuatReferenceSchema": {
-        "description": "A legislation reference suggested for the document.",
+        "description": "Evrak için önerilen bir mevzuat atfı.",
         "properties": {
           "aciklama": {
             "description": "Bu hükmün evrakla ilişkisi.",
@@ -3413,7 +3413,7 @@
         "type": "object"
       },
       "MissingField": {
-        "description": "A required field that is absent from the document, with its legal basis.",
+        "description": "Belgede bulunmayan, yasal dayanağıyla birlikte zorunlu bir alan.",
         "properties": {
           "key": {
             "description": "Eksik alanın teknik adı (örn. 'sayi').",
@@ -3452,31 +3452,31 @@
         "type": "object"
       },
       "PaginatedResponse": {
-        "description": "SOTA paginated response structure wrapper DTO.",
+        "description": "Sayfalanmış yanıt yapısını saran DTO.",
         "properties": {
           "items": {
-            "description": "List of items in the current page",
+            "description": "Mevcut sayfadaki öğelerin listesi",
             "items": {},
             "title": "Items",
             "type": "array"
           },
           "page": {
-            "description": "Current page number",
+            "description": "Mevcut sayfa numarası",
             "title": "Page",
             "type": "integer"
           },
           "pages": {
-            "description": "Total number of pages available",
+            "description": "Toplam sayfa sayısı",
             "title": "Pages",
             "type": "integer"
           },
           "size": {
-            "description": "Number of items per page",
+            "description": "Sayfa başına öğe sayısı",
             "title": "Size",
             "type": "integer"
           },
           "total": {
-            "description": "Total number of items across all pages",
+            "description": "Tüm sayfalardaki toplam öğe sayısı",
             "title": "Total",
             "type": "integer"
           }
@@ -3494,7 +3494,7 @@
       "PaginatedResponse_AuditLogResponse_": {
         "properties": {
           "items": {
-            "description": "List of items in the current page",
+            "description": "Mevcut sayfadaki öğelerin listesi",
             "items": {
               "$ref": "#/components/schemas/AuditLogResponse"
             },
@@ -3502,22 +3502,22 @@
             "type": "array"
           },
           "page": {
-            "description": "Current page number",
+            "description": "Mevcut sayfa numarası",
             "title": "Page",
             "type": "integer"
           },
           "pages": {
-            "description": "Total number of pages available",
+            "description": "Toplam sayfa sayısı",
             "title": "Pages",
             "type": "integer"
           },
           "size": {
-            "description": "Number of items per page",
+            "description": "Sayfa başına öğe sayısı",
             "title": "Size",
             "type": "integer"
           },
           "total": {
-            "description": "Total number of items across all pages",
+            "description": "Tüm sayfalardaki toplam öğe sayısı",
             "title": "Total",
             "type": "integer"
           }
@@ -3535,7 +3535,7 @@
       "PaginatedResponse_CompanyResponse_": {
         "properties": {
           "items": {
-            "description": "List of items in the current page",
+            "description": "Mevcut sayfadaki öğelerin listesi",
             "items": {
               "$ref": "#/components/schemas/CompanyResponse"
             },
@@ -3543,22 +3543,22 @@
             "type": "array"
           },
           "page": {
-            "description": "Current page number",
+            "description": "Mevcut sayfa numarası",
             "title": "Page",
             "type": "integer"
           },
           "pages": {
-            "description": "Total number of pages available",
+            "description": "Toplam sayfa sayısı",
             "title": "Pages",
             "type": "integer"
           },
           "size": {
-            "description": "Number of items per page",
+            "description": "Sayfa başına öğe sayısı",
             "title": "Size",
             "type": "integer"
           },
           "total": {
-            "description": "Total number of items across all pages",
+            "description": "Tüm sayfalardaki toplam öğe sayısı",
             "title": "Total",
             "type": "integer"
           }
@@ -3576,7 +3576,7 @@
       "PaginatedResponse_FeedbackResponse_": {
         "properties": {
           "items": {
-            "description": "List of items in the current page",
+            "description": "Mevcut sayfadaki öğelerin listesi",
             "items": {
               "$ref": "#/components/schemas/FeedbackResponse"
             },
@@ -3584,22 +3584,22 @@
             "type": "array"
           },
           "page": {
-            "description": "Current page number",
+            "description": "Mevcut sayfa numarası",
             "title": "Page",
             "type": "integer"
           },
           "pages": {
-            "description": "Total number of pages available",
+            "description": "Toplam sayfa sayısı",
             "title": "Pages",
             "type": "integer"
           },
           "size": {
-            "description": "Number of items per page",
+            "description": "Sayfa başına öğe sayısı",
             "title": "Size",
             "type": "integer"
           },
           "total": {
-            "description": "Total number of items across all pages",
+            "description": "Tüm sayfalardaki toplam öğe sayısı",
             "title": "Total",
             "type": "integer"
           }
@@ -3617,7 +3617,7 @@
       "PaginatedResponse_TrainingRunResponse_": {
         "properties": {
           "items": {
-            "description": "List of items in the current page",
+            "description": "Mevcut sayfadaki öğelerin listesi",
             "items": {
               "$ref": "#/components/schemas/TrainingRunResponse"
             },
@@ -3625,22 +3625,22 @@
             "type": "array"
           },
           "page": {
-            "description": "Current page number",
+            "description": "Mevcut sayfa numarası",
             "title": "Page",
             "type": "integer"
           },
           "pages": {
-            "description": "Total number of pages available",
+            "description": "Toplam sayfa sayısı",
             "title": "Pages",
             "type": "integer"
           },
           "size": {
-            "description": "Number of items per page",
+            "description": "Sayfa başına öğe sayısı",
             "title": "Size",
             "type": "integer"
           },
           "total": {
-            "description": "Total number of items across all pages",
+            "description": "Tüm sayfalardaki toplam öğe sayısı",
             "title": "Total",
             "type": "integer"
           }
@@ -3658,7 +3658,7 @@
       "PaginatedResponse_TrainingSampleResponse_": {
         "properties": {
           "items": {
-            "description": "List of items in the current page",
+            "description": "Mevcut sayfadaki öğelerin listesi",
             "items": {
               "$ref": "#/components/schemas/TrainingSampleResponse"
             },
@@ -3666,22 +3666,22 @@
             "type": "array"
           },
           "page": {
-            "description": "Current page number",
+            "description": "Mevcut sayfa numarası",
             "title": "Page",
             "type": "integer"
           },
           "pages": {
-            "description": "Total number of pages available",
+            "description": "Toplam sayfa sayısı",
             "title": "Pages",
             "type": "integer"
           },
           "size": {
-            "description": "Number of items per page",
+            "description": "Sayfa başına öğe sayısı",
             "title": "Size",
             "type": "integer"
           },
           "total": {
-            "description": "Total number of items across all pages",
+            "description": "Tüm sayfalardaki toplam öğe sayısı",
             "title": "Total",
             "type": "integer"
           }
@@ -3714,15 +3714,15 @@
         "type": "object"
       },
       "PasswordChangeRequest": {
-        "description": "Pydantic schema for updating current user's password securely.",
+        "description": "Mevcut kullanıcının parolasını güvenli şekilde güncellemek için Pydantic şeması.",
         "properties": {
           "current_password": {
-            "description": "The user's current password",
+            "description": "Kullanıcının mevcut parolası",
             "title": "Current Password",
             "type": "string"
           },
           "new_password": {
-            "description": "The user's new secure password",
+            "description": "Kullanıcının yeni güvenli parolası",
             "title": "New Password",
             "type": "string"
           }
@@ -3735,7 +3735,7 @@
         "type": "object"
       },
       "PermissionGrantCreate": {
-        "description": "Pydantic schema for delegating a permission to a user (Admin/Manager only).\n\nThe target user is the ``{user_id}`` path parameter of\n``POST /users/{user_id}/permissions``, not a field here -- one row is\nalways \"this action, to this specific person\", never a bulk operation.",
+        "description": "Bir kullanıcıya yetki devretmek için Pydantic şeması (yalnızca Admin/Manager).\n\nHedef kullanıcı, ``POST /users/{user_id}/permissions``'ın\n``{user_id}`` path parametresidir, burada bir alan değil -- bir satır\nher zaman \"bu eylem, bu belirli kişiye\" demektir, asla toplu bir\nişlem değildir.",
         "properties": {
           "action": {
             "description": "Örn. 'document:delete' -- bkz. app.core.authz.attributes.Action",
@@ -3812,7 +3812,7 @@
         "type": "object"
       },
       "PermissionGrantResponse": {
-        "description": "Pydantic schema for a persisted permission grant.",
+        "description": "Kalıcı bir yetki için Pydantic şeması.",
         "properties": {
           "action": {
             "title": "Action",
@@ -3925,7 +3925,7 @@
         "type": "object"
       },
       "PoolItemCreate": {
-        "description": "Pydantic schema for pushing one document into a specific pool.",
+        "description": "Bir evrakı belirli bir havuza itmek için Pydantic şeması.",
         "properties": {
           "document_id": {
             "description": "İtilecek evrakın storage_path'i",
@@ -3952,7 +3952,7 @@
         "type": "object"
       },
       "PoolPushRequest": {
-        "description": "Pydantic schema for a bulk push: one document, several recipients or a whole unit.",
+        "description": "Toplu itme için Pydantic şeması: bir evrak, birden çok alıcı veya tüm bir birim.",
         "properties": {
           "document_id": {
             "description": "İtilecek evrakın storage_path'i",
@@ -4006,7 +4006,7 @@
         "type": "object"
       },
       "PoolPushResultItem": {
-        "description": "Pydantic schema for one recipient's outcome within a bulk push.",
+        "description": "Toplu itme içinde bir alıcının sonucu için Pydantic şeması.",
         "properties": {
           "reason": {
             "anyOf": [
@@ -4037,7 +4037,7 @@
         "type": "object"
       },
       "ReasoningLevel": {
-        "description": "Speed-vs-quality tradeoff requested for a single AI request.",
+        "description": "Tek bir AI isteği için talep edilen hız-kalite takası.",
         "enum": [
           "fast",
           "balanced",
@@ -4047,10 +4047,10 @@
         "type": "string"
       },
       "RefreshRequest": {
-        "description": "Pydantic schema for access token renewal via refresh token.",
+        "description": "Refresh token aracılığıyla access token yenileme için Pydantic şeması.",
         "properties": {
           "refresh_token": {
-            "description": "Long-lived JWT Refresh Token",
+            "description": "Uzun ömürlü JWT Refresh Token",
             "title": "Refresh Token",
             "type": "string"
           }
@@ -4062,7 +4062,7 @@
         "type": "object"
       },
       "RoutingSuggestionRequest": {
-        "description": "Request a unit-routing decision for a draft, independent of drafting it.",
+        "description": "Bir taslağı oluşturmaktan bağımsız olarak, onun için bir birim\nyönlendirme kararı iste.",
         "properties": {
           "confidence_score": {
             "default": 100.0,
@@ -4098,7 +4098,7 @@
         "type": "object"
       },
       "SensitivityLevel": {
-        "description": "Official Turkish document confidentiality grades (``gizlilik derecesi``).\n\nOrdered from least to most restrictive so callers can compare levels\ndirectly (``level >= SensitivityLevel.GIZLI``). ``UNMARKED`` sits below\n``TASNIF_DISI`` (the explicit \"unclassified\" grade) -- a document that\nnever stated a grade at all is not the same fact as one that was\npositively marked unclassified, but neither blocks anything on its own.\n\n``rank`` is the same ordering as an int, because Qdrant payload filters\ncompare numbers, not enum members: chunk/document metadata stores\n``sensitivity_rank`` alongside this value's string for exactly that\nreason (see ``app.ai.retrieval`` range-filter wiring).",
+        "description": "Resmi Türkçe belge gizlilik dereceleri (``gizlilik derecesi``).\n\nÇağıranların seviyeleri doğrudan karşılaştırabilmesi için en az\nkısıtlayıcıdan en çok kısıtlayıcıya sıralanmıştır\n(``level >= SensitivityLevel.GIZLI``). ``UNMARKED``, ``TASNIF_DISI``'nin\n(açık \"tasnif dışı\" derecesi) altında yer alır -- hiç derece\nbelirtmeyen bir belge, olumlu olarak tasnif dışı işaretlenmiş bir\nbelgeyle aynı gerçek değildir, ama ikisi de kendi başına hiçbir şeyi\nengellemez.\n\n``rank``, bir int ile aynı sıralamadır, çünkü Qdrant payload\nfiltreleri enum üyelerini değil sayıları karşılaştırır: parça/belge\nmetadatası tam olarak bu nedenle bu değerin dizesiyle birlikte\n``sensitivity_rank``'i saklar (bkz. ``app.ai.retrieval`` aralık-filtre\nbağlantısı).",
         "enum": [
           "unmarked",
           "tasnif_disi",
@@ -4111,7 +4111,7 @@
         "type": "string"
       },
       "TokenResponse": {
-        "description": "Pydantic schema for token response payload.",
+        "description": "Token yanıtı payload'u için Pydantic şeması.",
         "properties": {
           "access_token": {
             "description": "JWT Access Token",
@@ -4125,7 +4125,7 @@
           },
           "token_type": {
             "default": "bearer",
-            "description": "Token type prefix",
+            "description": "Token tipi ön eki",
             "title": "Token Type",
             "type": "string"
           }
@@ -4138,7 +4138,7 @@
         "type": "object"
       },
       "TrainingRunResponse": {
-        "description": "Pydantic schema for one training run.",
+        "description": "Bir eğitim çalıştırması için Pydantic şeması.",
         "properties": {
           "created_at": {
             "format": "date-time",
@@ -4231,7 +4231,7 @@
         "type": "object"
       },
       "TrainingSampleResponse": {
-        "description": "Pydantic schema for one compiled preference-pair sample.",
+        "description": "Derlenmiş bir tercih-çifti örneği için Pydantic şeması.",
         "properties": {
           "chosen": {
             "anyOf": [
@@ -4333,7 +4333,7 @@
         "type": "object"
       },
       "TrainingSampleStatsResponse": {
-        "description": "Pydantic schema for `GET /companies/{id}/training-samples/stats`.",
+        "description": "`GET /companies/{id}/training-samples/stats` için Pydantic şeması.",
         "properties": {
           "by_source": {
             "additionalProperties": {
@@ -4365,7 +4365,7 @@
         "type": "object"
       },
       "TransferSendRequest": {
-        "description": "`POST /transfers/send` body -- the manual chat-initiated send.\n\nRecipient is always an explicit id here: this channel is fed by\n`UserSearchDrawer`/`PersonPickerBody` (Faz 2), which already resolves a\nname to a user before the request is ever made. Name-based resolution\n(`RecipientResolutionService`) exists for the Faz 4 AI channel, not\nthis one.",
+        "description": "`POST /transfers/send` gövdesi -- manuel, sohbetten başlatılan gönderim.\n\nAlıcı burada her zaman açık bir id'dir: bu kanal, istek yapılmadan\nönce zaten bir ismi bir kullanıcıya çözümleyen\n`UserSearchDrawer`/`PersonPickerBody` (Faz 2) tarafından beslenir.\nİsim tabanlı çözümleme (`RecipientResolutionService`) bu kanal için\ndeğil, Faz 4 AI kanalı için mevcuttur.",
         "properties": {
           "artifact_kind": {
             "enum": [
@@ -4418,7 +4418,7 @@
         "type": "object"
       },
       "UnitCreate": {
-        "description": "Pydantic schema for creating a new routable unit.",
+        "description": "Yeni bir yönlendirilebilir birim oluşturmak için Pydantic şeması.",
         "properties": {
           "description": {
             "description": "Birimin hangi konuları/talepleri kapsadığı -- AI yönlendirme kararında bunu okur",
@@ -4443,7 +4443,7 @@
         "type": "object"
       },
       "UnitMemberCreate": {
-        "description": "Pydantic schema for adding a user to a unit.",
+        "description": "Bir kullanıcıyı bir birime eklemek için Pydantic şeması.",
         "properties": {
           "is_primary": {
             "default": false,
@@ -4477,7 +4477,7 @@
         "type": "object"
       },
       "UnitMemberResponse": {
-        "description": "Pydantic schema for a unit membership, joined with the member's basic identity.",
+        "description": "Üyenin temel kimliğiyle birleştirilmiş bir birim üyeliği için Pydantic şeması.",
         "properties": {
           "email": {
             "description": "E-posta",
@@ -4522,7 +4522,7 @@
         "type": "object"
       },
       "UnitResponse": {
-        "description": "Pydantic schema for unit details output.",
+        "description": "Birim detayları çıktısı için Pydantic şeması.",
         "properties": {
           "description": {
             "description": "Birim açıklaması",
@@ -4555,7 +4555,7 @@
         "type": "object"
       },
       "UnitUpdate": {
-        "description": "Pydantic schema for updating an existing unit. All fields optional.",
+        "description": "Var olan bir birimi güncellemek için Pydantic şeması. Tüm alanlar isteğe bağlı.",
         "properties": {
           "description": {
             "anyOf": [
@@ -4629,26 +4629,26 @@
         "type": "object"
       },
       "UserCreate": {
-        "description": "Pydantic schema for creating a new user account.\n\nDeliberately has no ``clearance_level`` field: registration is\nself-service (gated only by the invite whitelist, no auth required), so\nletting a registrant set their own confidentiality ceiling would be a\nself-escalation hole. Every new account starts at\n``UserModel.clearance_level``'s column default and can only be raised\nafterwards by an admin via ``PUT /users/{id}``.",
+        "description": "Yeni bir kullanıcı hesabı oluşturmak için Pydantic şeması.\n\nKasıtlı olarak ``clearance_level`` alanı yoktur: kayıt self-servistir\n(sadece davet beyaz listesi ile kısıtlanır, kimlik doğrulama gerekmez),\nbu yüzden kayıt olan kişinin kendi gizlilik tavanını belirlemesine izin\nvermek, kendi kendine yetki yükseltme açığı olurdu. Her yeni hesap\n``UserModel.clearance_level``'ın kolon varsayılanıyla başlar ve sonradan\nsadece bir admin tarafından ``PUT /users/{id}`` ile yükseltilebilir.",
         "properties": {
           "email": {
-            "description": "Unique email address",
+            "description": "Benzersiz e-posta adresi",
             "format": "email",
             "title": "Email",
             "type": "string"
           },
           "password": {
-            "description": "Plain text password",
+            "description": "Düz metin parola",
             "title": "Password",
             "type": "string"
           },
           "role": {
             "$ref": "#/components/schemas/UserRole",
             "default": "employee",
-            "description": "Assigned role for authorization"
+            "description": "Yetkilendirme için atanan rol"
           },
           "username": {
-            "description": "Unique username",
+            "description": "Benzersiz kullanıcı adı",
             "title": "Username",
             "type": "string"
           }
@@ -4662,11 +4662,11 @@
         "type": "object"
       },
       "UserResponse": {
-        "description": "Pydantic schema for user account details output.",
+        "description": "Kullanıcı hesabı detayları çıktısı için Pydantic şeması.",
         "properties": {
           "clearance_level": {
             "$ref": "#/components/schemas/SensitivityLevel",
-            "description": "Confidentiality ceiling (EMPLOYEE role only)."
+            "description": "Gizlilik tavanı (sadece EMPLOYEE rolü için)."
           },
           "company_id": {
             "anyOf": [
@@ -4677,36 +4677,36 @@
                 "type": "null"
               }
             ],
-            "description": "Owning company (NULL for root)",
+            "description": "Sahip şirket (root için NULL)",
             "title": "Company Id"
           },
           "email": {
-            "description": "Unique email address",
+            "description": "Benzersiz e-posta adresi",
             "format": "email",
             "title": "Email",
             "type": "string"
           },
           "id": {
-            "description": "Unique user ID",
+            "description": "Benzersiz kullanıcı ID'si",
             "title": "Id",
             "type": "string"
           },
           "is_active": {
-            "description": "Status of user account",
+            "description": "Kullanıcı hesabının durumu",
             "title": "Is Active",
             "type": "boolean"
           },
           "is_deleted": {
-            "description": "Soft deletion flag status",
+            "description": "Soft delete bayrağının durumu",
             "title": "Is Deleted",
             "type": "boolean"
           },
           "role": {
             "$ref": "#/components/schemas/UserRole",
-            "description": "Assigned authorization role"
+            "description": "Atanan yetkilendirme rolü"
           },
           "username": {
-            "description": "Unique username",
+            "description": "Benzersiz kullanıcı adı",
             "title": "Username",
             "type": "string"
           }
@@ -4724,7 +4724,7 @@
         "type": "object"
       },
       "UserRole": {
-        "description": "User role types used throughout the system for RBAC.\n\nFour roles, one per level of the tenancy hierarchy:\n\n- ROOT: platform operator, not bound to any company (``UserModel.\n  company_id`` is NULL only for this role). Sees every company, never a\n  company's business data directly -- see ``app.core.authz`` for how a\n  root subject must explicitly scope to a company before any\n  company-resource action is permitted.\n- ADMIN: a company admin, created by root, scoped to exactly one\n  company.\n- MANAGER: a company manager, designated by that company's admin.\n- EMPLOYEE: a company employee, designated by an admin or manager.\n\nROOT, ADMIN and MANAGER all clear every confidentiality level (see\n``GuardrailPolicy.role_clearance_map``) -- MANAGER represents a company\nmanager, trusted with full access the same as ADMIN. EMPLOYEE's ceiling\nis not fixed by role at all: it comes from that individual's own\n``UserModel.clearance_level``, since two employees can legitimately need\ndifferent access.",
+        "description": "Sistem genelinde RBAC için kullanılan kullanıcı rol türleri.\n\nKiracılık hiyerarşisinin her seviyesi için bir tane olmak üzere dört rol:\n\n- ROOT: herhangi bir şirkete bağlı olmayan platform operatörü\n  (``UserModel.company_id`` yalnızca bu rol için NULL'dur). Her\n  şirketi görür, asla bir şirketin iş verisini doğrudan görmez -- bir\n  root öznesinin herhangi bir şirket-kaynağı eylemine izin verilmeden\n  önce açıkça bir şirkete nasıl kapsanması gerektiği için\n  ``app.core.authz``'ye bakın.\n- ADMIN: root tarafından oluşturulan, tam olarak bir şirkete kapsanan\n  bir şirket admini.\n- MANAGER: o şirketin admini tarafından atanan bir şirket müdürü.\n- EMPLOYEE: bir admin veya müdür tarafından atanan bir şirket çalışanı.\n\nROOT, ADMIN ve MANAGER'ın hepsi her gizlilik seviyesini açar (bkz.\n``GuardrailPolicy.role_clearance_map``) -- MANAGER, ADMIN ile aynı tam\nerişime güvenilen bir şirket müdürünü temsil eder. EMPLOYEE'nin tavanı\nrol tarafından hiç sabitlenmemiştir: o bireyin kendi\n``UserModel.clearance_level``'ından gelir, çünkü iki çalışan meşru\nbiçimde farklı erişime ihtiyaç duyabilir.",
         "enum": [
           "root",
           "admin",
@@ -4735,7 +4735,7 @@
         "type": "string"
       },
       "UserUpdate": {
-        "description": "Pydantic schema for updating a user account.",
+        "description": "Bir kullanıcı hesabını güncellemek için Pydantic şeması.",
         "properties": {
           "clearance_level": {
             "anyOf": [
@@ -4746,7 +4746,7 @@
                 "type": "null"
               }
             ],
-            "description": "Optional updated confidentiality ceiling (EMPLOYEE role only -- ADMIN/MANAGER clear everything regardless of this value). Admin-only, same as role/is_active."
+            "description": "İsteğe bağlı güncellenmiş gizlilik tavanı (sadece EMPLOYEE rolü için -- ADMIN/MANAGER bu değerden bağımsız olarak her şeyi geçer). role/is_active gibi sadece admin için."
           },
           "email": {
             "anyOf": [
@@ -4758,7 +4758,7 @@
                 "type": "null"
               }
             ],
-            "description": "Optional updated email address",
+            "description": "İsteğe bağlı güncellenmiş e-posta adresi",
             "title": "Email"
           },
           "is_active": {
@@ -4770,7 +4770,7 @@
                 "type": "null"
               }
             ],
-            "description": "Optional updated status of user account",
+            "description": "İsteğe bağlı güncellenmiş kullanıcı hesabı durumu",
             "title": "Is Active"
           },
           "role": {
@@ -4782,7 +4782,7 @@
                 "type": "null"
               }
             ],
-            "description": "Optional updated authorization role"
+            "description": "İsteğe bağlı güncellenmiş yetkilendirme rolü"
           }
         },
         "title": "UserUpdate",
@@ -4849,7 +4849,7 @@
   "paths": {
     "/api/v1/audit": {
       "get": {
-        "description": "List audit trail entries, newest first.\n\nRoot: pass `company_id` for one company, or omit it to list every row\nsystem-wide (every company's rows plus root's own system-wide actions).\nAdmin: always its own company, regardless of `company_id`.",
+        "description": "Denetim izi kayıtlarını en yeniden en eskiye listeler.\n\nRoot: tek bir şirket için `company_id` gönderin, ya da sistem genelinde\ntüm satırları listelemek için boş bırakın (tüm şirketlerin satırları\nartı root'un kendi sistem geneli işlemleri). Admin: `company_id`'den\nbağımsız olarak her zaman kendi şirketi.",
         "operationId": "list_audit_log_api_v1_audit_get",
         "parameters": [
           {
@@ -4976,7 +4976,7 @@
     },
     "/api/v1/audit/verify": {
       "get": {
-        "description": "Walk one hash chain and report the first tampered/missing link, or\nconfirm it's intact.\n\nRoot: pass `company_id` for that company's own chain, or omit it to\nverify root's own system-wide (`company_id IS NULL`) chain specifically\n-- unlike `GET /audit`'s omitted-`company_id` meaning \"every row,\" a\nchain to verify has to be one specific chain, since `seq`/`prev_hash`\ncontinuity is only ever defined within a single chain. Admin: always\nits own company's chain.",
+        "description": "Tek bir hash zincirini dolaşır ve ilk bozulmuş/eksik halkayı bildirir\nya da zincirin sağlam olduğunu doğrular.\n\nRoot: o şirketin kendi zinciri için `company_id` gönderin, ya da özellikle\nroot'un kendi sistem geneli (`company_id IS NULL`) zincirini doğrulamak\niçin boş bırakın -- `GET /audit`'te boş `company_id`'nin \"tüm satırlar\"\nanlamına gelmesinin aksine, doğrulanacak bir zincir tek bir belirli zincir\nolmak zorundadır, çünkü `seq`/`prev_hash` sürekliliği yalnızca tek bir\nzincir içinde tanımlıdır. Admin: her zaman kendi şirketinin zinciri.",
         "operationId": "verify_audit_chain_api_v1_audit_verify_get",
         "parameters": [
           {
@@ -5032,7 +5032,7 @@
     },
     "/api/v1/auth/login": {
       "post": {
-        "description": "Authenticate user credentials and issue access + refresh tokens.\n\nRate limit: max 5 requests per minute per IP.\n\nUses ``get_owner_db``, not ``get_db``: ``username``/``email`` are unique\nsystem-wide, not per company, so looking a caller up by either one is\ninherently cross-tenant -- there is no company to scope a row-level\n-security policy by until this call resolves who they are (see\n``get_owner_db``'s own docstring).",
+        "description": "Kullanıcı kimlik bilgilerini doğrular ve erişim + yenileme jetonu verir.\n\nHız sınırı: IP başına dakikada en fazla 5 istek.\n\n``get_db`` yerine ``get_owner_db`` kullanılır: ``username``/``email``\nşirket bazında değil, sistem genelinde benzersizdir, bu yüzden çağıranı\nbunlardan biriyle aramak doğası gereği çoklu kiracı (cross-tenant) bir\nişlemdir -- bu çağrı çağıranın kim olduğunu çözene kadar, satır düzeyinde\nbir güvenlik politikasını kapsayacak bir şirket yoktur (bkz.\n``get_owner_db``'nin kendi docstring'i).",
         "operationId": "login_api_v1_auth_login_post",
         "requestBody": {
           "content": {
@@ -5075,7 +5075,7 @@
     },
     "/api/v1/auth/logout": {
       "post": {
-        "description": "Logout the current user by blacklisting both access and refresh tokens in Redis.\n\nRaises:\n    BaseAppException: 500, if a token that was still live could not be\n        blacklisted -- the caller must not be told logout succeeded when\n        the token remains usable.",
+        "description": "Redis'te hem erişim hem yenileme jetonunu kara listeye alarak mevcut kullanıcının oturumunu kapatır.\n\nRaises:\n    BaseAppException: 500, hâlâ aktif olan bir jeton kara listeye\n        alınamazsa -- jeton kullanılabilir durumda kalırken çağırana\n        çıkışın başarılı olduğu söylenmemelidir.",
         "operationId": "logout_api_v1_auth_logout_post",
         "requestBody": {
           "content": {
@@ -5122,7 +5122,7 @@
     },
     "/api/v1/auth/refresh": {
       "post": {
-        "description": "Exchange a valid refresh token for a new access + refresh token pair.\n\nRate limit: max 20 requests per minute per IP.\nThe refresh token is validated against:\n- JWT signature and expiry\n- Token type (must be 'refresh', not 'access')\n- Redis blacklist (invalidated on logout)\n- Active user status\n\nUses ``get_owner_db``, not ``get_db``: a refresh token carries no\n``company_id`` claim (only an access token does -- see\n``AuthService.refresh_access_token``), so there is no tenant context\navailable yet to scope a row-level-security policy by (same reasoning\nas ``login`` above).",
+        "description": "Geçerli bir yenileme jetonunu yeni bir erişim + yenileme jetonu çiftiyle değiştirir.\n\nHız sınırı: IP başına dakikada en fazla 20 istek.\nYenileme jetonu şunlara karşı doğrulanır:\n- JWT imzası ve son kullanma tarihi\n- Jeton türü ('access' değil, 'refresh' olmalı)\n- Redis kara listesi (çıkışta geçersiz kılınır)\n- Aktif kullanıcı durumu\n\n``get_db`` yerine ``get_owner_db`` kullanılır: bir yenileme jetonu\n``company_id`` claim'i taşımaz (yalnızca bir erişim jetonu taşır -- bkz.\n``AuthService.refresh_access_token``), bu yüzden satır düzeyinde bir\ngüvenlik politikasını kapsayacak bir kiracı bağlamı henüz mevcut değildir\n(yukarıdaki ``login`` ile aynı gerekçe).",
         "operationId": "refresh_api_v1_auth_refresh_post",
         "requestBody": {
           "content": {
@@ -5165,7 +5165,7 @@
     },
     "/api/v1/chat/message": {
       "post": {
-        "description": "Orchestrate a chat interaction and return the completed result.\n\nRoutes the user input through the master planning graph, which resolves\nwhether it needs analysis, drafting, document Q&A or plain conversation.\nMay also return an ``INTERRUPTED`` status when the run paused at the\nhuman-in-the-loop gate; resume it via ``POST /chat/resume``.",
+        "description": "Bir sohbet etkileşimini düzenler ve tamamlanmış sonucu döndürür.\n\nKullanıcı girdisini, analiz, taslak yazımı, evrak soru-cevap ya da düz\nsohbete mi ihtiyaç duyduğunu çözen ana planlama grafiği üzerinden\nyönlendirir. Çalıştırma insan-döngüde kapısında duraklatıldığında bir\n``INTERRUPTED`` durumu da döndürebilir; bunu ``POST /chat/resume`` ile\ndevam ettirin.",
         "operationId": "send_chat_message_api_v1_chat_message_post",
         "requestBody": {
           "content": {
@@ -5211,7 +5211,7 @@
     },
     "/api/v1/chat/resume": {
       "post": {
-        "description": "Resume a run paused at the human-in-the-loop gate, streaming over SSE.\n\n``action=\"answer\"`` fills in a draft's missing-information placeholders\nwithout regenerating it. ``action=\"approve\"|\"revise\"|\"reject\"`` resolves a\ndraft that needed a human's sign-off before unit routing.",
+        "description": "İnsan-döngüde kapısında duraklatılmış bir çalıştırmayı SSE üzerinden akıtarak devam ettirir.\n\n``action=\"answer\"``, bir taslağın eksik bilgi yer tutucularını yeniden\nüretmeden doldurur. ``action=\"approve\"|\"revise\"|\"reject\"``, birim\nyönlendirmesinden önce insan onayına ihtiyaç duyan bir taslağı çözer.",
         "operationId": "resume_chat_stream_api_v1_chat_resume_post",
         "requestBody": {
           "content": {
@@ -5257,7 +5257,7 @@
     },
     "/api/v1/chat/resume/sync": {
       "post": {
-        "description": "Resume a paused run and return the completed (or re-paused) result.",
+        "description": "Duraklatılmış bir çalıştırmayı devam ettirir ve tamamlanmış (veya yeniden duraklatılmış) sonucu döndürür.",
         "operationId": "resume_chat_sync_api_v1_chat_resume_sync_post",
         "requestBody": {
           "content": {
@@ -5303,7 +5303,7 @@
     },
     "/api/v1/chat/sessions": {
       "get": {
-        "description": "List the caller's chat sessions, most recently active first.\n\n``user_id=None`` (an ADMIN/MANAGER/ROOT -- see ``bypasses_ownership``)\nlists every session *within the caller's own company*, matching\n``GET /documents``'s convention.",
+        "description": "Çağıranın sohbet oturumlarını, en son aktif olanı önce listeler.\n\n``user_id=None`` (bir ADMIN/MANAGER/ROOT -- bkz. ``bypasses_ownership``),\n``GET /documents``'in kuralına uygun olarak *çağıranın kendi şirketi\niçindeki* her oturumu listeler.",
         "operationId": "list_chat_sessions_api_v1_chat_sessions_get",
         "parameters": [
           {
@@ -5364,7 +5364,7 @@
     },
     "/api/v1/chat/sessions/{session_id}/messages": {
       "get": {
-        "description": "List a session's messages in conversation order (oldest first).\n\nOwnership reuses ``ChatService._verify_thread_ownership`` -- the same\n``user_id:`` prefix check that already gates ``/chat/resume`` from\ntouching another user's thread.\n\nRaises:\n    AuthorizationException: If ``session_id`` belongs to a different\n        user than ``current_user``.",
+        "description": "Bir oturumun mesajlarını konuşma sırasına göre listeler (en eskiden en yeniye).\n\nSahiplik, ``ChatService._verify_thread_ownership``'i yeniden kullanır --\n``/chat/resume``'un başka bir kullanıcının thread'ine dokunmasını zaten\nengelleyen aynı ``user_id:`` öneki kontrolü.\n\nRaises:\n    AuthorizationException: ``session_id``, ``current_user``'dan\n        farklı bir kullanıcıya aitse.",
         "operationId": "list_chat_session_messages_api_v1_chat_sessions__session_id__messages_get",
         "parameters": [
           {
@@ -5434,7 +5434,7 @@
     },
     "/api/v1/chat/sessions/{session_id}/state": {
       "get": {
-        "description": "Report whether a session is idle, running, or paused on an interrupt.\n\nLets the client recover after a page reload or a dropped SSE connection:\nif ``status`` is ``\"interrupted\"``, re-render the resume form from the\nreturned ``interrupt`` payload instead of losing it.",
+        "description": "Bir oturumun boşta mı, çalışıyor mu, yoksa bir kesintide mi duraklatılmış olduğunu bildirir.\n\nİstemcinin bir sayfa yenilemesi veya kopan bir SSE bağlantısı sonrası\nkurtarma yapmasını sağlar: ``status`` ``\"interrupted\"`` ise, devam\nettirme formunu kaybetmek yerine dönen ``interrupt`` yükünden yeniden\nrender edin.",
         "operationId": "get_session_state_api_v1_chat_sessions__session_id__state_get",
         "parameters": [
           {
@@ -5481,7 +5481,7 @@
     },
     "/api/v1/chat/stream": {
       "post": {
-        "description": "Orchestrate a chat interaction and stream progress events over SSE.\n\nEmits ``session`` first with the resolved thread_id, then\n``node_start``/``node_end``/``node_skipped``/``node_error`` for workflow\nphases, ``token`` for live text as it is generated, ``partial_result`` for\nintermediate output the client can render before the run finishes, and\neither a terminal ``final_result`` or, if the run paused at the\nhuman-in-the-loop gate, an ``interrupt`` event carrying what the human\nneeds to answer.",
+        "description": "Bir sohbet etkileşimini düzenler ve ilerleme olaylarını SSE üzerinden akıtır.\n\nÖnce çözümlenmiş thread_id ile ``session`` yayınlar, ardından iş akışı\naşamaları için ``node_start``/``node_end``/``node_skipped``/\n``node_error``, üretildikçe canlı metin için ``token``, istemcinin\nçalıştırma bitmeden önce render edebileceği ara çıktı için\n``partial_result``, ve ya sonlandırıcı bir ``final_result`` ya da,\nçalıştırma insan-döngüde kapısında duraklatıldıysa, insanın\nyanıtlaması gerekeni taşıyan bir ``interrupt`` olayı yayınlar.",
         "operationId": "stream_chat_message_api_v1_chat_stream_post",
         "requestBody": {
           "content": {
@@ -5527,7 +5527,7 @@
     },
     "/api/v1/companies": {
       "get": {
-        "description": "List every tenant company, paginated (Root only).",
+        "description": "Her kiracı şirketi sayfalanmış şekilde listeler (yalnızca Root).",
         "operationId": "list_companies_api_v1_companies_get",
         "parameters": [
           {
@@ -5588,7 +5588,7 @@
         ]
       },
       "post": {
-        "description": "Create a new tenant company (Root only).",
+        "description": "Yeni bir kiracı şirket oluşturur (yalnızca Root).",
         "operationId": "create_company_api_v1_companies_post",
         "requestBody": {
           "content": {
@@ -5636,7 +5636,7 @@
     },
     "/api/v1/companies/{company_id}": {
       "delete": {
-        "description": "Soft-delete a company (Root only).",
+        "description": "Bir şirketi geri alınabilir şekilde siler (soft-delete) (yalnızca Root).",
         "operationId": "delete_company_api_v1_companies__company_id__delete",
         "parameters": [
           {
@@ -5683,7 +5683,7 @@
         ]
       },
       "get": {
-        "description": "Fetch a single company's details (Root, or that company's own Admin).",
+        "description": "Tek bir şirketin ayrıntılarını getirir (Root, veya o şirketin kendi Admin'i).",
         "operationId": "get_company_api_v1_companies__company_id__get",
         "parameters": [
           {
@@ -5730,7 +5730,7 @@
         ]
       },
       "patch": {
-        "description": "Update a company's name/tax number/active flag/settings (Root, or that company's own Admin).",
+        "description": "Bir şirketin adını/vergi numarasını/aktiflik durumunu/ayarlarını günceller (Root, veya o şirketin kendi Admin'i).",
         "operationId": "update_company_api_v1_companies__company_id__patch",
         "parameters": [
           {
@@ -5789,7 +5789,7 @@
     },
     "/api/v1/companies/{company_id}/adapter": {
       "get": {
-        "description": "Fetch a company's current runtime style adapter (Faz C2).\n\nNever 404s for a company with nothing configured -- returns the empty\nadapter shape (``version=0``, empty lists) instead, same as\n``get_company_adapter`` itself.",
+        "description": "Bir şirketin geçerli çalışma zamanı stil adaptörünü getirir (Faz C2).\n\nHiçbir şey yapılandırılmamış bir şirket için asla 404 döndürmez --\nbunun yerine, ``get_company_adapter``'ın kendisiyle aynı şekilde,\nboş adaptör biçimini (``version=0``, boş listeler) döndürür.",
         "operationId": "get_company_adapter_endpoint_api_v1_companies__company_id__adapter_get",
         "parameters": [
           {
@@ -5836,7 +5836,7 @@
         ]
       },
       "put": {
-        "description": "Replace a company's runtime style adapter (Root, or that company's\nown Admin).\n\nHand-authoring is the only way to set one today -- Faz C3's automated\ntraining pipeline will call the same\n``app.domains.companies.provider.set_company_adapter`` this uses, with\na real ``sample_count`` instead of the 0 a manual edit gets. Each field\nreplaces the adapter's entire list, it does not append.",
+        "description": "Bir şirketin çalışma zamanı stil adaptörünü değiştirir (Root, veya o\nşirketin kendi Admin'i).\n\nBugün bunu ayarlamanın tek yolu elle yazmaktır -- Faz C3'ün otomatik\neğitim hattı, manuel bir düzenlemenin aldığı 0 yerine gerçek bir\n``sample_count`` ile bunun kullandığı aynı\n``app.domains.companies.provider.set_company_adapter``'ı çağıracaktır.\nHer alan, adaptörün tüm listesinin yerini alır, sona eklemez.",
         "operationId": "update_company_adapter_api_v1_companies__company_id__adapter_put",
         "parameters": [
           {
@@ -5895,7 +5895,7 @@
     },
     "/api/v1/companies/{company_id}/admins": {
       "post": {
-        "description": "Promote an existing company user to Admin (Root only).",
+        "description": "Mevcut bir şirket kullanıcısını Admin'e yükseltir (yalnızca Root).",
         "operationId": "assign_company_admin_api_v1_companies__company_id__admins_post",
         "parameters": [
           {
@@ -5954,7 +5954,7 @@
     },
     "/api/v1/companies/{company_id}/analytics/guardrails": {
       "get": {
-        "description": "Guardrail decision breakdown by stage/kind/decision.",
+        "description": "Aşama/tür/karar bazında güvenlik önlemi kararı dağılımı.",
         "operationId": "analytics_guardrails_api_v1_companies__company_id__analytics_guardrails_get",
         "parameters": [
           {
@@ -6003,7 +6003,7 @@
     },
     "/api/v1/companies/{company_id}/analytics/links": {
       "get": {
-        "description": "Grafana/Langfuse deep links, pre-filtered to this company where the\ntarget tool supports it (Grafana's `company` template variable --\nLangfuse's own tagging is honest-but-unverified, see\n`app.observability.tracer.build_trace_config`'s docstring).",
+        "description": "Hedef aracın desteklediği durumlarda bu şirkete önceden filtrelenmiş\nGrafana/Langfuse derin bağlantıları (Grafana'nın `company` şablon\ndeğişkeni -- Langfuse'un kendi etiketlemesi doğru kabul edilir ancak\ndoğrulanmamıştır, bkz. `app.observability.tracer.build_trace_config`'in\ndocstring'i).",
         "operationId": "analytics_links_api_v1_companies__company_id__analytics_links_get",
         "parameters": [
           {
@@ -6052,7 +6052,7 @@
     },
     "/api/v1/companies/{company_id}/analytics/summary": {
       "get": {
-        "description": "Document/draft/run/guardrail volume + quota usage for one company.",
+        "description": "Bir şirket için evrak/taslak/çalıştırma/güvenlik önlemi hacmi + kota kullanımı.",
         "operationId": "analytics_summary_api_v1_companies__company_id__analytics_summary_get",
         "parameters": [
           {
@@ -6101,7 +6101,7 @@
     },
     "/api/v1/companies/{company_id}/analytics/timeseries": {
       "get": {
-        "description": "One metric's volume over time, bucketed by day or week.",
+        "description": "Tek bir metriğin zaman içindeki hacmi, gün veya hafta bazında gruplanmış.",
         "operationId": "analytics_timeseries_api_v1_companies__company_id__analytics_timeseries_get",
         "parameters": [
           {
@@ -6207,7 +6207,7 @@
     },
     "/api/v1/companies/{company_id}/analytics/units": {
       "get": {
-        "description": "Draft volume per routed unit (`drafts.destination`).",
+        "description": "Yönlendirilen birim başına taslak hacmi (`drafts.destination`).",
         "operationId": "analytics_units_api_v1_companies__company_id__analytics_units_get",
         "parameters": [
           {
@@ -6256,7 +6256,7 @@
     },
     "/api/v1/companies/{company_id}/feedback/stats": {
       "get": {
-        "description": "Vote counts by signal and by target kind, for one company.",
+        "description": "Bir şirket için sinyale ve hedef türe göre oy sayıları.",
         "operationId": "feedback_stats_api_v1_companies__company_id__feedback_stats_get",
         "parameters": [
           {
@@ -6305,7 +6305,7 @@
     },
     "/api/v1/companies/{company_id}/profile": {
       "get": {
-        "description": "Fetch a company's identity profile.\n\nNever 404s for a company with nothing configured -- returns the empty\nprofile shape (``version=0``, empty fields) instead, same as\n``get_company_adapter_endpoint``.",
+        "description": "Bir şirketin kimlik profilini getirir.\n\nHiçbir şey yapılandırılmamış bir şirket için asla 404 döndürmez --\n``get_company_adapter_endpoint`` ile aynı şekilde, bunun yerine boş\nprofil biçimini (``version=0``, boş alanlar) döndürür.",
         "operationId": "get_company_profile_endpoint_api_v1_companies__company_id__profile_get",
         "parameters": [
           {
@@ -6352,7 +6352,7 @@
         ]
       },
       "put": {
-        "description": "Replace a company's identity profile (Root, or that company's own\nAdmin). Every field replaces the profile's current value.",
+        "description": "Bir şirketin kimlik profilini değiştirir (Root, veya o şirketin kendi\nAdmin'i). Her alan, profilin geçerli değerinin yerini alır.",
         "operationId": "update_company_profile_api_v1_companies__company_id__profile_put",
         "parameters": [
           {
@@ -6411,7 +6411,7 @@
     },
     "/api/v1/companies/{company_id}/rules": {
       "get": {
-        "description": "Fetch a company's mandatory drafting rules.\n\nNever 404s for a company with nothing configured -- returns an empty\nrule list instead, same as ``get_company_adapter_endpoint``.",
+        "description": "Bir şirketin zorunlu taslak yazım kurallarını getirir.\n\nHiçbir şey yapılandırılmamış bir şirket için asla 404 döndürmez --\n``get_company_adapter_endpoint`` ile aynı şekilde, bunun yerine boş bir\nkural listesi döndürür.",
         "operationId": "get_company_rules_endpoint_api_v1_companies__company_id__rules_get",
         "parameters": [
           {
@@ -6458,7 +6458,7 @@
         ]
       },
       "put": {
-        "description": "Replace a company's mandatory drafting rules (Root, or that\ncompany's own Admin).\n\nA violation is graded by the draft-quality judge and, when found,\nbecomes a numbered defect the existing verify/revise repair loop fixes\nautomatically -- see ``app.ai.verification.llm_judge.judge_draft``'s\nown ``company_rules_block`` parameter.",
+        "description": "Bir şirketin zorunlu taslak yazım kurallarını değiştirir (Root, veya\no şirketin kendi Admin'i).\n\nBir ihlal, taslak kalite hakemi tarafından derecelendirilir ve\nbulunduğunda, mevcut doğrulama/revizyon onarım döngüsünün otomatik\nolarak düzelttiği numaralandırılmış bir kusur hâline gelir -- bkz.\n``app.ai.verification.llm_judge.judge_draft``'ın kendi\n``company_rules_block`` parametresi.",
         "operationId": "update_company_rules_api_v1_companies__company_id__rules_put",
         "parameters": [
           {
@@ -6586,7 +6586,7 @@
         ]
       },
       "post": {
-        "description": "Trigger a training run. `style_adapter` compiles + mines + publishes\na refreshed style adapter synchronously (see `app.domains.training.\nservice`'s module docstring for why that scale doesn't need a\nbackground worker). `lora_sft`/`lora_dpo` only queues the job --\nactually running it needs the separate `worker` container manually\nstarted via `scripts/start_training_worker.sh` (see #191's own body\nfor why it isn't part of `docker compose up` by default).",
+        "description": "Bir eğitim çalıştırmasını tetikler. `style_adapter`, yenilenmiş bir\nstil adaptörünü senkron olarak derler + çıkarır + yayınlar (bu ölçeğin\nneden bir arka plan işçisine ihtiyaç duymadığı için bkz.\n`app.domains.training.service`'in modül docstring'i). `lora_sft`/\n`lora_dpo` işi yalnızca kuyruğa alır -- fiilen çalıştırmak,\n`scripts/start_training_worker.sh` ile manuel olarak başlatılan ayrı\nbir `worker` konteynerine ihtiyaç duyar (varsayılan olarak neden\n`docker compose up`'ın bir parçası olmadığı için bkz. #191'in kendi\ngövdesi).",
         "operationId": "trigger_training_run_api_v1_companies__company_id__training_runs_post",
         "parameters": [
           {
@@ -6648,7 +6648,7 @@
     },
     "/api/v1/companies/{company_id}/training-samples": {
       "get": {
-        "description": "List one company's compiled samples, newest first.",
+        "description": "Bir şirketin derlenmiş örneklerini en yeniden en eskiye listeler.",
         "operationId": "list_training_samples_api_v1_companies__company_id__training_samples_get",
         "parameters": [
           {
@@ -6736,7 +6736,7 @@
     },
     "/api/v1/companies/{company_id}/training-samples/compile": {
       "post": {
-        "description": "Re-derive `training_samples` from every currently-resolvable\n`feedback` vote. Does not train anything -- see `TrainingService.\ncompile_samples`'s docstring for why compiling is its own step.",
+        "description": "Şu anda çözümlenebilir her `feedback` oyundan `training_samples`'ı\nyeniden türetir. Hiçbir şeyi eğitmez -- derlemenin neden kendi başına\nbir adım olduğu için bkz. `TrainingService.compile_samples`'ın\ndocstring'i.",
         "operationId": "compile_training_samples_api_v1_companies__company_id__training_samples_compile_post",
         "parameters": [
           {
@@ -6785,7 +6785,7 @@
     },
     "/api/v1/companies/{company_id}/training-samples/export": {
       "get": {
-        "description": "The same rows `.../training-runs` trains on, as downloadable JSONL --\nsee `TrainingService.export_samples`'s docstring for why shown data and\ntrained data are guaranteed identical.",
+        "description": "`.../training-runs`'ın üzerinde eğitim yaptığı aynı satırlar, indirilebilir\nJSONL olarak -- gösterilen veri ile eğitilen verinin neden aynı olduğu\ngaranti edildiği için bkz. `TrainingService.export_samples`'ın docstring'i.",
         "operationId": "export_training_samples_api_v1_companies__company_id__training_samples_export_get",
         "parameters": [
           {
@@ -6843,7 +6843,7 @@
     },
     "/api/v1/companies/{company_id}/training-samples/stats": {
       "get": {
-        "description": "Source distribution + how far from `MIN_FEEDBACK_SAMPLES` a company is.",
+        "description": "Kaynak dağılımı + bir şirketin `MIN_FEEDBACK_SAMPLES`'a ne kadar uzak olduğu.",
         "operationId": "training_sample_stats_api_v1_companies__company_id__training_samples_stats_get",
         "parameters": [
           {
@@ -6892,7 +6892,7 @@
     },
     "/api/v1/documents": {
       "get": {
-        "description": "List uploaded documents with their summary metadata, newest first.\n\nArgs:\n    pagination: Page/size query parameters.\n    document_repository: Ownership/listing registry.\n    current_user: The authenticated caller -- the list is restricted to\n        documents it owns, unless it is ADMIN/MANAGER/ROOT (see\n        ``bypasses_ownership``), who see every document company-wide.\n        Never cross-company regardless of role.\n\nReturns:\n    A paginated envelope over the 7-field library projection (see\n    ``GET /documents/{storage_path}`` for the full analysis).",
+        "description": "Yüklenen evrakları özet meta verileriyle birlikte en yeniden en eskiye listeler.\n\nArgs:\n    pagination: Sayfa/boyut sorgu parametreleri.\n    document_repository: Sahiplik/listeleme kaydı.\n    current_user: Kimliği doğrulanmış çağıran -- liste, ADMIN/MANAGER/\n        ROOT (bkz. ``bypasses_ownership``) olmadığı sürece sahip olduğu\n        evraklarla sınırlıdır; bunlar şirket genelinde her evrakı görür.\n        Rolden bağımsız olarak asla şirketler arası değildir.\n\nReturns:\n    7 alanlı kütüphane izdüşümü üzerinde sayfalanmış bir zarf (tam\n    analiz için bkz. ``GET /documents/{storage_path}``).",
         "operationId": "list_documents_api_v1_documents_get",
         "parameters": [
           {
@@ -6953,7 +6953,7 @@
     },
     "/api/v1/documents/analyze": {
       "post": {
-        "description": "Perform the first review (ön inceleme) of an incoming official document.\n\nReads the document via direct text extraction or OCR, determines its type,\nextracts its header fields, reports required-but-missing information with the\nrelevant legislation, and returns a short summary.\n\nArgs:\n    http_request: The raw request, checked for a declared Content-Length\n        before the body is read at all.\n    file: The uploaded document.\n    service: Injected document analysis service.\n    current_user: The authenticated caller -- registered as the\n        document's owner and company so later reads can be restricted\n        to them.\n\nReturns:\n    The analysis result inside the unified success envelope.",
+        "description": "Gelen bir resmi evrakın ilk incelemesini (ön inceleme) yapar.\n\nEvrakı doğrudan metin çıkarımı veya OCR ile okur, türünü belirler,\nbaşlık alanlarını çıkarır, gerekli ama eksik bilgileri ilgili\nmevzuatla birlikte bildirir ve kısa bir özet döndürür.\n\nArgs:\n    http_request: Gövde hiç okunmadan önce beyan edilmiş bir\n        Content-Length için kontrol edilen ham istek.\n    file: Yüklenen evrak.\n    service: Enjekte edilmiş evrak analiz servisi.\n    current_user: Kimliği doğrulanmış çağıran -- daha sonraki okumaların\n        kendisiyle sınırlandırılabilmesi için evrakın sahibi ve şirketi\n        olarak kaydedilir.\n\nReturns:\n    Analiz sonucu, birleşik başarı zarfının içinde.",
         "operationId": "analyze_document_api_v1_documents_analyze_post",
         "requestBody": {
           "content": {
@@ -6999,7 +6999,7 @@
     },
     "/api/v1/documents/correspondence-types": {
       "get": {
-        "description": "List the supported outbound correspondence types and their Turkish labels.\n\nSingle source of truth for the frontend's type selector, instead of the\nlabels being retyped in TypeScript and drifting from\n``app.ai.workflows.correspondence.CORRESPONDENCE_TYPE_LABELS``.",
+        "description": "Desteklenen giden yazışma türlerini ve Türkçe etiketlerini listeler.\n\nEtiketlerin TypeScript'te yeniden yazılıp\n``app.ai.workflows.correspondence.CORRESPONDENCE_TYPE_LABELS``'tan\nsapması yerine, ön yüzün tür seçicisi için tek doğruluk kaynağıdır.",
         "operationId": "list_correspondence_types_api_v1_documents_correspondence_types_get",
         "responses": {
           "200": {
@@ -7025,7 +7025,7 @@
     },
     "/api/v1/documents/draft": {
       "post": {
-        "description": "Generate an official draft and department routing suggestion (Task 2).\n\nUses the output from the first review (Görev 1) to determine the correct\ncorrespondence type, draft the text, and route it to the appropriate department.\n\n``DraftService`` reads the source document straight from storage by\n``storage_path`` -- unlike ``GET /documents/{storage_path}``, it has no\nownership/clearance concept of its own, so that check belongs here, at\nthe router boundary, before the raw file content ever reaches the\ndrafting graph.\n\nRaises:\n    AuthorizationException: If the document belongs to a different\n        company, or a different owner than ``current_user`` (and it\n        isn't ADMIN/MANAGER/ROOT), or ``current_user``'s clearance\n        doesn't cover the document's confidentiality level.",
+        "description": "Resmi bir taslak ve birim yönlendirme önerisi üretir (Görev 2).\n\nDoğru yazışma türünü belirlemek, metni yazmak ve uygun birime\nyönlendirmek için ilk incelemenin (Görev 1) çıktısını kullanır.\n\n``DraftService``, kaynak evrakı doğrudan depodan ``storage_path`` ile\nokur -- ``GET /documents/{storage_path}``'ın aksine, kendi\nsahiplik/yetki kavramı yoktur, bu yüzden bu kontrol burada, router\nsınırında, ham dosya içeriği taslak yazım grafiğine ulaşmadan önce\nyapılmalıdır.\n\nRaises:\n    AuthorizationException: Evrak farklı bir şirkete aitse, veya\n        ``current_user``'dan farklı bir sahibe aitse (ve ADMIN/MANAGER/\n        ROOT değilse), veya ``current_user``'ın yetkisi evrakın gizlilik\n        seviyesini karşılamıyorsa.",
         "operationId": "generate_draft_api_v1_documents_draft_post",
         "requestBody": {
           "content": {
@@ -7071,7 +7071,7 @@
     },
     "/api/v1/documents/graph": {
       "get": {
-        "description": "The compliance knowledge graph over every document the caller may see.\n\nDeclared here, above every ``/{storage_path:path}`` route below --\nFastAPI matches routes in registration order, and ``:path`` converters\nswallow slashes, so a literal ``/graph`` registered after the catch-all\n``GET /{storage_path:path}`` would never be reached; every request would\nmatch the catch-all first, with ``storage_path=\"graph\"``.\n\nUnlike every other route in this file, a document above the caller's\nclearance is not a 403 for the whole graph -- it is silently excluded\n(see ``DocumentService.build_corpus_graph``'s own docstring), and only\nits count is reported back as ``hidden_document_count``. Revealing that\na hidden document *exists* would defeat the point of hiding it.\n\nArgs:\n    service: Injected document analysis service.\n    current_user: The authenticated caller. Company-wide when\n        ADMIN/MANAGER/ROOT (see ``bypasses_ownership``), otherwise\n        scoped to the caller's own documents -- the same semantics\n        ``GET /documents`` already uses.\n\nReturns:\n    ``{nodes, edges, insights, truncated, total_document_count,\n    hidden_document_count}`` inside the unified success envelope.",
+        "description": "Çağıranın görebileceği her evrak üzerindeki uyumluluk bilgi grafiği.\n\nAşağıdaki her ``/{storage_path:path}`` rotasının üzerinde burada\ntanımlanmıştır -- FastAPI rotaları kayıt sırasına göre eşleştirir ve\n``:path`` dönüştürücüleri eğik çizgileri yutar, bu yüzden yakalayıcı\n``GET /{storage_path:path}``'dan sonra kaydedilen düz bir ``/graph``\nasla ulaşılamaz olurdu; her istek önce ``storage_path=\"graph\"`` ile\nyakalayıcıyla eşleşirdi.\n\nBu dosyadaki diğer her rotanın aksine, çağıranın yetkisinin üzerindeki\nbir evrak tüm grafik için 403 değildir -- sessizce hariç tutulur (bkz.\n``DocumentService.build_corpus_graph``'ın kendi docstring'i) ve yalnızca\nsayısı ``hidden_document_count`` olarak geri bildirilir. Gizli bir\nevrakın *var olduğunu* açığa çıkarmak, onu gizlemenin amacını boşa\nçıkarırdı.\n\nArgs:\n    service: Enjekte edilmiş evrak analiz servisi.\n    current_user: Kimliği doğrulanmış çağıran. ADMIN/MANAGER/ROOT ise\n        şirket geneli (bkz. ``bypasses_ownership``), aksi halde\n        çağıranın kendi evraklarıyla sınırlı -- ``GET /documents``'in\n        zaten kullandığı aynı semantik.\n\nReturns:\n    Birleşik başarı zarfı içinde ``{nodes, edges, insights, truncated,\n    total_document_count, hidden_document_count}``.",
         "operationId": "get_corpus_graph_api_v1_documents_graph_get",
         "responses": {
           "200": {
@@ -7097,7 +7097,7 @@
     },
     "/api/v1/documents/{storage_path}": {
       "delete": {
-        "description": "Permanently delete a document: registry row, raw file, analysis\ncache, and any indexed Q&A chunks.\n\nArgs:\n    storage_path: The document's storage key.\n    service: Injected document analysis service.\n    document_repository: Ownership/listing registry, checked before the\n        delete.\n    current_user: The authenticated caller.\n\nReturns:\n    ``{\"deleted\": true}`` inside the unified success envelope. Succeeds\n    even if ``storage_path`` was already gone -- delete is idempotent.\n\nRaises:\n    HTTPException: 400 if storage_path is malformed.\n    AuthorizationException: 403 if the document belongs to a different\n        company, or a different user than ``current_user`` (and it\n        isn't ADMIN/MANAGER/ROOT), or ``current_user``'s clearance\n        doesn't cover the document's confidentiality level.",
+        "description": "Bir evrakı kalıcı olarak siler: kayıt satırı, ham dosya, analiz\nönbelleği ve indekslenmiş her Soru-Cevap parçası.\n\nArgs:\n    storage_path: Evrakın depo anahtarı.\n    service: Enjekte edilmiş evrak analiz servisi.\n    document_repository: Silmeden önce kontrol edilen sahiplik/listeleme\n        kaydı.\n    current_user: Kimliği doğrulanmış çağıran.\n\nReturns:\n    Birleşik başarı zarfı içinde ``{\"deleted\": true}``. ``storage_path``\n    zaten yoksa bile başarılı olur -- silme idempotenttir.\n\nRaises:\n    HTTPException: storage_path bozuksa 400.\n    AuthorizationException: Evrak farklı bir şirkete, veya\n        ``current_user``'dan farklı bir kullanıcıya aitse (ve\n        ADMIN/MANAGER/ROOT değilse), veya ``current_user``'ın yetkisi\n        evrakın gizlilik seviyesini karşılamıyorsa 403.",
         "operationId": "delete_document_api_v1_documents__storage_path__delete",
         "parameters": [
           {
@@ -7142,7 +7142,7 @@
         ]
       },
       "get": {
-        "description": "Return a previously computed analysis in full.\n\n``GET /documents`` only ever returns the 7-field library projection\n(document_type_label, compliance_status, summary, ...); re-selecting a\ndocument from that list lost ``missing_fields`` and\n``mevzuat_references`` entirely because nothing exposed the cached\nanalysis this reads back.\n\nArgs:\n    storage_path: The document's storage key (as returned by\n        ``POST /documents/analyze``).\n    service: Injected document analysis service.\n    document_repository: Ownership registry, checked before returning\n        content.\n    current_user: The authenticated caller.\n\nReturns:\n    The full analysis inside the unified success envelope.\n\nRaises:\n    HTTPException: 400 if storage_path is malformed, 404 if no analysis\n        is cached for it.\n    AuthorizationException: 403 if the document belongs to a different\n        company, or a different user than the one making the request\n        (and it isn't ADMIN/MANAGER/ROOT), or the requester's clearance\n        doesn't cover the document's confidentiality level.",
+        "description": "Daha önce hesaplanmış bir analizi tam olarak döndürür.\n\n``GET /documents`` her zaman yalnızca 7 alanlı kütüphane izdüşümünü\ndöndürür (document_type_label, compliance_status, summary, ...); o\nlisteden bir evrakı yeniden seçmek, bu uç noktanın geri okuduğu\nönbelleğe alınmış analizi hiçbir şey açığa çıkarmadığından\n``missing_fields`` ve ``mevzuat_references``'ı tamamen kaybediyordu.\n\nArgs:\n    storage_path: Evrakın depo anahtarı (``POST /documents/analyze``'ın\n        döndürdüğü şekilde).\n    service: Enjekte edilmiş evrak analiz servisi.\n    document_repository: İçeriği döndürmeden önce kontrol edilen\n        sahiplik kaydı.\n    current_user: Kimliği doğrulanmış çağıran.\n\nReturns:\n    Tam analiz, birleşik başarı zarfının içinde.\n\nRaises:\n    HTTPException: storage_path bozuksa 400, onun için önbelleğe\n        alınmış bir analiz yoksa 404.\n    AuthorizationException: Evrak farklı bir şirkete, veya isteği\n        yapandan farklı bir kullanıcıya aitse (ve ADMIN/MANAGER/ROOT\n        değilse), veya isteği yapanın yetkisi evrakın gizlilik\n        seviyesini karşılamıyorsa 403.",
         "operationId": "get_document_analysis_api_v1_documents__storage_path__get",
         "parameters": [
           {
@@ -7189,7 +7189,7 @@
     },
     "/api/v1/documents/{storage_path}/detailed-summary": {
       "post": {
-        "description": "Build (or return the already-built) detailed summary of a document.\n\nOn-demand: the short ``summary`` `POST /documents/analyze` already\nreturns is enough for most documents, and building the detailed one is\nexpensive -- measured directly, 184-288s on real documents, several\nsequential LLM calls (see ``app.ai.summarization``'s own module\ndocstring). This is why it is its own endpoint rather than part of the\neager analysis: a user pays that cost only when they actually want the\nresult, not on every upload.\n\nIdempotent: a document whose detailed summary is already cached returns\nit immediately, no model call. Rate-limited tighter than\n``POST /documents/analyze`` (5/60s vs 10/60s) precisely because each\ncall that does reach the model is this expensive.\n\nArgs:\n    storage_path: The document's storage key.\n    service: Injected document analysis service.\n    document_repository: Ownership registry, checked before generating.\n    current_user: The authenticated caller.\n\nReturns:\n    The full analysis with ``detailed_summary`` populated, in the same\n    shape as ``GET /documents/{storage_path}``.\n\nRaises:\n    HTTPException: 400 if storage_path is malformed, 404 if no analysis\n        is cached for it.\n    AuthorizationException: 403 if the document belongs to a different\n        company or user, or the requester's clearance doesn't cover the\n        document's confidentiality level.\n    AIException: 502 if building the summary times out or the\n        underlying provider call fails (see\n        ``DocumentService.generate_detailed_summary``'s own docstring\n        for why this raises instead of degrading silently).",
+        "description": "Bir evrakın ayrıntılı özetini oluşturur (veya zaten oluşturulmuşsa döndürür).\n\nTalep üzerine: `POST /documents/analyze`'ın zaten döndürdüğü kısa\n``summary`` çoğu evrak için yeterlidir, ve ayrıntılı olanı oluşturmak\nmaliyetlidir -- doğrudan ölçülmüştür, gerçek evraklarda 184-288sn,\nbirkaç ardışık LLM çağrısı (bkz. ``app.ai.summarization``'ın modül\ndocstring'i). Bu yüzden istekli analizin bir parçası yerine kendi başına\nbir uç noktadır: bir kullanıcı bu maliyeti yalnızca sonucu gerçekten\nistediğinde öder, her yüklemede değil.\n\nİdempotent: ayrıntılı özeti zaten önbelleğe alınmış bir evrak, model\nçağrısı olmadan onu hemen döndürür. Tam olarak modele ulaşan her\nçağrının bu kadar pahalı olması nedeniyle\n``POST /documents/analyze``'den (5/60sn ve 10/60sn) daha sıkı hız\nsınırlıdır.\n\nArgs:\n    storage_path: Evrakın depo anahtarı.\n    service: Enjekte edilmiş evrak analiz servisi.\n    document_repository: Üretmeden önce kontrol edilen sahiplik kaydı.\n    current_user: Kimliği doğrulanmış çağıran.\n\nReturns:\n    ``detailed_summary`` doldurulmuş tam analiz, ``GET\n    /documents/{storage_path}`` ile aynı biçimde.\n\nRaises:\n    HTTPException: storage_path bozuksa 400, onun için önbelleğe\n        alınmış bir analiz yoksa 404.\n    AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya\n        aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini\n        karşılamıyorsa 403.\n    AIException: Özeti oluşturmak zaman aşımına uğrarsa veya alttaki\n        sağlayıcı çağrısı başarısız olursa 502 (bunun neden sessizce\n        bozulmak yerine hata fırlattığı için bkz.\n        ``DocumentService.generate_detailed_summary``'nin kendi\n        docstring'i).",
         "operationId": "generate_detailed_summary_api_v1_documents__storage_path__detailed_summary_post",
         "parameters": [
           {
@@ -7236,7 +7236,7 @@
     },
     "/api/v1/documents/{storage_path}/fields": {
       "patch": {
-        "description": "Manually correct a document's extracted fields.\n\nUI-driven fix for fields the extraction missed or got wrong (see\n``DocumentAnalysisPanel`` -- previously read-only). Re-runs the same\ndeterministic compliance check the original analysis used\n(``app.ai.compliance.checker.check_required_fields``, no LLM call), so\n``missing_fields``/``compliance_status`` reflect the correction\nimmediately instead of staying stuck at whatever the extraction found.\n\nArgs:\n    storage_path: The document's storage key.\n    payload: The full corrected field set.\n    service: Injected document analysis service.\n    document_repository: Ownership registry, checked before the update.\n    current_user: The authenticated caller.\n\nReturns:\n    The updated analysis, in the same shape as ``GET /documents/{storage_path}``.\n\nRaises:\n    HTTPException: 400 if storage_path is malformed, 404 if no analysis\n        is cached for it.\n    AuthorizationException: 403 if the document belongs to a different\n        company or user, or the requester's clearance doesn't cover the\n        document's confidentiality level.",
+        "description": "Bir evrakın çıkarılan alanlarını elle düzeltir.\n\nÇıkarımın kaçırdığı veya yanlış aldığı alanlar için arayüz odaklı bir\ndüzeltme (bkz. ``DocumentAnalysisPanel`` -- önceden salt okunurdu).\nOrijinal analizin kullandığı aynı deterministik uyumluluk kontrolünü\n(``app.ai.compliance.checker.check_required_fields``, LLM çağrısı yok)\nyeniden çalıştırır, böylece ``missing_fields``/``compliance_status``,\nçıkarımın bulduğu değerde takılı kalmak yerine düzeltmeyi hemen yansıtır.\n\nArgs:\n    storage_path: Evrakın depo anahtarı.\n    payload: Düzeltilmiş tam alan kümesi.\n    service: Enjekte edilmiş evrak analiz servisi.\n    document_repository: Güncellemeden önce kontrol edilen sahiplik kaydı.\n    current_user: Kimliği doğrulanmış çağıran.\n\nReturns:\n    ``GET /documents/{storage_path}`` ile aynı biçimde güncellenmiş analiz.\n\nRaises:\n    HTTPException: storage_path bozuksa 400, onun için önbelleğe\n        alınmış bir analiz yoksa 404.\n    AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya\n        aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini\n        karşılamıyorsa 403.",
         "operationId": "update_document_fields_api_v1_documents__storage_path__fields_patch",
         "parameters": [
           {
@@ -7293,7 +7293,7 @@
     },
     "/api/v1/documents/{storage_path}/graph": {
       "get": {
-        "description": "The single-document neighbourhood: one document and every madde/kanun\nit touches.\n\nDeclared above the catch-all ``GET /{storage_path:path}`` below -- both\nare GET routes matching the same path shape, so registration order is\nthe only thing that decides which one a request like\n``/documents/uploads/abc.pdf/graph`` reaches. Registered after it, this\nroute would never be hit; every such request would instead match the\ncatch-all with ``storage_path=\"uploads/abc.pdf/graph\"``.\n\nArgs:\n    storage_path: The document's storage key.\n    service: Injected document analysis service.\n    document_repository: Ownership registry, checked before returning\n        content.\n    current_user: The authenticated caller.\n\nReturns:\n    The same envelope shape as ``GET /documents/graph``, scoped to this\n    one document.\n\nRaises:\n    HTTPException: 400 if storage_path is malformed, 404 if no analysis\n        is cached for it.\n    AuthorizationException: 403 if the document belongs to a different\n        company or user, or the requester's clearance doesn't cover the\n        document's confidentiality level.",
+        "description": "Tek evrak komşuluğu: bir evrak ve dokunduğu her madde/kanun.\n\nAşağıdaki yakalayıcı ``GET /{storage_path:path}``'ın üzerinde\ntanımlanmıştır -- ikisi de aynı yol biçimiyle eşleşen GET rotalarıdır,\nbu yüzden ``/documents/uploads/abc.pdf/graph`` gibi bir isteğin\nhangisine ulaşacağına yalnızca kayıt sırası karar verir. Ondan sonra\nkaydedilseydi, bu rotaya asla ulaşılamazdı; her böyle bir istek bunun\nyerine ``storage_path=\"uploads/abc.pdf/graph\"`` ile yakalayıcıyla\neşleşirdi.\n\nArgs:\n    storage_path: Evrakın depo anahtarı.\n    service: Enjekte edilmiş evrak analiz servisi.\n    document_repository: İçeriği döndürmeden önce kontrol edilen\n        sahiplik kaydı.\n    current_user: Kimliği doğrulanmış çağıran.\n\nReturns:\n    ``GET /documents/graph`` ile aynı zarf biçimi, bu tek evrakla\n    sınırlı.\n\nRaises:\n    HTTPException: storage_path bozuksa 400, onun için önbelleğe\n        alınmış bir analiz yoksa 404.\n    AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya\n        aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini\n        karşılamıyorsa 403.",
         "operationId": "get_document_graph_api_v1_documents__storage_path__graph_get",
         "parameters": [
           {
@@ -7340,7 +7340,7 @@
     },
     "/api/v1/documents/{storage_path}/re-extract": {
       "post": {
-        "description": "Re-run OCR with the vision model directly -- the manual override for\nwhen the extraction chain's own automatic escalation didn't fire.\n\nBypasses ``get_document_extractor()``'s chain entirely and always pays\nthe full glm-ocr cost (see ``DocumentService.reextract_document_text``'s\nown docstring) -- this is deliberately more expensive and more tightly\nrate-limited than ``PUT .../text`` (2/60s vs 10/60s) or\n``POST .../detailed-summary`` (5/60s), matching how expensive the call\nit triggers actually is.\n\nArgs:\n    storage_path: The document's storage key.\n    service: Injected document analysis service.\n    document_repository: Ownership registry, checked before re-running.\n    current_user: The authenticated caller.\n\nReturns:\n    The updated analysis, in the same shape as\n    ``GET /documents/{storage_path}``.\n\nRaises:\n    HTTPException: 400 if storage_path is malformed, 404 if no analysis\n        is cached for it.\n    AuthorizationException: 403 if the document belongs to a different\n        company or user, or the requester's clearance doesn't cover the\n        document's confidentiality level.\n    ValidationException: 422 if the vision model call itself fails.",
+        "description": "OCR'ı doğrudan görü modeliyle yeniden çalıştırır -- çıkarım zincirinin\nkendi otomatik yükseltmesi tetiklenmediğinde kullanılan manuel geçersiz kılma.\n\n``get_document_extractor()``'ın zincirini tamamen atlar ve her zaman\ntam glm-ocr maliyetini öder (bkz.\n``DocumentService.reextract_document_text``'in kendi docstring'i) --\nbu, tetiklediği çağrının fiilen ne kadar pahalı olduğuyla uyumlu olarak\nbilinçli şekilde ``PUT .../text``'ten (2/60sn ve 10/60sn) veya\n``POST .../detailed-summary``'den (5/60sn) daha pahalı ve daha sıkı\nhız sınırlıdır.\n\nArgs:\n    storage_path: Evrakın depo anahtarı.\n    service: Enjekte edilmiş evrak analiz servisi.\n    document_repository: Yeniden çalıştırmadan önce kontrol edilen\n        sahiplik kaydı.\n    current_user: Kimliği doğrulanmış çağıran.\n\nReturns:\n    ``GET /documents/{storage_path}`` ile aynı biçimde güncellenmiş analiz.\n\nRaises:\n    HTTPException: storage_path bozuksa 400, onun için önbelleğe\n        alınmış bir analiz yoksa 404.\n    AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya\n        aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini\n        karşılamıyorsa 403.\n    ValidationException: Görü modeli çağrısının kendisi başarısız olursa 422.",
         "operationId": "reextract_document_text_api_v1_documents__storage_path__re_extract_post",
         "parameters": [
           {
@@ -7387,7 +7387,7 @@
     },
     "/api/v1/documents/{storage_path}/text": {
       "get": {
-        "description": "Return the extracted/OCR text of a previously analysed document.\n\nBacks the \"Belge metni\" panel section. Declared ABOVE the catch-all\n``GET /{storage_path:path}`` below on purpose: that route is greedy and\nwould otherwise swallow ``.../text`` as if it were itself a\n``storage_path``. The ``/fields`` and ``/detailed-summary`` routes get\naway with sitting below it only because they use different HTTP\nmethods; a ``GET`` sub-route does not have that luxury.\n\nArgs:\n    storage_path: The document's storage key.\n    service: Injected document analysis service.\n    document_repository: Ownership registry, checked before returning\n        content.\n    current_user: The authenticated caller.\n\nReturns:\n    The cached pages/text plus extraction provenance, inside the\n    unified success envelope.\n\nRaises:\n    HTTPException: 400 if storage_path is malformed, 404 if no analysis\n        is cached for it.\n    AuthorizationException: 403 if the document belongs to a different\n        company or user, or the requester's clearance doesn't cover the\n        document's confidentiality level.",
+        "description": "Daha önce analiz edilmiş bir evrakın çıkarılan/OCR metnini döndürür.\n\n\"Belge metni\" panel bölümünü destekler. Bilerek aşağıdaki yakalayıcı\n``GET /{storage_path:path}``'ın ÜZERİNDE tanımlanmıştır: o rota\naçgözlüdür ve aksi halde ``.../text``'i sanki kendisi bir\n``storage_path``'mış gibi yutardı. ``/fields`` ve ``/detailed-summary``\nrotaları yalnızca farklı HTTP yöntemleri kullandıkları için onun altında\ndurabiliyor; bir ``GET`` alt rotasının böyle bir lüksü yoktur.\n\nArgs:\n    storage_path: Evrakın depo anahtarı.\n    service: Enjekte edilmiş evrak analiz servisi.\n    document_repository: İçeriği döndürmeden önce kontrol edilen\n        sahiplik kaydı.\n    current_user: Kimliği doğrulanmış çağıran.\n\nReturns:\n    Önbelleğe alınmış sayfalar/metin artı çıkarım kaynağı, birleşik\n    başarı zarfının içinde.\n\nRaises:\n    HTTPException: storage_path bozuksa 400, onun için önbelleğe\n        alınmış bir analiz yoksa 404.\n    AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya\n        aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini\n        karşılamıyorsa 403.",
         "operationId": "get_document_text_api_v1_documents__storage_path__text_get",
         "parameters": [
           {
@@ -7432,7 +7432,7 @@
         ]
       },
       "put": {
-        "description": "Save hand-corrected OCR/extraction text.\n\nUI-driven fix for text the extraction pipeline still got wrong -- the\ncompanion to the field-aware extraction-acceptance fix in\n``FallbackDocumentExtractor``: a document whose header still didn't\nparse (or that never escalated because the automatic rule's floor\nwasn't crossed) can be corrected directly. Re-derives ``fields``,\n``missing_fields``, ``compliance_status`` and ``guardrail``\ndeterministically from the corrected text -- no model call (see\n``DocumentService.update_document_text``'s own docstring).\n\nArgs:\n    storage_path: The document's storage key.\n    payload: The corrected per-page text.\n    service: Injected document analysis service.\n    document_repository: Ownership registry, checked before the update.\n    current_user: The authenticated caller.\n\nReturns:\n    The updated analysis, in the same shape as\n    ``GET /documents/{storage_path}``.\n\nRaises:\n    HTTPException: 400 if storage_path is malformed, 404 if no analysis\n        is cached for it.\n    AuthorizationException: 403 if the document belongs to a different\n        company or user, or the requester's clearance doesn't cover the\n        document's confidentiality level.\n    ValidationException: 422 if the submitted page count doesn't match\n        the cached document's.",
+        "description": "Elle düzeltilmiş OCR/çıkarım metnini kaydeder.\n\nÇıkarım hattının hâlâ yanlış aldığı metin için arayüz odaklı bir\ndüzeltme -- ``FallbackDocumentExtractor``'daki alan bilinçli çıkarım\nkabul düzeltmesinin eşlikçisi: başlığı hâlâ ayrıştırılamayan (veya\notomatik kuralın eşiği aşılmadığı için hiç yükseltilmeyen) bir evrak\ndoğrudan düzeltilebilir. ``fields``, ``missing_fields``,\n``compliance_status`` ve ``guardrail``'ı düzeltilmiş metinden\ndeterministik olarak yeniden türetir -- model çağrısı yok (bkz.\n``DocumentService.update_document_text``'in kendi docstring'i).\n\nArgs:\n    storage_path: Evrakın depo anahtarı.\n    payload: Düzeltilmiş sayfa bazlı metin.\n    service: Enjekte edilmiş evrak analiz servisi.\n    document_repository: Güncellemeden önce kontrol edilen sahiplik kaydı.\n    current_user: Kimliği doğrulanmış çağıran.\n\nReturns:\n    ``GET /documents/{storage_path}`` ile aynı biçimde güncellenmiş analiz.\n\nRaises:\n    HTTPException: storage_path bozuksa 400, onun için önbelleğe\n        alınmış bir analiz yoksa 404.\n    AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya\n        aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini\n        karşılamıyorsa 403.\n    ValidationException: Gönderilen sayfa sayısı önbelleğe alınmış\n        evrakınkiyle eşleşmiyorsa 422.",
         "operationId": "update_document_text_api_v1_documents__storage_path__text_put",
         "parameters": [
           {
@@ -7489,7 +7489,7 @@
     },
     "/api/v1/drafts": {
       "get": {
-        "description": "List drafts, one row per session (its latest version), newest first.\n\n``session_id``/``document_id`` narrow the listing; ``user_id`` is\nresolved from the caller and is not a query parameter, same as\n``GET /documents``/``GET /chat/sessions``.",
+        "description": "Taslakları listeler, oturum başına bir satır (en son sürümü), en\nyeniden en eskiye.\n\n``session_id``/``document_id`` listelemeyi daraltır; ``user_id``,\n``GET /documents``/``GET /chat/sessions`` ile aynı şekilde, çağırandan\nçözümlenir ve bir sorgu parametresi değildir.",
         "operationId": "list_drafts_api_v1_drafts_get",
         "parameters": [
           {
@@ -7582,7 +7582,7 @@
     },
     "/api/v1/drafts/inbox": {
       "get": {
-        "description": "Shares received by the caller, newest first. Optional `status` filter\n(\"sent\" | \"read\" | \"accepted\" | \"rejected\" | \"withdrawn\").",
+        "description": "Çağıranın aldığı paylaşımlar, en yeniden en eskiye. İsteğe bağlı\n`status` filtresi (\"sent\" | \"read\" | \"accepted\" | \"rejected\" | \"withdrawn\").",
         "operationId": "list_draft_inbox_api_v1_drafts_inbox_get",
         "parameters": [
           {
@@ -7659,7 +7659,7 @@
     },
     "/api/v1/drafts/outbox": {
       "get": {
-        "description": "Shares sent by the caller, newest first. Optional `status` filter.",
+        "description": "Çağıranın gönderdiği paylaşımlar, en yeniden en eskiye. İsteğe bağlı `status` filtresi.",
         "operationId": "list_draft_outbox_api_v1_drafts_outbox_get",
         "parameters": [
           {
@@ -7736,7 +7736,7 @@
     },
     "/api/v1/drafts/shares/{share_id}": {
       "delete": {
-        "description": "Withdraw a still-`sent` share. Sender (or Admin/Manager/Root) only.",
+        "description": "Hâlâ `sent` durumundaki bir paylaşımı geri çeker. Yalnızca gönderen (veya Admin/Manager/Root).",
         "operationId": "withdraw_draft_share_api_v1_drafts_shares__share_id__delete",
         "parameters": [
           {
@@ -7783,7 +7783,7 @@
     },
     "/api/v1/drafts/shares/{share_id}/accept": {
       "post": {
-        "description": "Accept a shared draft. Recipient only -- forks a new version the\nrecipient now owns (see `DraftShareService.respond`).",
+        "description": "Paylaşılan bir taslağı kabul eder. Yalnızca alıcı -- alıcının artık\nsahibi olduğu yeni bir sürüm çatallar (bkz. `DraftShareService.respond`).",
         "operationId": "accept_draft_share_api_v1_drafts_shares__share_id__accept_post",
         "parameters": [
           {
@@ -7840,7 +7840,7 @@
     },
     "/api/v1/drafts/shares/{share_id}/read": {
       "post": {
-        "description": "Advance a share to `read`. Recipient only.",
+        "description": "Bir paylaşımı `read` durumuna ilerletir. Yalnızca alıcı.",
         "operationId": "read_draft_share_api_v1_drafts_shares__share_id__read_post",
         "parameters": [
           {
@@ -7887,7 +7887,7 @@
     },
     "/api/v1/drafts/shares/{share_id}/reject": {
       "post": {
-        "description": "Reject a shared draft. Recipient only.",
+        "description": "Paylaşılan bir taslağı reddeder. Yalnızca alıcı.",
         "operationId": "reject_draft_share_api_v1_drafts_shares__share_id__reject_post",
         "parameters": [
           {
@@ -7944,7 +7944,7 @@
     },
     "/api/v1/drafts/{draft_id}": {
       "delete": {
-        "description": "Soft-delete a draft and its whole version chain.",
+        "description": "Bir taslağı ve tüm sürüm zincirini geri alınabilir şekilde siler (soft-delete).",
         "operationId": "delete_draft_api_v1_drafts__draft_id__delete",
         "parameters": [
           {
@@ -7989,7 +7989,7 @@
         ]
       },
       "get": {
-        "description": "Fetch one draft version by id.",
+        "description": "Tek bir taslak sürümünü id ile getirir.",
         "operationId": "get_draft_api_v1_drafts__draft_id__get",
         "parameters": [
           {
@@ -8036,7 +8036,7 @@
     },
     "/api/v1/drafts/{draft_id}/destination": {
       "patch": {
-        "description": "Override this draft version's routed unit with the caller's own pick.\n\nThe routing graph always proposes a primary (and usually an\nalternative) unit now -- this is the write path for a human choosing a\nthird option instead, e.g. from the chat UI's unit picker. Updates the\nrow in place; unlike a content revision this never creates a new\nversion, since routing metadata isn't the draft's own text.",
+        "description": "Bu taslak sürümünün yönlendirilmiş birimini çağıranın kendi seçimiyle geçersiz kılar.\n\nYönlendirme grafiği artık her zaman birincil (ve genellikle bir\nalternatif) birim öneriyor -- bu, bir insanın bunun yerine üçüncü bir\nseçenek seçtiği yazma yoludur, örn. sohbet arayüzünün birim seçicisinden.\nSatırı yerinde günceller; bir içerik revizyonunun aksine, yönlendirme\nmeta verisi taslağın kendi metni olmadığından bu asla yeni bir sürüm\noluşturmaz.",
         "operationId": "update_draft_destination_api_v1_drafts__draft_id__destination_patch",
         "parameters": [
           {
@@ -8093,7 +8093,7 @@
     },
     "/api/v1/drafts/{draft_id}/send": {
       "post": {
-        "description": "Send one draft version to one or more recipients within the caller's company.\n\nDelegates to `ArtifactTransferService.execute` (see `DraftShareService.\nsend`'s own docstring) -- `Action.ARTIFACT_TRANSFER`-gated there: an\nEMPLOYEE may only send its own draft, ADMIN/MANAGER/ROOT may send any\ndraft company-wide.",
+        "description": "Bir taslak sürümünü çağıranın şirketi içinde bir veya daha fazla alıcıya gönderir.\n\n`ArtifactTransferService.execute`'a devreder (bkz. `DraftShareService.\nsend`'in kendi docstring'i) -- orada `Action.ARTIFACT_TRANSFER` ile\nkorunur: bir EMPLOYEE yalnızca kendi taslağını gönderebilir,\nADMIN/MANAGER/ROOT şirket genelinde herhangi bir taslağı gönderebilir.",
         "operationId": "send_draft_api_v1_drafts__draft_id__send_post",
         "parameters": [
           {
@@ -8150,7 +8150,7 @@
     },
     "/api/v1/drafts/{draft_id}/versions": {
       "get": {
-        "description": "List every version in this draft's revision chain, oldest first.",
+        "description": "Bu taslağın revizyon zincirindeki her sürümü en eskiden en yeniye listeler.",
         "operationId": "list_draft_versions_api_v1_drafts__draft_id__versions_get",
         "parameters": [
           {
@@ -8197,7 +8197,7 @@
     },
     "/api/v1/feedback": {
       "get": {
-        "description": "List the caller's own company's feedback, newest first. Admin/Manager/Root only.",
+        "description": "Çağıranın kendi şirketinin geri bildirimlerini en yeniden en eskiye listeler. Yalnızca Admin/Manager/Root.",
         "operationId": "list_feedback_api_v1_feedback_get",
         "parameters": [
           {
@@ -8306,7 +8306,7 @@
         ]
       },
       "post": {
-        "description": "Cast (or re-cast) a 👍/👎 vote on a piece of AI-generated output.\n\nAny authenticated user may vote, scoped to their own company -- this is\nthe one write path in the RLHF-style data-collection layer every user\nreaches, not just admins.",
+        "description": "Yapay zeka tarafından üretilmiş bir çıktıya 👍/👎 oyu verir (veya yeniden verir).\n\nKimliği doğrulanmış her kullanıcı, yalnızca kendi şirketiyle sınırlı\nolarak oy verebilir -- bu, RLHF tarzı veri toplama katmanında sadece\nyöneticilerin değil her kullanıcının eriştiği tek yazma yoludur.",
         "operationId": "submit_feedback_api_v1_feedback_post",
         "requestBody": {
           "content": {
@@ -8354,7 +8354,7 @@
     },
     "/api/v1/feedback/{feedback_id}": {
       "delete": {
-        "description": "Withdraw a vote. The voter, or Admin/Manager/Root company-wide.",
+        "description": "Bir oyu geri çeker. Oyu veren kişi veya şirket genelinde Admin/Manager/Root.",
         "operationId": "delete_feedback_api_v1_feedback__feedback_id__delete",
         "parameters": [
           {
@@ -8403,7 +8403,7 @@
     },
     "/api/v1/health": {
       "get": {
-        "description": "Health check endpoint returning standardized APIResponse.\n\nArgs:\n    deep: When True, probes Postgres, Redis, Qdrant, Ollama and the\n        LangGraph checkpointer instead of only reporting that the process\n        is up. Any failed dependency sets the HTTP status to 503 so\n        uptime monitors and load balancers can act on it, not just read it.",
+        "description": "Standartlaştırılmış bir APIResponse döndüren sağlık kontrolü uç noktası.\n\nArgs:\n    deep: True olduğunda, yalnızca sürecin ayakta olduğunu bildirmek\n        yerine Postgres, Redis, Qdrant, Ollama ve LangGraph checkpointer'ı\n        yoklar. Başarısız olan herhangi bir bağımlılık, uptime izleme\n        araçlarının ve yük dengeleyicilerin sadece okumakla kalmayıp\n        harekete geçebilmesi için HTTP durumunu 503 yapar.",
         "operationId": "health_check_api_v1_health_get",
         "parameters": [
           {
@@ -8446,7 +8446,7 @@
     },
     "/api/v1/messaging/conversations": {
       "get": {
-        "description": "The caller's active conversations, most recent activity first.",
+        "description": "Çağıranın aktif konuşmaları, en son etkinlik önce.",
         "operationId": "list_conversations_api_v1_messaging_conversations_get",
         "parameters": [
           {
@@ -8505,7 +8505,7 @@
         ]
       },
       "post": {
-        "description": "Open a DM (idempotent) or create a group conversation.",
+        "description": "Bir özel mesajı açar (idempotent) veya bir grup konuşması oluşturur.",
         "operationId": "create_conversation_api_v1_messaging_conversations_post",
         "requestBody": {
           "content": {
@@ -8595,7 +8595,7 @@
         ]
       },
       "patch": {
-        "description": "Rename/archive a group conversation (owner, or Admin/Manager/Root).",
+        "description": "Bir grup konuşmasını yeniden adlandırır/arşivler (sahibi, veya Admin/Manager/Root).",
         "operationId": "update_conversation_api_v1_messaging_conversations__conversation_id__patch",
         "parameters": [
           {
@@ -8652,7 +8652,7 @@
     },
     "/api/v1/messaging/conversations/{conversation_id}/messages": {
       "get": {
-        "description": "Keyset page of messages, newest first (`before_id` to page older).",
+        "description": "Mesajların keyset sayfası, en yeniden en eskiye (daha eskiye gitmek için `before_id`).",
         "operationId": "list_messages_api_v1_messaging_conversations__conversation_id__messages_get",
         "parameters": [
           {
@@ -8781,7 +8781,7 @@
     },
     "/api/v1/messaging/conversations/{conversation_id}/participants": {
       "post": {
-        "description": "Add members to a group conversation (owner, or Admin/Manager/Root).",
+        "description": "Bir grup konuşmasına üye ekler (sahibi, veya Admin/Manager/Root).",
         "operationId": "add_participants_api_v1_messaging_conversations__conversation_id__participants_post",
         "parameters": [
           {
@@ -8838,7 +8838,7 @@
     },
     "/api/v1/messaging/conversations/{conversation_id}/participants/{user_id}": {
       "delete": {
-        "description": "Leave a group (self) or remove another member (owner, or Admin/Manager/Root).",
+        "description": "Bir gruptan ayrılır (kendisi) veya başka bir üyeyi çıkarır (sahibi, veya Admin/Manager/Root).",
         "operationId": "remove_participant_api_v1_messaging_conversations__conversation_id__participants__user_id__delete",
         "parameters": [
           {
@@ -8950,7 +8950,7 @@
     },
     "/api/v1/messaging/stream": {
       "get": {
-        "description": "Live-push new messages over SSE, one connection per user across every\nconversation they're in -- same Redis pub/sub pattern as\n`notifications/router.py::stream_notifications`, distinct channel\nprefix (see `messaging_channel_for`'s docstring). A dropped or never-\nreceived push is never data loss: `GET /messaging/conversations/{id}/\nmessages` always has the row regardless of whether this stream was\nconnected when it was sent.",
+        "description": "SSE üzerinden yeni mesajları canlı gönderir, kullanıcı başına\nbulundukları her konuşma boyunca tek bir bağlantı --\n`notifications/router.py::stream_notifications` ile aynı Redis pub/sub\ndeseni, farklı kanal öneki (bkz. `messaging_channel_for`'ın\ndocstring'i). Kaçırılan veya hiç alınmayan bir gönderim asla veri\nkaybı değildir: bu akış mesaj gönderildiğinde bağlı olsa da olmasa da\n`GET /messaging/conversations/{id}/messages` her zaman o satıra sahiptir.",
         "operationId": "stream_messages_api_v1_messaging_stream_get",
         "responses": {
           "200": {
@@ -8976,7 +8976,7 @@
     },
     "/api/v1/notifications": {
       "get": {
-        "description": "The caller's own notifications, newest first.",
+        "description": "Çağıranın kendi bildirimleri, en yeniden en eskiye.",
         "operationId": "list_notifications_api_v1_notifications_get",
         "parameters": [
           {
@@ -9047,7 +9047,7 @@
     },
     "/api/v1/notifications/read-all": {
       "post": {
-        "description": "Mark every unread notification of the caller as read.",
+        "description": "Çağıranın okunmamış tüm bildirimlerini okundu olarak işaretler.",
         "operationId": "read_all_notifications_api_v1_notifications_read_all_post",
         "responses": {
           "200": {
@@ -9073,7 +9073,7 @@
     },
     "/api/v1/notifications/stream": {
       "get": {
-        "description": "Live-push notification stream over SSE.\n\nBacked by Redis pub/sub (`RedisCache.publish`/`NotificationService.\ncreate`), not the process-wide in-memory `EventBus` alone -- a multi-\nworker uvicorn deployment would otherwise drop any notification\npublished from a worker other than the one holding this connection (see\nthe tenancy plan's own risk note on this). A dropped or never-received\nlive push is never data loss: the notification row already exists by\nthe time it's published (see `NotificationService.create`), so\n`GET /notifications` always has it regardless of whether this stream\nwas even connected.",
+        "description": "SSE üzerinden canlı bildirim akışı.\n\nSüreç geneli bellek içi `EventBus`'ın tek başına değil, Redis pub/sub\n(`RedisCache.publish`/`NotificationService.create`) tarafından\ndesteklenir -- aksi halde çok işçili (multi-worker) bir uvicorn\ndağıtımı, bu bağlantıyı tutan işçi dışındaki bir işçiden yayınlanan her\nbildirimi kaybederdi (bkz. kiracılık planının bu konudaki risk notu).\nKaçırılan veya hiç alınmayan bir canlı bildirim asla veri kaybı değildir:\nbildirim satırı yayınlandığı anda zaten mevcuttur (bkz.\n`NotificationService.create`), bu yüzden bu akış bağlı olsa da olmasa da\n`GET /notifications` her zaman bu bildirime sahiptir.",
         "operationId": "stream_notifications_api_v1_notifications_stream_get",
         "responses": {
           "200": {
@@ -9099,7 +9099,7 @@
     },
     "/api/v1/notifications/{notification_id}/read": {
       "post": {
-        "description": "Mark one notification as read.",
+        "description": "Tek bir bildirimi okundu olarak işaretler.",
         "operationId": "read_notification_api_v1_notifications__notification_id__read_post",
         "parameters": [
           {
@@ -9146,7 +9146,7 @@
     },
     "/api/v1/pools/items/{item_id}/acknowledge": {
       "post": {
-        "description": "Mark a pushed item as read/acknowledged. The pool's own owner, or Admin/Manager/Root.",
+        "description": "İtilmiş bir ögeyi okundu/onaylandı olarak işaretler. Havuzun sahibi veya Admin/Manager/Root.",
         "operationId": "acknowledge_pool_item_api_v1_pools_items__item_id__acknowledge_post",
         "parameters": [
           {
@@ -9195,7 +9195,7 @@
     },
     "/api/v1/pools/items/{item_id}/adopt": {
       "post": {
-        "description": "Copy-on-write (Faz 5, #205): give a transferred item's own owner a\nfully independent, editable copy (blob + registry row + analysis cache\n+ Q&A index) instead of the read-only shared-blob snapshot a transfer\nleaves behind by default. The pool item's own owner only -- no Admin/\nManager bypass, see `DocumentService.adopt_pool_item`'s own docstring.",
+        "description": "Copy-on-write (Faz 5, #205): bir transferin varsayılan olarak\nbıraktığı salt okunur paylaşılan blob anlık görüntüsü yerine, transfer\nedilen bir ögenin sahibine tamamen bağımsız, düzenlenebilir bir kopya\n(blob + kayıt satırı + analiz önbelleği + Soru-Cevap indeksi) verir.\nYalnızca havuz ögesinin kendi sahibi -- Admin/Manager atlaması yok,\nbkz. `DocumentService.adopt_pool_item`'in kendi docstring'i.",
         "operationId": "adopt_pool_item_api_v1_pools_items__item_id__adopt_post",
         "parameters": [
           {
@@ -9244,7 +9244,7 @@
     },
     "/api/v1/pools/me": {
       "get": {
-        "description": "The caller's own personal document pool, lazily created on first use.",
+        "description": "Çağıranın kendi kişisel evrak havuzu, ilk kullanımda tembel (lazy) olarak oluşturulur.",
         "operationId": "get_my_pool_api_v1_pools_me_get",
         "responses": {
           "200": {
@@ -9272,7 +9272,7 @@
     },
     "/api/v1/pools/push": {
       "post": {
-        "description": "Push one document into several recipients' (or a whole unit's) personal pools\n(Admin/Manager only). Per-recipient result: 'pushed' | 'denied_clearance' | 'not_found'.",
+        "description": "Bir evrakı birden çok alıcının (veya bütün bir birimin) kişisel\nhavuzlarına iter (yalnızca Admin/Manager). Alıcı bazında sonuç:\n'pushed' | 'denied_clearance' | 'not_found'.",
         "operationId": "push_bulk_api_v1_pools_push_post",
         "requestBody": {
           "content": {
@@ -9320,7 +9320,7 @@
     },
     "/api/v1/pools/{pool_id}/items": {
       "get": {
-        "description": "List a pool's items, newest first. The pool's own owner, or Admin/Manager/Root.",
+        "description": "Bir havuzun ögelerini en yeniden en eskiye listeler. Havuzun sahibi veya Admin/Manager/Root.",
         "operationId": "list_pool_items_api_v1_pools__pool_id__items_get",
         "parameters": [
           {
@@ -9390,7 +9390,7 @@
         ]
       },
       "post": {
-        "description": "Push one document directly into a specific, already-known pool (Admin/Manager only).",
+        "description": "Bir evrakı doğrudan belirli, zaten bilinen bir havuza iter (yalnızca Admin/Manager).",
         "operationId": "push_to_pool_api_v1_pools__pool_id__items_post",
         "parameters": [
           {
@@ -9449,7 +9449,7 @@
     },
     "/api/v1/pools/{pool_id}/items/{item_id}": {
       "delete": {
-        "description": "Remove an item from a pool. The pool's own owner, or Admin/Manager/Root.",
+        "description": "Havuzdan bir öge kaldırır. Havuzun sahibi veya Admin/Manager/Root.",
         "operationId": "remove_pool_item_api_v1_pools__pool_id__items__item_id__delete",
         "parameters": [
           {
@@ -9507,7 +9507,7 @@
     },
     "/api/v1/root/companies/stats": {
       "get": {
-        "description": "Per-company rollup: identity plus user/document/draft counts.",
+        "description": "Şirket başına toplu bakış: kimlik bilgisi artı kullanıcı/belge/taslak sayıları.",
         "operationId": "root_company_stats_api_v1_root_companies_stats_get",
         "responses": {
           "200": {
@@ -9535,7 +9535,7 @@
     },
     "/api/v1/root/health": {
       "get": {
-        "description": "`GET /health?deep=true`'s full dependency probe, plus a per-company\nlast-activity view (root's own \"which tenant looks stale\" question,\nwhich the plain health check has no concept of a tenant to answer).",
+        "description": "`GET /health?deep=true`'nin tam bağımlılık kontrolü, artı şirket\nbaşına son etkinlik görünümü (root'a özgü \"hangi kiracı bayat\ngörünüyor\" sorusu -- düz sağlık kontrolünün yanıtlayacağı bir kiracı\nkavramı yoktur).",
         "operationId": "root_health_api_v1_root_health_get",
         "responses": {
           "200": {
@@ -9563,7 +9563,7 @@
     },
     "/api/v1/root/overview": {
       "get": {
-        "description": "System-wide counts: companies, users, documents, drafts, and run\nstatus/error-rate breakdown, across every company at once.",
+        "description": "Sistem geneli sayılar: tüm şirketler genelinde bir arada şirketler,\nkullanıcılar, belgeler, taslaklar ve çalışma durumu/hata oranı dökümü.",
         "operationId": "root_overview_api_v1_root_overview_get",
         "responses": {
           "200": {
@@ -9591,7 +9591,7 @@
     },
     "/api/v1/root/users/stats": {
       "get": {
-        "description": "Role breakdown and 7-day active count, system-wide -- see\n`app.domains.analytics.repository.AnalyticsRepository.active_user_count`'s\ndocstring for what \"active\" means here (a `runs` row, not a tracked\nlogin timestamp).",
+        "description": "Sistem geneli rol dökümü ve 7 günlük aktif kullanıcı sayısı --\nburada \"aktif\" olmanın ne anlama geldiği için (izlenen bir giriş\nzaman damgası değil, bir `runs` satırı)\n`app.domains.analytics.repository.AnalyticsRepository.active_user_count`'un\ndocstring'ine bakın.",
         "operationId": "root_user_stats_api_v1_root_users_stats_get",
         "responses": {
           "200": {
@@ -9619,7 +9619,7 @@
     },
     "/api/v1/routing/suggest": {
       "post": {
-        "description": "Produce a unit-routing decision for a draft, independent of drafting it.\n\nStandalone from ``POST /documents/draft`` so a human who edits a draft\nafter it was generated can get a fresh routing decision without paying\nfor a new generation -- the routing graph runs on the fast tier and reads\nonly the draft text and its confidence score.",
+        "description": "Bir taslak için, taslağı oluşturmaktan bağımsız olarak birim yönlendirme kararı üretir.\n\n``POST /documents/draft`` uç noktasından bağımsızdır; böylece bir taslak\noluşturulduktan sonra onu düzenleyen bir kullanıcı, yeni bir üretim\nmaliyetine katlanmadan güncel bir yönlendirme kararı alabilir -- yönlendirme\ngrafiği hızlı katmanda çalışır ve yalnızca taslak metnini ve güven skorunu okur.",
         "operationId": "suggest_routing_api_v1_routing_suggest_post",
         "requestBody": {
           "content": {
@@ -9665,7 +9665,7 @@
     },
     "/api/v1/training-samples/{sample_id}": {
       "delete": {
-        "description": "Remove a sample from the training set (a bad-label cleanup), scoped\nto the caller's own company.",
+        "description": "Bir örneği eğitim setinden kaldırır (hatalı etiket temizliği),\nçağıranın kendi şirketiyle sınırlı.",
         "operationId": "delete_training_sample_api_v1_training_samples__sample_id__delete",
         "parameters": [
           {
@@ -9714,7 +9714,7 @@
     },
     "/api/v1/transfers/recommendations": {
       "get": {
-        "description": "Suggested recipients for `draft_id`, ranked from its own routed\nunit's membership (favorites first). Empty, never an error, when the\ndraft has no routed unit or that unit is inactive -- a recommendation\nis a hint, not a requirement.",
+        "description": "`draft_id` için önerilen alıcılar, taslağın kendi yönlendirilmiş\nbiriminin üyeliğinden sıralanmış (favoriler önce). Taslağın yönlendirilmiş\nbir birimi yoksa veya o birim pasifse boş döner, asla hata vermez --\nbir öneri bir ipucudur, bir gereklilik değildir.",
         "operationId": "recommend_recipients_api_v1_transfers_recommendations_get",
         "parameters": [
           {
@@ -9773,7 +9773,7 @@
     },
     "/api/v1/transfers/send": {
       "post": {
-        "description": "Send one draft or document to one recipient -- the manual chat-\ninitiated path. `Action.ARTIFACT_TRANSFER`-gated: an EMPLOYEE may only\nsend an artifact it owns, ADMIN/MANAGER/ROOT may send any artifact\ncompany-wide. Always ends up posting a `kind=\"artifact\"` message into\nthe sender/recipient DM (opened if it didn't already exist).",
+        "description": "Bir taslağı veya evrakı tek bir alıcıya gönderir -- manuel, sohbet\nüzerinden başlatılan yol. `Action.ARTIFACT_TRANSFER` ile korunur: bir\nEMPLOYEE yalnızca sahibi olduğu bir artefaktı gönderebilir,\nADMIN/MANAGER/ROOT şirket genelinde herhangi bir artefaktı gönderebilir.\nHer zaman gönderen/alıcı özel mesajına (yoksa açılarak)\n`kind=\"artifact\"` türünde bir mesaj gönderilmesiyle sonuçlanır.",
         "operationId": "send_transfer_api_v1_transfers_send_post",
         "requestBody": {
           "content": {
@@ -9819,7 +9819,7 @@
     },
     "/api/v1/transfers/send-group": {
       "post": {
-        "description": "Send one draft or document to several recipients at once -- chat/\nREST only (see `ArtifactTransferService.execute_group`'s own docstring\nfor why the AI channel never reaches this). Per-recipient partial\nsuccess: one recipient's denial/not-found never blocks the others.",
+        "description": "Bir taslağı veya evrakı birden çok alıcıya aynı anda gönderir --\nyalnızca sohbet/REST üzerinden (yapay zeka kanalının buraya neden hiç\nulaşmadığı için bkz. `ArtifactTransferService.execute_group`'un kendi\ndocstring'i). Alıcı bazında kısmi başarı: bir alıcının reddedilmesi/\nbulunamaması diğerlerini asla engellemez.",
         "operationId": "send_group_transfer_api_v1_transfers_send_group_post",
         "requestBody": {
           "content": {
@@ -9865,7 +9865,7 @@
     },
     "/api/v1/transfers/{transfer_id}": {
       "get": {
-        "description": "Fetch one transfer -- the sender or recipient only (or Admin/\nManager/Root company-wide), same participation-is-the-grant shape\n`draft_shares` already uses. Backs `ArtifactMessageCard`'s live read of\na `kind=\"artifact\"` message's current status.",
+        "description": "Tek bir transferi getirir -- yalnızca gönderen veya alıcı (veya şirket\ngenelinde Admin/Manager/Root), `draft_shares`'in zaten kullandığı\n\"katılım = yetki\" biçimiyle aynı. `ArtifactMessageCard`'ın bir\n`kind=\"artifact\"` mesajının güncel durumunu canlı okumasını destekler.",
         "operationId": "get_transfer_api_v1_transfers__transfer_id__get",
         "parameters": [
           {
@@ -9912,7 +9912,7 @@
     },
     "/api/v1/units": {
       "get": {
-        "description": "List every unit of the caller's company (active and inactive) -- the\nAI's routing suggestions themselves only ever consider the active\nsubset (see ``app.domains.units.provider``); this endpoint returns both\nso an admin UI can review and reactivate a disabled unit.",
+        "description": "Çağıranın şirketindeki her birimi listeler (aktif ve pasif) -- yapay\nzekanın yönlendirme önerilerinin kendisi yalnızca aktif alt kümeyi\ndikkate alır (bkz. ``app.domains.units.provider``); bu uç nokta bir\nyönetici arayüzünün pasif bir birimi inceleyip yeniden aktif\nedebilmesi için ikisini de döndürür.",
         "operationId": "list_units_api_v1_units_get",
         "responses": {
           "200": {
@@ -9938,7 +9938,7 @@
         ]
       },
       "post": {
-        "description": "Create a new routable unit within the caller's company (Admin/Manager only).",
+        "description": "Çağıranın şirketi içinde yönlendirilebilir yeni bir birim oluşturur (yalnızca Admin/Manager).",
         "operationId": "create_unit_api_v1_units_post",
         "requestBody": {
           "content": {
@@ -9986,7 +9986,7 @@
     },
     "/api/v1/units/{unit_id}": {
       "delete": {
-        "description": "Permanently delete a unit (Admin/Manager only).",
+        "description": "Bir birimi kalıcı olarak siler (yalnızca Admin/Manager).",
         "operationId": "delete_unit_api_v1_units__unit_id__delete",
         "parameters": [
           {
@@ -10033,7 +10033,7 @@
         ]
       },
       "patch": {
-        "description": "Update a unit's name, description or active status (Admin/Manager only).",
+        "description": "Bir birimin adını, açıklamasını veya aktiflik durumunu günceller (yalnızca Admin/Manager).",
         "operationId": "update_unit_api_v1_units__unit_id__patch",
         "parameters": [
           {
@@ -10092,7 +10092,7 @@
     },
     "/api/v1/units/{unit_id}/members": {
       "get": {
-        "description": "List a unit's members, ranked (primary first, then leads, then the rest).",
+        "description": "Bir birimin üyelerini sıralanmış şekilde listeler (önce birincil, sonra sorumlular, sonra geri kalanlar).",
         "operationId": "list_unit_members_api_v1_units__unit_id__members_get",
         "parameters": [
           {
@@ -10139,7 +10139,7 @@
         ]
       },
       "post": {
-        "description": "Add a company user to a unit (Admin/Manager only).",
+        "description": "Bir şirket kullanıcısını bir birime ekler (yalnızca Admin/Manager).",
         "operationId": "add_unit_member_api_v1_units__unit_id__members_post",
         "parameters": [
           {
@@ -10198,7 +10198,7 @@
     },
     "/api/v1/units/{unit_id}/members/{user_id}": {
       "delete": {
-        "description": "Remove a user from a unit (Admin/Manager only).",
+        "description": "Bir kullanıcıyı bir birimden çıkarır (yalnızca Admin/Manager).",
         "operationId": "remove_unit_member_api_v1_units__unit_id__members__user_id__delete",
         "parameters": [
           {
@@ -10256,7 +10256,7 @@
     },
     "/api/v1/units/{unit_id}/suggested-recipients": {
       "get": {
-        "description": "AI-suggested draft recipients: the members of the unit routing chose.\n\nReuses the existing routing decision entirely -- no new AI call here.\nThe caller already has `unit_id` from the routed `destination` unit name\n(`POST /documents/draft`'s response, or `POST /routing/suggest`) matched\nagainst `GET /units`; this just ranks that unit's own membership the\nsame way `GET /units/{id}/members` does (primary, then leads, then\neveryone else), which is exactly what \"suggested recipients\" means once\na unit has already been identified.",
+        "description": "Yapay zeka tarafından önerilen taslak alıcıları: yönlendirmenin\nseçtiği birimin üyeleri.\n\nMevcut yönlendirme kararını tamamen yeniden kullanır -- burada yeni bir\nyapay zeka çağrısı yoktur. Çağıranın zaten `GET /units` ile eşleştirilmiş,\nyönlendirilen `destination` birim adından (`POST /documents/draft`'ın\nyanıtı veya `POST /routing/suggest`) gelen bir `unit_id`'si vardır; bu\nyalnızca o birimin kendi üyeliğini `GET /units/{id}/members`'ın yaptığı\naynı şekilde sıralar (önce birincil, sonra sorumlular, sonra herkes),\nki bu da bir birim zaten belirlendikten sonra \"önerilen alıcılar\"ın tam\nolarak ne anlama geldiğidir.",
         "operationId": "suggested_recipients_api_v1_units__unit_id__suggested_recipients_get",
         "parameters": [
           {
@@ -10305,7 +10305,7 @@
     },
     "/api/v1/users": {
       "get": {
-        "description": "Retrieve the caller's own company's users, paginated and role-filtered (Admin/Manager only).",
+        "description": "Çağıranın kendi şirketinin kullanıcılarını sayfalanmış ve role göre filtrelenmiş şekilde getirir (yalnızca Admin/Manager).",
         "operationId": "list_users_api_v1_users_get",
         "parameters": [
           {
@@ -10382,7 +10382,7 @@
         ]
       },
       "post": {
-        "description": "Register a new user account in the system, validating the email invitation whitelist.\n\nUnauthenticated by design -- registration is invite-gated instead (see\n`UserService.register_user`), and the invite is what determines both\nthe new account's role and its company, never the request body.\n\nUses `get_owner_db`, not `get_db`: the invite lookup is by `email`,\nunique system-wide (`InvitedEmailModel.email`, not per company), so\nthere is no tenant context yet to scope a row-level-security policy by\nuntil the invite (and the company it belongs to) is found -- same\nreasoning as `auth/router.py::login`.",
+        "description": "Sistemde yeni bir kullanıcı hesabı kaydeder, e-posta davet beyaz listesini doğrular.\n\nTasarım gereği kimlik doğrulaması yoktur -- bunun yerine kayıt davet\ntarafından kapılanır (bkz. `UserService.register_user`), ve yeni\nhesabın hem rolünü hem de şirketini belirleyen davettir, istek gövdesi\nasla değil.\n\n`get_db` yerine `get_owner_db` kullanılır: davet araması `email` ile\nyapılır, sistem genelinde benzersizdir (`InvitedEmailModel.email`,\nşirket bazında değil), bu yüzden davet (ve ait olduğu şirket)\nbulunana kadar satır düzeyinde bir güvenlik politikasını kapsayacak\nbir kiracı bağlamı henüz yoktur -- `auth/router.py::login` ile aynı\ngerekçe.",
         "operationId": "register_api_v1_users_post",
         "requestBody": {
           "content": {
@@ -10425,7 +10425,7 @@
     },
     "/api/v1/users/invitations": {
       "post": {
-        "description": "Invite/whitelist an email address with a predefined role, into the\ncaller's own company (Admin/Manager only).",
+        "description": "Bir e-posta adresini önceden tanımlanmış bir rolle çağıranın kendi\nşirketine davet eder/beyaz listeye alır (yalnızca Admin/Manager).",
         "operationId": "invite_user_api_v1_users_invitations_post",
         "requestBody": {
           "content": {
@@ -10473,7 +10473,7 @@
     },
     "/api/v1/users/me": {
       "get": {
-        "description": "Get profile details of the currently authenticated user.",
+        "description": "Şu anda kimliği doğrulanmış kullanıcının profil bilgilerini getirir.",
         "operationId": "get_me_api_v1_users_me_get",
         "responses": {
           "200": {
@@ -10501,7 +10501,7 @@
     },
     "/api/v1/users/me/favorites": {
       "get": {
-        "description": "The caller's own favorites, newest-favorited first.",
+        "description": "Çağıranın kendi favorileri, en son favorilenen önce.",
         "operationId": "list_my_favorites_api_v1_users_me_favorites_get",
         "responses": {
           "200": {
@@ -10525,7 +10525,7 @@
         ]
       },
       "post": {
-        "description": "Add a company user to the caller's own favorites.",
+        "description": "Bir şirket kullanıcısını çağıranın kendi favorilerine ekler.",
         "operationId": "add_my_favorite_api_v1_users_me_favorites_post",
         "requestBody": {
           "content": {
@@ -10571,7 +10571,7 @@
     },
     "/api/v1/users/me/favorites/{user_id}": {
       "delete": {
-        "description": "Remove a user from the caller's own favorites.",
+        "description": "Bir kullanıcıyı çağıranın kendi favorilerinden çıkarır.",
         "operationId": "remove_my_favorite_api_v1_users_me_favorites__user_id__delete",
         "parameters": [
           {
@@ -10618,7 +10618,7 @@
     },
     "/api/v1/users/me/password": {
       "post": {
-        "description": "Update password of current logged-in user after validation.",
+        "description": "Doğrulamadan sonra şu anda giriş yapmış kullanıcının parolasını günceller.",
         "operationId": "change_my_password_api_v1_users_me_password_post",
         "requestBody": {
           "content": {
@@ -10666,7 +10666,7 @@
     },
     "/api/v1/users/permissions/{grant_id}": {
       "delete": {
-        "description": "Revoke a permission grant (Admin/Manager only, own company).\n\nThe revoked row is kept, not deleted (see\n``PermissionGrantModel.revoked_at``'s docstring) -- its own audit trail.",
+        "description": "Bir yetki devrini geri alır (yalnızca Admin/Manager, kendi şirketi).\n\nGeri alınan satır silinmez, saklanır (bkz.\n``PermissionGrantModel.revoked_at``'ın docstring'i) -- kendi denetim izi.",
         "operationId": "revoke_permission_api_v1_users_permissions__grant_id__delete",
         "parameters": [
           {
@@ -10715,7 +10715,7 @@
     },
     "/api/v1/users/search": {
       "get": {
-        "description": "Search the caller's own company's users for the messaging/artifact-\ntransfer recipient picker. `q` requires at least 2 characters (rate-\nlimited on top -- see `rate_limit`'s own docstring) to keep this from\ndoubling as a company-wide user enumeration tool. Results are always\ncompany-scoped by RLS + the explicit `company_id` filter regardless.",
+        "description": "Mesajlaşma/artefakt transferi alıcı seçicisi için çağıranın kendi\nşirketinin kullanıcılarında arama yapar. `q`, bunun şirket geneli bir\nkullanıcı listeleme aracına dönüşmesini engellemek için en az 2 karakter\ngerektirir (üzerine hız sınırlaması da eklenmiştir -- bkz.\n`rate_limit`'in kendi docstring'i). Sonuçlar, ne olursa olsun her zaman\nRLS + açık `company_id` filtresi ile şirket bazlıdır.",
         "operationId": "search_users_api_v1_users_search_get",
         "parameters": [
           {
@@ -10826,7 +10826,7 @@
     },
     "/api/v1/users/{user_id}": {
       "get": {
-        "description": "Retrieve details of a specific user. Authenticated user can only\nretrieve themselves, unless they are Admin/Manager of that user's own\ncompany (ROOT is not implicitly cross-company here -- see the\n`/companies` routes for root's company-scoped views).",
+        "description": "Belirli bir kullanıcının bilgilerini getirir. Kimliği doğrulanmış\nkullanıcı, o kullanıcının kendi şirketinin Admin/Manager'ı olmadığı\nsürece yalnızca kendisini getirebilir (ROOT burada örtük olarak şirketler\narası değildir -- root'un şirket bazlı görünümleri için `/companies`\nrotalarına bakın).",
         "operationId": "get_user_api_v1_users__user_id__get",
         "parameters": [
           {
@@ -10873,7 +10873,7 @@
         ]
       },
       "put": {
-        "description": "Update profile details of a user. Role or status changes require Admin privileges.",
+        "description": "Bir kullanıcının profil bilgilerini günceller. Rol veya durum değişiklikleri Admin yetkisi gerektirir.",
         "operationId": "update_user_api_v1_users__user_id__put",
         "parameters": [
           {
@@ -10932,7 +10932,7 @@
     },
     "/api/v1/users/{user_id}/hard": {
       "delete": {
-        "description": "Permanently delete user record from database (Admin only, own company).",
+        "description": "Kullanıcı kaydını veritabanından kalıcı olarak siler (yalnızca Admin, kendi şirketi).",
         "operationId": "hard_delete_api_v1_users__user_id__hard_delete",
         "parameters": [
           {
@@ -10981,7 +10981,7 @@
     },
     "/api/v1/users/{user_id}/permissions": {
       "get": {
-        "description": "List every non-revoked permission explicitly granted to a company user (Admin/Manager only).",
+        "description": "Bir şirket kullanıcısına açıkça verilmiş, geri alınmamış her yetkiyi listeler (yalnızca Admin/Manager).",
         "operationId": "list_permissions_api_v1_users__user_id__permissions_get",
         "parameters": [
           {
@@ -11028,7 +11028,7 @@
         ]
       },
       "post": {
-        "description": "Delegate a permission to a company user (Admin/Manager only).\n\nPrivilege non-escalation: the granter itself must be authorized for\n``schema.action`` (checked with its own identity standing in for the\nresource's owner) before it may hand that action to someone else -- a\nmanager who only holds a delegated ``document:delete`` grant cannot in\nturn grant ``draft:send``, since it was never granted that itself. Built\n-in ADMIN/MANAGER role rules already cover every action defined today\n(see ``app.core.authz.rules.BUILTIN_RULES``), so this check only starts\nactually restricting once a manager's own permissions are themselves\ngrant-derived rather than role-derived.",
+        "description": "Bir şirket kullanıcısına bir yetki devreder (yalnızca Admin/Manager).\n\nYetki yükseltmesi olmaması: yetkiyi verenin kendisi, o eylemi başka\nbirine devredebilmeden önce ``schema.action`` için yetkilendirilmiş\nolmalıdır (kendi kimliği kaynağın sahibi yerine geçerek kontrol edilir)\n-- yalnızca devredilmiş bir ``document:delete`` yetkisine sahip bir\nyönetici, kendisine hiç verilmediği için ``draft:send`` yetkisini\ndevredemez. Yerleşik ADMIN/MANAGER rol kuralları bugün tanımlı her\neylemi zaten kapsadığından (bkz. ``app.core.authz.rules.BUILTIN_RULES``),\nbu kontrol yalnızca bir yöneticinin kendi yetkileri rolden değil\ndevirden türetildiğinde fiilen kısıtlamaya başlar.",
         "operationId": "grant_permission_api_v1_users__user_id__permissions_post",
         "parameters": [
           {
@@ -11087,7 +11087,7 @@
     },
     "/api/v1/users/{user_id}/soft": {
       "delete": {
-        "description": "Soft delete user account by setting is_deleted flag (Admin only, own company).",
+        "description": "is_deleted bayrağını ayarlayarak kullanıcı hesabını geri alınabilir şekilde siler (yalnızca Admin, kendi şirketi).",
         "operationId": "soft_delete_api_v1_users__user_id__soft_delete",
         "parameters": [
           {

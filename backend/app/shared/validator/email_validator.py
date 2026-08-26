@@ -5,9 +5,9 @@ EMAIL_REGEX = re.compile(
 )
 
 def validate_email(email: str) -> str:
-    """Validate email address format.
-    
-    Raises ValueError if format is invalid.
+    """E-posta adresi biçimini doğrular.
+
+    Biçim geçersizse ValueError fırlatır.
     """
     if not EMAIL_REGEX.match(email):
         raise ValueError("Invalid email format.")

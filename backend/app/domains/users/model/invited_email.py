@@ -4,12 +4,12 @@ from app.infrastructure.database.base import Base
 from app.infrastructure.database.models import TimestampMixin
 
 class InvitedEmailModel(Base, TimestampMixin):
-    """SQLAlchemy ORM model storing whitelisted/invited emails for registration.
+    """Kayıt için beyaz listeye alınmış/davet edilmiş e-postaları saklayan SQLAlchemy ORM modeli.
 
-    ``UserService.register_user`` takes the registrant's ``company_id`` (and
-    ``role``) from this row, not from the request body -- self-service
-    registration is invite-gated, so letting a registrant pick their own
-    company would be a cross-tenant self-assignment hole.
+    ``UserService.register_user``, kayıt olan kişinin ``company_id``'sini
+    (ve ``role``'unu) istek gövdesinden değil bu satırdan alır -- self-servis
+    kayıt davet ile kısıtlıdır, bu yüzden kayıt olan kişinin kendi şirketini
+    seçmesine izin vermek, kiracılar arası kendi kendine atama açığı olurdu.
     """
     __tablename__ = "invited_emails"
 

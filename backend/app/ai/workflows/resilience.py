@@ -1,9 +1,10 @@
-"""Centralised resilience primitives for LangGraph nodes.
+"""LangGraph node'ları için merkezileştirilmiş dayanıklılık (resilience) ilkelleri.
 
-LangGraph moved ``RetryPolicy`` between ``langgraph.pregel`` and
-``langgraph.types`` across releases. Every module in this codebase that needs
-it imports it from here, not from LangGraph directly, so a version bump only
-needs one import path fixed instead of a grep-and-replace across every graph.
+LangGraph, ``RetryPolicy``'yi sürümler arasında ``langgraph.pregel`` ile
+``langgraph.types`` arasında taşıdı. Bu kod tabanında ona ihtiyaç duyan her
+modül onu doğrudan LangGraph'tan değil buradan import ediyor; böylece bir
+sürüm yükseltmesinde yalnızca tek bir import yolunun düzeltilmesi yeterli
+oluyor, her grafikte grep-and-replace yapmak gerekmiyor.
 """
 
 import asyncio
@@ -28,32 +29,36 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 class NodeBudgetExceeded(Exception):
-    """A node ran past its own time budget.
+    """Bir node, kendi zaman bütçesini aşarak çalıştı.
 
-    Deliberately *not* a `TimeoutError`, and deliberately absent from
-    `TRANSIENT_ERRORS`. The two look alike and mean opposite things: a
-    `TimeoutError` from httpx is a connection that hung and is worth another
-    attempt, while this one says the work itself is too slow for the budget --
-    and on a local model that will almost always be true a second time.
+    Kasıtlı olarak bir `TimeoutError` *değil* ve kasıtlı olarak
+    `TRANSIENT_ERRORS` içinde yer almıyor. İkisi birbirine benziyor ama
+    zıt şeyler ifade ediyor: httpx'ten gelen bir `TimeoutError`, askıda kalmış
+    ve tekrar denemeye değer bir bağlantıdır; buysa işin kendisinin bütçe için
+    çok yavaş olduğunu söylüyor -- ve yerel bir modelde bu neredeyse her
+    zaman ikinci denemede de doğru olacaktır.
 
-    Retrying it was actively harmful. `suggest_mevzuat` normally finishes in
-    28-34s against a 70s budget; when it occasionally ran long, LangGraph
-    retried the node, spent another 70s, and then failed the whole request. A
-    marginal slowdown became a 166s wait ending in a 502, where doing nothing
-    would have cost 71s and still had a usable answer.
+    Bunu yeniden denemek fiilen zararlıydı. `suggest_mevzuat` normalde 70s'lik
+    bir bütçeye karşı 28-34s'de bitiyor; ara sıra uzun sürdüğünde, LangGraph
+    node'u yeniden deniyor, bir 70s daha harcıyor ve sonra tüm isteği
+    başarısız kılıyordu. Marjinal bir yavaşlama, 502 ile biten 166s'lik bir
+    beklemeye dönüşüyordu; oysa hiçbir şey yapmamak 71s'e mal olacak ve yine
+    de kullanılabilir bir cevap verecekti.
     """
 
 
-#: Transient failures worth a second attempt: a hung/dropped connection to
-#: Ollama or Qdrant, not a validation error or a schema mismatch (those are
-#: handled by BaseAgent.run_structured's own correction loop, not by retrying
-#: the whole node), and not budget exhaustion (see NodeBudgetExceeded).
+#: İkinci bir denemeye değer geçici hatalar: Ollama veya Qdrant'a askıda
+#: kalmış/kopmuş bir bağlantı; bir doğrulama hatası veya şema uyuşmazlığı
+#: değil (bunlar tüm node'u yeniden denemek yerine BaseAgent.run_structured'ın
+#: kendi düzeltme döngüsüyle ele alınır), ve bütçe tükenmesi de değil (bkz.
+#: NodeBudgetExceeded).
 TRANSIENT_ERRORS = (ConnectionError, httpx.HTTPError, httpx.TimeoutException)
 
-#: For LLM-backed nodes that do not stream tokens to the UI. Retrying a node
-#: that already emitted tokens (the draft writer) would replay the whole
-#: generation into the frontend's streamingText -- those nodes get resilience
-#: from the reflexion loop instead (see draft_graph.py), never from this policy.
+#: UI'a token akıtmayan (stream etmeyen) LLM destekli node'lar için. Zaten
+#: token yaymış bir node'u (draft writer) yeniden denemek, tüm üretimi
+#: frontend'in streamingText'ine tekrar oynatırdı -- bu node'lar
+#: dayanıklılığını bunun yerine reflexion döngüsünden alır (bkz.
+#: draft_graph.py), asla bu policy'den değil.
 LLM_RETRY = RetryPolicy(
     max_attempts=2,
     initial_interval=0.5,
@@ -61,7 +66,8 @@ LLM_RETRY = RetryPolicy(
     retry_on=TRANSIENT_ERRORS,
 )
 
-#: For retrieval / vector-store I/O, which is cheaper to retry than an LLM call.
+#: Bir LLM çağrısından daha ucuza yeniden denenebilen alım (retrieval) /
+#: vektör-deposu I/O'su için.
 IO_RETRY = RetryPolicy(
     max_attempts=3,
     initial_interval=0.3,
@@ -69,23 +75,24 @@ IO_RETRY = RetryPolicy(
     retry_on=TRANSIENT_ERRORS,
 )
 
-#: Per-node timeout budgets, kept as a module alias for readability at the call
-#: sites that report them. The values live in ``app.ai.policy`` so they sit
-#: beside the invariants that relate them to the workflow ceiling.
+#: Node başına timeout bütçeleri; bunları raporlayan çağrı noktalarında
+#: okunabilirlik için modül takma adı olarak tutuluyor. Değerler
+#: ``app.ai.policy`` içinde yaşıyor, böylece onları workflow tavanıyla
+#: ilişkilendiren değişmezlerin (invariant) yanında duruyorlar.
 NODE_TIMEOUT_SECONDS = get_policy().budget.node_seconds
 
 
 def _reasoning_level_of(args: tuple[Any, ...]) -> Optional[str]:
-    """Read the run's reasoning level out of a LangGraph node's state argument.
+    """Çalışmanın reasoning level'ını bir LangGraph node'unun state argümanından okur.
 
     Args:
-        args: The wrapped node's positional arguments. LangGraph always passes
-            state first.
+        args: Sarmalanan (wrapped) node'un pozisyonel argümanları. LangGraph
+            her zaman state'i ilk sırada geçirir.
 
     Returns:
-        The level, or None when the graph's state carries no such field --
-        ``DocumentAnalysisState`` and ``RoutingState`` do not, and budget
-        resolution falls back to balanced for them.
+        Level değeri, ya da grafiğin state'i böyle bir alan taşımıyorsa None
+        -- ``DocumentAnalysisState`` ve ``RoutingState`` taşımaz, ve bütçe
+        çözümlemesi bunlar için balanced'a geri düşer.
     """
     state = args[0] if args else None
     if isinstance(state, dict):
@@ -97,19 +104,21 @@ def _reasoning_level_of(args: tuple[Any, ...]) -> Optional[str]:
 def node_timeout(
     node: str,
 ) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
-    """Decorator wrapping an async node in a budget resolved at call time.
+    """Bir async node'u, çağrı zamanında çözümlenen bir bütçeye saran decorator.
 
-    Takes a node *name* rather than a number on purpose. The previous signature
-    took a float, which was evaluated when the graph was built -- and a graph is
-    compiled once per process, so no per-request value could ever reach it. That
-    is why ``reasoning_levels.timeout_multiplier`` never affected a node budget
-    despite existing since the feature landed.
+    Kasıtlı olarak bir sayı yerine bir node *adı* alır. Önceki imza bir float
+    alıyordu ve bu, grafik inşa edilirken değerlendiriliyordu -- bir grafik
+    işlem başına bir kez derlendiğinden, istek başına hiçbir değer ona asla
+    ulaşamıyordu. ``reasoning_levels.timeout_multiplier``'ın, özellik
+    eklendiğinden beri var olmasına rağmen bir node bütçesini hiç
+    etkilememesinin nedeni budur.
 
     Args:
-        node: The node's name, as keyed in ``BudgetPolicy.node_seconds``.
+        node: ``BudgetPolicy.node_seconds`` içinde anahtar olarak kullanılan
+            node adı.
 
     Returns:
-        The decorator.
+        Decorator.
     """
 
     def _decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
@@ -117,25 +126,28 @@ def node_timeout(
         async def _wrapped(*args: Any, **kwargs: Any) -> T:
             budget = node_budget(node, _reasoning_level_of(args))
             started = time.perf_counter()
-            # "node_budget", not this node's own subgraph name -- this
-            # decorator has no way to know which graph it's wrapping (it's
-            # shared across document_analysis_graph/routing_graph), and the
-            # `node` label alone already disambiguates. Deliberately a
-            # separate label value from planning_graph.py's own
-            # NODE_DURATION.observe() call (graph="planning"), which
-            # measures a whole plan *step* (classification/brief/draft/
-            # routing) -- this measures the individual node inside one, the
-            # same granularity evaluation/latency/budget_report.py (E3)
-            # reports against BudgetPolicy.node_seconds.
+            # "node_budget", bu node'un kendi subgraph adı değil -- bu
+            # decorator'ın hangi grafiği sardığını bilmesinin bir yolu yok
+            # (document_analysis_graph/routing_graph arasında paylaşılıyor)
+            # ve tek başına `node` etiketi zaten belirsizliği gideriyor.
+            # Kasıtlı olarak planning_graph.py'ın kendi
+            # NODE_DURATION.observe() çağrısından (graph="planning") ayrı bir
+            # etiket değeri; o çağrı tüm bir plan *adımını*
+            # (classification/brief/draft/routing) ölçer -- bu ise bunlardan
+            # birinin içindeki tekil node'u ölçer, tıpkı
+            # evaluation/latency/budget_report.py'ın (E3)
+            # BudgetPolicy.node_seconds'a karşı raporladığı aynı
+            # granülaritede.
             try:
                 result = await asyncio.wait_for(func(*args, **kwargs), timeout=budget)
             except (asyncio.TimeoutError, TimeoutError) as exc:
                 NODE_DURATION.labels(
                     graph="node_budget", node=node, status="failed"
                 ).observe(time.perf_counter() - started)
-                # Re-raised as a distinct type so the retry policy leaves it
-                # alone. A node that overran its budget will overrun it again;
-                # the caller's own degradation path is the useful response.
+                # Retry policy'nin bunu es geçmesi için ayrı bir tip olarak
+                # yeniden fırlatılıyor (re-raise). Bütçesini aşan bir node
+                # onu tekrar aşacaktır; çağıranın kendi düşürme
+                # (degradation) yolu burada yararlı olan tepkidir.
                 raise NodeBudgetExceeded(
                     f"Node '{node}' exceeded its {budget:.0f}s budget."
                 ) from exc
@@ -159,22 +171,25 @@ async def with_fast_tier_fallback(
     primary: Callable[[], Awaitable[T]],
     fallback: Callable[[], Awaitable[T]],
 ) -> T:
-    """Run ``primary``; on failure, run ``fallback`` once.
+    """``primary``'yi çalıştırır; hata durumunda ``fallback``'ı bir kez çalıştırır.
 
-    Used to drop from the quality tier to the fast tier on the *failure path
-    only* -- the common case never pays the fallback's cost. This is the
-    third rung under the document-analysis node's existing two-tier
-    degradation ladder (merged schema -> classification-only -> this).
+    Kalite katmanından hızlı katmana yalnızca *hata yolunda* düşmek için
+    kullanılır -- yaygın durum hiçbir zaman fallback'in maliyetini ödemez.
+    Bu, doküman-analizi node'unun mevcut iki katmanlı düşürme
+    (degradation) merdiveninin üçüncü basamağıdır (birleşik şema ->
+    yalnızca sınıflandırma -> bu).
 
     Args:
-        primary: The preferred call, already bound to its arguments.
-        fallback: The degraded call, tried only if ``primary`` raises.
+        primary: Argümanlarına zaten bağlanmış, tercih edilen çağrı.
+        fallback: Yalnızca ``primary`` hata fırlatırsa denenen, düşürülmüş
+            (degraded) çağrı.
 
     Returns:
-        The result of whichever call succeeded.
+        Hangisi başarılı olduysa o çağrının sonucu.
 
     Raises:
-        Exception: The fallback's exception, if both attempts failed.
+        Exception: Her iki deneme de başarısız olduysa, fallback'in
+            fırlattığı istisna.
     """
     try:
         return await primary()

@@ -9,19 +9,20 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class TrainingRunModel(Base, TimestampMixin):
-    """One execution of the training pipeline for one company.
+    """Bir şirket için eğitim hattının bir çalıştırması.
 
-    Faz C3 (#187) only ever produces `kind="style_adapter"` rows today --
-    the deterministic-diff + single-LLM-call path that updates
-    `app.domains.companies.provider.set_company_adapter`'s `CompanyAdapter`.
-    `kind` stays a loose string (not an enum) so `"lora_sft"`/`"lora_dpo"`
-    (a future, GPU-backed phase, deliberately out of scope here -- see
-    #187's own body) can be added without a migration, same convention as
-    `FeedbackModel.target_kind`.
+    Faz C3 (#187) bugün yalnızca `kind="style_adapter"` satırları üretir --
+    `app.domains.companies.provider.set_company_adapter`'ın
+    `CompanyAdapter`'ını güncelleyen deterministik-diff + tek-LLM-çağrısı
+    yolu. `kind`, `"lora_sft"`/`"lora_dpo"` (gelecekteki, GPU destekli bir
+    faz, bilerek burada kapsam dışı -- bkz. #187'nin kendi gövdesi) bir
+    migration olmadan eklenebilsin diye gevşek bir string olarak kalır
+    (enum değil), `FeedbackModel.target_kind` ile aynı kural.
 
-    `artifact_path` is likewise unused by every run this phase produces (a
-    style adapter lives in `CompanyModel.settings`, not a file) but is kept
-    on the table now so the LoRA phase does not need a schema change later.
+    `artifact_path` de benzer şekilde bu fazın ürettiği hiçbir çalıştırma
+    tarafından kullanılmaz (bir stil adaptörü bir dosyada değil,
+    `CompanyModel.settings`'te yaşar) ama LoRA fazının daha sonra bir şema
+    değişikliğine ihtiyaç duymaması için şimdiden tabloda tutulur.
     """
 
     __tablename__ = "training_runs"
@@ -30,18 +31,18 @@ class TrainingRunModel(Base, TimestampMixin):
     company_id: Mapped[str] = mapped_column(
         String, ForeignKey("companies.id"), nullable=False, index=True
     )
-    #: "style_adapter" today; "lora_sft" / "lora_dpo" reserved for later.
+    #: Bugün "style_adapter"; "lora_sft" / "lora_dpo" ileriye ayrılmıştır.
     kind: Mapped[str] = mapped_column(String, nullable=False)
     #: "queued" | "running" | "succeeded" | "failed" | "skipped" -- "skipped"
-    #: is the below-`MIN_FEEDBACK_SAMPLES` outcome, not an error.
+    #: `MIN_FEEDBACK_SAMPLES`'ın altında kalma sonucudur, bir hata değildir.
     status: Mapped[str] = mapped_column(String, nullable=False, default="queued")
     triggered_by: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("users.id"), nullable=True
     )
-    #: "manual" today; "scheduled" reserved for a future cron trigger.
+    #: Bugün "manual"; "scheduled" gelecekteki bir cron tetikleyicisi için ayrılmıştır.
     trigger: Mapped[str] = mapped_column(String, nullable=False, default="manual")
     sample_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    #: e.g. `{"liked_count": ..., "disliked_count": ..., "adapter_version": ...}`.
+    #: örn. `{"liked_count": ..., "disliked_count": ..., "adapter_version": ...}`.
     metrics: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     artifact_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

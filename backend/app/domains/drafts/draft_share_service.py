@@ -21,28 +21,28 @@ _ACTIVE_STATUSES = ("sent", "read")
 
 
 class DraftShareService:
-    """Service for `draft_shares` -- the çalışanlar arası taslak gönder/al flow.
+    """`draft_shares` için servis -- çalışanlar arası taslak gönder/al akışı.
 
-    `send` no longer performs the transfer itself -- it delegates the
-    whole thing (authorize, policy, fork, delivery, audit, notification)
-    to `ArtifactTransferService.execute(channel="rest")`, the single path
-    every artifact transfer now goes through (see that service's own
-    docstring). What's left here is purely the `draft_shares`-specific
-    inbox/outbox/accept/reject bookkeeping this table's own consumers
-    (`GET /drafts/inbox`, `/outbox`, the accept/reject/withdraw routes)
-    still need -- it does not duplicate the ABAC/policy decision, only
-    records that a share happened alongside the real transfer.
+    `send` artık transferi kendisi gerçekleştirmiyor -- işin tamamını
+    (yetkilendirme, politika, fork, teslimat, denetim kaydı, bildirim)
+    her artifact transferinin artık geçtiği tek yol olan
+    `ArtifactTransferService.execute(channel="rest")`'e devrediyor (bkz. o
+    servisin kendi docstring'i). Burada kalan yalnızca bu tablonun kendi
+    tüketicilerinin (`GET /drafts/inbox`, `/outbox`, accept/reject/withdraw
+    rotaları) hâlâ ihtiyaç duyduğu `draft_shares`'e özgü inbox/outbox/kabul/
+    ret muhasebesi -- ABAC/politika kararını tekrarlamaz, yalnızca gerçek
+    transferin yanında bir paylaşımın gerçekleştiğini kaydeder.
 
-    Viewing/responding to an already-created share is *not* an ABAC
-    decision: a `draft_shares` row's `recipient_id`/`sender_id` is itself
-    the authorization (only the two parties, or ADMIN/MANAGER/ROOT
-    company-wide via `bypasses_ownership`, may touch it) -- there is no
-    `draft:read` check against the underlying `drafts` row here, which is
-    deliberate: a recipient who does not own the draft and isn't
-    ADMIN/MANAGER/ROOT would fail that check, yet must still be able to
-    read what was sent to them. The share row (joined with the draft's
-    content in every response -- see `DraftShareResponse`) is the access
-    grant, not the draft's own ownership.
+    Zaten oluşturulmuş bir paylaşımı görüntülemek/yanıtlamak ABAC kararı
+    *değildir*: bir `draft_shares` satırının `recipient_id`/`sender_id`'si
+    zaten yetkilendirmenin kendisidir (yalnızca iki taraf, ya da
+    `bypasses_ownership` üzerinden şirket çapında ADMIN/MANAGER/ROOT ona
+    dokunabilir) -- burada altta yatan `drafts` satırına karşı bir
+    `draft:read` kontrolü yoktur ve bu kasıtlıdır: taslağın sahibi olmayan
+    ve ADMIN/MANAGER/ROOT olmayan bir alıcı bu kontrolü geçemezdi, ama yine
+    de kendisine gönderileni okuyabilmelidir. Paylaşım satırı (her yanıtta
+    taslağın içeriğiyle join edilmiş halde -- bkz. `DraftShareResponse`)
+    erişim yetkisinin kendisidir, taslağın sahipliği değil.
     """
 
     def __init__(
@@ -59,9 +59,9 @@ class DraftShareService:
 
     @staticmethod
     async def _publish(event) -> None:
-        """Publish a domain event without letting listener failures break the request.
+        """Bir domain event'i, listener hatalarının isteği bozmasına izin vermeden yayınla.
 
-        Same pattern as `app.domains.documents.service.DocumentService._publish`.
+        `app.domains.documents.service.DocumentService._publish` ile aynı desen.
         """
         try:
             await event_bus.publish(event)
@@ -71,30 +71,30 @@ class DraftShareService:
     async def send(
         self, draft_id: str, sender: UserModel, request: DraftSendRequest, company_id: str
     ) -> List[DraftShareModel]:
-        """Send one draft version to one or more recipients.
+        """Bir taslak versiyonunu bir veya birden fazla alıcıya gönder.
 
-        Each recipient goes through its own call to `ArtifactTransferService.
-        execute` -- authorize, policy, fork, delivery, audit, and
-        notification all happen there (see its own docstring). Unlike the
-        old, single-implementation version of this method, a multi-
-        recipient send is no longer strictly all-or-nothing: a transfer
-        that already executed for an earlier recipient stays executed even
-        if a later recipient's own policy check fails (self-send, inactive,
-        insufficient clearance) -- unifying every channel onto one transfer
-        path takes priority over preserving a batch-atomicity guarantee
-        that only existed because no real transfer service existed yet.
-        In practice this only matters for a genuinely multi-recipient send,
-        which neither this endpoint's own frontend consumer (there isn't
-        one) nor the new chat-composer send flow (single-recipient by
-        construction) ever exercises.
+        Her alıcı kendi `ArtifactTransferService.execute` çağrısından geçer
+        -- yetkilendirme, politika, fork, teslimat ve bildirim hepsi orada
+        gerçekleşir (bkz. kendi docstring'i). Bu metodun eski, tek parça
+        implementasyonunun aksine, çok alıcılı bir gönderim artık kesin
+        anlamda hep-ya-da-hiç değildir: önceki bir alıcı için zaten
+        gerçekleşmiş bir transfer, sonraki bir alıcının kendi politika
+        kontrolü başarısız olsa bile (kendine gönderme, pasif alıcı,
+        yetersiz yetki) gerçekleşmiş olarak kalır -- her kanalı tek bir
+        transfer yoluna birleştirmek, yalnızca gerçek bir transfer servisi
+        henüz var olmadığı için var olan bir batch-atomiklik garantisini
+        korumaktan daha önceliklidir. Pratikte bu yalnızca gerçekten çok
+        alıcılı bir gönderimde önem taşır ki bunu ne bu endpoint'in kendi
+        frontend tüketicisi (böyle bir şey yok) ne de yeni chat-composer
+        gönderim akışı (yapısı gereği tek alıcılı) hiç kullanmaz.
 
         Raises:
-            NotFoundException: If `draft_id` doesn't resolve within
-                `company_id`, or (from `ArtifactTransferService.execute`)
-                a `recipient_ids` entry doesn't.
-            AuthorizationException: If `sender` isn't allowed to send this
-                specific draft, or `TransferPolicy` denies for a narrower
-                reason (self-send, inactive recipient).
+            NotFoundException: `draft_id`, `company_id` içinde
+                çözümlenmiyorsa, ya da (`ArtifactTransferService.execute`
+                üzerinden) bir `recipient_ids` girdisi çözümlenmiyorsa.
+            AuthorizationException: `sender`'ın bu spesifik taslağı
+                göndermesine izin yoksa, ya da `TransferPolicy` daha dar bir
+                sebeple reddediyorsa (kendine gönderme, pasif alıcı).
         """
         draft = await self.draft_repository.get_by_id(draft_id)
         if draft is None:
@@ -120,9 +120,9 @@ class DraftShareService:
                     draft_id=draft.id,
                     sender_id=sender.id,
                     recipient_id=recipient_id,
-                    # Already resolved once at draft-write time (see
-                    # `drafts.destination_unit_id`'s own docstring) --
-                    # no per-send name lookup needed anymore.
+                    # Zaten taslak yazma anında bir kere çözümlendi (bkz.
+                    # `drafts.destination_unit_id`'in kendi docstring'i) --
+                    # artık her gönderimde ayrı bir ad sorgusuna gerek yok.
                     suggested_unit_id=draft.destination_unit_id,
                     message=request.message,
                     status="sent",
@@ -175,22 +175,23 @@ class DraftShareService:
     async def respond(
         self, share_id: str, company_id: str, requester: UserModel, status: str, response_note: Optional[str]
     ) -> Tuple[DraftShareModel, DraftModel]:
-        """Accept or reject a share addressed to `requester`.
+        """`requester`'a adreslenmiş bir paylaşımı kabul et veya reddet.
 
-        Purely a status transition now -- no longer forks a draft version.
-        The recipient already got their own, immediately-owned copy at
-        *send* time (`ArtifactTransferService.execute`'s draft fork, see
-        its own docstring), so accepting a share is just acknowledging
-        delivery, the same way `mark_read` already is. Forking again here
-        on top of that would have produced a second, orphaned copy the
-        recipient never asked for -- the exact double-fork this change
-        removes (see the plan's own §D5).
+        Artık yalnızca bir durum geçişi -- artık bir taslak versiyonu fork
+        etmiyor. Alıcı zaten *gönderim* anında kendi, doğrudan sahip
+        olduğu kopyayı almıştı (`ArtifactTransferService.execute`'ın taslak
+        fork'u, bkz. kendi docstring'i), bu yüzden bir paylaşımı kabul
+        etmek, tıpkı `mark_read`'in zaten yaptığı gibi, sadece teslimatı
+        onaylamaktır. Bunun üzerine burada tekrar fork yapmak, alıcının hiç
+        istemediği ikinci, sahipsiz bir kopya üretirdi -- bu değişikliğin
+        ortadan kaldırdığı tam da o çifte fork (bkz. planın kendi §D5'i).
 
         Raises:
-            NotFoundException: If `share_id` doesn't resolve.
-            AuthorizationException: If `requester` isn't the share's
-                `recipient_id`, or the share isn't `sent`/`read` anymore
-                (already resolved, or withdrawn).
+            NotFoundException: `share_id` çözümlenmiyorsa.
+            AuthorizationException: `requester`, paylaşımın
+                `recipient_id`'si değilse, ya da paylaşım artık
+                `sent`/`read` durumunda değilse (zaten sonuçlanmış ya da
+                geri çekilmiş).
         """
         share, draft = await self._get_owned_share(share_id, company_id, requester)
         if share.recipient_id != requester.id:

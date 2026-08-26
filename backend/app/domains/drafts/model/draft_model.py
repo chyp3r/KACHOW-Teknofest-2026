@@ -8,29 +8,30 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class DraftModel(Base, TimestampMixin):
-    """One version of a drafted official correspondence.
+    """Yazılan bir resmi yazışma taslağının bir versiyonu.
 
-    A row is written per turn that produces or revises a draft -- never
-    overwritten, so `session_id` + `version` reconstructs the full edit
-    history and `parent_draft_id` chains a revision back to the version it
-    edited. There is no separate "current draft" table: the latest row for a
-    `session_id` (by `version`) is the current one (see
-    `DraftRepository.get_latest_for_session`).
+    Bir taslağı üreten ya da revize eden her tur için bir satır yazılır --
+    asla üzerine yazılmaz, bu yüzden `session_id` + `version` tüm düzenleme
+    geçmişini yeniden kurar ve `parent_draft_id` bir revizyonu düzenlediği
+    versiyona zincirler. Ayrı bir "geçerli taslak" tablosu yoktur: bir
+    `session_id` için en son satır (`version`'a göre) geçerli olandır
+    (bkz. `DraftRepository.get_latest_for_session`).
 
-    `session_id` is nullable and carries no FK: a draft produced through the
-    chat flow gets the composed thread_id (see `ChatService._thread_id`),
-    but a direct `POST /documents/draft` call has no chat session at all.
-    `document_id` is likewise a loose `storage_path`-shaped reference, same
-    as `DocumentModel`'s own looseness around ownership.
+    `session_id` nullable'dır ve FK taşımaz: chat akışı üzerinden üretilen
+    bir taslak birleştirilmiş thread_id'yi alır (bkz.
+    `ChatService._thread_id`), ama doğrudan bir `POST /documents/draft`
+    çağrısının hiç chat oturumu yoktur. `document_id` de aynı şekilde
+    `DocumentModel`'in sahiplik konusundaki kendi gevşekliğiyle aynı
+    şekilde gevşek, `storage_path` biçiminde bir referanstır.
     """
 
     __tablename__ = "drafts"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    #: NOT NULL since migration `0016_recorder_tables_rls` -- populated by
-    #: every `draft_recorder.record_draft` call site, including the chat
-    #: path via `PlanningState.company_id` (see `RunModel.company_id`'s
-    #: docstring).
+    #: `0016_recorder_tables_rls` migrasyonundan beri NOT NULL -- her
+    #: `draft_recorder.record_draft` çağrı noktası tarafından doldurulur;
+    #: chat yolunda `PlanningState.company_id` üzerinden de dahil (bkz.
+    #: `RunModel.company_id`'in docstring'i).
     company_id: Mapped[str] = mapped_column(
         String, ForeignKey("companies.id"), nullable=False, index=True
     )
@@ -46,30 +47,30 @@ class DraftModel(Base, TimestampMixin):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     correspondence_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     destination: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    #: `destination` resolved against `units` at write time (see
-    #: `app.domains.drafts.draft_recorder.record_draft`) -- `None` when
-    #: `destination` didn't match any unit in this company (renamed/
-    #: deleted since, or routing came back empty), same honesty
-    #: `draft_shares.suggested_unit_id` already has. This is what a
-    #: transfer's cross-unit check and recipient recommendation
-    #: (`app.domains.transfers`) read; nothing re-resolves `destination`
-    #: by name anymore.
+    #: `destination`'ın yazma anında `units`'e karşı çözümlenmiş hali (bkz.
+    #: `app.domains.drafts.draft_recorder.record_draft`) -- `destination`
+    #: bu şirkette hiçbir birimle eşleşmiyorsa (o zamandan beri yeniden
+    #: adlandırılmış/silinmiş, ya da routing boş dönmüş) `None`;
+    #: `draft_shares.suggested_unit_id`'in zaten sahip olduğu aynı dürüstlük.
+    #: Bir transferin birimler-arası kontrolü ve alıcı önerisi
+    #: (`app.domains.transfers`) bunu okur; artık hiçbir şey `destination`'ı
+    #: ada göre yeniden çözümlemiyor.
     destination_unit_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("units.id"), nullable=True, index=True
     )
-    #: The routing graph's own `RouteOutput.justification` for this
-    #: version -- persisted so a transfer confirmation can show "why this
-    #: unit" without re-running routing.
+    #: Bu versiyon için routing graph'ın kendi `RouteOutput.justification`'ı
+    #: -- routing'i yeniden çalıştırmadan bir transfer onayının "neden bu
+    #: birim" gösterebilmesi için kalıcı hale getirilir.
     destination_justification: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     confidence_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     requires_human_approval: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     attempts: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    #: The deterministic verifier's report (see `DraftResponseSchema.verification`).
+    #: Deterministik doğrulayıcının raporu (bkz. `DraftResponseSchema.verification`).
     verification: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    #: The quality judge's structured verdict, when it ran (`DraftResponseSchema.judge`).
+    #: Kalite hakeminin (judge) yapılandırılmış kararı, çalıştıysa (`DraftResponseSchema.judge`).
     judge: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    #: `List[InfoQuestion]` asked of the user to complete this draft.
+    #: Bu taslağı tamamlamak için kullanıcıya sorulan `List[InfoQuestion]`.
     missing_information: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

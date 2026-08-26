@@ -1,21 +1,22 @@
-"""AI-specific Prometheus collectors.
+"""AI'ye özgü Prometheus toplayıcıları.
 
-``prometheus-fastapi-instrumentator`` (see ``observability/metrics.py``) only
-covers the HTTP layer -- request count/latency/status. Everything about the
-AI pipeline's own behaviour (how long a draft's revision loop takes, how
-often the judge degrades, how often a session hits the human-in-the-loop
-gate) was previously invisible outside of log lines.
+``prometheus-fastapi-instrumentator`` (bkz. ``observability/metrics.py``)
+yalnızca HTTP katmanını kapsar -- istek sayısı/gecikme/durum. AI pipeline'ının
+kendi davranışına dair her şey (bir taslağın revizyon döngüsü ne kadar sürer,
+yargıç ne sıklıkla düşer, bir oturum insan-döngüde onay kapısına ne sıklıkla
+takılır) daha önce log satırları dışında görünmezdi.
 
-Scope note: ``NODE_DURATION`` and ``LLM_TOKENS`` are declared here for a
-complete metric surface but are not wired up everywhere yet. Per-node timing
-needs a start/end correlation that the current generic ``emit_node_start``/
-``emit_node_end`` helpers don't carry (a node can legitimately emit
-``node_start`` without a matching ``node_end`` under the same id, e.g. the
-draft writer's completion is reported by the separate ``verify`` node), and
-token counts aren't exposed by ``BaseLLMClient.generate()`` today. Wiring
-either honestly requires touching the client abstraction or the per-node
-call sites individually rather than one shared choke point; left as declared
-but unpopulated rather than instrumented with fabricated numbers.
+Kapsam notu: ``NODE_DURATION`` ve ``LLM_TOKENS`` eksiksiz bir metrik yüzeyi
+için burada bildiriliyor ama henüz her yerde bağlanmış değil. Düğüm bazlı
+zamanlama, mevcut genel ``emit_node_start``/``emit_node_end`` yardımcılarının
+taşımadığı bir başlangıç/bitiş ilişkilendirmesi gerektirir (bir düğüm, aynı
+kimlik altında eşleşen bir ``node_end`` olmadan meşru şekilde ``node_start``
+yayınlayabilir; örn. taslak yazıcının tamamlanması ayrı ``verify`` düğümü
+tarafından raporlanır) ve token sayıları bugün ``BaseLLMClient.generate()``
+tarafından dışa açılmıyor. İkisini de dürüstçe bağlamak, tek bir paylaşılan
+boğaz noktası yerine istemci soyutlamasına ya da düğüm başına çağrı
+noktalarına tek tek dokunmayı gerektirir; uydurma sayılarla enstrümante
+etmek yerine bildirilmiş ama doldurulmamış bırakıldı.
 """
 
 import logging
@@ -30,27 +31,28 @@ NODE_DURATION = Histogram(
     "kachow_node_duration_seconds",
     "Wall-clock duration of a single workflow node execution.",
     ["graph", "node", "status"],
-    # prometheus_client's own default buckets top out at 10.0s -- far too
-    # coarse for this metric's actual subjects: BudgetPolicy.node_seconds
-    # ranges from 25s to 180s, and workflow_ceiling_seconds is 480s. Every
-    # real observation was silently collapsing into the +Inf bucket,
-    # discovered running evaluation/latency/budget_report.py (Workstream
-    # E3) against a live analyze run -- p50/p95/p99 all read back as the
-    # same floor value (10.0) regardless of the true duration. Spans from
-    # sub-second (the fastest node, retrieve_mevzuat, ~12ms) past the
-    # workflow ceiling, with enough resolution in the 25-180s band the
-    # actual budgets live in to make a p95-vs-budget comparison meaningful.
+    # prometheus_client'ın kendi varsayılan bucket'ları 10.0s'de tavan yapıyor
+    # -- bu metriğin gerçek konuları için çok kaba: BudgetPolicy.node_seconds
+    # 25s ile 180s arasında değişiyor ve workflow_ceiling_seconds 480s. Her
+    # gerçek gözlem sessizce +Inf bucket'ına çöküyordu; bu durum,
+    # evaluation/latency/budget_report.py (Workstream E3) canlı bir analyze
+    # çalıştırmasına karşı çalıştırılırken keşfedildi -- p50/p95/p99 gerçek
+    # süreden bağımsız olarak hep aynı taban değeri (10.0) okuyordu. En hızlı
+    # düğümün (retrieve_mevzuat, ~12ms) altına inen saniyenin altındaki
+    # değerlerden workflow tavanının ötesine kadar uzanır ve gerçek
+    # bütçelerin yaşadığı 25-180s bandında p95-vs-bütçe karşılaştırmasını
+    # anlamlı kılacak yeterli çözünürlük sağlar.
     buckets=(0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 20.0, 30.0, 45.0, 60.0, 90.0, 120.0, 180.0, 240.0, 300.0, 480.0),
 )
 
-#: BudgetPolicy.node_seconds, mirrored into Prometheus so it can be
-#: `join`'d against NODE_DURATION's own observations in PromQL (see
-#: monitoring/prometheus/rules/kachow.rules.yml's KachowNodeBudgetExhaustion
-#: rule) -- without this, "is a node's p95 approaching its budget" is a
-#: question only evaluation/latency/budget_report.py (Workstream E3) can
-#: answer, offline, after the fact. A Gauge, not a Counter/Histogram: the
-#: policy's own value, set once at process start (init_ai_metrics), not an
-#: observation that accumulates over the run.
+#: BudgetPolicy.node_seconds, PromQL içinde NODE_DURATION'ın kendi
+#: gözlemleriyle `join` edilebilsin diye Prometheus'a yansıtılır (bkz.
+#: monitoring/prometheus/rules/kachow.rules.yml'nin KachowNodeBudgetExhaustion
+#: kuralı) -- bu olmadan "bir düğümün p95'i bütçesine yaklaşıyor mu" sorusunu
+#: yalnızca evaluation/latency/budget_report.py (Workstream E3) çevrimdışı ve
+#: olay sonrasında cevaplayabilir. Counter/Histogram değil bir Gauge: bu,
+#: politikanın kendi değeridir, süreç başlangıcında bir kez ayarlanır
+#: (init_ai_metrics), çalışma boyunca biriken bir gözlem değildir.
 NODE_BUDGET_SECONDS = Gauge(
     "kachow_node_budget_seconds",
     "Configured BudgetPolicy.node_seconds budget for a workflow node.",
@@ -88,24 +90,25 @@ JUDGE_FAILURES = Counter(
     ["reason"],
 )
 
-#: Same role as JUDGE_FAILURES, kept separate rather than an added label:
-#: the guardrail judge (app.ai.guardrails.llm_nuance) degrading means "this
-#: decision fell back to the deterministic-only verdict," a security-relevant
-#: event worth its own signal rather than being folded into draft-quality
-#: judge failures.
+#: JUDGE_FAILURES ile aynı rol, eklenen bir etiket yerine ayrı tutuldu:
+#: koruma katmanı yargıcının (app.ai.guardrails.llm_nuance) düşmesi, "bu
+#: karar yalnızca deterministik karara geri döndü" anlamına gelir; bu,
+#: taslak-kalitesi yargıç hatalarına katılmak yerine kendi sinyalini hak eden
+#: güvenlikle ilgili bir olaydır.
 GUARDRAIL_JUDGE_FAILURES = Counter(
     "kachow_guardrail_judge_failures_total",
     "Guardrail nuance-layer LLM judge calls that degraded to deterministic-only.",
     ["reason"],
 )
 
-#: The guardrail system's overall decision surface -- every stage (input at
-#: upload, output at response time) and every kind (pii, sensitivity,
-#: injection, magic_byte, archive_bomb, groundedness, leakage, llm_judge),
-#: not just the judge layer's own failures (GUARDRAIL_JUDGE_FAILURES above).
-#: Incremented from a single choke point (app.observability.guardrail_recorder
-#: .record_event) rather than at each of its three call sites, so this stays
-#: accurate as new guardrail checks are added without a matching metrics edit.
+#: Koruma sisteminin genel karar yüzeyi -- yalnızca yargıç katmanının kendi
+#: hataları değil (yukarıdaki GUARDRAIL_JUDGE_FAILURES), her aşama (yüklemede
+#: girdi, yanıt zamanında çıktı) ve her tür (pii, sensitivity, injection,
+#: magic_byte, archive_bomb, groundedness, leakage, llm_judge). Üç çağrı
+#: noktasının her birinde değil, tek bir boğaz noktasından
+#: (app.observability.guardrail_recorder.record_event) artırılır; böylece
+#: yeni koruma kontrolleri eklendikçe eşleşen bir metrik değişikliği
+#: gerekmeden doğru kalır.
 GUARDRAIL_DECISIONS = Counter(
     "kachow_guardrail_decisions_total",
     "Guardrail decisions made, by stage, kind, and outcome.",
@@ -136,52 +139,53 @@ EXTRACTION = Counter(
     ["extractor", "outcome"],
 )
 
-#: The deterministic draft gate's own behaviour, which was previously invisible:
-#: DRAFT_SCORE records the number it produced but nothing recorded *how*. The
-#: `method` label is the escalation ladder in `draft_verifier._support_for`
-#: (exact -> canonical -> token_overlap -> none), so a rise in `none` for one
-#: kind localises a groundedness regression to a single claim type, and the
-#: `canonical` share measures how much work type-aware normalisation is doing.
-#: Both labels are closed sets -- no free text, which would blow up cardinality.
+#: Deterministik taslak kapısının kendi davranışı, daha önce görünmezdi:
+#: DRAFT_SCORE ürettiği sayıyı kaydeder ama *nasıl* ürettiğini hiçbir şey
+#: kaydetmiyordu. `method` etiketi, `draft_verifier._support_for` içindeki
+#: üst kademe (exact -> canonical -> token_overlap -> none) merdivenidir;
+#: böylece bir tür için `none` oranındaki artış, bir dayanaklılık
+#: gerilemesini tek bir iddia türüne yerelleştirir ve `canonical` payı, tür
+#: farkında normalleştirmenin ne kadar iş yaptığını ölçer. Her iki etiket de
+#: kapalı kümedir -- kardinaliteyi patlatacak serbest metin yok.
 CLAIM_MATCH = Counter(
     "kachow_claim_match_total",
     "Draft claims checked against source material, by claim kind and match method.",
     ["kind", "method"],
 )
 
-#: Whether the intent ladder's semantic rung (app.ai.semantic.prototype_matcher)
-#: is actually loaded, as opposed to having silently disabled itself because
-#: the on-disk vector file was stale (built under a different embedding model
-#: or a different POLICY_VERSION) or missing outright. Layer 2 disabling
-#: itself is the *correct* behaviour -- deciding from stale vectors is worse
-#: than paying for a model call -- but it must not be silent: every message
-#: the lexical layer abstains on then skips straight to the clarify/guess
-#: fallback instead of getting a semantic second opinion. Set once at graph
-#: construction time (see planning_graph.py's PrototypeMatcher setup), not
-#: per-request, so this is a Gauge rather than a Counter.
+#: Niyet merdiveninin anlamsal basamağının (app.ai.semantic.prototype_matcher)
+#: gerçekten yüklenip yüklenmediği; diskteki vektör dosyası eski
+#: (farklı bir gömme modeli ya da farklı bir POLICY_VERSION altında
+#: derlenmiş) veya tamamen eksik olduğu için sessizce kendini devre dışı
+#: bırakmasının aksine. Katman 2'nin kendini devre dışı bırakması *doğru*
+#: davranıştır -- eski vektörlerden karar vermek bir model çağrısına para
+#: ödemekten daha kötüdür -- ama sessiz olmamalıdır: sözcüksel katmanın
+#: çekimser kaldığı her mesaj, anlamsal bir ikinci görüş almak yerine
+#: doğrudan clarify/guess yedeğine atlar. Grafik oluşturma zamanında bir kez
+#: ayarlanır (bkz. planning_graph.py'nin PrototypeMatcher kurulumu), istek
+#: başına değil; bu yüzden bir Counter değil Gauge'dur.
 ROUTER_SEMANTIC_AVAILABLE = Gauge(
     "kachow_router_semantic_available",
     "Whether the intent ladder's semantic prototype layer loaded successfully (1) or disabled itself (0).",
 )
 
-#: Every router decision, by resolved intent and by the mechanism that
-#: produced it (``fused``/``fused_semantic``/``compound``/
-#: ``clarification_resolved``/``model``/``model_failed``/``clarify`` -- see
-#: ``app.ai.workflows.planner.PlanDecision.source``). This is the number that
-#: was previously invisible outside of a `run_recorder` DB row: how often
-#: production actually asks a clarifying question, and which rung is doing
-#: the deciding.
+#: Çözümlenen niyete ve onu üreten mekanizmaya göre her yönlendirici kararı
+#: (``fused``/``fused_semantic``/``compound``/``clarification_resolved``/
+#: ``model``/``model_failed``/``clarify`` -- bkz.
+#: ``app.ai.workflows.planner.PlanDecision.source``). Bu, daha önce bir
+#: `run_recorder` DB satırı dışında görünmeyen sayıdır: üretimin gerçekte ne
+#: sıklıkla açıklayıcı bir soru sorduğu ve hangi basamağın karar verdiği.
 ROUTER_DECISIONS = Counter(
     "kachow_router_decisions_total",
     "Router decisions, by resolved intent and by the mechanism that produced them.",
     ["intent", "source"],
 )
 
-#: Distribution of `PlanDecision.confidence`, by source. Comparable across
-#: every source since the fusion rewrite gave them a single calibrated scale
-#: (see `PlanDecision.confidence`'s docstring) -- before that, three
-#: incompatible scales landing in the same histogram would have been
-#: meaningless.
+#: Kaynağa göre `PlanDecision.confidence` dağılımı. Füzyon yeniden yazımı
+#: hepsine tek bir kalibre edilmiş ölçek verdiğinden (bkz.
+#: `PlanDecision.confidence`'ın docstring'i) tüm kaynaklar arasında
+#: karşılaştırılabilir -- ondan önce aynı histogramda üç uyumsuz ölçeğin
+#: buluşması anlamsız olurdu.
 ROUTER_CONFIDENCE = Histogram(
     "kachow_router_confidence",
     "Router decision confidence in [0, 1], by source.",
@@ -189,73 +193,78 @@ ROUTER_CONFIDENCE = Histogram(
     buckets=(0.0, 0.2, 0.35, 0.5, 0.55, 0.7, 0.85, 0.95, 1.0),
 )
 
-#: Wall-clock cost of each stage `resolve_plan` can pay for, so the semantic
-#: rung coming back online (see `ROUTER_SEMANTIC_AVAILABLE`) has a number
-#: attached to the latency it adds, and the (currently empty on the gold set,
-#: see `evaluation/harness/intent_suite.py::run_with_model`) model band's
-#: real-traffic cost is visible once it does fire.
+#: `resolve_plan`'in ödeyebileceği her aşamanın gerçek zaman maliyeti;
+#: böylece anlamsal basamağın tekrar çevrimiçi olması (bkz.
+#: `ROUTER_SEMANTIC_AVAILABLE`) eklediği gecikmeye bağlı bir sayıya sahip
+#: olur ve (şu anda altın kümede boş, bkz.
+#: `evaluation/harness/intent_suite.py::run_with_model`) model bandının
+#: gerçek trafik maliyeti, tetiklendiğinde görünür hale gelir.
 ROUTER_STAGE_DURATION = Histogram(
     "kachow_router_stage_duration_seconds",
     "Wall-clock duration of one router decision stage.",
     ["stage"],
 )
 
-#: Every time a turn that resolved to "assist" got handed off to draft/revise
-#: instead of actually running the assist step (Faz 7, see
-#: planning_graph._step_assist) -- by "reason" (``fallback_source``: a
-#: deterministic re-score caught it before assist ever ran, because the
-#: routing decision itself came from a fallback source with no real
-#: evidence behind it; ``model_tool``: the assistant model itself called
-#: ``request_handoff`` mid-turn) and by the "target" it moved to. A rising
-#: rate here is a signal the fusion weights (app.ai.policy.router_weights)
-#: have gone stale for current traffic, not that this fix is failing --
-#: this fix is the *symptom detector* for that drift, not its cure.
+#: "assist"e çözümlenen ama assist adımını gerçekten çalıştırmak yerine
+#: draft/revise'a devredilen her tur (Faz 7, bkz. planning_graph._step_assist)
+#: -- "reason"a göre (``fallback_source``: assist hiç çalışmadan önce
+#: deterministik bir yeniden puanlama bunu yakaladı, çünkü yönlendirme
+#: kararının kendisi arkasında gerçek kanıt olmayan bir yedek kaynaktan
+#: geldi; ``model_tool``: asistan modelinin kendisi tur ortasında
+#: ``request_handoff`` çağırdı) ve taşındığı "target"a göre. Buradaki
+#: yükselen bir oran, füzyon ağırlıklarının (app.ai.policy.router_weights)
+#: mevcut trafik için eskimiş olduğunun bir işaretidir, bu düzeltmenin
+#: başarısız olduğunun değil -- bu düzeltme o sapmanın çaresi değil,
+#: *belirti dedektörü*dür.
 ROUTER_ASSIST_HANDOFFS = Counter(
     "kachow_router_assist_handoffs_total",
     "Turns routed to assist that were handed off to draft/revise instead, by reason and target.",
     ["reason", "target"],
 )
 
-#: How the human approval gate's "revizyon iste" loop (planning_graph
-#: gate_revise_node/route_after_gate) resolves: another round produced (still
-#: within HITL_MAX_GATE_REVISIONS) vs. the round cap was hit and the gate
-#: stopped offering it. Distinguishes "users keep revising and it works" from
-#: "users keep hitting the cap," which call for different responses (better
-#: rewrites vs. a higher cap).
+#: İnsan onay kapısının "revizyon iste" döngüsünün (planning_graph
+#: gate_revise_node/route_after_gate) nasıl sonuçlandığı: başka bir tur
+#: üretildi (hâlâ HITL_MAX_GATE_REVISIONS içinde) mi yoksa tur sınırına
+#: ulaşıldı ve kapı onu sunmayı bıraktı mı. "Kullanıcılar revize etmeye devam
+#: ediyor ve işe yarıyor" ile "kullanıcılar sınıra takılıp duruyor" ayrımını
+#: yapar; bunlar farklı yanıtlar gerektirir (daha iyi yeniden yazımlar mı
+#: yoksa daha yüksek bir sınır mı).
 GATE_REVISIONS = Counter(
     "kachow_gate_revisions_total",
     "Human approval gate revision rounds, by outcome.",
     ["outcome"],
 )
 
-#: Findings from app.ai.revision.conflict -- a user's revision instruction
-#: applied despite contradicting the retrieved mevzuat or the source
-#: document. Every finding is applied anyway and only forces a human gate
-#: (see ConflictReport.applied_anyway); this metric is what makes "how often
-#: does that actually happen, and of what kind" visible instead of only
-#: showing up as an extra HITL_INTERRUPTS count with no context.
+#: app.ai.revision.conflict'ten gelen bulgular -- alınan mevzuatla veya
+#: kaynak dokümanla çelişmesine rağmen uygulanan bir kullanıcı revizyon
+#: talimatı. Her bulgu yine de uygulanır ve yalnızca bir insan kapısını
+#: zorlar (bkz. ConflictReport.applied_anyway); bu metrik, "bu gerçekte ne
+#: sıklıkla ve hangi türde oluyor" sorusunu, bağlamsız fazladan bir
+#: HITL_INTERRUPTS sayısı olarak görünmek yerine görünür kılar.
 REVISION_CONFLICTS = Counter(
     "kachow_revision_conflicts_total",
     "Instruction-vs-mevzuat/source conflicts detected during a revision, by kind, severity and source.",
     ["kind", "severity", "source"],
 )
 
-#: Whether a revision's conditional legislation re-retrieval
-#: (app.ai.revision.retrieval.maybe_extend_context) actually ran, by outcome
-#: -- most revisions should skip (pure tone/length edits), so a rising
-#: "extended" share tracks how often users ask revisions to introduce new
-#: normative content, and "failed" tracks retriever health independent of
-#: the draft's own quality gate.
+#: Bir revizyonun koşullu mevzuat yeniden getirmesinin
+#: (app.ai.revision.retrieval.maybe_extend_context) sonuca göre gerçekten
+#: çalışıp çalışmadığı -- çoğu revizyonun atlaması gerekir (saf ton/uzunluk
+#: düzenlemeleri), bu yüzden yükselen bir "extended" payı, kullanıcıların
+#: revizyonlarla yeni normatif içerik getirmesini ne sıklıkla istediğini
+#: izler, "failed" ise getiricinin sağlığını taslağın kendi kalite kapısından
+#: bağımsız olarak izler.
 REVISION_RETRIEVAL = Counter(
     "kachow_revision_retrieval_total",
     "Revision-time conditional legislation re-retrieval outcomes.",
     ["decision"],
 )
 
-#: The parameter set the deterministic decisions above were produced under.
-#: Without it a shift in DRAFT_SCORE or CLAIM_MATCH is ambiguous between "the
-#: traffic changed" and "we moved a threshold" -- and those call for opposite
-#: responses. An Info rather than a label so it costs no cardinality.
+#: Yukarıdaki deterministik kararların üretildiği parametre kümesi. Bu
+#: olmadan DRAFT_SCORE veya CLAIM_MATCH'teki bir kayma, "trafik değişti" ile
+#: "bir eşiği taşıdık" arasında belirsizdir -- ve bunlar birbirine zıt
+#: yanıtlar gerektirir. Kardinalite maliyeti olmasın diye bir etiket yerine
+#: Info kullanılır.
 POLICY_INFO = Info(
     "kachow_decision_policy",
     "Active version of the deterministic decision layer's parameter set.",
@@ -264,26 +273,28 @@ POLICY_INFO.info({"version": POLICY_VERSION})
 
 
 def router_semantic_available() -> bool:
-    """Read ``ROUTER_SEMANTIC_AVAILABLE`` back, for the ``/system/health?deep`` probe.
+    """``/system/health?deep`` probu için ``ROUTER_SEMANTIC_AVAILABLE``'ı geri oku.
 
-    ``prometheus_client`` gauges have no public getter; ``_value`` is the
-    documented escape hatch other instrumentation code uses for exactly this
-    "read my own gauge back" case, rather than tracking the state twice.
+    ``prometheus_client`` gauge'larının herkese açık bir getter'ı yoktur;
+    ``_value``, durumu iki kez izlemek yerine diğer enstrümantasyon kodunun
+    tam olarak bu "kendi gauge'umu geri oku" durumu için kullandığı
+    belgelenmiş kaçış yoludur.
     """
     return bool(ROUTER_SEMANTIC_AVAILABLE._value.get())
 
 
 def init_ai_metrics() -> None:
-    """Force this module's import so its collectors register with Prometheus.
+    """Toplayıcılarının Prometheus'a kaydolması için bu modülün import
+    edilmesini zorla.
 
-    ``Counter``/``Histogram`` register themselves with the default registry
-    at definition time; this function exists only so ``main.py`` has an
-    explicit, greppable call site symmetric with ``init_metrics(app)``,
-    rather than relying on an import for its side effect.
+    ``Counter``/``Histogram`` tanımlanma anında kendilerini varsayılan
+    registry'ye kaydeder; bu fonksiyon yalnızca ``main.py``'nin bir import'un
+    yan etkisine güvenmek yerine ``init_metrics(app)`` ile simetrik, açık ve
+    grep'lenebilir bir çağrı noktasına sahip olması için var.
 
-    Also sets ``NODE_BUDGET_SECONDS`` from the active policy -- unlike the
-    Counters/Histograms above, a Gauge has no "definition-time" value to
-    register; it has to be set explicitly, once, here.
+    Ayrıca ``NODE_BUDGET_SECONDS``'ı aktif politikadan ayarlar -- yukarıdaki
+    Counter/Histogram'ların aksine bir Gauge'un kaydedilecek "tanım anı"
+    değeri yoktur; burada açıkça, bir kez ayarlanması gerekir.
     """
     for node, seconds in get_policy().budget.node_seconds.items():
         NODE_BUDGET_SECONDS.labels(node=node).set(seconds)

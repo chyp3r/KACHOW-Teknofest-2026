@@ -1,21 +1,21 @@
-"""Renders a ``CompanyAdapter`` into a prompt block.
+"""Bir ``CompanyAdapter``'ı bir prompt bloğuna render eder.
 
-Mirrors ``app.ai.workflows.draft_graph._format_style_examples`` on purpose
--- same "return '' rather than an empty header" rule (a header with nothing
-under it reads to the model as a missing-context signal, not as "nothing
-this time"), same "style/format only, never a source of fact" boundary
-language, same real-example leak-check story. That function was already the
-established, working pattern for "extra per-turn context that must never
-be mistaken for the brief"; this reuses it rather than inventing a second
-convention.
+Bilinçli olarak ``app.ai.workflows.draft_graph._format_style_examples``'i
+yansıtır -- aynı "boş bir başlık yerine '' döndür" kuralı (altında hiçbir
+şey olmayan bir başlık, modele "bu seferlik hiçbir şey yok" değil, eksik
+bağlam sinyali olarak okunur), aynı "yalnızca üslup/biçim, asla gerçek
+kaynağı değil" sınır dili, aynı gerçek-örnek sızıntı-kontrolü hikayesi. O
+fonksiyon "brief ile asla karıştırılmaması gereken tur başına ek bağlam"
+için zaten yerleşik, çalışan bir desendi; bu, ikinci bir kural icat etmek
+yerine onu yeniden kullanır.
 """
 
 from app.ai.adapters.company_adapter import CompanyAdapter
 from app.ai.adapters.company_rules import CompanyRuleSet
 
-#: Prefixed onto the whole block so a reader (human or model) sees at a
-#: glance which company's preferences these are, without needing to cross-
-#: reference the brief.
+#: Tüm bloğun başına eklenir, böylece bir okuyucu (insan veya model) brief'e
+#: çapraz referans vermeye gerek kalmadan bunların hangi şirketin
+#: tercihleri olduğunu bir bakışta görür.
 _BOUNDARY_NOTE = (
     "Bu bölümdeki hiçbir kural veya örnek, brief'te bulunmayan bir kurum adı, "
     "kişi, tarih, sayı veya mevzuat maddesi eklemek için gerekçe olamaz -- "

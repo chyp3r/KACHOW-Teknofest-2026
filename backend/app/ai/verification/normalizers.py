@@ -1,32 +1,34 @@
-"""Type-aware canonical forms for the values a draft can be checked against.
+"""Bir taslağın karşılaştırıldığı değerler için tür-duyarlı kanonik biçimler.
 
-``draft_verifier`` decides whether a concrete claim in a draft is grounded by
-folding both sides to lowercase ASCII and asking whether one contains the other.
-That works for text and fails for *typed* values, because two spellings of the
-same fact fold to different strings:
+``draft_verifier``, taslaktaki somut bir iddianın dayanaklı olup olmadığına,
+her iki tarafı da küçük harf ASCII'ye katlayıp birinin diğerini içerip
+içermediğini sorarak karar verir. Bu, metin için işe yarar ama *tipli*
+değerler için başarısız olur, çünkü aynı gerçeğin iki farklı yazılışı
+farklı dizelere katlanır:
 
     kaynak: "01.03.2026"      taslak: "1 Mart 2026"
     kaynak: "Madde 11"        taslak: "m. 11"
     kaynak: "125.000,00 TL"   taslak: "125.000 TL"
     kaynak: "E-44444444-841-77"  taslak: "E-44444444/841/77"
 
-The measured baseline (``evaluation/reports/all-baseline.md``) shows this is not
-a hypothetical: every false positive the deterministic draft gate produces is
-one of these, and each one costs a correct draft a human-in-the-loop
-interruption. The token-overlap fallback cannot rescue them either -- "12 Mart
-2026" against "12 03 2026" shares only the year once short tokens are dropped,
-which is 0.5 overlap against a 0.75 threshold.
+Ölçülen temel çizgi (``evaluation/reports/all-baseline.md``) bunun varsayımsal
+olmadığını gösteriyor: deterministik taslak kapısının ürettiği her yanlış
+pozitif bunlardan biri ve her biri doğru bir taslağa bir insan-döngüde
+kesintiye mal oluyor. Token-örtüşme yedek yöntemi de bunları kurtaramaz --
+"12 Mart 2026", kısa tokenlar atıldıktan sonra "12 03 2026" ile sadece yılı
+paylaşır, bu da 0.75 eşiğine karşı 0.5 örtüşmedir.
 
-So each type gets a canonical form and values are compared on it. This is
-*lossless normalisation, not fuzzy matching*: a canonical form changes how a
-value is written, never what it means. Two different dates must never collapse
-onto one canonical string, which is why the month table is exact and an
-unparseable value returns None (fall back to the textual comparison) rather than
-a best guess.
+Bu yüzden her tür bir kanonik biçim alır ve değerler bu biçim üzerinden
+karşılaştırılır. Bu *kayıpsız normalleştirmedir, bulanık eşleştirme değil*:
+kanonik bir biçim bir değerin nasıl yazıldığını değiştirir, asla ne anlama
+geldiğini değiştirmez. İki farklı tarih asla tek bir kanonik dizeye
+çökmemelidir; ay tablosunun tam (exact) olmasının ve ayrıştırılamayan bir
+değerin en iyi tahmin yerine None döndürmesinin (metinsel karşılaştırmaya
+geri dönmek için) nedeni budur.
 
-Deliberately excluded: anything semantic. Numbers, dates and amounts need
-equality, not similarity -- "12.03.2026" and "13.03.2026" are one character
-apart and mean entirely different things.
+Kasıtlı olarak dışlanan: anlamsal herhangi bir şey. Sayılar, tarihler ve
+tutarlar eşitlik gerektirir, benzerlik değil -- "12.03.2026" ve
+"13.03.2026" bir karakter farklıdır ve tamamen farklı şeyler ifade eder.
 """
 
 import re
@@ -41,7 +43,7 @@ __all__ = [
     "canonical_for_kind",
 ]
 
-#: Turkish month names as the regulation writes them, folded to ASCII.
+#: Mevzuatın yazdığı şekliyle Türkçe ay adları, ASCII'ye katlanmış.
 _MONTHS: dict[str, int] = {
     "ocak": 1,
     "subat": 2,
@@ -65,21 +67,22 @@ _TURKISH_MAP = str.maketrans(
 )
 
 _NUMERIC_DATE = re.compile(r"^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$")
-#: ISO 8601 ("2026-04-09") -- a source document's own extracted text (a PDF's
-#: literal "Dates: 2026-04-09 to 2026-05-06", say) uses this shape as often as
-#: the Turkish DD.MM.YYYY one _NUMERIC_DATE handles. Checked before it: a
-#: leading 4-digit group can never match _NUMERIC_DATE's first (1-2 digit) day
-#: group, so the two patterns never contend for the same input, but ordering
-#: this one first keeps the "most specific first" reading intact.
+#: ISO 8601 ("2026-04-09") -- bir kaynak belgenin kendi çıkarılmış metni
+#: (örneğin bir PDF'in tam olarak "Dates: 2026-04-09 to 2026-05-06" yazması),
+#: _NUMERIC_DATE'in ele aldığı Türkçe GG.AA.YYYY biçimi kadar sık bu biçimi
+#: kullanır. Ondan önce kontrol edilir: baştaki 4 haneli bir grup asla
+#: _NUMERIC_DATE'in ilk (1-2 haneli) gün grubuyla eşleşemez, yani iki kalıp
+#: hiçbir zaman aynı girdi için yarışmaz, ama bunu önce sıralamak "en özgülü
+#: önce" okumasını korur.
 _ISO_DATE = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
 _TEXTUAL_DATE = re.compile(r"^(\d{1,2})\s+([a-z]+)\s+(\d{4})$")
 
-#: "4982 sayılı" -> the law's number.
+#: "4982 sayılı" -> kanunun numarası.
 _LAW_NUMBER = re.compile(r"^(\d{3,5})\s+sayili$")
-#: "madde 12" / "m. 7" / "m.7" -> the article number.
+#: "madde 12" / "m. 7" / "m.7" -> madde numarası.
 _ARTICLE = re.compile(r"^(?:madde|m)\s*\.?\s*(\d+)$")
 
-#: A currency written in any of the forms the corpus uses.
+#: Korpüsün kullandığı biçimlerin herhangi birinde yazılmış bir para birimi.
 _CURRENCY_ALIASES = {
     "tl": "TRY",
     "try": "TRY",
@@ -91,14 +94,14 @@ _CURRENCY_ALIASES = {
 }
 _AMOUNT = re.compile(r"^([\d.,\s]+?)\s*(tl|try|lira|euro|eur|usd|dolar)$")
 
-#: Currency symbols are dropped outright by the ASCII fold, so they are spelled
-#: out before folding rather than listed in the alternation above -- where they
-#: could never match.
+#: Para birimi sembolleri ASCII katlaması tarafından doğrudan atılır, bu
+#: yüzden yukarıdaki alternasyonda listelenmek yerine -- ki orada asla
+#: eşleşemezlerdi -- katlamadan önce yazıyla ifade edilirler.
 _CURRENCY_SYMBOLS = {"₺": " tl", "€": " eur", "$": " usd"}
 
 
 def _fold(text: str) -> str:
-    """Fold to lowercase ASCII with whitespace collapsed, keeping punctuation."""
+    """Noktalama işaretlerini koruyarak, boşlukları sıkıştırıp küçük harf ASCII'ye katla."""
     folded = (text or "").translate(_TURKISH_MAP)
     decomposed = unicodedata.normalize("NFKD", folded)
     ascii_text = decomposed.encode("ascii", "ignore").decode("ascii").lower()
@@ -106,19 +109,19 @@ def _fold(text: str) -> str:
 
 
 def canonical_date(value: str) -> Optional[str]:
-    """Render a Turkish date in ISO form.
+    """Bir Türkçe tarihi ISO biçiminde ifade et.
 
-    Handles the formats the regulation, its drafts, and an uploaded
-    document's own extracted text actually use -- ``12.03.2026`` (also with
-    ``/`` or ``-``), ``12 Mart 2026``, and ISO 8601's ``2026-03-12``.
+    Mevzuatın, taslaklarının ve yüklenen bir belgenin kendi çıkarılmış
+    metninin fiilen kullandığı biçimleri ele alır -- ``12.03.2026`` (ayrıca
+    ``/`` veya ``-`` ile), ``12 Mart 2026`` ve ISO 8601'in ``2026-03-12``'si.
 
     Args:
-        value: The date as written.
+        value: Yazıldığı şekliyle tarih.
 
     Returns:
-        ``YYYY-MM-DD``, or None when the value is not a date this understands.
-        None is deliberate: an unrecognised value must fall back to textual
-        comparison rather than be coerced into a wrong canonical form.
+        ``YYYY-MM-DD``, veya değer bunun anladığı bir tarih değilse None.
+        None kasıtlıdır: tanınmayan bir değer yanlış bir kanonik biçime
+        zorlanmak yerine metinsel karşılaştırmaya geri dönmelidir.
     """
     folded = _fold(value)
 
@@ -138,26 +141,27 @@ def canonical_date(value: str) -> Optional[str]:
                 return None
             day, month, year = int(day_text), _MONTHS[month_name], int(year_text)
 
-    # Reject impossible dates rather than normalising them; a draft claiming
-    # "32.13.2026" is a defect the verifier should still surface as ungrounded.
+    # İmkansız tarihleri normalleştirmek yerine reddet; "32.13.2026" iddia
+    # eden bir taslak, doğrulayıcının yine de dayanaksız olarak göstermesi
+    # gereken bir kusurdur.
     if not (1 <= day <= 31 and 1 <= month <= 12):
         return None
     return f"{year:04d}-{month:02d}-{day:02d}"
 
 
 def canonical_document_number(value: str) -> Optional[str]:
-    """Strip separator variation from an official document number.
+    """Resmi bir belge numarasındaki ayraç varyasyonunu kaldır.
 
-    ``E-44444444-841-77``, ``E-44444444/841/77`` and ``E 44444444 841 77`` are
-    the same number written three ways. Only the alphanumeric run is
-    significant.
+    ``E-44444444-841-77``, ``E-44444444/841/77`` ve ``E 44444444 841 77``,
+    aynı numaranın üç farklı yazılışıdır. Sadece alfanümerik dizi
+    önemlidir.
 
     Args:
-        value: The document number as written.
+        value: Yazıldığı şekliyle belge numarası.
 
     Returns:
-        The separator-free form, or None when the value carries no digits (in
-        which case it is not a document number and must not be treated as one).
+        Ayraçsız biçim, veya değer hiç rakam taşımıyorsa None (bu durumda
+        bu bir belge numarası değildir ve öyle muamele görmemelidir).
     """
     folded = _fold(value)
     stripped = re.sub(r"[^a-z0-9]+", "", folded)
@@ -167,18 +171,19 @@ def canonical_document_number(value: str) -> Optional[str]:
 
 
 def canonical_amount(value: str) -> Optional[str]:
-    """Render a monetary amount as a decimal plus an ISO-ish currency code.
+    """Bir parasal tutarı ondalık artı ISO-benzeri bir para birimi kodu
+    olarak ifade et.
 
-    Turkish notation uses ``.`` for thousands and ``,`` for decimals, so
-    ``125.000,00 TL`` and ``125.000 TL`` and ``125000 TL`` are the same amount.
-    Trailing zero decimals are dropped so the first two compare equal.
+    Türkçe gösterim binler için ``.``, ondalıklar için ``,`` kullanır, bu
+    yüzden ``125.000,00 TL``, ``125.000 TL`` ve ``125000 TL`` aynı tutardır.
+    Sondaki sıfır ondalıklar atılır, böylece ilk ikisi eşit karşılaştırılır.
 
     Args:
-        value: The amount as written.
+        value: Yazıldığı şekliyle tutar.
 
     Returns:
-        ``"<amount> <CURRENCY>"``, or None when the value is not a recognised
-        amount.
+        ``"<tutar> <PARA_BİRİMİ>"``, veya değer tanınan bir tutar değilse
+        None.
     """
     spelled = value or ""
     for symbol, word in _CURRENCY_SYMBOLS.items():
@@ -207,18 +212,19 @@ def canonical_amount(value: str) -> Optional[str]:
 
 
 def canonical_legislation(value: str) -> Optional[str]:
-    """Render a legislation citation in one of two canonical shapes.
+    """Bir mevzuat atfını iki kanonik biçimden biriyle ifade et.
 
-    ``4982 sayılı`` becomes ``kanun:4982``; ``madde 11``, ``m. 11`` and ``m.11``
-    all become ``madde:11``. The two are kept as separate namespaces because a
-    law number and an article number are different facts and a draft citing
-    article 4982 of something is not grounded by a source mentioning law 4982.
+    ``4982 sayılı``, ``kanun:4982`` olur; ``madde 11``, ``m. 11`` ve
+    ``m.11`` hepsi ``madde:11`` olur. İkisi ayrı ad alanları olarak
+    tutulur çünkü bir kanun numarası ile bir madde numarası farklı
+    gerçeklerdir ve bir şeyin 4982. maddesine atıf yapan bir taslak, 4982
+    sayılı kanundan bahseden bir kaynakla dayanaklandırılmış olmaz.
 
     Args:
-        value: The citation as written.
+        value: Yazıldığı şekliyle atıf.
 
     Returns:
-        The canonical citation, or None when the value is not one.
+        Kanonik atıf, veya değer bir atıf değilse None.
     """
     folded = _fold(value).rstrip(".")
 
@@ -233,8 +239,9 @@ def canonical_legislation(value: str) -> Optional[str]:
     return None
 
 
-#: Claim kind -> canonicaliser. Keyed by the kind labels ``draft_verifier``
-#: already uses, so the two cannot drift apart silently.
+#: İddia türü -> kanonikleştirici. ``draft_verifier``'ın zaten kullandığı
+#: tür etiketleriyle anahtarlanmıştır, böylece ikisi sessizce birbirinden
+#: sapamaz.
 _BY_KIND = {
     "tarih": canonical_date,
     "sayı": canonical_document_number,
@@ -244,16 +251,16 @@ _BY_KIND = {
 
 
 def canonical_for_kind(kind: str, value: str) -> Optional[str]:
-    """Canonicalise a value according to its claim kind.
+    """Bir değeri iddia türüne göre kanonikleştir.
 
     Args:
-        kind: The claim kind (``tarih``, ``sayı``, ``tutar``, ``mevzuat``).
-        value: The value as written.
+        kind: İddia türü (``tarih``, ``sayı``, ``tutar``, ``mevzuat``).
+        value: Yazıldığı şekliyle değer.
 
     Returns:
-        The canonical form, or None when the kind has no canonicaliser (notably
-        ``kurum``, where names are compared textually) or the value does not
-        parse.
+        Kanonik biçim, veya türün bir kanonikleştiricisi yoksa (özellikle
+        adların metinsel olarak karşılaştırıldığı ``kurum``) ya da değer
+        ayrıştırılamıyorsa None.
     """
     canonicalise = _BY_KIND.get(kind)
     return canonicalise(value) if canonicalise else None

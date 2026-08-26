@@ -1,18 +1,19 @@
 """LoRA/PEFT fine-tuning -- Faz C3, Aşama 3 (#191).
 
-Lazily imports `torch`/`datasets`/`peft`/`transformers`/`trl`: those only
-ship in the training worker's image (`requirements-training.txt`), never
-the main backend's. Importing this module (e.g. transitively, since
-`app.workers.training` is the only real caller) must never fail just
-because those packages are absent from a process that never calls the
-functions below -- only actually calling `train_lora_sft`/`train_lora_dpo`
-without them installed raises a clear `RuntimeError`. Every name that would
-normally come from those imports is still bound (to `None`) when the
-import fails, so tests can monkeypatch them without the packages present.
+`torch`/`datasets`/`peft`/`transformers`/`trl` tembel (lazy) olarak import
+edilir: bunlar yalnızca training worker'ın image'ında bulunur
+(`requirements-training.txt`), asla ana backend'de değil. Bu modülü import
+etmek (ör. dolaylı olarak, çünkü tek gerçek çağıran `app.workers.training`)
+aşağıdaki fonksiyonları hiç çağırmayan bir süreçte sadece bu paketler
+bulunmuyor diye asla başarısız olmamalıdır -- yalnızca `train_lora_sft`/
+`train_lora_dpo`'yu bunlar kurulu olmadan gerçekten çağırmak net bir
+`RuntimeError` fırlatır. Import başarısız olduğunda normalde bu import'lardan
+gelecek her isim yine de (`None`'a) bağlanır, böylece testler paketler
+mevcut olmadan bunları monkeypatch edebilir.
 
-No `app.domains` import here either, same rule `app.ai.training.dataset`
-documents: `app.workers.training` resolves `PreferencePair`s from the DB
-and hands them in as plain data.
+`app.ai.training.dataset`'in belgelediği aynı kural gereği burada da
+`app.domains` import'u yok: `app.workers.training`, `PreferencePair`ları
+DB'den çözümler ve bu modüle düz veri olarak aktarır.
 """
 
 import json
@@ -88,9 +89,10 @@ class LoraTrainingResult:
 
 
 def sft_examples_from_pairs(pairs: List[PreferencePair]) -> List[SftExample]:
-    """Only the accepted side of a pair is an SFT target -- see
-    `PreferencePair`'s docstring for why a pair is single-wing (a
-    rejected-only row has no completion worth imitating)."""
+    """Bir çiftin yalnızca kabul edilen tarafı bir SFT hedefidir -- bir
+    çiftin neden tek kanatlı olduğu için `PreferencePair`'ın docstring'ine
+    bakın (yalnızca reddedilen bir satırda taklit edilmeye değer bir
+    completion yoktur)."""
     return [
         SftExample(prompt=pair.prompt_context, completion=pair.chosen)
         for pair in pairs
@@ -99,11 +101,11 @@ def sft_examples_from_pairs(pairs: List[PreferencePair]) -> List[SftExample]:
 
 
 def dpo_examples_from_pairs(pairs: List[PreferencePair]) -> List[DpoExample]:
-    """DPO needs *both* sides of a pair -- today's only compiled source
-    (explicit_feedback, Aşama 2) is single-wing by construction, so this is
-    typically empty until a second, genuinely paired signal source (the
-    plan's HITL reject->accept chain, still deferred -- see
-    `TrainingSampleModel`'s docstring) is compiled alongside it."""
+    """DPO bir çiftin *her iki* tarafına da ihtiyaç duyar -- bugün derlenen
+    tek kaynak (explicit_feedback, Aşama 2) yapısı gereği tek kanatlıdır,
+    bu yüzden ikinci, gerçekten çiftlenmiş bir sinyal kaynağı (planın HITL
+    reject->accept zinciri, hâlâ ertelenmiş -- bkz. `TrainingSampleModel`'in
+    docstring'i) onunla birlikte derlenene kadar bu genelde boştur."""
     return [
         DpoExample(prompt=pair.prompt_context, chosen=pair.chosen, rejected=pair.rejected)
         for pair in pairs
@@ -154,11 +156,12 @@ def _lora_config(config: LoraTrainingConfig) -> "LoraConfig":
 
 
 def train_lora_sft(sft_jsonl_path: str, config: LoraTrainingConfig) -> LoraTrainingResult:
-    """Supervised fine-tune a fresh LoRA adapter on `chosen` completions.
+    """`chosen` completion'ları üzerinde yepyeni bir LoRA adaptörünü
+    supervised fine-tune eder.
 
     Raises:
-        RuntimeError: If the training worker's own ML dependencies aren't
-            installed in this process (see the module docstring).
+        RuntimeError: Training worker'ın kendi ML bağımlılıkları bu
+            süreçte kurulu değilse (bkz. modül docstring'i).
     """
     _require_training_libs()
     dataset = Dataset.from_json(sft_jsonl_path)
@@ -203,15 +206,16 @@ def train_lora_dpo(
     *,
     sft_adapter_dir: Optional[str] = None,
 ) -> LoraTrainingResult:
-    """Preference-optimize a LoRA adapter on `chosen`/`rejected` pairs.
+    """`chosen`/`rejected` çiftleri üzerinde bir LoRA adaptörünü tercih
+    (preference) optimizasyonundan geçirir.
 
-    If `sft_adapter_dir` is given, DPO continues training *on top of* that
-    already-SFT'd adapter (the plan's two-stage `lora_sft` then `lora_dpo`
-    pipeline); otherwise it starts a fresh adapter directly from the base
-    model.
+    `sft_adapter_dir` verilirse, DPO eğitime zaten SFT'lenmiş o adaptörün
+    *üzerine* devam eder (planın iki aşamalı `lora_sft` sonra `lora_dpo`
+    pipeline'ı); aksi halde base model'den doğrudan yepyeni bir adaptörle
+    başlar.
 
     Raises:
-        RuntimeError: See `train_lora_sft`.
+        RuntimeError: Bkz. `train_lora_sft`.
     """
     _require_training_libs()
     dataset = Dataset.from_json(dpo_jsonl_path)
@@ -250,9 +254,9 @@ def train_lora_dpo(
 
 
 def write_ollama_modelfile(adapter_dir: str, base_model: str, output_path: str) -> str:
-    """`FROM {base_model}` + `ADAPTER {adapter_dir}` -- the two lines
-    `ollama create kachow-{slug}:v{n} -f {output_path}` needs to publish
-    the adapter as a runnable Ollama model."""
+    """`FROM {base_model}` + `ADAPTER {adapter_dir}` -- adaptörü çalıştırılabilir
+    bir Ollama modeli olarak yayımlamak için `ollama create
+    kachow-{slug}:v{n} -f {output_path}`'in ihtiyaç duyduğu iki satır."""
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     Path(output_path).write_text(f"FROM {base_model}\nADAPTER {adapter_dir}\n", encoding="utf-8")
     return output_path

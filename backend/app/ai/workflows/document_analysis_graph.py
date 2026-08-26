@@ -45,56 +45,60 @@ from app.core.enums.sensitivity_level import SensitivityLevel
 
 logger = logging.getLogger(__name__)
 
-#: Header fields sit on the first page and the imza/ek block at the very end;
-#: the middle body matters for the summary, not for field extraction.
+#: Başlık alanları ilk sayfada ve imza/ek bloğu en sonda yer alır;
+#: aradaki gövde metni özet için önemlidir, alan çıkarımı için değil.
 HEAD_CHAR_BUDGET = 6000
 TAIL_CHAR_BUDGET = 1500
 MEVZUAT_RESULT_LIMIT = 3
 
-#: The merged classify+extract call emits a nested object with a dozen fields.
+#: Birleşik sınıflandır+çıkar çağrısı, bir düzine alan içeren iç içe bir nesne üretir.
 ANALYSIS_MAX_TOKENS = 1536
 
-#: Share of the suggest_mevzuat budget the model call may use, leaving the rest
-#: for the node's own degradation path. Without this the node's timeout fires
-#: outside its try/except -- where its fallback cannot reach it -- and the whole
-#: analysis fails over the optional half of requirement 5.
+#: suggest_mevzuat bütçesinden model çağrısının kullanabileceği pay; kalanı
+#: düğümün kendi düşüş (degradation) yoluna bırakılır. Bu olmadan düğümün
+#: zaman aşımı try/except bloğunun dışında tetiklenir -- burada fallback ona
+#: erişemez -- ve tüm analiz, 5. gereksinimin isteğe bağlı yarısı yüzünden
+#: başarısız olur.
 SUGGESTION_BUDGET_SHARE = 0.85
 
-#: Generation cap for the suggestion node. Its output is a handful of one-sentence
-#: justifications, so the 1024-token default buys the model room it does not use
-#: -- but 384 is too tight against real retrieved excerpts and was measured
-#: costing more than it saves: qwen3.5:9b truncated mid-JSON, failed to parse,
-#: retried, failed again, and the run fell through to the raw-citation fallback
-#: after 2x the model's own generation time. That failure only showed up end to
-#: end, not in the isolated call that first picked 384 -- worth remembering
-#: before trusting an isolated timing again.
+#: Öneri düğümü için üretim üst sınırı. Çıktısı bir avuç tek cümlelik
+#: gerekçeden ibarettir, dolayısıyla 1024 token'lık varsayılan modele
+#: kullanmayacağı bir alan sağlar -- ama 384, gerçek alıntılara karşı çok
+#: dardır ve kazandırdığından fazlasına mal olduğu ölçüldü: qwen3.5:9b
+#: JSON'un ortasında kesildi, ayrıştırma başarısız oldu, yeniden denendi,
+#: yine başarısız oldu ve çalışma, modelin kendi üretim süresinin 2 katı
+#: sonra ham alıntı (raw-citation) fallback'ine düştü. Bu başarısızlık
+#: yalnızca uçtan uca ortaya çıktı, 384'ü ilk seçen izole çağrıda değil --
+#: izole bir zamanlamaya tekrar güvenmeden önce hatırlanmaya değer.
 #:
-#: 512 was measured against six document/missing-field combinations, two
-#: repeats each: 6/6 succeeded on the first attempt, no retries. Confirmed
-#: through the live endpoint against a single verified server process: three
-#: consecutive uploads of the same document at 49-51s each (was 65-85s
-#: uncapped), the ComplianceAgent call itself down to ~25s from ~35s, and the
-#: deterministic core (type, compliance status, missing fields) identical
-#: across all three. Lowering MEVZUAT_RESULT_LIMIT was measured too and
-#: rejected: it saves ~2s and *changes* the answer, which is not the same kind
-#: of win as a cap that reproduces the uncapped text.
+#: 512 değeri altı belge/eksik-alan kombinasyonuna karşı, her biri iki kez
+#: tekrarlanarak ölçüldü: 6/6 ilk denemede başarılı oldu, yeniden deneme
+#: olmadı. Tek bir doğrulanmış sunucu sürecine karşı canlı uç nokta
+#: üzerinden doğrulandı: aynı belgenin art arda üç yüklemesi her biri
+#: 49-51s sürdü (sınırsızken 65-85s idi), ComplianceAgent çağrısının
+#: kendisi ~35s'den ~25s'ye düştü ve deterministik çekirdek (tür, uyum
+#: durumu, eksik alanlar) üçünde de aynıydı. MEVZUAT_RESULT_LIMIT'i
+#: düşürmek de ölçüldü ve reddedildi: ~2s kazandırıyor ama cevabı
+#: *değiştiriyor*; bu, sınırsız metni yeniden üreten bir üst sınırla aynı
+#: türden bir kazanç değil.
 SUGGESTION_MAX_TOKENS = 512
 
 
 class DocumentAnalysisState(TypedDict, total=False):
-    """LangGraph state for the incoming-document (evrak) analysis workflow."""
+    """Gelen evrak (evrak) analizi iş akışı için LangGraph durumu."""
 
     input_text: str
     is_ocr_text: bool
-    # Signature/stamp/handwriting regions already detected during extraction
-    # (app.infrastructure.extractors.marks.detect_marks), threaded straight
-    # through the same way is_ocr_text is -- detection runs once, against the
-    # rasterised page, before this graph starts, and check_compliance_node
-    # below is the only node that reads it. Deliberately not a separate graph
-    # branch/node (the shape scan_sensitivity_node uses): that pattern fans
-    # to END independently and check_compliance_node cannot see its output
-    # within the same run, but check_compliance_node specifically needs this
-    # to decide whether a document reads as signed.
+    # İmza/kaşe/el yazısı bölgeleri çıkarım sırasında zaten tespit edilmiştir
+    # (app.infrastructure.extractors.marks.detect_marks); is_ocr_text ile aynı
+    # şekilde doğrudan aktarılır -- tespit, bu graf başlamadan önce
+    # rasterize edilmiş sayfaya karşı bir kez çalışır ve aşağıdaki
+    # check_compliance_node bunu okuyan tek düğümdür. Bilinçli olarak ayrı
+    # bir graf dalı/düğümü değildir (scan_sensitivity_node'un kullandığı
+    # biçim): o örüntü bağımsız olarak END'e dallanır ve check_compliance_node
+    # aynı çalışma içinde onun çıktısını göremez, ama check_compliance_node
+    # bir belgenin imzalı okunup okunmadığına karar vermek için özellikle buna
+    # ihtiyaç duyar.
     detected_marks: list[dict[str, Any]]
     document_type: str
     document_type_label: str
@@ -109,9 +113,9 @@ class DocumentAnalysisState(TypedDict, total=False):
     sensitivity_assessment: dict[str, Any]
 
 
-#: Type and summary only. Used as the fallback when the merged schema fails.
+#: Yalnızca tür ve özet. Birleşik şema başarısız olduğunda fallback olarak kullanılır.
 class DocumentClassificationOutput(BaseModel):
-    """Structured type and summary of an incoming official document."""
+    """Gelen resmî bir evrakın yapılandırılmış tür ve özet bilgisi."""
 
     document_type: DocumentType = Field(
         description=(
@@ -128,23 +132,25 @@ class DocumentClassificationOutput(BaseModel):
 
 
 def _build_merged_output_model() -> type[BaseModel]:
-    """Build the combined analysis schema as a *flat* model.
+    """Birleşik analiz şemasını *düz (flat)* bir model olarak oluştur.
 
-    Classification and field extraction used to be two model calls over the same
-    text, reading the same evidence, so the second re-ingested a prompt the first
-    had already paid for. Merging them halves the analysis leg.
+    Sınıflandırma ve alan çıkarımı eskiden aynı metin üzerinde, aynı kanıtı
+    okuyan iki ayrı model çağrısıydı; bu yüzden ikincisi, birincisinin zaten
+    ödediği bir prompt'u yeniden işliyordu. Bunları birleştirmek analiz
+    aşamasının maliyetini yarıya indirir.
 
-    The merge is generated from :class:`EvrakField` rather than hand-written, and
-    deliberately flattened rather than nesting ``fields: EvrakField``. Local 9B
-    models emit malformed JSON for nested object schemas often enough that the
-    nested version failed validation on both attempts and fell through to the
-    "Evrak özeti çıkarılamadı." path. A flat schema of scalars and string lists
-    is what they reliably produce -- and generating it from ``EvrakField`` keeps
-    a single source of truth for the field definitions.
+    Birleşim, elle yazılmak yerine :class:`EvrakField`'dan üretilir ve
+    bilinçli olarak ``fields: EvrakField`` şeklinde iç içe değil, düzleştirilmiş
+    olarak kurulur. Yerel 9B modeller, iç içe nesne şemaları için yeterince
+    sık bozuk JSON üretiyor; iç içe geçmiş sürüm her iki denemede de
+    doğrulamayı geçemedi ve "Evrak özeti çıkarılamadı." yoluna düştü.
+    Skaler değerler ve string listelerinden oluşan düz bir şema, bu modellerin
+    güvenilir biçimde ürettiği şeydir -- ve bunu ``EvrakField``'dan üretmek,
+    alan tanımları için tek bir doğruluk kaynağı sağlar.
 
     Returns:
-        A Pydantic model with ``document_type``, ``summary`` and every
-        ``EvrakField`` attribute at the top level.
+        En üst düzeyde ``document_type``, ``summary`` ve her ``EvrakField``
+        özniteliğini içeren bir Pydantic modeli.
     """
     definitions: dict[str, Any] = {
         "document_type": (
@@ -163,8 +169,9 @@ def _build_merged_output_model() -> type[BaseModel]:
         ),
     }
     for name, info in EvrakField.model_fields.items():
-        # Deep-copied: FieldInfo instances carry per-model state, and handing
-        # EvrakField's own objects to a second model would have the two share it.
+        # Deepcopy edilir: FieldInfo örnekleri model başına durum taşır; bu
+        # nesneleri doğrudan ikinci bir modele vermek, ikisinin onu paylaşmasına
+        # yol açardı.
         definitions[name] = (info.annotation, deepcopy(info))
 
     return create_model("MergedDocumentAnalysisOutput", **definitions)
@@ -172,12 +179,12 @@ def _build_merged_output_model() -> type[BaseModel]:
 
 DocumentAnalysisOutput = _build_merged_output_model()
 
-#: Keys belonging to EvrakField, used to split the flat model back apart.
+#: EvrakField'a ait anahtarlar; düz modeli tekrar ayırmak için kullanılır.
 EVRAK_FIELD_KEYS = tuple(EvrakField.model_fields)
 
 
 class MevzuatSuggestion(BaseModel):
-    """A single legislation reference relevant to the document."""
+    """Belgeyle ilgili tek bir mevzuat referansı."""
 
     mevzuat: str = Field(
         description="İlgili mevzuatın adı ve varsa madde numarası, alıntıda yazıldığı biçimde."
@@ -188,7 +195,7 @@ class MevzuatSuggestion(BaseModel):
 
 
 class MevzuatSuggestionOutput(BaseModel):
-    """Structured legislation suggestions grounded in retrieved excerpts."""
+    """Getirilen alıntılara dayandırılmış, yapılandırılmış mevzuat önerileri."""
 
     suggestions: list[MevzuatSuggestion] = Field(
         default_factory=list,
@@ -197,14 +204,14 @@ class MevzuatSuggestionOutput(BaseModel):
 
 
 def _trim_for_extraction(text: str) -> str:
-    """Shorten a document so its header and signature block survive truncation.
+    """Bir belgeyi, başlığı ve imza bloğu kısaltmadan sağ çıkacak şekilde kısalt.
 
     Args:
-        text: Full document text.
+        text: Belgenin tam metni.
 
     Returns:
-        The text unchanged when short enough, otherwise head and tail joined by
-        an explicit elision marker.
+        Yeterince kısaysa metin değişmeden döner, aksi halde baş ve son kısımlar
+        açık bir kesinti işareti ile birleştirilerek döner.
     """
     if len(text) <= HEAD_CHAR_BUDGET + TAIL_CHAR_BUDGET:
         return text
@@ -216,28 +223,30 @@ def _trim_for_extraction(text: str) -> str:
 
 
 def _build_mevzuat_query(state: DocumentAnalysisState) -> str:
-    """Compose the legislation search query deterministically.
+    """Mevzuat arama sorgusunu deterministik biçimde oluştur.
 
-    Built from the document-type label, the subject and the type's own legislation
-    vocabulary rather than from a model rewrite: those are literal tokens in the
-    corpus, which is what the BM25 half of the hybrid retriever matches best.
+    Bir model yeniden yazımı yerine belge-türü etiketinden, konudan ve türün
+    kendi mevzuat kelime dağarcığından kurulur: bunlar korpustaki gerçek
+    (literal) token'lardır ve hibrit retriever'ın BM25 yarısının en iyi
+    eşleştirdiği şey de budur.
 
-    The vocabulary is per type (`DOCUMENT_TYPE_QUERY_TERMS`) rather than one fixed
-    string. The fixed version was written when the corpus held a single realistic
-    target, the correspondence regulation, so its terms were harmless in every
-    query. Against the expanded corpus they became a bias: measured over the sample
-    types, the fixed suffix pulled leave requests to the data-protection law and
-    petitions to the civil-service law, while dropping it instead cost the
-    regulation its own document types. Per-type terms are what recovers both.
+    Kelime dağarcığı tek bir sabit string yerine türe göre değişir
+    (`DOCUMENT_TYPE_QUERY_TERMS`). Sabit sürüm, korpus tek bir gerçekçi hedef
+    içerdiğinde -- yazışma yönetmeliği -- yazılmıştı, bu yüzden terimleri her
+    sorguda zararsızdı. Genişletilmiş korpusa karşı bir önyargıya dönüştüler:
+    örnek türler üzerinde ölçüldüğünde, sabit ek izin taleplerini
+    veri koruma kanununa, dilekçeleri ise memurlar kanununa çekiyordu; onu
+    kaldırmak ise yönetmeliğe kendi belge türlerini kaybettiriyordu. Türe özgü
+    terimler her ikisini de düzeltir.
 
-    Deliberately does not depend on the compliance report, so retrieval and
-    compliance checking can run as independent branches.
+    Bilinçli olarak uyum (compliance) raporuna bağlı değildir; böylece
+    getirme (retrieval) ve uyum kontrolü bağımsız dallar olarak çalışabilir.
 
     Args:
-        state: Current workflow state.
+        state: Mevcut iş akışı durumu.
 
     Returns:
-        The search query.
+        Arama sorgusu.
     """
     parts = [state.get("document_type_label") or "resmî yazı"]
 
@@ -256,13 +265,13 @@ def _build_mevzuat_query(state: DocumentAnalysisState) -> str:
 
 
 def _render_mevzuat_excerpts(documents: list[Document]) -> str:
-    """Render retrieved legislation excerpts as prompt/display context.
+    """Getirilen mevzuat alıntılarını prompt/görüntüleme bağlamı olarak render et.
 
     Args:
-        documents: Documents returned by the hybrid retriever.
+        documents: Hibrit retriever'ın döndürdüğü belgeler.
 
     Returns:
-        The excerpts joined into one string, or an empty string when none.
+        Alıntıların tek bir string'de birleştirilmiş hali, hiç yoksa boş string.
     """
     parts: list[str] = []
     for index, document in enumerate(documents, start=1):
@@ -272,24 +281,25 @@ def _render_mevzuat_excerpts(documents: list[Document]) -> str:
 
 
 def _dedupe_suggestions(suggestions: list[dict[str, str]]) -> list[dict[str, str]]:
-    """Drop a second and later suggestion citing the same legislation.
+    """Aynı mevzuata atıf yapan ikinci ve sonraki önerileri at.
 
-    `mevzuat` carries both the law and its article together (e.g. "RYUEHY
-    m.11"), so two suggestions with the same folded `mevzuat` really are
-    the same finding -- a different article of the same law is a distinct
-    string and survives untouched. Retrieval can hand back several excerpts
-    from the same article (`MEVZUAT_RESULT_LIMIT` excerpts, a chunked
-    corpus), and both the model and `_raw_citation_suggestions` (one
-    per excerpt) then reproduce that duplication verbatim, so a user
-    reading `mevzuat_references` sees the same rule listed two or three
-    times. First occurrence wins -- retrieval order is relevance order.
+    `mevzuat`, kanunu ve maddesini birlikte taşır (ör. "RYUEHY m.11"), bu
+    yüzden aynı normalize edilmiş `mevzuat` değerine sahip iki öneri aslında
+    aynı bulgudur -- aynı kanunun farklı bir maddesi ayrı bir string olur ve
+    dokunulmadan kalır. Retrieval, aynı maddeden birden çok alıntı
+    döndürebilir (`MEVZUAT_RESULT_LIMIT` alıntı, parçalanmış (chunked) bir
+    korpus), ve hem model hem de `_raw_citation_suggestions` (alıntı başına
+    bir öneri) bu tekrarı olduğu gibi yeniden üretir; böylece
+    `mevzuat_references`'ı okuyan bir kullanıcı aynı kuralı iki veya üç kez
+    listelenmiş görür. İlk görülen kazanır -- retrieval sırası, alaka
+    sırasıdır.
 
     Args:
-        suggestions: Suggestions in order, each carrying `mevzuat`.
+        suggestions: Her biri bir `mevzuat` taşıyan, sırayla öneriler.
 
     Returns:
-        The same suggestions, in order, with later same-citation entries
-        removed.
+        Aynı öneriler, sırayla, aynı atıfa sahip sonraki girişler
+        kaldırılmış olarak.
     """
     seen: set[str] = set()
     deduped = []
@@ -303,19 +313,18 @@ def _dedupe_suggestions(suggestions: list[dict[str, str]]) -> list[dict[str, str
 
 
 def _raw_citation_suggestions(documents: list[Document]) -> list[dict[str, str]]:
-    """Build one grounded-by-construction suggestion per retrieved excerpt.
+    """Getirilen her alıntı için, yapısı gereği dayanaklı bir öneri oluştur.
 
-    Every citation names a law the excerpt was literally fetched under, so
-    there is nothing here for `citation_support` to ever reject. Used both
-    when the LLM call itself fails (existing degradation path) and when its
-    suggestions come back but every one fails grounding -- either way the
-    requirement is met with the retrieved citations, just without the
-    model's explanation of them.
+    Her atıf, alıntının gerçekten hangi kanun altında getirildiğini adlandırır;
+    bu yüzden `citation_support`'un reddedebileceği hiçbir şey yoktur. Hem
+    LLM çağrısının kendisi başarısız olduğunda (mevcut düşüş yolu) hem de
+    öneriler geldiğinde ama hepsi dayanak (grounding) kontrolünden geçemediğinde
+    kullanılır -- her iki durumda da gereksinim, getirilen atıflarla
+    karşılanır, yalnızca modelin açıklaması olmadan.
 
-    Deduplicated via `_dedupe_suggestions`: `documents` is one entry per
-    retrieved excerpt, and two excerpts from the same article (a chunked
-    corpus routinely returns this) would otherwise produce two identical
-    rows here.
+    `_dedupe_suggestions` ile tekilleştirilir: `documents`, getirilen alıntı
+    başına bir girdidir ve aynı maddeden iki alıntı (parçalanmış bir korpus
+    bunu rutin olarak döndürür) aksi halde burada iki özdeş satır üretirdi.
     """
     return _dedupe_suggestions(
         [
@@ -329,18 +338,19 @@ def _raw_citation_suggestions(documents: list[Document]) -> list[dict[str, str]]
 
 
 def _flatten_fields_for_grounding(fields: dict[str, Any]) -> str:
-    """Render an EvrakField dict as plain text for a groundedness haystack.
+    """Bir EvrakField sözlüğünü, dayanak (groundedness) kontrolü için düz metne çevir.
 
-    `check_groundedness` matches by folded substring and token overlap, so a
-    faithful reconstruction of every value's exact string form is
-    unnecessary -- `str()` on a list value still leaves each item's words
-    inside the rendered text, which is all a substring/overlap match needs.
+    `check_groundedness` normalize edilmiş alt dizi (substring) ve token
+    örtüşmesiyle eşleştirir; bu yüzden her değerin tam string biçiminin
+    sadakatle yeniden kurulmasına gerek yoktur -- bir liste değeri üzerinde
+    `str()` bile her öğenin kelimelerini render edilen metnin içinde bırakır,
+    ki bir alt dizi/örtüşme eşleşmesinin ihtiyacı olan da budur.
 
     Args:
-        fields: The document's own extracted `EvrakField` values.
+        fields: Belgenin kendi çıkarılmış `EvrakField` değerleri.
 
     Returns:
-        Every non-empty value space-joined into one string.
+        Boş olmayan her değerin boşlukla birleştirilmiş hali, tek bir string.
     """
     return " ".join(str(value) for value in fields.values() if value)
 
@@ -352,56 +362,59 @@ def create_document_analysis_graph(
     fast_llm_client: Optional[BaseLLMClient] = None,
     guard_llm_client: Optional[BaseLLMClient] = None,
 ):
-    """Create and compile the incoming-document analysis workflow.
+    """Gelen evrak analizi iş akışını oluştur ve derle.
 
-    Flow::
+    Akış::
 
         START -> analyze -+-> check_compliance -+-> suggest_mevzuat -> END
                           |-> retrieve_mevzuat -/
                           \\-> scan_sensitivity -----------------------> END
 
-    Compliance checking is pure computation and legislation retrieval is network
-    I/O, so they run as concurrent branches. They write disjoint state keys,
-    which is what makes the fan-out safe without custom reducers.
-    Sensitivity scanning is also pure computation (deterministic PII/marking
-    detection, no LLM call) and writes its own disjoint key
-    (``sensitivity_assessment``); it fans straight to END rather than into
-    ``suggest_mevzuat`` because nothing downstream in this sub-graph needs to
-    block on it, and LangGraph merges every branch's output into the same
-    final state regardless of which edge reaches END.
+    Uyum kontrolü saf hesaplamadır, mevzuat getirme ise ağ G/Ç'sidir; bu
+    yüzden eş zamanlı dallar olarak çalışırlar. Ayrık durum anahtarları
+    yazarlar, ki fan-out'u özel reducer'lar olmadan güvenli kılan da budur.
+    Hassasiyet taraması da saf hesaplamadır (deterministik KVK/işaretleme
+    tespiti, LLM çağrısı yok) ve kendi ayrık anahtarını yazar
+    (``sensitivity_assessment``); ``suggest_mevzuat``'a değil doğrudan END'e
+    dallanır çünkü bu alt-grafta hiçbir aşağı akış düğümü onu bekleyecek
+    şekilde bloke olmaya ihtiyaç duymaz ve LangGraph, hangi kenarın END'e
+    ulaştığından bağımsız olarak her dalın çıktısını aynı nihai durumda
+    birleştirir.
 
-    A detailed, unbounded-length summary is deliberately **not** produced
-    here. It used to run as a fifth branch (``summarize``), but measured
-    directly it was the slowest thing in this graph by a wide margin
-    (184-288s against every other branch's <100s), and ``ainvoke`` cannot
-    return until every branch finishes -- so every upload paid that cost
-    whether or not anyone ever read the result. It is now on-demand: see
-    ``app.ai.summarization.build_detailed_summary`` and
-    ``DocumentService.generate_detailed_summary``, triggered by its own
-    endpoint against the already-cached extraction, not by this graph.
+    Detaylı, sınırsız uzunlukta bir özet burada bilinçli olarak
+    **üretilmez**. Eskiden beşinci bir dal olarak (``summarize``)
+    çalışıyordu, ama doğrudan ölçüldüğünde bu grafta açık farkla en yavaş
+    şeydi (diğer her dalın <100s'sine karşı 184-288s) ve ``ainvoke``, her dal
+    bitmeden dönemez -- yani sonucu kimse okumasa bile her yükleme bu
+    maliyeti ödüyordu. Artık talep üzerine çalışır: bkz.
+    ``app.ai.summarization.build_detailed_summary`` ve
+    ``DocumentService.generate_detailed_summary``; bu grafın değil, zaten
+    önbelleğe alınmış çıkarıma karşı kendi endpoint'i tarafından tetiklenir.
 
     Args:
-        llm_client: The LLM used for document analysis.
-        mevzuat_retriever: Optional legislation retriever -- a HybridRetriever
-            (local corpus) or a FallbackMevzuatRetriever (MCP-first with local
-            fallback, see app.ai.retrieval.mcp_mevzuat); anything exposing
-            ``async retrieve(query, limit) -> list[Document]`` works. When
-            omitted, the two legislation nodes degrade to no-ops and the rest
-            still runs.
-        reasoning_llm_client: Optional separate client for the legislation
-            suggestion step. Defaults to ``llm_client``.
-        fast_llm_client: Optional fast-tier client. When the quality tier fails
-            both the merged and classification-only structured calls, one more
-            attempt runs on the fast tier before dropping to
-            ``DocumentType.OTHER`` -- a third, cheap rung under the existing
-            two-tier degradation ladder, only paid on the failure path.
-        guard_llm_client: Optional client for the guardrail judge. Defaults to
-            ``fast_llm_client or llm_client`` -- pass
-            ``app.ai.llms.get_guard_llm_client()`` to route to Evren's
-            dedicated ``guard`` model instead of the general fast-tier model.
+        llm_client: Belge analizi için kullanılan LLM.
+        mevzuat_retriever: İsteğe bağlı mevzuat retriever'ı -- bir
+            HybridRetriever (yerel korpus) veya bir FallbackMevzuatRetriever
+            (yerel fallback'li MCP-öncelikli, bkz. app.ai.retrieval.mcp_mevzuat);
+            ``async retrieve(query, limit) -> list[Document]`` sağlayan
+            herhangi bir şey çalışır. Verilmediğinde iki mevzuat düğümü
+            no-op'a düşer, geri kalanı yine çalışır.
+        reasoning_llm_client: Mevzuat önerisi adımı için isteğe bağlı ayrı
+            bir istemci. Varsayılan olarak ``llm_client``.
+        fast_llm_client: İsteğe bağlı hızlı katman istemcisi. Kalite katmanı
+            hem birleşik hem de yalnızca-sınıflandırma yapılandırılmış
+            çağrılarında başarısız olduğunda, ``DocumentType.OTHER``'a
+            düşmeden önce hızlı katmanda bir deneme daha yapılır -- mevcut
+            iki katmanlı düşüş merdiveninin altına, yalnızca başarısızlık
+            yolunda ödenen üçüncü, ucuz bir basamak.
+        guard_llm_client: Guardrail hakemi için isteğe bağlı istemci.
+            Varsayılan olarak ``fast_llm_client or llm_client`` --
+            genel hızlı katman modeli yerine Evren'in kendine özel ``guard``
+            modeline yönlendirmek için ``app.ai.llms.get_guard_llm_client()``
+            geçirin.
 
     Returns:
-        The compiled LangGraph workflow.
+        Derlenmiş LangGraph iş akışı.
     """
     classifier_agent = ClassifierAgent(llm_client)
     compliance_agent = ComplianceAgent(reasoning_llm_client or llm_client)
@@ -412,7 +425,7 @@ def create_document_analysis_graph(
     async def analyze_node(
         state: DocumentAnalysisState, config: RunnableConfig
     ) -> dict[str, Any]:
-        """Classify the document and extract its header fields in one call."""
+        """Belgeyi tek bir çağrıda sınıflandır ve başlık alanlarını çıkar."""
         logger.info("Running Document Analysis Node (classify + extract)...")
         await emit_node_start(
             config,
@@ -423,9 +436,9 @@ def create_document_analysis_graph(
 
         text = _trim_for_extraction(state["input_text"])
 
-        # The regulation prescribes the header layout, so labelled fields are
-        # read with regular expressions rather than by the model. The parser
-        # scores 60/60 on the sample corpus with no invented values.
+        # Yönetmelik başlık düzenini belirlediği için etiketli alanlar model
+        # yerine düzenli ifadelerle okunur. Ayrıştırıcı, örnek korpusta
+        # hiç uydurma değer üretmeden 60/60 puan alır.
         parsed = parse_labelled_fields(text)
         logger.info("Parsed %d labelled field(s) deterministically.", len(parsed))
 
@@ -440,15 +453,14 @@ def create_document_analysis_graph(
             "kurum antedi bulunmayan başvuru.\n"
             "- information_request: yalnızca 4982 sayılı Kanun kapsamında bilgi "
             "veya belge talebi açıkça istendiğinde.\n"
-            # circular needs explicit discriminators. Without them the model falls
-            # back to official_letter, which the paragraph above names as the
-            # default for inter-institution correspondence -- and a genelge *is*
-            # structurally an official letter, so only the addressee and the
-            # rule-setting language separate them. detect_structural_signal already
-            # reported DAĞITIM, so the observation was present and only the
-            # criterion to act on it was missing. Measured on qwen3.5:9b over the
-            # sample corpus: type accuracy 11/12 -> 12/12, stable across three
-            # repeats (36/36).
+            # circular için açık ayırt edici kriterler gerekir. Bunlar olmadan
+            # model, yukarıdaki paragrafın kurumlar arası yazışma için varsayılan
+            # olarak adlandırdığı official_letter'a geri düşer -- ve bir genelge
+            # yapısal olarak zaten resmî bir yazı*dır*, dolayısıyla onları yalnızca
+            # muhatap ve kural koyucu dil ayırır. detect_structural_signal DAĞITIM'ı
+            # zaten bildiriyordu, yani gözlem mevcuttu, eksik olan yalnızca ona göre
+            # hareket edecek kriterdi. qwen3.5:9b üzerinde örnek korpusta ölçüldü:
+            # tür doğruluğu 11/12 -> 12/12, üç tekrar boyunca kararlı (36/36).
             "- circular: tek bir muhataba değil 'DAĞITIM YERLERİNE' / 'Dağıtım' "
             "listesine gönderilen, tek bir olayı değil genel uygulama usul ve "
             "esaslarını düzenleyen yazı (genelge). Muhatabı dağıtım listesi olan ve "
@@ -464,10 +476,10 @@ def create_document_analysis_graph(
             "Alan çıkarımında belgede gerçekten bulunmayan alanları null bırak; "
             "tahmin etme, örnek değer üretme.\n\n"
             f'EVRAK:\n"""\n{text}\n"""'
-            # Deterministic regex observations, injected as facts rather than as
-            # instructions. Measured on qwen3:8b these cut the harmful
-            # official_letter -> petition confusion, which matters because the
-            # document type selects the required-field rule table.
+            # Deterministik regex gözlemleri, talimat olarak değil olgu olarak
+            # enjekte edilir. qwen3:8b üzerinde ölçüldüğünde bunlar, zararlı
+            # official_letter -> petition karışıklığını azaltır; bu önemlidir
+            # çünkü belge türü, gerekli-alan kural tablosunu seçer.
             f"{format_structural_signal(detect_structural_signal(state['input_text']))}"
             f"{format_parsed_fields(parsed)}"
             f"{ocr_warning(state.get('is_ocr_text', False))}"
@@ -485,17 +497,17 @@ def create_document_analysis_graph(
             summary = payload["summary"]
             model_fields = {key: payload.get(key) for key in EVRAK_FIELD_KEYS}
         except TRANSIENT_ERRORS:
-            # A dropped connection affects every tier of this ladder equally
-            # (they all talk to the same Ollama instance), so retrying the
-            # whole node once the connection is back beats cycling through
-            # degradation tiers that would hit the same error.
+            # Kopan bir bağlantı bu merdivenin her katmanını eşit şekilde
+            # etkiler (hepsi aynı Ollama örneğiyle konuşur), bu yüzden bağlantı
+            # geri geldiğinde tüm düğümü yeniden denemek, aynı hatayla
+            # karşılaşacak düşüş katmanları arasında dönmekten daha iyidir.
             logger.warning("Document Analysis Node hit a transient error; retrying.")
             raise
         except Exception:
-            # Fall back to type and summary alone. The merged schema is the
-            # fast path, not a requirement: a smaller model that cannot hold the
-            # full field list should still produce a usable classification
-            # rather than dropping the document to "other".
+            # Yalnızca tür ve özete geri düş. Birleşik şema hızlı yoldur,
+            # bir zorunluluk değil: tam alan listesini tutamayan daha küçük
+            # bir model, belgeyi "other"a düşürmek yerine yine de kullanılabilir
+            # bir sınıflandırma üretmelidir.
             logger.warning(
                 "Merged analysis failed; retrying with classification only.",
                 exc_info=True,
@@ -543,13 +555,13 @@ def create_document_analysis_graph(
                     logger.exception("Document Analysis Node failed")
                     document_type = DocumentType.OTHER
                     summary = "Evrak özeti çıkarılamadı."
-            # The deterministically parsed fields still stand: a model failure
-            # must not discard values read straight off the document.
+            # Deterministik olarak ayrıştırılan alanlar hâlâ geçerlidir: bir
+            # model hatası, belgeden doğrudan okunan değerleri yok saymamalıdır.
             model_fields = EvrakField().model_dump()
 
-        # The full, untrimmed document -- not the head/tail-trimmed `text`
-        # the prompt above was built from -- so evidence-based rescue can
-        # ground a value even when it happens to sit in the elided middle.
+        # Yukarıdaki prompt'un kurulduğu baş/son kısaltılmış `text` değil, tam
+        # ve kısaltılmamış belge -- böylece kanıt temelli kurtarma, değer
+        # kısaltılmış ortada kaldığında bile onu dayanaklı hale getirebilir.
         merged_fields = merge_parsed_over_model(
             model_fields, parsed, document_text=state["input_text"]
         )
@@ -561,22 +573,23 @@ def create_document_analysis_graph(
             "entities": merged_fields.get("entities", []),
         }
 
-        # Surface the classification immediately. The draft is what dominates
-        # wall-clock time, and there is no reason for the user to stare at a
-        # spinner while results that already exist are withheld.
+        # Sınıflandırmayı hemen görünür kıl. Toplam süreye asıl hakim olan
+        # taslaktır; zaten var olan sonuçlar tutulurken kullanıcının bir
+        # yükleme animasyonuna bakması için bir sebep yoktur.
         await emit_partial(config, "classification", update)
         return update
 
     async def check_compliance_node(
         state: DocumentAnalysisState, config: RunnableConfig
     ) -> dict[str, Any]:
-        """Check required fields. Pure set subtraction; no LLM involved."""
+        """Gerekli alanları kontrol et. Saf küme çıkarma; LLM yok."""
         logger.info("Running Compliance Check Node...")
         try:
             fields = EvrakField(**(state.get("fields") or {}))
-            # None (unknown, not unsigned) when mark detection never ran at
-            # all for this document -- see DocumentAnalysisState.detected_marks
-            # and check_required_fields's own docstring.
+            # Bu belge için işaret tespiti hiç çalışmadıysa None döner
+            # (bilinmiyor anlamında, imzasız değil) -- bkz.
+            # DocumentAnalysisState.detected_marks ve check_required_fields'in
+            # kendi docstring'i.
             marks = state.get("detected_marks")
             is_signed = (
                 any(mark.get("kind") == "signature" for mark in marks)
@@ -608,15 +621,16 @@ def create_document_analysis_graph(
     async def scan_sensitivity_node(
         state: DocumentAnalysisState, config: RunnableConfig
     ) -> dict[str, Any]:
-        """Assess confidentiality marking and PII exposure, then ask the
-        nuance judge whether the document reads as sensitive in meaning
-        even where no pattern matched.
+        """Gizlilik işaretlemesini ve KVK açığa çıkmasını değerlendir, ardından
+        hiçbir örüntü eşleşmese bile belgenin anlam olarak hassas okunup
+        okunmadığını nüans hakemine sor.
 
-        Independent branch off ``analyze`` (see the flow diagram above):
-        nothing downstream in this sub-graph needs to block on it, so it
-        fans straight to END rather than merging into ``suggest_mevzuat``'s
-        fan-in. ``DocumentService`` reads ``sensitivity_assessment`` off the
-        final merged state alongside every other branch's output.
+        ``analyze``'den ayrılan bağımsız bir daldır (yukarıdaki akış
+        diyagramına bakın): bu alt-grafta hiçbir aşağı akış düğümü onu
+        bekleyecek şekilde bloke olmaya ihtiyaç duymaz, bu yüzden
+        ``suggest_mevzuat``'ın fan-in'ine katılmak yerine doğrudan END'e
+        dallanır. ``DocumentService``, ``sensitivity_assessment``'ı, diğer
+        her dalın çıktısıyla birlikte nihai birleşik durumdan okur.
         """
         logger.info("Running Sensitivity Scan Node...")
         input_text = state.get("input_text", "")
@@ -630,10 +644,10 @@ def create_document_analysis_graph(
             )
 
         if not assessment.requires_review:
-            # Only worth asking when the deterministic layer didn't already
-            # flag the document -- this is specifically the "no pattern
-            # matched but it reads as sensitive" case; a document already
-            # routed to review gains nothing from a second opinion here.
+            # Yalnızca deterministik katman belgeyi zaten işaretlemediğinde
+            # sormaya değer -- bu özellikle "hiçbir örüntü eşleşmedi ama
+            # hassas okunuyor" durumudur; incelemeye zaten yönlendirilmiş bir
+            # belge, burada ikinci bir görüşten bir şey kazanmaz.
             judge_verdict = await judge_input_sensitivity(guardrail_judge_agent, text=input_text)
             promotion_floor = get_policy().guardrail.judge_promotion_confidence
             if (
@@ -659,13 +673,13 @@ def create_document_analysis_graph(
     async def retrieve_mevzuat_node(
         state: DocumentAnalysisState, config: RunnableConfig
     ) -> dict[str, Any]:
-        """Retrieve legislation excerpts for the document.
+        """Belge için mevzuat alıntılarını getir.
 
-        Emits its own node_start/node_end under the "rag" node id -- the root
-        cause of the frontend's "Mevzuat" panel never showing data (D1) was
-        that this node previously emitted nothing at all, even though the
-        excerpts it retrieves are real and used by both the draft brief and
-        the analysis response's mevzuat_references.
+        "rag" düğüm kimliği altında kendi node_start/node_end'ini yayınlar --
+        frontend'deki "Mevzuat" panelinin hiç veri göstermemesinin (D1) kök
+        nedeni, bu düğümün daha önce hiçbir şey yayınlamamasıydı; oysa
+        getirdiği alıntılar gerçekti ve hem taslak özette hem de analiz
+        yanıtının mevzuat_references alanında kullanılıyordu.
         """
         query = _build_mevzuat_query(state)
         await emit_node_start(
@@ -706,8 +720,9 @@ def create_document_analysis_graph(
             )
             return {"mevzuat_documents": documents}
         except TRANSIENT_ERRORS:
-            # Let the graph's IO_RETRY policy retry a dropped connection;
-            # swallowing it here would mean the retry policy never fires.
+            # Kopan bir bağlantıyı grafın IO_RETRY politikasının yeniden
+            # denemesine izin ver; burada yutmak, yeniden deneme politikasının
+            # hiç tetiklenmemesi anlamına gelirdi.
             logger.warning("Mevzuat Retrieval Node hit a transient error; retrying.")
             raise
         except Exception:
@@ -725,7 +740,7 @@ def create_document_analysis_graph(
     async def suggest_mevzuat_node(
         state: DocumentAnalysisState, config: RunnableConfig
     ) -> dict[str, Any]:
-        """Explain how the retrieved provisions bear on this document."""
+        """Getirilen hükümlerin bu belgeyle nasıl ilişkili olduğunu açıkla."""
         documents = state.get("mevzuat_documents") or []
         if not documents:
             logger.info("No mevzuat excerpts available; skipping suggestion.")
@@ -752,29 +767,30 @@ def create_document_analysis_graph(
             "hükümlerini listele. Alıntılarda bulunmayan madde numarası veya kanun "
             "adı üretme."
         )
-        # Set inside the try block when the grounding filter runs; stays 0 on
-        # every other path (transient retry, total-failure fallback) since
-        # `_raw_citation_suggestions` is grounded by construction and never
-        # needs to drop anything.
+        # Dayanak (grounding) filtresi çalıştığında try bloğunun içinde
+        # atanır; diğer her yolda (geçici hata yeniden denemesi, tam
+        # başarısızlık fallback'i) 0 kalır çünkü `_raw_citation_suggestions`
+        # yapısı gereği dayanaklıdır ve hiçbir şeyi atmaya ihtiyaç duymaz.
         dropped_suggestion_count = 0
         try:
-            # Bounded *inside* the node, below the node's own budget, so an
-            # overrun lands in the degradation path below instead of escaping to
-            # node_timeout. Explaining the excerpts is the optional half of
-            # requirement 5 -- the citations are already retrieved and correct --
-            # so a slow model should cost the explanation, never the analysis.
+            # Düğümün kendi bütçesinin altında, düğümün *içinde* sınırlanır;
+            # böylece bir aşım node_timeout'a kaçmak yerine aşağıdaki düşüş
+            # yoluna düşer. Alıntıları açıklamak, 5. gereksinimin isteğe bağlı
+            # yarısıdır -- atıflar zaten getirilmiş ve doğrudur -- bu yüzden
+            # yavaş bir model yalnızca açıklamaya mal olmalı, asla analize değil.
             #
-            # The reasoning level is read from `state` here for the same reason
-            # the outer @node_timeout reads it via _reasoning_level_of: the two
-            # budgets must scale together. DocumentAnalysisState carries no
-            # reasoning_level field today, so both currently resolve to the same
-            # balanced default -- but they resolved to it independently, by two
-            # separately-written call sites that happened to agree rather than
-            # being structurally tied. Had a future reasoning_level field been
-            # added to this state without updating this line too, a fast run
-            # (0.6x outer) would make this inner bound (0.85x) exceed its own
-            # node_timeout, and suggest_mevzuat's degradation path -- the whole
-            # reason this inner bound exists -- would become unreachable again.
+            # Reasoning seviyesi burada `state`'ten okunur, tıpkı dıştaki
+            # @node_timeout'un onu _reasoning_level_of aracılığıyla okuduğu
+            # sebeple aynı: iki bütçe birlikte ölçeklenmelidir. DocumentAnalysisState
+            # bugün bir reasoning_level alanı taşımıyor, bu yüzden ikisi de şu an
+            # aynı dengeli varsayılana çözülüyor -- ama bu çözülme bağımsız olarak
+            # gerçekleşti, yapısal olarak bağlı olmaktan ziyade birbirinden ayrı
+            # yazılmış iki çağrı noktasının tesadüfen uyuşması yoluyla. Bu duruma
+            # gelecekte bu satırı da güncellemeden bir reasoning_level alanı
+            # eklenseydi, hızlı bir çalışma (dıştakinin 0.6x'i) bu iç sınırın
+            # (0.85x) kendi node_timeout'unu aşmasına yol açardı ve
+            # suggest_mevzuat'ın düşüş yolu -- bu iç sınırın var olma sebebinin
+            # tamamı -- tekrar erişilemez hale gelirdi.
             res: MevzuatSuggestionOutput = await asyncio.wait_for(
                 compliance_agent.run_structured(
                     messages=prompt,
@@ -787,17 +803,17 @@ def create_document_analysis_graph(
             )
             suggestions = [item.model_dump() for item in res.suggestions]
 
-            # Verify each suggestion against the excerpts it was supposedly
-            # drawn from -- the prompt above asks the model not to invent a
-            # madde/kanun not present in ALINTILARI, but nothing enforced
-            # that until now. A suggestion citing a law absent from every
-            # excerpt is dropped outright (see `citation_support.grounded`);
-            # its explanation is not even worth checking if its citation is
-            # fabricated. A suggestion with a grounded citation but an
-            # explanation making unsupported sayı/tarih/kurum/tutar claims
-            # keeps the citation and only loses the explanation, the same
-            # neutral text the except-branch fallback below already uses --
-            # the citation itself is what requirement 5 actually needs.
+            # Her öneriyi, güya çıkarıldığı alıntılara karşı doğrula --
+            # yukarıdaki prompt modelden ALINTILARI'nda bulunmayan bir
+            # madde/kanun uydurmamasını ister, ama şimdiye kadar hiçbir şey
+            # bunu zorunlu kılmıyordu. Hiçbir alıntıda bulunmayan bir kanuna
+            # atıf yapan öneri doğrudan atılır (bkz. `citation_support.grounded`);
+            # atıf uydurmaysa açıklamasını kontrol etmeye bile değmez. Dayanaklı
+            # bir atıfa sahip ama desteklenmeyen sayı/tarih/kurum/tutar iddiaları
+            # içeren bir açıklamaya sahip öneri, atıfı korur ve yalnızca
+            # açıklamayı kaybeder -- aşağıdaki except dalının fallback'inin zaten
+            # kullandığı aynı nötr metin -- çünkü 5. gereksinimin asıl ihtiyacı
+            # atıfın kendisidir.
             source_materials = "\n\n".join(
                 part
                 for part in (
@@ -833,26 +849,26 @@ def create_document_analysis_graph(
                     dropped,
                     len(suggestions),
                 )
-            # Fall back to raw citations only when the model *produced*
-            # suggestions and grounding rejected every one of them. A model
-            # that itself returned an empty list made a legitimate "nothing
-            # worth suggesting" call and must stay empty, not be
-            # reinterpreted as a fabrication requiring the fallback.
+            # Ham atıflara yalnızca model öneri *ürettiğinde* ve dayanak
+            # kontrolü hepsini reddettiğinde geri düş. Kendisi boş bir liste
+            # döndüren bir model meşru bir "önerilecek bir şey yok" kararı
+            # vermiştir ve boş kalmalıdır; fallback gerektiren bir uydurma
+            # olarak yeniden yorumlanmamalıdır.
             if suggestions and not grounded_suggestions:
                 suggestions = _raw_citation_suggestions(documents)
             else:
-                # `MEVZUAT_RESULT_LIMIT` excerpts from a chunked corpus can
-                # land on the same article more than once; the model then
-                # has no reason not to write a suggestion per excerpt it
-                # was handed, reproducing that duplication in its own
-                # output the same way the raw-citation fallback would.
+                # Parçalanmış bir korpustan gelen `MEVZUAT_RESULT_LIMIT`
+                # alıntısı aynı maddeye birden fazla kez düşebilir; bu durumda
+                # modelin kendisine verilen her alıntı için bir öneri
+                # yazmamak için hiçbir sebebi yoktur ve bu tekrarı, ham atıf
+                # fallback'inin yapacağı gibi kendi çıktısında yeniden üretir.
                 suggestions = _dedupe_suggestions(grounded_suggestions)
         except TRANSIENT_ERRORS:
             logger.warning("Mevzuat Suggestion Node hit a transient error; retrying.")
             raise
         except Exception:
             logger.exception("Mevzuat Suggestion Node failed")
-            # Degrade to the raw citations rather than losing the requirement.
+            # Gereksinimi kaybetmek yerine ham atıflara düş.
             suggestions = _raw_citation_suggestions(documents)
 
         await emit_node_end(
@@ -868,8 +884,9 @@ def create_document_analysis_graph(
         return {"mevzuat_suggestions": suggestions}
 
     builder = StateGraph(DocumentAnalysisState)
-    # check_compliance is pure computation over already-fetched state and
-    # never raises past its own try/except, so it carries no retry policy.
+    # check_compliance, zaten getirilmiş durum üzerinde saf hesaplama yapar ve
+    # kendi try/except'inin ötesine hiçbir zaman istisna geçirmez, bu yüzden
+    # bir yeniden deneme politikası taşımaz.
     builder.add_node("analyze", analyze_node, retry_policy=LLM_RETRY)
     builder.add_node("check_compliance", check_compliance_node)
     builder.add_node("retrieve_mevzuat", retrieve_mevzuat_node, retry_policy=IO_RETRY)
@@ -877,16 +894,16 @@ def create_document_analysis_graph(
     builder.add_node("scan_sensitivity", scan_sensitivity_node)
 
     builder.add_edge(START, "analyze")
-    # Fan out: compliance is CPU-bound, retrieval is network-bound, and
-    # sensitivity scanning is CPU-bound and independent of both.
+    # Fan out: compliance CPU'ya bağlıdır, retrieval ağa bağlıdır ve
+    # hassasiyet taraması CPU'ya bağlıdır ve ikisinden de bağımsızdır.
     builder.add_edge("analyze", "check_compliance")
     builder.add_edge("analyze", "retrieve_mevzuat")
     builder.add_edge("analyze", "scan_sensitivity")
-    # Fan in: LangGraph waits for both branches before running this node.
+    # Fan in: LangGraph bu düğümü çalıştırmadan önce her iki dalı da bekler.
     builder.add_edge("check_compliance", "suggest_mevzuat")
     builder.add_edge("retrieve_mevzuat", "suggest_mevzuat")
     builder.add_edge("suggest_mevzuat", END)
-    # Independent branch -- its own path straight to END.
+    # Bağımsız dal -- doğrudan END'e kendi yolu.
     builder.add_edge("scan_sensitivity", END)
 
     return builder.compile()

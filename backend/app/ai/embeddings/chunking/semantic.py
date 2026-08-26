@@ -9,65 +9,66 @@ from app.ai.embeddings.models import BaseEmbeddingsClient
 
 
 def cosine_distance(u: List[float], v: List[float]) -> float:
-    """Calculate the cosine distance between two vectors."""
+    """İki vektör arasındaki kosinüs mesafesini hesaplar."""
     dot_product = sum(a * b for a, b in zip(u, v))
     norm_u = math.sqrt(sum(a * a for a in u))
     norm_v = math.sqrt(sum(b * b for b in v))
     if norm_u == 0 or norm_v == 0:
         return 1.0
     similarity = dot_product / (norm_u * norm_v)
-    # Clip similarity to avoid floating point issues out of [-1, 1] range
+    # Kayan nokta sorunlarının benzerliği [-1, 1] aralığının dışına taşırmasını önlemek için kırp
     similarity = max(-1.0, min(1.0, similarity))
     return 1.0 - similarity
 
 
 class SemanticChunker(BaseChunker):
-    """Splits text based on semantic similarity/distance between consecutive
-    sentences rather than character lengths.
+    """Metni karakter uzunlukları yerine ardışık cümleler arasındaki anlamsal
+    benzerlik/mesafeye göre böler.
 
-    NOT WIRED INTO PRODUCTION -- and must not be, as-is. The only chunker
-    any production call site uses is ``RecursiveChunker``
-    (``app.ai.embeddings.chunking.recursive``); ``ChunkingPolicy``
-    (``app.ai.policy.schema``) deliberately carries no strategy field
-    selecting this class. This is not an oversight to "finish wiring up" --
-    three concrete problems make it unsafe to plug into
-    ``DocumentService._index_for_qa`` today:
+    PRODUKSİYONA BAĞLANMAMIŞTIR -- ve olduğu haliyle bağlanmamalıdır. Herhangi
+    bir prodüksiyon çağrı noktasının kullandığı tek chunker ``RecursiveChunker``
+    (``app.ai.embeddings.chunking.recursive``) sınıfıdır; ``ChunkingPolicy``
+    (``app.ai.policy.schema``) kasıtlı olarak bu sınıfı seçen bir strateji
+    alanı taşımaz. Bu "bağlamayı tamamlamayı unutmuş" bir durum değildir --
+    bugün ``DocumentService._index_for_qa`` içine takmayı güvensiz kılan üç
+    somut sorun vardır:
 
-    1. No ``start_index`` metadata. ``_index_for_qa`` reads a chunk's
-       ``start_index`` to look up its page via
-       ``app.ai.documents.anchors.build_page_map``, and
-       ``RecursiveChunker`` provides it via
-       ``RecursiveCharacterTextSplitter(add_start_index=True)``. This class
-       emits only ``chunk_index``/``sentence_count``. Bolting it on as-is
-       does not merely drop the ``[s. N]`` page citation -- if a future
-       change joins the grouped sentences with ``" ".join(...)`` and
-       treats a naive re-search as the offset, it collapses
-       ``app.ai.documents.anchors.PAGE_SEPARATOR`` (``"\\n\\n"``) into a
-       single space, so any offset computed from that joined string drifts
-       by exactly the amount ``build_page_map`` uses to find page
-       boundaries -- the citation would be *wrong*, not merely absent,
-       which is worse.
-    2. ``_split_into_sentences``'s regex is not safe for Turkish official
-       correspondence. The negative lookbehind ``(?<![A-Z][a-z]\\.)`` only
-       recognises ASCII uppercase, so it does not protect Turkish
-       abbreviation patterns using ``İ/Ş/Ğ/Ç/Ö/Ü``, and it has no exception
-       list for the common Turkish abbreviations ("Sn.", "Dr.", "T.C.",
-       "vb.", "md.") or numbered-item markers ("1.", "2.") this document
-       type is full of -- each one is a false sentence boundary.
-    3. No maximum chunk size and no overlap. A long, topically-homogeneous
-       document (which official correspondence often is) can produce one
-       very large chunk that ``DraftPolicy.source_chunk_char_budget``
-       drops entirely rather than truncating, and there is no overlap to
-       recover an answer that lands on a chunk boundary the way
-       ``RecursiveChunker``'s configured overlap does.
+    1. ``start_index`` metadata'sı yok. ``_index_for_qa``, bir parçanın
+       sayfasını ``app.ai.documents.anchors.build_page_map`` üzerinden
+       bulmak için ``start_index``'ini okur ve ``RecursiveChunker`` bunu
+       ``RecursiveCharacterTextSplitter(add_start_index=True)`` ile sağlar.
+       Bu sınıf ise yalnızca ``chunk_index``/``sentence_count`` üretir.
+       Olduğu gibi eklemek yalnızca ``[s. N]`` sayfa alıntısını düşürmekle
+       kalmaz -- gelecekte bir değişiklik gruplanmış cümleleri
+       ``" ".join(...)`` ile birleştirip saf bir yeniden-arama işlemini
+       ofset olarak ele alırsa, bu durum
+       ``app.ai.documents.anchors.PAGE_SEPARATOR``'ı (``"\\n\\n"``) tek bir
+       boşluğa indirger; böylece birleştirilmiş dizeden hesaplanan herhangi
+       bir ofset, ``build_page_map``'in sayfa sınırlarını bulmak için
+       kullandığı miktar kadar kayar -- alıntı sadece eksik değil,
+       *yanlış* olur ki bu daha kötüdür.
+    2. ``_split_into_sentences``'ın regex'i Türkçe resmi yazışmalar için
+       güvenli değildir. Negatif lookbehind ``(?<![A-Z][a-z]\\.)`` yalnızca
+       ASCII büyük harfleri tanır, dolayısıyla ``İ/Ş/Ğ/Ç/Ö/Ü`` kullanan
+       Türkçe kısaltma kalıplarını korumaz; ayrıca bu belge türünün dolu
+       olduğu yaygın Türkçe kısaltmalar ("Sn.", "Dr.", "T.C.", "vb.",
+       "md.") veya numaralı madde işaretleri ("1.", "2.") için bir istisna
+       listesi de yoktur -- her biri sahte bir cümle sınırıdır.
+    3. Maksimum parça boyutu ve örtüşme yoktur. Uzun, konu bakımından
+       homojen bir belge (resmi yazışmalar çoğunlukla böyledir), kısaltmak
+       yerine ``DraftPolicy.source_chunk_char_budget``'ın tamamen
+       düşüreceği tek, çok büyük bir parça üretebilir ve
+       ``RecursiveChunker``'ın yapılandırılmış örtüşmesinin yaptığı gibi
+       bir parça sınırına denk gelen bir yanıtı kurtaracak örtüşme yoktur.
 
-    This class stays in the package, exported and unit-tested, as an
-    eval-only exploration arm (see ``evaluation``'s retrieval suite) --
-    whether it beats ``RecursiveChunker`` on this document type is a
-    measured question, not a settled one, and the answer belongs in a
-    report, not in a docstring. Do not wire it into ``DocumentService``
-    without first fixing (1)-(3) above and having eval numbers to justify
-    the switch.
+    Bu sınıf, yalnızca değerlendirme amaçlı bir keşif kolu olarak (bkz.
+    ``evaluation``'ın retrieval paketi) pakette dışa aktarılmış ve birim
+    testli olarak kalır -- bu belge türünde ``RecursiveChunker``'ı geçip
+    geçmediği ölçülmesi gereken bir soru olup henüz karara bağlanmamıştır
+    ve cevabı bir docstring'e değil bir rapora aittir.
+    Yukarıdaki (1)-(3) maddelerini önce düzeltmeden ve geçişi
+    gerekçelendirecek değerlendirme sayıları olmadan bunu
+    ``DocumentService`` içine bağlamayın.
     """
 
     def __init__(
@@ -77,13 +78,13 @@ class SemanticChunker(BaseChunker):
         threshold_value: float = 85.0,
         min_sentences: int = 1,
     ):
-        """Initialize Semantic Chunker.
+        """Semantic Chunker'ı başlatır.
 
         Args:
-            embeddings_client: An instance of BaseEmbeddingsClient to generate sentence vectors.
-            threshold_type: Type of thresholding to use. Options: "percentile", "static".
-            threshold_value: Percentile value (0-100) or static distance threshold (0.0-1.0).
-            min_sentences: Minimum number of sentences to keep in a chunk.
+            embeddings_client: Cümle vektörleri üretmek için bir BaseEmbeddingsClient örneği.
+            threshold_type: Kullanılacak eşikleme türü. Seçenekler: "percentile", "static".
+            threshold_value: Yüzdelik değer (0-100) veya sabit mesafe eşiği (0.0-1.0).
+            min_sentences: Bir parçada tutulacak minimum cümle sayısı.
         """
         self.embeddings_client = embeddings_client
         self.threshold_type = threshold_type.lower()
@@ -91,14 +92,14 @@ class SemanticChunker(BaseChunker):
         self.min_sentences = min_sentences
 
     def _split_into_sentences(self, text: str) -> List[str]:
-        """Split text into sentences using a regex pattern."""
-        # Split on sentence boundaries: dot, question mark, exclamation mark followed by whitespace.
+        """Metni bir regex kalıbı kullanarak cümlelere böler."""
+        # Cümle sınırlarına göre böl: nokta, soru işareti, ünlem işareti ve ardından boşluk.
         sentence_ends = re.compile(r"(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|\!)\s")
         sentences = sentence_ends.split(text)
         return [s.strip() for s in sentences if s.strip()]
 
     async def split_text(self, text: str, **kwargs) -> List[Document]:
-        """Splits the text semantically using sentence embeddings."""
+        """Metni cümle embedding'lerini kullanarak anlamsal olarak böler."""
         sentences = self._split_into_sentences(text)
 
         if not sentences:
@@ -106,29 +107,29 @@ class SemanticChunker(BaseChunker):
         if len(sentences) <= self.min_sentences:
             return [Document(page_content=text, metadata={"chunk_index": 0})]
 
-        # 1. Generate embeddings for all sentences
+        # 1. Tüm cümleler için embedding üret
         embeddings = await self.embeddings_client.embed_documents(sentences)
 
-        # 2. Calculate cosine distances between consecutive sentences
+        # 2. Ardışık cümleler arasındaki kosinüs mesafelerini hesapla
         distances = []
         for i in range(len(embeddings) - 1):
             dist = cosine_distance(embeddings[i], embeddings[i + 1])
             distances.append(dist)
 
-        # 3. Determine distance threshold for splitting
+        # 3. Bölme için mesafe eşiğini belirle
         if self.threshold_type == "percentile":
             if not distances:
                 threshold = 0.5
             else:
                 sorted_dists = sorted(distances)
-                # Find index matching the percentile
+                # Yüzdelik ile eşleşen indeksi bul
                 pct_index = int((self.threshold_value / 100.0) * len(distances))
                 pct_index = max(0, min(pct_index, len(distances) - 1))
                 threshold = sorted_dists[pct_index]
         else:
             threshold = self.threshold_value
 
-        # 4. Group sentences based on splits
+        # 4. Bölmelere göre cümleleri grupla
         chunks = []
         current_chunk_sentences = [sentences[0]]
 
@@ -136,7 +137,7 @@ class SemanticChunker(BaseChunker):
             next_sentence = sentences[i + 1]
             dist = distances[i]
 
-            # If distance exceeds threshold, start a new chunk
+            # Mesafe eşiği aşarsa yeni bir parça başlat
             if dist > threshold and len(current_chunk_sentences) >= self.min_sentences:
                 chunks.append(" ".join(current_chunk_sentences))
                 current_chunk_sentences = [next_sentence]
@@ -146,7 +147,7 @@ class SemanticChunker(BaseChunker):
         if current_chunk_sentences:
             chunks.append(" ".join(current_chunk_sentences))
 
-        # 5. Return documents list
+        # 5. Belge listesini döndür
         return [
             Document(
                 page_content=chunk_text,

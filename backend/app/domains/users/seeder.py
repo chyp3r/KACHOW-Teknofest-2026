@@ -1,22 +1,24 @@
-"""Best-effort bootstrap of one ADMIN, one MANAGER and one EMPLOYEE account.
+"""Bir ADMIN, bir MANAGER ve bir EMPLOYEE hesabının best-effort önyükleme (bootstrap) işlemi.
 
-A fresh deployment (a new environment, a demo, CI) otherwise has no users at
-all -- the only way to create one is the invite-gated registration flow
-(`UserService.register_user`), which needs an existing account to issue the
-invite in the first place. This creates one account per role directly
-through `UserRepository`, bypassing that gate entirely (a bootstrap has
-nothing to invite itself with).
+Aksi takdirde taze bir dağıtımın (yeni bir ortam, bir demo, CI) hiç
+kullanıcısı olmaz -- bir tane oluşturmanın tek yolu, davet çıkarmak için
+zaten var olan bir hesap gerektiren davet kısıtlı kayıt akışıdır
+(`UserService.register_user`). Bu, o geçidi tamamen atlayarak
+(bir bootstrap'ın kendini davet edecek hiçbir şeyi yoktur) `UserRepository`
+üzerinden doğrudan rol başına bir hesap oluşturur.
 
-Idempotent by design: each account is checked by email (and by username, to
-avoid an IntegrityError if that username was independently taken by a
-different email) before it is created, so re-running this on every startup
-never duplicates or overwrites an existing row. Each account gets its own
-short-lived session -- mirrors `app.observability.run_recorder`'s pattern,
-since `app.lifespan` has no request-scoped `Depends(get_db)` -- so one
-account's conflict never blocks the other two from being seeded.
+Tasarım gereği idempotent: her hesap oluşturulmadan önce e-postaya göre
+(ve o kullanıcı adı bağımsız olarak farklı bir e-posta tarafından
+alınmışsa bir IntegrityError'dan kaçınmak için kullanıcı adına göre de)
+kontrol edilir, bu yüzden her başlatmada tekrar çalıştırmak var olan bir
+satırı asla çoğaltmaz veya üzerine yazmaz. Her hesap kendi kısa ömürlü
+oturumunu alır -- `app.observability.run_recorder`'ın örüntüsünü yansıtır,
+çünkü `app.lifespan`'ın istek kapsamlı bir `Depends(get_db)`'si yoktur --
+bu yüzden bir hesabın çakışması diğer ikisinin seed edilmesini asla
+engellemez.
 
-Every function swallows its own exceptions and only logs -- seeding must
-never be the reason the API fails to boot.
+Her fonksiyon kendi istisnalarını yutar ve sadece loglar -- seed işlemi
+API'nin ayağa kalkmama sebebi olmamalıdır.
 """
 
 import logging
@@ -40,7 +42,7 @@ class _SeedAccount:
     email: str
     password: str
     role: str
-    #: None only for root -- see UserModel.company_id's CHECK constraint.
+    #: Sadece root için None -- bkz. UserModel.company_id'nin CHECK constraint'i.
     company_id: Optional[str]
 
 
@@ -84,29 +86,30 @@ def _seed_accounts(company_id: Optional[str]) -> list[_SeedAccount]:
 
 
 async def _seed_one(account: _SeedAccount) -> bool:
-    """Create one account if it doesn't already exist.
+    """Henüz yoksa bir hesap oluşturur.
 
-    The existence check runs on the schema-owner connection
-    (`OwnerAsyncSessionLocal`), not a tenant-scoped one: `username`/`email`
-    are unique *system-wide* (`UserModel`'s own `unique=True` columns), not
-    per company, so "does this already exist" has to see every company, the
-    same reasoning as `app.infrastructure.database.session.get_owner_db`.
-    Checking it under a single company's row-level-security scope instead
-    was tried first and broke exactly this way: two different companies can
-    each be seeded with a user named "admin", the per-company-scoped check
-    can't see the other one, and the insert then fails on the *global*
-    unique constraint anyway -- just later, and as an unhandled
-    `IntegrityError` instead of a clean "already exists, skip".
+    Varlık kontrolü, kiracı kapsamlı bir bağlantı yerine şema-sahibi
+    bağlantısı (`OwnerAsyncSessionLocal`) üzerinde çalışır: `username`/
+    `email`, şirket başına değil *sistem genelinde* benzersizdir
+    (`UserModel`'in kendi `unique=True` kolonları), bu yüzden "bu zaten var
+    mı" sorusu her şirketi görebilmelidir, `app.infrastructure.database.
+    session.get_owner_db` ile aynı gerekçe. Bunun yerine tek bir şirketin
+    row-level-security kapsamı altında kontrol etmek önce denendi ve tam
+    olarak şöyle bozuldu: iki farklı şirket de "admin" adlı bir kullanıcıyla
+    seed edilebilir, şirket başına kapsamlı kontrol diğerini göremez, ve
+    insert işlemi yine de *global* benzersizlik kısıtına takılır -- sadece
+    daha geç, ve temiz bir "zaten var, atla" yerine ele alınmamış bir
+    `IntegrityError` olarak.
 
-    The insert itself does use `tenant_session` -- `users` is under
-    row-level security (migration `0013_rls`) and this write has no request
-    to read a tenant `ContextVar` from, so it must supply the target
-    company_id (or `is_root=True` for the root account, which has none)
-    explicitly.
+    Insert işleminin kendisi `tenant_session` kullanır -- `users` row-level
+    security altındadır (migration `0013_rls`) ve bu yazma işleminin
+    okuyacağı bir istek kapsamlı `ContextVar`'ı yoktur, bu yüzden hedef
+    company_id'yi (veya hiç şirketi olmayan root hesabı için
+    `is_root=True`'yu) açıkça sağlamalıdır.
 
     Returns:
-        True if a new row was created, False if it already existed (by
-        email or by username) and nothing was done.
+        Yeni bir satır oluşturulduysa True; (e-posta veya kullanıcı adına
+        göre) zaten varsa ve hiçbir şey yapılmadıysa False.
     """
     async with OwnerAsyncSessionLocal() as check_session:
         check_repository = UserRepository(check_session)
@@ -139,18 +142,18 @@ async def _seed_one(account: _SeedAccount) -> bool:
 
 
 async def seed_default_users(company_id: Optional[str]) -> None:
-    """Create the default ROOT/ADMIN/MANAGER/EMPLOYEE accounts, skipping any
-    that already exist.
+    """Varsayılan ROOT/ADMIN/MANAGER/EMPLOYEE hesaplarını oluşturur, zaten
+    var olanları atlar.
 
-    A no-op when `settings.SEED_DEFAULT_USERS` is off. Safe to call on every
-    startup.
+    `settings.SEED_DEFAULT_USERS` kapalıyken hiçbir şey yapmaz. Her
+    başlatmada çağrılması güvenlidir.
 
     Args:
-        company_id: The demo company to bind ADMIN/MANAGER/EMPLOYEE to (see
-            `app.domains.companies.seeder.seed_demo_company`, which must run
-            first). ROOT is seeded regardless, since it has no company.
-            When `None` (demo company seeding is off and none exists yet),
-            only ROOT is seeded.
+        company_id: ADMIN/MANAGER/EMPLOYEE'nin bağlanacağı demo şirket
+            (önce çalışması gereken `app.domains.companies.seeder.
+            seed_demo_company`'ye bakınız). ROOT'un şirketi olmadığından
+            her durumda seed edilir. `None` olduğunda (demo şirket seed
+            işlemi kapalı ve henüz hiçbiri yoksa), sadece ROOT seed edilir.
     """
     if not settings.SEED_DEFAULT_USERS:
         return

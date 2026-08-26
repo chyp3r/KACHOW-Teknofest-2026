@@ -12,9 +12,10 @@ logger = logging.getLogger(__name__)
 
 
 class HybridRetriever:
-    """SOTA Hybrid Retriever executing unified dense + sparse vector queries on Qdrant.
+    """Qdrant üzerinde birleşik dense + sparse vektör sorguları yürüten hibrit retriever.
 
-    Merges search scores natively inside the Qdrant database using Reciprocal Rank Fusion (RRF).
+    Arama skorlarını Qdrant veritabanı içinde, Reciprocal Rank Fusion (RRF)
+    kullanarak native olarak birleştirir.
     """
 
     def __init__(
@@ -24,13 +25,13 @@ class HybridRetriever:
         collection_name: str = "documents",
         sparse_vocab_path: str = "",
     ):
-        """Initialize Native Hybrid Retriever.
+        """Native Hybrid Retriever'ı başlat.
 
         Args:
-            vector_store: BaseVectorStore client (e.g. QdrantStore).
-            embeddings_client: BaseEmbeddingsClient to generate query vector.
-            collection_name: Qdrant collection name to search.
-            sparse_vocab_path: Path to the fitted sparse vocab JSON file.
+            vector_store: BaseVectorStore istemcisi (ör. QdrantStore).
+            embeddings_client: Sorgu vektörünü üretecek BaseEmbeddingsClient.
+            collection_name: Aranacak Qdrant koleksiyon adı.
+            sparse_vocab_path: Fit edilmiş sparse vocab JSON dosyasının yolu.
         """
         self.vector_store = vector_store
         self.embeddings_client = embeddings_client
@@ -56,26 +57,26 @@ class HybridRetriever:
         limit: int = 5,
         filter_dict: Optional[Dict[str, Any]] = None,
     ) -> List[Document]:
-        """Perform semantic and keyword search simultaneously on Qdrant, returning RRF-fused results.
+        """Qdrant'ta eş zamanlı anlamsal ve anahtar kelime araması yap, RRF ile birleştirilmiş sonuçları döndür.
 
         Args:
-            query: User's question or search query.
-            limit: Maximum documents to retrieve.
-            filter_dict: Optional payload filter, forwarded as-is to
-                ``BaseVectorStore.hybrid_search`` (see its
-                ``_build_qdrant_filter`` for the accepted shape).
+            query: Kullanıcının sorusu veya arama sorgusu.
+            limit: Getirilecek maksimum belge sayısı.
+            filter_dict: İsteğe bağlı payload filtresi; olduğu gibi
+                ``BaseVectorStore.hybrid_search``'e iletilir (kabul edilen
+                şekil için onun ``_build_qdrant_filter``'ına bakın).
         """
         if not query.strip():
             return []
 
         try:
-            # 1. Embed dense query
+            # 1. Dense sorguyu embed et
             query_vector = await self.embeddings_client.embed_query(query)
 
-            # 2. Encode sparse query (BM25)
+            # 2. Sparse sorguyu kodla (BM25)
             sparse_indices, sparse_values = self.sparse_encoder.encode_query(query)
 
-            # 3. Query Qdrant with native hybrid search
+            # 3. Qdrant'ı native hibrit arama ile sorgula
             hits = await self.vector_store.hybrid_search(
                 collection_name=self.collection_name,
                 query_vector=query_vector,
@@ -85,7 +86,7 @@ class HybridRetriever:
                 filter_dict=filter_dict,
             )
 
-            # 4. Format hits into LangChain Document objects
+            # 4. Sonuçları LangChain Document nesnelerine dönüştür
             documents = []
             for hit in hits:
                 metadata = hit.get("metadata", {}).copy()

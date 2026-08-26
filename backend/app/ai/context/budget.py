@@ -3,13 +3,13 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class TokenBudget:
-    """How many tokens a prompt may spend before the context window overflows.
+    """Bağlam penceresi taşmadan önce bir prompt'un harcayabileceği token sayısı.
 
     Attributes:
-        total: The model's context window (``settings.OLLAMA_NUM_CTX``).
-        reserved_for_completion: Tokens set aside for the model's own answer
-            (typically the call's ``max_tokens``). Spending the whole window
-            on the prompt would leave no room for the response.
+        total: Modelin bağlam penceresi (``settings.OLLAMA_NUM_CTX``).
+        reserved_for_completion: Modelin kendi cevabı için ayrılan token
+            sayısı (genelde çağrının ``max_tokens`` değeri). Tüm pencereyi
+            prompt'a harcamak cevaba yer bırakmaz.
     """
 
     total: int
@@ -17,5 +17,5 @@ class TokenBudget:
 
     @property
     def available(self) -> int:
-        """Tokens the prompt itself may use."""
+        """Prompt'un kendisinin kullanabileceği token sayısı."""
         return max(0, self.total - self.reserved_for_completion)

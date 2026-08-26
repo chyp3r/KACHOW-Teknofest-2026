@@ -1,16 +1,16 @@
 from pydantic import BaseModel, Field
 
 class LoginRequest(BaseModel):
-    """Pydantic schema for credentials validation on login."""
-    username: str = Field(description="Username or Email address of user")
-    password: str = Field(description="Raw account password")
+    """Giriş sırasında kimlik bilgilerini doğrulamak için Pydantic şeması."""
+    username: str = Field(description="Kullanıcının kullanıcı adı veya e-posta adresi")
+    password: str = Field(description="Ham hesap şifresi")
 
 class TokenResponse(BaseModel):
-    """Pydantic schema for token response payload."""
+    """Token yanıtı payload'u için Pydantic şeması."""
     access_token: str = Field(description="JWT Access Token")
     refresh_token: str = Field(description="JWT Refresh Token")
-    token_type: str = Field(default="bearer", description="Token type prefix")
+    token_type: str = Field(default="bearer", description="Token tipi ön eki")
 
 class RefreshRequest(BaseModel):
-    """Pydantic schema for access token renewal via refresh token."""
-    refresh_token: str = Field(description="Long-lived JWT Refresh Token")
+    """Refresh token aracılığıyla access token yenileme için Pydantic şeması."""
+    refresh_token: str = Field(description="Uzun ömürlü JWT Refresh Token")

@@ -1,22 +1,24 @@
-"""Orchestrates Faz C3 (#187): compiling `feedback` votes into
-`training_samples`, and turning enough of them into a refreshed
-`CompanyAdapter` (Faz C2, #185) style adapter.
+"""Faz C3'ü (#187) düzenler: `feedback` oylarını `training_samples`'a
+derlemek ve yeterince biriktiğinde bunları yenilenmiş bir `CompanyAdapter`
+(Faz C2, #185) stil adaptörüne dönüştürmek.
 
-This is the one place `app.ai.training` (pure compiler/miner) and
-`app.domains.companies.provider` (the C2 adapter's read/write layer) meet
--- both are wired together here rather than either importing the other
-directly, keeping each side's own boundary intact.
+Burası `app.ai.training`'in (saf derleyici/madenci) ve
+`app.domains.companies.provider`'ın (C2 adaptörünün okuma/yazma katmanı)
+buluştuğu tek yerdir -- ikisi de birbirini doğrudan import etmek yerine
+burada birbirine bağlanır, her iki tarafın kendi sınırını da bozulmadan
+tutar.
 
-Two very different execution shapes share this file, by kind:
+Bu dosyayı iki çok farklı yürütme şekli, türe göre paylaşır:
 
-- `kind="style_adapter"` (`run_style_adapter_training`) runs synchronously
-  inside the triggering request -- the only LLM call it makes is the
-  single `style_miner.mine_style` call, which takes a few seconds (see
-  #187's own body for why that did not warrant a queue).
-- `kind="lora_sft"`/`"lora_dpo"` (`enqueue_lora_training_run`) is genuinely
-  long (potentially hours on a GPU host), so it is only *queued* here --
-  `app.workers.training.run_lora_training_job`, running in the separate
-  `worker` container (Faz C3 Aşama 3, #191), does the actual work.
+- `kind="style_adapter"` (`run_style_adapter_training`) tetikleyen isteğin
+  içinde senkron çalışır -- yaptığı tek LLM çağrısı, birkaç saniye süren
+  tek bir `style_miner.mine_style` çağrısıdır (bunun neden bir kuyruk
+  gerektirmediği için #187'nin kendi gövdesine bakın).
+- `kind="lora_sft"`/`"lora_dpo"` (`enqueue_lora_training_run`) gerçekten
+  uzun sürer (bir GPU host'ta potansiyel olarak saatler), bu yüzden
+  burada yalnızca *kuyruğa alınır* -- ayrı `worker` konteynerinde
+  (Faz C3 Aşama 3, #191) çalışan `app.workers.training.
+  run_lora_training_job` fiili işi yapar.
 """
 
 import logging
@@ -43,9 +45,10 @@ class TrainingService:
         self.repository = repository
 
     # ------------------------------------------------------------------
-    # Compilation -- can run standalone, independent of training itself
-    # (see TrainingRepository/TrainingSampleModel docstrings: this is
-    # deliberately inspectable before anything is trained on it).
+    # Derleme -- eğitimin kendisinden bağımsız, tek başına çalışabilir
+    # (bkz. TrainingRepository/TrainingSampleModel docstring'leri: bu,
+    # üzerinde herhangi bir şey eğitilmeden önce bilerek incelenebilir
+    # tutulur).
     # ------------------------------------------------------------------
     async def compile_samples(
         self, company_id: str, training_run_id: Optional[str] = None
@@ -78,15 +81,16 @@ class TrainingService:
         }
 
     async def export_samples(self, company_id: str) -> List[TrainingSampleModel]:
-        """The exact rows a training run would read -- see
-        `TrainingRepository.list_all_active_samples`'s docstring for why
-        this and the training path share one query."""
+        """Bir eğitim çalıştırmasının okuyacağı tam satırlar -- bunun ve
+        eğitim yolunun neden tek bir sorguyu paylaştığı için
+        `TrainingRepository.list_all_active_samples`'ın docstring'ine
+        bakın."""
         return await self.repository.list_all_active_samples(company_id)
 
     async def active_pairs_for_training(self, company_id: str) -> List[PreferencePair]:
-        """Every active sample, converted back to `PreferencePair`s -- what
-        both the style-adapter miner (Aşama 2) and the LoRA export step
-        (`app.workers.training`, Aşama 3, #191) actually train on."""
+        """Her aktif örnek, geri `PreferencePair`'lere dönüştürülür -- hem
+        stil-adaptörü madencisinin (Aşama 2) hem de LoRA export adımının
+        (`app.workers.training`, Aşama 3, #191) fiilen eğitildiği veri."""
         samples = await self.repository.list_all_active_samples(company_id)
         return [_sample_to_pair(sample) for sample in samples]
 
@@ -98,7 +102,7 @@ class TrainingService:
         return sample
 
     # ------------------------------------------------------------------
-    # Training runs
+    # Eğitim çalıştırmaları
     # ------------------------------------------------------------------
     async def list_runs(self, company_id: str, skip: int = 0, limit: int = 100) -> List[TrainingRunModel]:
         return await self.repository.list_runs(company_id, skip=skip, limit=limit)
@@ -109,17 +113,18 @@ class TrainingService:
     async def enqueue_lora_training_run(
         self, company_id: str, *, kind: str, triggered_by: Optional[str]
     ) -> TrainingRunModel:
-        """Create a `status="queued"` row and hand it to the training
-        worker via `arq` -- returns immediately, does not wait for the
-        run to actually happen (see this module's own docstring for why
-        LoRA is queued, unlike the synchronous style-adapter path).
+        """`status="queued"` bir satır oluştur ve `arq` üzerinden eğitim
+        worker'ına ver -- hemen döner, çalıştırmanın fiilen gerçekleşmesini
+        beklemez (LoRA'nın senkron stil-adaptörü yolunun aksine neden
+        kuyruğa alındığı için bu modülün kendi docstring'ine bakın).
 
-        The `app.workers.queue` import is local, not top-level: that
-        module's own `app.workers.training` imports `TrainingService`
-        (this class) back, to run the query the worker itself needs --
-        a top-level import here would be a circular import between the
-        two modules. Deferring it until the call actually happens breaks
-        the cycle without either side needing to restructure around it.
+        `app.workers.queue` importu üst düzey değil, yereldir: o modülün
+        kendi `app.workers.training`'i, worker'ın kendisinin ihtiyaç
+        duyduğu sorguyu çalıştırmak için `TrainingService`'i (bu sınıf)
+        geri import eder -- burada üst düzey bir import iki modül arasında
+        dairesel bir import olurdu. Bunu çağrı fiilen gerçekleşene kadar
+        ertelemek, hiçbir tarafın bunun etrafında yeniden yapılanmasına
+        gerek kalmadan döngüyü kırar.
         """
         from app.workers.queue import enqueue_lora_training_job
 
@@ -132,12 +137,13 @@ class TrainingService:
     async def run_style_adapter_training(
         self, company_id: str, *, triggered_by: Optional[str], llm_client
     ) -> TrainingRunModel:
-        """Compile fresh samples, then mine and publish an updated style
-        adapter if there is enough signal.
+        """Taze örnekler derle, ardından yeterli sinyal varsa güncellenmiş
+        bir stil adaptörünü madencilikle çıkar ve yayınla.
 
-        Always recompiles first (rather than training on whatever samples
-        already happen to be in the table) so a run's `sample_count`
-        reflects every vote cast up to this moment, not a stale snapshot.
+        Tabloda o an her ne örnek varsa onun üzerinde eğitmek yerine her
+        zaman önce yeniden derler, böylece bir çalıştırmanın
+        `sample_count`'u bayat bir anlık görüntü değil, bu ana kadar
+        verilen her oyu yansıtır.
         """
         run = await self.repository.create_run(
             company_id, kind=STYLE_ADAPTER_KIND, triggered_by=triggered_by
@@ -163,11 +169,12 @@ class TrainingService:
                     metrics={"reason": "below_min_feedback_samples"},
                 )
 
-            #: Automated runs never touch preferred_examples -- those stay
-            #: whatever an admin last hand-curated via PUT .../adapter (see
-            #: set_company_adapter's docstring: it replaces the whole list,
-            #: so an automated run has to explicitly carry the current
-            #: value forward or it would silently wipe it every time).
+            #: Otomatik çalıştırmalar preferred_examples'a asla dokunmaz --
+            #: bunlar bir yöneticinin PUT .../adapter ile en son elle
+            #: düzenlediği ne ise öyle kalır (bkz. set_company_adapter'ın
+            #: docstring'i: tüm listeyi değiştirir, bu yüzden otomatik bir
+            #: çalıştırma mevcut değeri açıkça ileri taşımalıdır, yoksa
+            #: her seferinde onu sessizce siler).
             current_adapter = await get_company_adapter(company_id)
             adapter = await set_company_adapter(
                 company_id,
@@ -187,7 +194,7 @@ class TrainingService:
                     "avoided_patterns_count": len(adapter.avoided_patterns),
                 },
             )
-        except Exception as exc:  # noqa: BLE001 -- a failed run must be visible, not raised into the request
+        except Exception as exc:  # noqa: BLE001 -- başarısız bir çalıştırma isteğe fırlatılmak değil, görünür olmak zorunda
             logger.exception("Style adapter training run failed for company %s", company_id)
             return await self.repository.finish_run(
                 run, status="failed", sample_count=None, error=str(exc)
@@ -195,10 +202,11 @@ class TrainingService:
 
 
 def _sample_to_pair(sample: TrainingSampleModel) -> PreferencePair:
-    """The style miner reads `PreferencePair`s, not ORM rows -- this is the
-    one place a persisted `training_samples` row is converted back, so a
-    training run works from the exact rows it just upserted rather than a
-    second, potentially different, re-derivation from raw feedback."""
+    """Stil madencisi ORM satırlarını değil `PreferencePair`'leri okur --
+    burası kalıcı hale getirilmiş bir `training_samples` satırının geri
+    dönüştürüldüğü tek yerdir, böylece bir eğitim çalıştırması, ham geri
+    bildirimden ikinci, potansiyel olarak farklı bir yeniden türetme
+    yerine, az önce upsert ettiği tam satırlar üzerinden çalışır."""
     return PreferencePair(
         source=sample.source,
         source_feedback_id=sample.source_feedback_id,

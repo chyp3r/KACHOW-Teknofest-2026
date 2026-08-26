@@ -1,7 +1,8 @@
-"""`AnalyticsService` -- thin caching + shaping layer over `AnalyticsRepository`'s
-raw aggregate queries, per the tenancy plan's §6.1: a 60s Redis cache keyed
-by `(company_id, metric, range)` is the entire caching story here, no
-materialized view or rollup table.
+"""`AnalyticsService` -- `AnalyticsRepository`'nin ham toplama sorguları
+üzerinde ince bir önbellekleme + biçimlendirme katmanı, kiracılık planının
+§6.1'ine göre: `(company_id, metric, range)` ile anahtarlanmış 60 saniyelik
+bir Redis önbelleği burada önbellekleme hikâyesinin tamamı, materialized
+view veya rollup tablosu yok.
 """
 
 import json
@@ -44,13 +45,14 @@ class AnalyticsService:
         return value
 
     async def summary(self, company_id: str) -> dict:
-        """The company overview `GET /companies/{id}/analytics/summary` returns.
+        """`GET /companies/{id}/analytics/summary`'nin döndürdüğü şirket genel bakışı.
 
-        Also opportunistically refreshes `kachow_company_active_users` (see
-        `app.observability.company_metrics`'s own docstring on why this is
-        the one point that gauge gets updated, not a continuous timer) --
-        a side effect of computing the number this endpoint needed anyway,
-        not an extra query paid just for the metric.
+        Ayrıca fırsatçı biçimde `kachow_company_active_users`'ı da yeniler
+        (bu gauge'un neden sürekli bir zamanlayıcı yerine tam olarak bu
+        noktada güncellendiğine dair `app.observability.company_metrics`'in
+        kendi docstring'ine bakın) -- bu endpoint'in zaten ihtiyaç duyduğu
+        sayıyı hesaplamanın bir yan etkisi, sadece metrik için ödenen ekstra
+        bir sorgu değil.
         """
 
         async def compute():

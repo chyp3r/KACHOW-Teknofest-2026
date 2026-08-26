@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class UnitMemberCreate(BaseModel):
-    """Pydantic schema for adding a user to a unit."""
+    """Bir kullanıcıyı bir birime eklemek için Pydantic şeması."""
 
     user_id: str = Field(description="Birime eklenecek kullanıcının ID'si")
     is_primary: bool = Field(
@@ -16,7 +16,7 @@ class UnitMemberCreate(BaseModel):
 
 
 class UnitMemberResponse(BaseModel):
-    """Pydantic schema for a unit membership, joined with the member's basic identity."""
+    """Üyenin temel kimliğiyle birleştirilmiş bir birim üyeliği için Pydantic şeması."""
 
     user_id: str = Field(description="Kullanıcı ID")
     username: str = Field(description="Kullanıcı adı")

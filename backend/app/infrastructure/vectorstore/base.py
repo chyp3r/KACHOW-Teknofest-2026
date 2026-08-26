@@ -5,18 +5,18 @@ from app.ai.embeddings.service import EmbeddedChunk
 
 
 class BaseVectorStore(ABC):
-    """Abstract Base Class for Vector Database interactions."""
+    """Vektör veritabanı etkileşimleri için soyut temel sınıf."""
 
     @abstractmethod
     async def create_collection(
         self, collection_name: str, vector_size: int, distance: str = "Cosine"
     ) -> bool:
-        """Create a new collection in the vector database.
+        """Vektör veritabanında yeni bir koleksiyon oluştur.
 
         Args:
-            collection_name: The name of the collection.
-            vector_size: Dimensionality of the vectors.
-            distance: Distance metric (e.g. "Cosine", "Euclidean", "Dot").
+            collection_name: Koleksiyonun adı.
+            vector_size: Vektörlerin boyutsallığı.
+            distance: Mesafe metriği (örn. "Cosine", "Euclidean", "Dot").
         """
         pass
 
@@ -24,11 +24,11 @@ class BaseVectorStore(ABC):
     async def upsert_documents(
         self, collection_name: str, chunks: List[EmbeddedChunk]
     ) -> bool:
-        """Insert or update embedded chunks in a collection.
+        """Bir koleksiyondaki embed edilmiş parçaları ekle veya güncelle.
 
         Args:
-            collection_name: The name of the collection.
-            chunks: List of EmbeddedChunk containing texts, vectors, and metadata.
+            collection_name: Koleksiyonun adı.
+            chunks: Metinler, vektörler ve metadata içeren EmbeddedChunk listesi.
         """
         pass
 
@@ -36,15 +36,15 @@ class BaseVectorStore(ABC):
     async def similarity_search(
         self, collection_name: str, query_vector: List[float], limit: int = 5, filter_dict: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
-        """Search for similar vectors in a collection.
+        """Bir koleksiyonda benzer vektörleri ara.
 
         Args:
-            collection_name: The name of the collection.
-            query_vector: The query embedding vector.
-            limit: Maximum number of results to return.
+            collection_name: Koleksiyonun adı.
+            query_vector: Sorgu embedding vektörü.
+            limit: Döndürülecek maksimum sonuç sayısı.
 
         Returns:
-            A list of dictionary objects, each representing a hit (payload, score, id).
+            Her biri bir eşleşmeyi (payload, skor, id) temsil eden bir sözlük nesneleri listesi.
         """
         pass
 
@@ -58,26 +58,26 @@ class BaseVectorStore(ABC):
         limit: int = 5,
         filter_dict: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
-        """Perform hybrid dense/sparse vector search with fusion.
+        """Füzyon ile yoğun/seyrek (dense/sparse) hibrit vektör araması yap.
 
         Args:
-            collection_name: The name of the collection.
-            query_vector: The query embedding vector.
-            sparse_indices: Sparse vector token indices.
-            sparse_values: Sparse vector token values (weights).
-            limit: Maximum number of results to return.
+            collection_name: Koleksiyonun adı.
+            query_vector: Sorgu embedding vektörü.
+            sparse_indices: Seyrek vektör jeton indeksleri.
+            sparse_values: Seyrek vektör jeton değerleri (ağırlıklar).
+            limit: Döndürülecek maksimum sonuç sayısı.
 
         Returns:
-            A list of dictionary objects, each representing a hit.
+            Her biri bir eşleşmeyi temsil eden bir sözlük nesneleri listesi.
         """
         pass
 
     @abstractmethod
     async def delete_collection(self, collection_name: str) -> bool:
-        """Delete a collection from the vector database.
+        """Vektör veritabanından bir koleksiyonu sil.
 
         Args:
-            collection_name: The name of the collection to delete.
+            collection_name: Silinecek koleksiyonun adı.
         """
         pass
 
@@ -85,17 +85,17 @@ class BaseVectorStore(ABC):
     async def delete_by_filter(
         self, collection_name: str, filter_dict: Dict[str, Any]
     ) -> bool:
-        """Delete every point matching a filter, without dropping the collection.
+        """Koleksiyonu düşürmeden bir filtreyle eşleşen her noktayı sil.
 
-        The narrower counterpart to `delete_collection` -- removes one
-        document's chunks (e.g. `{"storage_path": "uploads/x.pdf"}`) out of
-        a shared collection other documents still live in.
+        `delete_collection`'ın daha dar karşılığı -- diğer belgelerin hâlâ
+        yaşadığı paylaşılan bir koleksiyondan tek bir belgenin parçalarını
+        (örn. `{"storage_path": "uploads/x.pdf"}`) kaldırır.
 
         Args:
-            collection_name: The name of the collection.
-            filter_dict: This module's filter convention (see
-                `QdrantStore._build_qdrant_filter`); must be non-empty --
-                an empty filter would delete the entire collection's points.
+            collection_name: Koleksiyonun adı.
+            filter_dict: Bu modülün filtre sözleşmesi (bkz.
+                `QdrantStore._build_qdrant_filter`); boş olmamalıdır --
+                boş bir filtre koleksiyonun tüm noktalarını silerdi.
         """
         pass
 

@@ -2,27 +2,30 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import AsyncIterator, List, Dict, Any, Optional
 
-#: Characters per token, calibrated for Turkish. Agglutinative morphology
-#: splits into more subword tokens per character than English (~4 chars/tok),
-#: so a borrowed English ratio would systematically undercount here. Not an
-#: exact provider count -- Ollama does not expose a tokenize endpoint for
-#: arbitrary models -- but a real, consistent measurement, used everywhere
-#: text needs sizing against ``settings.OLLAMA_NUM_CTX`` instead of the
-#: char-count/turn-count heuristics that previously gave no visibility into
-#: whether a prompt was close to overflowing the model's context window.
+#: Türkçe için kalibre edilmiş, token başına karakter sayısı. Sondan eklemeli
+#: (aglütinatif) biçimbilim, karakter başına İngilizce'den (~4 karakter/tok)
+#: daha fazla alt kelime token'ına bölünür, bu yüzden ödünç alınmış bir
+#: İngilizce oran burada sistematik olarak eksik sayım yapardı. Sağlayıcının
+#: kesin sayısı değil -- Ollama, keyfi modeller için bir tokenize endpoint'i
+#: sunmaz -- ama gerçek, tutarlı bir ölçüm; metnin ``settings.OLLAMA_NUM_CTX``'e
+#: göre boyutlandırılması gerektiği her yerde, önceden bir promptun modelin
+#: bağlam penceresini taşmaya ne kadar yakın olduğuna dair hiçbir görünürlük
+#: sunmayan karakter sayısı/tur sayısı sezgisellerinin yerine kullanılır.
 CHARS_PER_TOKEN_TR = 2.8
 
 
 @dataclass
 class ToolCallResponse:
-    """One non-streaming turn of a tool-calling exchange.
+    """Bir araç çağırma alışverişinin akışsız (non-streaming) tek bir turu.
 
     Attributes:
-        content: Text the model produced alongside (or instead of) tool calls.
-            Some providers emit a short remark even when they also request a
-            tool; most emit only tool calls with empty content.
-        tool_calls: Requested calls, each ``{"id", "name", "args"}``. Empty
-            means the model chose to answer directly instead of calling a tool.
+        content: Modelin araç çağrılarıyla birlikte (veya onların yerine)
+            ürettiği metin. Bazı sağlayıcılar bir araç istediğinde bile
+            kısa bir yorum üretir; çoğu yalnızca boş içerikli araç
+            çağrıları üretir.
+        tool_calls: İstenen çağrılar, her biri ``{"id", "name", "args"}``.
+            Boş olması, modelin bir araç çağırmak yerine doğrudan yanıt
+            vermeyi seçtiği anlamına gelir.
     """
 
     content: str = ""
@@ -30,7 +33,7 @@ class ToolCallResponse:
 
 
 class BaseLLMClient(ABC):
-    """Abstract base class representing a unified interface for all LLM providers."""
+    """Tüm LLM sağlayıcıları için birleşik bir arayüzü temsil eden soyut temel sınıf."""
 
     @abstractmethod
     async def generate(
@@ -40,13 +43,13 @@ class BaseLLMClient(ABC):
         max_tokens: Optional[int] = None,
         **kwargs: Any
     ) -> str:
-        """Generate response from a list of messages.
+        """Bir mesaj listesinden yanıt üretir.
 
         Args:
-            messages: List of message dicts (e.g., [{"role": "user", "content": "hi"}])
-            temperature: Sampling temperature
-            max_tokens: Maximum tokens to generate
-            **kwargs: Extra provider-specific parameters
+            messages: Mesaj dict'lerinin listesi (örn. [{"role": "user", "content": "hi"}])
+            temperature: Örnekleme sıcaklığı
+            max_tokens: Üretilecek maksimum token sayısı
+            **kwargs: Sağlayıcıya özel ek parametreler
         """
         pass
 
@@ -58,13 +61,13 @@ class BaseLLMClient(ABC):
         max_tokens: Optional[int] = None,
         **kwargs: Any
     ) -> AsyncIterator[str]:
-        """Stream the generated response chunk-by-chunk.
+        """Üretilen yanıtı parça parça akıtır (stream).
 
         Args:
-            messages: List of message dicts
-            temperature: Sampling temperature
-            max_tokens: Maximum tokens to generate
-            **kwargs: Extra provider-specific parameters
+            messages: Mesaj dict'lerinin listesi
+            temperature: Örnekleme sıcaklığı
+            max_tokens: Üretilecek maksimum token sayısı
+            **kwargs: Sağlayıcıya özel ek parametreler
         """
         pass
 
@@ -76,13 +79,13 @@ class BaseLLMClient(ABC):
         temperature: Optional[float] = None,
         **kwargs: Any
     ) -> Any:
-        """Generate structured output validated against a Pydantic model.
+        """Bir Pydantic modeline karşı doğrulanmış yapılandırılmış çıktı üretir.
 
         Args:
-            messages: List of message dicts
-            response_model: Pydantic model class to validate the output against
-            temperature: Sampling temperature
-            **kwargs: Extra provider-specific parameters
+            messages: Mesaj dict'lerinin listesi
+            response_model: Çıktının doğrulanacağı Pydantic model sınıfı
+            temperature: Örnekleme sıcaklığı
+            **kwargs: Sağlayıcıya özel ek parametreler
         """
         pass
 
@@ -95,44 +98,47 @@ class BaseLLMClient(ABC):
         max_tokens: Optional[int] = None,
         **kwargs: Any
     ) -> ToolCallResponse:
-        """Generate one turn of a tool-calling exchange.
+        """Bir araç çağırma alışverişinin tek bir turunu üretir.
 
-        Non-streaming: a tool call has to be inspected and executed before
-        anything downstream can be shown to the user, so there is nothing
-        useful to stream on a turn that might just be a tool request.
+        Akışsız (non-streaming): bir araç çağrısı, aşağı akıştaki herhangi bir
+        şey kullanıcıya gösterilmeden önce incelenip yürütülmesi gerektiğinden,
+        yalnızca bir araç isteği olabilecek bir turda akıtılacak yararlı
+        hiçbir şey yoktur.
 
         Args:
-            messages: Message dicts. Beyond the usual ``system``/``user``/
-                ``assistant`` roles, a caller resuming a tool loop may include
-                an ``assistant`` message carrying a ``tool_calls`` key (the
-                model's own previous turn) and ``tool`` messages carrying
-                ``tool_call_id``/``name``/``content`` (that turn's results).
-            tools: Tool schemas in this provider's native bindable form (e.g.
-                LangChain ``BaseTool`` instances for a LangChain-backed client).
-            temperature: Sampling temperature.
-            max_tokens: Maximum tokens to generate.
-            **kwargs: Extra provider-specific parameters.
+            messages: Mesaj dict'leri. Olağan ``system``/``user``/
+                ``assistant`` rollerinin ötesinde, bir araç döngüsünü devam
+                ettiren bir çağıran, bir ``tool_calls`` anahtarı taşıyan bir
+                ``assistant`` mesajı (modelin önceki turu) ve
+                ``tool_call_id``/``name``/``content`` taşıyan ``tool``
+                mesajları (o turun sonuçları) içerebilir.
+            tools: Bu sağlayıcının yerel bağlanabilir biçimindeki araç
+                şemaları (örn. LangChain destekli bir istemci için
+                LangChain ``BaseTool`` örnekleri).
+            temperature: Örnekleme sıcaklığı.
+            max_tokens: Üretilecek maksimum token sayısı.
+            **kwargs: Sağlayıcıya özel ek parametreler.
 
         Returns:
-            The model's text (if any) and any tool calls it requested.
+            Modelin metni (varsa) ve istediği araç çağrıları.
         """
         pass
 
     def count_tokens(self, text: str) -> int:
-        """Estimate how many tokens ``text`` costs against the context window.
+        """``text``'in bağlam penceresine karşı kaç token'a mal olacağını tahmin eder.
 
-        A character-ratio estimate (see ``CHARS_PER_TOKEN_TR``), not an exact
-        provider count. Good enough to catch a prompt approaching
-        ``settings.OLLAMA_NUM_CTX`` before Ollama silently truncates it from
-        the beginning -- which previously had no visibility at all, only
-        char-count and turn-count proxies. A provider with a real tokenizer
-        may override this with an exact count.
+        Bir karakter oranı tahmini (bkz. ``CHARS_PER_TOKEN_TR``), sağlayıcının
+        kesin sayısı değil. Bir promptun ``settings.OLLAMA_NUM_CTX``'e
+        yaklaştığını -- Ollama'nın onu baştan sessizce kırpmasından önce --
+        yakalamak için yeterince iyi; daha önce hiç görünürlük yoktu, yalnızca
+        karakter sayısı ve tur sayısı vekilleri vardı. Gerçek bir
+        tokenizer'a sahip bir sağlayıcı, bunu kesin bir sayımla geçersiz kılabilir.
 
         Args:
-            text: The text to size.
+            text: Boyutlandırılacak metin.
 
         Returns:
-            Estimated token count. 0 for empty/whitespace-only text.
+            Tahmini token sayısı. Boş/yalnızca boşluk içeren metin için 0.
         """
         stripped = text.strip() if text else ""
         if not stripped:
@@ -142,7 +148,7 @@ class BaseLLMClient(ABC):
     def _format_prompt(
         self, prompt: str, system_prompt: Optional[str] = None
     ) -> List[Dict[str, str]]:
-        """Helper to format a simple prompt and system prompt into a standard message list."""
+        """Basit bir prompt ve system prompt'u standart bir mesaj listesine biçimlendirmeye yarayan yardımcı."""
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -157,7 +163,7 @@ class BaseLLMClient(ABC):
         max_tokens: Optional[int] = None,
         **kwargs: Any
     ) -> str:
-        """Convenience method to generate text directly from a prompt string."""
+        """Bir prompt string'inden doğrudan metin üretmek için kolaylık metodu."""
         messages = self._format_prompt(prompt, system_prompt)
         return await self.generate(
             messages=messages,
@@ -174,7 +180,7 @@ class BaseLLMClient(ABC):
         max_tokens: Optional[int] = None,
         **kwargs: Any
     ) -> AsyncIterator[str]:
-        """Convenience method to stream response directly from a prompt string."""
+        """Bir prompt string'inden doğrudan yanıt akıtmak için kolaylık metodu."""
         messages = self._format_prompt(prompt, system_prompt)
         return self.stream(
             messages=messages,

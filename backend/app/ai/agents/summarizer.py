@@ -2,19 +2,19 @@ from app.ai.agents.template_agent import TemplateAgent
 
 
 class SummarizerAgent(TemplateAgent):
-    """Produces a detailed, unbounded-length Turkish summary of a document or chunk.
+    """Bir belge veya parçanın ayrıntılı, sınırsız uzunlukta Türkçe özetini üretir.
 
-    Deliberately its own agent rather than a reuse of ``ClassifierAgent``:
-    ``classifier.md`` (ClassifierAgent's own template) hard-codes "Özet en
-    fazla 3 cümle olsun" ("the summary must be at most 3 sentences") in its
-    system prompt -- the second, independent source of the three-sentence cap
-    alongside ``analyze_node``'s merged-schema Field description (see
-    ``document_analysis_graph.SummaryOutput``). Reusing ``classifier_agent``
-    here would keep that constraint in force via the system prompt even after
-    removing it from the schema, so this needs a template of its own that
-    never states a length cap.
+    ``ClassifierAgent``'ı yeniden kullanmak yerine bilinçli olarak kendi
+    ajanı: ``classifier.md`` (ClassifierAgent'ın kendi şablonu) sistem
+    prompt'unda "Özet en fazla 3 cümle olsun" ifadesini sabit koder --
+    ``analyze_node``'un birleştirilmiş şema Field açıklamasının (bkz.
+    ``document_analysis_graph.SummaryOutput``) yanında üç cümlelik sınırın
+    ikinci, bağımsız kaynağı. Burada ``classifier_agent``'ı yeniden kullanmak,
+    bu kısıtı şemadan kaldırdıktan sonra bile sistem prompt'u aracılığıyla
+    yürürlükte tutardı; bu yüzden bunun asla bir uzunluk sınırı belirtmeyen
+    kendi şablonuna ihtiyacı var.
     """
 
     TEMPLATE_NAME = "summarizer"
     AGENT_NAME = "SummarizerAgent"
-    DESCRIPTION = "Produces a detailed Turkish summary of an official document, unabridged."
+    DESCRIPTION = "Resmi bir belgenin ayrıntılı, kısaltılmamış Türkçe özetini üretir."

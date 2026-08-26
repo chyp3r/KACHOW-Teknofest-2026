@@ -7,11 +7,11 @@ from app.ai.prompts.manager import PromptManager, get_prompt_manager
 
 
 class ReviserAgent(BaseAgent):
-    """Applies a numbered defect list to a previously generated draft.
+    """Daha önce üretilmiş bir taslağa numaralandırılmış bir kusur listesi uygular.
 
-    A separate class from WriterAgent so the "fix only what's listed, invent
-    nothing" constraint is a system-level prompt rather than a user-turn
-    suggestion the model can deprioritise.
+    WriterAgent'tan ayrı bir sınıf, böylece "yalnızca listelenmiş olanı düzelt,
+    hiçbir şey uydurma" kısıtı, modelin önceliğini düşürebileceği bir
+    kullanıcı-turu önerisi yerine sistem seviyesinde bir prompt olur.
     """
 
     def __init__(
@@ -23,7 +23,7 @@ class ReviserAgent(BaseAgent):
         super().__init__(
             llm_client=llm_client,
             name="ReviserAgent",
-            description="Repairs a draft's listed defects without regenerating it from scratch.",
+            description="Bir taslağı sıfırdan yeniden üretmeden listelenmiş kusurlarını onarır.",
             system_prompt=pm.get_template("reviser"),
             validators=[assert_no_prompt_leak],
         )

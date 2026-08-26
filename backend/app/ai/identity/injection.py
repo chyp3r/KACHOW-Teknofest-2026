@@ -1,63 +1,67 @@
-"""Renders identity info (company or caller) into prompt text.
+"""Kimlik bilgisini (şirket veya arayan) prompt metnine render eder.
 
-Three separate render targets, on purpose:
+Bilinçli olarak üç ayrı render hedefi:
 
-- :func:`format_agent_identity` -- the assistant's self-description, fed
-  into ``assistant.md``'s ``{{agent_identity}}`` placeholder via
-  ``app.ai.prompts.manager``. When ``profile.is_empty``, returns the exact
-  sentence the template used to hard-code, so a company with nothing
-  configured sees byte-identical behaviour to before this feature existed.
-- :func:`format_user_address` -- the caller's own name, fed into
-  ``assistant.md``'s ``{{user_display_name}}`` placeholder. Takes a plain
-  string (``PlanningState.user_display_name``, the caller's ``username``),
-  not a profile object -- there is no provider/caching layer here, the
-  value is already sitting on the authenticated request.
-- :func:`format_identity_brief_section` -- a brief section for
-  ``app.ai.workflows.draft_graph._build_brief``, mirroring
-  ``_format_style_examples``'s "return '' rather than an empty header"
-  rule. Unlike ``CompanyAdapter``'s style block, this section's content is
-  a fact (the company's own name/letterhead), so ``draft_verifier.
-  verify_draft`` must be told to trust it via its ``trusted_facts``
-  parameter -- otherwise the writer's own institutional header would be
-  flagged as an unsupported claim on every single draft.
+- :func:`format_agent_identity` -- asistanın kendini tanıtması,
+  ``app.ai.prompts.manager`` aracılığıyla ``assistant.md``'nin
+  ``{{agent_identity}}`` yer tutucusuna beslenir. ``profile.is_empty``
+  olduğunda, şablonun daha önce sabit kodladığı tam cümleyi döndürür;
+  böylece hiçbir şey yapılandırılmamış bir şirket, bu özellik var olmadan
+  önceki davranışla bayt bayt aynı davranışı görür.
+- :func:`format_user_address` -- arayanın kendi adı,
+  ``assistant.md``'nin ``{{user_display_name}}`` yer tutucusuna beslenir.
+  Bir profil nesnesi değil, düz bir string alır (``PlanningState.
+  user_display_name``, arayanın ``username``'i) -- burada bir
+  sağlayıcı/önbellekleme katmanı yoktur, değer zaten kimliği doğrulanmış
+  isteğin üzerinde durur.
+- :func:`format_identity_brief_section` --
+  ``app.ai.workflows.draft_graph._build_brief`` için bir brief bölümü,
+  ``_format_style_examples``'ın "boş bir başlık yerine '' döndür" kuralını
+  yansıtır. ``CompanyAdapter``'ın stil bloğunun aksine, bu bölümün içeriği
+  bir gerçektir (şirketin kendi adı/anteti), bu yüzden
+  ``draft_verifier.verify_draft``'a bunun ``trusted_facts`` parametresi
+  aracılığıyla buna güvenmesi söylenmelidir -- aksi halde yazarın kendi
+  kurumsal başlığı her taslakta desteklenmeyen bir iddia olarak
+  işaretlenirdi.
 
-This section used to describe itself as a *fallback*, applied only when
-the writing brief's own "gönderen" slot (``app.ai.workflows.writing_brief``,
-section 8) came back unspecified. That was backwards: a real, admin-entered
-identity is the most reliable signal for who is writing this letter that
-exists anywhere in the pipeline -- more reliable than a guess derived from
-the *incoming* document's own header fields, which is what an unspecified
-"gönderen" slot fell back to before ``resolve_party_context`` existed (see
-``app.ai.identity.parties``). ``_resolve_yazan_taraf`` now consults this
-same profile *before* falling back to the document, so by the time this
-section renders, section 8's own "gönderen" is normally already this
-company's own identity -- this section is now the primary source, not a
-fallback, and only an explicit contrary statement in the user's own message
-(surfaced in section 8 as a ``user_text``-sourced slot) overrides it.
+Bu bölüm eskiden kendisini yalnızca yazım briefinin kendi "gönderen" alanı
+(``app.ai.workflows.writing_brief``, bölüm 8) belirtilmemiş geldiğinde
+uygulanan bir *yedek* olarak tanımlıyordu. Bu tersti: gerçek, yönetici
+tarafından girilmiş bir kimlik, bu mektubu kimin yazdığı konusunda pipeline'ın
+herhangi bir yerinde var olan en güvenilir sinyaldir -- ``resolve_party_context``
+var olmadan önce belirtilmemiş bir "gönderen" alanının yedeklendiği,
+*gelen* belgenin kendi başlık alanlarından türetilen bir tahminden daha
+güvenilirdir (bkz. ``app.ai.identity.parties``). ``_resolve_yazan_taraf``
+artık belgeye yedeklenmeden *önce* bu aynı profile başvurur, bu yüzden bu
+bölüm render edildiğinde bölüm 8'in kendi "gönderen"i normalde zaten bu
+şirketin kendi kimliğidir -- bu bölüm artık bir yedek değil birincil
+kaynaktır ve yalnızca kullanıcının kendi mesajındaki açık bir aykırı ifade
+(bölüm 8'de ``user_text`` kaynaklı bir alan olarak ortaya çıkar) onun
+üzerine yazar.
 """
 
 from typing import Optional
 
 from app.ai.identity.company_profile import CompanyProfile
 
-#: The identity the assistant presents when no company profile is
-#: configured -- kept as the literal sentence ``assistant.md`` used to
-#: hard-code, so an unconfigured company's prompt renders byte-for-byte the
-#: same as before ``{{agent_identity}}`` existed.
+#: Hiçbir şirket profili yapılandırılmadığında asistanın sunduğu kimlik --
+#: ``assistant.md``'nin sabit kodladığı cümle olarak korunur; böylece
+#: yapılandırılmamış bir şirketin promptu, ``{{agent_identity}}`` var olmadan
+#: önceki haliyle bayt bayt aynı render edilir.
 _DEFAULT_SYSTEM_NAME = "KACHOW Evrak Karar Destek Sistemi (EKDS)"
 _DEFAULT_AGENT_NAME = "KACHOW Karar Destek Sistemi Asistanı"
 
 
 def format_agent_identity(profile: CompanyProfile) -> str:
-    """Render the assistant's self-description sentence(s).
+    """Asistanın kendini tanıtma cümlesini/cümlelerini render eder.
 
     Args:
-        profile: The requesting company's current profile (see
+        profile: İstek yapan şirketin güncel profili (bkz.
             ``app.domains.companies.provider.get_company_profile``).
 
     Returns:
-        The identity text to substitute into ``assistant.md``'s
-        ``{{agent_identity}}`` placeholder. Never empty.
+        ``assistant.md``'nin ``{{agent_identity}}`` yer tutucusunun yerine
+        geçecek kimlik metni. Asla boş değildir.
     """
     if profile.is_empty:
         return (
@@ -80,17 +84,17 @@ def format_agent_identity(profile: CompanyProfile) -> str:
 
 
 def format_user_address(display_name: Optional[str]) -> str:
-    """Render the assistant's addressing instruction for the current caller.
+    """Asistanın güncel arayana hitap etme talimatını render eder.
 
     Args:
-        display_name: The authenticated caller's ``username`` (see
-            ``PlanningState.user_display_name``), or ``None`` in the open
-            demo/dev path or when it wasn't resolved.
+        display_name: Kimliği doğrulanmış arayanın ``username``'i (bkz.
+            ``PlanningState.user_display_name``), veya açık demo/dev
+            yolunda ya da çözümlenmediğinde ``None``.
 
     Returns:
-        The text to substitute into ``assistant.md``'s
-        ``{{user_display_name}}`` placeholder. Never empty -- a neutral
-        instruction when no name is known, so the model doesn't invent one.
+        ``assistant.md``'nin ``{{user_display_name}}`` yer tutucusunun
+        yerine geçecek metin. Asla boş değildir -- hiçbir ad bilinmediğinde
+        modelin bir ad uydurmaması için nötr bir talimat.
     """
     if not display_name:
         return "Kullanıcının adı bilinmiyor; nötr, kişiselleştirilmemiş bir dille hitap et."
@@ -101,20 +105,21 @@ def format_user_address(display_name: Optional[str]) -> str:
 
 
 def format_identity_brief_section(profile: CompanyProfile, section_number: int = 9) -> str:
-    """Render the draft brief's "KURUM KİMLİĞİ" section.
+    """Taslak briefinin "KURUM KİMLİĞİ" bölümünü render eder.
 
     Args:
-        profile: The requesting company's current profile.
-        section_number: The brief's own numbering for this section (see
-            ``app.ai.workflows.draft_graph._build_brief``) -- kept a
-            parameter rather than hard-coded so the brief's section order
-            can change without this module needing to know why.
+        profile: İstek yapan şirketin güncel profili.
+        section_number: Bu bölüm için briefin kendi numaralandırması (bkz.
+            ``app.ai.workflows.draft_graph._build_brief``) -- bu modülün
+            briefin bölüm sırasının neden değiştiğini bilmesine gerek
+            kalmadan değişebilmesi için sabit kodlanmak yerine bir
+            parametre olarak tutulur.
 
     Returns:
-        "" when the profile is empty -- same convention as
-        ``app.ai.adapters.injection.format_adapter_block``: a header with
-        nothing under it reads as a missing-context signal, not as "this
-        company has no profile configured yet".
+        Profil boşsa "" -- ``app.ai.adapters.injection.format_adapter_block``
+        ile aynı kural: altında hiçbir şey olmayan bir başlık, "bu şirketin
+        henüz yapılandırılmış bir profili yok" değil, eksik bağlam sinyali
+        olarak okunur.
     """
     if profile.is_empty:
         return ""

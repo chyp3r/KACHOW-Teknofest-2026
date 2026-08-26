@@ -1,20 +1,19 @@
-"""Company-tagged, deliberately small Prometheus collector set -- the
-tenancy plan's own cardinality warning applies here: `app.observability.
-ai_metrics`'s ~20 collectors already cross `graph x node x status`, and
-multiplying that by a growing, never-shrinking set of company slugs would
-permanently inflate the series count even for deleted companies. This
-module is kept to exactly the handful of company-level business signals
-worth that cost, label value always the human-readable `slug` (not the
-uuid `id`), matching what a Grafana dashboard viewer would actually type
-into a `company` template variable.
+"""Şirket etiketli, kasıtlı olarak küçük tutulan Prometheus toplayıcı kümesi
+-- kiracılık planının kendi kardinalite uyarısı burada da geçerli:
+`app.observability.ai_metrics`'in ~20 toplayıcısı zaten `graph x node x
+status` çarpımını yapıyor ve bunu büyüyen, hiç küçülmeyen bir şirket slug
+kümesiyle çarpmak, silinmiş şirketler için bile seri sayısını kalıcı olarak
+şişirir. Bu modül, o maliyete değecek yalnızca birkaç şirket düzeyinde iş
+sinyaliyle sınırlı tutulur; etiket değeri her zaman insan tarafından
+okunabilir `slug`'dır (uuid `id` değil), bu da bir Grafana panosu izleyicisinin
+`company` şablon değişkenine gerçekte ne yazacağıyla eşleşir.
 
-`kachow_company_requests_total` is deliberately single-labelled
-(`company` only, no `endpoint_group`) -- attributing a request to a route
-group needs either per-route instrumentation or reading matched-route
-state from a second middleware pass, and this module's whole point is
-staying cheap and simple; the existing generic HTTP metrics
-(`app.observability.metrics`, unlabelled by company) already cover the
-per-route breakdown.
+`kachow_company_requests_total` kasıtlı olarak tek etiketlidir (yalnızca
+`company`, `endpoint_group` yok) -- bir isteği bir rota grubuna atfetmek ya
+rota başına enstrümantasyon ya da ikinci bir middleware geçişinden eşleşen
+rota durumunu okumayı gerektirir; bu modülün bütün amacı ucuz ve basit
+kalmaktır. Mevcut genel HTTP metrikleri (`app.observability.metrics`,
+şirkete göre etiketlenmemiş) rota başına dökümü zaten kapsıyor.
 """
 
 import logging
@@ -48,43 +47,44 @@ COMPANY_GUARDRAIL_BLOCKS = Counter(
     ["company", "kind"],
 )
 
-#: Refreshed opportunistically whenever `AnalyticsService.summary` runs for
-#: a company (see that module), not on a continuous timer -- there is no
-#: periodic-task runner in this codebase to drive one (no celery/cron; see
-#: `app.lifespan`'s own startup-only scope), so this gauge's value is only
-#: as fresh as the last analytics summary request for that company. Still
-#: honest: it reports what it actually last measured, not a fabricated
-#: continuous signal.
+#: `AnalyticsService.summary` bir şirket için her çalıştığında fırsatçı bir
+#: şekilde yenilenir (bkz. o modül), sürekli bir zamanlayıcıyla değil -- bu
+#: kod tabanında onu çalıştıracak periyodik görev çalıştırıcısı yok
+#: (celery/cron yok; bkz. `app.lifespan`'ın yalnızca başlangıç kapsamı), bu
+#: yüzden bu gauge'un değeri o şirket için yapılan son analitik özet isteği
+#: kadar günceldir. Yine de dürüsttür: uydurma bir sürekli sinyal değil,
+#: gerçekte en son ölçtüğü şeyi bildirir.
 COMPANY_ACTIVE_USERS = Gauge(
     "kachow_company_active_users",
     "Users active in the last 7 days, by company (refreshed on each analytics summary call).",
     ["company"],
 )
 
-#: company_id -> slug. Populated lazily by `resolve_slug`, never evicted --
-#: a company's slug is immutable after creation (see `CompanyModel.slug`'s
-#: own docstring), so a permanently-growing cache bounded by "however many
-#: companies exist" is safe, the same reasoning `documents/service.py`'s
-#: `_qa_vector_size` probe-once-per-process cache already relies on.
+#: company_id -> slug. `resolve_slug` tarafından tembelce doldurulur, hiç
+#: tahliye edilmez -- bir şirketin slug'ı oluşturulduktan sonra değişmez
+#: (bkz. `CompanyModel.slug`'ın kendi docstring'i), bu yüzden "kaç şirket
+#: varsa o kadar" ile sınırlı, kalıcı olarak büyüyen bir önbellek güvenlidir;
+#: `documents/service.py`'nin `_qa_vector_size` süreç başına bir kez sorgula
+#: önbelleğinin zaten dayandığı aynı gerekçe.
 _slug_cache: dict[str, str] = {}
 
 
 def cache_slug(company_id: str, slug: str) -> None:
-    """Record a known `company_id` -> `slug` mapping, e.g. right after
-    `CompanyRepository.get_by_id` already loaded the row for another
-    reason -- avoids a second lookup purely for the metrics label."""
+    """Bilinen bir `company_id` -> `slug` eşleşmesini kaydet, örn.
+    `CompanyRepository.get_by_id` satırı başka bir nedenle zaten
+    yüklediği anda -- yalnızca metrik etiketi için ikinci bir sorgulamayı
+    önler."""
     _slug_cache[company_id] = slug
 
 
 def cached_slug(company_id: Optional[str]) -> Optional[str]:
-    """The cached slug for `company_id`, or `None` on a cache miss.
+    """`company_id` için önbelleğe alınmış slug, ya da önbellek ıskalarsa `None`.
 
-    Deliberately does not query the database itself -- this module must
-    stay free of a DB dependency so it can be imported from anywhere
-    (including `app.api.dependency`, which already imports a lot). Callers
-    that can afford a lookup (they already have a `CompanyRepository` in
-    hand, e.g. `get_current_user`) should call `cache_slug` once they have
-    the answer.
+    Kasıtlı olarak veritabanını kendisi sorgulamaz -- bu modül her yerden
+    (zaten çok şey import eden `app.api.dependency` dahil) import
+    edilebilsin diye DB bağımlılığından bağımsız kalmalıdır. Bir sorgulamayı
+    karşılayabilen çağıranlar (elinde zaten bir `CompanyRepository` olanlar,
+    örn. `get_current_user`) cevabı aldıklarında `cache_slug`'ı çağırmalıdır.
     """
     if company_id is None:
         return None
@@ -92,10 +92,10 @@ def cached_slug(company_id: Optional[str]) -> Optional[str]:
 
 
 def note_request(company_id: Optional[str]) -> None:
-    """Increment `COMPANY_REQUESTS` for `company_id`, if its slug is already
-    cached. A cache miss (the company's slug was never resolved this
-    process) is silently skipped rather than triggering a lookup -- see
-    `cached_slug`'s docstring."""
+    """Slug'ı zaten önbelleğe alınmışsa `company_id` için `COMPANY_REQUESTS`'i
+    artır. Bir önbellek ıskası (şirketin slug'ı bu süreçte hiç çözümlenmedi)
+    bir sorgulamayı tetiklemek yerine sessizce atlanır -- bkz.
+    `cached_slug`'ın docstring'i."""
     slug = cached_slug(company_id)
     if slug is not None:
         COMPANY_REQUESTS.labels(company=slug).inc()
@@ -118,11 +118,12 @@ def set_active_users(company_slug: str, count: int) -> None:
 
 
 def init_company_metrics() -> None:
-    """Force this module's import so its collectors register with Prometheus.
+    """Toplayıcılarının Prometheus'a kaydolması için bu modülün import
+    edilmesini zorla.
 
-    Symmetric with `app.observability.ai_metrics.init_ai_metrics` -- see
-    that function's own docstring for why this exists as an explicit,
-    greppable call site even though every collector here already registers
-    itself at module import time.
+    `app.observability.ai_metrics.init_ai_metrics` ile simetriktir --
+    buradaki her toplayıcı modül import zamanında zaten kendini kaydediyor
+    olsa bile, bunun neden açık ve grep'lenebilir bir çağrı noktası olarak
+    var olduğu için o fonksiyonun kendi docstring'ine bakın.
     """
     logger.debug("Company metrics registered.")

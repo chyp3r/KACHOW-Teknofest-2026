@@ -13,13 +13,13 @@ from app.domains.users.repository import UserRepository
 
 
 class CompanyService:
-    """Service executing company-management business rules.
+    """Şirket yönetimi iş kurallarını uygulayan servis.
 
-    Root-only by construction: every method assumes the caller has already
-    been authorized as ROOT (or, for the read/analytics paths, as that
-    company's own ADMIN) at the router layer -- this service enforces
-    business invariants (slug uniqueness, admin-assignment rules), not
-    authorization.
+    Tasarım gereği yalnızca root'a özeldir: her metot, çağıranın router
+    katmanında zaten ROOT olarak (veya okuma/analitik yolları için o
+    şirketin kendi ADMIN'i olarak) yetkilendirildiğini varsayar -- bu
+    servis yetkilendirmeyi değil, iş kurallarının değişmezlerini (slug
+    benzersizliği, admin atama kuralları) uygular.
     """
 
     def __init__(self, repository: CompanyRepository, user_repository: UserRepository):
@@ -27,7 +27,7 @@ class CompanyService:
         self.user_repository = user_repository
 
     async def create_company(self, schema: CompanyCreate, created_by: str) -> CompanyModel:
-        """Create a new tenant company, rejecting a duplicate slug."""
+        """Yeni bir kiracı şirket oluşturur; yinelenen slug'ı reddeder."""
         existing = await self.repository.get_by_slug(schema.slug)
         if existing:
             raise ConflictException(message="Bu kısa ada (slug) sahip bir şirket zaten mevcut.")
@@ -45,39 +45,40 @@ class CompanyService:
         return await self.repository.create(company)
 
     async def get_company_by_id(self, company_id: str) -> CompanyModel:
-        """Fetch a company by ID, raising NotFoundException if not present or deleted."""
+        """ID ile bir şirketi getirir; mevcut değilse veya silinmişse NotFoundException fırlatır."""
         company = await self.repository.get_by_id(company_id)
         if not company or company.is_deleted:
             raise NotFoundException(message="Şirket bulunamadı.")
         return company
 
     async def list_companies(self, *, page: int, size: int) -> tuple[List[CompanyModel], int]:
-        """Fetch non-deleted companies, paginated."""
+        """Silinmemiş şirketleri sayfalanmış şekilde getirir."""
         offset = (page - 1) * size
         companies = await self.repository.list_all(offset=offset, limit=size)
         total = await self.repository.count_all()
         return companies, total
 
     async def update_company(self, company_id: str, schema: CompanyUpdate) -> CompanyModel:
-        """Update a company's name/tax number/active flag/settings."""
+        """Bir şirketin ad/vergi numarası/aktiflik bayrağı/ayarlarını günceller."""
         company = await self.get_company_by_id(company_id)
         update_dict = schema.model_dump(exclude_unset=True)
         return await self.repository.update(company, update_dict)
 
     async def delete_company(self, company_id: str) -> None:
-        """Soft-delete a company and deactivate it."""
+        """Bir şirketi soft-delete eder ve pasifleştirir."""
         company = await self.get_company_by_id(company_id)
         await self.repository.soft_delete(company)
 
     async def assign_admin(self, company_id: str, user_id: str) -> UserModel:
-        """Promote an existing user of this company to ADMIN.
+        """Bu şirketin mevcut bir kullanıcısını ADMIN'e yükseltir.
 
-        The user must already belong to the target company -- assigning a
-        stranger from another company as admin would silently move them
-        across the tenant boundary, which is exactly the kind of implicit
-        cross-tenant write the whole tenancy model exists to prevent. Root
-        must first ensure the user was created/invited into this company
-        (e.g. via the invite flow) before promoting them.
+        Kullanıcı zaten hedef şirkete ait olmalıdır -- başka bir şirketten
+        yabancı bir kullanıcıyı admin olarak atamak, onu sessizce kiracı
+        sınırının ötesine taşırdı; bu tam olarak tüm kiracılık modelinin
+        önlemek için var olduğu türden örtük, kiracılar arası bir yazma
+        işlemidir. Root, kullanıcıyı yükseltmeden önce onun bu şirkete
+        (ör. davet akışıyla) oluşturulduğundan/davet edildiğinden emin
+        olmalıdır.
         """
         company = await self.get_company_by_id(company_id)
         user = await self.user_repository.get_by_id(user_id)
